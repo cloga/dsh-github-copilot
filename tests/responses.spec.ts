@@ -32,7 +32,7 @@ function responseWith(output: ResponsesResponse['output'], status = 200): Respon
 }
 
 describe('buildResponsesSearchBody', () => {
-  it('pins the web_search tool through tool_choice', () => {
+  it('pins the web search server tool through tool_choice', () => {
     const body = buildResponsesSearchBody(OPTIONS, { action: 'search', text: 'hello' }) as {
       model: string
       tools: unknown[]
@@ -42,8 +42,11 @@ describe('buildResponsesSearchBody', () => {
       stream: boolean
     }
     expect(body.model).toBe('deepseek-v4-flash')
-    expect(body.tools).toEqual([{ type: 'web_search' }])
-    expect(body.tool_choice).toEqual({ type: 'web_search' })
+    // The versioned type executes on gateway endpoints that drop a nameless
+    // `web_search` tool (OpenCode Zen/Go) and is documented by OpenAI and
+    // DeepSeek; the probe verifies the endpoint before any search is served.
+    expect(body.tools).toEqual([{ type: 'web_search_2025_08_26' }])
+    expect(body.tool_choice).toEqual({ type: 'web_search_2025_08_26' })
     expect(body.stream).toBe(false)
     expect(body.max_output_tokens).toBe(4096)
     expect(body.input).toEqual([

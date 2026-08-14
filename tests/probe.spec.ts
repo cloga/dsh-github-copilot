@@ -21,9 +21,17 @@ function stubFetch(body: unknown, status = 200): ReturnType<typeof vi.fn> {
 
 describe('probeCandidate (openai-responses)', () => {
   it('confirms support when a web_search_call item comes back', async () => {
-    stubFetch({ output: [{ type: 'web_search_call', id: 'ws-1', action: { type: 'search', queries: ['q'] } }] })
+    const fetchMock = stubFetch({ output: [{ type: 'web_search_call', id: 'ws-1', action: { type: 'search', queries: ['q'] } }] })
     const outcome = await probeCandidate(makeCandidate('openai-responses'), async () => KEY, 1000)
     expect(outcome.supported).toBe(true)
+    // The probe must exercise the exact tool spelling real searches use, or a
+    // gateway that drops a nameless `web_search` would pass a probe that
+    // never ran one.
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      tools: [{ type: 'web_search_2025_08_26' }],
+      tool_choice: { type: 'web_search_2025_08_26' },
+    })
   })
 
   it('rejects a 2xx reply that executed no search', async () => {

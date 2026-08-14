@@ -15,8 +15,18 @@ import { abortable, isAbortError, providerErrorMessage, readBounded, searchAbort
 /** Path appended to the configured base URL to reach the Responses API. */
 const RESPONSES_ENDPOINT = '/responses'
 
+/**
+ * The server-tool type sent on every Responses request. The unversioned
+ * `web_search` spelling is dropped by gateway-style endpoints that parse
+ * tools as function-like entries keyed by `name` (OpenCode Zen/Go ignores a
+ * nameless `web_search` and answers from memory); `web_search_2025_08_26` is
+ * documented by OpenAI and DeepSeek, executes without extra fields, and is
+ * what the capability probe verifies before any search is served.
+ */
+export const RESPONSES_WEB_SEARCH_TOOL_TYPE = 'web_search_2025_08_26'
+
 /** Attribution header value sent on every request. Bump with the package version. */
-const USER_AGENT = 'dsh-web-search-provider/0.1.0'
+const USER_AGENT = 'dsh-web-search-provider/0.1.1'
 
 /**
  * The three server-side web actions this adapter can ask for. `search` is the
@@ -95,8 +105,8 @@ export function buildResponsesSearchBody(options: ResponsesSearchOptions, input:
         content: [{ type: 'input_text', text: input.text }],
       },
     ],
-    tools: [{ type: 'web_search' }],
-    tool_choice: { type: 'web_search' },
+    tools: [{ type: RESPONSES_WEB_SEARCH_TOOL_TYPE }],
+    tool_choice: { type: RESPONSES_WEB_SEARCH_TOOL_TYPE },
     stream: false,
     max_output_tokens: options.maxOutputTokens,
   }

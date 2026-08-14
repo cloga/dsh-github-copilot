@@ -2,7 +2,7 @@
 
 为 DeepSeek Harness 的 web 能力接缝（`ctx.web`）提供原生网络搜索的 provider。一个 provider，两种线上协议：
 
-- **OpenAI Responses API** —— `POST {baseURL}/responses`，启用服务端 `web_search` 工具。服务端自行执行完整浏览循环 —— `search` / `open_page` / `find_in_page` 三种 action —— 适配器完整理解这三种 action，以及 `url_citation` / `web_search` / `search_result` 的来源注解词汇。
+- **OpenAI Responses API** —— `POST {baseURL}/responses`，启用服务端 `web_search_2025_08_26` 工具（带版本号的拼写在会丢弃无名 `web_search` 的网关端点上也能执行，如 OpenCode Zen/Go；OpenAI 与 DeepSeek 官方文档均支持）。服务端自行执行完整浏览循环 —— `search` / `open_page` / `find_in_page` 三种 action —— 适配器完整理解这三种 action，以及 `url_citation` / `web_search` / `search_result` 的来源注解词汇。
 - **Anthropic 兼容 Messages API** —— `POST {baseURL}/messages`，启用原生 `web_search_20250305` 服务端工具，按现有 `web-search-deepseek` 插件的方式映射 `web_search_tool_result` 块与引文摘录。
 
 与 `include:web-search-deepseek`（仅限 DeepSeek，且不验证端点是否真的执行搜索）不同，本插件探测 harness 当前正在对话的 provider，用一次有界请求**探测**所选端点确实运行原生搜索，无响应时**自动禁用** —— 除非使用者在配置中显式指定协议与端点。

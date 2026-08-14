@@ -2,7 +2,7 @@
 
 A native web-search provider for the DeepSeek Harness web capability seam (`ctx.web`). One provider, two wire protocols:
 
-- **OpenAI Responses API** — `POST {baseURL}/responses` with the server-side `web_search` tool. The server executes the full browsing loop itself — `search`, `open_page`, and `find_in_page` actions — and the adapter understands all three, plus the `url_citation`/`web_search`/`search_result` annotation vocabulary for sources.
+- **OpenAI Responses API** — `POST {baseURL}/responses` with the server-side `web_search_2025_08_26` tool (the versioned spelling executes on gateway endpoints that drop a nameless `web_search`, e.g. OpenCode Zen/Go, and is documented by OpenAI and DeepSeek). The server executes the full browsing loop itself — `search`, `open_page`, and `find_in_page` actions — and the adapter understands all three, plus the `url_citation`/`web_search`/`search_result` annotation vocabulary for sources.
 - **Anthropic-compatible Messages API** — `POST {baseURL}/messages` with the native `web_search_20250305` server tool, mapping `web_search_tool_result` blocks and citation excerpts exactly like the shipped `web-search-deepseek` plugin.
 
 Unlike `include:web-search-deepseek` (DeepSeek-only, blind to whether its endpoint actually runs search), this plugin detects the provider the harness currently chats with, **probes** the chosen endpoint with one bounded request to verify native search really runs, and **auto-disables** when nothing answers — unless the user pins a protocol and endpoint in configuration.

@@ -13,9 +13,10 @@ import { WebError } from '@deepseek-ai/dsh-web'
 import type { SearchPlanCandidate } from './plan.ts'
 import type { AnthropicResponse, ResponsesResponse } from './types.ts'
 import { isAbortError, providerErrorMessage, readBounded } from './http.ts'
+import { RESPONSES_WEB_SEARCH_TOOL_TYPE } from './responses.ts'
 
 /** Attribution header value sent on probe requests. Bump with the package version. */
-const USER_AGENT = 'dsh-web-search-provider/0.1.0'
+const USER_AGENT = 'dsh-web-search-provider/0.1.1'
 
 /** Upper bound on generated tokens for a probe reply; the verdict needs none of it. */
 const PROBE_MAX_TOKENS = 64
@@ -79,8 +80,8 @@ async function probeResponses(candidate: SearchPlanCandidate, apiKey: string, si
       body: JSON.stringify({
         model: candidate.model,
         input: [{ role: 'user', content: [{ type: 'input_text', text: 'Probe web search capability.' }] }],
-        tools: [{ type: 'web_search' }],
-        tool_choice: { type: 'web_search' },
+        tools: [{ type: RESPONSES_WEB_SEARCH_TOOL_TYPE }],
+        tool_choice: { type: RESPONSES_WEB_SEARCH_TOOL_TYPE },
         stream: false,
         max_output_tokens: PROBE_MAX_TOKENS,
       }),

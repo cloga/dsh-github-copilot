@@ -1,7 +1,7 @@
 {
   "name": "dsh-web-search-provider",
   "description": "Native web search provider for the DeepSeek Harness web seam (ctx.web): one provider that speaks the OpenAI Responses API (web_search, with search / open_page / find_in_page actions) and the Anthropic-compatible Messages API (web_search_20250305), selected and verified against the provider the harness currently chats with",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packageManager": "pnpm@11.3.0",
   "publishConfig": {
     "access": "public",
