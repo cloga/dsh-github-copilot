@@ -1,0 +1,37 @@
+# Publish the package to npm via trusted publishing (OIDC) — no npm token.
+# On npmjs.com, the package's Trusted Publisher must name this exact workflow
+# filename: Settings → Trusted publishing → GitHub Actions → Workflow filename:
+# `publish.yml` (see README "Publishing").
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  # Required for OIDC: lets GitHub mint the short-lived token npm exchanges
+  # for a publish credential. Without it the publish fails with ENEEDAUTH.
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Reads the pinned version from the `packageManager` field.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          # Release builds must never reuse a stale dependency cache.
+          package-manager-cache: false
+
+      # The publish hook (`prepublishOnly`) runs the test suite and the build,
+      # so what is published is exactly what was just verified.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm publish --provenance --no-git-checks

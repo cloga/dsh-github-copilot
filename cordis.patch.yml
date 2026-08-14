@@ -1,0 +1,10 @@
+# Example overlay: load the local web-search-provider plugin into a dsh profile.
+# Used by the load smoke test (`dsh web --patch ./cordis.patch.yml`); adjust the
+# absolute plugin path to this checkout, or reference the installed package name.
+- insert:
+    - id: web-search-provider
+      name: '/home/yms/work/dsh-web-search/lib/index.js'
+      config:
+        # The smoke test skips the live capability probe so boot makes no
+        # provider calls; real deployments keep the default (probe: true).
+        probe: false
