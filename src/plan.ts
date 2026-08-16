@@ -1,27 +1,21 @@
 /**
  * Search-plan resolution: which protocol and endpoint native search runs
- * through. An explicit config pin always wins; otherwise the current chat
- * route (default-model selection plus the `llm-pi-ai` settings section) is
- * detected and probed — its own protocol when that can search, the known
- * search-capable sibling protocols of its host otherwise. The {@link SearchPlan}
- * class owns the probe lifecycle so `available()` stays synchronous while the
- * verdict lands in the background.
+ * through. The current chat route (default-model selection plus the
+ * `llm-pi-ai` settings section) is detected and probed — its own protocol
+ * when that can search, the known search-capable sibling protocols of its
+ * host otherwise. The {@link SearchPlan} class owns the probe lifecycle so
+ * `available()` stays synchronous while the verdict lands in the background.
  * @module dsh-web-search-provider/plan
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { Context } from '@deepseek-ai/cordis'
-import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import type { ProbeOutcome } from './probe.ts'
 import { currentChatRoute } from './current-provider.ts'
 import type { CurrentChatRoute } from './current-provider.ts'
-import { DEFAULT_API_VERSION, DEFAULT_MAX_TOKENS, DEFAULT_MAX_USES } from './anthropic.ts'
 
 /** The two search-capable wire protocols this package speaks. */
 export type SearchProtocol = 'openai-responses' | 'anthropic-messages'
-
-/** Default model for both protocols when neither config nor route names one. */
-export const DEFAULT_MODEL = 'deepseek-v4-flash'
 
 /** Default credential reference when neither config nor route names one. */
 export const DEFAULT_API_KEY_ENV = 'DEEPSEEK_API_KEY'
@@ -29,20 +23,30 @@ export const DEFAULT_API_KEY_ENV = 'DEEPSEEK_API_KEY'
 /** Default Responses base URL (DeepSeek first-party; `/responses` is appended). */
 export const DEFAULT_RESPONSES_BASE_URL = 'https://api.deepseek.com'
 
-/** Default Anthropic-compatible base URL (DeepSeek first-party; `/messages` is appended). */
-export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.deepseek.com/anthropic/v1'
-
-/** Default upper bound on generated tokens for a Responses search. */
-export const DEFAULT_MAX_OUTPUT_TOKENS = 4096
+/** Default `anthropic-version` header value. */
+export const DEFAULT_API_VERSION = '2023-06-01'
 
 /**
- * Environment variables naming endpoint bases for the pinned-protocol mode.
- * Deliberately distinct from `$DEEPSEEK_BASE_URL`, which belongs to the
- * chat-completions LLM adapter: search speaks the search protocols, so one
- * variable cannot serve both.
+ * The server-side Responses web tool spellings. The standard `web_search`
+ * is the OpenAI/DeepSeek-official default; `web_search_2025_08_26` is the
+ * versioned spelling OpenCode Go-style gateways require. The probe tries the
+ * candidate's primary spelling first and falls back to the other, so unknown
+ * gateway endpoints self-adapt.
  */
-export const RESPONSES_BASE_URL_ENV = 'DSH_WEB_SEARCH_RESPONSES_BASE_URL'
-export const ANTHROPIC_BASE_URL_ENV = 'DSH_WEB_SEARCH_ANTHROPIC_BASE_URL'
+export type ResponsesWebSearchToolType = 'web_search' | 'web_search_2025_08_26'
+
+/** Standard server-side web search tool type (OpenAI/DeepSeek official). */
+export const WEB_SEARCH_TOOL_TYPE: ResponsesWebSearchToolType = 'web_search'
+
+/**
+ * Versioned spelling required by OpenCode Go (opencode.ai) and similar
+ * gateways that parse tools as function-like entries keyed by `name` and
+ * drop a nameless `web_search`.
+ */
+export const RESPONSES_WEB_SEARCH_TOOL_TYPE: ResponsesWebSearchToolType = 'web_search_2025_08_26'
+
+/** Anthropic server-side web search tool type (versioned). */
+export const ANTHROPIC_WEB_SEARCH_TOOL_TYPE = 'web_search_20250305'
 
 /** Known credential references for pi-ai catalog routes without a profile override. */
 const KNOWN_API_KEY_ENVS: Readonly<Record<string, string>> = {
@@ -73,24 +77,19 @@ export interface SearchPlanCandidate {
   readonly apiKeyEnv: string
   /** `anthropic-version` header value (anthropic-messages only). */
   readonly apiVersion: string
-  /** Upper bound on generated tokens for the Messages request (anthropic-messages only). */
-  readonly maxTokens: number
-  /** Maximum `web_search` server-tool uses per request (anthropic-messages only). */
-  readonly maxUses: number
-  /** Upper bound on generated tokens for a Responses search (openai-responses only). */
-  readonly maxOutputTokens: number
+  /**
+   * The Responses web tool spelling this candidate serves with (probe-verified;
+   * openai-responses only). The probe may settle on the fallback spelling, in
+   * which case the chosen candidate carries the verified one.
+   */
+  readonly webSearchToolType?: ResponsesWebSearchToolType
 }
 
 /** The plugin-config fields the plan reads; `apply` projects the full section onto this. */
 export interface PlanConfig {
-  readonly protocol?: SearchProtocol
   readonly baseURL?: string
   readonly apiKeyEnv?: string
   readonly model?: string
-  readonly apiVersion?: string
-  readonly maxTokens?: number
-  readonly maxUses?: number
-  readonly maxOutputTokens?: number
   /** Whether a live capability probe verifies each candidate before use. */
   readonly probe: boolean
   /** Bound on one probe request, in milliseconds. */
@@ -125,88 +124,84 @@ function hostnameOf(baseURL: string | undefined): string | undefined {
   }
 }
 
+/** Whether a base belongs to the OpenCode Go family, which needs the versioned spelling. */
+function isOpenCodeHost(baseURL: string): boolean {
+  const hostname = hostnameOf(baseURL)
+  return hostname !== undefined && (hostname === 'opencode.ai' || hostname.endsWith('.opencode.ai'))
+}
+
 /**
  * The search-capable sibling protocols one chat route can be asked through,
  * in preference order. A route whose own protocol can already search is
  * asked on it alone; a Chat-Completions route cannot search on that wire, so
  * the known first-party endpoints sharing the route's host are asked instead.
  * Unknown hosts yield no siblings: deriving endpoint layouts for a gateway
- * nobody knows would be guessing, and explicit configuration exists for that
- * case.
+ * nobody knows would be guessing. To enable such a gateway, declare its
+ * search-capable api (openai-responses or anthropic-messages) in the
+ * llm-pi-ai route profile — the plan then derives that route's own protocol
+ * as its single candidate, and baseURL/model/apiKeyEnv overrides apply.
  * @param route - the current chat route facts.
+ * @param baseOverride - optional configured base replacing the route's own.
  * @returns `{ protocol, baseURL }` pairs in probe order.
  */
-export function siblingCandidates(route: CurrentChatRoute): readonly { protocol: SearchProtocol; baseURL: string }[] {
+export function siblingCandidates(
+  route: CurrentChatRoute,
+  baseOverride?: string,
+): readonly { protocol: SearchProtocol; baseURL: string }[] {
+  const base = (baseOverride ?? route.baseURL)?.replace(/\/+$/, '') ?? ''
   if (route.api === 'openai-responses' || route.api === 'anthropic-messages') {
-    return [{ protocol: route.api, baseURL: route.baseURL ?? '' }]
+    return [{ protocol: route.api, baseURL: base }]
   }
-  const base = route.baseURL?.replace(/\/+$/, '') ?? ''
-  if (isDeepSeekFamily(route.provider) || hostnameOf(route.baseURL) === 'api.deepseek.com') {
+  if (isDeepSeekFamily(route.provider) || hostnameOf(baseOverride ?? route.baseURL) === 'api.deepseek.com') {
+    // Chat-Completions bases conventionally end in `/v1` (DeepSeek accepts
+    // both https://api.deepseek.com and …/v1); the search endpoints live at
+    // the host root, so the suffix is stripped before deriving them.
+    const chatBase = base.replace(/\/v1$/u, '')
     return [
-      { protocol: 'openai-responses', baseURL: base.length > 0 ? base : DEFAULT_RESPONSES_BASE_URL },
-      { protocol: 'anthropic-messages', baseURL: `${base.length > 0 ? base : DEFAULT_RESPONSES_BASE_URL}/anthropic/v1` },
+      { protocol: 'openai-responses', baseURL: chatBase.length > 0 ? chatBase : DEFAULT_RESPONSES_BASE_URL },
+      { protocol: 'anthropic-messages', baseURL: `${chatBase.length > 0 ? chatBase : DEFAULT_RESPONSES_BASE_URL}/anthropic/v1` },
     ]
   }
-  if (route.provider === 'openai' || hostnameOf(route.baseURL) === 'api.openai.com') {
+  if (route.provider === 'openai' || hostnameOf(baseOverride ?? route.baseURL) === 'api.openai.com') {
     return [{ protocol: 'openai-responses', baseURL: base.length > 0 ? base : 'https://api.openai.com/v1' }]
   }
   return []
-}
-
-/** The base URL a pinned protocol falls back to when the route cannot answer. */
-function pinnedBaseURL(protocol: SearchProtocol, config: PlanConfig, route: CurrentChatRoute | undefined, ctx: Context): string {
-  if (config.baseURL !== undefined && config.baseURL.length > 0) return config.baseURL
-  if (route !== undefined) {
-    if (protocol === 'openai-responses' && (route.api === 'openai-responses'
-      || isDeepSeekFamily(route.provider) || hostnameOf(route.baseURL) === 'api.deepseek.com'
-      || route.provider === 'openai' || hostnameOf(route.baseURL) === 'api.openai.com')) {
-      return route.baseURL ?? DEFAULT_RESPONSES_BASE_URL
-    }
-    if (protocol === 'anthropic-messages' && route.api === 'anthropic-messages') {
-      return route.baseURL ?? DEFAULT_ANTHROPIC_BASE_URL
-    }
-    if (protocol === 'anthropic-messages' && (isDeepSeekFamily(route.provider) || hostnameOf(route.baseURL) === 'api.deepseek.com')) {
-      return `${route.baseURL ?? DEFAULT_RESPONSES_BASE_URL}/anthropic/v1`
-    }
-  }
-  const ambient = launchEnvironmentOf(ctx).get(protocol === 'openai-responses' ? RESPONSES_BASE_URL_ENV : ANTHROPIC_BASE_URL_ENV)
-  if (ambient !== undefined && ambient.value.length > 0) return ambient.value
-  return protocol === 'openai-responses' ? DEFAULT_RESPONSES_BASE_URL : DEFAULT_ANTHROPIC_BASE_URL
 }
 
 /** Build one fully defaulted candidate from a protocol and its base. */
 function buildCandidate(
   protocol: SearchProtocol,
   baseURL: string,
-  route: CurrentChatRoute | undefined,
+  route: CurrentChatRoute,
   config: PlanConfig,
 ): SearchPlanCandidate {
   return {
     protocol,
     baseURL: protocol === 'anthropic-messages' ? ensureV1Base(baseURL) : baseURL,
-    model: config.model ?? route?.model ?? DEFAULT_MODEL,
-    apiKeyEnv: config.apiKeyEnv ?? route?.apiKeyEnv ?? KNOWN_API_KEY_ENVS[route?.provider ?? ''] ?? DEFAULT_API_KEY_ENV,
-    apiVersion: config.apiVersion ?? DEFAULT_API_VERSION,
-    maxTokens: config.maxTokens ?? DEFAULT_MAX_TOKENS,
-    maxUses: config.maxUses ?? DEFAULT_MAX_USES,
-    maxOutputTokens: config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+    // `route.model` is always present (the selection names one); only the
+    // config override can replace it.
+    model: config.model ?? route.model,
+    apiKeyEnv: config.apiKeyEnv ?? route.apiKeyEnv ?? KNOWN_API_KEY_ENVS[route.provider] ?? DEFAULT_API_KEY_ENV,
+    apiVersion: DEFAULT_API_VERSION,
+    // OpenAI-standard semantics by default; only OpenCode Go hosts get the
+    // versioned spelling up front (the probe still falls back for unknown
+    // gateway-style endpoints).
+    ...protocol === 'openai-responses'
+      ? { webSearchToolType: isOpenCodeHost(baseURL) ? RESPONSES_WEB_SEARCH_TOOL_TYPE : WEB_SEARCH_TOOL_TYPE }
+      : {},
   }
 }
 
 /**
- * Resolve the candidate set for one plan. An explicit protocol pin yields a
- * single candidate (the user owns the endpoint); otherwise the current chat
- * route decides, with the sibling fallback above. An empty result means the
- * plugin auto-disables — nothing to probe, nothing to register.
- * @param ctx - plugin context for route detection and environment layers.
+ * Resolve the candidate set for one plan from the current chat route. An
+ * empty result means the plugin auto-disables — nothing to probe, nothing to
+ * register.
+ * @param ctx - plugin context for route detection.
  * @param config - the currently authoritative plan config.
  * @returns the candidates in probe order.
  */
 export function resolveCandidates(ctx: Context, config: PlanConfig): readonly SearchPlanCandidate[] {
   const route = currentChatRoute(ctx)
-  if (config.protocol !== undefined) {
-    return [buildCandidate(config.protocol, pinnedBaseURL(config.protocol, config, route, ctx), route, config)]
-  }
   if (route === undefined) return []
   // A route whose protocol could not be resolved (no profile `api`, no
   // catalog entry — e.g. the legacy `deepseek-official` alias) is treated as
@@ -217,13 +212,13 @@ export function resolveCandidates(ctx: Context, config: PlanConfig): readonly Se
   // host's known siblings otherwise.
   if (route.api === undefined || route.api === 'openai-completions'
     || route.api === 'openai-responses' || route.api === 'anthropic-messages') {
-    return siblingCandidates(route).map(({ protocol, baseURL }) => buildCandidate(protocol, baseURL, route, config))
+    return siblingCandidates(route, config.baseURL).map(({ protocol, baseURL }) => buildCandidate(protocol, baseURL, route, config))
   }
   return []
 }
 
 /** Lifecycle state of one search plan. */
-export type SearchPlanStatus = 'pending' | 'probing' | 'ready' | 'failed'
+export type SearchPlanStatus = 'probing' | 'ready' | 'failed'
 
 /**
  * One candidate set plus its probe lifecycle. The probe runs in the
@@ -237,7 +232,7 @@ export class SearchPlan {
   /** Resolves when the probe verdict (or the immediate decision) lands. */
   readonly settled: Promise<void>
 
-  private status: SearchPlanStatus = 'pending'
+  private status: SearchPlanStatus
   private chosen: SearchPlanCandidate | undefined
   private reason: string | undefined
 
@@ -254,7 +249,7 @@ export class SearchPlan {
     this.candidates = candidates
     if (candidates.length === 0) {
       this.status = 'failed'
-      this.reason = 'native web search is disabled: no search-capable provider is configured and the current chat provider could not be detected; configure a "protocol" in the web-search-provider plugin config'
+      this.reason = 'native web search is disabled: no search-capable provider is configured and the current chat provider could not be detected; make the default model selection resolvable, declare a search-capable "api" (openai-responses or anthropic-messages) for the chat route in the llm-pi-ai settings profile, or switch to a provider with known search-capable endpoints'
       this.settled = Promise.resolve()
       return
     }
@@ -264,17 +259,29 @@ export class SearchPlan {
       this.settled = Promise.resolve()
       return
     }
+    this.status = 'probing'
     this.settled = this.runProbe()
   }
 
   /** Probe candidates in order; the first supported verdict wins. */
   private async runProbe(): Promise<void> {
-    this.status = 'probing'
     for (const candidate of this.candidates) {
-      const outcome = await this.probe(candidate)
+      let outcome: ProbeOutcome
+      try {
+        outcome = await this.probe(candidate)
+      } catch (error) {
+        // A crashing probe must not reject `settled`: listeners never await
+        // the plan, and a rejected promise here would be unhandled.
+        outcome = { supported: false, detail: `probe crashed: ${String(error)}` }
+      }
       if (outcome.supported) {
         this.status = 'ready'
-        this.chosen = candidate
+        // The probe may have passed on the FALLBACK spelling; the wire must
+        // send exactly the spelling that was verified, so the chosen
+        // candidate carries the verified value.
+        this.chosen = outcome.webSearchToolType !== undefined && outcome.webSearchToolType !== candidate.webSearchToolType
+          ? { ...candidate, webSearchToolType: outcome.webSearchToolType }
+          : candidate
         return
       }
       this.reason = outcome.detail
@@ -288,10 +295,11 @@ export class SearchPlan {
   }
 
   /**
-   * Cheap synchronous usability check for the web seam's provider selection.
-   * While probing (or after a probe failure) the provider is unavailable, so
-   * the seam reports a structured unavailable error rather than admitting a
-   * call that cannot run.
+   * Cheap synchronous usability check for the listener gate. While probing
+   * the plan is PROVISIONALLY available — the first gated request may enter
+   * and await {@link settle} — so the probe verdict and the stream start in
+   * parallel; only a failed (or candidate-less) plan is unavailable and keeps
+   * the request on the normal adapter path.
    * @returns whether a search can currently be served.
    */
   available(): boolean {
@@ -334,8 +342,6 @@ export function sameCandidates(
       && candidate.model === other.model
       && candidate.apiKeyEnv === other.apiKeyEnv
       && candidate.apiVersion === other.apiVersion
-      && candidate.maxTokens === other.maxTokens
-      && candidate.maxUses === other.maxUses
-      && candidate.maxOutputTokens === other.maxOutputTokens
+      && candidate.webSearchToolType === other.webSearchToolType
   })
 }

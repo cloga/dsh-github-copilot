@@ -1,7 +1,7 @@
 {
   "name": "dsh-web-search-provider",
-  "description": "Native web search provider for the DeepSeek Harness web seam (ctx.web): one provider that speaks the OpenAI Responses API (web_search, with search / open_page / find_in_page actions) and the Anthropic-compatible Messages API (web_search_20250305), selected and verified against the provider the harness currently chats with",
-  "version": "0.1.1",
+  "description": "Improve web search in Deepseek Harness, use server-side search service.",
+  "version": "0.2.1",
   "packageManager": "pnpm@11.3.0",
   "publishConfig": {
     "access": "public",
@@ -12,18 +12,17 @@
     "url": "git+https://github.com/hiyms/dsh-web-search-provider.git"
   },
   "type": "module",
-  "main": "lib/index.js",
-  "types": "lib/types/index.d.ts",
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
+    "cordis.patch.yml",
     "lib/index.js",
+    "lib/*.js",
     "lib/types/**/*.d.ts",
     "README.md",
     "README.zh.md"
@@ -42,8 +41,9 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsdown",
+    "build": "pnpm clean && tsc -p tsconfig.json && tsdown",
     "clean": "rm -rf lib",
+    "prepare": "tsc -p tsconfig.json && tsdown",
     "prepublishOnly": "pnpm test && pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -55,10 +55,8 @@
     "@deepseek-ai/dsh-agent-default-model": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-credentials": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-launch-environment": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-web": "^0.1.0-rc.6"
   },
   "dependencies": {
@@ -71,14 +69,22 @@
     "@deepseek-ai/dsh-agent-default-model": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-credentials": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-launch-environment": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-web": "^0.1.0-rc.6",
     "@types/node": "^22.0.0",
     "tsdown": "^0.22.2",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
+  },
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "imports": {
+    "#package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   }
 }

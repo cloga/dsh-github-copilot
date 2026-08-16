@@ -1,10 +1,10 @@
 /**
- * Shared HTTP plumbing for the two protocol adapters and the capability
- * probe: bounded response reading, caller-cancellation propagation, and the
- * stable {@link WebError} translations. The patterns mirror the harness
- * `dsh-web` package family (web-search-deepseek, model discovery) so every
- * credentialed request rejects redirects before a `Location` target can be
- * contacted.
+ * Shared HTTP plumbing for the capability probe and the inline wires:
+ * bounded response reading, caller-cancellation races for preflight steps,
+ * and the stable {@link WebError} translations. The patterns mirror the
+ * harness `dsh-web` package family (web-search-deepseek, model discovery) so
+ * every credentialed request rejects redirects before a `Location` target can
+ * be contacted.
  * @module dsh-web-search-provider/http
  */
 
@@ -59,54 +59,42 @@ export async function readBounded(response: Response, url: string): Promise<stri
     body.set(chunk, offset)
     offset += chunk.byteLength
   }
-  return new TextDecoder().decode(body)
+  // Strict decoding, mirroring the SSE parser: invalid UTF-8 is a corrupt
+  // reply and must fail the read, not be substituted into the payload.
+  return new TextDecoder('utf-8', { fatal: true }).decode(body)
 }
 
-/**
- * Whether an error is the fetch/`AbortSignal` abort signal, surfaced as
- * `WEB_ABORTED` rather than a provider failure.
- * @param error - the caught throwable.
- * @returns true for a DOM abort error.
- */
+/** Whether an error is the fetch/`AbortSignal` abort signal. */
 export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError'
 }
 
-/** Build the provider's stable cancellation error while retaining the caller's reason. */
-export function searchAborted(signal: AbortSignal | undefined, fallback?: unknown): WebError {
-  return new WebError('native web search aborted', 'WEB_ABORTED', {
-    cause: signal?.aborted === true ? signal.reason : fallback,
-  })
-}
-
-/** Throw the provider's stable cancellation error when the caller already aborted. */
-export function throwIfSearchAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted === true) throw searchAborted(signal)
-}
-
 /**
  * Race a same-process asynchronous preflight (credential resolution) against
- * caller cancellation. The attached settlement handlers keep observing an
- * uncooperative operation after abort so a later rejection cannot become
- * unhandled.
+ * a cancellation signal. The attached settlement handlers keep observing an
+ * uncooperative operation after the race is lost, so a later rejection cannot
+ * become unhandled.
  * @param operation - the preflight promise.
- * @param signal - the caller's cancellation signal.
- * @returns the operation's value, or a rejection with the stable abort error.
+ * @param signal - the cancellation signal (request abort or idle watchdog).
+ * @returns the operation's value, or a rejection once the signal fires.
  */
 export function abortable<T>(operation: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
   if (signal === undefined) return operation
-  if (signal.aborted) return Promise.reject(searchAborted(signal))
+  if (signal.aborted) {
+    // The caller will not await the operation; keep observing it so a later
+    // rejection cannot become unhandled.
+    operation.then(() => undefined, () => undefined)
+    return Promise.reject(new DOMException('aborted', 'AbortError'))
+  }
   return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => {
-      reject(searchAborted(signal))
-    }
+    const onAbort = (): void => reject(new DOMException('aborted', 'AbortError'))
     signal.addEventListener('abort', onAbort, { once: true })
     operation.then((value) => {
       signal.removeEventListener('abort', onAbort)
       resolve(value)
     }, (error: unknown) => {
       signal.removeEventListener('abort', onAbort)
-      reject(new Error(String(error).replace(/^Error: /u, ''), { cause: error }))
+      reject(error)
     })
   })
 }

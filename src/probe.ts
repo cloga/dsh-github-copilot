@@ -10,13 +10,18 @@
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'
-import type { SearchPlanCandidate } from './plan.ts'
+import {
+  ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
+  RESPONSES_WEB_SEARCH_TOOL_TYPE,
+  WEB_SEARCH_TOOL_TYPE,
+} from './plan.ts'
+import type { ResponsesWebSearchToolType, SearchPlanCandidate } from './plan.ts'
 import type { AnthropicResponse, ResponsesResponse } from './types.ts'
 import { isAbortError, providerErrorMessage, readBounded } from './http.ts'
-import { RESPONSES_WEB_SEARCH_TOOL_TYPE } from './responses.ts'
+import { version } from '#package.json' with { type: 'json' }
 
-/** Attribution header value sent on probe requests. Bump with the package version. */
-const USER_AGENT = 'dsh-web-search-provider/0.1.1'
+/** Attribution header value sent on probe requests; single-sourced from package.json. */
+const USER_AGENT = `dsh-web-search-provider/${version}`
 
 /** Upper bound on generated tokens for a probe reply; the verdict needs none of it. */
 const PROBE_MAX_TOKENS = 64
@@ -26,13 +31,24 @@ export interface ProbeOutcome {
   readonly supported: boolean
   /** Why the candidate failed, for the auto-disable diagnostic. */
   readonly detail: string
+  /**
+   * The Responses tool spelling the probe verified (openai-responses only).
+   * May differ from the candidate's primary spelling when the fallback won;
+   * the wire must use this verified value.
+   */
+  readonly webSearchToolType?: ResponsesWebSearchToolType
 }
+
+/** Upper bound on the whole probe (also the fetch signal bound), milliseconds. */
+const MAX_PROBE_TIMEOUT_MS = 2_147_483_647
 
 /**
  * Probe one candidate protocol with a single bounded request. The verdict is
  * structural: a Responses reply must contain a `web_search_call` item and a
  * Messages reply must contain a `web_search_tool_result` block; anything else
  * — HTTP error, unparseable body, silent tool ignore — is "not supported".
+ * The timeout bounds the WHOLE probe, including credential resolution; the
+ * probe never throws — every failure becomes a verdict.
  * @param candidate - the resolved endpoint facts to verify.
  * @param resolveApiKey - resolves the candidate's credential reference.
  * @param timeoutMs - bound on the whole probe.
@@ -43,7 +59,30 @@ export async function probeCandidate(
   resolveApiKey: (apiKeyEnv: string) => Promise<string | undefined>,
   timeoutMs: number,
 ): Promise<ProbeOutcome> {
-  const signal = AbortSignal.timeout(timeoutMs)
+  // Clamp: `AbortSignal.timeout` (and `setTimeout`) refuse values beyond 2^31-1
+  // in different ways; the clamp keeps an absurd config from throwing.
+  const bound = Math.min(Math.max(Math.trunc(timeoutMs), 1), MAX_PROBE_TIMEOUT_MS)
+  const deadline = Date.now() + bound
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      runProbe(candidate, resolveApiKey, bound, deadline),
+      new Promise<ProbeOutcome>((resolve) => {
+        timer = setTimeout(() => resolve({ supported: false, detail: `probe timed out after ${bound}ms` }), bound)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Resolve the key and probe the endpoint; the fetch is bounded by the remaining deadline. */
+async function runProbe(
+  candidate: SearchPlanCandidate,
+  resolveApiKey: (apiKeyEnv: string) => Promise<string | undefined>,
+  bound: number,
+  deadline: number,
+): Promise<ProbeOutcome> {
   try {
     const apiKey = await resolveApiKey(candidate.apiKeyEnv)
     if (apiKey === undefined || apiKey.length === 0) {
@@ -52,6 +91,14 @@ export async function probeCandidate(
         detail: `no API key for "${candidate.apiKeyEnv}"`,
       }
     }
+    // The race above returns the verdict at `bound`, but the work keeps
+    // running: a key that lands late must not start a FRESH fetch with a
+    // fresh timeout. Check the remaining budget and bound the fetch to it.
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) {
+      return { supported: false, detail: `probe timed out after ${bound}ms` }
+    }
+    const signal = AbortSignal.timeout(remaining)
     return candidate.protocol === 'openai-responses'
       ? await probeResponses(candidate, apiKey, signal)
       : await probeAnthropic(candidate, apiKey, signal)
@@ -63,8 +110,30 @@ export async function probeCandidate(
   }
 }
 
-/** Probe the Responses endpoint: force `web_search` and require a call item. */
-async function probeResponses(candidate: SearchPlanCandidate, apiKey: string, signal: AbortSignal): Promise<ProbeOutcome> {
+/** The verdict of one spelling attempt; `retryOther` marks spelling-specific failures. */
+interface SpellingVerdict {
+  readonly supported: boolean
+  readonly detail: string
+  readonly retryOther: boolean
+}
+
+/**
+ * Probe the Responses endpoint with a single tool spelling: force the tool
+ * (standard `required` or the gateway's object choice) and require a
+ * `web_search_call` item as structural evidence.
+ * @param candidate - the resolved endpoint facts.
+ * @param apiKey - the resolved credential.
+ * @param signal - the probe timeout signal.
+ * @param spelling - the tool type spelling to exercise.
+ * @returns the verdict; `retryOther` is true when the failure is specific to
+ *   the spelling (refused tool type, or a 2xx that ignored the tool).
+ */
+async function probeResponsesSpelling(
+  candidate: SearchPlanCandidate,
+  apiKey: string,
+  signal: AbortSignal,
+  spelling: ResponsesWebSearchToolType,
+): Promise<SpellingVerdict> {
   const endpoint = `${candidate.baseURL.replace(/\/+$/, '')}/responses`
   let response: Response
   try {
@@ -80,16 +149,18 @@ async function probeResponses(candidate: SearchPlanCandidate, apiKey: string, si
       body: JSON.stringify({
         model: candidate.model,
         input: [{ role: 'user', content: [{ type: 'input_text', text: 'Probe web search capability.' }] }],
-        tools: [{ type: RESPONSES_WEB_SEARCH_TOOL_TYPE }],
-        tool_choice: { type: RESPONSES_WEB_SEARCH_TOOL_TYPE },
+        tools: [{ type: spelling }],
+        // Standard semantics force through the string choice; the versioned
+        // spelling keeps the gateway's object choice.
+        tool_choice: spelling === WEB_SEARCH_TOOL_TYPE ? 'required' : { type: spelling },
         stream: false,
         max_output_tokens: PROBE_MAX_TOKENS,
       }),
       signal,
     })
   } catch (error) {
-    if (isAbortError(error)) return { supported: false, detail: 'probe timed out or was aborted' }
-    return { supported: false, detail: `probe request failed: ${String(error)}` }
+    if (isAbortError(error)) return { supported: false, detail: 'probe timed out or was aborted', retryOther: false }
+    return { supported: false, detail: `probe request failed: ${String(error)}`, retryOther: false }
   }
   if (!response.ok) {
     let detail = `HTTP ${response.status}`
@@ -99,18 +170,50 @@ async function probeResponses(candidate: SearchPlanCandidate, apiKey: string, si
     } catch {
       // The error body is best-effort; the status alone already names the failure.
     }
-    return { supported: false, detail }
+    // A 400 about the tool type is spelling-specific; auth, rate, and server
+    // failures are endpoint-level and a second spelling cannot fix them.
+    const retryOther = response.status === 400 && /tool|unsupported|unknown/i.test(detail)
+    return { supported: false, detail, retryOther }
   }
   let body: ResponsesResponse
   try {
     body = JSON.parse(await readBounded(response, endpoint)) as ResponsesResponse
   } catch (error) {
-    return { supported: false, detail: `unparseable probe reply: ${String(error)}` }
+    return { supported: false, detail: `unparseable probe reply: ${String(error)}`, retryOther: false }
   }
   const ranSearch = (body.output ?? []).some(item => item.type === 'web_search_call')
   return ranSearch
-    ? { supported: true, detail: 'native web search answered the probe' }
-    : { supported: false, detail: 'the endpoint accepted the request but executed no web_search_call; the web_search tool may be ignored' }
+    ? { supported: true, detail: 'native web search answered the probe', retryOther: false }
+    : {
+        supported: false,
+        detail: 'the endpoint accepted the request but executed no web_search_call; the web_search tool may be ignored',
+        retryOther: true,
+      }
+}
+
+/**
+ * Probe the Responses endpoint, falling back between the two tool spellings.
+ * The candidate's primary spelling goes first (standard by default, versioned
+ * for OpenCode Go hosts); a spelling-specific failure (refused tool type or a
+ * 2xx that ignored the tool) retries with the other spelling, so unknown
+ * gateway-style endpoints self-adapt. The verified spelling is reported back
+ * for the wire to use.
+ */
+async function probeResponses(candidate: SearchPlanCandidate, apiKey: string, signal: AbortSignal): Promise<ProbeOutcome> {
+  const primary = candidate.webSearchToolType ?? WEB_SEARCH_TOOL_TYPE
+  const spellings: readonly ResponsesWebSearchToolType[] = primary === RESPONSES_WEB_SEARCH_TOOL_TYPE
+    ? [RESPONSES_WEB_SEARCH_TOOL_TYPE, WEB_SEARCH_TOOL_TYPE]
+    : [WEB_SEARCH_TOOL_TYPE, RESPONSES_WEB_SEARCH_TOOL_TYPE]
+  let firstDetail: string | undefined
+  for (const spelling of spellings) {
+    const verdict = await probeResponsesSpelling(candidate, apiKey, signal, spelling)
+    if (verdict.supported) {
+      return { supported: true, detail: verdict.detail, webSearchToolType: spelling }
+    }
+    if (!verdict.retryOther) return { supported: false, detail: verdict.detail }
+    firstDetail ??= verdict.detail
+  }
+  return { supported: false, detail: firstDetail ?? 'the endpoint accepted neither web_search spelling' }
 }
 
 /** Probe the Messages endpoint: enable `web_search_20250305` and require a result block. */
@@ -133,7 +236,7 @@ async function probeAnthropic(candidate: SearchPlanCandidate, apiKey: string, si
         model: candidate.model,
         max_tokens: PROBE_MAX_TOKENS,
         messages: [{ role: 'user', content: [{ type: 'text', text: 'Probe web search capability.' }] }],
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }],
+        tools: [{ type: ANTHROPIC_WEB_SEARCH_TOOL_TYPE, name: 'web_search', max_uses: 1 }],
       }),
       signal,
     })

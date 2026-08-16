@@ -1,280 +1,281 @@
 /**
- * Register the native web-search provider in `ctx.web`. One provider serves
- * both search-capable protocols — the OpenAI Responses API `web_search`
- * server tool (with its `search` / `open_page` / `find_in_page` actions) and
- * the Anthropic-compatible Messages API `web_search_20250305` server tool —
- * chosen and verified against the provider the harness currently chats with.
- * An explicit config pin always wins; otherwise the current chat route is
- * detected and probed, and the plugin auto-disables when nothing answers.
+ * The inline web-search plugin: short-circuits agent-loop model calls on
+ * the `llm/stream` waterfall, injecting the server-side `web_search` tool
+ * into the wire request so search executes inside the model's own turn.
+ * The narrow gate keeps every other request on the normal adapter path.
  * @module dsh-web-search-provider
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
+// Bring the `systemPrompt` service declaration (dsh-agent augmentation) into
+// the type graph: module augmentations only apply when their module is part
+// of the program.
 import type {} from '@deepseek-ai/dsh-agent'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import type {} from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-web'
-import { DEFAULT_API_VERSION, DEFAULT_MAX_TOKENS, DEFAULT_MAX_USES } from './anthropic.ts'
-import { probeCandidate } from './probe.ts'
-import { NativeSearchProvider } from './provider.ts'
-import type { NativeSearchProviderHooks } from './provider.ts'
-import { applyNativeTools } from './tools.ts'
-import { DEFAULT_MAX_OUTPUT_TOKENS, resolveCandidates, sameCandidates, SearchPlan } from './plan.ts'
+import { resolveCandidates, sameCandidates, SearchPlan } from './plan.ts'
 import type { PlanConfig, SearchPlanCandidate } from './plan.ts'
-import type { SearchLlmRequest } from './types.ts'
-
-export { WEB_SEARCH_PROVIDER_ID, NativeSearchProvider } from './provider.ts'
-export type { NativeSearchProviderHooks } from './provider.ts'
-export { applyNativeTools, formatBrowseOutput } from './tools.ts'
-export { ensureV1Base, resolveCandidates, sameCandidates, SearchPlan } from './plan.ts'
-export type { PlanConfig, SearchPlanCandidate, SearchPlanStatus, SearchProtocol } from './plan.ts'
-export { runResponsesSearch, mapResponsesSearchResult, sourcesFromAnnotations, buildResponsesSearchBody, openPageInstruction, findInPageInstruction } from './responses.ts'
-export type { ResponsesSearchOptions, ResponsesSearchInput, WebSearchAction } from './responses.ts'
-export { runAnthropicSearch, mapAnthropicResponse, citationSnippets, buildAnthropicSearchBody } from './anthropic.ts'
-export type { AnthropicSearchOptions } from './anthropic.ts'
-export { probeCandidate } from './probe.ts'
-export type { ProbeOutcome } from './probe.ts'
-export { currentChatRoute } from './current-provider.ts'
-export type { CurrentChatRoute } from './current-provider.ts'
+import { probeCandidate } from './probe.ts'
+import { currentChatRoute } from './current-provider.ts'
+import type { CurrentChatRoute } from './current-provider.ts'
+import { Config } from './config.ts'
+import type { InlineConfig } from './config.ts'
+import { contentHasImages, inlineWireStream } from './wire.ts'
+import type { InlineHooks } from './wire.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'web-search-provider'
 
-/** Services the plugin registers into: the web seam, the tool registry, and prompt guidance. */
-export const inject = ['web', 'tools', 'systemPrompt']
+/** Services the plugin hooks into; `credentials` is declared so the
+ * credential seam is settled before apply resolves keys. */
+export const inject = ['llm', 'systemPrompt', 'settings', 'credentials']
 
-/** Default bound on one capability-probe request, in milliseconds. */
-export const DEFAULT_PROBE_TIMEOUT_MS = 30_000
+/** Settings namespace carrying this plugin's section. */
+export const WEB_SEARCH_SETTINGS_NAMESPACE = settingsNamespace('web-search-provider')
 
-/** Default cooperative tool-call timeout budget (ms) for the browsing tools. */
-export const DEFAULT_TOOL_TIMEOUT_MS = 60_000
-
-/** Plugin config. Everything is optional: the current chat provider decides defaults. */
-export interface Config {
-  /**
-   * Explicit protocol pin. When set, search always runs through this
-   * protocol and the current chat provider is never consulted; when unset,
-   * the current chat route (and its search-capable siblings) is detected and
-   * probed.
-   */
-  protocol?: 'openai-responses' | 'anthropic-messages'
-  /**
-   * Endpoint base for the pinned protocol (`/responses` or `/messages` is
-   * appended). Requires {@link protocol}: without a pin the endpoint layout
-   * is derived from the current chat route.
-   */
-  baseURL?: string
-  /** Literal API key; prefer {@link apiKeyEnv} so no secret enters configuration. */
-  apiKey?: string
-  /**
-   * Credential reference resolved for each search through the credentials
-   * seam. Defaults to the current chat route's reference, then to a known
-   * per-provider variable, then to `DEEPSEEK_API_KEY`.
-   */
-  apiKeyEnv?: string
-  /** Model name for the search request. Defaults to the current chat route's model. */
-  model?: string
-  /** `anthropic-version` header value (anthropic-messages). Defaults to `2023-06-01`. */
-  apiVersion?: string
-  /** Upper bound on generated tokens for a Messages search. Defaults to 4096. */
-  maxTokens?: number
-  /** Maximum `web_search` server-tool uses per Messages request. Defaults to 5. */
-  maxUses?: number
-  /** Upper bound on generated tokens for a Responses search. Defaults to 4096. */
-  maxOutputTokens?: number
-  /**
-   * Verify the endpoint truly executes native web search with one bounded
-   * request before serving. Defaults to true; set false to trust the
-   * protocol and endpoint declaration.
-   */
-  probe?: boolean
-  /** Bound on one probe request, in milliseconds. Defaults to 30000. */
-  probeTimeoutMs?: number
-  /** Cooperative timeout budget (ms) for `open_page` / `find_in_page`. Defaults to 60000. */
-  timeoutMs?: number
-  /** Which Responses-only browsing tools to register. */
-  tools?: {
-    /** Register `open_page`. Defaults to true. */
-    openPage?: boolean
-    /** Register `find_in_page`. Defaults to true. */
-    findInPage?: boolean
-  }
-}
+/** Schema of the plugin's settings section, exported for composition consumers. */
+export { Config } from './config.ts'
+export type { InlineConfig } from './config.ts'
 
 /**
- * Schema of the plugin's settings section; the documented defaults live on
- * {@link Config} so a configuration surface renders them.
- */
-export const Config: z<Config> = z.object({
-  protocol: z.union(['openai-responses', 'anthropic-messages']),
-  // Declared here rather than only at the use site: a configuration surface
-  // renders the resolved section, so a default the schema does not carry
-  // reads there as no value at all.
-  baseURL: z.string(),
-  apiKey: z.string().role('secret'),
-  apiKeyEnv: z.string().role('credential-ref'),
-  model: z.string(),
-  apiVersion: z.string().default(DEFAULT_API_VERSION),
-  maxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
-  maxUses: z.number().step(1).min(1).default(DEFAULT_MAX_USES),
-  maxOutputTokens: z.number().step(1).min(1).default(DEFAULT_MAX_OUTPUT_TOKENS),
-  probe: z.boolean().default(true),
-  probeTimeoutMs: z.number().step(1).min(1).default(DEFAULT_PROBE_TIMEOUT_MS),
-  timeoutMs: z.number().step(1).min(1).default(DEFAULT_TOOL_TIMEOUT_MS),
-  tools: z.object({
-    openPage: z.boolean().default(true),
-    findInPage: z.boolean().default(true),
-  }).default({ openPage: true, findInPage: true }),
-})
-
-/** Settings namespace carrying this plugin's section (endpoint, model, probe switches). */
-export const WEB_SEARCH_PROVIDER_SETTINGS_NAMESPACE = settingsNamespace('web-search-provider')
-
-/** Project the resolved section onto the plan's config subset. */
-function projectConfig(config: Config): PlanConfig {
-  return {
-    ...config.protocol === undefined ? {} : { protocol: config.protocol },
-    ...config.baseURL === undefined ? {} : { baseURL: config.baseURL },
-    ...config.apiKeyEnv === undefined ? {} : { apiKeyEnv: config.apiKeyEnv },
-    ...config.model === undefined ? {} : { model: config.model },
-    apiVersion: config.apiVersion ?? DEFAULT_API_VERSION,
-    maxTokens: config.maxTokens ?? DEFAULT_MAX_TOKENS,
-    maxUses: config.maxUses ?? DEFAULT_MAX_USES,
-    maxOutputTokens: config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
-    probe: config.probe ?? true,
-    probeTimeoutMs: config.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
-  }
-}
-
-/**
- * Register the native search provider and the Responses-only browsing tools.
- * The plan (candidates plus probe verdict) is rebuilt when the settings
- * section changes; the provider and tools read the CURRENT plan per
- * operation, so a committed change reaches the next search without a
- * restart and never splits an in-flight one.
- * @param ctx - context whose `web`, `tools`, and `systemPrompt` services
- *   receive the registrations; all are effect-scoped and unregister on dispose.
+ * Register the inline short-circuit. The plan (candidates plus probe
+ * verdict) follows the settings section; the listener reads the CURRENT
+ * plan and config per request.
+ * @param ctx - context whose `llm` events and `systemPrompt` receive the
+ *   registrations; both are effect-scoped and unregister on dispose.
  * @param config - the composition entry config, used as the settings base layer.
  */
-export function apply(ctx: Context, config: Config): void {
-  let current: () => Config = () => config
-  let currentPlan: SearchPlan
-  let toolsDisposer: (() => void) | undefined
-  let syncedKey: string | undefined
+export function apply(ctx: Context, config: InlineConfig): void {
+  let current: () => InlineConfig = () => config
+  // The plan is built when the settings section attaches IF the chat route
+  // is already detectable (so the probe verdict and the prompt guidance are
+  // ready before the first conversation turn); otherwise it is deferred to
+  // the FIRST model request that passes the gate. The deferral matters: at
+  // apply time the settings document (llm-pi-ai section) and the credentials
+  // seam may not be settled yet, so route detection returns unknowns and the
+  // probe would target the wrong endpoint with the wrong key (observed at
+  // boot: api/baseURL/key all unknown). By first request the harness has
+  // already driven the LLM, so the route and credential facts are guaranteed
+  // settled.
+  let currentPlan: SearchPlan | undefined
+  // The route snapshot the current plan was built for: model/provider
+  // switches in the web UI must rebuild the plan (and re-probe) instead of
+  // reusing a stale candidate set.
+  let planRoute: CurrentChatRoute | undefined
+  // The probe knobs the current plan was built with: a probe/probeTimeoutMs
+  // change must rebuild even when the candidate set is unchanged (e.g. to
+  // recover a failed plan with a longer timeout or probing off).
+  let planProbe: { enabled: boolean; timeoutMs: number } | undefined
 
-  const hooks: NativeSearchProviderHooks = {
-    apiKeyOf: () => current().apiKey,
+  const hooks: InlineHooks = {
     resolveApiKey: async (apiKeyEnv) => {
       const credentials = ctx.get('credentials')
       if (credentials !== undefined) return (await credentials.resolve(credentialRef(apiKeyEnv)))?.value
-      // Without the seam the environment is the whole credential plane.
       const ambient = launchEnvironmentOf(ctx).get(apiKeyEnv)
       return ambient !== undefined && ambient.value.length > 0 ? ambient.value : undefined
     },
-    recordRequest: (request: SearchLlmRequest) => {
-      ctx.get('agents')?.currentInitiator()?.session.append('web/search-native-llm-request', request)
-    },
   }
 
-  function buildPlan(entry: Config): SearchPlan {
-    const planConfig = projectConfig(entry)
-    const candidates = resolveCandidates(ctx, planConfig)
-    return new SearchPlan(
-      candidates,
-      (candidate: SearchPlanCandidate) => probeCandidate(candidate, hooks.resolveApiKey, planConfig.probeTimeoutMs),
-      planConfig.probe,
-    )
+  /** The live plan, built on first use and rebuilt when the chat route moves. */
+  function plan(): SearchPlan {
+    const route = currentChatRoute(ctx)
+    if (currentPlan !== undefined && sameRoute(route, planRoute)) return currentPlan
+    currentPlan = buildPlan(ctx, current(), hooks)
+    planRoute = route
+    planProbe = probeSettings(current())
+    reportRoute(ctx)
+    reportPlan(ctx, currentPlan)
+    return currentPlan
   }
 
-  /**
-   * Register or withdraw the browsing tools to match the CURRENT plan and
-   * section: they exist only while the plan serves the Responses protocol,
-   * and their timeout and enable flags come from the section. The key guards
-   * against re-registering on a probe that changed nothing.
-   */
-  function syncTools(): void {
-    const entry = current()
-    const key = `${currentPlan.chosenCandidate()?.protocol ?? 'none'}|${String(entry.timeoutMs)}|${String(entry.tools?.openPage)}|${String(entry.tools?.findInPage)}`
-    if (syncedKey === key) return
-    toolsDisposer?.()
-    toolsDisposer = undefined
-    syncedKey = key
-    if (currentPlan.chosenCandidate()?.protocol !== 'openai-responses') return
-    toolsDisposer = applyNativeTools(ctx, {
-      planOf: () => currentPlan,
-      apiKeyOf: hooks.apiKeyOf,
-      resolveApiKey: hooks.resolveApiKey,
-      ...hooks.recordRequest === undefined ? {} : { recordRequest: hooks.recordRequest },
-      timeoutMs: entry.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS,
-      openPage: entry.tools?.openPage ?? true,
-      findInPage: entry.tools?.findInPage ?? true,
-    })
-  }
-
-  /** Rebuild the plan when the section changed; re-probe only when the candidates moved. */
-  function refresh(): void {
-    const next = buildPlan(current())
-    if (!sameCandidates(next.candidates, currentPlan.candidates)) {
-      currentPlan = next
-      syncTools()
-      // The first probe verdict may land later; re-sync when it does.
-      void next.settled.then(() => {
-        if (currentPlan === next) {
-          syncTools()
-          reportPlan(next)
-        }
-      })
-      return
-    }
-    // The plan is unchanged, but the timeout or tool-enable flags may have
-    // moved; the sync key makes this a no-op when nothing relevant changed.
-    syncTools()
-  }
-
-  /** Announce the plan's verdict so an auto-disable is visible in the boot log. */
-  function reportPlan(plan: SearchPlan): void {
-    void plan.settled.then(() => {
-      const chosen = plan.chosenCandidate()
-      if (chosen === undefined) {
-        ctx.logger.warn('[web-search-provider] %s', plan.failureReason() ?? 'native web search is disabled')
-        return
-      }
-      ctx.logger.info(
-        '[web-search-provider] serving native web search through %s at %s (model %s, key %s)',
-        chosen.protocol,
-        chosen.baseURL,
-        chosen.model,
-        chosen.apiKeyEnv,
-      )
-    })
-  }
-
-  // The initial plan is built here (not only through the settings hook) so
-  // the plugin works identically when no settings service is mounted; the
-  // settings hook below may then replace it synchronously.
-  currentPlan = buildPlan(config)
-  installSettingsSection(ctx, WEB_SEARCH_PROVIDER_SETTINGS_NAMESPACE, Config, config, {
+  installSettingsSection(ctx, WEB_SEARCH_SETTINGS_NAMESPACE, Config, config, {
     setSource: (source) => {
       current = source
     },
-    onChange: refresh,
-    validate: (value) => {
-      if (value.baseURL !== undefined && value.baseURL.length > 0 && value.protocol === undefined) {
-        throw new Error('web-search-provider: "baseURL" requires an explicit "protocol"')
+    onChange: () => {
+      const cfg = current()
+      if (!cfg.enabled) {
+        // Disabled: drop the plan and its probe so nothing runs and the
+        // prompt section (which reads the plan) goes dark.
+        currentPlan = undefined
+        planRoute = undefined
+        planProbe = undefined
+        return
+      }
+      // Route facts may not be settled at attach time (the llm-pi-ai
+      // section or the credentials seam may still be initializing), or the
+      // selection may be briefly unavailable mid-session: without a route
+      // the plan cannot resolve candidates, and a STALE plan must not
+      // survive the gap — drop it so the next request rebuilds with the
+      // current config (a later restore of the same route snapshot would
+      // otherwise reuse the old baseURL/model).
+      const route = currentChatRoute(ctx)
+      if (route === undefined) {
+        currentPlan = undefined
+        planRoute = undefined
+        planProbe = undefined
+        return
+      }
+      // Resolve the candidate set WITHOUT starting probes; only a real
+      // difference (candidates, or the probe knobs that decide their
+      // verdict) rebuilds the plan. This keeps no-op edits (idleTimeoutMs,
+      // includeSources, …) from wasting a probe round-trip.
+      const candidates = resolveCandidates(ctx, planConfigOf(cfg))
+      const probe = probeSettings(cfg)
+      if (currentPlan === undefined
+        || planProbe === undefined
+        || !sameCandidates(candidates, currentPlan.candidates)
+        || probe.enabled !== planProbe.enabled
+        || probe.timeoutMs !== planProbe.timeoutMs) {
+        currentPlan = buildPlan(ctx, cfg, hooks)
+        planRoute = route
+        planProbe = probe
+        reportPlan(ctx, currentPlan)
       }
     },
   })
-  const initial = currentPlan
-  ctx.web.registerSearchProvider(new NativeSearchProvider(() => currentPlan, hooks))
-  syncTools()
-  reportPlan(initial)
-  void initial.settled.then(() => {
-    if (currentPlan === initial) {
-      syncTools()
-      reportPlan(initial)
-    }
+
+  ctx.on('llm/stream', (request: GenerateOptions, next: () => AsyncIterable<StreamChunk>) => {
+    const cfg = current()
+    // Zero-cost gate first: disabled plugins, non-loop requests, purposed
+    // calls, provider mismatches, and image-bearing requests never build a
+    // plan and never start a probe.
+    if (!preflight(request, cfg, ctx)) return next()
+    const p = plan()
+    if (!p.available()) return next()
+    return inlineWireStream(request, p, hooks, cfg)
   })
+
+  ctx.systemPrompt.section({
+    name: 'tool:web-search-provider',
+    order: 115,
+    // The guidance is only true while the plugin actually serves: with the
+    // plugin disabled or the plan failed, an empty section keeps the model
+    // from being steered toward a web_search tool that does not exist.
+    text: () => servingPrompt(current, currentPlan),
+  })
+}
+
+/**
+ * The web-search guidance text, or an empty string while the plugin cannot
+ * serve: disabled, no plan yet, or a plan that has not settled on a
+ * VERIFIED candidate (probing or failed). Only a ready plan — the state
+ * `available()` admits for serving — may tell the model the tool exists.
+ * @param current - the authoritative config source.
+ * @param plan - the live plan, when one exists.
+ * @returns the section text to contribute to this assembly.
+ */
+function servingPrompt(current: () => InlineConfig, plan: SearchPlan | undefined): string {
+  if (!current().enabled || plan?.chosenCandidate() === undefined) return ''
+  return '## Web Search\n\n'
+    + 'The web_search tool runs natively on the model provider inside the same request: '
+    + 'when you call it, the search executes server-side and its results are immediately '
+    + 'available for you to answer from. Use web_search when the user asks for current or '
+    + 'online information. Prefer web_search over guessing when freshness matters. '
+    + 'Cite the relevant URLs as markdown links in your answer.'
+}
+
+/**
+ * Announce the plan's verdict through the harness logger.
+ * @param ctx - the plugin context whose logger receives the line.
+ * @param plan - the plan whose settled verdict to announce.
+ */
+function reportPlan(ctx: Context, plan: SearchPlan): void {
+  void plan.settled.then(() => {
+    const chosen = plan.chosenCandidate()
+    if (chosen === undefined) {
+      ctx.logger.warn('[web-search-provider] %s', plan.failureReason() ?? 'web search is disabled')
+      return
+    }
+    ctx.logger.info(
+      '[web-search-provider] serving inline web search through %s at %s (model %s, key %s)',
+      chosen.protocol,
+      chosen.baseURL,
+      chosen.model,
+      chosen.apiKeyEnv,
+    )
+  })
+}
+
+/** Report the detected chat route through the harness logger. */
+function reportRoute(ctx: Context): void {
+  const route = currentChatRoute(ctx)
+  if (route === undefined) {
+    ctx.logger.warn('[web-search-provider] chat route undetectable; inline web search stays on the adapter path')
+    return
+  }
+  ctx.logger.info(
+    '[web-search-provider] chat route %s (api=%s, baseURL=%s, key=%s)',
+    route.provider,
+    route.api ?? 'unknown',
+    route.baseURL ?? 'unknown',
+    route.apiKeyEnv ?? 'unknown',
+  )
+}
+
+/** Build one plan from the section; `hooks` is referenced lazily via closure. */
+function buildPlan(ctx: Context, cfg: InlineConfig, hooks: InlineHooks): SearchPlan {
+  return new SearchPlan(
+    resolveCandidates(ctx, planConfigOf(cfg)),
+    (candidate: SearchPlanCandidate) => probeCandidate(candidate, hooks.resolveApiKey, cfg.probeTimeoutMs),
+    cfg.probe,
+  )
+}
+
+/** Project the settings section onto the plan's config surface. */
+function planConfigOf(cfg: InlineConfig): PlanConfig {
+  return {
+    ...cfg.baseURL !== undefined && cfg.baseURL.length > 0 ? { baseURL: cfg.baseURL } : {},
+    ...cfg.model !== undefined && cfg.model.length > 0 ? { model: cfg.model } : {},
+    ...cfg.apiKeyEnv !== undefined && cfg.apiKeyEnv.length > 0 ? { apiKeyEnv: cfg.apiKeyEnv } : {},
+    probe: cfg.probe,
+    probeTimeoutMs: cfg.probeTimeoutMs,
+  }
+}
+
+/** The probe knobs deciding whether a candidate set needs a new verdict. */
+function probeSettings(cfg: InlineConfig): { enabled: boolean; timeoutMs: number } {
+  return { enabled: cfg.probe, timeoutMs: cfg.probeTimeoutMs }
+}
+
+/** Whether two route snapshots are identical for plan rebuilding purposes. */
+function sameRoute(left: CurrentChatRoute | undefined, right: CurrentChatRoute | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right
+  return left.provider === right.provider
+    && left.model === right.model
+    && left.api === right.api
+    && left.baseURL === right.baseURL
+    && left.apiKeyEnv === right.apiKeyEnv
+}
+
+/**
+ * The narrow gate: short-circuit only agent-loop conversation requests on a
+ * whitelisted route; everything else keeps the normal adapter path. Runs
+ * before the plan is built so disabled plugins and unrelated requests never
+ * trigger a probe.
+ */
+function preflight(request: GenerateOptions, cfg: InlineConfig, ctx: Context): boolean {
+  if (!isAgentLoopRequest(request)) return false
+  if (request.purpose !== undefined) return false
+  if (!cfg.enabled) return false
+  if (!providerAllowed(request, cfg, ctx)) return false
+  if (contentHasImages(request)) return false
+  return true
+}
+
+/**
+ * Provider whitelist; empty config follows the current chat route. The
+ * request provider must ALWAYS be the current chat route's provider: the
+ * plan's candidates (baseURL/model/key) are derived from that route, so
+ * serving any other provider would send its request to the wrong endpoint.
+ * The whitelist only restricts which of the route's providers may be served;
+ * it can never extend serving to a provider the plan was not built for.
+ */
+function providerAllowed(request: GenerateOptions, cfg: InlineConfig, ctx: Context): boolean {
+  const route = currentChatRoute(ctx)
+  if (route === undefined || route.provider !== request.provider) return false
+  return cfg.providers.length === 0 || cfg.providers.includes(request.provider)
 }

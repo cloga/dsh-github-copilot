@@ -44,9 +44,7 @@ export function makeCandidate(protocol: SearchPlanCandidate['protocol'], overrid
     model: 'deepseek-v4-flash',
     apiKeyEnv: 'DEEPSEEK_API_KEY',
     apiVersion: '2023-06-01',
-    maxTokens: 4096,
-    maxUses: 5,
-    maxOutputTokens: 4096,
+    ...protocol === 'openai-responses' ? { webSearchToolType: 'web_search' } : {},
     ...overrides,
   }
 }

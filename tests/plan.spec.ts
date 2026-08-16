@@ -43,11 +43,28 @@ describe('siblingCandidates', () => {
       .toEqual([{ protocol: 'anthropic-messages', baseURL: 'https://gw.example/anthropic/v1' }])
   })
 
+  it('honors a base override for a search-capable route', () => {
+    expect(siblingCandidates(deepseekRoute({ api: 'openai-responses' }), 'https://gw.example/v1'))
+      .toEqual([{ protocol: 'openai-responses', baseURL: 'https://gw.example/v1' }])
+  })
+
   it('derives the DeepSeek siblings for a chat-completions route', () => {
     expect(siblingCandidates(deepseekRoute())).toEqual([
       { protocol: 'openai-responses', baseURL: 'https://api.deepseek.com' },
       { protocol: 'anthropic-messages', baseURL: 'https://api.deepseek.com/anthropic/v1' },
     ])
+  })
+
+  it('strips a /v1 chat-completions suffix before deriving the DeepSeek siblings', () => {
+    expect(siblingCandidates(deepseekRoute({ baseURL: 'https://api.deepseek.com/v1' }))).toEqual([
+      { protocol: 'openai-responses', baseURL: 'https://api.deepseek.com' },
+      { protocol: 'anthropic-messages', baseURL: 'https://api.deepseek.com/anthropic/v1' },
+    ])
+  })
+
+  it('keeps the /v1 suffix on the OpenAI sibling (its responses endpoint lives under /v1)', () => {
+    expect(siblingCandidates(deepseekRoute({ provider: 'openai', baseURL: 'https://api.openai.com/v1' })))
+      .toEqual([{ protocol: 'openai-responses', baseURL: 'https://api.openai.com/v1' }])
   })
 
   it('derives the DeepSeek siblings for a gateway on the official host', () => {
@@ -81,21 +98,7 @@ describe('siblingCandidates', () => {
 })
 
 describe('resolveCandidates', () => {
-  it('pins a single candidate when the config names a protocol', () => {
-    const ctx = fakeContext({})
-    const candidates = resolveCandidates(ctx, planConfig({ protocol: 'openai-responses', baseURL: 'https://gw.example/v1', model: 'm-1', apiKeyEnv: 'K' }))
-    expect(candidates).toEqual([
-      makeCandidate('openai-responses', { baseURL: 'https://gw.example/v1', model: 'm-1', apiKeyEnv: 'K' }),
-    ])
-  })
-
-  it('pins the anthropic protocol and normalizes its base', () => {
-    const ctx = fakeContext({})
-    const candidates = resolveCandidates(ctx, planConfig({ protocol: 'anthropic-messages', baseURL: 'https://api.anthropic.com' }))
-    expect(candidates[0]?.baseURL).toBe('https://api.anthropic.com/v1')
-  })
-
-  it('inherits the current route when no protocol is pinned', () => {
+  it('follows the current chat route when no pin is configured', () => {
     const ctx = fakeContext({
       agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-v4-flash' }) },
       settings: { get: () => ({ providers: { deepseek: { apiKeyEnv: 'MY_KEY' } } }) },
@@ -110,6 +113,18 @@ describe('resolveCandidates', () => {
     expect(candidates[1]?.baseURL).toBe('https://api.deepseek.com/anthropic/v1')
   })
 
+  it('applies the configured baseURL and model to every route candidate', () => {
+    const ctx = fakeContext({
+      agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-v4-flash' }) },
+      settings: { get: () => ({ providers: { deepseek: {} } }) },
+    })
+    const candidates = resolveCandidates(ctx, planConfig({ baseURL: 'https://gw.example/custom', model: 'm-1', apiKeyEnv: 'K' }))
+    expect(candidates).toEqual([
+      makeCandidate('openai-responses', { baseURL: 'https://gw.example/custom', model: 'm-1', apiKeyEnv: 'K' }),
+      makeCandidate('anthropic-messages', { baseURL: 'https://gw.example/custom/anthropic/v1', model: 'm-1', apiKeyEnv: 'K' }),
+    ])
+  })
+
   it('serves an OpenAI route on the Responses protocol it already speaks', () => {
     const ctx = fakeContext({
       agentDefaultModel: { currentSelection: () => ({ provider: 'openai', model: 'gpt-5.6' }) },
@@ -118,6 +133,24 @@ describe('resolveCandidates', () => {
     const candidates = resolveCandidates(ctx, planConfig())
     expect(candidates).toHaveLength(1)
     expect(candidates[0]).toMatchObject({ protocol: 'openai-responses', baseURL: 'https://gw.example/v1' })
+  })
+
+  it('defaults to the standard web_search tool spelling', () => {
+    const ctx = fakeContext({
+      agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-v4-flash' }) },
+      settings: { get: () => ({ providers: { deepseek: { api: 'openai-completions', baseURL: 'https://api.deepseek.com' } } }) },
+    })
+    const candidates = resolveCandidates(ctx, planConfig())
+    expect(candidates[0]).toMatchObject({ protocol: 'openai-responses', webSearchToolType: 'web_search' })
+  })
+
+  it('uses the versioned tool spelling for OpenCode Go hosts', () => {
+    const ctx = fakeContext({
+      agentDefaultModel: { currentSelection: () => ({ provider: 'opencode-go-response', model: 'deepseek-v4-flash' }) },
+      settings: { get: () => ({ providers: { 'opencode-go-response': { api: 'openai-responses', baseURL: 'https://opencode.ai/zen/go/v1', apiKeyEnv: 'K' } } }) },
+    })
+    const candidates = resolveCandidates(ctx, planConfig())
+    expect(candidates[0]).toMatchObject({ protocol: 'openai-responses', webSearchToolType: 'web_search_2025_08_26' })
   })
 
   it('resolves an unprofilable route through the pi-ai catalog', () => {
@@ -181,6 +214,24 @@ describe('SearchPlan', () => {
     await expect(plan.settle()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
     expect(plan.failureReason()).toContain('no search-capable provider')
   })
+
+  it('fails the plan without rejecting settled when the probe crashes', async () => {
+    const plan = new SearchPlan([makeCandidate('openai-responses')], async () => { throw new Error('probe crashed') }, true)
+    await plan.settled
+    expect(plan.available()).toBe(false)
+    expect(plan.failureReason()).toContain('probe crashed')
+    await expect(plan.settle()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+  })
+
+  it('serves the candidate with the exact spelling the probe verified', async () => {
+    const plan = new SearchPlan([makeCandidate('openai-responses', { webSearchToolType: 'web_search' })], async () => ({
+      supported: true,
+      detail: 'ok',
+      webSearchToolType: 'web_search_2025_08_26',
+    }), true)
+    const chosen = await plan.settle()
+    expect(chosen.webSearchToolType).toBe('web_search_2025_08_26')
+  })
 })
 
 describe('sameCandidates', () => {
@@ -199,6 +250,10 @@ describe('sameCandidates', () => {
     expect(sameCandidates(
       [makeCandidate('openai-responses')],
       [makeCandidate('anthropic-messages')],
+    )).toBe(false)
+    expect(sameCandidates(
+      [makeCandidate('openai-responses', { webSearchToolType: 'web_search' })],
+      [makeCandidate('openai-responses', { webSearchToolType: 'web_search_2025_08_26' })],
     )).toBe(false)
   })
 })

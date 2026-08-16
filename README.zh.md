@@ -1,145 +1,104 @@
 # dsh-web-search-provider
 
-为 DeepSeek Harness 的 web 能力接缝（`ctx.web`）提供原生网络搜索的 provider。一个 provider，两种线上协议：
+[![npm version](https://img.shields.io/npm/v/dsh-web-search-provider)](https://www.npmjs.com/package/dsh-web-search-provider)
 
-- **OpenAI Responses API** —— `POST {baseURL}/responses`，启用服务端 `web_search_2025_08_26` 工具（带版本号的拼写在会丢弃无名 `web_search` 的网关端点上也能执行，如 OpenCode Zen/Go；OpenAI 与 DeepSeek 官方文档均支持）。服务端自行执行完整浏览循环 —— `search` / `open_page` / `find_in_page` 三种 action —— 适配器完整理解这三种 action，以及 `url_citation` / `web_search` / `search_result` 的来源注解词汇。
-- **Anthropic 兼容 Messages API** —— `POST {baseURL}/messages`，启用原生 `web_search_20250305` 服务端工具，按现有 `web-search-deepseek` 插件的方式映射 `web_search_tool_result` 块与引文摘录。
+为 Deepseek Harness 引入基于模型供应方服务器能力的**网络搜索支持**。
 
-与 `include:web-search-deepseek`（仅限 DeepSeek，且不验证端点是否真的执行搜索）不同，本插件探测 harness 当前正在对话的 provider，用一次有界请求**探测**所选端点确实运行原生搜索，无响应时**自动禁用** —— 除非使用者在配置中显式指定协议与端点。
+本插件使用时要求模型供应方使用 **OpenAI Responses API** 或 **Anthropic 兼容 Messages API** ，**同时提供网络搜索能力**。
 
-## 选择逻辑
+> [!TIP]
+> Anthropic 兼容 Messages API 仅提供了搜索能力，而 OpenAI Responses API 则支持在查看 URL 对应网页内容/从 URL 对应网页查找特定内容。**推荐使用 OpenAI Responses API 供应方**。
 
-| 配置 | 行为 |
-|---|---|
-| 设置了 `protocol` | 搜索始终走该协议。`baseURL`、`apiKeyEnv`、`model` 依次回退到当前聊天路由（兼容时）、环境变量（`$DSH_WEB_SEARCH_RESPONSES_BASE_URL` / `$DSH_WEB_SEARCH_ANTHROPIC_BASE_URL`）、DeepSeek 官方默认值。 |
-| 未设置 `protocol` | 从默认模型选择（`agent-default-model`）与 `llm-pi-ai` 设置段探测当前聊天路由。路由自身协议可搜索（`openai-responses` / `anthropic-messages`）时走该协议；Chat-Completions 路由的线路上无法搜索，则探测其主机的已知可搜索兄弟协议：DeepSeek 官方（路由 `deepseek` / `deepseek-official`，或 `api.deepseek.com` 主机）依次探测 `openai-responses` 与 `anthropic-messages`；OpenAI 探测 `openai-responses`。未知网关不产生兄弟候选 —— 请显式配置 `protocol`。 |
-| 无法解析任何候选 | provider 注册为不可用、不注册任何 tool、启动日志说明原因。 |
+> [!TIP]
+> 经实测，Deepseek 官方 Messages API（即 DSH内置的 Deepseek 供应方）、OpenCode Go Messages API、OpenCode Go Response API 和某 OpenAI 中转站 Response API 均能与本插件配合工作。
 
-探测（默认 `probe: true`）通过 `tool_choice` 强制服务端工具执行，并要求结构化证据返回（`web_search_call` 条目或 `web_search_tool_result` 块）。不少"Responses 兼容"网关会接受 `web_search` 字段却静默忽略 —— 这正是静态协议检查看不到的失效模式。每次探测在 provider 上消耗一次真实搜索，每个计划只跑一次（后台执行，受 `probeTimeoutMs` 约束），设置 `probe: false` 可完全跳过。
+> [!WARNING]
+> DSH 内置的 OpenCode Go 供应方对不同模型使用的 API 类型不同。如对于其提供的 Deepseek V4 Flash/Pro 模型，如期望使用本插件提供的能力，需要手动添加 Response / Message API 类型的自定义供应方。
 
-## 工具
+> [!WARNING]
+> 部分模型供应方对本插件使用的网络搜索能力可能进行额外收费。
 
-接缝的 `web_search` 工具（`tool-web`，出厂组合已启用）由本 provider 的 `search()` 在两种协议上提供服务。此外，当计划服务于 Responses API 时，插件注册接缝无法表达的两个浏览工具：
+本插件不通过 Deepseek Harness 内的 `web_search` 工具提供支持，因而你可以将本插件与其它 web search provider 插件（如内置的 `web-search-deepseek`）配合使用。
 
-- **`open_page`** —— 通过服务端工具打开指定 URL，返回页面内容摘要。
-- **`find_in_page`** —— 在已加载页面内查找模式，返回匹配段落。
+## 比较 web-search-deepseek
 
-因此 Responses-API 部署获得完整的三动作浏览循环：`web_search`（search）、`open_page`、`find_in_page`。两个工具都以计划确实服务于 Responses 协议为前提：探测（或固定配置）落在 `openai-responses` 时注册，否则撤下 —— 已撤下的工具不会被调用。`tools.openPage` / `tools.findInPage` 可分别关闭。
+> TL;DR 本插件相比 `web-search-deepseek` ，在消耗词元、消耗时间上均有明显优势。
+
+`web-search-deepseek` 是 Deepseek Harness 内置的搜索插件，当会话中模型调用 `web_search` 工具时，其会在内部新建一个会话进行搜索，并返回若干个网址及其内容摘要。
+
+本插件相比 `web-search-deepseek` ， 会话中 AI 直接向服务器发起网络搜索请求，**单次搜索速度更快**。同时，模型可以直接查看/搜索网页内容（仅 **OpenAI Responses API** 支持），减少 AI 为了查看网页所有内容，使用 bash/curl 消耗的词元。
+
+
+使用 Deepseek 官方 Messages API 的 `deepseek-v4-flash model with high think` ，分别使用两个插件，每次进行5次指定的搜索，测试十次：
+
+| 插件                  | 平均消耗词元 | 平均消耗时间 |
+|:-------------------:|:------:|:------:|
+| web-search-deepseek | 4,446  | 47.5s  |
+| **web-search-provider** | **822**    | **14.5s**  |
+
+消耗时间统计自 Deepseek Harness 中显示的回答耗时。消耗词元统计自 Deepseek 开放平台取"输出"词元平均数，通过使用两个不同的 API 令牌（因为 Deepseek Harness 不统计工具调用内消耗的词元）。
+
+测试结果仅供参考。在需要更多网络搜索内容的任务中，预期本插件有更明显的优势。
 
 ## 安装
-
 ```sh
-pnpm install
-pnpm build        # tsc 产出 lib/types，tsdown 打包 lib/index.js
-pnpm test         # vitest 单元测试
+dsh plugin add dsh-web-search-provider
 ```
 
-在 `cordis.yml` overlay 中引用构建产物：
+------
+
+或从源代码安装：
+```sh
+pnpm install
+```
+
+在 `cordis.yml` 覆盖层中引用构建后的插件：
 
 ```yaml
 - insert:
     - id: web-search-provider
-      name: '/absolute/path/to/dsh-web-search/lib/index.js'
-      # 全部使用默认值；由当前聊天 provider 决定一切
-```
-
-或安装为包后按包名引用。要替换出厂 DeepSeek 搜索，还需把 web 接缝指向本 provider：
-
-```yaml
-- id: web
-  name: '@deepseek-ai/dsh-web'
-  config:
-    searchProvider: web-search-provider
+      name: 'dsh-web-search-provider'
+      config:
+        enabled: true
+        probe: true
 ```
 
 ## 配置
 
-所有字段均可选；schema 默认值与当前聊天路由补齐其余部分。
+设置段 `web-search-provider`（实时命名空间：改动对下一次请求生效）。除注明外所有字段均可选。
 
-| 键 | 默认值 | 含义 |
+| 键 | 默认 | 含义 |
 |---|---|---|
-| `protocol` | 未设置 | 显式协议固定：`openai-responses` 或 `anthropic-messages`。 |
-| `baseURL` | 推导 | 端点基地址；追加 `/responses` 或 `/messages`。需要 `protocol`。对 `anthropic-messages`，不含 `/v1` 段的基地址会被补上（`https://api.anthropic.com` → `/v1/messages`）。 |
-| `apiKey` | 未设置 | 字面 API 密钥；优先 `apiKeyEnv`，避免密钥进入配置。 |
-| `apiKeyEnv` | 路由引用 → `DEEPSEEK_API_KEY` | 每次操作经 `ctx.credentials`（再退回启动环境）解析的凭据引用。 |
-| `model` | 路由模型 → `deepseek-v4-flash` | 搜索请求的模型名。 |
-| `apiVersion` | `2023-06-01` | `anthropic-version` 请求头值。 |
-| `maxTokens` | `4096` | Messages 搜索生成 token 上限。 |
-| `maxUses` | `5` | 每次 Messages 请求 `web_search` 服务端工具最大使用次数。 |
-| `maxOutputTokens` | `4096` | Responses 搜索生成 token 上限。 |
-| `probe` | `true` | 服务前用一次有界请求验证端点确实运行原生搜索。 |
-| `probeTimeoutMs` | `30000` | 单次探测请求的时间上限。 |
-| `timeoutMs` | `60000` | `open_page` / `find_in_page` 的协作超时预算。 |
-| `tools.openPage` / `tools.findInPage` | `true` | 注册仅 Responses 可用的浏览工具。 |
+| `enabled` | `true` | 总开关；`false` 时所有请求走普通适配器路径。 |
+| `providers` | `[]` | Provider 白名单（llm-pi-ai 路由键）。请求的 provider 必须是当前聊天路由（计划从该路由推导端点事实）才会被服务；白名单只限制该路由中哪些 provider 可被服务。空 = 服务当前聊天路由。 |
+| `baseURL` | 路由 | 路由候选的端点基址覆盖；追加 `/responses` 或 `/messages`。 |
+| `model` | loop 模型 | 模型覆盖；探测和实际 wire 请求都使用它。 |
+| `apiKeyEnv` | 路由引用 | 每次操作经凭证引用解析。 |
+| `includeSources` | `true` | 向 Responses wire 请求追加 `include: ['web_search_call.action.sources']`。 |
+| `stripServerTools` | `true` | 从 wire 工具中剔除函数工具变体（`web_search`/`open_page`/`find_in_page`）。 |
+| `idleTimeoutMs` | `300000` | 单次 inline 请求的空闲上限（毫秒）。 |
+| `probe` | `true` | 服务前用一次有界请求验证端点确实执行原生搜索。 |
+| `probeTimeoutMs` | `30000` | 单次探测请求的上限（毫秒）。 |
 
 ```yaml
 - id: web-search-provider
   name: 'dsh-web-search-provider'
   config:
-    # 聊天用什么 provider 都行，搜索始终走网关的 Responses API。
-    protocol: openai-responses
-    baseURL: https://gateway.internal/v1
-    apiKeyEnv: GATEWAY_API_KEY
-    model: gpt-5.6
+    enabled: true
     probe: true
 ```
 
-该段是活跃的用户设置命名空间（`web-search-provider`）：修改无需重启即影响下一次搜索；只有当解析出的候选真正变化时才重新探测；进行中的搜索保持其启动时的计划。
 
-## 发布
+## 已知限制
 
-推荐走 [npm 可信发布](https://docs.npmjs.com/trusted-publishers)（OIDC）：[发布工作流](.github/workflows/publish.yml) 在 GitHub Actions 中完成发布，仓库内不需要任何 npm token，npm 自动附加 provenance 出处证明（要求公开包 + 公开仓库）。`repository.url` 必须与 GitHub 仓库完全一致。
+- 对于使用 Response API / Message API **但不提供搜索能力**的供应方，在**首次使用时会话会报错**。继续发送消息/新开会话即可在无本插件能力的同时继续使用 DSH。
+- AI 使用本插件提供的网络搜索能力时，**无显示搜索调用 UI**。可能的使用表现为多端连续的思考内容，段思考尾部包含“*Let me make search queries*” 等字样。 
 
-**首次发布（基于 token）。** 可信发布按包在 npmjs.com 上配置，所以包需要先存在。先用 token 登录并发布一次：
+## 参与贡献
 
+### 编译
 ```sh
-npm login --registry https://registry.npmjs.org
-pnpm publish        # 自动运行 prepublishOnly（测试 + 构建）后发布
+pnpm install
+pnpm build        # tsc 产出 lib/types，tsdown 打包 lib/index.js
+pnpm test         # vitest 单元测试
 ```
-
-**配置可信发布者。** 在 npmjs.com：Packages → `dsh-web-search-provider` → Settings → Trusted publishing → GitHub Actions，填写：
-
-| 字段 | 值 |
-|---|---|
-| Organization or user | `hiyms` |
-| Repository | `dsh-web-search-provider` |
-| Workflow filename | `publish.yml`（即 `.github/workflows/` 中的文件） |
-| Environment | 留空（之后可加 GitHub environment 做审批门禁） |
-| Allowed actions | `npm publish` |
-
-npm 保存时不会校验配置 —— 工作流文件名与仓库 URL 大小写敏感、必须完全一致，否则首次发布报 `ENEEDAUTH`。
-
-**后续发布。** 提升 `package.json` 版本号、提交、打 tag、推送：
-
-```sh
-pnpm version patch   # 升版本、提交并打 v0.1.1 标签
-git push --follow-tags
-```
-
-工作流通过 `prepublishOnly` 运行测试与构建，用 OIDC 发布，自动生成 provenance。发布后可验证出处：
-
-```sh
-npm attestations dsh-web-search-provider
-```
-
-注意：provenance 要求**公开**仓库（私有仓库即使发布公开包也不生成）；只能用 GitHub 托管 runner（暂不支持自托管 runner）；npm CLI 侧的 OIDC 需要 npm ≥ 11.5.1 / Node ≥ 22.14，工作流使用的 Node 24 满足。本地基于 token 的 `pnpm publish` 仍可作为后备，但正常情况下不再需要。
-
-## 失败语义
-
-- provider 失败表现为 `WebError` `WEB_PROVIDER_ERROR`；调用方取消为 `WEB_ABORTED`；缺少凭据为 `WEB_PROVIDER_CREDENTIAL_MISSING` 并指明引用。
-- **严格模式**：2xx 响应中缺少 `web_search_call`（Responses）或 `web_search_tool_result`（Messages）即为错误，绝不退化为从散文里刮取 URL。
-- 重定向在联系 `Location` 目标之前被拒绝（凭据绝不跟随）。
-- 响应读取有 4 MiB 上限；可解析时保留非 2xx 响应的错误消息。
-- 每次请求在分发前以无密钥的 `web/search-native-llm-request` 会话事件记入发起 Agent 的会话日志。
-
-## 模型体验
-
-一次独立的辅助模型请求（绝不进入对话上下文）携带查询文本与原生服务端工具定义。Responses 模式把模型回答作为 `content`、引用 URL 作为 `sources` 返回；Messages 模式返回结构化结果块并拼接引文摘录，不信任 `content`。每次搜索产生输入/输出 token；`maxOutputTokens` / `maxTokens` 限制生成输出，`maxUses` 限制服务端工具使用次数。
-
-## 已知限制与后续工作
-
-- **一次搜索消耗一整轮模型调用** —— 延迟加生成 token；两种协议都没有专用检索端点。
-- **一次探测消耗一次真实搜索**（完整服务端搜索，约等于一次大输入的价钱），计划每次变化时执行；端点已知可用时可设 `probe: false` 关闭。
-- **`open_page` / `find_in_page` 各消耗一轮模型调用**，且确定性受服务端模型限制：`tool_choice` 只固定工具、不固定 action，URL/模式由指令携带。
-- **超量来源仍消耗 token** —— 两种线路上都没有结果数旋钮，`maxResults` 只能由接缝事后截断。
-- **兄弟协议推导只覆盖已知主机** —— DeepSeek 与 OpenAI 官方端点；其他网关需要显式 `protocol`（及 `baseURL`）。

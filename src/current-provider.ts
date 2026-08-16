@@ -30,11 +30,35 @@ export interface CurrentChatRoute {
   readonly apiKeyEnv?: string
 }
 
-/** Catalog providers indexed by route id. */
+/** Catalog providers indexed by route id. The catalog is static for a given
+ * pi-ai version; constructing it per call would rebuild ~30 provider objects
+ * on every route read (several per request). */
+let catalogCache: ReadonlyMap<string, { readonly baseUrl?: string }> | undefined
+
 function catalogById(): ReadonlyMap<string, { readonly baseUrl?: string }> {
-  const map = new Map<string, { readonly baseUrl?: string }>()
-  for (const provider of builtinProviders()) map.set(provider.id, provider)
-  return map
+  if (catalogCache === undefined) {
+    const map = new Map<string, { readonly baseUrl?: string }>()
+    for (const provider of builtinProviders()) map.set(provider.id, provider)
+    catalogCache = map
+  }
+  return catalogCache
+}
+
+/** Per-provider model tables, cached the same way. */
+const modelTableCache = new Map<string, readonly { readonly id: string; readonly api?: string; readonly baseUrl?: string }[]>()
+
+function modelTableOf(provider: string): readonly { readonly id: string; readonly api?: string; readonly baseUrl?: string }[] {
+  const cached = modelTableCache.get(provider)
+  if (cached !== undefined) return cached
+  try {
+    const models = getBuiltinModels(provider as BuiltinProvider)
+    modelTableCache.set(provider, models)
+    return models
+  } catch {
+    // A provider entry whose model table fails to materialize is treated as
+    // unknown rather than failing route detection for every other route.
+    return []
+  }
 }
 
 /**
@@ -48,16 +72,9 @@ function catalogById(): ReadonlyMap<string, { readonly baseUrl?: string }> {
 function catalogModelFacts(provider: string, model: string): { api?: string; baseUrl?: string } {
   const catalog = catalogById().get(provider)
   if (catalog === undefined) return {}
-  try {
-    const models = getBuiltinModels(provider as BuiltinProvider)
-    const found = models.find(candidate => candidate.id === model)
-    if (found === undefined) return {}
-    return { api: found.api, baseUrl: found.baseUrl }
-  } catch {
-    // A provider entry whose model table fails to materialize is treated as
-    // unknown rather than failing route detection for every other route.
-    return {}
-  }
+  const found = modelTableOf(provider).find(candidate => candidate.id === model)
+  if (found === undefined) return {}
+  return { api: found.api, baseUrl: found.baseUrl }
 }
 
 /** Read one route profile from the llm-pi-ai settings section, defensively narrowed. */
