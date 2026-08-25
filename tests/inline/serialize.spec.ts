@@ -89,6 +89,25 @@ describe('serializeMessage', () => {
     })
   })
 
+  it('maps invalid replay item ids to stable short ids', () => {
+    const itemId = 'tool call/with invalid characters'
+    const result = serializeMessage(message('assistant', [{ type: 'tool-call', id: `call_00_abc|${itemId}`, name: 'bash', arguments: '{}' }]))
+
+    expect(result[0]).toMatchObject({
+      call_id: 'call_00_abc',
+      id: `fc_${shortHash(itemId)}`,
+    })
+  })
+
+  it('maps oversized replay item ids to stable short ids', () => {
+    const itemId = `fc_${'a'.repeat(62)}`
+    const result = serializeMessage(message('assistant', [{ type: 'tool-call', id: `call_00_abc|${itemId}`, name: 'bash', arguments: '{}' }]))
+    const replayItemId = (result[0] as { id: string }).id
+
+    expect(replayItemId).toBe(`fc_${shortHash(itemId)}`)
+    expect(replayItemId.length).toBeLessThanOrEqual(64)
+  })
+
   it('throws UnsupportedContentError on image content', () => {
     expect(() => serializeMessage(message('user', [{ type: 'image', attachment: {} as never }]))).toThrow(/image/)
   })
