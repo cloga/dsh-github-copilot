@@ -15,7 +15,7 @@
  */
 
 import type { CallId, GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { attributionHeaders } from '@deepseek-ai/dsh-llm'
+import { attributionHeaders, contentHasImage } from '@deepseek-ai/dsh-llm'
 import type { SearchPlan, SearchPlanCandidate } from './plan.ts'
 import { WEB_SEARCH_TOOL_TYPE } from './plan.ts'
 import { abortedFinish, classifyHttpStatus, classifyWireError, errorFinish, parseRetryAfterMs } from './failure.ts'
@@ -51,9 +51,12 @@ interface Slot {
   opened?: boolean
 }
 
-/** Whether any message carries image content (unsupported on this wire). */
-export function contentHasImages(request: GenerateOptions): boolean {
-  return request.messages.some(message => message.content.some(block => block.type === 'image'))
+/**
+ * Whether the request carries an image attachment. Image blocks retain the
+ * harness attachment object that the official vision channel must consume.
+ */
+export function contentHasImageAttachments(request: GenerateOptions): boolean {
+  return request.messages.some(message => contentHasImage(message.content))
 }
 
 /**

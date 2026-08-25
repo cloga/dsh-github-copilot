@@ -178,12 +178,23 @@ describe('web-search-provider apply', () => {
       'event: response.output_item.done\ndata: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1","content":[{"type":"output_text","text":"Node 22 is current"}]}}\n\n',
       'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}\n\n',
     ].join('')
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, { status: 200 })))
+    const fetchMock = vi.fn(async (
+      _input: string | URL | Request,
+      _init?: RequestInit,
+    ) => new Response(stream, { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
     const result = runtime.listener?.(request(), next)
     expect(result).not.toBe('next-value')
     const chunks = await drain(result as AsyncIterable<StreamChunk>)
     expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
     expect(next).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      input: unknown[]
+      tools: unknown[]
+    }
+    expect(body.input).toContainEqual({ role: 'user', content: [{ type: 'input_text', text: 'hi' }] })
+    expect(body.tools).toContainEqual({ type: 'web_search' })
   })
 
   it('passes non-loop requests through to next()', () => {
@@ -204,13 +215,32 @@ describe('web-search-provider apply', () => {
     expect(next).toHaveBeenCalledTimes(2)
   })
 
-  it('passes image-bearing requests through to next()', () => {
+  it('preserves image attachments when bypassing the custom wire', () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, config)
-    const next = vi.fn(() => 'next-value')
-    const withImage = request({ messages: [{ id: 'u1' as Message['id'], role: 'user', content: [{ type: 'image', attachment: {} as never }], source: { kind: 'user' } }] })
+    const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
+    vi.stubGlobal('fetch', fetchMock)
+    const attachment = { id: 'attachment-1', name: 'diagram.png' } as never
+    const withImage = request({
+      messages: [{
+        id: 'u1' as Message['id'],
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What is shown here?' },
+          { type: 'image', attachment },
+        ],
+        source: { kind: 'user' },
+      }],
+    })
+    const originalMessages = withImage.messages
+    const next = vi.fn(() => {
+      expect(withImage.messages).toBe(originalMessages)
+      expect(withImage.messages[0]?.content[1]).toMatchObject({ type: 'image', attachment })
+      return 'next-value'
+    })
     expect(runtime.listener?.(withImage, next)).toBe('next-value')
     expect(next).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('honors the enabled switch', () => {
