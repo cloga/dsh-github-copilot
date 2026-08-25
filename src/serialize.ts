@@ -98,10 +98,11 @@ export function serializeMessage(message: Message): unknown[] {
       })
     } else if (block.type === 'tool-call') {
       const { callId, itemId } = splitCallId(block.id)
+      const replayItemId = /^fc_[A-Za-z0-9_-]{1,61}$/.test(itemId) ? itemId : `fc_${shortHash(itemId)}`
       items.push({
         type: 'function_call',
         call_id: callId,
-        id: itemId.startsWith('fc_') ? itemId : `fc_${itemId}`,
+        id: replayItemId,
         name: block.name,
         arguments: block.arguments,
         status: 'completed',
