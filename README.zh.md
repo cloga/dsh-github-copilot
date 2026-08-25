@@ -88,6 +88,30 @@ pnpm install
     probe: true
 ```
 
+### 可选模型目录同步
+
+拥有 OpenAI 兼容 provider 配置的宿主可以调用
+`synchronizeOpenAICompatibleModelCatalog()`，从 `/v1/models` 刷新可选择模型。
+该辅助函数同时支持标准 OpenAI 列表和更丰富的 Copilot 元数据；只有可选元数据
+明确表示模型被禁用、不显示在选择器中、不是聊天模型、不支持工具调用，或只支持
+非交互端点时，才会过滤该模型。存在相应元数据时，它还会映射视觉、上下文窗口、
+最大输出和推理能力。
+
+该辅助函数具有失败保护：把 provider 的静态目录作为 `fallback` 传入后，任何网络、
+HTTP、JSON 或校验失败都会原样返回该 fallback。它不会修改 `llm-pi-ai` 设置。本插件
+只消费该命名空间，并不拥有它；provider/设置集成需要自行决定何时以及如何持久化
+成功结果。
+
+```ts
+import { synchronizeOpenAICompatibleModelCatalog } from 'dsh-web-search-provider'
+
+const models = await synchronizeOpenAICompatibleModelCatalog({
+  baseURL: provider.baseURL,
+  fallback: provider.models,
+  headers: provider.headers,
+})
+```
+
 
 ## 已知限制
 

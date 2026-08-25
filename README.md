@@ -90,6 +90,32 @@ Settings section `web-search-provider` (a live namespace: edits reach the next r
     probe: true
 ```
 
+### Optional model catalog synchronization
+
+Hosts that own an OpenAI-compatible provider profile can use
+`synchronizeOpenAICompatibleModelCatalog()` to refresh its selectable models
+from `/v1/models`. The helper accepts standard OpenAI listings and richer
+Copilot metadata, filters models only when optional metadata explicitly marks
+them as disabled, hidden from the picker, non-chat, unable to call tools, or
+limited to non-interactive endpoints, and maps vision, context, output, and
+reasoning capabilities when present.
+
+The helper is failure-safe: pass the provider's static catalog as `fallback`
+and any network, HTTP, JSON, or validation failure returns that same fallback.
+It does not mutate `llm-pi-ai` settings. This plugin consumes that namespace but
+does not own it; the provider/settings integration must decide when and how to
+persist a successful result.
+
+```ts
+import { synchronizeOpenAICompatibleModelCatalog } from 'dsh-web-search-provider'
+
+const models = await synchronizeOpenAICompatibleModelCatalog({
+  baseURL: provider.baseURL,
+  fallback: provider.models,
+  headers: provider.headers,
+})
+```
+
 
 ## Known limitations
 
