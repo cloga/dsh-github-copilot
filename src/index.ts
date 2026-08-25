@@ -23,7 +23,7 @@ import { currentChatRoute } from './current-provider.ts'
 import type { CurrentChatRoute } from './current-provider.ts'
 import { Config } from './config.ts'
 import type { InlineConfig } from './config.ts'
-import { contentHasImages, inlineWireStream } from './wire.ts'
+import { contentHasImageAttachments, inlineWireStream } from './wire.ts'
 import type { InlineHooks } from './wire.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -262,7 +262,7 @@ function preflight(request: GenerateOptions, cfg: InlineConfig, ctx: Context): b
   if (request.purpose !== undefined) return false
   if (!cfg.enabled) return false
   if (!providerAllowed(request, cfg, ctx)) return false
-  if (contentHasImages(request)) return false
+  if (contentHasImageAttachments(request)) return false
   return true
 }
 
