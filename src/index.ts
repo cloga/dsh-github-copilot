@@ -39,6 +39,16 @@ export const WEB_SEARCH_SETTINGS_NAMESPACE = settingsNamespace('web-search-provi
 /** Schema of the plugin's settings section, exported for composition consumers. */
 export { Config } from './config.ts'
 export type { InlineConfig } from './config.ts'
+export {
+  modelCatalogURL,
+  modelsFromOpenAICompatibleListing,
+  synchronizeOpenAICompatibleModelCatalog,
+} from './model-catalog.ts'
+export type {
+  CatalogModel,
+  CatalogReasoningEfforts,
+  ModelCatalogSyncOptions,
+} from './model-catalog.ts'
 
 /**
  * Register the inline short-circuit. The plan (candidates plus probe
