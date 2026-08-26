@@ -29,7 +29,7 @@ jobs:
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm build
-      - run: node -e "require('node:fs').mkdirSync('artifacts', { recursive: true })"
+      - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts
       - name: Verify deployment metadata is packed
         if: runner.os == 'Linux'
