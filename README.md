@@ -47,6 +47,39 @@ The results are for reference only. On tasks that need more web search content, 
 dsh plugin add dsh-web-search-provider
 ```
 
+### Cloga DSH Windows/Copilot deployment baseline
+
+The fork build `0.2.3-cloga.1` is a deployment baseline, not an upstream
+release. Upstream remains the durable destination for these fixes. Consumers
+must pin the PR commit and the resulting
+`dsh-web-search-provider-0.2.3-cloga.1.tgz`; the package name alone is not a
+sufficient identity.
+
+Build the tarball from the pinned commit and retain both the commit and archive
+SHA-256 beside the installer:
+
+```sh
+git checkout <pinned-commit>
+pnpm install --frozen-lockfile
+pnpm verify:baseline
+pnpm test
+pnpm typecheck
+pnpm build
+pnpm pack --pack-destination artifacts
+git rev-parse HEAD
+```
+
+Every tarball exports `./deployment-baseline.json`. An installer should reject
+the package unless `schemaVersion` is `1`, `baseline.id` is
+`cloga.dsh-windows-copilot.web-search`, `package.version` is
+`0.2.3-cloga.1`, `supportedBaselines.dsh.release` is `0.1.0-rc.6`, and all
+required capability IDs are present with `required: true`:
+`responses-replay-item-id-normalization`, `grounded-sandbox-escalation`,
+`image-attachment-bypass`, `failure-safe-copilot-model-catalog`, and
+`orphaned-replay-item-filtering`. Run `pnpm verify:baseline` in a source
+checkout to enforce the same contract against package exports, source markers,
+and named tests.
+
 ------
 
 Or install from source:
