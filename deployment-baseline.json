@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "baseline": {
+    "id": "cloga.dsh-windows-copilot.web-search",
+    "kind": "fork-deployment-baseline",
+    "source": "https://github.com/cloga/dsh-web-search-provider",
+    "sourceCommitPolicy": "exact-external-pin",
+    "upstream": "https://github.com/hiyms/dsh-web-search-provider"
+  },
+  "package": {
+    "name": "dsh-web-search-provider",
+    "version": "0.2.3-cloga.1"
+  },
+  "supportedBaselines": {
+    "platforms": [
+      "windows"
+    ],
+    "node": ">=22.0.0",
+    "dsh": {
+      "release": "0.1.0-rc.6",
+      "packages": [
+        "@deepseek-ai/dsh-agent",
+        "@deepseek-ai/dsh-agent-default-model",
+        "@deepseek-ai/dsh-credentials",
+        "@deepseek-ai/dsh-launch-environment",
+        "@deepseek-ai/dsh-llm",
+        "@deepseek-ai/dsh-settings",
+        "@deepseek-ai/dsh-web"
+      ]
+    },
+    "copilot": {
+      "api": "openai-responses",
+      "modelCatalogEndpoint": "/v1/models",
+      "metadataProfile": "optional-copilot-model-capabilities"
+    }
+  },
+  "capabilities": [
+    {
+      "id": "responses-replay-item-id-normalization",
+      "required": true,
+      "sourceMarkers": [
+        {
+          "file": "src/serialize.ts",
+          "marker": "const replayItemId = /^fc_[A-Za-z0-9_-]{1,61}$/.test(itemId)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "tests/inline/serialize.spec.ts",
+          "name": "maps invalid replay item ids to stable short ids"
+        },
+        {
+          "file": "tests/inline/serialize.spec.ts",
+          "name": "maps oversized replay item ids to stable short ids"
+        }
+      ]
+    },
+    {
+      "id": "grounded-sandbox-escalation",
+      "required": true,
+      "sourceMarkers": [
+        {
+          "file": "src/wire.ts",
+          "marker": "function hasGroundedSandboxEscalation"
+        },
+        {
+          "file": "src/wire.ts",
+          "marker": "function sanitizeSandboxEscalationArguments"
+        }
+      ],
+      "tests": [
+        {
+          "file": "tests/inline/wire.spec.ts",
+          "name": "removes speculative sandbox escalation arguments from full-access tool calls"
+        },
+        {
+          "file": "tests/inline/wire.spec.ts",
+          "name": "preserves sandbox escalation arguments when retrying a real DSH denial"
+        }
+      ]
+    },
+    {
+      "id": "image-attachment-bypass",
+      "required": true,
+      "sourceMarkers": [
+        {
+          "file": "src/index.ts",
+          "marker": "if (contentHasImageAttachments(request)) return false"
+        }
+      ],
+      "tests": [
+        {
+          "file": "tests/inline/apply.spec.ts",
+          "name": "preserves image attachments when bypassing the custom wire"
+        }
+      ]
+    },
+    {
+      "id": "failure-safe-copilot-model-catalog",
+      "required": true,
+      "sourceMarkers": [
+        {
+          "file": "src/model-catalog.ts",
+          "marker": "export async function synchronizeOpenAICompatibleModelCatalog"
+        },
+        {
+          "file": "src/model-catalog.ts",
+          "marker": "return options.fallback"
+        }
+      ],
+      "tests": [
+        {
+          "file": "tests/model-catalog.spec.ts",
+          "name": "maps rich Copilot metadata for selectable interactive models"
+        },
+        {
+          "file": "tests/model-catalog.spec.ts",
+          "name": "requests /v1/models and returns the static fallback when discovery fails"
+        }
+      ]
+    },
+    {
+      "id": "orphaned-replay-item-filtering",
+      "required": true,
+      "sourceMarkers": [
+        {
+          "file": "src/serialize.ts",
+          "marker": "export function pairedToolCallIds"
+        }
+      ],
+      "tests": [
+        {
+          "file": "tests/inline/serialize.spec.ts",
+          "name": "keeps only call ids with both replay halves"
+        },
+        {
+          "file": "tests/inline/serialize.spec.ts",
+          "name": "drops orphaned replay calls and results while preserving paired calls"
+        }
+      ]
+    }
+  ],
+  "requiredExports": {
+    ".": [
+      "modelCatalogURL",
+      "modelsFromOpenAICompatibleListing",
+      "synchronizeOpenAICompatibleModelCatalog"
+    ],
+    "./deployment-baseline.json": []
+  }
+}

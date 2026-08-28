@@ -63,12 +63,16 @@ export async function probeCandidate(
   // in different ways; the clamp keeps an absurd config from throwing.
   const bound = Math.min(Math.max(Math.trunc(timeoutMs), 1), MAX_PROBE_TIMEOUT_MS)
   const deadline = Date.now() + bound
+  const cancellation = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
-      runProbe(candidate, resolveApiKey, bound, deadline),
+      runProbe(candidate, resolveApiKey, bound, deadline, cancellation.signal),
       new Promise<ProbeOutcome>((resolve) => {
-        timer = setTimeout(() => resolve({ supported: false, detail: `probe timed out after ${bound}ms` }), bound)
+        timer = setTimeout(() => {
+          cancellation.abort()
+          resolve({ supported: false, detail: `probe timed out after ${bound}ms` })
+        }, bound)
       }),
     ])
   } finally {
@@ -82,6 +86,7 @@ async function runProbe(
   resolveApiKey: (apiKeyEnv: string) => Promise<string | undefined>,
   bound: number,
   deadline: number,
+  cancellation: AbortSignal,
 ): Promise<ProbeOutcome> {
   try {
     const apiKey = await resolveApiKey(candidate.apiKeyEnv)
@@ -95,10 +100,10 @@ async function runProbe(
     // running: a key that lands late must not start a FRESH fetch with a
     // fresh timeout. Check the remaining budget and bound the fetch to it.
     const remaining = deadline - Date.now()
-    if (remaining <= 0) {
+    if (cancellation.aborted || remaining <= 0) {
       return { supported: false, detail: `probe timed out after ${bound}ms` }
     }
-    const signal = AbortSignal.timeout(remaining)
+    const signal = AbortSignal.any([cancellation, AbortSignal.timeout(remaining)])
     return candidate.protocol === 'openai-responses'
       ? await probeResponses(candidate, apiKey, signal)
       : await probeAnthropic(candidate, apiKey, signal)
