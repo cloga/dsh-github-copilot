@@ -25,13 +25,15 @@ import { Config } from './config.ts'
 import type { InlineConfig } from './config.ts'
 import { contentHasImageAttachments, inlineWireStream } from './wire.ts'
 import type { InlineHooks } from './wire.ts'
+import { createTraditionalSearchProvider } from './traditional-search.ts'
+export { COPILOT_HOSTED_SEARCH_PROVIDER_ID } from './traditional-search.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'web-search-provider'
 
 /** Services the plugin hooks into; `credentials` is declared so the
  * credential seam is settled before apply resolves keys. */
-export const inject = ['llm', 'systemPrompt', 'settings', 'credentials']
+export const inject = ['llm', 'systemPrompt', 'settings', 'credentials', 'web']
 
 /** Settings namespace carrying this plugin's section. */
 export const WEB_SEARCH_SETTINGS_NAMESPACE = settingsNamespace('web-search-provider')
@@ -79,6 +81,10 @@ export function apply(ctx: Context, config: InlineConfig): void {
   // change must rebuild even when the candidate set is unchanged (e.g. to
   // recover a failed plan with a longer timeout or probing off).
   let planProbe: { enabled: boolean; timeoutMs: number } | undefined
+  let traditionalPlan: SearchPlan | undefined
+  let traditionalPlanRoute: CurrentChatRoute | undefined
+  let traditionalPlanProbe: { enabled: boolean; timeoutMs: number } | undefined
+  let traditionalPlanCandidates: readonly SearchPlanCandidate[] | undefined
 
   const hooks: InlineHooks = {
     resolveApiKey: async (apiKeyEnv) => {
@@ -101,6 +107,60 @@ export function apply(ctx: Context, config: InlineConfig): void {
     return currentPlan
   }
 
+  /** Responses-only plan used by the traditional `ctx.web.search()` bridge. */
+  function webPlan(): SearchPlan {
+    const route = currentChatRoute(ctx)
+    const probe = probeSettings(current())
+    const candidates = traditionalCandidates()
+    if (traditionalPlan !== undefined
+      && sameRoute(route, traditionalPlanRoute)
+      && traditionalPlanProbe?.enabled === probe.enabled
+      && traditionalPlanProbe.timeoutMs === probe.timeoutMs
+      && traditionalPlanCandidates !== undefined
+      && sameCandidates(candidates, traditionalPlanCandidates)) return traditionalPlan
+    const cfg = current()
+    traditionalPlan = new SearchPlan(
+      candidates,
+      (candidate: SearchPlanCandidate) => probeCandidate(candidate, hooks.resolveApiKey, cfg.probeTimeoutMs),
+      cfg.probe,
+    )
+    traditionalPlanRoute = route
+    traditionalPlanProbe = probe
+    traditionalPlanCandidates = candidates
+    return traditionalPlan
+  }
+
+  /** Responses candidates admitted by the current route whitelist. */
+  function traditionalCandidates(): readonly SearchPlanCandidate[] {
+    const cfg = current()
+    const route = currentChatRoute(ctx)
+    if (!cfg.enabled || route === undefined) return []
+    if (cfg.providers.length > 0 && !cfg.providers.includes(route.provider)) return []
+    return resolveCandidates(ctx, planConfigOf(cfg)).filter(candidate => candidate.protocol === 'openai-responses')
+  }
+
+  /** Local/provisional availability, refined by a matching cached probe verdict. */
+  function traditionalAvailable(): boolean {
+    const route = currentChatRoute(ctx)
+    const probe = probeSettings(current())
+    const candidates = traditionalCandidates()
+    if (candidates.length === 0) return false
+    if (traditionalPlan === undefined
+      || !sameRoute(route, traditionalPlanRoute)
+      || traditionalPlanProbe?.enabled !== probe.enabled
+      || traditionalPlanProbe.timeoutMs !== probe.timeoutMs
+      || traditionalPlanCandidates === undefined
+      || !sameCandidates(candidates, traditionalPlanCandidates)) return true
+    return traditionalPlan.available()
+  }
+
+  ctx.web.registerSearchProvider(createTraditionalSearchProvider(
+    traditionalAvailable,
+    webPlan,
+    hooks,
+    current,
+  ))
+
   installSettingsSection(ctx, WEB_SEARCH_SETTINGS_NAMESPACE, Config, config, {
     setSource: (source) => {
       current = source
@@ -113,6 +173,10 @@ export function apply(ctx: Context, config: InlineConfig): void {
         currentPlan = undefined
         planRoute = undefined
         planProbe = undefined
+        traditionalPlan = undefined
+        traditionalPlanRoute = undefined
+        traditionalPlanProbe = undefined
+        traditionalPlanCandidates = undefined
         return
       }
       // Route facts may not be settled at attach time (the llm-pi-ai
@@ -127,6 +191,10 @@ export function apply(ctx: Context, config: InlineConfig): void {
         currentPlan = undefined
         planRoute = undefined
         planProbe = undefined
+        traditionalPlan = undefined
+        traditionalPlanRoute = undefined
+        traditionalPlanProbe = undefined
+        traditionalPlanCandidates = undefined
         return
       }
       // Resolve the candidate set WITHOUT starting probes; only a real
@@ -145,6 +213,10 @@ export function apply(ctx: Context, config: InlineConfig): void {
         planProbe = probe
         reportPlan(ctx, currentPlan)
       }
+      traditionalPlan = undefined
+      traditionalPlanRoute = undefined
+      traditionalPlanProbe = undefined
+      traditionalPlanCandidates = undefined
     },
   })
 

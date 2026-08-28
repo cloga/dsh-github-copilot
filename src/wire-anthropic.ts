@@ -34,6 +34,8 @@ interface AnthropicSlot {
   name?: string
   text: string
   arguments: string
+  /** Whether a reasoning block-start was emitted. */
+  opened?: boolean
 }
 
 /** Map an Anthropic usage object onto the harness TokenUsage shape. */
@@ -176,7 +178,7 @@ export async function* inlineAnthropicStream(
       for (const [streamIndex, slot] of slots) {
         if (slot.blockType === 'tool-call') {
           yield { type: 'block-end', index: slot.index, block: { type: 'tool-call', id: slot.id as CallId, name: slot.name ?? '', arguments: slot.arguments } }
-        } else if (slot.blockType === 'reasoning') {
+        } else if (slot.blockType === 'reasoning' && slot.opened === true) {
           yield { type: 'block-end', index: slot.index, block: { type: 'reasoning', text: slot.text } }
         }
         slots.delete(streamIndex)
@@ -224,7 +226,6 @@ export async function* inlineAnthropicStream(
               yield { type: 'block-start', index: slots.get(data.index ?? -1)?.index ?? 0, blockType: 'text' }
             } else if (blockType === 'thinking' || blockType === 'redacted_thinking') {
               slots.set(data.index ?? -1, { index: localIndex++, blockType: 'reasoning', text: '', arguments: '' })
-              yield { type: 'block-start', index: slots.get(data.index ?? -1)?.index ?? 0, blockType: 'reasoning' }
             } else if (blockType === 'tool_use') {
               sawToolCall = true
               slots.set(data.index ?? -1, {
@@ -255,6 +256,13 @@ export async function* inlineAnthropicStream(
               const text = data.delta?.thinking ?? ''
               if (text.length === 0) break
               slot.text += text
+              if (slot.opened !== true) {
+                if (slot.text.trim().length === 0) break
+                slot.opened = true
+                yield { type: 'block-start', index: slot.index, blockType: 'reasoning' }
+                yield { type: 'reasoning-delta', index: slot.index, text: slot.text }
+                break
+              }
               yield { type: 'reasoning-delta', index: slot.index, text }
             } else if (deltaType === 'input_json_delta') {
               const json = data.delta?.partial_json ?? ''
@@ -270,7 +278,7 @@ export async function* inlineAnthropicStream(
             if (slot === undefined) break
             if (slot.blockType === 'tool-call') {
               yield { type: 'block-end', index: slot.index, block: { type: 'tool-call', id: slot.id as CallId, name: slot.name ?? '', arguments: slot.arguments } }
-            } else if (slot.blockType === 'reasoning') {
+            } else if (slot.blockType === 'reasoning' && slot.opened === true) {
               yield { type: 'block-end', index: slot.index, block: { type: 'reasoning', text: slot.text } }
             }
             // Text slots never emit block-end (assembler uses deltas).

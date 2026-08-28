@@ -9,11 +9,14 @@ const requiredCapabilityIds = [
   'image-attachment-bypass',
   'failure-safe-copilot-model-catalog',
   'orphaned-replay-item-filtering',
+  'traditional-search-compatibility-bridge',
+  'nonempty-reasoning-blocks',
 ]
 const requiredRootExports = [
   'modelCatalogURL',
   'modelsFromOpenAICompatibleListing',
   'synchronizeOpenAICompatibleModelCatalog',
+  'COPILOT_HOSTED_SEARCH_PROVIDER_ID',
 ]
 
 async function readJson(path) {

@@ -15,10 +15,39 @@ export interface WebSearchCallItem {
   readonly type: 'web_search_call'
   readonly id?: string
   readonly status?: string
+  readonly action?: {
+    readonly sources?: readonly ResponsesWebSearchSource[]
+  }
 }
 
-/** Any output item; only `web_search_call` is consumed by the probe. */
-export type ResponseOutputItem = WebSearchCallItem | { readonly type: string }
+/** One Responses citation or search source. */
+export interface ResponsesWebSearchSource {
+  readonly url?: string
+  readonly title?: string
+  readonly snippet?: string
+  readonly published_at?: string
+}
+
+/** One annotation on generated output text. */
+export interface ResponsesAnnotation extends ResponsesWebSearchSource {
+  readonly type?: string
+}
+
+/** Generated output text carrying optional URL citations. */
+export interface ResponsesOutputText {
+  readonly type: 'output_text'
+  readonly text?: string
+  readonly annotations?: readonly ResponsesAnnotation[]
+}
+
+/** A generated message in a non-streamed Responses envelope. */
+export interface ResponsesMessageItem {
+  readonly type: 'message'
+  readonly content?: readonly ResponsesOutputText[]
+}
+
+/** Any output item consumed by the probe or traditional-search bridge. */
+export type ResponseOutputItem = WebSearchCallItem | ResponsesMessageItem | { readonly type: string }
 
 /** The non-streamed Responses envelope the probe parses. */
 export interface ResponsesResponse {

@@ -47,9 +47,9 @@ dsh plugin add dsh-web-search-provider
 
 ### Cloga DSH Windows/Copilot 部署基线
 
-分支版本 `0.2.3-cloga.1` 是部署基线，并非上游正式版本；这些修复的长期归属仍是
+分支版本 `0.2.3-cloga.3` 是部署基线，并非上游正式版本；这些修复的长期归属仍是
 上游。使用方必须同时锁定 PR commit 与生成的
-`dsh-web-search-provider-0.2.3-cloga.1.tgz`，不能只用包名识别构建。
+`dsh-web-search-provider-0.2.3-cloga.3.tgz`，不能只用包名识别构建。
 
 从锁定的 commit 构建 tarball，并在安装器旁保存 commit 与压缩包 SHA-256：
 
@@ -67,11 +67,13 @@ git rev-parse HEAD
 每个 tarball 都导出 `./deployment-baseline.json`。安装器必须验证：
 `schemaVersion` 为 `1`，`baseline.id` 为
 `cloga.dsh-windows-copilot.web-search`，`package.version` 为
-`0.2.3-cloga.1`，`supportedBaselines.dsh.release` 为 `0.1.0-rc.6`，
+`0.2.3-cloga.3`，`supportedBaselines.dsh.release` 为 `0.1.0-rc.6`，
 并且以下能力 ID 均存在且为 `required: true`：
 `responses-replay-item-id-normalization`、`grounded-sandbox-escalation`、
-`image-attachment-bypass`、`failure-safe-copilot-model-catalog` 与
-`orphaned-replay-item-filtering`；否则应拒绝安装。源码 checkout 可运行
+`image-attachment-bypass`、`failure-safe-copilot-model-catalog`、
+`orphaned-replay-item-filtering`、`traditional-search-compatibility-bridge`
+与 `nonempty-reasoning-blocks`；
+否则应拒绝安装。源码 checkout 可运行
 `pnpm verify:baseline`，同时校验包导出、源码标记和具名测试。
 
 ------
@@ -95,6 +97,11 @@ pnpm install
 ## 配置
 
 设置段 `web-search-provider`（实时命名空间：改动对下一次请求生效）。除注明外所有字段均可选。
+
+插件还会注册仅搜索的 `ctx.web` provider `copilot-hosted`，复用相同且已验证的
+OpenAI Responses 路由、凭证与超时设置。安装其他搜索 provider 时，请在
+`@deepseek-ai/dsh-web` 服务中配置 `searchProvider: copilot-hosted`。该插件不会
+注册 fetch provider。
 
 | 键 | 默认 | 含义 |
 |---|---|---|

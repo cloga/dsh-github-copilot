@@ -49,10 +49,10 @@ dsh plugin add dsh-web-search-provider
 
 ### Cloga DSH Windows/Copilot deployment baseline
 
-The fork build `0.2.3-cloga.1` is a deployment baseline, not an upstream
+The fork build `0.2.3-cloga.3` is a deployment baseline, not an upstream
 release. Upstream remains the durable destination for these fixes. Consumers
 must pin the PR commit and the resulting
-`dsh-web-search-provider-0.2.3-cloga.1.tgz`; the package name alone is not a
+`dsh-web-search-provider-0.2.3-cloga.3.tgz`; the package name alone is not a
 sufficient identity.
 
 Build the tarball from the pinned commit and retain both the commit and archive
@@ -72,11 +72,13 @@ git rev-parse HEAD
 Every tarball exports `./deployment-baseline.json`. An installer should reject
 the package unless `schemaVersion` is `1`, `baseline.id` is
 `cloga.dsh-windows-copilot.web-search`, `package.version` is
-`0.2.3-cloga.1`, `supportedBaselines.dsh.release` is `0.1.0-rc.6`, and all
+`0.2.3-cloga.3`, `supportedBaselines.dsh.release` is `0.1.0-rc.6`, and all
 required capability IDs are present with `required: true`:
 `responses-replay-item-id-normalization`, `grounded-sandbox-escalation`,
-`image-attachment-bypass`, `failure-safe-copilot-model-catalog`, and
-`orphaned-replay-item-filtering`. Run `pnpm verify:baseline` in a source
+`image-attachment-bypass`, `failure-safe-copilot-model-catalog`,
+`orphaned-replay-item-filtering`, `traditional-search-compatibility-bridge`,
+and `nonempty-reasoning-blocks`.
+Run `pnpm verify:baseline` in a source
 checkout to enforce the same contract against package exports, source markers,
 and named tests.
 
@@ -101,6 +103,12 @@ Reference the built plugin from a `cordis.yml` overlay:
 ## Config
 
 Settings section `web-search-provider` (a live namespace: edits reach the next request). All fields are optional unless noted.
+
+The plugin also registers the search-only `ctx.web` provider
+`copilot-hosted`, backed by the same verified OpenAI Responses route,
+credentials, and timeout settings. Configure the `@deepseek-ai/dsh-web`
+service with `searchProvider: copilot-hosted` when other search providers are
+installed. It intentionally registers no fetch provider.
 
 | Key | Default | Meaning |
 |---|---|---|
