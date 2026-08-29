@@ -211,6 +211,32 @@ describe('inlineStream', () => {
     expect(chunks).toContainEqual(expect.objectContaining({ type: 'reasoning-delta', text: 'thinking' }))
   })
 
+  it('drops reasoning items that never emit non-empty text', async () => {
+    const stream = [
+      event('response.output_item.added', { type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs_empty' } }),
+      event('response.reasoning_text.delta', { type: 'response.reasoning_text.delta', output_index: 0, delta: '' }),
+      event('response.output_item.done', { type: 'response.output_item.done', output_index: 0, item: { type: 'reasoning', id: 'rs_empty', content: [] } }),
+      event('response.completed', { type: 'response.completed', response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }),
+    ]
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(sseBody(stream), { status: 200 })))
+    const chunks = await collect(request())
+    expect(chunks.some(chunk => chunk.type === 'block-start' && chunk.blockType === 'reasoning')).toBe(false)
+    expect(chunks.some(chunk => chunk.type === 'block-end' && chunk.block.type === 'reasoning')).toBe(false)
+  })
+
+  it('drops reasoning items that emit only whitespace', async () => {
+    const stream = [
+      event('response.output_item.added', { type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs_whitespace' } }),
+      event('response.reasoning_text.delta', { type: 'response.reasoning_text.delta', output_index: 0, delta: '   ' }),
+      event('response.output_item.done', { type: 'response.output_item.done', output_index: 0, item: { type: 'reasoning', id: 'rs_whitespace', content: [] } }),
+      event('response.completed', { type: 'response.completed', response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }),
+    ]
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(sseBody(stream), { status: 200 })))
+    const chunks = await collect(request())
+    expect(chunks.some(chunk => chunk.type === 'block-start' && chunk.blockType === 'reasoning')).toBe(false)
+    expect(chunks.some(chunk => chunk.type === 'block-end' && chunk.block.type === 'reasoning')).toBe(false)
+  })
+
   it('maps HTTP 401 to an error finish with AUTH', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('denied', { status: 401 })))
     const chunks = await collect(request())

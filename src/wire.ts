@@ -309,11 +309,11 @@ export async function* inlineStream(
               arguments: '',
             }
             slots.set(outputIndex, slot)
-            if (slot.blockType === 'tool-call' || slot.blockType === 'reasoning') {
+            if (slot.blockType === 'tool-call') {
               open.add(outputIndex)
               yield { type: 'block-start', index: slot.index, blockType: slot.blockType }
             }
-            // Text slots open lazily on their first delta (see below).
+            // Text and reasoning slots open lazily on their first delta.
             break
           }
           case 'response.output_text.delta': {
@@ -337,6 +337,14 @@ export async function* inlineStream(
             const delta = data.delta ?? ''
             if (delta.length === 0) break
             slot.text += delta
+            if (slot.opened !== true) {
+              if (slot.text.trim().length === 0) break
+              slot.opened = true
+              open.add(data.output_index ?? -1)
+              yield { type: 'block-start', index: slot.index, blockType: 'reasoning' }
+              yield { type: 'reasoning-delta', index: slot.index, text: slot.text }
+              break
+            }
             yield { type: 'reasoning-delta', index: slot.index, text: delta }
             break
           }

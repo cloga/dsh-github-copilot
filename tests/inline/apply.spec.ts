@@ -11,6 +11,7 @@ import type { InlineConfig } from '../../src/config.ts'
 import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import type { Context } from '@deepseek-ai/cordis'
+import type { WebFetchProvider, WebSearchProvider } from '@deepseek-ai/dsh-web'
 
 interface FakeRuntime {
   ctx: Context
@@ -19,6 +20,9 @@ interface FakeRuntime {
   settingsDocument: Record<string, unknown>
   /** The registered prompt section object (name + dynamic text provider). */
   promptSection: { name: string; text: () => string } | undefined
+  searchProviders: WebSearchProvider[]
+  fetchProviders: WebFetchProvider[]
+  credentialResolve: ReturnType<typeof vi.fn>
   /** Commit a change to one settings namespace, as the settings service would. */
   triggerSettingsChange(ns: string): void
 }
@@ -72,6 +76,9 @@ function buildRuntime(
   let listener: FakeRuntime['listener']
   const listeners = new Map<string, (request: GenerateOptions, next: () => unknown) => unknown>()
   const sectionNames: string[] = []
+  const searchProviders: WebSearchProvider[] = []
+  const fetchProviders: WebFetchProvider[] = []
+  const credentialResolve = vi.fn(async () => ({ value: 'secret' }))
   let promptSection: FakeRuntime['promptSection']
   const settingsDocument: Record<string, unknown> = {
     [WEB_SEARCH_SETTINGS_NAMESPACE]: {},
@@ -92,7 +99,17 @@ function buildRuntime(
         : { provider: selectionRef.current.provider, model: selectionRef.current.model },
     }],
     // Credentials seam so resolveApiKey never falls back to the process env.
-    ['credentials', { resolve: async () => ({ value: 'secret' }) }],
+    ['credentials', { resolve: credentialResolve }],
+    ['web', {
+      registerSearchProvider: (provider: WebSearchProvider) => {
+        searchProviders.push(provider)
+        return () => undefined
+      },
+      registerFetchProvider: (provider: WebFetchProvider) => {
+        fetchProviders.push(provider)
+        return () => undefined
+      },
+    }],
   ])
   const ctx = {
     get: (name: string) => store.get(name),
@@ -133,6 +150,9 @@ function buildRuntime(
     ctx: ctx as unknown as Context,
     get listener() { return listener },
     sectionNames,
+    searchProviders,
+    fetchProviders,
+    credentialResolve,
     settingsDocument,
     get promptSection() { return promptSection },
     triggerSettingsChange: (ns) => fake.triggerChange(ns),
@@ -166,6 +186,59 @@ describe('web-search-provider apply', () => {
     apply(runtime.ctx, config)
     expect(runtime.listener).toBeTypeOf('function')
     expect(runtime.sectionNames).toContain('tool:web-search-provider')
+  })
+
+  it('registers the copilot-hosted traditional search provider without a fetch provider', () => {
+    const runtime = buildRuntime()
+    apply(runtime.ctx, config)
+    expect(runtime.searchProviders.map(provider => provider.id)).toEqual(['copilot-hosted'])
+    expect(runtime.searchProviders[0]?.available()).toBe(true)
+    expect(runtime.fetchProviders).toEqual([])
+  })
+
+  it('coexists with another traditional search provider without replacing it', () => {
+    const runtime = buildRuntime()
+    runtime.searchProviders.push({
+      id: 'existing-search',
+      available: () => true,
+      search: async () => ({ sources: [], truncated: false }),
+    })
+    apply(runtime.ctx, config)
+    expect(runtime.searchProviders.map(provider => provider.id)).toEqual(['existing-search', 'copilot-hosted'])
+  })
+
+  it('keeps traditional search unavailable when the current route is excluded', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, providers: ['other-route'] })
+    const provider = runtime.searchProviders[0]
+
+    expect(provider?.available()).toBe(false)
+    await expect(provider?.search({ query: 'news' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('reflects a cached failed probe and becomes provisional after candidate config changes', async () => {
+    const runtime = buildRuntime()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: 'unsupported' } }),
+      { status: 400 },
+    )))
+    apply(runtime.ctx, { ...config, probe: true })
+    const provider = runtime.searchProviders[0]
+
+    expect(provider?.available()).toBe(true)
+    await expect(provider?.search({ query: 'news' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(provider?.available()).toBe(false)
+
+    runtime.settingsDocument[WEB_SEARCH_SETTINGS_NAMESPACE] = {
+      probe: true,
+      baseURL: 'https://replacement.example/v1',
+    }
+    runtime.triggerSettingsChange(WEB_SEARCH_SETTINGS_NAMESPACE)
+    expect(provider?.available()).toBe(true)
   })
 
   it('short-circuits agent-loop requests on the whitelisted route', async () => {

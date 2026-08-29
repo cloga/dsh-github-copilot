@@ -120,6 +120,34 @@ describe('inlineAnthropicStream', () => {
     expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
   })
 
+  it('drops thinking blocks that never emit non-empty text', async () => {
+    const stream = [
+      event('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } }),
+      event('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: '' } }),
+      event('content_block_stop', { type: 'content_block_stop', index: 0 }),
+      event('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 1, output_tokens: 1 } }),
+      event('message_stop', { type: 'message_stop' }),
+    ]
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(sseBody(stream), { status: 200 })))
+    const chunks = await collect(request())
+    expect(chunks.some(chunk => chunk.type === 'block-start' && chunk.blockType === 'reasoning')).toBe(false)
+    expect(chunks.some(chunk => chunk.type === 'block-end' && chunk.block.type === 'reasoning')).toBe(false)
+  })
+
+  it('drops thinking blocks that emit only whitespace', async () => {
+    const stream = [
+      event('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } }),
+      event('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: '   ' } }),
+      event('content_block_stop', { type: 'content_block_stop', index: 0 }),
+      event('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 1, output_tokens: 1 } }),
+      event('message_stop', { type: 'message_stop' }),
+    ]
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(sseBody(stream), { status: 200 })))
+    const chunks = await collect(request())
+    expect(chunks.some(chunk => chunk.type === 'block-start' && chunk.blockType === 'reasoning')).toBe(false)
+    expect(chunks.some(chunk => chunk.type === 'block-end' && chunk.block.type === 'reasoning')).toBe(false)
+  })
+
   it('slots local tool_use blocks and finishes with tool-calls', async () => {
     const stream = [
       event('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_1', name: 'bash', input: {} } }),

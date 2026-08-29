@@ -9,7 +9,7 @@
   },
   "package": {
     "name": "dsh-web-search-provider",
-    "version": "0.2.3-cloga.1"
+    "version": "0.2.3-cloga.3"
   },
   "supportedBaselines": {
     "platforms": [
@@ -138,13 +138,70 @@
           "name": "drops orphaned replay calls and results while preserving paired calls"
         }
       ]
+    },
+    {
+      "id": "traditional-search-compatibility-bridge",
+      "required": true,
+      "sourceMarkers": [
+        {
+          "file": "src/traditional-search.ts",
+          "marker": "export const COPILOT_HOSTED_SEARCH_PROVIDER_ID = 'copilot-hosted'"
+        },
+        {
+          "file": "src/index.ts",
+          "marker": "ctx.web.registerSearchProvider(createTraditionalSearchProvider("
+        }
+      ],
+      "tests": [
+        {
+          "file": "tests/inline/apply.spec.ts",
+          "name": "registers the copilot-hosted traditional search provider without a fetch provider"
+        },
+        {
+          "file": "tests/traditional-search.spec.ts",
+          "name": "normalizes generated content and deduplicated sources"
+        },
+        {
+          "file": "tests/traditional-search.spec.ts",
+          "name": "honors caller abort before credential or network access"
+        },
+        {
+          "file": "tests/inline/apply.spec.ts",
+          "name": "coexists with another traditional search provider without replacing it"
+        }
+      ]
+    },
+    {
+      "id": "nonempty-reasoning-blocks",
+      "required": true,
+      "sourceMarkers": [
+        {
+          "file": "src/wire.ts",
+          "marker": "if (slot.text.trim().length === 0) break"
+        },
+        {
+          "file": "src/wire-anthropic.ts",
+          "marker": "if (slot.text.trim().length === 0) break"
+        }
+      ],
+      "tests": [
+        {
+          "file": "tests/inline/wire.spec.ts",
+          "name": "drops reasoning items that emit only whitespace"
+        },
+        {
+          "file": "tests/inline/wire-anthropic.spec.ts",
+          "name": "drops thinking blocks that emit only whitespace"
+        }
+      ]
     }
   ],
   "requiredExports": {
     ".": [
       "modelCatalogURL",
       "modelsFromOpenAICompatibleListing",
-      "synchronizeOpenAICompatibleModelCatalog"
+      "synchronizeOpenAICompatibleModelCatalog",
+      "COPILOT_HOSTED_SEARCH_PROVIDER_ID"
     ],
     "./deployment-baseline.json": []
   }
