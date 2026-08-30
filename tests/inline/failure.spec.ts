@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { classifyHttpStatus, classifyWireError, parseRetryAfterMs } from '../../src/failure.ts'
+import { MAX_SSE_EVENT_BYTES, SseEventSizeError } from '../../src/sse.ts'
 
 describe('classifyHttpStatus', () => {
   it('maps 401 and 403 to AUTH', () => {
@@ -71,6 +72,12 @@ describe('classifyWireError', () => {
 
   it('maps context window language to CONTEXT_WINDOW_EXCEEDED', () => {
     expect(classifyWireError(new Error('context window exceeded')).code).toBe('CONTEXT_WINDOW_EXCEEDED')
+  })
+
+  it('maps an oversized SSE event to INVALID_REQUEST', () => {
+    const failure = classifyWireError(new SseEventSizeError())
+    expect(failure.code).toBe('INVALID_REQUEST')
+    expect(failure.message).toContain(String(MAX_SSE_EVENT_BYTES))
   })
 
   it('defaults to UNKNOWN', () => {

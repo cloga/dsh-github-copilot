@@ -8,6 +8,7 @@
  */
 
 import type { LlmFailure, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { SseEventSizeError } from './sse.ts'
 
 /**
  * Classify a non-OK HTTP response into the harness failure vocabulary.
@@ -59,6 +60,7 @@ export function parseRetryAfterMs(retryAfter: string | null): number | undefined
  */
 export function classifyWireError(error: unknown): LlmFailure {
   const message = error instanceof Error ? error.message : String(error)
+  if (error instanceof SseEventSizeError) return { message, code: 'INVALID_REQUEST' }
   const text = message.toLowerCase()
   if (text.includes('timeout') || text.includes('timed out')) return { message, code: 'TIMEOUT' }
   if (text.includes('context') && text.includes('window')) return { message, code: 'CONTEXT_WINDOW_EXCEEDED' }

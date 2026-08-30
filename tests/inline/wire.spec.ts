@@ -7,6 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { inlineStream, inlineWireStream } from '../../src/wire.ts'
+import { MAX_SSE_EVENT_BYTES } from '../../src/sse.ts'
 import type { InlineConfig } from '../../src/config.ts'
 import type { SearchPlan, SearchPlanCandidate } from '../../src/plan.ts'
 import { markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
@@ -264,6 +265,18 @@ describe('inlineStream', () => {
     const finish = chunks.at(-1) as Extract<StreamChunk, { type: 'finish' }>
     expect(finish.reason.kind).toBe('error')
     if (finish.reason.kind === 'error') expect(finish.reason.failure.code).toBe('TRANSPORT')
+  })
+
+  it('maps an oversized SSE event to an INVALID_REQUEST finish', async () => {
+    const oversized = `data: ${JSON.stringify('a'.repeat(MAX_SSE_EVENT_BYTES))}`
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(sseBody([oversized]), { status: 200 })))
+    const chunks = await collect(request())
+    const finish = chunks.at(-1) as Extract<StreamChunk, { type: 'finish' }>
+    expect(finish.reason.kind).toBe('error')
+    if (finish.reason.kind === 'error') {
+      expect(finish.reason.failure.code).toBe('INVALID_REQUEST')
+      expect(finish.reason.failure.message).toContain(String(MAX_SSE_EVENT_BYTES))
+    }
   })
 
   it('closes open slots and yields a transport error when the stream ends without a terminal event', async () => {
