@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { parseSse } from '../../src/sse.ts'
+import { MAX_SSE_EVENT_BYTES, parseSse } from '../../src/sse.ts'
 
 function streamOf(text: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
@@ -57,9 +57,26 @@ describe('parseSse', () => {
     await expect(collect('data: not-json\n\n')).rejects.toThrow()
   })
 
-  it('throws past the size bound', async () => {
-    const big = `${'a'.repeat(9 * 1024 * 1024)}\n\n`
-    await expect(collect(big)).rejects.toThrow(/size bound/)
+  it('allows cumulative stream bytes past the bound across valid events', async () => {
+    const payload = 'x'.repeat(4096)
+    const text = Array.from({ length: 2049 }, (_, index) =>
+      `data: ${JSON.stringify({ index, payload })}\n\n`).join('')
+    const events = await collect(text)
+    expect(events).toHaveLength(2049)
+    expect((events.at(-1)?.data as { index: number }).index).toBe(2048)
+  })
+
+  it('resets pending byte accounting at blank-line event boundaries', async () => {
+    const first = `data: ${JSON.stringify('a'.repeat(5 * 1024 * 1024))}\n\n`
+    const second = `data: ${JSON.stringify('b'.repeat(4 * 1024 * 1024))}\n\n`
+    await expect(collect(first + second)).resolves.toHaveLength(2)
+  })
+
+  it('throws when one incomplete event exceeds the size bound', async () => {
+    const big = `data: ${JSON.stringify('a'.repeat(MAX_SSE_EVENT_BYTES))}`
+    await expect(collect(big)).rejects.toThrow(
+      `SSE event exceeded the ${MAX_SSE_EVENT_BYTES}-byte size bound`,
+    )
   })
 })
 
