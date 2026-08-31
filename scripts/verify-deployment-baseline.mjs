@@ -11,6 +11,7 @@ const requiredCapabilityIds = [
   'orphaned-replay-item-filtering',
   'traditional-search-compatibility-bridge',
   'nonempty-reasoning-blocks',
+  'settings-provider-instance-api',
 ]
 const requiredRootExports = [
   'modelCatalogURL',
@@ -42,8 +43,12 @@ assert(manifest.supportedBaselines?.node === packageJson.engines?.node, 'Node ba
 assert(manifest.supportedBaselines?.platforms?.includes('windows'), 'Windows baseline marker is missing')
 
 const dshRelease = manifest.supportedBaselines?.dsh?.release
+const dshDevelopmentRelease = manifest.supportedBaselines?.dsh?.developmentRelease
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
-  assert(packageJson.peerDependencies?.[dependency] === `^${dshRelease}`, `${dependency} does not match the DSH baseline`)
+  assert(
+    packageJson.peerDependencies?.[dependency] === `^${dshRelease} || ^${dshDevelopmentRelease}`,
+    `${dependency} does not match the DSH baselines`,
+  )
 }
 
 const capabilities = new Map((manifest.capabilities ?? []).map(capability => [capability.id, capability]))
