@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const expectedCommit = 'dd6322d604e00eec1ba5e0c8541159906a21094a'
-const input = process.argv[2] ?? process.env.DSH_UPSTREAM_ROOT
+const [argument] = process.argv.slice(2).filter(value => value !== '--')
+const input = argument ?? process.env.DSH_UPSTREAM_ROOT
 if (input === undefined || input.length === 0) {
   throw new Error('usage: node scripts/verify-upstream-baseline.mjs <deepseek-harness checkout>')
 }
