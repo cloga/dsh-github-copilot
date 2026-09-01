@@ -17,6 +17,14 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./client": {
+      "types": "./lib/types/client.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./remote": {
+      "types": "./lib/types/remote.d.ts",
+      "default": "./lib/remote.js"
+    },
     "./deployment-baseline.json": "./deployment-baseline.json",
     "./package.json": "./package.json"
   },
@@ -24,6 +32,8 @@
     "cordis.patch.yml",
     "deployment-baseline.json",
     "lib/index.js",
+    "lib/client.js",
+    "lib/remote.js",
     "lib/*.js",
     "lib/types/**/*.d.ts",
     "README.md",
@@ -52,32 +62,68 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "verify:baseline": "node scripts/verify-deployment-baseline.mjs"
+    "verify:baseline": "node scripts/verify-deployment-baseline.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
+    "verify:upstream": "node scripts/verify-upstream-baseline.mjs",
+    "verify": "pnpm test && pnpm typecheck && pnpm verify:baseline && pnpm build && pnpm verify:package"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-agent": "^0.1.1-rc.2 || ^0.1.2-alpha.2",
-    "@deepseek-ai/dsh-agent-default-model": "^0.1.1-rc.2 || ^0.1.2-alpha.2",
-    "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2 || ^0.1.2-alpha.2",
-    "@deepseek-ai/dsh-launch-environment": "^0.1.1-rc.2 || ^0.1.2-alpha.2",
-    "@deepseek-ai/dsh-llm": "^0.1.1-rc.2 || ^0.1.2-alpha.2",
-    "@deepseek-ai/dsh-settings": "^0.1.1-rc.2 || ^0.1.2-alpha.2",
-    "@deepseek-ai/dsh-web": "^0.1.1-rc.2 || ^0.1.2-alpha.2"
+    "@deepseek-ai/dsh-agent": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-agent-default-model": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-api-remotes": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-authorization": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-renderer": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-settings-models": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-credentials": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-llm": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-settings": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.2-alpha.3",
+    "@deepseek-ai/dsh-web": "^0.1.2-alpha.3",
+    "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-api-remotes": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-authorization": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-renderer": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-models": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-slots": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@earendil-works/pi-ai": "^0.82.0"
+    "@earendil-works/pi-ai": "^0.84.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-agent-default-model": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-api-remotes": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-authorization": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings-models": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-launch-environment": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-llm": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-web": "^0.1.1-rc.2",
     "@types/node": "^22.0.0",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0",
     "tsdown": "^0.22.2",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
@@ -90,6 +136,13 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-settings-models"
+      ],
+      "platform": "web"
     }
   }
 }

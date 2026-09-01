@@ -20,16 +20,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: dd6322d604e00eec1ba5e0c8541159906a21094a
+          path: dsh-upstream
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:baseline
-      - run: pnpm test
-      - run: pnpm typecheck
-      - run: pnpm build
+      - run: pnpm verify:upstream -- dsh-upstream
+      - run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts
       - name: Verify deployment metadata is packed

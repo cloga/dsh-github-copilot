@@ -16,12 +16,6 @@ export interface InlineConfig {
    * chat route, whose candidates decide whether the plugin can serve.
    */
   providers: string[]
-  /** Endpoint base override; `/responses` or `/messages` is appended. Default: from route. */
-  baseURL?: string
-  /** Model override; used by the probe and by the served wire request. */
-  model?: string
-  /** Credential reference; defaults to the route's reference. */
-  apiKeyEnv?: string
   /** Append `include: ['web_search_call.action.sources']` to wire requests. */
   includeSources: boolean
   /** Strip function-tool variants of the server-side web tools from the wire. */
@@ -41,9 +35,6 @@ const MAX_TIMEOUT_MS = 2_147_483_647
 export const Config: z<InlineConfig> = z.object({
   enabled: z.boolean().default(true),
   providers: z.array(z.string()).default([]),
-  baseURL: z.string(),
-  model: z.string(),
-  apiKeyEnv: z.string().role('credential-ref'),
   includeSources: z.boolean().default(true),
   stripServerTools: z.boolean().default(true),
   idleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(300_000),

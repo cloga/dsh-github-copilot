@@ -17,6 +17,9 @@ import {
 } from './plan.ts'
 import type { ResponsesWebSearchToolType, SearchPlanCandidate } from './plan.ts'
 import type { AnthropicResponse, ResponsesResponse } from './types.ts'
+import { providerRequestHeaders } from './copilot-request.ts'
+import { applyRequestAuth, normalizeRequestAuth } from './copilot-request.ts'
+import type { ResolvedRequestAuth } from './copilot-request.ts'
 import { isAbortError, providerErrorMessage, readBounded } from './http.ts'
 import { version } from '#package.json' with { type: 'json' }
 
@@ -56,7 +59,7 @@ const MAX_PROBE_TIMEOUT_MS = 2_147_483_647
  */
 export async function probeCandidate(
   candidate: SearchPlanCandidate,
-  resolveApiKey: (apiKeyEnv: string) => Promise<string | undefined>,
+  resolveApiKey: (candidate: SearchPlanCandidate) => Promise<string | ResolvedRequestAuth | undefined>,
   timeoutMs: number,
 ): Promise<ProbeOutcome> {
   // Clamp: `AbortSignal.timeout` (and `setTimeout`) refuse values beyond 2^31-1
@@ -83,19 +86,21 @@ export async function probeCandidate(
 /** Resolve the key and probe the endpoint; the fetch is bounded by the remaining deadline. */
 async function runProbe(
   candidate: SearchPlanCandidate,
-  resolveApiKey: (apiKeyEnv: string) => Promise<string | undefined>,
+  resolveApiKey: (candidate: SearchPlanCandidate) => Promise<string | ResolvedRequestAuth | undefined>,
   bound: number,
   deadline: number,
   cancellation: AbortSignal,
 ): Promise<ProbeOutcome> {
   try {
-    const apiKey = await resolveApiKey(candidate.apiKeyEnv)
-    if (apiKey === undefined || apiKey.length === 0) {
+    const auth = normalizeRequestAuth(await resolveApiKey(candidate))
+    if (auth === undefined || auth.apiKey.length === 0) {
       return {
         supported: false,
         detail: `no API key for "${candidate.apiKeyEnv}"`,
       }
     }
+    candidate = applyRequestAuth(candidate, auth)
+    const apiKey = auth.apiKey
     // The race above returns the verdict at `bound`, but the work keeps
     // running: a key that lands late must not start a FRESH fetch with a
     // fresh timeout. Check the remaining budget and bound the fetch to it.
@@ -150,6 +155,7 @@ async function probeResponsesSpelling(
         'content-type': 'application/json',
         accept: 'application/json',
         'user-agent': USER_AGENT,
+        ...providerRequestHeaders(candidate, 'user'),
       },
       body: JSON.stringify({
         model: candidate.model,
@@ -167,6 +173,7 @@ async function probeResponsesSpelling(
     if (isAbortError(error)) return { supported: false, detail: 'probe timed out or was aborted', retryOther: false }
     return { supported: false, detail: `probe request failed: ${String(error)}`, retryOther: false }
   }
+
   if (!response.ok) {
     let detail = `HTTP ${response.status}`
     try {
@@ -236,6 +243,7 @@ async function probeAnthropic(candidate: SearchPlanCandidate, apiKey: string, si
         'content-type': 'application/json',
         accept: 'application/json',
         'user-agent': USER_AGENT,
+        ...providerRequestHeaders(candidate, 'user'),
       },
       body: JSON.stringify({
         model: candidate.model,

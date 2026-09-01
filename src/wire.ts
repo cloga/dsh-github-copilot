@@ -23,6 +23,8 @@ import { abortable } from './http.ts'
 import { mapUsage } from './usage.ts'
 import type { WireUsage } from './usage.ts'
 import { buildWireBody, flattenText } from './serialize.ts'
+import { applyRequestAuth, normalizeRequestAuth, providerRequestHeaders } from './copilot-request.ts'
+import type { ResolvedRequestAuth } from './copilot-request.ts'
 import { parseSse } from './sse.ts'
 import { IdleWatchdog } from './watchdog.ts'
 import type { InlineConfig } from './config.ts'
@@ -37,7 +39,7 @@ const SANDBOX_DENIAL_MARKER = '[sandbox: file access denied under'
 /** Credential and cancellation hooks the stream resolves per operation. */
 export interface InlineHooks {
   /** Resolve one credential reference through the credentials seam. */
-  resolveApiKey: (apiKeyEnv: string) => Promise<string | undefined>
+  resolveApiKey: (candidate: SearchPlanCandidate) => Promise<string | ResolvedRequestAuth | undefined>
 }
 
 /** One in-flight server output item, keyed by the server output_index. */
@@ -170,9 +172,9 @@ export async function* inlineStream(
     }
     watchdog = new IdleWatchdog(cfg.idleTimeoutMs)
     watchdog.signal.addEventListener('abort', onAbort, { once: true })
-    let apiKey: string | undefined
+    let auth: ResolvedRequestAuth | undefined
     try {
-      apiKey = await abortable(hooks.resolveApiKey(candidate.apiKeyEnv), controller.signal)
+      auth = normalizeRequestAuth(await abortable(hooks.resolveApiKey(candidate), controller.signal))
     } catch (error) {
       // Never throw out of the generator: a failing credential hook becomes
       // an error finish exactly like every other failure path.
@@ -187,10 +189,12 @@ export async function* inlineStream(
       yield errorFinish(classifyWireError(error))
       return
     }
-    if (apiKey === undefined || apiKey.length === 0) {
+    if (auth === undefined || auth.apiKey.length === 0) {
       yield errorFinish({ message: `no API key for "${candidate.apiKeyEnv}"`, code: 'AUTH' })
       return
     }
+    candidate = applyRequestAuth(candidate, auth)
+    const apiKey = auth.apiKey
     // The idle window covers the wire phase; reset the bound consumed by the
     // key resolution.
     watchdog.reset()
@@ -206,6 +210,7 @@ export async function* inlineStream(
           'content-type': 'application/json',
           accept: 'text/event-stream',
           ...attributionHeaders(),
+          ...providerRequestHeaders(candidate, request.messages.at(-1)?.role === 'user' ? 'user' : 'agent'),
           ...request.sessionId !== undefined
             ? { 'x-client-request-id': String(request.sessionId), session_id: String(request.sessionId) }
             : {},
@@ -217,6 +222,7 @@ export async function* inlineStream(
         yield abortedFinish()
         return
       }
+
       if (watchdog.signal.aborted === true) {
         // Idle watchdog tripped while fetch was still waiting (headers or
         // body): map to a retryable TIMEOUT, not UNKNOWN.

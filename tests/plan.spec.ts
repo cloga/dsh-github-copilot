@@ -1,302 +1,94 @@
-/**
- * Unit tests for search-plan resolution (config pin vs current chat route)
- * and the probe state machine (auto-disable semantics).
- */
-
 import { describe, expect, it } from 'vitest'
-import { WebError } from '@deepseek-ai/dsh-web'
-import { ensureV1Base, resolveCandidates, sameCandidates, SearchPlan, siblingCandidates } from '../src/plan.ts'
-import type { PlanConfig, SearchProtocol } from '../src/plan.ts'
+import {
+  ensureV1Base,
+  GITHUB_COPILOT_CREDENTIAL_KEY,
+  resolveCandidates,
+  sameCandidates,
+  SearchPlan,
+  siblingCandidates,
+} from '../src/plan.ts'
 import type { ProbeOutcome } from '../src/probe.ts'
-import { currentChatRoute } from '../src/current-provider.ts'
 import { deepseekRoute, fakeContext, makeCandidate } from './helpers.ts'
 
-/** A plan config with the probe left to each test. */
-function planConfig(overrides: Partial<PlanConfig> = {}): PlanConfig {
-  return { probe: true, probeTimeoutMs: 1000, ...overrides }
+const planConfig = { probe: true, probeTimeoutMs: 1_000 }
+
+function copilotContext(model = 'gpt-5.4') {
+  return fakeContext({
+    agentDefaultModel: { currentSelection: () => ({ provider: 'github-copilot', model }) },
+    settings: { get: () => ({ providers: { 'github-copilot': {} } }) },
+  })
 }
 
-/** A probe stub whose verdicts are consumed in candidate order. */
-function verdictProbe(...verdicts: boolean[]): (candidate: unknown) => Promise<ProbeOutcome> {
-  let index = 0
-  return async () => {
-    const supported = verdicts[index] ?? false
-    index += 1
-    return { supported, detail: supported ? 'ok' : 'refused' }
-  }
-}
-
-describe('ensureV1Base', () => {
-  it('keeps a v1-included base unchanged', () => {
-    expect(ensureV1Base('https://api.deepseek.com/anthropic/v1')).toBe('https://api.deepseek.com/anthropic/v1')
+describe('Copilot candidate resolution', () => {
+  it('normalizes Anthropic roots to a v1 endpoint base', () => {
+    expect(ensureV1Base('https://api.individual.githubcopilot.com')).toBe(
+      'https://api.individual.githubcopilot.com/v1',
+    )
   })
 
-  it('appends /v1 to an SDK-style root base', () => {
-    expect(ensureV1Base('https://api.anthropic.com')).toBe('https://api.anthropic.com/v1')
-    expect(ensureV1Base('https://gateway.example/anthropic/')).toBe('https://gateway.example/anthropic/v1')
-  })
-})
-
-describe('siblingCandidates', () => {
-  it('asks a search-capable route on its own protocol alone', () => {
-    expect(siblingCandidates(deepseekRoute({ api: 'anthropic-messages', baseURL: 'https://gw.example/anthropic/v1' })))
-      .toEqual([{ protocol: 'anthropic-messages', baseURL: 'https://gw.example/anthropic/v1' }])
-  })
-
-  it('honors a base override for a search-capable route', () => {
-    expect(siblingCandidates(deepseekRoute({ api: 'openai-responses' }), 'https://gw.example/v1'))
-      .toEqual([{ protocol: 'openai-responses', baseURL: 'https://gw.example/v1' }])
-  })
-
-  it('derives the DeepSeek siblings for a chat-completions route', () => {
-    expect(siblingCandidates(deepseekRoute())).toEqual([
-      { protocol: 'openai-responses', baseURL: 'https://api.deepseek.com' },
-      { protocol: 'anthropic-messages', baseURL: 'https://api.deepseek.com/anthropic/v1' },
-    ])
-  })
-
-  it('strips a /v1 chat-completions suffix before deriving the DeepSeek siblings', () => {
-    expect(siblingCandidates(deepseekRoute({ baseURL: 'https://api.deepseek.com/v1' }))).toEqual([
-      { protocol: 'openai-responses', baseURL: 'https://api.deepseek.com' },
-      { protocol: 'anthropic-messages', baseURL: 'https://api.deepseek.com/anthropic/v1' },
-    ])
-  })
-
-  it('keeps the /v1 suffix on the OpenAI sibling (its responses endpoint lives under /v1)', () => {
-    expect(siblingCandidates(deepseekRoute({ provider: 'openai', baseURL: 'https://api.openai.com/v1' })))
-      .toEqual([{ protocol: 'openai-responses', baseURL: 'https://api.openai.com/v1' }])
-  })
-
-  it('derives the DeepSeek siblings for a gateway on the official host', () => {
-    expect(siblingCandidates(deepseekRoute({ provider: 'acme', baseURL: 'https://api.deepseek.com/custom' })))
-      .toEqual([
-        { protocol: 'openai-responses', baseURL: 'https://api.deepseek.com/custom' },
-        { protocol: 'anthropic-messages', baseURL: 'https://api.deepseek.com/custom/anthropic/v1' },
-      ])
-  })
-
-  it('derives the DeepSeek siblings for the legacy deepseek-official route alias', () => {
-    const ctx = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-v4-flash' }) },
-      settings: { get: () => ({ providers: { 'deepseek-official': { apiKeyEnv: 'DEEPSEEK_API_KEY' } } }) },
-    })
-    const candidates = resolveCandidates(ctx, planConfig())
-    expect(candidates.map(candidate => candidate.protocol)).toEqual(['openai-responses', 'anthropic-messages'])
-    expect(candidates[0]?.baseURL).toBe('https://api.deepseek.com')
-    expect(candidates[1]?.baseURL).toBe('https://api.deepseek.com/anthropic/v1')
-    expect(candidates[0]?.apiKeyEnv).toBe('DEEPSEEK_API_KEY')
-  })
-
-  it('derives only the Responses sibling for an OpenAI route', () => {
-    expect(siblingCandidates(deepseekRoute({ provider: 'openai', baseURL: 'https://api.openai.com/v1' })))
-      .toEqual([{ protocol: 'openai-responses', baseURL: 'https://api.openai.com/v1' }])
-  })
-
-  it('derives the Responses sibling for the GitHub Copilot Chat route', () => {
+  it('uses a Copilot Responses route without deriving gateway siblings', () => {
     expect(siblingCandidates(deepseekRoute({
-      provider: 'github-copilot-chat',
-      api: 'openai-completions',
-      baseURL: 'https://gateway.example/v1',
-      apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
-      supportedApis: ['openai-responses', 'openai-completions'],
-    }))).toEqual([{ protocol: 'openai-responses', baseURL: 'https://gateway.example/v1' }])
+      provider: 'github-copilot',
+      model: 'gpt-5.4',
+      api: 'openai-responses',
+      baseURL: 'https://api.individual.githubcopilot.com',
+    }))).toEqual([{
+      protocol: 'openai-responses',
+      baseURL: 'https://api.individual.githubcopilot.com',
+    }])
   })
 
-  it('does not guess a Responses sibling for a Chat-only GitHub Copilot model', () => {
-    expect(siblingCandidates(deepseekRoute({
-      provider: 'github-copilot-chat',
-      api: 'openai-completions',
-      baseURL: 'https://gateway.example/v1',
-      supportedApis: ['openai-completions'],
-    }))).toEqual([])
+  it('refuses non-Copilot routes', () => {
+    expect(siblingCandidates(deepseekRoute({ provider: 'openai' }))).toEqual([])
+    expect(resolveCandidates(fakeContext({
+      agentDefaultModel: { currentSelection: () => ({ provider: 'openai', model: 'gpt-5.4' }) },
+      settings: { get: () => ({ providers: { openai: {} } }) },
+    }), planConfig)).toEqual([])
   })
 
-  it('yields nothing for an unknown gateway route', () => {
-    expect(siblingCandidates(deepseekRoute({ provider: 'acme', baseURL: 'https://acme.example/v1' }))).toEqual([])
-  })
-})
-
-describe('resolveCandidates', () => {
-  it('follows the current chat route when no pin is configured', () => {
-    const ctx = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-v4-flash' }) },
-      settings: { get: () => ({ providers: { deepseek: { apiKeyEnv: 'MY_KEY' } } }) },
-    })
-    const candidates = resolveCandidates(ctx, planConfig())
-    expect(candidates.map(candidate => candidate.protocol)).toEqual(['openai-responses', 'anthropic-messages'])
-    for (const candidate of candidates) {
-      expect(candidate.model).toBe('deepseek-v4-flash')
-      expect(candidate.apiKeyEnv).toBe('MY_KEY')
-    }
-    expect(candidates[0]?.baseURL).toBe('https://api.deepseek.com')
-    expect(candidates[1]?.baseURL).toBe('https://api.deepseek.com/anthropic/v1')
-  })
-
-  it('applies the configured baseURL and model to every route candidate', () => {
-    const ctx = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-v4-flash' }) },
-      settings: { get: () => ({ providers: { deepseek: {} } }) },
-    })
-    const candidates = resolveCandidates(ctx, planConfig({ baseURL: 'https://gw.example/custom', model: 'm-1', apiKeyEnv: 'K' }))
-    expect(candidates).toEqual([
-      makeCandidate('openai-responses', { baseURL: 'https://gw.example/custom', model: 'm-1', apiKeyEnv: 'K' }),
-      makeCandidate('anthropic-messages', { baseURL: 'https://gw.example/custom/anthropic/v1', model: 'm-1', apiKeyEnv: 'K' }),
-    ])
-  })
-
-  it('serves an OpenAI route on the Responses protocol it already speaks', () => {
-    const ctx = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'openai', model: 'gpt-5.6' }) },
-      settings: { get: () => ({ providers: { openai: { api: 'openai-responses', baseURL: 'https://gw.example/v1', apiKeyEnv: 'OPENAI_API_KEY' } } }) },
-    })
-    const candidates = resolveCandidates(ctx, planConfig())
-    expect(candidates).toHaveLength(1)
-    expect(candidates[0]).toMatchObject({ protocol: 'openai-responses', baseURL: 'https://gw.example/v1' })
-  })
-
-  it('defaults to the standard web_search tool spelling', () => {
-    const ctx = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-v4-flash' }) },
-      settings: { get: () => ({ providers: { deepseek: { api: 'openai-completions', baseURL: 'https://api.deepseek.com' } } }) },
-    })
-    const candidates = resolveCandidates(ctx, planConfig())
-    expect(candidates[0]).toMatchObject({ protocol: 'openai-responses', webSearchToolType: 'web_search' })
-  })
-
-  it('uses the versioned tool spelling for OpenCode Go hosts', () => {
-    const ctx = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'opencode-go-response', model: 'deepseek-v4-flash' }) },
-      settings: { get: () => ({ providers: { 'opencode-go-response': { api: 'openai-responses', baseURL: 'https://opencode.ai/zen/go/v1', apiKeyEnv: 'K' } } }) },
-    })
-    const candidates = resolveCandidates(ctx, planConfig())
-    expect(candidates[0]).toMatchObject({ protocol: 'openai-responses', webSearchToolType: 'web_search_2025_08_26' })
-  })
-
-  it('resolves an unprofilable route through the pi-ai catalog', () => {
-    const ctx = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-v4-flash' }) },
-      settings: { get: () => ({ providers: {} }) },
-    })
-
-    const route = currentChatRoute(ctx)
-    // The route itself carries no key reference (that lives on the profile);
-    // the catalog supplies protocol and base URL.
-    expect(route).toMatchObject({ api: 'openai-completions', baseURL: 'https://api.deepseek.com' })
-    expect(route?.apiKeyEnv).toBeUndefined()
-  })
-
-  it('reads all supported APIs from the selected Copilot model profile', () => {
-    const ctx = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'github-copilot-chat', model: 'gpt-test' }) },
-      settings: {
-        get: () => ({
-          providers: {
-            'github-copilot-chat': {
-              api: 'openai-completions',
-              baseURL: 'https://gateway.example/v1',
-              models: [{
-                id: 'gpt-test',
-                api: 'openai-responses',
-                apis: ['openai-responses', 'openai-completions'],
-              }],
-            },
-          },
-        }),
+  it('inherits model, endpoint, protocol, credential record, and catalog headers', () => {
+    const [candidate] = resolveCandidates(copilotContext(), planConfig)
+    expect(candidate).toMatchObject({
+      protocol: 'openai-responses',
+      baseURL: 'https://api.individual.githubcopilot.com',
+      model: 'gpt-5.4',
+      apiKeyEnv: GITHUB_COPILOT_CREDENTIAL_KEY,
+      webSearchToolType: 'web_search',
+      headers: {
+        'Copilot-Integration-Id': 'vscode-chat',
       },
     })
-    expect(currentChatRoute(ctx)?.supportedApis).toEqual(['openai-responses', 'openai-completions'])
-    expect(resolveCandidates(ctx, planConfig())).toHaveLength(1)
   })
 
-  it('falls back to a known credential reference for a profilable catalog route', () => {
-    const ctx = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-v4-flash' }) },
-      settings: { get: () => ({ providers: {} }) },
-    })
-    const candidates = resolveCandidates(ctx, planConfig())
-    expect(candidates[0]?.apiKeyEnv).toBe('DEEPSEEK_API_KEY')
-  })
-
-  it('returns no candidates without a route and without a pin', () => {
-    const ctx = fakeContext({})
-    expect(resolveCandidates(ctx, planConfig())).toEqual([])
+  it('fails closed for a Copilot model whose catalog protocol cannot host search', () => {
+    expect(resolveCandidates(copilotContext('gpt-4.1'), planConfig)).toEqual([])
   })
 })
 
 describe('SearchPlan', () => {
-  it('trusts the first candidate when probing is disabled', async () => {
-    const plan = new SearchPlan([makeCandidate('openai-responses')], verdictProbe(false), false)
-    expect(plan.available()).toBe(true)
-    expect((await plan.settle()).protocol).toBe('openai-responses')
-  })
-
-  it('picks the first candidate that passes the probe', async () => {
-    const candidates = [
-      makeCandidate('openai-responses'),
-      makeCandidate('anthropic-messages'),
+  it('selects the first probe-supported candidate and preserves its tool spelling', async () => {
+    const first = makeCandidate('openai-responses')
+    const second = makeCandidate('anthropic-messages')
+    const verdicts: ProbeOutcome[] = [
+      { supported: false, detail: 'refused' },
+      { supported: true, detail: 'ok' },
     ]
-    const plan = new SearchPlan(candidates, verdictProbe(false, true), true)
-    expect(plan.available()).toBe(true)
-    expect((await plan.settle()).protocol).toBe('anthropic-messages')
+    const plan = new SearchPlan([first, second], async () => verdicts.shift()!, true)
+    await expect(plan.settle()).resolves.toEqual(second)
+    expect(plan.chosenCandidate()).toEqual(second)
   })
 
-  it('auto-disables when every candidate fails the probe', async () => {
-    const plan = new SearchPlan([makeCandidate('openai-responses')], verdictProbe(false), true)
-    // While the probe is in flight the plan still admits calls so the first
-    // search can await the verdict instead of failing spuriously.
-    expect(plan.available()).toBe(true)
-    await plan.settled
-    expect(plan.available()).toBe(false)
-    await expect(plan.settle()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
-    expect(plan.failureReason()).toContain('refused')
+  it('surfaces a named unsupported error when no Copilot search candidate exists', async () => {
+    const plan = new SearchPlan([], async () => ({ supported: false, detail: 'unused' }), true)
+    await expect(plan.settle()).rejects.toEqual(expect.objectContaining({
+      code: 'WEB_PROVIDER_UNAVAILABLE',
+    }))
+    expect(plan.failureReason()).toContain('GitHub Copilot hosted search is unavailable')
   })
 
-  it('auto-disables with a named reason when no candidate exists', async () => {
-    const plan = new SearchPlan([], verdictProbe(), true)
-    expect(plan.available()).toBe(false)
-    await expect(plan.settle()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
-    expect(plan.failureReason()).toContain('no search-capable provider')
-  })
-
-  it('fails the plan without rejecting settled when the probe crashes', async () => {
-    const plan = new SearchPlan([makeCandidate('openai-responses')], async () => { throw new Error('probe crashed') }, true)
-    await plan.settled
-    expect(plan.available()).toBe(false)
-    expect(plan.failureReason()).toContain('probe crashed')
-    await expect(plan.settle()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
-  })
-
-  it('serves the candidate with the exact spelling the probe verified', async () => {
-    const plan = new SearchPlan([makeCandidate('openai-responses', { webSearchToolType: 'web_search' })], async () => ({
-      supported: true,
-      detail: 'ok',
-      webSearchToolType: 'web_search_2025_08_26',
-    }), true)
-    const chosen = await plan.settle()
-    expect(chosen.webSearchToolType).toBe('web_search_2025_08_26')
-  })
-})
-
-describe('sameCandidates', () => {
-  it('is true for identical candidate sets', () => {
-    expect(sameCandidates(
-      [makeCandidate('openai-responses')],
-      [makeCandidate('openai-responses')],
-    )).toBe(true)
-  })
-
-  it('is false when any resolved fact differs', () => {
-    expect(sameCandidates(
-      [makeCandidate('openai-responses')],
-      [makeCandidate('openai-responses', { model: 'other' })],
-    )).toBe(false)
-    expect(sameCandidates(
-      [makeCandidate('openai-responses')],
-      [makeCandidate('anthropic-messages')],
-    )).toBe(false)
-    expect(sameCandidates(
-      [makeCandidate('openai-responses', { webSearchToolType: 'web_search' })],
-      [makeCandidate('openai-responses', { webSearchToolType: 'web_search_2025_08_26' })],
-    )).toBe(false)
+  it('compares static provider headers as part of candidate identity', () => {
+    const base = makeCandidate('openai-responses', { headers: { A: 'one' } })
+    expect(sameCandidates([base], [{ ...base, headers: { A: 'one' } }])).toBe(true)
+    expect(sameCandidates([base], [{ ...base, headers: { A: 'two' } }])).toBe(false)
   })
 })

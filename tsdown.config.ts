@@ -9,13 +9,35 @@ import { defineConfig } from 'tsdown'
  * never leak into the package; tsdown itself must NOT clean, because its
  * outDir is also the tsc output it bundles as its entry.
  */
-export default defineConfig({
-  entry: ['lib/types/index.js'],
-  outDir: 'lib',
-  format: ['esm'],
-  platform: 'node',
-  target: 'es2024',
-  fixedExtension: false,
-  dts: false,
-  clean: false,
-})
+export default defineConfig([
+  {
+    entry: ['lib/types/index.js'],
+    outDir: 'lib',
+    format: ['esm'],
+    platform: 'node',
+    target: 'es2024',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+  },
+  {
+    entry: ['lib/types/client.js'],
+    outDir: 'lib',
+    format: ['esm'],
+    platform: 'browser',
+    target: 'es2024',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+  },
+  {
+    entry: ['lib/types/remote.js'],
+    outDir: 'lib',
+    format: ['esm'],
+    platform: 'browser',
+    target: 'es2024',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+  },
+])
