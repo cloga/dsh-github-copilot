@@ -44,10 +44,17 @@ assert(manifest.supportedBaselines?.platforms?.includes('windows'), 'Windows bas
 
 const dshRelease = manifest.supportedBaselines?.dsh?.release
 const dshDevelopmentRelease = manifest.supportedBaselines?.dsh?.developmentRelease
+const dshPeerRange = manifest.supportedBaselines?.dsh?.peerRange
+assert(typeof dshRelease === 'string' && dshRelease.length > 0, 'DSH release baseline is missing')
+assert(
+  typeof dshDevelopmentRelease === 'string' && dshDevelopmentRelease.length > 0,
+  'DSH development release baseline is missing',
+)
+assert(typeof dshPeerRange === 'string' && dshPeerRange.length > 0, 'DSH peer range is missing')
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(
-    packageJson.peerDependencies?.[dependency] === `^${dshRelease} || ^${dshDevelopmentRelease}`,
-    `${dependency} does not match the DSH baselines`,
+    packageJson.peerDependencies?.[dependency] === dshPeerRange,
+    `${dependency} does not match the DSH peer range`,
   )
 }
 
