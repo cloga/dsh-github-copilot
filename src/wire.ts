@@ -11,7 +11,7 @@
  * search inside the same request and the model answers from its results in
  * the same turn, so the harness never sees a tool call. (UI search cards
  * were removed — the added latency outweighed the visual value.)
- * @module dsh-web-search-provider/wire
+ * @module dsh-github-copilot/wire
  */
 
 import type { CallId, GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'

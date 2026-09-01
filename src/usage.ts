@@ -2,7 +2,7 @@
  * Usage mapping for the inline wire path: Responses-API usage objects
  * project onto the harness TokenUsage shape exactly like the pi-ai adapter
  * (input minus cached, cache and reasoning split out as separate fields).
- * @module dsh-web-search-provider/usage
+ * @module dsh-github-copilot/usage
  */
 
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'

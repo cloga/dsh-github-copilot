@@ -5,7 +5,7 @@
  * Anthropic-compatible Messages API `web_search_tool_result` block. The
  * probe's verdict is structural — a reply containing the evidence item means
  * the endpoint executed native search inside the request.
- * @module dsh-web-search-provider/types
+ * @module dsh-github-copilot/types
  */
 
 // ── OpenAI Responses API ────────────────────────────────────────────────────

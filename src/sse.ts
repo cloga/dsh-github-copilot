@@ -3,7 +3,7 @@
  * `data:` fields, multi-line data, CRLF, comments, and trailing events
  * without a final blank line; unknown fields are ignored and oversized
  * individual events are rejected.
- * @module dsh-web-search-provider/sse
+ * @module dsh-github-copilot/sse
  */
 
 /** Upper bound on one incomplete SSE event, in bytes. */

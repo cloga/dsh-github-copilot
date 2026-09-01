@@ -2,7 +2,7 @@
  * Failure-safe discovery of OpenAI-compatible model catalogs. This module
  * deliberately returns data to the settings owner instead of mutating the
  * `llm-pi-ai` namespace from this plugin.
- * @module dsh-web-search-provider/model-catalog
+ * @module dsh-github-copilot/model-catalog
  */
 
 /** Reasoning effort values understood by the llm-pi-ai settings model. */
@@ -13,6 +13,8 @@ export interface CatalogModel {
   readonly id: string
   readonly name: string
   readonly api?: 'openai-responses' | 'openai-completions'
+  /** Every supported interactive OpenAI endpoint; `api` is the preferred one. */
+  readonly apis?: readonly ('openai-responses' | 'openai-completions')[]
   readonly input: readonly ('text' | 'image')[]
   readonly contextWindow?: number
   readonly maxTokens?: number
@@ -72,12 +74,17 @@ function normalizedEndpoint(value: unknown): string | undefined {
   }
 }
 
-function apiFromEndpoints(raw: unknown): CatalogModel['api'] | undefined {
+function apisFromEndpoints(raw: unknown): CatalogModel['apis'] | undefined {
   if (!Array.isArray(raw)) return undefined
   const endpoints = raw.map(normalizedEndpoint)
-  if (endpoints.includes('/responses')) return 'openai-responses'
-  if (endpoints.includes('/chat/completions')) return 'openai-completions'
-  return undefined
+  const apis: NonNullable<CatalogModel['apis']>[number][] = []
+  if (endpoints.includes('/responses')) apis.push('openai-responses')
+  if (endpoints.includes('/chat/completions')) apis.push('openai-completions')
+  return apis.length > 0 ? apis : undefined
+}
+
+function apiFromEndpoints(raw: unknown): CatalogModel['api'] | undefined {
+  return apisFromEndpoints(raw)?.[0]
 }
 
 function hasInteractiveEndpoint(raw: unknown): boolean {
@@ -136,6 +143,7 @@ function mergeDiscoveredModel(raw: Record<string, unknown>, fallback: CatalogMod
     raw['max_output_tokens'],
   )
   const api = apiFromEndpoints(raw['supported_endpoints'])
+  const apis = apisFromEndpoints(raw['supported_endpoints'])
   const reasoning = efforts !== undefined
     ? true
     : typeof supports['reasoning'] === 'boolean' ? supports['reasoning'] : undefined
@@ -151,6 +159,7 @@ function mergeDiscoveredModel(raw: Record<string, unknown>, fallback: CatalogMod
       ? supports['vision'] === true || record(limits['vision']) !== undefined ? ['text', 'image'] : ['text']
       : fallback?.input ?? ['text'],
     ...api === undefined ? {} : { api },
+    ...apis === undefined || apis.length < 2 ? {} : { apis },
     ...contextWindow === undefined ? {} : { contextWindow },
     ...maxTokens === undefined ? {} : { maxTokens },
     ...reasoning === undefined ? {} : { reasoning },
@@ -212,4 +221,17 @@ export async function synchronizeOpenAICompatibleModelCatalog(
     options.onError?.(error)
     return options.fallback
   }
+}
+
+/** Package-identity alias for parsing a GitHub Copilot gateway listing. */
+export const modelsFromGitHubCopilotListing = modelsFromOpenAICompatibleListing
+
+/** Package-identity alias for resolving the GitHub Copilot catalog endpoint. */
+export const githubCopilotModelCatalogURL = modelCatalogURL
+
+/** Package-identity wrapper for failure-safe GitHub Copilot catalog refresh. */
+export async function synchronizeGitHubCopilotModelCatalog(
+  options: ModelCatalogSyncOptions,
+): Promise<readonly CatalogModel[]> {
+  return synchronizeOpenAICompatibleModelCatalog(options)
 }

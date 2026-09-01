@@ -3,7 +3,7 @@
  * the `llm/stream` waterfall, injecting the server-side `web_search` tool
  * into the wire request so search executes inside the model's own turn.
  * The narrow gate keeps every other request on the normal adapter path.
- * @module dsh-web-search-provider
+ * @module dsh-github-copilot
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -27,24 +27,31 @@ import type { InlineConfig } from './config.ts'
 import { contentHasImageAttachments, inlineWireStream } from './wire.ts'
 import type { InlineHooks } from './wire.ts'
 import { createTraditionalSearchProvider } from './traditional-search.ts'
-export { COPILOT_HOSTED_SEARCH_PROVIDER_ID } from './traditional-search.ts'
+import { assertDshCompatibility } from './compatibility.ts'
+export {
+  COPILOT_HOSTED_SEARCH_PROVIDER_ID,
+  GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
+} from './traditional-search.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
-export const name = 'web-search-provider'
+export const name = 'github-copilot'
 
 /** Services the plugin hooks into; `credentials` is declared so the
  * credential seam is settled before apply resolves keys. */
-export const inject = ['llm', 'systemPrompt', 'settings', 'credentials', 'web']
+export const inject = ['llm', 'systemPrompt', 'settings', 'credentials', 'web', 'agentDefaultModel']
 
 /** Settings namespace carrying this plugin's section. */
-export const WEB_SEARCH_SETTINGS_NAMESPACE = 'web-search-provider' as SettingsNamespace
+export const GITHUB_COPILOT_SETTINGS_NAMESPACE = 'github-copilot' as SettingsNamespace
 
 /** Schema of the plugin's settings section, exported for composition consumers. */
 export { Config } from './config.ts'
 export type { InlineConfig } from './config.ts'
 export {
+  githubCopilotModelCatalogURL,
   modelCatalogURL,
+  modelsFromGitHubCopilotListing,
   modelsFromOpenAICompatibleListing,
+  synchronizeGitHubCopilotModelCatalog,
   synchronizeOpenAICompatibleModelCatalog,
 } from './model-catalog.ts'
 export type {
@@ -52,6 +59,19 @@ export type {
   CatalogReasoningEfforts,
   ModelCatalogSyncOptions,
 } from './model-catalog.ts'
+export {
+  composeGitHubCopilotProviderRoutes,
+  GITHUB_COPILOT_API_KEY_ENV,
+  GITHUB_COPILOT_CHAT_PROVIDER_ID,
+  GITHUB_COPILOT_PROVIDER_ID,
+} from './copilot-provider.ts'
+export type {
+  GitHubCopilotApi,
+  GitHubCopilotProviderRoute,
+  GitHubCopilotRouteComposition,
+  GitHubCopilotRouteOptions,
+} from './copilot-provider.ts'
+export { assertDshCompatibility, DSH_COMPATIBILITY } from './compatibility.ts'
 
 interface SettingsSectionHooks {
   setSource(source: () => InlineConfig): void
@@ -92,14 +112,14 @@ function installWebSearchSettings(
 ): void {
   const legacyInstaller = (dshSettings as LegacySettingsModule).installSettingsSection
   if (legacyInstaller !== undefined) {
-    legacyInstaller(ctx, WEB_SEARCH_SETTINGS_NAMESPACE, Config, config, hooks)
+    legacyInstaller(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, Config, config, hooks)
     return
   }
   ctx.inject(['settings'], (settingsCtx) => {
     if (!isInstanceSettingsInstaller(settingsCtx.settings)) {
-      throw new Error('web-search-provider: settings service does not support section installation')
+      throw new Error('github-copilot: settings service does not support section installation')
     }
-    settingsCtx.settings.installSection(ctx, WEB_SEARCH_SETTINGS_NAMESPACE, Config, config, hooks)
+    settingsCtx.settings.installSection(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, Config, config, hooks)
   })
 }
 
@@ -112,6 +132,7 @@ function installWebSearchSettings(
  * @param config - the composition entry config, used as the settings base layer.
  */
 export function apply(ctx: Context, config: InlineConfig): void {
+  assertDshCompatibility(ctx)
   let current: () => InlineConfig = () => config
   // The plan is built when the settings section attaches IF the chat route
   // is already detectable (so the probe verdict and the prompt guidance are
@@ -283,7 +304,7 @@ export function apply(ctx: Context, config: InlineConfig): void {
   })
 
   ctx.systemPrompt.section({
-    name: 'tool:web-search-provider',
+    name: 'tool:github-copilot',
     order: 115,
     // The guidance is only true while the plugin actually serves: with the
     // plugin disabled or the plan failed, an empty section keeps the model
@@ -320,11 +341,11 @@ function reportPlan(ctx: Context, plan: SearchPlan): void {
   void plan.settled.then(() => {
     const chosen = plan.chosenCandidate()
     if (chosen === undefined) {
-      ctx.logger.warn('[web-search-provider] %s', plan.failureReason() ?? 'web search is disabled')
+      ctx.logger.warn('[github-copilot] %s', plan.failureReason() ?? 'web search is disabled')
       return
     }
     ctx.logger.info(
-      '[web-search-provider] serving inline web search through %s at %s (model %s, key %s)',
+      '[github-copilot] serving inline web search through %s at %s (model %s, key %s)',
       chosen.protocol,
       chosen.baseURL,
       chosen.model,
@@ -337,11 +358,11 @@ function reportPlan(ctx: Context, plan: SearchPlan): void {
 function reportRoute(ctx: Context): void {
   const route = currentChatRoute(ctx)
   if (route === undefined) {
-    ctx.logger.warn('[web-search-provider] chat route undetectable; inline web search stays on the adapter path')
+    ctx.logger.warn('[github-copilot] chat route undetectable; inline web search stays on the adapter path')
     return
   }
   ctx.logger.info(
-    '[web-search-provider] chat route %s (api=%s, baseURL=%s, key=%s)',
+    '[github-copilot] chat route %s (api=%s, baseURL=%s, key=%s)',
     route.provider,
     route.api ?? 'unknown',
     route.baseURL ?? 'unknown',
@@ -382,6 +403,7 @@ function sameRoute(left: CurrentChatRoute | undefined, right: CurrentChatRoute |
     && left.api === right.api
     && left.baseURL === right.baseURL
     && left.apiKeyEnv === right.apiKeyEnv
+    && JSON.stringify(left.supportedApis) === JSON.stringify(right.supportedApis)
 }
 
 /**

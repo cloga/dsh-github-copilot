@@ -92,6 +92,25 @@ describe('siblingCandidates', () => {
       .toEqual([{ protocol: 'openai-responses', baseURL: 'https://api.openai.com/v1' }])
   })
 
+  it('derives the Responses sibling for the GitHub Copilot Chat route', () => {
+    expect(siblingCandidates(deepseekRoute({
+      provider: 'github-copilot-chat',
+      api: 'openai-completions',
+      baseURL: 'https://gateway.example/v1',
+      apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
+      supportedApis: ['openai-responses', 'openai-completions'],
+    }))).toEqual([{ protocol: 'openai-responses', baseURL: 'https://gateway.example/v1' }])
+  })
+
+  it('does not guess a Responses sibling for a Chat-only GitHub Copilot model', () => {
+    expect(siblingCandidates(deepseekRoute({
+      provider: 'github-copilot-chat',
+      api: 'openai-completions',
+      baseURL: 'https://gateway.example/v1',
+      supportedApis: ['openai-completions'],
+    }))).toEqual([])
+  })
+
   it('yields nothing for an unknown gateway route', () => {
     expect(siblingCandidates(deepseekRoute({ provider: 'acme', baseURL: 'https://acme.example/v1' }))).toEqual([])
   })
@@ -158,11 +177,35 @@ describe('resolveCandidates', () => {
       agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-v4-flash' }) },
       settings: { get: () => ({ providers: {} }) },
     })
+
     const route = currentChatRoute(ctx)
     // The route itself carries no key reference (that lives on the profile);
     // the catalog supplies protocol and base URL.
     expect(route).toMatchObject({ api: 'openai-completions', baseURL: 'https://api.deepseek.com' })
     expect(route?.apiKeyEnv).toBeUndefined()
+  })
+
+  it('reads all supported APIs from the selected Copilot model profile', () => {
+    const ctx = fakeContext({
+      agentDefaultModel: { currentSelection: () => ({ provider: 'github-copilot-chat', model: 'gpt-test' }) },
+      settings: {
+        get: () => ({
+          providers: {
+            'github-copilot-chat': {
+              api: 'openai-completions',
+              baseURL: 'https://gateway.example/v1',
+              models: [{
+                id: 'gpt-test',
+                api: 'openai-responses',
+                apis: ['openai-responses', 'openai-completions'],
+              }],
+            },
+          },
+        }),
+      },
+    })
+    expect(currentChatRoute(ctx)?.supportedApis).toEqual(['openai-responses', 'openai-completions'])
+    expect(resolveCandidates(ctx, planConfig())).toHaveLength(1)
   })
 
   it('falls back to a known credential reference for a profilable catalog route', () => {

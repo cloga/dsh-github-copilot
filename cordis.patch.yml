@@ -1,7 +1,5 @@
-# Published bundle layer: `dsh plugin add dsh-web-search-provider` applies
-# this patch. Rows reference the package by name so Node resolution finds
-# the installed entry point; configuration defaults live in the settings
-# schema and are intentionally not restated here.
+# The package contributes only its integration entry. DSH Core continues to
+# own sandboxing, modes, model selection, attachments, and Desktop routing.
 - insert:
-    - id: web-search-provider
-      name: dsh-web-search-provider
+    - id: github-copilot
+      name: dsh-github-copilot

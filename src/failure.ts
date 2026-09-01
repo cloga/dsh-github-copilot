@@ -4,7 +4,7 @@
  * INVALID_REQUEST, SERVER, TIMEOUT, TRANSPORT, QUOTA,
  * CONTEXT_WINDOW_EXCEEDED, UNKNOWN) so the standard retry policy applies.
  * Also owns the finish-chunk constructors the two wires share.
- * @module dsh-web-search-provider/failure
+ * @module dsh-github-copilot/failure
  */
 
 import type { LlmFailure, StreamChunk } from '@deepseek-ai/dsh-llm'

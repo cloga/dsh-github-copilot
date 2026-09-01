@@ -46,6 +46,7 @@ describe('modelsFromOpenAICompatibleListing', () => {
       id: 'dynamic-chat',
       name: 'Dynamic Chat',
       api: 'openai-responses',
+      apis: ['openai-responses', 'openai-completions'],
       input: ['text', 'image'],
       contextWindow: 128_000,
       maxTokens: 16_000,

@@ -1,7 +1,7 @@
 {
-  "name": "dsh-web-search-provider",
-  "description": "Improve web search in Deepseek Harness, use server-side search service.",
-  "version": "0.2.3-cloga.5",
+  "name": "dsh-github-copilot",
+  "description": "First-class GitHub Copilot model and hosted-search integration for DeepSeek Harness.",
+  "version": "0.3.0-cloga.1",
   "packageManager": "pnpm@11.7.0",
   "publishConfig": {
     "access": "public",
@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hiyms/dsh-web-search-provider.git"
+    "url": "git+https://github.com/cloga/dsh-web-search-provider.git"
   },
   "type": "module",
   "exports": {
@@ -34,8 +34,9 @@
     "deepseek-harness",
     "plugin",
     "web-search",
+    "github-copilot",
+    "model-provider",
     "responses-api",
-    "anthropic",
     "openai"
   ],
   "license": "MIT",

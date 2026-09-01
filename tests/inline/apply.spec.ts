@@ -6,7 +6,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, WEB_SEARCH_SETTINGS_NAMESPACE } from '../../src/index.ts'
+import { apply, GITHUB_COPILOT_SETTINGS_NAMESPACE } from '../../src/index.ts'
 import type { InlineConfig } from '../../src/config.ts'
 import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
@@ -99,7 +99,7 @@ function buildRuntime(
   const credentialResolve = vi.fn(async () => ({ value: 'secret' }))
   let promptSection: FakeRuntime['promptSection']
   const settingsDocument: Record<string, unknown> = {
-    [WEB_SEARCH_SETTINGS_NAMESPACE]: {},
+    [GITHUB_COPILOT_SETTINGS_NAMESPACE]: {},
     // The chat route profile: currentChatRoute() reads `llm-pi-ai` providers.
     'llm-pi-ai': { providers: { 'opencode-go-response': { api: 'openai-responses' } } },
     ...extraSettings,
@@ -199,24 +199,24 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('web-search-provider apply', () => {
+describe('github-copilot apply', () => {
   it('uses the settings provider instance API when legacy helpers are absent', () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, config)
-    expect(runtime.installedSettingsSections).toEqual([WEB_SEARCH_SETTINGS_NAMESPACE])
+    expect(runtime.installedSettingsSections).toEqual([GITHUB_COPILOT_SETTINGS_NAMESPACE])
   })
 
   it('registers an llm/stream listener and the prompt section', () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, config)
     expect(runtime.listener).toBeTypeOf('function')
-    expect(runtime.sectionNames).toContain('tool:web-search-provider')
+    expect(runtime.sectionNames).toContain('tool:github-copilot')
   })
 
-  it('registers the copilot-hosted traditional search provider without a fetch provider', () => {
+  it('registers the github-copilot-hosted traditional search provider without a fetch provider', () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, config)
-    expect(runtime.searchProviders.map(provider => provider.id)).toEqual(['copilot-hosted'])
+    expect(runtime.searchProviders.map(provider => provider.id)).toEqual(['github-copilot-hosted'])
     expect(runtime.searchProviders[0]?.available()).toBe(true)
     expect(runtime.fetchProviders).toEqual([])
   })
@@ -229,7 +229,7 @@ describe('web-search-provider apply', () => {
       search: async () => ({ sources: [], truncated: false }),
     })
     apply(runtime.ctx, config)
-    expect(runtime.searchProviders.map(provider => provider.id)).toEqual(['existing-search', 'copilot-hosted'])
+    expect(runtime.searchProviders.map(provider => provider.id)).toEqual(['existing-search', 'github-copilot-hosted'])
   })
 
   it('keeps traditional search unavailable when the current route is excluded', async () => {
@@ -258,11 +258,11 @@ describe('web-search-provider apply', () => {
     await expect(provider?.search({ query: 'news' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
     expect(provider?.available()).toBe(false)
 
-    runtime.settingsDocument[WEB_SEARCH_SETTINGS_NAMESPACE] = {
+    runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = {
       probe: true,
       baseURL: 'https://replacement.example/v1',
     }
-    runtime.triggerSettingsChange(WEB_SEARCH_SETTINGS_NAMESPACE)
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
     expect(provider?.available()).toBe(true)
   })
 
@@ -419,8 +419,8 @@ describe('web-search-provider apply', () => {
     expect((fetchMock.mock.calls[0] as [string])[0]).toBe('https://old.example/responses')
     // The settings commit lands while the selection is temporarily null.
     selection.current = null
-    runtime.settingsDocument[WEB_SEARCH_SETTINGS_NAMESPACE] = { baseURL: 'https://new.example' }
-    runtime.triggerSettingsChange(WEB_SEARCH_SETTINGS_NAMESPACE)
+    runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = { baseURL: 'https://new.example' }
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
     selection.current = { provider: 'deepseek', model: 'deepseek-v4-flash' }
     // The next request must rebuild with the NEW config, not reuse the stale
     // plan snapshot (same route, old baseURL).
@@ -537,8 +537,8 @@ describe('web-search-provider apply', () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     // A no-op edit for the plan (idle bound, sources, tool stripping) must
     // not start a second probe.
-    runtime.settingsDocument[WEB_SEARCH_SETTINGS_NAMESPACE] = { idleTimeoutMs: 600_000 }
-    runtime.triggerSettingsChange(WEB_SEARCH_SETTINGS_NAMESPACE)
+    runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = { idleTimeoutMs: 600_000 }
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
@@ -556,8 +556,8 @@ describe('web-search-provider apply', () => {
     // The first plan failed (the endpoint never confirms search); raising the
     // probe bound must rebuild and re-probe even though the candidates are
     // the same.
-    runtime.settingsDocument[WEB_SEARCH_SETTINGS_NAMESPACE] = { probeTimeoutMs: 60_000 }
-    runtime.triggerSettingsChange(WEB_SEARCH_SETTINGS_NAMESPACE)
+    runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = { probeTimeoutMs: 60_000 }
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
   })
 })
