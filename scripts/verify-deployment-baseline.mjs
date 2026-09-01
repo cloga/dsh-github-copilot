@@ -45,6 +45,11 @@ const manifest = await readJson('deployment-baseline.json')
 assert(manifest.schemaVersion === 1, 'schemaVersion must be 1')
 assert(manifest.baseline?.id === 'cloga.dsh-github-copilot', 'baseline id changed')
 assert(manifest.baseline?.kind === 'fork-deployment-baseline', 'fork ownership marker is missing')
+assert(manifest.baseline?.source === 'https://github.com/cloga/dsh-github-copilot', 'baseline source is not canonical')
+assert(
+  packageJson.repository?.url === 'git+https://github.com/cloga/dsh-github-copilot.git',
+  'package repository is not canonical',
+)
 assert(manifest.package?.name === packageJson.name, 'package name does not match package.json')
 assert(manifest.package?.version === packageJson.version, 'package version does not match package.json')
 assert(/-cloga\.\d+$/u.test(packageJson.version), 'package version is not an unambiguous cloga prerelease')

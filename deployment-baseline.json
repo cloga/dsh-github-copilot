@@ -3,7 +3,7 @@
   "baseline": {
     "id": "cloga.dsh-github-copilot",
     "kind": "fork-deployment-baseline",
-    "source": "https://github.com/cloga/dsh-web-search-provider",
+    "source": "https://github.com/cloga/dsh-github-copilot",
     "sourceCommitPolicy": "exact-external-pin",
     "upstream": "https://github.com/hiyms/dsh-web-search-provider"
   },
