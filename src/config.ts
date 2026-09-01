@@ -2,7 +2,7 @@
  * Settings section of the inline web-search plugin: the narrow-gate switch,
  * provider whitelist, wire controls, and probe bounds. Everything is
  * configurable through the settings seam; defaults follow the chat route.
- * @module dsh-web-search-provider/config
+ * @module dsh-github-copilot/config
  */
 
 import z from '@deepseek-ai/schemastery'

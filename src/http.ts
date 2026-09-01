@@ -5,7 +5,7 @@
  * harness `dsh-web` package family (web-search-deepseek, model discovery) so
  * every credentialed request rejects redirects before a `Location` target can
  * be contacted.
- * @module dsh-web-search-provider/http
+ * @module dsh-github-copilot/http
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'

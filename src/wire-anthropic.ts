@@ -7,7 +7,7 @@
  * executes the search inside the same request and the model answers from
  * its results in the same turn. The generator NEVER throws; every failure
  * becomes a finish chunk.
- * @module dsh-web-search-provider/wire-anthropic
+ * @module dsh-github-copilot/wire-anthropic
  */
 
 import type { CallId, GenerateOptions, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'

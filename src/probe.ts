@@ -6,7 +6,7 @@
  * and silently ignore it (DeepSeek documents that unknown tool types are
  * ignored), which is exactly the failure mode static protocol detection
  * cannot see. The probe is what makes the auto-disable decision honest.
- * @module dsh-web-search-provider/probe
+ * @module dsh-github-copilot/probe
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'
@@ -21,7 +21,7 @@ import { isAbortError, providerErrorMessage, readBounded } from './http.ts'
 import { version } from '#package.json' with { type: 'json' }
 
 /** Attribution header value sent on probe requests; single-sourced from package.json. */
-const USER_AGENT = `dsh-web-search-provider/${version}`
+const USER_AGENT = `dsh-github-copilot/${version}`
 
 /** Upper bound on generated tokens for a probe reply; the verdict needs none of it. */
 const PROBE_MAX_TOKENS = 64

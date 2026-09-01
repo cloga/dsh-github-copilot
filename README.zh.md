@@ -1,167 +1,128 @@
-# dsh-web-search-provider
+# dsh-github-copilot
 
-[![npm version](https://img.shields.io/npm/v/dsh-web-search-provider)](https://www.npmjs.com/package/dsh-web-search-provider)
+[![npm version](https://img.shields.io/npm/v/dsh-github-copilot)](https://www.npmjs.com/package/dsh-github-copilot)
 
-为 Deepseek Harness 引入基于模型供应方服务器能力的**网络搜索支持**。
+面向 DeepSeek Harness（DSH）**主 Agent** 的一体化 GitHub Copilot 模型集成。它为 DSH Core 组合 OpenAI 兼容的 GitHub Copilot 网关路由和模型元数据，并保留由模型供应方在同一轮请求中执行的托管搜索。
 
-本插件使用时要求模型供应方使用 **OpenAI Responses API** 或 **Anthropic 兼容 Messages API** ，**同时提供网络搜索能力**。
+## 范围与职责边界
 
-> [!TIP]
-> Anthropic 兼容 Messages API 仅提供了搜索能力，而 OpenAI Responses API 则支持在查看 URL 对应网页内容/从 URL 对应网页查找特定内容。**推荐使用 OpenAI Responses API 供应方**。
+本包提供：
 
-> [!TIP]
-> 经实测，Deepseek 官方 Messages API（即 DSH内置的 Deepseek 供应方）、OpenCode Go Messages API、OpenCode Go Response API 和某 OpenAI 中转站 Response API 均能与本插件配合工作。
+- 带 GitHub Copilot 能力元数据的失败保护型 `/v1/models` 发现；
+- 可由安装器直接写入的 OpenAI Responses 与 Chat Completions 路由；
+- 推理强度、上下文/输出限制以及文本/图片能力映射；
+- Responses 托管搜索和传统 `ctx.web` 搜索桥；
+- DSH replay item 规范化以及 SSE 到 `StreamChunk` 的兼容转换；
+- 启动时 API 兼容性检查和机器可读部署基线。
 
-> [!WARNING]
-> DSH 内置的 OpenCode Go 供应方对不同模型使用的 API 类型不同。如对于其提供的 Deepseek V4 Flash/Pro 模型，如期望使用本插件提供的能力，需要手动添加 Response / Message API 类型的自定义供应方。
+模型选择、plan/code/tool 模式、工具呈现、sandbox 策略、凭证、官方图片/视觉附件路由和 Desktop Core 选择仍由 DSH Core 负责。带图片的请求会原样绕过托管搜索 wire，交由 Core 官方视觉路由处理。本包明确**不提供 ACP 或 subagent 支持**。
 
-> [!WARNING]
-> 部分模型供应方对本插件使用的网络搜索能力可能进行额外收费。
+## 兼容范围
 
-本插件不通过 Deepseek Harness 内的 `web_search` 工具提供支持，因而你可以将本插件与其它 web search provider 插件（如内置的 `web-search-deepseek`）配合使用。
+- Node.js：`>=22.0.0`
+- DSH 正式基线：`0.1.1-rc.2`
+- DSH 开发基线：`0.1.2-alpha.3`
+- DSH peer 范围：`^0.1.1-rc.2 || ^0.1.2-alpha.2`
 
-## 比较 web-search-deepseek
-
-> TL;DR 本插件相比 `web-search-deepseek` ，在消耗词元、消耗时间上均有明显优势。
-
-`web-search-deepseek` 是 Deepseek Harness 内置的搜索插件，当会话中模型调用 `web_search` 工具时，其会在内部新建一个会话进行搜索，并返回若干个网址及其内容摘要。
-
-本插件相比 `web-search-deepseek` ， 会话中 AI 直接向服务器发起网络搜索请求，**单次搜索速度更快**。同时，模型可以直接查看/搜索网页内容（仅 **OpenAI Responses API** 支持），减少 AI 为了查看网页所有内容，使用 bash/curl 消耗的词元。
-
-
-使用 Deepseek 官方 Messages API 的 `deepseek-v4-flash model with high think` ，分别使用两个插件，每次进行5次指定的搜索，测试十次：
-
-| 插件                  | 平均消耗词元 | 平均消耗时间 |
-|:-------------------:|:------:|:------:|
-| web-search-deepseek | 4,446  | 47.5s  |
-| **web-search-provider** | **822**    | **14.5s**  |
-
-消耗时间统计自 Deepseek Harness 中显示的回答耗时。消耗词元统计自 Deepseek 开放平台取"输出"词元平均数，通过使用两个不同的 API 令牌（因为 Deepseek Harness 不统计工具调用内消耗的词元）。
-
-测试结果仅供参考。在需要更多网络搜索内容的任务中，预期本插件有更明显的优势。
+插件注册任何 effect 前会运行 `assertDshCompatibility()`；缺失必要 DSH API 时会用明确错误拒绝启动。`pnpm verify:baseline` 还会校验 peer 范围、源码/测试证据、单入口 bundle patch、包导出以及仅主 Agent 的边界。
 
 ## 安装
-```sh
-dsh plugin add dsh-web-search-provider
-```
-
-### Cloga DSH Windows/Copilot 部署基线
-
-分支版本 `0.2.3-cloga.5` 是部署基线，并非上游正式版本；这些修复的长期归属仍是
-上游。使用方必须同时锁定 PR commit 与生成的
-`dsh-web-search-provider-0.2.3-cloga.5.tgz`，不能只用包名识别构建。
-
-从锁定的 commit 构建 tarball，并在安装器旁保存 commit 与压缩包 SHA-256：
 
 ```sh
-git checkout <pinned-commit>
-pnpm install --frozen-lockfile
-pnpm verify:baseline
-pnpm test
-pnpm typecheck
-pnpm build
-pnpm pack --pack-destination artifacts
-git rev-parse HEAD
+dsh plugin add dsh-github-copilot
 ```
 
-每个 tarball 都导出 `./deployment-baseline.json`。安装器必须验证：
-`schemaVersion` 为 `1`，`baseline.id` 为
-`cloga.dsh-windows-copilot.web-search`，`package.version` 为
-`0.2.3-cloga.5`，`supportedBaselines.dsh.release` 为 `0.1.1-rc.2`，
-`supportedBaselines.dsh.developmentRelease` 为 `0.1.2-alpha.3`，且
-`supportedBaselines.dsh.peerRange` 与全部 DSH peer dependency 一致。该范围保留
-alpha.2 兼容下限，同时允许 alpha.3。以下能力 ID 也必须存在且为 `required: true`：
-`responses-replay-item-id-normalization`、`grounded-sandbox-escalation`、
-`image-attachment-bypass`、`failure-safe-copilot-model-catalog`、
-`orphaned-replay-item-filtering`、`traditional-search-compatibility-bridge`、
-`nonempty-reasoning-blocks` 与 `settings-provider-instance-api`；
-否则应拒绝安装。源码 checkout 可运行
-`pnpm verify:baseline`，同时校验包导出、源码标记和具名测试。
-
-------
-
-或从源代码安装：
-```sh
-pnpm install
-```
-
-在 `cordis.yml` 覆盖层中引用构建后的插件：
+Bundle patch 只安装一个入口：
 
 ```yaml
 - insert:
-    - id: web-search-provider
-      name: 'dsh-web-search-provider'
-      config:
-        enabled: true
-        probe: true
+    - id: github-copilot
+      name: dsh-github-copilot
 ```
 
-## 配置
+## 网关模型路由
 
-设置段 `web-search-provider`（实时命名空间：改动对下一次请求生效）。除注明外所有字段均可选。
+运维安装器负责网关发现和设置持久化：
 
-插件还会注册仅搜索的 `ctx.web` provider `copilot-hosted`，复用相同且已验证的
-OpenAI Responses 路由、凭证与超时设置。安装其他搜索 provider 时，请在
-`@deepseek-ai/dsh-web` 服务中配置 `searchProvider: copilot-hosted`。该插件不会
-注册 fetch provider。
+1. 解析网关 `baseURL` 与 `COPILOT_GITHUB_TOKEN` 凭证引用。
+2. 以锁定的静态目录作为 fallback 调用 `synchronizeGitHubCopilotModelCatalog()`。
+3. 调用 `composeGitHubCopilotProviderRoutes()`。
+4. 将返回的 `providers` 合并到 `llm-pi-ai.providers`，不得覆盖其它路由。
+5. 通过现有 DSH default-model 服务选择返回的 provider/model。
+
+```ts
+import {
+  composeGitHubCopilotProviderRoutes,
+  synchronizeGitHubCopilotModelCatalog,
+} from 'dsh-github-copilot'
+
+const models = await synchronizeGitHubCopilotModelCatalog({
+  baseURL: gatewayBaseURL,
+  headers: { authorization: `Bearer ${gatewayToken}` },
+  fallback: pinnedModels,
+})
+
+const { providers } = composeGitHubCopilotProviderRoutes({
+  baseURL: gatewayBaseURL,
+  apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
+  models,
+})
+
+settings['llm-pi-ai'].providers = {
+  ...settings['llm-pi-ai'].providers,
+  ...providers,
+}
+```
+
+安装器写入的精确路由字段：
+
+| 路由 | `api` | 其它字段 |
+|---|---|---|
+| `github-copilot` | `openai-responses` | `baseURL`、`apiKeyEnv`、`models` |
+| `github-copilot-chat` | `openai-completions` | `baseURL`、`apiKeyEnv`、`models` |
+
+同时支持两个端点的模型会出现在两条路由。目录条目保留 `id`、`name`、首选 `api`、全部 `apis`、`input`、`contextWindow`、`maxTokens`、`reasoning` 和 `reasoningEfforts`。发现失败时原样返回 fallback；辅助函数不会修改 DSH 设置。
+
+## 托管搜索配置
+
+实时设置命名空间为 `github-copilot`：
 
 | 键 | 默认 | 含义 |
 |---|---|---|
-| `enabled` | `true` | 总开关；`false` 时所有请求走普通适配器路径。 |
-| `providers` | `[]` | Provider 白名单（llm-pi-ai 路由键）。请求的 provider 必须是当前聊天路由（计划从该路由推导端点事实）才会被服务；白名单只限制该路由中哪些 provider 可被服务。空 = 服务当前聊天路由。 |
-| `baseURL` | 路由 | 路由候选的端点基址覆盖；追加 `/responses` 或 `/messages`。 |
-| `model` | loop 模型 | 模型覆盖；探测和实际 wire 请求都使用它。 |
-| `apiKeyEnv` | 路由引用 | 每次操作经凭证引用解析。 |
-| `includeSources` | `true` | 向 Responses wire 请求追加 `include: ['web_search_call.action.sources']`。 |
-| `stripServerTools` | `true` | 从 wire 工具中剔除函数工具变体（`web_search`/`open_page`/`find_in_page`）。 |
-| `idleTimeoutMs` | `300000` | 单次 inline 请求的空闲上限（毫秒）。 |
-| `probe` | `true` | 服务前用一次有界请求验证端点确实执行原生搜索。 |
-| `probeTimeoutMs` | `30000` | 单次探测请求的上限（毫秒）。 |
+| `enabled` | `true` | 托管搜索总开关。 |
+| `providers` | `[]` | 允许的 `llm-pi-ai` 路由 ID；空值跟随当前主 Agent 路由。 |
+| `baseURL` | 当前路由 | 搜索端点覆盖。 |
+| `model` | 当前模型 | 探测和托管搜索模型覆盖。 |
+| `apiKeyEnv` | 当前路由 | DSH 凭证引用。 |
+| `includeSources` | `true` | 请求托管搜索来源元数据。 |
+| `stripServerTools` | `true` | 删除供应方托管工具的本地函数变体。 |
+| `idleTimeoutMs` | `300000` | Inline stream 空闲超时。 |
+| `probe` | `true` | 服务前验证原生托管搜索。 |
+| `probeTimeoutMs` | `30000` | 能力探测超时。 |
 
-```yaml
-- id: web-search-provider
-  name: 'dsh-web-search-provider'
-  config:
-    enabled: true
-    probe: true
-```
+插件还会注册搜索 provider `github-copilot-hosted`。需要时将现有 DSH web 服务的 `searchProvider` 设为该 ID。本包不会注册 fetch provider。
 
-### 可选模型目录同步
+## 从 `dsh-web-search-provider` 迁移
 
-拥有 OpenAI 兼容 provider 配置的宿主可以调用
-`synchronizeOpenAICompatibleModelCatalog()`，从 `/v1/models` 刷新可选择模型。
-该辅助函数同时支持标准 OpenAI 列表和更丰富的 Copilot 元数据；只有可选元数据
-明确表示模型被禁用、不显示在选择器中、不是聊天模型、不支持工具调用，或只支持
-非交互端点时，才会过滤该模型。存在相应元数据时，它还会映射视觉、上下文窗口、
-最大输出和推理能力。
+1. 删除旧 `dsh-web-search-provider` bundle/package 入口。
+2. 安装 `dsh-github-copilot`，并把 bundle ID 从 `web-search-provider` 改为 `github-copilot`。
+3. 将设置命名空间 `web-search-provider` 迁移为 `github-copilot`，字段值保持不变。
+4. 将 web `searchProvider` 从 `copilot-hosted` 改为 `github-copilot-hosted`。
+5. 新增上述两条 `llm-pi-ai.providers` 路由，并通过 Core 选择 Copilot 模型。
+6. 用 `cloga.dsh-github-copilot`、`dsh-github-copilot` 和新归档元数据替换旧基线/包/tarball pin。
+7. 删除 ACP/subagent 专用组合；它不属于本包契约。
 
-该辅助函数具有失败保护：把 provider 的静态目录作为 `fallback` 传入后，任何网络、
-HTTP、JSON 或校验失败都会原样返回该 fallback。它不会修改 `llm-pi-ai` 设置。本插件
-只消费该命名空间，并不拥有它；provider/设置集成需要自行决定何时以及如何持久化
-成功结果。
+旧导出 `COPILOT_HOSTED_SEARCH_PROVIDER_ID` 仅作为源码迁移辅助保留；新代码应使用 `GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID`。
 
-```ts
-import { synchronizeOpenAICompatibleModelCatalog } from 'dsh-web-search-provider'
+## 构建与验证
 
-const models = await synchronizeOpenAICompatibleModelCatalog({
-  baseURL: provider.baseURL,
-  fallback: provider.models,
-  headers: provider.headers,
-})
-```
-
-
-## 已知限制
-
-- 包含图片附件的请求会原样绕过本插件的自定义 wire，由 Deepseek Harness 官方的视觉/附件通道继续处理。
-- 对于使用 Response API / Message API **但不提供搜索能力**的供应方，在**首次使用时会话会报错**。继续发送消息/新开会话即可在无本插件能力的同时继续使用 DSH。
-- AI 使用本插件提供的网络搜索能力时，**无显示搜索调用 UI**。可能的使用表现为多端连续的思考内容，段思考尾部包含“*Let me make search queries*” 等字样。 
-
-## 参与贡献
-
-### 编译
 ```sh
-pnpm install
-pnpm build        # tsc 产出 lib/types，tsdown 打包 lib/index.js
-pnpm test         # vitest 单元测试
+pnpm install --frozen-lockfile
+pnpm test
+pnpm typecheck
+pnpm verify:baseline
+pnpm build
+pnpm pack --pack-destination artifacts
 ```
+
+每个归档都会导出 `./deployment-baseline.json`。使用方必须锁定源码 commit、tarball 文件名和 SHA-256，并在基线不匹配时拒绝安装。

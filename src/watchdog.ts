@@ -2,7 +2,7 @@
  * Idle watchdog for the inline wire path: aborts when no data arrives for a
  * configurable interval. The timeout resets on every `reset()` call, so a
  * slow but alive stream never trips it.
- * @module dsh-web-search-provider/watchdog
+ * @module dsh-github-copilot/watchdog
  */
 
 /** Abort-triggering idle timer. */

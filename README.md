@@ -1,177 +1,131 @@
-# dsh-web-search-provider
+# dsh-github-copilot
 
-[![npm version](https://img.shields.io/npm/v/dsh-web-search-provider)](https://www.npmjs.com/package/dsh-web-search-provider)
+[![npm version](https://img.shields.io/npm/v/dsh-github-copilot)](https://www.npmjs.com/package/dsh-github-copilot)
 
 [简体中文](./README.zh.md)
 
-Network search support for the Deepseek Harness, powered by the model provider's server-side capability.
+A first-class **main-agent** GitHub Copilot model integration for DeepSeek Harness (DSH). It composes OpenAI-compatible GitHub Copilot gateway routes and model metadata for DSH Core, and preserves provider-hosted search in the model's own turn.
 
-Using this plugin requires the model provider to use the **OpenAI Responses API** or an **Anthropic-compatible Messages API**, and to **provide a web search capability**.
+## Scope and ownership
 
-> [!TIP]
-> The Anthropic-compatible Messages API only provides a search capability, while the OpenAI Responses API additionally supports viewing a URL's page content / finding specific content within a URL's page. **Providers on the OpenAI Responses API are recommended.**
+This package provides:
 
-> [!TIP]
-> Verified to work with: the Deepseek official Messages API (the DSH built-in Deepseek provider), the OpenCode Go Messages API, the OpenCode Go Response API, and an OpenAI relay station's Response API.
+- failure-safe `/v1/models` discovery with GitHub Copilot capability metadata;
+- installer-ready OpenAI Responses and Chat Completions route composition;
+- reasoning effort, context/output limit, and text/image capability mapping;
+- provider-hosted search on Responses, including the traditional `ctx.web` bridge;
+- DSH replay item normalization and SSE-to-`StreamChunk` compatibility;
+- a startup API compatibility guard and a machine-readable deployment baseline.
 
-> [!WARNING]
-> The DSH built-in OpenCode Go provider uses different API types for different models. For example, for its Deepseek V4 Flash/Pro models, to use this plugin's capability you need to manually add a custom provider of the Response / Message API type.
+DSH Core remains authoritative for model selection, plan/code/tool modes, tool presentation, sandbox policy, credentials, official image/vision attachment routing, and Desktop Core selection. Image-bearing calls bypass the hosted-search wire unchanged and use Core's official vision route. This package intentionally provides **no ACP or subagent integration**.
 
-> [!WARNING]
-> Some model providers may charge extra for the web search capability this plugin uses.
+## Compatibility
 
-This plugin does not provide its support through the `web_search` tool inside the Deepseek Harness, so you can use it alongside other web search provider plugins (such as the built-in `web-search-deepseek`).
+- Node.js: `>=22.0.0`
+- DSH release baseline: `0.1.1-rc.2`
+- DSH development baseline: `0.1.2-alpha.3`
+- DSH peer range: `^0.1.1-rc.2 || ^0.1.2-alpha.2`
 
-## Comparing with web-search-deepseek
-
-> TL;DR Compared with `web-search-deepseek`, this plugin has a clear advantage in both token consumption and time.
-
-`web-search-deepseek` is the Deepseek Harness's built-in search plugin: when the model in a session calls the `web_search` tool, it creates a new internal session to run the search and returns several URLs with their content summaries.
-
-Compared with `web-search-deepseek`, the AI in this plugin's sessions sends the network search request directly to the server, making **each individual search faster**. Also, the model can directly view / search page content (only with the **OpenAI Responses API**), reducing the tokens the AI spends on bash/curl to read a page's full content.
-
-
-Using the Deepseek official Messages API's `deepseek-v4-flash model with high think`, each plugin performed 5 specified searches per run, tested 10 times:
-
-| Plugin | Average tokens | Average time |
-|:---:|:---:|:---:|
-| web-search-deepseek | 4,446 | 47.5s |
-| **web-search-provider** | **822** | **14.5s** |
-
-Time is measured from the answer duration shown in the Deepseek Harness. Tokens are the average of the "output" tokens reported on the Deepseek Open Platform, using two different API tokens (because the Deepseek Harness does not count tokens consumed inside tool calls).
-
-The results are for reference only. On tasks that need more web search content, this plugin is expected to show a more pronounced advantage.
+`assertDshCompatibility()` runs before plugin effects are registered. Missing required DSH APIs fail startup with a named error. `pnpm verify:baseline` also checks the peer range, required source/test evidence, one-entry bundle patch, package exports, and the explicit main-agent-only boundary.
 
 ## Install
-```sh
-dsh plugin add dsh-web-search-provider
-```
-
-### Cloga DSH Windows/Copilot deployment baseline
-
-The fork build `0.2.3-cloga.5` is a deployment baseline, not an upstream
-release. Upstream remains the durable destination for these fixes. Consumers
-must pin the PR commit and the resulting
-`dsh-web-search-provider-0.2.3-cloga.5.tgz`; the package name alone is not a
-sufficient identity.
-
-Build the tarball from the pinned commit and retain both the commit and archive
-SHA-256 beside the installer:
 
 ```sh
-git checkout <pinned-commit>
-pnpm install --frozen-lockfile
-pnpm verify:baseline
-pnpm test
-pnpm typecheck
-pnpm build
-pnpm pack --pack-destination artifacts
-git rev-parse HEAD
+dsh plugin add dsh-github-copilot
 ```
 
-Every tarball exports `./deployment-baseline.json`. An installer should reject
-the package unless `schemaVersion` is `1`, `baseline.id` is
-`cloga.dsh-windows-copilot.web-search`, `package.version` is
-`0.2.3-cloga.5`, `supportedBaselines.dsh.release` is `0.1.1-rc.2`,
-`supportedBaselines.dsh.developmentRelease` is `0.1.2-alpha.3`, and
-`supportedBaselines.dsh.peerRange` matches every declared DSH peer dependency.
-The peer range retains the alpha.2 compatibility floor while admitting alpha.3.
-All required capability IDs must also be present with `required: true`:
-`responses-replay-item-id-normalization`, `grounded-sandbox-escalation`,
-`image-attachment-bypass`, `failure-safe-copilot-model-catalog`,
-`orphaned-replay-item-filtering`, `traditional-search-compatibility-bridge`,
-`nonempty-reasoning-blocks`, and `settings-provider-instance-api`.
-Run `pnpm verify:baseline` in a source
-checkout to enforce the same contract against package exports, source markers,
-and named tests.
-
-------
-
-Or install from source:
-```sh
-pnpm install
-```
-
-Reference the built plugin from a `cordis.yml` overlay:
+The bundle patch installs exactly one entry:
 
 ```yaml
 - insert:
-    - id: web-search-provider
-      name: 'dsh-web-search-provider'
-      config:
-        enabled: true
-        probe: true
+    - id: github-copilot
+      name: dsh-github-copilot
 ```
 
-## Config
+## Gateway model routes
 
-Settings section `web-search-provider` (a live namespace: edits reach the next request). All fields are optional unless noted.
+The operations installer owns gateway discovery and settings persistence. It should:
 
-The plugin also registers the search-only `ctx.web` provider
-`copilot-hosted`, backed by the same verified OpenAI Responses route,
-credentials, and timeout settings. Configure the `@deepseek-ai/dsh-web`
-service with `searchProvider: copilot-hosted` when other search providers are
-installed. It intentionally registers no fetch provider.
+1. Resolve the gateway base URL and the `COPILOT_GITHUB_TOKEN` credential reference.
+2. Call `synchronizeGitHubCopilotModelCatalog()` with a pinned static fallback.
+3. Call `composeGitHubCopilotProviderRoutes()`.
+4. Merge the returned `providers` object into `llm-pi-ai.providers`.
+5. Use the existing DSH default-model service to select one returned provider/model pair.
+
+```ts
+import {
+  composeGitHubCopilotProviderRoutes,
+  synchronizeGitHubCopilotModelCatalog,
+} from 'dsh-github-copilot'
+
+const models = await synchronizeGitHubCopilotModelCatalog({
+  baseURL: gatewayBaseURL,
+  headers: { authorization: `Bearer ${gatewayToken}` },
+  fallback: pinnedModels,
+})
+
+const { providers } = composeGitHubCopilotProviderRoutes({
+  baseURL: gatewayBaseURL,
+  apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
+  models,
+})
+
+// Merge into the existing settings document; do not replace unrelated routes.
+settings['llm-pi-ai'].providers = {
+  ...settings['llm-pi-ai'].providers,
+  ...providers,
+}
+```
+
+The helper writes these route fields:
+
+| Route | `api` | Other fields |
+|---|---|---|
+| `github-copilot` | `openai-responses` | `baseURL`, `apiKeyEnv`, `models` |
+| `github-copilot-chat` | `openai-completions` | `baseURL`, `apiKeyEnv`, `models` |
+
+A model that advertises both endpoints appears on both routes. Catalog entries preserve `id`, `name`, preferred `api`, all `apis`, `input`, `contextWindow`, `maxTokens`, `reasoning`, and `reasoningEfforts`. Discovery failures return the exact fallback object. No helper mutates DSH settings.
+
+## Hosted search configuration
+
+The live settings namespace is `github-copilot`:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `true` | Master switch; `false` sends every request down the normal adapter path. |
-| `providers` | `[]` | Provider whitelist (llm-pi-ai route keys). A request is served only when its provider is also the current chat route (the plan derives its endpoint facts from that route); the whitelist restricts which of its providers may be served. Empty = serve the current chat route. |
-| `baseURL` | route | Endpoint base override for the route's candidates; `/responses` or `/messages` is appended. |
-| `model` | loop model | Model override; used by the capability probe and by the served wire request. |
-| `apiKeyEnv` | route ref | Credential reference resolved per operation. |
-| `includeSources` | `true` | Append `include: ['web_search_call.action.sources']` to Responses wire requests. |
-| `stripServerTools` | `true` | Strip the function-tool variants (`web_search`/`open_page`/`find_in_page`) from the wire tools. |
-| `idleTimeoutMs` | `300000` | Idle bound for one inline request, in milliseconds. |
-| `probe` | `true` | Verify the endpoint executes native search before serving. |
-| `probeTimeoutMs` | `30000` | Bound on one probe request, in milliseconds. |
+| `enabled` | `true` | Master hosted-search switch. |
+| `providers` | `[]` | Allowed `llm-pi-ai` route IDs; empty follows the active main-agent route. |
+| `baseURL` | active route | Search endpoint override. |
+| `model` | active model | Probe and hosted-search model override. |
+| `apiKeyEnv` | active route | DSH credential reference. |
+| `includeSources` | `true` | Request hosted-search source metadata. |
+| `stripServerTools` | `true` | Remove local function variants of provider-hosted tools. |
+| `idleTimeoutMs` | `300000` | Inline stream idle timeout. |
+| `probe` | `true` | Verify native hosted search before serving. |
+| `probeTimeoutMs` | `30000` | Capability probe timeout. |
 
-```yaml
-- id: web-search-provider
-  name: 'dsh-web-search-provider'
-  config:
-    enabled: true
-    probe: true
-```
+The plugin also registers search provider `github-copilot-hosted`; set the existing DSH web service's `searchProvider` to that ID when desired. It does not register a fetch provider.
 
-### Optional model catalog synchronization
+## Migration from `dsh-web-search-provider`
 
-Hosts that own an OpenAI-compatible provider profile can use
-`synchronizeOpenAICompatibleModelCatalog()` to refresh its selectable models
-from `/v1/models`. The helper accepts standard OpenAI listings and richer
-Copilot metadata, filters models only when optional metadata explicitly marks
-them as disabled, hidden from the picker, non-chat, unable to call tools, or
-limited to non-interactive endpoints, and maps vision, context, output, and
-reasoning capabilities when present.
+1. Remove the old `dsh-web-search-provider` bundle/package entry.
+2. Install `dsh-github-copilot` and change the bundle ID from `web-search-provider` to `github-copilot`.
+3. Move settings namespace `web-search-provider` to `github-copilot` without changing field values.
+4. Change web `searchProvider` from `copilot-hosted` to `github-copilot-hosted`.
+5. Add the two `llm-pi-ai.providers` routes described above and select a Copilot model through Core.
+6. Replace the old baseline/package/tarball pins with `cloga.dsh-github-copilot`, `dsh-github-copilot`, and the new archive metadata.
+7. Remove any ACP/subagent-specific composition; it is outside this package's contract.
 
-The helper is failure-safe: pass the provider's static catalog as `fallback`
-and any network, HTTP, JSON, or validation failure returns that same fallback.
-It does not mutate `llm-pi-ai` settings. This plugin consumes that namespace but
-does not own it; the provider/settings integration must decide when and how to
-persist a successful result.
+The deprecated `COPILOT_HOSTED_SEARCH_PROVIDER_ID` export remains as a source migration aid; new code should use `GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID`.
 
-```ts
-import { synchronizeOpenAICompatibleModelCatalog } from 'dsh-web-search-provider'
+## Build and verify
 
-const models = await synchronizeOpenAICompatibleModelCatalog({
-  baseURL: provider.baseURL,
-  fallback: provider.models,
-  headers: provider.headers,
-})
-```
-
-
-## Known limitations
-
-- Requests containing image attachments bypass this plugin's custom wire unchanged, so Deepseek Harness's official vision/attachment channel remains authoritative.
-- For providers that use the Response API / Message API **but do not provide a search capability**, the session **errors on first use**. Keep sending messages / open a new session and DSH keeps working without this plugin's capability.
-- When the AI uses this plugin's web search capability, there is **no visible search-call UI**. The usage may appear as multiple consecutive thinking segments, with the tail of a thinking segment containing something like "*Let me make search queries*".
-
-## Contributing
-
-### Building
 ```sh
-pnpm install
-pnpm build        # tsc emits lib/types, tsdown bundles lib/index.js
-pnpm test         # vitest unit suite
+pnpm install --frozen-lockfile
+pnpm test
+pnpm typecheck
+pnpm verify:baseline
+pnpm build
+pnpm pack --pack-destination artifacts
 ```
+
+Every archive exports `./deployment-baseline.json`. Consumers must pin the source commit, tarball filename, and SHA-256, and reject a baseline mismatch.

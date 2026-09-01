@@ -5,7 +5,7 @@
  * defaults (wire protocol, base URL) a profile that overrides nothing inherits.
  * The probe and plan modules read this to decide which search-capable
  * protocol to use without any configuration.
- * @module dsh-web-search-provider/current-provider
+ * @module dsh-github-copilot/current-provider
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -28,6 +28,8 @@ export interface CurrentChatRoute {
   readonly baseURL?: string
   /** Credential reference the route resolves its key through. */
   readonly apiKeyEnv?: string
+  /** All interactive APIs advertised by this route's selected model. */
+  readonly supportedApis?: readonly string[]
 }
 
 /** Catalog providers indexed by route id. The catalog is static for a given
@@ -78,7 +80,11 @@ function catalogModelFacts(provider: string, model: string): { api?: string; bas
 }
 
 /** Read one route profile from the llm-pi-ai settings section, defensively narrowed. */
-function profileFacts(section: unknown, provider: string): { api?: string; baseURL?: string; apiKeyEnv?: string } | undefined {
+function profileFacts(
+  section: unknown,
+  provider: string,
+  model: string,
+): { api?: string; baseURL?: string; apiKeyEnv?: string; supportedApis?: readonly string[] } | undefined {
   if (typeof section !== 'object' || section === null) return undefined
   const providers = (section as Record<string, unknown>)['providers']
   if (typeof providers !== 'object' || providers === null) return undefined
@@ -87,10 +93,24 @@ function profileFacts(section: unknown, provider: string): { api?: string; baseU
   const record = profile as Record<string, unknown>
   const stringField = (key: string): string | undefined =>
     typeof record[key] === 'string' && (record[key] as string).length > 0 ? record[key] as string : undefined
+  const models = Array.isArray(record['models']) ? record['models'] : []
+  const selected = models.find((candidate) =>
+    typeof candidate === 'object'
+    && candidate !== null
+    && (candidate as Record<string, unknown>)['id'] === model,
+  ) as Record<string, unknown> | undefined
+  const declaredApis = Array.isArray(selected?.['apis'])
+    ? selected.apis.filter((api): api is string => typeof api === 'string')
+    : []
+  const selectedApi = typeof selected?.['api'] === 'string' ? selected.api : undefined
+  const supportedApis = declaredApis.length > 0
+    ? declaredApis
+    : selectedApi === undefined ? undefined : [selectedApi]
   return {
     ...stringField('api') === undefined ? {} : { api: stringField('api') },
     ...stringField('baseURL') === undefined ? {} : { baseURL: stringField('baseURL') },
     ...stringField('apiKeyEnv') === undefined ? {} : { apiKeyEnv: stringField('apiKeyEnv') },
+    ...supportedApis === undefined ? {} : { supportedApis },
   }
 }
 
@@ -105,7 +125,7 @@ function profileFacts(section: unknown, provider: string): { api?: string; baseU
 export function currentChatRoute(ctx: Context): CurrentChatRoute | undefined {
   const selection = ctx.get('agentDefaultModel')?.currentSelection()
   if (selection === undefined) return undefined
-  const profile = profileFacts(ctx.get('settings')?.get(LLM_PI_AI_NAMESPACE), selection.provider)
+  const profile = profileFacts(ctx.get('settings')?.get(LLM_PI_AI_NAMESPACE), selection.provider, selection.model)
   const catalog = catalogModelFacts(selection.provider, selection.model)
   return {
     provider: selection.provider,
@@ -115,5 +135,6 @@ export function currentChatRoute(ctx: Context): CurrentChatRoute | undefined {
     ...profile?.baseURL === undefined ? {} : { baseURL: profile.baseURL },
     ...profile?.baseURL === undefined && catalog.baseUrl !== undefined ? { baseURL: catalog.baseUrl } : {},
     ...profile?.apiKeyEnv === undefined ? {} : { apiKeyEnv: profile.apiKeyEnv },
+    ...profile?.supportedApis === undefined ? {} : { supportedApis: profile.supportedApis },
   }
 }

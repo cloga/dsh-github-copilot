@@ -2,7 +2,7 @@
  * Traditional `ctx.web` search provider backed by a verified OpenAI Responses
  * candidate. This is intentionally search-only: URL fetching remains owned by
  * dedicated anonymous fetch providers.
- * @module dsh-web-search-provider/traditional-search
+ * @module dsh-github-copilot/traditional-search
  */
 
 import { attributionHeaders } from '@deepseek-ai/dsh-llm'
@@ -22,7 +22,10 @@ import type {
 } from './types.ts'
 
 /** Stable provider id selected through `web.searchProvider`. */
-export const COPILOT_HOSTED_SEARCH_PROVIDER_ID = 'copilot-hosted'
+export const GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID = 'github-copilot-hosted'
+
+/** @deprecated Use {@link GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID}. */
+export const COPILOT_HOSTED_SEARCH_PROVIDER_ID = GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID
 
 /** Build the search-only provider registered with `ctx.web`. */
 export function createTraditionalSearchProvider(
@@ -32,12 +35,12 @@ export function createTraditionalSearchProvider(
   config: () => InlineConfig,
 ): WebSearchProvider {
   return {
-    id: COPILOT_HOSTED_SEARCH_PROVIDER_ID,
+    id: GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
     available,
     search: (request, signal) => {
       if (signal?.aborted === true) return Promise.reject(aborted())
       if (!available()) {
-        return Promise.reject(new WebError('the copilot-hosted search provider is unavailable for the current route', 'WEB_PROVIDER_UNAVAILABLE'))
+        return Promise.reject(new WebError('the github-copilot-hosted search provider is unavailable for the current route', 'WEB_PROVIDER_UNAVAILABLE'))
       }
       return searchResponses(request, signal, plan(), hooks, config())
     },

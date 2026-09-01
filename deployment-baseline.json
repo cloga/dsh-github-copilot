@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "id": "cloga.dsh-windows-copilot.web-search",
+    "id": "cloga.dsh-github-copilot",
     "kind": "fork-deployment-baseline",
     "source": "https://github.com/cloga/dsh-web-search-provider",
     "sourceCommitPolicy": "exact-external-pin",
     "upstream": "https://github.com/hiyms/dsh-web-search-provider"
   },
   "package": {
-    "name": "dsh-web-search-provider",
-    "version": "0.2.3-cloga.5"
+    "name": "dsh-github-copilot",
+    "version": "0.3.0-cloga.1"
   },
   "supportedBaselines": {
     "platforms": [
@@ -31,9 +31,14 @@
       ]
     },
     "copilot": {
-      "api": "openai-responses",
+      "apis": [
+        "openai-responses",
+        "openai-completions"
+      ],
       "modelCatalogEndpoint": "/v1/models",
-      "metadataProfile": "optional-copilot-model-capabilities"
+      "metadataProfile": "optional-copilot-model-capabilities",
+      "mainAgent": true,
+      "acpSubagents": false
     }
   },
   "capabilities": [
@@ -82,7 +87,7 @@
       ]
     },
     {
-      "id": "image-attachment-bypass",
+      "id": "official-vision-route-bypass",
       "required": true,
       "sourceMarkers": [
         {
@@ -98,7 +103,7 @@
       ]
     },
     {
-      "id": "failure-safe-copilot-model-catalog",
+      "id": "github-copilot-model-catalog",
       "required": true,
       "sourceMarkers": [
         {
@@ -118,6 +123,54 @@
         {
           "file": "tests/model-catalog.spec.ts",
           "name": "requests /v1/models and returns the static fallback when discovery fails"
+        }
+      ]
+    },
+    {
+      "id": "github-copilot-route-composition",
+      "required": true,
+      "sourceMarkers": [
+        {
+          "file": "src/copilot-provider.ts",
+          "marker": "export function composeGitHubCopilotProviderRoutes"
+        },
+        {
+          "file": "src/copilot-provider.ts",
+          "marker": "api: 'openai-completions'"
+        }
+      ],
+      "tests": [
+        {
+          "file": "tests/copilot-provider.spec.ts",
+          "name": "composes Responses and Chat routes with catalog metadata intact"
+        },
+        {
+          "file": "tests/copilot-provider.spec.ts",
+          "name": "fails closed for invalid route input"
+        }
+      ]
+    },
+    {
+      "id": "dsh-runtime-compatibility-guard",
+      "required": true,
+      "sourceMarkers": [
+        {
+          "file": "src/compatibility.ts",
+          "marker": "export function assertDshCompatibility"
+        },
+        {
+          "file": "src/index.ts",
+          "marker": "assertDshCompatibility(ctx)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "tests/compatibility.spec.ts",
+          "name": "accepts the supported DSH service contract"
+        },
+        {
+          "file": "tests/compatibility.spec.ts",
+          "name": "fails before startup when a required API is absent"
         }
       ]
     },
@@ -147,7 +200,7 @@
       "sourceMarkers": [
         {
           "file": "src/traditional-search.ts",
-          "marker": "export const COPILOT_HOSTED_SEARCH_PROVIDER_ID = 'copilot-hosted'"
+          "marker": "export const GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID = 'github-copilot-hosted'"
         },
         {
           "file": "src/index.ts",
@@ -157,7 +210,7 @@
       "tests": [
         {
           "file": "tests/inline/apply.spec.ts",
-          "name": "registers the copilot-hosted traditional search provider without a fetch provider"
+          "name": "registers the github-copilot-hosted traditional search provider without a fetch provider"
         },
         {
           "file": "tests/traditional-search.spec.ts",
@@ -203,7 +256,7 @@
       "sourceMarkers": [
         {
           "file": "src/index.ts",
-          "marker": "settingsCtx.settings.installSection(ctx, WEB_SEARCH_SETTINGS_NAMESPACE"
+          "marker": "settingsCtx.settings.installSection(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE"
         }
       ],
       "tests": [
@@ -217,9 +270,18 @@
   "requiredExports": {
     ".": [
       "modelCatalogURL",
+      "githubCopilotModelCatalogURL",
+      "modelsFromGitHubCopilotListing",
       "modelsFromOpenAICompatibleListing",
+      "synchronizeGitHubCopilotModelCatalog",
       "synchronizeOpenAICompatibleModelCatalog",
-      "COPILOT_HOSTED_SEARCH_PROVIDER_ID"
+      "composeGitHubCopilotProviderRoutes",
+      "GITHUB_COPILOT_PROVIDER_ID",
+      "GITHUB_COPILOT_CHAT_PROVIDER_ID",
+      "GITHUB_COPILOT_API_KEY_ENV",
+      "DSH_COMPATIBILITY",
+      "assertDshCompatibility",
+      "GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID"
     ],
     "./deployment-baseline.json": []
   }

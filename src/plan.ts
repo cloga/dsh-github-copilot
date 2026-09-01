@@ -5,7 +5,7 @@
  * when that can search, the known search-capable sibling protocols of its
  * host otherwise. The {@link SearchPlan} class owns the probe lifecycle so
  * `available()` stays synchronous while the verdict lands in the background.
- * @module dsh-web-search-provider/plan
+ * @module dsh-github-copilot/plan
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'
@@ -19,6 +19,9 @@ export type SearchProtocol = 'openai-responses' | 'anthropic-messages'
 
 /** Default credential reference when neither config nor route names one. */
 export const DEFAULT_API_KEY_ENV = 'DEEPSEEK_API_KEY'
+
+/** Credential reference used by the deployment-composed Copilot routes. */
+export const GITHUB_COPILOT_API_KEY_ENV = 'COPILOT_GITHUB_TOKEN'
 
 /** Default Responses base URL (DeepSeek first-party; `/responses` is appended). */
 export const DEFAULT_RESPONSES_BASE_URL = 'https://api.deepseek.com'
@@ -56,11 +59,18 @@ const KNOWN_API_KEY_ENVS: Readonly<Record<string, string>> = {
   'deepseek-official': 'DEEPSEEK_API_KEY',
   openai: 'OPENAI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
+  'github-copilot': GITHUB_COPILOT_API_KEY_ENV,
+  'github-copilot-chat': GITHUB_COPILOT_API_KEY_ENV,
 }
 
 /** Whether a route is the DeepSeek first-party family (catalog or legacy alias). */
 function isDeepSeekFamily(provider: string): boolean {
   return provider === 'deepseek' || provider === 'deepseek-official'
+}
+
+/** Whether a route belongs to this package's Responses/Chat provider pair. */
+function isGitHubCopilotFamily(provider: string): boolean {
+  return provider === 'github-copilot' || provider === 'github-copilot-chat'
 }
 
 /**
@@ -151,6 +161,9 @@ export function siblingCandidates(
   const base = (baseOverride ?? route.baseURL)?.replace(/\/+$/, '') ?? ''
   if (route.api === 'openai-responses' || route.api === 'anthropic-messages') {
     return [{ protocol: route.api, baseURL: base }]
+  }
+  if (isGitHubCopilotFamily(route.provider) && route.supportedApis?.includes('openai-responses') === true) {
+    return [{ protocol: 'openai-responses', baseURL: base }]
   }
   if (isDeepSeekFamily(route.provider) || hostnameOf(baseOverride ?? route.baseURL) === 'api.deepseek.com') {
     // Chat-Completions bases conventionally end in `/v1` (DeepSeek accepts

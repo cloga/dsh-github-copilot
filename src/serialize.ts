@@ -2,7 +2,7 @@
  * Message and tool serialization for the inline wire path: dsh messages and
  * tool schemas project onto the OpenAI Responses input vocabulary exactly
  * like the pi-ai adapter, plus the server-side `web_search` tool injection.
- * @module dsh-web-search-provider/serialize
+ * @module dsh-github-copilot/serialize
  */
 
 import type { ContentBlock, GenerateOptions, Message, TextBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
