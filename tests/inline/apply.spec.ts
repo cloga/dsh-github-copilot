@@ -51,6 +51,7 @@ function fakeSettings(document: Record<string, unknown>): FakeSettings {
   const installedSections: string[] = []
   const settings = {
     get: (ns: unknown) => document[String(ns)],
+    mutate: async () => undefined,
     register: (ns: unknown, schema: (value: unknown) => unknown, options?: { base?: unknown }) => {
       const namespace = String(ns)
       return {
@@ -88,7 +89,7 @@ type SelectionRef = { current: { provider: string; model: string } | null }
 
 function buildRuntime(
   overrides: Partial<FakeRuntime> = {},
-  selectionRef: SelectionRef = { current: { provider: 'opencode-go-response', model: 'deepseek-v4-flash' } },
+  selectionRef: SelectionRef = { current: { provider: 'github-copilot', model: 'gpt-5.4' } },
   extraSettings: Record<string, unknown> = {},
 ): FakeRuntime {
   let listener: FakeRuntime['listener']
@@ -101,7 +102,7 @@ function buildRuntime(
   const settingsDocument: Record<string, unknown> = {
     [GITHUB_COPILOT_SETTINGS_NAMESPACE]: {},
     // The chat route profile: currentChatRoute() reads `llm-pi-ai` providers.
-    'llm-pi-ai': { providers: { 'opencode-go-response': { api: 'openai-responses' } } },
+    'llm-pi-ai': { providers: { 'github-copilot': {} } },
     ...extraSettings,
   }
   const fake = fakeSettings(settingsDocument)
@@ -117,7 +118,37 @@ function buildRuntime(
         : { provider: selectionRef.current.provider, model: selectionRef.current.model },
     }],
     // Credentials seam so resolveApiKey never falls back to the process env.
-    ['credentials', { resolve: credentialResolve }],
+    ['authorization', {
+      describe: () => undefined,
+      begin: async () => ({ status: 'cancelled' as const }),
+      cancel: () => undefined,
+    }],
+    ['credentials', {
+      resolve: credentialResolve,
+      describeRecord: async () => ({ configured: false, writable: true }),
+      readRecord: async () => ({
+        kind: 'grant',
+        payload: {
+          type: 'oauth',
+          refresh: 'github-device-grant',
+          access: 'copilot-api-token',
+          expires: Date.now() + 86_400_000,
+          availableModelIds: ['gpt-5.4'],
+        },
+      }),
+      listRecords: async () => [{ key: 'llm-pi-ai/github-copilot', kind: 'grant' }],
+      modifyRecord: async (_key: string, mutate: (current: unknown) => Promise<unknown>) => mutate({
+        kind: 'grant',
+        payload: {
+          type: 'oauth',
+          refresh: 'github-device-grant',
+          access: 'copilot-api-token',
+          expires: Date.now() + 86_400_000,
+          availableModelIds: ['gpt-5.4'],
+        },
+      }),
+      deleteRecord: async () => undefined,
+    }],
     ['web', {
       registerSearchProvider: (provider: WebSearchProvider) => {
         searchProviders.push(provider)
@@ -135,6 +166,7 @@ function buildRuntime(
     // while a fiber is unloading; a live fiber is what this fake is.
     fiber: { state: 1 },
     logger: { info: () => undefined, warn: () => undefined },
+    plugin: () => undefined,
     on: (event: string, handler: (request: GenerateOptions, next: () => unknown) => unknown) => {
       if (event === 'llm/stream') listener = handler
       listeners.set(event, handler)
@@ -181,8 +213,8 @@ function buildRuntime(
 
 function request(overrides: Partial<GenerateOptions> = {}): GenerateOptions {
   return markAgentLoopRequest({
-    provider: 'opencode-go-response',
-    model: 'deepseek-v4-flash',
+    provider: 'github-copilot',
+    model: 'gpt-5.4',
     messages: [{ id: 'u1' as Message['id'], role: 'user', content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } }],
     ...overrides,
   })
@@ -245,7 +277,7 @@ describe('github-copilot apply', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('reflects a cached failed probe and becomes provisional after candidate config changes', async () => {
+  it('reflects a cached failed probe and becomes ready after probing is disabled', async () => {
     const runtime = buildRuntime()
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
       JSON.stringify({ error: { message: 'unsupported' } }),
@@ -259,8 +291,7 @@ describe('github-copilot apply', () => {
     expect(provider?.available()).toBe(false)
 
     runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = {
-      probe: true,
-      baseURL: 'https://replacement.example/v1',
+      probe: false,
     }
     runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
     expect(provider?.available()).toBe(true)
@@ -362,7 +393,7 @@ describe('github-copilot apply', () => {
     // The whitelist names both routes, but the plan can only ever derive from
     // the CURRENT chat route: a request from a non-current provider must not
     // be served with the current route's endpoint facts.
-    apply(runtime.ctx, { ...config, providers: ['opencode-go-response', 'other-route'] })
+    apply(runtime.ctx, { ...config, providers: ['github-copilot', 'other-route'] })
     const next = vi.fn(() => 'next-value')
     expect(runtime.listener?.(request({ provider: 'other-route' }), next)).toBe('next-value')
     expect(next).toHaveBeenCalledTimes(1)
@@ -371,7 +402,7 @@ describe('github-copilot apply', () => {
 
   it('serves a whitelisted provider when it is the current chat route', async () => {
     const runtime = buildRuntime()
-    apply(runtime.ctx, { ...config, providers: ['opencode-go-response'] })
+    apply(runtime.ctx, { ...config, providers: ['github-copilot'] })
     const next = vi.fn(() => 'next-value')
     const stream = [
       'event: response.output_item.added\ndata: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1"}}\n\n',
@@ -398,37 +429,6 @@ describe('github-copilot apply', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('applies a settings change committed while the route was briefly unavailable', async () => {
-    const selection: SelectionRef = { current: { provider: 'deepseek', model: 'deepseek-v4-flash' } }
-    const runtime = buildRuntime({}, selection, {
-      'llm-pi-ai': { providers: { deepseek: { api: 'openai-completions', baseURL: 'https://old.example' } } },
-    })
-    apply(runtime.ctx, config)
-    const next = vi.fn(() => 'next-value')
-    const stream = [
-      'event: response.output_item.added\ndata: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1"}}\n\n',
-      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","output_index":0,"delta":"Node 22 is current"}\n\n',
-      'event: response.output_item.done\ndata: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1","content":[{"type":"output_text","text":"Node 22 is current"}]}}\n\n',
-      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}\n\n',
-    ].join('')
-    const fetchMock = vi.fn(async () => new Response(stream, { status: 200 }))
-    vi.stubGlobal('fetch', fetchMock)
-    // First request serves through the old endpoint.
-    const first = runtime.listener?.(request({ provider: 'deepseek' }), next)
-    await drain(first as AsyncIterable<StreamChunk>)
-    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('https://old.example/responses')
-    // The settings commit lands while the selection is temporarily null.
-    selection.current = null
-    runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = { baseURL: 'https://new.example' }
-    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
-    selection.current = { provider: 'deepseek', model: 'deepseek-v4-flash' }
-    // The next request must rebuild with the NEW config, not reuse the stale
-    // plan snapshot (same route, old baseURL).
-    const second = runtime.listener?.(request({ provider: 'deepseek' }), next)
-    await drain(second as AsyncIterable<StreamChunk>)
-    expect((fetchMock.mock.calls[1] as [string])[0]).toBe('https://new.example/responses')
-  })
-
   it('defers the plan to the first request when the route is unsettled at attach', async () => {
     const fetchMock = vi.fn(async () => { throw new Error('should never be called') })
     vi.stubGlobal('fetch', fetchMock)
@@ -450,30 +450,6 @@ describe('github-copilot apply', () => {
     runtime.listener?.(request({ purpose: 'compaction' }), next)
     runtime.listener?.(request({ provider: 'unrelated-route' }), next)
     expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('serves a chat-completions route through its sibling candidates', async () => {
-    const selection: SelectionRef = { current: { provider: 'deepseek', model: 'deepseek-v4-flash' } }
-    const runtime = buildRuntime({}, selection, {
-      'llm-pi-ai': { providers: { deepseek: { api: 'openai-completions', baseURL: 'https://api.deepseek.com' } } },
-    })
-    apply(runtime.ctx, config)
-    const next = vi.fn(() => 'next-value')
-    const stream = [
-      'event: response.output_item.added\ndata: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1"}}\n\n',
-      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","output_index":0,"delta":"Node 22 is current"}\n\n',
-      'event: response.output_item.done\ndata: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1","content":[{"type":"output_text","text":"Node 22 is current"}]}}\n\n',
-      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}\n\n',
-    ].join('')
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, { status: 200 })))
-    // The route speaks chat-completions (not search-capable on its own wire),
-    // but its DeepSeek-host siblings give the plan candidates: the request is
-    // served rather than passed through.
-    const result = runtime.listener?.(request({ provider: 'deepseek' }), next)
-    expect(result).not.toBe('next-value')
-    const chunks = await drain(result as AsyncIterable<StreamChunk>)
-    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
-    expect(next).not.toHaveBeenCalled()
   })
 
   it('keeps the prompt section empty while the plugin cannot serve', async () => {
@@ -500,8 +476,8 @@ describe('github-copilot apply', () => {
     expect(runtime.promptSection?.text()).toBe('')
   })
 
-  it('rebuilds the plan when the chat route changes and never serves an unknown gateway', async () => {
-    const selection: SelectionRef = { current: { provider: 'opencode-go-response', model: 'deepseek-v4-flash' } }
+  it('rebuilds the plan when the chat route changes and never serves a non-Copilot route', async () => {
+    const selection: SelectionRef = { current: { provider: 'github-copilot', model: 'gpt-5.4' } }
     const runtime = buildRuntime({}, selection)
     apply(runtime.ctx, config)
     const next = vi.fn(() => 'next-value')
@@ -515,11 +491,10 @@ describe('github-copilot apply', () => {
     // Route A speaks openai-responses: short-circuit.
     const first = runtime.listener?.(request(), next)
     expect(first).not.toBe('next-value')
-    // Switch to an unknown-gateway route: the plan is rebuilt, no sibling
-    // candidates exist, so the request passes through and no endpoint is
-    // probed with the wrong protocol.
-    selection.current = { provider: 'opencode-go', model: 'deepseek-v4-flash' }
-    const second = runtime.listener?.(request({ provider: 'opencode-go' }), next)
+    // Switch to a non-Copilot route: the plan is rebuilt with no candidates,
+    // so the request passes through.
+    selection.current = { provider: 'openai', model: 'gpt-5.4' }
+    const second = runtime.listener?.(request({ provider: 'openai' }), next)
     expect(second).toBe('next-value')
     expect(next).toHaveBeenCalled()
   })

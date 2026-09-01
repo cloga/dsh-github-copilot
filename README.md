@@ -4,118 +4,79 @@
 
 [简体中文](./README.zh.md)
 
-A first-class **main-agent** GitHub Copilot model integration for DeepSeek Harness (DSH). It composes OpenAI-compatible GitHub Copilot gateway routes and model metadata for DSH Core, and preserves provider-hosted search in the model's own turn.
+One plugin for GitHub Copilot models and provider-hosted web search in DeepSeek Harness (DSH) `0.1.2-alpha.3`.
 
-## Scope and ownership
-
-This package provides:
-
-- failure-safe `/v1/models` discovery with GitHub Copilot capability metadata;
-- installer-ready OpenAI Responses and Chat Completions route composition;
-- reasoning effort, context/output limit, and text/image capability mapping;
-- provider-hosted search on Responses, including the traditional `ctx.web` bridge;
-- DSH replay item normalization and SSE-to-`StreamChunk` compatibility;
-- a startup API compatibility guard and a machine-readable deployment baseline.
-
-DSH Core remains authoritative for model selection, plan/code/tool modes, tool presentation, sandbox policy, credentials, official image/vision attachment routing, and Desktop Core selection. Image-bearing calls bypass the hosted-search wire unchanged and use Core's official vision route. This package intentionally provides **no ACP or subagent integration**.
-
-## Compatibility
-
-- Node.js: `>=22.0.0`
-- DSH release baseline: `0.1.1-rc.2`
-- DSH development baseline: `0.1.2-alpha.3`
-- DSH peer range: `^0.1.1-rc.2 || ^0.1.2-alpha.2`
-
-`assertDshCompatibility()` runs before plugin effects are registered. Missing required DSH APIs fail startup with a named error. `pnpm verify:baseline` also checks the peer range, required source/test evidence, one-entry bundle patch, package exports, and the explicit main-agent-only boundary.
-
-## Install
+## Install and sign in
 
 ```sh
 dsh plugin add dsh-github-copilot
 ```
 
-The bundle patch installs exactly one entry:
+Then open **Settings → Models**, find **GitHub Copilot**, and select **Sign in**. Complete the GitHub device-code flow shown in the provider card. The plugin uses DSH's built-in `llm-pi-ai` provider and writes a reference-free `llm-pi-ai.providers.github-copilot` profile without replacing other settings.
 
-```yaml
-- insert:
-    - id: github-copilot
-      name: dsh-github-copilot
-```
+No `copilot2api` process, gateway URL, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
-## Gateway model routes
+## Product behavior
 
-The operations installer owns gateway discovery and settings persistence. It should:
+- DSH's dormant `llm-pi-ai` mount owns the Copilot model adapter, catalog, OAuth flow, credential record, and token refresh.
+- This package contributes the Models provider-card UI and its Host-only authorization Remote.
+- Successful sign-in intersects the account's `availableModelIds` with the installed pi-ai catalog when creating a new route profile.
+- Sign-out deletes only `llm-pi-ai/github-copilot`. It intentionally keeps the route profile and all unrelated settings.
+- Hosted search calls `api.individual.githubcopilot.com` directly with the refreshed credential from that same record.
+- The inline path adds the provider-native web-search tool to eligible agent-loop calls. The `github-copilot-hosted` provider exposes the same capability through `ctx.web`.
+- Search is fail-closed: the selected route must be `github-copilot`, the selected account must expose the model, its catalog protocol must support native search, and the capability probe must pass.
 
-1. Resolve the gateway base URL and the `COPILOT_GITHUB_TOKEN` credential reference.
-2. Call `synchronizeGitHubCopilotModelCatalog()` with a pinned static fallback.
-3. Call `composeGitHubCopilotProviderRoutes()`.
-4. Merge the returned `providers` object into `llm-pi-ai.providers`.
-5. Use the existing DSH default-model service to select one returned provider/model pair.
+Models that only use Chat Completions are still usable through DSH's normal `llm-pi-ai` path, but they do not advertise hosted search. Responses and Anthropic Messages candidates are probed before use.
 
-```ts
-import {
-  composeGitHubCopilotProviderRoutes,
-  synchronizeGitHubCopilotModelCatalog,
-} from 'dsh-github-copilot'
+## Ownership boundary
 
-const models = await synchronizeGitHubCopilotModelCatalog({
-  baseURL: gatewayBaseURL,
-  headers: { authorization: `Bearer ${gatewayToken}` },
-  fallback: pinnedModels,
-})
+| Surface | Owner |
+|---|---|
+| Copilot chat/model transport and catalog | DSH `@deepseek-ai/dsh-llm-pi-ai` + pi-ai |
+| OAuth/device flow registration | DSH authorization seam + `llm-pi-ai` |
+| Credential storage and refresh | DSH credentials record `llm-pi-ai/github-copilot` + pi-ai |
+| Models sign-in/status/sign-out UI | This package's `./client` entry |
+| Browser-to-Host authorization calls | This package's `./remote` and Host controller |
+| Reference-free route mutation | This package, through DSH settings path mutation |
+| Hosted search probe, inline wire, and `ctx.web` bridge | This package, Host-only |
+| Model selection, sandboxing, tools, attachments, and other providers | DSH Core |
 
-const { providers } = composeGitHubCopilotProviderRoutes({
-  baseURL: gatewayBaseURL,
-  apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
-  models,
-})
+Credential payloads never cross the Client Remote. The hosted-search adapter uses pi-ai's public `createModels()` and `Models.getAuth()` path, so refresh remains serialized inside DSH's credential-record mutation.
 
-// Merge into the existing settings document; do not replace unrelated routes.
-settings['llm-pi-ai'].providers = {
-  ...settings['llm-pi-ai'].providers,
-  ...providers,
-}
-```
+## Settings
 
-The helper writes these route fields:
-
-| Route | `api` | Other fields |
-|---|---|---|
-| `github-copilot` | `openai-responses` | `baseURL`, `apiKeyEnv`, `models` |
-| `github-copilot-chat` | `openai-completions` | `baseURL`, `apiKeyEnv`, `models` |
-
-A model that advertises both endpoints appears on both routes. Catalog entries preserve `id`, `name`, preferred `api`, all `apis`, `input`, `contextWindow`, `maxTokens`, `reasoning`, and `reasoningEfforts`. Discovery failures return the exact fallback object. No helper mutates DSH settings.
-
-## Hosted search configuration
-
-The live settings namespace is `github-copilot`:
+The `github-copilot` settings section contains only hosted-search behavior:
 
 | Key | Default | Meaning |
-|---|---|---|
-| `enabled` | `true` | Master hosted-search switch. |
-| `providers` | `[]` | Allowed `llm-pi-ai` route IDs; empty follows the active main-agent route. |
-| `baseURL` | active route | Search endpoint override. |
-| `model` | active model | Probe and hosted-search model override. |
-| `apiKeyEnv` | active route | DSH credential reference. |
-| `includeSources` | `true` | Request hosted-search source metadata. |
-| `stripServerTools` | `true` | Remove local function variants of provider-hosted tools. |
+|---|---:|---|
+| `enabled` | `true` | Enable the hosted-search integration. |
+| `providers` | `[]` | Optional route allowlist; empty follows the selected route. |
+| `includeSources` | `true` | Request and return provider citations. |
+| `stripServerTools` | `true` | Remove local function variants of provider-hosted search tools. |
 | `idleTimeoutMs` | `300000` | Inline stream idle timeout. |
-| `probe` | `true` | Verify native hosted search before serving. |
+| `probe` | `true` | Require native hosted-search evidence before serving. |
 | `probeTimeoutMs` | `30000` | Capability probe timeout. |
 
-The plugin also registers search provider `github-copilot-hosted`; set the existing DSH web service's `searchProvider` to that ID when desired. It does not register a fetch provider.
+There are no token, API-key, model-catalog, or endpoint settings in this package.
 
-## Migration from `dsh-web-search-provider`
+## Migration
 
-1. Remove the old `dsh-web-search-provider` bundle/package entry.
-2. Install `dsh-github-copilot` and change the bundle ID from `web-search-provider` to `github-copilot`.
-3. Move settings namespace `web-search-provider` to `github-copilot` without changing field values.
-4. Change web `searchProvider` from `copilot-hosted` to `github-copilot-hosted`.
-5. Add the two `llm-pi-ai.providers` routes described above and select a Copilot model through Core.
-6. Replace the old baseline/package/tarball pins with `cloga.dsh-github-copilot`, `dsh-github-copilot`, and the new archive metadata.
-7. Remove any ACP/subagent-specific composition; it is outside this package's contract.
+Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential references, `copilot2api`, and `dsh-web-search-provider`. Install this package, sign in from **Settings → Models**, select an account-available Copilot model, and select `github-copilot-hosted` only when an explicit `ctx.web` search provider is needed.
 
-The deprecated `COPILOT_HOSTED_SEARCH_PROVIDER_ID` export remains as a source migration aid; new code should use `GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID`.
+## Source and package entries
+
+- `src/index.ts`: Host plugin composition and hosted-search registration.
+- `src/authorization-controller.ts`: Host authorization/settings bridge.
+- `src/copilot-auth.ts`: Host-only DSH credential-record adapter for pi-ai refresh.
+- `src/client.ts`: Models provider-card UI.
+- `src/remote.ts`: Client-safe Typert descriptors.
+- `src/current-provider.ts`, `src/plan.ts`: selected-route projection and fail-closed search planning.
+- `src/probe.ts`, `src/wire*.ts`, `src/traditional-search.ts`: hosted-search transports.
+- `lib/index.js`, `lib/client.js`, `lib/remote.js`: generated package entries; never edit them directly.
+
+Public package entries are `.`, `./client`, `./remote`, and `./deployment-baseline.json`.
+
+The package peer contract targets DSH `0.1.2-alpha.3`. Because those scoped packages are not published in the configured npm registry, rc.2 development packages are used only as compiler scaffolding; CI checks the exact alpha.3 source commit and the required public seams separately.
 
 ## Build and verify
 
@@ -125,7 +86,8 @@ pnpm test
 pnpm typecheck
 pnpm verify:baseline
 pnpm build
+pnpm verify:package
 pnpm pack --pack-destination artifacts
 ```
 
-Every archive exports `./deployment-baseline.json`. Consumers must pin the source commit, tarball filename, and SHA-256, and reject a baseline mismatch.
+`pnpm verify` runs the complete local test, typecheck, baseline, build, and package-smoke path. See [AGENTS.md](./AGENTS.md) for repository invariants and change workflow.

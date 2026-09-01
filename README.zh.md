@@ -2,117 +2,79 @@
 
 [![npm version](https://img.shields.io/npm/v/dsh-github-copilot)](https://www.npmjs.com/package/dsh-github-copilot)
 
-面向 DeepSeek Harness（DSH）**主 Agent** 的一体化 GitHub Copilot 模型集成。它为 DSH Core 组合 OpenAI 兼容的 GitHub Copilot 网关路由和模型元数据，并保留由模型供应方在同一轮请求中执行的托管搜索。
+面向 DeepSeek Harness（DSH）`0.1.2-alpha.3` 的单插件 GitHub Copilot 模型与供应方托管搜索集成。
 
-## 范围与职责边界
-
-本包提供：
-
-- 带 GitHub Copilot 能力元数据的失败保护型 `/v1/models` 发现；
-- 可由安装器直接写入的 OpenAI Responses 与 Chat Completions 路由；
-- 推理强度、上下文/输出限制以及文本/图片能力映射；
-- Responses 托管搜索和传统 `ctx.web` 搜索桥；
-- DSH replay item 规范化以及 SSE 到 `StreamChunk` 的兼容转换；
-- 启动时 API 兼容性检查和机器可读部署基线。
-
-模型选择、plan/code/tool 模式、工具呈现、sandbox 策略、凭证、官方图片/视觉附件路由和 Desktop Core 选择仍由 DSH Core 负责。带图片的请求会原样绕过托管搜索 wire，交由 Core 官方视觉路由处理。本包明确**不提供 ACP 或 subagent 支持**。
-
-## 兼容范围
-
-- Node.js：`>=22.0.0`
-- DSH 正式基线：`0.1.1-rc.2`
-- DSH 开发基线：`0.1.2-alpha.3`
-- DSH peer 范围：`^0.1.1-rc.2 || ^0.1.2-alpha.2`
-
-插件注册任何 effect 前会运行 `assertDshCompatibility()`；缺失必要 DSH API 时会用明确错误拒绝启动。`pnpm verify:baseline` 还会校验 peer 范围、源码/测试证据、单入口 bundle patch、包导出以及仅主 Agent 的边界。
-
-## 安装
+## 安装与登录
 
 ```sh
 dsh plugin add dsh-github-copilot
 ```
 
-Bundle patch 只安装一个入口：
+打开 **Settings → Models**，找到 **GitHub Copilot** 并点击 **Sign in**，然后完成 provider card 展示的 GitHub device-code 流程。插件复用 DSH 内置的 `llm-pi-ai` provider，并通过路径级设置变更创建 reference-free `llm-pi-ai.providers.github-copilot` profile，不会替换其它 provider 设置。
 
-```yaml
-- insert:
-    - id: github-copilot
-      name: dsh-github-copilot
-```
+不需要运行 `copilot2api`，不需要填写 gateway URL、placeholder API key 或原始 GitHub token，也不需要安装 `dsh-web-search-provider`。
 
-## 网关模型路由
+## 产品行为
 
-运维安装器负责网关发现和设置持久化：
+- DSH 的 dormant `llm-pi-ai` mount 负责 Copilot 模型 adapter、catalog、OAuth、credential record 和 token refresh。
+- 本包只补充 Models provider-card UI、Host-only authorization Remote 和 hosted search。
+- 新 profile 会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集。
+- Sign out 只删除 `llm-pi-ai/github-copilot` credential；route profile 和其它设置保持不变。
+- Hosted search 使用同一 credential record 的刷新结果直接请求 `api.individual.githubcopilot.com`。
+- Inline 路径为符合条件的 agent-loop 请求加入供应方原生 web-search tool；`github-copilot-hosted` 通过 `ctx.web` 暴露相同能力。
+- 搜索默认 fail closed：当前 route 必须是 `github-copilot`，账号必须允许该模型，模型协议必须支持原生搜索，且 capability probe 必须成功。
 
-1. 解析网关 `baseURL` 与 `COPILOT_GITHUB_TOKEN` 凭证引用。
-2. 以锁定的静态目录作为 fallback 调用 `synchronizeGitHubCopilotModelCatalog()`。
-3. 调用 `composeGitHubCopilotProviderRoutes()`。
-4. 将返回的 `providers` 合并到 `llm-pi-ai.providers`，不得覆盖其它路由。
-5. 通过现有 DSH default-model 服务选择返回的 provider/model。
+仅支持 Chat Completions 的 Copilot 模型仍可通过 DSH 原生 `llm-pi-ai` 使用，但不会宣称 hosted search 可用。
 
-```ts
-import {
-  composeGitHubCopilotProviderRoutes,
-  synchronizeGitHubCopilotModelCatalog,
-} from 'dsh-github-copilot'
+## 职责边界
 
-const models = await synchronizeGitHubCopilotModelCatalog({
-  baseURL: gatewayBaseURL,
-  headers: { authorization: `Bearer ${gatewayToken}` },
-  fallback: pinnedModels,
-})
+| 表面 | 负责人 |
+|---|---|
+| Copilot chat/model transport 与 catalog | DSH `dsh-llm-pi-ai` 与 pi-ai |
+| OAuth/device flow 注册 | DSH authorization seam 与 `llm-pi-ai` |
+| Credential 存储与刷新 | DSH record `llm-pi-ai/github-copilot` 与 pi-ai |
+| Models 登录/状态/登出 UI | 本包 `./client` |
+| Browser 到 Host 的授权调用 | 本包 `./remote` 与 Host controller |
+| Reference-free route 变更 | 本包通过 DSH settings path mutation |
+| Hosted-search probe、inline wire、`ctx.web` bridge | 本包 Host 侧 |
+| 模型选择、sandbox、工具、附件与其它 provider | DSH Core |
 
-const { providers } = composeGitHubCopilotProviderRoutes({
-  baseURL: gatewayBaseURL,
-  apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
-  models,
-})
+Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共 `createModels()` 与 `Models.getAuth()`，刷新仍在 DSH credential-record 的串行 mutation 内完成。
 
-settings['llm-pi-ai'].providers = {
-  ...settings['llm-pi-ai'].providers,
-  ...providers,
-}
-```
+## 设置
 
-安装器写入的精确路由字段：
+`github-copilot` section 只包含 hosted-search 行为：
 
-| 路由 | `api` | 其它字段 |
-|---|---|---|
-| `github-copilot` | `openai-responses` | `baseURL`、`apiKeyEnv`、`models` |
-| `github-copilot-chat` | `openai-completions` | `baseURL`、`apiKeyEnv`、`models` |
-
-同时支持两个端点的模型会出现在两条路由。目录条目保留 `id`、`name`、首选 `api`、全部 `apis`、`input`、`contextWindow`、`maxTokens`、`reasoning` 和 `reasoningEfforts`。发现失败时原样返回 fallback；辅助函数不会修改 DSH 设置。
-
-## 托管搜索配置
-
-实时设置命名空间为 `github-copilot`：
-
-| 键 | 默认 | 含义 |
-|---|---|---|
-| `enabled` | `true` | 托管搜索总开关。 |
-| `providers` | `[]` | 允许的 `llm-pi-ai` 路由 ID；空值跟随当前主 Agent 路由。 |
-| `baseURL` | 当前路由 | 搜索端点覆盖。 |
-| `model` | 当前模型 | 探测和托管搜索模型覆盖。 |
-| `apiKeyEnv` | 当前路由 | DSH 凭证引用。 |
-| `includeSources` | `true` | 请求托管搜索来源元数据。 |
-| `stripServerTools` | `true` | 删除供应方托管工具的本地函数变体。 |
+| 键 | 默认值 | 含义 |
+|---|---:|---|
+| `enabled` | `true` | 启用 hosted search。 |
+| `providers` | `[]` | 可选 route allowlist；空值跟随当前选择。 |
+| `includeSources` | `true` | 请求并返回供应方引用。 |
+| `stripServerTools` | `true` | 删除 hosted-search tool 的本地 function 变体。 |
 | `idleTimeoutMs` | `300000` | Inline stream 空闲超时。 |
-| `probe` | `true` | 服务前验证原生托管搜索。 |
-| `probeTimeoutMs` | `30000` | 能力探测超时。 |
+| `probe` | `true` | 服务前要求原生 hosted-search 证据。 |
+| `probeTimeoutMs` | `30000` | Capability probe 超时。 |
 
-插件还会注册搜索 provider `github-copilot-hosted`。需要时将现有 DSH web 服务的 `searchProvider` 设为该 ID。本包不会注册 fetch provider。
+本包不提供 token、API key、model catalog 或 endpoint 设置。
 
-## 从 `dsh-web-search-provider` 迁移
+## 迁移
 
-1. 删除旧 `dsh-web-search-provider` bundle/package 入口。
-2. 安装 `dsh-github-copilot`，并把 bundle ID 从 `web-search-provider` 改为 `github-copilot`。
-3. 将设置命名空间 `web-search-provider` 迁移为 `github-copilot`，字段值保持不变。
-4. 将 web `searchProvider` 从 `copilot-hosted` 改为 `github-copilot-hosted`。
-5. 新增上述两条 `llm-pi-ai.providers` 路由，并通过 Core 选择 Copilot 模型。
-6. 用 `cloga.dsh-github-copilot`、`dsh-github-copilot` 和新归档元数据替换旧基线/包/tarball pin。
-7. 删除 ACP/subagent 专用组合；它不属于本包契约。
+删除旧 Copilot gateway route、`COPILOT_GITHUB_TOKEN` 类 credential reference、`copilot2api` 和 `dsh-web-search-provider`。安装本包后从 **Settings → Models** 登录并选择账号可用的 Copilot 模型；只有显式使用 `ctx.web` 搜索时才需要选择 `github-copilot-hosted`。
 
-旧导出 `COPILOT_HOSTED_SEARCH_PROVIDER_ID` 仅作为源码迁移辅助保留；新代码应使用 `GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID`。
+## 源码与发行物
+
+- `src/index.ts`：Host 插件组合。
+- `src/authorization-controller.ts`：Host authorization/settings bridge。
+- `src/copilot-auth.ts`：Host-only DSH credential-record 到 pi-ai refresh adapter。
+- `src/client.ts`：Models provider-card UI。
+- `src/remote.ts`：Client-safe Typert descriptors。
+- `src/current-provider.ts`、`src/plan.ts`：route 投影与 fail-closed 规划。
+- `src/probe.ts`、`src/wire*.ts`、`src/traditional-search.ts`：hosted-search transport。
+- `lib/`：构建生成的发行物，不要手工修改。
+
+公开入口为 `.`, `./client`, `./remote` 和 `./deployment-baseline.json`。
+
+Peer contract 精确目标是 DSH `0.1.2-alpha.3`。由于配置的 npm registry 尚未发布这些 scoped package，rc.2 dev dependency 只作为编译脚手架；CI 会另外 checkout 精确 alpha.3 commit 并核验本插件依赖的 public seam。
 
 ## 构建与验证
 
@@ -122,7 +84,8 @@ pnpm test
 pnpm typecheck
 pnpm verify:baseline
 pnpm build
+pnpm verify:package
 pnpm pack --pack-destination artifacts
 ```
 
-每个归档都会导出 `./deployment-baseline.json`。使用方必须锁定源码 commit、tarball 文件名和 SHA-256，并在基线不匹配时拒绝安装。
+`pnpm verify` 执行完整的 test、typecheck、baseline、build 和 package smoke 路径。仓库不变量与修改工作流见 [AGENTS.md](./AGENTS.md)。

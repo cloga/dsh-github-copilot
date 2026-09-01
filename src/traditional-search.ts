@@ -13,6 +13,8 @@ import { abortable, isAbortError, readBounded } from './http.ts'
 import { WEB_SEARCH_TOOL_TYPE } from './plan.ts'
 import type { SearchPlan, SearchPlanCandidate } from './plan.ts'
 import type { InlineHooks } from './wire.ts'
+import { applyRequestAuth, normalizeRequestAuth, providerRequestHeaders } from './copilot-request.ts'
+import type { ResolvedRequestAuth } from './copilot-request.ts'
 import type {
   ResponsesAnnotation,
   ResponsesMessageItem,
@@ -75,15 +77,17 @@ async function searchResponses(
     throw new WebError('the verified search candidate does not support the Responses bridge', 'WEB_PROVIDER_UNAVAILABLE')
   }
 
-  let apiKey: string | undefined
+  let auth: ResolvedRequestAuth | undefined
   try {
-    apiKey = await abortable(hooks.resolveApiKey(candidate.apiKeyEnv), combined)
+    auth = normalizeRequestAuth(await abortable(hooks.resolveApiKey(candidate), combined))
   } catch (error) {
     throw translateError(error, signal, timeout)
   }
-  if (apiKey === undefined || apiKey.length === 0) {
+  if (auth === undefined || auth.apiKey.length === 0) {
     throw new WebError(`no API key for "${candidate.apiKeyEnv}"`, 'WEB_PROVIDER_UNAVAILABLE')
   }
+  candidate = applyRequestAuth(candidate, auth)
+  const apiKey = auth.apiKey
 
   const endpoint = `${candidate.baseURL.replace(/\/+$/, '')}/responses`
   let response: Response
@@ -97,6 +101,7 @@ async function searchResponses(
         'content-type': 'application/json',
         accept: 'application/json',
         ...attributionHeaders(),
+        ...providerRequestHeaders(candidate, 'user'),
       },
       body: JSON.stringify({
         model: candidate.model,
@@ -113,6 +118,7 @@ async function searchResponses(
   } catch (error) {
     throw translateError(error, signal, timeout)
   }
+
 
   if (!response.ok) {
     await response.body?.cancel().catch(() => undefined)

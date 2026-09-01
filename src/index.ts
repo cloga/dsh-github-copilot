@@ -13,10 +13,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
-import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import * as dshSettings from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { resolveCandidates, sameCandidates, SearchPlan } from './plan.ts'
 import type { PlanConfig, SearchPlanCandidate } from './plan.ts'
 import { probeCandidate } from './probe.ts'
@@ -28,6 +26,8 @@ import { contentHasImageAttachments, inlineWireStream } from './wire.ts'
 import type { InlineHooks } from './wire.ts'
 import { createTraditionalSearchProvider } from './traditional-search.ts'
 import { assertDshCompatibility } from './compatibility.ts'
+import GitHubCopilotAuthorizationController from './authorization-controller.ts'
+import { createGitHubCopilotTokenResolver } from './copilot-auth.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
   GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -38,7 +38,15 @@ export const name = 'github-copilot'
 
 /** Services the plugin hooks into; `credentials` is declared so the
  * credential seam is settled before apply resolves keys. */
-export const inject = ['llm', 'systemPrompt', 'settings', 'credentials', 'web', 'agentDefaultModel']
+export const inject = [
+  'llm',
+  'systemPrompt',
+  'settings',
+  'credentials',
+  'authorization',
+  'web',
+  'agentDefaultModel',
+]
 
 /** Settings namespace carrying this plugin's section. */
 export const GITHUB_COPILOT_SETTINGS_NAMESPACE = 'github-copilot' as SettingsNamespace
@@ -46,32 +54,17 @@ export const GITHUB_COPILOT_SETTINGS_NAMESPACE = 'github-copilot' as SettingsNam
 /** Schema of the plugin's settings section, exported for composition consumers. */
 export { Config } from './config.ts'
 export type { InlineConfig } from './config.ts'
-export {
-  githubCopilotModelCatalogURL,
-  modelCatalogURL,
-  modelsFromGitHubCopilotListing,
-  modelsFromOpenAICompatibleListing,
-  synchronizeGitHubCopilotModelCatalog,
-  synchronizeOpenAICompatibleModelCatalog,
-} from './model-catalog.ts'
-export type {
-  CatalogModel,
-  CatalogReasoningEfforts,
-  ModelCatalogSyncOptions,
-} from './model-catalog.ts'
-export {
-  composeGitHubCopilotProviderRoutes,
-  GITHUB_COPILOT_API_KEY_ENV,
-  GITHUB_COPILOT_CHAT_PROVIDER_ID,
-  GITHUB_COPILOT_PROVIDER_ID,
-} from './copilot-provider.ts'
-export type {
-  GitHubCopilotApi,
-  GitHubCopilotProviderRoute,
-  GitHubCopilotRouteComposition,
-  GitHubCopilotRouteOptions,
-} from './copilot-provider.ts'
 export { assertDshCompatibility, DSH_COMPATIBILITY } from './compatibility.ts'
+export {
+  GITHUB_COPILOT_CREDENTIAL_KEY,
+  GitHubCopilotAuthorizationController,
+  LLM_PI_AI_SETTINGS_NAMESPACE,
+} from './authorization-controller.ts'
+export type {
+  AuthorizationNoticeView,
+  GitHubCopilotAuthorizationPhase,
+  GitHubCopilotAuthorizationView,
+} from './authorization-controller.ts'
 
 interface SettingsSectionHooks {
   setSource(source: () => InlineConfig): void
@@ -133,6 +126,8 @@ function installWebSearchSettings(
  */
 export function apply(ctx: Context, config: InlineConfig): void {
   assertDshCompatibility(ctx)
+  ctx.plugin(GitHubCopilotAuthorizationController)
+  const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx)
   let current: () => InlineConfig = () => config
   // The plan is built when the settings section attaches IF the chat route
   // is already detectable (so the probe verdict and the prompt guidance are
@@ -159,12 +154,20 @@ export function apply(ctx: Context, config: InlineConfig): void {
   let traditionalPlanCandidates: readonly SearchPlanCandidate[] | undefined
 
   const hooks: InlineHooks = {
-    resolveApiKey: async (apiKeyEnv) => {
-      const credentials = ctx.get('credentials')
-      if (credentials !== undefined) return (await credentials.resolve(credentialRef(apiKeyEnv)))?.value
-      const ambient = launchEnvironmentOf(ctx).get(apiKeyEnv)
-      return ambient !== undefined && ambient.value.length > 0 ? ambient.value : undefined
+    resolveApiKey: async (candidate) => {
+      if (!isDirectGitHubCopilot(candidate)) {
+        throw new Error('github-copilot: hosted search refuses non-Copilot endpoints')
+      }
+      return resolveGitHubCopilotToken(candidate.model)
     },
+  }
+
+  function isDirectGitHubCopilot(candidate: SearchPlanCandidate): boolean {
+    try {
+      return new URL(candidate.baseURL).hostname === 'api.individual.githubcopilot.com'
+    } catch {
+      return false
+    }
   }
 
   /** The live plan, built on first use and rebuilt when the chat route moves. */
@@ -362,11 +365,10 @@ function reportRoute(ctx: Context): void {
     return
   }
   ctx.logger.info(
-    '[github-copilot] chat route %s (api=%s, baseURL=%s, key=%s)',
+    '[github-copilot] chat route %s (api=%s, baseURL=%s)',
     route.provider,
     route.api ?? 'unknown',
     route.baseURL ?? 'unknown',
-    route.apiKeyEnv ?? 'unknown',
   )
 }
 
@@ -382,9 +384,6 @@ function buildPlan(ctx: Context, cfg: InlineConfig, hooks: InlineHooks): SearchP
 /** Project the settings section onto the plan's config surface. */
 function planConfigOf(cfg: InlineConfig): PlanConfig {
   return {
-    ...cfg.baseURL !== undefined && cfg.baseURL.length > 0 ? { baseURL: cfg.baseURL } : {},
-    ...cfg.model !== undefined && cfg.model.length > 0 ? { model: cfg.model } : {},
-    ...cfg.apiKeyEnv !== undefined && cfg.apiKeyEnv.length > 0 ? { apiKeyEnv: cfg.apiKeyEnv } : {},
     probe: cfg.probe,
     probeTimeoutMs: cfg.probeTimeoutMs,
   }

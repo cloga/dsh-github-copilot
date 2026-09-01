@@ -30,6 +30,8 @@ export interface CurrentChatRoute {
   readonly apiKeyEnv?: string
   /** All interactive APIs advertised by this route's selected model. */
   readonly supportedApis?: readonly string[]
+  /** Static provider/model request headers from pi-ai's catalog. */
+  readonly headers?: Readonly<Record<string, string | null>>
 }
 
 /** Catalog providers indexed by route id. The catalog is static for a given
@@ -47,9 +49,19 @@ function catalogById(): ReadonlyMap<string, { readonly baseUrl?: string }> {
 }
 
 /** Per-provider model tables, cached the same way. */
-const modelTableCache = new Map<string, readonly { readonly id: string; readonly api?: string; readonly baseUrl?: string }[]>()
+const modelTableCache = new Map<string, readonly {
+  readonly id: string
+  readonly api?: string
+  readonly baseUrl?: string
+  readonly headers?: Readonly<Record<string, string | null>>
+}[]>()
 
-function modelTableOf(provider: string): readonly { readonly id: string; readonly api?: string; readonly baseUrl?: string }[] {
+function modelTableOf(provider: string): readonly {
+  readonly id: string
+  readonly api?: string
+  readonly baseUrl?: string
+  readonly headers?: Readonly<Record<string, string | null>>
+}[] {
   const cached = modelTableCache.get(provider)
   if (cached !== undefined) return cached
   try {
@@ -71,12 +83,15 @@ function modelTableOf(provider: string): readonly { readonly id: string; readonl
  * @param model - model id.
  * @returns the catalog protocol and base URL, when known.
  */
-function catalogModelFacts(provider: string, model: string): { api?: string; baseUrl?: string } {
+function catalogModelFacts(
+  provider: string,
+  model: string,
+): { api?: string; baseUrl?: string; headers?: Readonly<Record<string, string | null>> } {
   const catalog = catalogById().get(provider)
   if (catalog === undefined) return {}
   const found = modelTableOf(provider).find(candidate => candidate.id === model)
   if (found === undefined) return {}
-  return { api: found.api, baseUrl: found.baseUrl }
+  return { api: found.api, baseUrl: found.baseUrl, headers: found.headers }
 }
 
 /** Read one route profile from the llm-pi-ai settings section, defensively narrowed. */
@@ -136,5 +151,6 @@ export function currentChatRoute(ctx: Context): CurrentChatRoute | undefined {
     ...profile?.baseURL === undefined && catalog.baseUrl !== undefined ? { baseURL: catalog.baseUrl } : {},
     ...profile?.apiKeyEnv === undefined ? {} : { apiKeyEnv: profile.apiKeyEnv },
     ...profile?.supportedApis === undefined ? {} : { supportedApis: profile.supportedApis },
+    ...catalog.headers === undefined ? {} : { headers: catalog.headers },
   }
 }

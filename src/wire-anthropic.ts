@@ -16,6 +16,9 @@ import type { SearchPlanCandidate } from './plan.ts'
 import { abortedFinish, classifyHttpStatus, classifyWireError, errorFinish, parseRetryAfterMs } from './failure.ts'
 import { abortable } from './http.ts'
 import { buildAnthropicWireBody } from './serialize.ts'
+import { providerRequestHeaders } from './copilot-request.ts'
+import { applyRequestAuth, normalizeRequestAuth } from './copilot-request.ts'
+import type { ResolvedRequestAuth } from './copilot-request.ts'
 import { parseSse } from './sse.ts'
 import { IdleWatchdog } from './watchdog.ts'
 import type { InlineConfig } from './config.ts'
@@ -91,9 +94,9 @@ export async function* inlineAnthropicStream(
     }
     watchdog = new IdleWatchdog(cfg.idleTimeoutMs)
     watchdog.signal.addEventListener('abort', onAbort, { once: true })
-    let apiKey: string | undefined
+    let auth: ResolvedRequestAuth | undefined
     try {
-      apiKey = await abortable(hooks.resolveApiKey(candidate.apiKeyEnv), controller.signal)
+      auth = normalizeRequestAuth(await abortable(hooks.resolveApiKey(candidate), controller.signal))
     } catch (error) {
       if (request.signal?.aborted ?? false) {
         yield abortedFinish()
@@ -106,10 +109,12 @@ export async function* inlineAnthropicStream(
       yield errorFinish(classifyWireError(error))
       return
     }
-    if (apiKey === undefined || apiKey.length === 0) {
+    if (auth === undefined || auth.apiKey.length === 0) {
       yield errorFinish({ message: `no API key for "${candidate.apiKeyEnv}"`, code: 'AUTH' })
       return
     }
+    candidate = applyRequestAuth(candidate, auth)
+    const apiKey = auth.apiKey
     // The idle window covers the wire phase; reset the bound consumed by the
     // key resolution.
     watchdog.reset()
@@ -127,6 +132,7 @@ export async function* inlineAnthropicStream(
           'content-type': 'application/json',
           accept: 'text/event-stream',
           ...attributionHeaders(),
+          ...providerRequestHeaders(candidate, request.messages.at(-1)?.role === 'user' ? 'user' : 'agent'),
         },
         body: JSON.stringify(buildAnthropicWireBody(request, cfg, candidate.model)),
       })

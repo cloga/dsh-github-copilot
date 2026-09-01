@@ -2,287 +2,135 @@
   "schemaVersion": 1,
   "baseline": {
     "id": "cloga.dsh-github-copilot",
-    "kind": "fork-deployment-baseline",
+    "kind": "standalone-dsh-plugin",
     "source": "https://github.com/cloga/dsh-github-copilot",
-    "sourceCommitPolicy": "exact-external-pin",
-    "upstream": "https://github.com/hiyms/dsh-web-search-provider"
+    "sourceCommitPolicy": "exact-external-pin"
   },
   "package": {
     "name": "dsh-github-copilot",
     "version": "0.3.0-cloga.1"
   },
   "supportedBaselines": {
-    "platforms": [
-      "windows"
-    ],
+    "platforms": ["windows", "linux"],
     "node": ">=22.0.0",
     "dsh": {
-      "release": "0.1.1-rc.2",
-      "developmentRelease": "0.1.2-alpha.3",
-      "peerRange": "^0.1.1-rc.2 || ^0.1.2-alpha.2",
+      "release": "0.1.2-alpha.3",
+      "tag": "dsh-v0.1.2-alpha.3",
+      "commit": "dd6322d604e00eec1ba5e0c8541159906a21094a",
+      "peerRange": "^0.1.2-alpha.3",
       "packages": [
         "@deepseek-ai/dsh-agent",
         "@deepseek-ai/dsh-agent-default-model",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-authorization",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-settings-models",
+        "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-credentials",
-        "@deepseek-ai/dsh-launch-environment",
         "@deepseek-ai/dsh-llm",
         "@deepseek-ai/dsh-settings",
+        "@deepseek-ai/dsh-typert-protocol",
         "@deepseek-ai/dsh-web"
       ]
     },
-    "copilot": {
-      "apis": [
-        "openai-responses",
-        "openai-completions"
-      ],
-      "modelCatalogEndpoint": "/v1/models",
-      "metadataProfile": "optional-copilot-model-capabilities",
-      "mainAgent": true,
-      "acpSubagents": false
-    }
+    "piAi": "^0.84.2"
   },
   "capabilities": [
     {
-      "id": "responses-replay-item-id-normalization",
+      "id": "models-provider-card-authorization",
       "required": true,
       "sourceMarkers": [
-        {
-          "file": "src/serialize.ts",
-          "marker": "const replayItemId = /^fc_[A-Za-z0-9_-]{1,61}$/.test(itemId)"
-        }
+        {"file": "src/client.ts", "marker": "settings.models.provider-card"},
+        {"file": "src/authorization-controller.ts", "marker": "GitHubCopilotAuthorizationController"}
       ],
       "tests": [
-        {
-          "file": "tests/inline/serialize.spec.ts",
-          "name": "maps invalid replay item ids to stable short ids"
-        },
-        {
-          "file": "tests/inline/serialize.spec.ts",
-          "name": "maps oversized replay item ids to stable short ids"
-        }
+        {"file": "tests/client.spec.ts", "name": "mounts its Remote contribution and registers the llm-pi-ai provider-card seat"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "signs in through the built-in flow and adds only the reference-free Copilot profile"}
       ]
     },
     {
-      "id": "grounded-sandbox-escalation",
+      "id": "reference-free-route-mutation",
       "required": true,
       "sourceMarkers": [
-        {
-          "file": "src/wire.ts",
-          "marker": "function hasGroundedSandboxEscalation"
-        },
-        {
-          "file": "src/wire.ts",
-          "marker": "function sanitizeSandboxEscalationArguments"
-        }
+        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID]"}
       ],
       "tests": [
-        {
-          "file": "tests/inline/wire.spec.ts",
-          "name": "removes speculative sandbox escalation arguments from full-access tool calls"
-        },
-        {
-          "file": "tests/inline/wire.spec.ts",
-          "name": "preserves sandbox escalation arguments when retrying a real DSH denial"
-        }
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not replace an existing Copilot profile or unrelated provider settings"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "materializes only account-available installed models for a new profile"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "fails loudly instead of enabling the full catalog when no installed model is available"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "signs out by deleting only the llm-pi-ai Copilot record and keeps the route profile"}
       ]
     },
     {
-      "id": "official-vision-route-bypass",
+      "id": "shared-copilot-credential-refresh",
       "required": true,
       "sourceMarkers": [
-        {
-          "file": "src/index.ts",
-          "marker": "if (contentHasImageAttachments(request)) return false"
-        }
+        {"file": "src/copilot-auth.ts", "marker": "models.getAuth(catalogModel)"},
+        {"file": "src/copilot-auth.ts", "marker": "GITHUB_COPILOT_CREDENTIAL_KEY"}
       ],
       "tests": [
-        {
-          "file": "tests/inline/apply.spec.ts",
-          "name": "preserves image attachments when bypassing the custom wire"
-        }
+        {"file": "tests/copilot-auth.spec.ts", "name": "refreshes the llm-pi-ai grant in-place and returns the Copilot API token"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "rejects models excluded by the signed-in account model list"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "rechecks model availability after refreshing the credential"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "accepts the credential-specific endpoint for a signed-in GitHub Enterprise domain"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "rejects a credential-derived endpoint outside GitHub Copilot boundaries"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "fails loudly when the DSH credential record API is unavailable"}
       ]
     },
     {
-      "id": "github-copilot-model-catalog",
+      "id": "direct-provider-hosted-search",
       "required": true,
       "sourceMarkers": [
-        {
-          "file": "src/model-catalog.ts",
-          "marker": "export async function synchronizeOpenAICompatibleModelCatalog"
-        },
-        {
-          "file": "src/model-catalog.ts",
-          "marker": "return options.fallback"
-        }
+        {"file": "src/plan.ts", "marker": "route.provider !== 'github-copilot'"},
+        {"file": "src/copilot-request.ts", "marker": "Openai-Intent"},
+        {"file": "src/wire.ts", "marker": "WEB_SEARCH_TOOL_TYPE"}
       ],
       "tests": [
-        {
-          "file": "tests/model-catalog.spec.ts",
-          "name": "maps rich Copilot metadata for selectable interactive models"
-        },
-        {
-          "file": "tests/model-catalog.spec.ts",
-          "name": "requests /v1/models and returns the static fallback when discovery fails"
-        }
+        {"file": "tests/plan.spec.ts", "name": "inherits model, endpoint, protocol, credential record, and catalog headers"},
+        {"file": "tests/copilot-request.spec.ts", "name": "combines installed catalog headers with provider-required request metadata"},
+        {"file": "tests/copilot-request.spec.ts", "name": "applies a credential-specific Copilot endpoint before request construction"},
+        {"file": "tests/copilot-request.spec.ts", "name": "preserves the Anthropic v1 path on a credential-specific endpoint"},
+        {"file": "tests/copilot-request.spec.ts", "name": "adds dynamic headers for business and enterprise Copilot endpoints"},
+        {"file": "tests/probe.spec.ts", "name": "confirms support via the standard spelling and reports it"},
+        {"file": "tests/inline/wire.spec.ts", "name": "skips web_search_call events and streams the answer normally"},
+        {"file": "tests/inline/wire.spec.ts", "name": "skips a pass-through function_call named web_search without slotting it"}
       ]
     },
     {
-      "id": "github-copilot-route-composition",
+      "id": "traditional-search-bridge",
       "required": true,
       "sourceMarkers": [
-        {
-          "file": "src/copilot-provider.ts",
-          "marker": "export function composeGitHubCopilotProviderRoutes"
-        },
-        {
-          "file": "src/copilot-provider.ts",
-          "marker": "api: 'openai-completions'"
-        }
+        {"file": "src/traditional-search.ts", "marker": "github-copilot-hosted"}
       ],
       "tests": [
-        {
-          "file": "tests/copilot-provider.spec.ts",
-          "name": "composes Responses and Chat routes with catalog metadata intact"
-        },
-        {
-          "file": "tests/copilot-provider.spec.ts",
-          "name": "fails closed for invalid route input"
-        }
+        {"file": "tests/traditional-search.spec.ts", "name": "normalizes generated content and deduplicated sources"},
+        {"file": "tests/traditional-search.spec.ts", "name": "honors caller abort before credential or network access"},
+        {"file": "tests/traditional-search.spec.ts", "name": "maps HTTP errors without leaking credentials or provider bodies"}
       ]
     },
     {
-      "id": "dsh-runtime-compatibility-guard",
+      "id": "dsh-alpha3-fail-loud-guard",
       "required": true,
       "sourceMarkers": [
-        {
-          "file": "src/compatibility.ts",
-          "marker": "export function assertDshCompatibility"
-        },
-        {
-          "file": "src/index.ts",
-          "marker": "assertDshCompatibility(ctx)"
-        }
+        {"file": "src/compatibility.ts", "marker": "peerRange: '^0.1.2-alpha.3'"}
       ],
       "tests": [
-        {
-          "file": "tests/compatibility.spec.ts",
-          "name": "accepts the supported DSH service contract"
-        },
-        {
-          "file": "tests/compatibility.spec.ts",
-          "name": "fails before startup when a required API is absent"
-        }
-      ]
-    },
-    {
-      "id": "orphaned-replay-item-filtering",
-      "required": true,
-      "sourceMarkers": [
-        {
-          "file": "src/serialize.ts",
-          "marker": "export function pairedToolCallIds"
-        }
-      ],
-      "tests": [
-        {
-          "file": "tests/inline/serialize.spec.ts",
-          "name": "keeps only call ids with both replay halves"
-        },
-        {
-          "file": "tests/inline/serialize.spec.ts",
-          "name": "drops orphaned replay calls and results while preserving paired calls"
-        }
-      ]
-    },
-    {
-      "id": "traditional-search-compatibility-bridge",
-      "required": true,
-      "sourceMarkers": [
-        {
-          "file": "src/traditional-search.ts",
-          "marker": "export const GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID = 'github-copilot-hosted'"
-        },
-        {
-          "file": "src/index.ts",
-          "marker": "ctx.web.registerSearchProvider(createTraditionalSearchProvider("
-        }
-      ],
-      "tests": [
-        {
-          "file": "tests/inline/apply.spec.ts",
-          "name": "registers the github-copilot-hosted traditional search provider without a fetch provider"
-        },
-        {
-          "file": "tests/traditional-search.spec.ts",
-          "name": "normalizes generated content and deduplicated sources"
-        },
-        {
-          "file": "tests/traditional-search.spec.ts",
-          "name": "honors caller abort before credential or network access"
-        },
-        {
-          "file": "tests/inline/apply.spec.ts",
-          "name": "coexists with another traditional search provider without replacing it"
-        }
-      ]
-    },
-    {
-      "id": "nonempty-reasoning-blocks",
-      "required": true,
-      "sourceMarkers": [
-        {
-          "file": "src/wire.ts",
-          "marker": "if (slot.text.trim().length === 0) break"
-        },
-        {
-          "file": "src/wire-anthropic.ts",
-          "marker": "if (slot.text.trim().length === 0) break"
-        }
-      ],
-      "tests": [
-        {
-          "file": "tests/inline/wire.spec.ts",
-          "name": "drops reasoning items that emit only whitespace"
-        },
-        {
-          "file": "tests/inline/wire-anthropic.spec.ts",
-          "name": "drops thinking blocks that emit only whitespace"
-        }
-      ]
-    },
-    {
-      "id": "settings-provider-instance-api",
-      "required": true,
-      "sourceMarkers": [
-        {
-          "file": "src/index.ts",
-          "marker": "settingsCtx.settings.installSection(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE"
-        }
-      ],
-      "tests": [
-        {
-          "file": "tests/inline/apply.spec.ts",
-          "name": "uses the settings provider instance API when legacy helpers are absent"
-        }
+        {"file": "tests/compatibility.spec.ts", "name": "accepts the supported DSH service contract"},
+        {"file": "tests/compatibility.spec.ts", "name": "fails before startup when a required API is absent"}
       ]
     }
   ],
   "requiredExports": {
     ".": [
-      "modelCatalogURL",
-      "githubCopilotModelCatalogURL",
-      "modelsFromGitHubCopilotListing",
-      "modelsFromOpenAICompatibleListing",
-      "synchronizeGitHubCopilotModelCatalog",
-      "synchronizeOpenAICompatibleModelCatalog",
-      "composeGitHubCopilotProviderRoutes",
-      "GITHUB_COPILOT_PROVIDER_ID",
-      "GITHUB_COPILOT_CHAT_PROVIDER_ID",
-      "GITHUB_COPILOT_API_KEY_ENV",
+      "GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID",
+      "GITHUB_COPILOT_CREDENTIAL_KEY",
+      "GitHubCopilotAuthorizationController",
+      "LLM_PI_AI_SETTINGS_NAMESPACE",
       "DSH_COMPATIBILITY",
-      "assertDshCompatibility",
-      "GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID"
+      "assertDshCompatibility"
     ],
+    "./client": [],
+    "./remote": [],
     "./deployment-baseline.json": []
   }
 }
