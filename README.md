@@ -49,10 +49,10 @@ dsh plugin add dsh-web-search-provider
 
 ### Cloga DSH Windows/Copilot deployment baseline
 
-The fork build `0.2.3-cloga.4` is a deployment baseline, not an upstream
+The fork build `0.2.3-cloga.5` is a deployment baseline, not an upstream
 release. Upstream remains the durable destination for these fixes. Consumers
 must pin the PR commit and the resulting
-`dsh-web-search-provider-0.2.3-cloga.4.tgz`; the package name alone is not a
+`dsh-web-search-provider-0.2.3-cloga.5.tgz`; the package name alone is not a
 sufficient identity.
 
 Build the tarball from the pinned commit and retain both the commit and archive
@@ -72,9 +72,11 @@ git rev-parse HEAD
 Every tarball exports `./deployment-baseline.json`. An installer should reject
 the package unless `schemaVersion` is `1`, `baseline.id` is
 `cloga.dsh-windows-copilot.web-search`, `package.version` is
-`0.2.3-cloga.4`, `supportedBaselines.dsh.release` is `0.1.1-rc.2`,
-`supportedBaselines.dsh.developmentRelease` is `0.1.2-alpha.2`, and all required
-capability IDs are present with `required: true`:
+`0.2.3-cloga.5`, `supportedBaselines.dsh.release` is `0.1.1-rc.2`,
+`supportedBaselines.dsh.developmentRelease` is `0.1.2-alpha.3`, and
+`supportedBaselines.dsh.peerRange` matches every declared DSH peer dependency.
+The peer range retains the alpha.2 compatibility floor while admitting alpha.3.
+All required capability IDs must also be present with `required: true`:
 `responses-replay-item-id-normalization`, `grounded-sandbox-escalation`,
 `image-attachment-bypass`, `failure-safe-copilot-model-catalog`,
 `orphaned-replay-item-filtering`, `traditional-search-compatibility-bridge`,
