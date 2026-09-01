@@ -4,7 +4,7 @@
 
 [简体中文](./README.zh.md)
 
-One plugin for GitHub Copilot models and provider-hosted web search in DeepSeek Harness (DSH) `0.1.2-alpha.3`.
+One plugin for GitHub Copilot models and provider-hosted web search in DSH Desktop `0.1.1-rc.2` and DeepSeek Harness (DSH) `0.1.2-alpha.3`.
 
 ## Install and sign in
 
@@ -13,6 +13,8 @@ dsh plugin add dsh-github-copilot
 ```
 
 Then open **Settings → Models**, find **GitHub Copilot**, and select **Sign in**. Complete the GitHub device-code flow shown in the provider card. The plugin uses DSH's built-in `llm-pi-ai` provider and writes a reference-free `llm-pi-ai.providers.github-copilot` profile without replacing other settings.
+
+On Desktop `0.1.1-rc.2`, open the dedicated **Settings → GitHub Copilot** page because that release predates the Models provider-card extension slot. On `0.1.2-alpha.3`, the same controls render directly in the GitHub Copilot provider card.
 
 No `copilot2api` process, gateway URL, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -76,7 +78,7 @@ Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential refer
 
 Public package entries are `.`, `./client`, `./remote`, and `./deployment-baseline.json`.
 
-The package peer contract targets DSH `0.1.2-alpha.3`. Because those scoped packages are not published in the configured npm registry, rc.2 development packages are used only as compiler scaffolding; CI checks the exact alpha.3 source commit and the required public seams separately.
+The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.3`. The published rc.2 packages are the local compiler baseline; CI checks the exact rc.2 and alpha.3 source commits and their required public seams separately.
 
 ## Build and verify
 

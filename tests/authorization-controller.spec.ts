@@ -170,7 +170,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(section.providers['github-copilot']).toEqual({})
   })
 
-  it('fails loudly when alpha.3 did not register the expected authorization flow', async () => {
+  it('fails loudly when DSH did not register the expected authorization flow', async () => {
     const harness = runtime({ withFlow: false })
     await expect(harness.controller.start()).rejects.toThrow(
       /did not register the GitHub Copilot authorization flow/,

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { assertDshCompatibility } from '../src/compatibility.ts'
+import { assertDshCompatibility, DSH_COMPATIBILITY } from '../src/compatibility.ts'
 
 function context(overrides: Record<string, unknown> = {}): Context {
   const services: Record<string, unknown> = {
@@ -30,6 +30,15 @@ function context(overrides: Record<string, unknown> = {}): Context {
 }
 
 describe('assertDshCompatibility', () => {
+  it('declares desktop rc.2 and alpha.3 compatibility', () => {
+    expect(DSH_COMPATIBILITY).toMatchObject({
+      release: '0.1.2-alpha.3',
+      developmentRelease: '0.1.1-rc.2',
+      peerRange: '^0.1.1-rc.2 || ^0.1.2-alpha.3',
+      supportedReleases: ['0.1.1-rc.2', '0.1.2-alpha.3'],
+    })
+  })
+
   it('accepts the supported DSH service contract', () => {
     expect(() => assertDshCompatibility(context())).not.toThrow()
   })

@@ -4,7 +4,7 @@ This file is the authoritative entry point for humans and coding agents. Read it
 
 ## Product and architecture
 
-`dsh-github-copilot` is a companion to DSH `0.1.2-alpha.3`. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth flow, credential format, token exchange, refresh, and normal model transport.
+`dsh-github-copilot` is a companion to DSH Desktop `0.1.1-rc.2` and DSH `0.1.2-alpha.3`. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth flow, credential format, token exchange, refresh, and normal model transport.
 
 This repository owns four narrow surfaces:
 
@@ -44,11 +44,14 @@ This repository owns four narrow surfaces:
 - Misconfiguration and API drift fail loudly with a named missing seam. Do not fall back to process-local secrets or implicit machine state.
 - Host, Client, and Remote package entries must stay independently buildable and exported.
 
-## DSH alpha.3 seams
+## Supported DSH seams
 
-The supported upstream baseline is tag `dsh-v0.1.2-alpha.3`, commit `dd6322d604e00eec1ba5e0c8541159906a21094a`.
+The supported upstream baselines are:
 
-- Models slot: `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`.
+- Desktop tag `dsh-v0.1.1-rc.2`, commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
+- Tag `dsh-v0.1.2-alpha.3`, commit `dd6322d604e00eec1ba5e0c8541159906a21094a`.
+
+- Models UI: alpha.3 uses `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
 - Authorization flow key: `llm-pi-ai/github-copilot`.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
 - Settings: create the provider through a path operation at `providers.github-copilot`.
@@ -82,7 +85,7 @@ pnpm pack --pack-destination artifacts
 
 `pnpm verify` is the normal complete gate. Use a focused `vitest run <files...>` while iterating, then run the complete gate before commit. CI runs frozen install, `pnpm verify`, and package creation on Windows and Linux.
 
-The alpha.3 DSH packages are not published in the configured npm registry, so the rc.2 development dependencies are compiler scaffolding only. CI separately checks out commit `dd6322d604e00eec1ba5e0c8541159906a21094a` and runs `pnpm verify:upstream -- dsh-upstream` to verify every public alpha.3 seam this plugin consumes. Do not describe rc.2 as runtime-compatible.
+The rc.2 development dependencies are the Desktop compiler and runtime baseline. The alpha.3 DSH packages are not published in the configured npm registry, so CI separately checks out both exact upstream commits and runs `pnpm verify:upstream -- dsh-upstream` to verify every public seam this plugin consumes.
 
 ## Changing capabilities
 
