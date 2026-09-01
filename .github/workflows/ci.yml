@@ -17,13 +17,18 @@ jobs:
         os:
           - ubuntu-latest
           - windows-latest
+        dsh:
+          - release: 0.1.1-rc.2
+            commit: b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
+          - release: 0.1.2-alpha.3
+            commit: dd6322d604e00eec1ba5e0c8541159906a21094a
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: dd6322d604e00eec1ba5e0c8541159906a21094a
+          ref: ${{ matrix.dsh.commit }}
           path: dsh-upstream
           persist-credentials: false
       - uses: pnpm/action-setup@v6

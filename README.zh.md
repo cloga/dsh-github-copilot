@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/dsh-github-copilot)](https://www.npmjs.com/package/dsh-github-copilot)
 
-面向 DeepSeek Harness（DSH）`0.1.2-alpha.3` 的单插件 GitHub Copilot 模型与供应方托管搜索集成。
+面向 DSH Desktop `0.1.1-rc.2` 与 DeepSeek Harness（DSH）`0.1.2-alpha.3` 的单插件 GitHub Copilot 模型与供应方托管搜索集成。
 
 ## 安装与登录
 
@@ -11,6 +11,8 @@ dsh plugin add dsh-github-copilot
 ```
 
 打开 **Settings → Models**，找到 **GitHub Copilot** 并点击 **Sign in**，然后完成 provider card 展示的 GitHub device-code 流程。插件复用 DSH 内置的 `llm-pi-ai` provider，并通过路径级设置变更创建 reference-free `llm-pi-ai.providers.github-copilot` profile，不会替换其它 provider 设置。
+
+Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录控件位于独立的 **Settings → GitHub Copilot** 页面；在 `0.1.2-alpha.3` 中，同一组控件直接显示在 GitHub Copilot provider card 内。
 
 不需要运行 `copilot2api`，不需要填写 gateway URL、placeholder API key 或原始 GitHub token，也不需要安装 `dsh-web-search-provider`。
 
@@ -74,7 +76,7 @@ Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共
 
 公开入口为 `.`, `./client`, `./remote` 和 `./deployment-baseline.json`。
 
-Peer contract 精确目标是 DSH `0.1.2-alpha.3`。由于配置的 npm registry 尚未发布这些 scoped package，rc.2 dev dependency 只作为编译脚手架；CI 会另外 checkout 精确 alpha.3 commit 并核验本插件依赖的 public seam。
+Peer contract 同时支持 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.3`。已发布的 rc.2 package 是本地编译基线；CI 会分别 checkout 精确 rc.2 与 alpha.3 commit，并核验本插件依赖的 public seam。
 
 ## 构建与验证
 

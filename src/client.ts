@@ -8,12 +8,16 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createElement, useCallback, useEffect, useState } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
-import type { ProviderCardExtrasOwnerProps } from './dsh-alpha3-types.ts'
+import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-alpha3-types.ts'
 import githubCopilotRemote from './remote.ts'
 
 export const inject = ['remote', 'slots']
 
 interface GitHubCopilotProviderCardProps extends ProviderCardExtrasOwnerProps {
+  readonly remote: ClientContext['remote']['githubCopilot']
+}
+
+interface GitHubCopilotSettingsSectionProps extends SettingsSectionOwnerProps {
   readonly remote: ClientContext['remote']['githubCopilot']
 }
 
@@ -104,14 +108,77 @@ export function GitHubCopilotProviderCard(
         }, 'Sign in with GitHub'))
 }
 
-function registerUi(ctx: ClientContext): void {
-  ctx.slots.inject('settings.models.provider-card', () => ctx.slots.register({
-    name: 'settings.models.provider-card',
-    key: 'llm-pi-ai',
-  }, (props: ProviderCardExtrasOwnerProps) => createElement(GitHubCopilotProviderCard, {
-    ...props,
-    remote: ctx.remote.githubCopilot,
-  })))
+/** rc.2 fallback for Models pages that predate the provider-card extension slot. */
+export function GitHubCopilotSettingsSection(
+  props: GitHubCopilotSettingsSectionProps,
+): ReturnType<typeof createElement> {
+  return createElement('section', { 'data-dsh-github-copilot-settings': true },
+    createElement('h2', null, 'GitHub Copilot'),
+    createElement(GitHubCopilotProviderCard, {
+      provider: {
+        provider: 'github-copilot',
+        displayName: 'GitHub Copilot',
+        settingsNs: 'llm-pi-ai',
+      },
+      configured: false,
+      keyConfigured: false,
+      remote: props.remote,
+    }))
+}
+
+function registerUi(ctx: ClientContext): () => void {
+  let providerCardActive = false
+  let settingsSectionActive = false
+  let disposeFallback: (() => void) | undefined
+
+  const syncFallback = (): void => {
+    if (settingsSectionActive && !providerCardActive) {
+      disposeFallback ??= ctx.slots.register({
+        name: 'settings.section',
+        id: 'github-copilot',
+        order: 11,
+        label: 'GitHub Copilot',
+      }, (props: SettingsSectionOwnerProps) => createElement(GitHubCopilotSettingsSection, {
+        ...props,
+        remote: ctx.remote.githubCopilot,
+      }))
+      return
+    }
+    disposeFallback?.()
+    disposeFallback = undefined
+  }
+
+  const disposeProviderCardInjection = ctx.slots.inject('settings.models.provider-card', () => {
+    providerCardActive = true
+    syncFallback()
+    const dispose = ctx.slots.register({
+      name: 'settings.models.provider-card',
+      key: 'llm-pi-ai',
+    }, (props: ProviderCardExtrasOwnerProps) => createElement(GitHubCopilotProviderCard, {
+      ...props,
+      remote: ctx.remote.githubCopilot,
+    }))
+    return () => {
+      dispose()
+      providerCardActive = false
+      syncFallback()
+    }
+  })
+
+  const disposeSettingsSectionInjection = ctx.slots.inject('settings.section', () => {
+    settingsSectionActive = true
+    syncFallback()
+    return () => {
+      settingsSectionActive = false
+      syncFallback()
+    }
+  })
+
+  return () => {
+    disposeProviderCardInjection()
+    disposeSettingsSectionInjection()
+    disposeFallback?.()
+  }
 }
 
 /** Mount the plugin-owned Remote namespace and register the Models card seat. */

@@ -31,9 +31,27 @@ assert(
 )
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
-assert(peerRange === '^0.1.2-alpha.3', 'DSH peer range must target alpha.3')
+assert(peerRange === '^0.1.1-rc.2 || ^0.1.2-alpha.3', 'DSH peer range must target rc.2 and alpha.3')
+const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
+assert(dshBaselines.length === 2, 'exactly two DSH baselines must be declared')
+assert(
+  dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
+    && entry.commit === 'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e'
+    && entry.modelsUi === 'settings-section-fallback'),
+  'DSH Desktop rc.2 baseline is missing',
+)
+assert(
+  dshBaselines.some(entry => entry.release === '0.1.2-alpha.3'
+    && entry.commit === 'dd6322d604e00eec1ba5e0c8541159906a21094a'
+    && entry.modelsUi === 'provider-card'),
+  'DSH alpha.3 baseline is missing',
+)
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
+  assert(
+    packageJson.devDependencies?.[dependency] === `^${manifest.supportedBaselines.dsh.developmentRelease}`,
+    `${dependency} development range differs`,
+  )
 }
 
 const compatibility = await read('src/compatibility.ts')
@@ -86,7 +104,7 @@ for (const heading of [
   '## Product and architecture',
   '## File map',
   '## Non-negotiable invariants',
-  '## DSH alpha.3 seams',
+  '## Supported DSH seams',
   '## Mechanical verification',
   '## Issue, branch, and PR workflow',
 ]) {
@@ -96,6 +114,7 @@ assert((await read('CLAUDE.md')).includes('[AGENTS.md](./AGENTS.md)'), 'CLAUDE.m
 
 const workflow = await read('.github/workflows/ci.yml')
 for (const command of [
+  'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e',
   'dd6322d604e00eec1ba5e0c8541159906a21094a',
   'pnpm install --frozen-lockfile',
   'pnpm verify:upstream -- dsh-upstream',

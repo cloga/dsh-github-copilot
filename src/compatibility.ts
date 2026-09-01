@@ -10,8 +10,9 @@ import * as dshSettings from '@deepseek-ai/dsh-settings'
 
 export const DSH_COMPATIBILITY = {
   release: '0.1.2-alpha.3',
-  developmentRelease: '0.1.2-alpha.3',
-  peerRange: '^0.1.2-alpha.3',
+  developmentRelease: '0.1.1-rc.2',
+  peerRange: '^0.1.1-rc.2 || ^0.1.2-alpha.3',
+  supportedReleases: ['0.1.1-rc.2', '0.1.2-alpha.3'],
   requiredApis: [
     'agentDefaultModel.currentSelection',
     'authorization.describe',
