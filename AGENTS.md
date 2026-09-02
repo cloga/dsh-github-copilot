@@ -10,8 +10,9 @@ This repository owns four narrow surfaces:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution and Client-safe Remote descriptors.
-3. Safe creation of a reference-free `llm-pi-ai.providers.github-copilot` profile.
-4. Direct provider-hosted search using the same Host-side credential lifecycle.
+3. Strict JSON normalization of pi-ai's provider-owned Copilot OAuth grant.
+4. Safe creation of a reference-free `llm-pi-ai.providers.github-copilot` profile.
+5. Direct provider-hosted search using the same Host-side credential lifecycle.
 
 ## File map
 
@@ -38,6 +39,7 @@ This repository owns four narrow surfaces:
 - The credential record key is `llm-pi-ai/github-copilot`.
 - OAuth credential payloads stay Host-only. Client Remote methods may expose status, notices, and errors only.
 - Refresh must run through pi-ai `Models.getAuth()` and DSH `credentials.modifyRecord()`.
+- Copilot OAuth grant writes must rebuild only pi-ai's documented provider fields as a fresh plain JSON object; unrelated extension values never reach DSH credential storage.
 - Settings changes are path-level. Never replace the whole `llm-pi-ai` section or unrelated provider profiles.
 - Sign-out deletes only the Copilot credential record and keeps route settings.
 - Hosted search only serves the selected `github-copilot` route, only for an account-available model and a native search protocol, after a successful probe.
@@ -56,6 +58,7 @@ The supported upstream baselines are:
 - Authorization flow key: `llm-pi-ai/github-copilot`.
 - Authorization service: alpha.4 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
+- Copilot grant schema: `type: oauth`, non-empty `refresh`/`access`, finite `expires`, optional non-empty `enterpriseUrl`, and optional deduplicated non-empty-string `availableModelIds`.
 - Settings: create the provider through a path operation at `providers.github-copilot`.
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.

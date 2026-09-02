@@ -25,6 +25,7 @@ Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录�
 - 本包只补充 Models provider-card UI、Host-only authorization Remote 和 hosted search。
 - 四个 authorization Remote 结果共用一个严格的 Zod v4 codec，因此 rc.2 会验证 status/start/cancel/sign-out view，同时 alpha.4 保持相同 wire contract。
 - 新 profile 会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集。
+- Copilot OAuth grant 在写入或复用前，会由 Host adapter 将 pi-ai 文档化字段重建为新的普通 JSON 对象。只要归属字段有效，就可接受跨模块或 null-prototype credential；无关扩展字段会被丢弃，模型 ID 按原顺序去重，归属字段格式错误时也不会在错误中泄露字段值。
 - Sign out 只删除 `llm-pi-ai/github-copilot` credential；route profile 和其它设置保持不变。
 - Hosted search 使用同一 credential record 的刷新结果直接请求 `api.individual.githubcopilot.com`。
 - Inline 路径为符合条件的 agent-loop 请求加入供应方原生 web-search tool；`github-copilot-hosted` 通过 `ctx.web` 暴露相同能力。
@@ -46,7 +47,7 @@ Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录�
 | Hosted-search probe、inline wire、`ctx.web` bridge | 本包 Host 侧 |
 | 模型选择、sandbox、工具、附件与其它 provider | DSH Core |
 
-Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共 `createModels()` 与 `Models.getAuth()`，刷新仍在 DSH credential-record 的串行 mutation 内完成。
+Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共 `createModels()` 与 `Models.getAuth()`，刷新仍在 DSH credential-record 的串行 mutation 内完成。严格的 Copilot normalizer 只持久化 `type`、`refresh`、`access`、有限数值 `expires`、可选 `enterpriseUrl` 与可选 `availableModelIds`。
 
 ## 设置
 
