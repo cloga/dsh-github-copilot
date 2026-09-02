@@ -135,6 +135,21 @@
       ]
     },
     {
+      "id": "strict-json-oauth-grant-normalization",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/copilot-auth.ts", "marker": "normalizeGitHubCopilotOAuthCredential"},
+        {"file": "src/copilot-auth.ts", "marker": "Number.isFinite(expires)"}
+      ],
+      "tests": [
+        {"file": "tests/copilot-auth.spec.ts", "name": "normalizes cross-module OAuth grants for a strict JSON credential store"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "rejects malformed required OAuth fields without exposing their values"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "rejects nonfinite OAuth expiry timestamps"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "rejects invalid OAuth model id collections"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "requires a non-empty enterprise URL when the OAuth field is present"}
+      ]
+    },
+    {
       "id": "direct-provider-hosted-search",
       "required": true,
       "sourceMarkers": [

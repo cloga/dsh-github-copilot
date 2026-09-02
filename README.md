@@ -27,6 +27,7 @@ The package installs `@deepseek-ai/dsh-authorization` as a runtime dependency. I
 - This package contributes the Models provider-card UI and its Host-only authorization Remote.
 - All four authorization Remote results use one strict Zod v4 codec, so rc.2 validates status/start/cancel/sign-out views while alpha.4 keeps the same wire contract.
 - Successful sign-in intersects the account's `availableModelIds` with the installed pi-ai catalog when creating a new route profile.
+- Before a Copilot OAuth grant is persisted or reused, the Host adapter rebuilds pi-ai's documented fields into a fresh plain JSON object. Cross-module and null-prototype credentials are accepted when their owned fields are valid; unrelated extension members are discarded, model IDs are deduplicated in order, and malformed owned fields fail without logging their values.
 - Sign-out deletes only `llm-pi-ai/github-copilot`. It intentionally keeps the route profile and all unrelated settings.
 - Hosted search calls `api.individual.githubcopilot.com` directly with the refreshed credential from that same record.
 - The inline path adds the provider-native web-search tool to eligible agent-loop calls. The `github-copilot-hosted` provider exposes the same capability through `ctx.web`.
@@ -48,7 +49,7 @@ Models that only use Chat Completions are still usable through DSH's normal `llm
 | Hosted search probe, inline wire, and `ctx.web` bridge | This package, Host-only |
 | Model selection, sandboxing, tools, attachments, and other providers | DSH Core |
 
-Credential payloads never cross the Client Remote. The hosted-search adapter uses pi-ai's public `createModels()` and `Models.getAuth()` path, so refresh remains serialized inside DSH's credential-record mutation.
+Credential payloads never cross the Client Remote. The hosted-search adapter uses pi-ai's public `createModels()` and `Models.getAuth()` path, so refresh remains serialized inside DSH's credential-record mutation. Its strict Copilot normalizer persists only `type`, `refresh`, `access`, finite `expires`, optional `enterpriseUrl`, and optional `availableModelIds`.
 
 ## Settings
 

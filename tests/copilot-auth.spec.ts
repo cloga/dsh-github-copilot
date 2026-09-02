@@ -1,6 +1,11 @@
 import { Context } from '@deepseek-ai/cordis'
+import type { Credential } from '@earendil-works/pi-ai'
+import vm from 'node:vm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createGitHubCopilotTokenResolver } from '../src/copilot-auth.ts'
+import {
+  createGitHubCopilotCredentialStore,
+  createGitHubCopilotTokenResolver,
+} from '../src/copilot-auth.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY } from '../src/authorization-controller.ts'
 
 interface GrantRecord {
@@ -8,8 +13,33 @@ interface GrantRecord {
   payload: Record<string, unknown>
 }
 
+function strictJsonRoundTrip<T>(value: T): T {
+  const inspect = (candidate: unknown): void => {
+    if (
+      candidate === null
+      || typeof candidate === 'string'
+      || typeof candidate === 'boolean'
+      || (typeof candidate === 'number' && Number.isFinite(candidate))
+    ) return
+    if (Array.isArray(candidate)) {
+      for (const entry of candidate) inspect(entry)
+      return
+    }
+    if (
+      typeof candidate !== 'object'
+      || Object.getPrototypeOf(candidate) !== Object.prototype
+    ) {
+      throw new Error('strict JSON credential store rejected a non-JSON value')
+    }
+    for (const entry of Object.values(candidate)) inspect(entry)
+  }
+  inspect(value)
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
 function runtime(record: GrantRecord | undefined): {
   readonly resolve: (modelId: string) => Promise<string | undefined>
+  readonly store: ReturnType<typeof createGitHubCopilotCredentialStore>
   readonly modifyRecord: ReturnType<typeof vi.fn>
   current(): GrantRecord | undefined
 } {
@@ -19,7 +49,8 @@ function runtime(record: GrantRecord | undefined): {
     mutate: (value: GrantRecord | undefined) => Promise<GrantRecord | undefined>,
   ) => {
     expect(key).toBe(GITHUB_COPILOT_CREDENTIAL_KEY)
-    current = await mutate(current)
+    const next = await mutate(current)
+    current = next === undefined ? undefined : strictJsonRoundTrip(next)
     return current
   })
   const credentials = {
@@ -35,6 +66,7 @@ function runtime(record: GrantRecord | undefined): {
   ctx.get = ((name: string) => name === 'credentials' ? credentials : undefined) as typeof ctx.get
   return {
     resolve: createGitHubCopilotTokenResolver(ctx),
+    store: createGitHubCopilotCredentialStore(ctx),
     modifyRecord,
     current: () => current,
   }
@@ -45,6 +77,128 @@ afterEach(() => {
 })
 
 describe('GitHub Copilot credential adapter', () => {
+  it('normalizes cross-module OAuth grants for a strict JSON credential store', async () => {
+    const credential = vm.runInNewContext(`(() => {
+      const value = Object.create(null)
+      Object.assign(value, {
+        type: 'oauth',
+        refresh: 'github-device-grant',
+        access: 'opaque-copilot-token',
+        expires: 123456789,
+        enterpriseUrl: undefined,
+        availableModelIds: ['gpt-5.4', 'gpt-5-mini', 'gpt-5.4'],
+        bigintExtension: 1n,
+        functionExtension() {},
+        symbolExtension: Symbol('extension'),
+        classExtension: new (class Extension {})(),
+      })
+      Object.defineProperty(value, 'unreadExtension', {
+        enumerable: true,
+        get() {
+          throw new Error('unrelated extension was read')
+        },
+      })
+      return value
+    })()`) as Credential
+    const harness = runtime(undefined)
+
+    await expect(harness.store.modify('github-copilot', async () => credential)).resolves.toEqual({
+      type: 'oauth',
+      refresh: 'github-device-grant',
+      access: 'opaque-copilot-token',
+      expires: 123456789,
+      availableModelIds: ['gpt-5.4', 'gpt-5-mini'],
+    })
+    expect(harness.current()).toEqual({
+      kind: 'grant',
+      payload: {
+        type: 'oauth',
+        refresh: 'github-device-grant',
+        access: 'opaque-copilot-token',
+        expires: 123456789,
+        availableModelIds: ['gpt-5.4', 'gpt-5-mini'],
+      },
+    })
+    expect(Object.getPrototypeOf(harness.current()?.payload)).toBe(Object.prototype)
+  })
+
+  it('rejects malformed required OAuth fields without exposing their values', async () => {
+    const cases = [
+      {
+        credential: { type: 'api-key', refresh: 'refresh', access: 'access', expires: 1 },
+        field: 'type',
+      },
+      {
+        credential: { type: 'oauth', refresh: '   ', access: 'access', expires: 1 },
+        field: 'refresh',
+      },
+      {
+        credential: { type: 'oauth', refresh: 'refresh', access: 123n, expires: 1 },
+        field: 'access',
+      },
+      {
+        credential: { type: 'oauth', refresh: 'refresh', access: 'access' },
+        field: 'expires',
+      },
+    ] as const
+
+    for (const { credential, field } of cases) {
+      const harness = runtime(undefined)
+      const secret = 'must-not-appear'
+      const malformed = { ...credential, unsupportedSecret: secret } as unknown as Credential
+      let failure: Error | undefined
+      try {
+        await harness.store.modify('github-copilot', async () => malformed)
+      } catch (error) {
+        failure = error as Error
+      }
+      expect(failure?.message).toContain(field)
+      expect(failure?.message).not.toContain(secret)
+      expect(harness.current()).toBeUndefined()
+    }
+  })
+
+  it('rejects nonfinite OAuth expiry timestamps', async () => {
+    for (const expires of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const harness = runtime(undefined)
+      await expect(harness.store.modify('github-copilot', async () => ({
+        type: 'oauth',
+        refresh: 'refresh',
+        access: 'access',
+        expires,
+      }))).rejects.toThrow(/expires.*finite number/)
+    }
+  })
+
+  it('rejects invalid OAuth model id collections', async () => {
+    for (const availableModelIds of [
+      'gpt-5.4',
+      ['gpt-5.4', ''],
+      ['gpt-5.4', '   '],
+      ['gpt-5.4', 42],
+    ]) {
+      const harness = runtime(undefined)
+      await expect(harness.store.modify('github-copilot', async () => ({
+        type: 'oauth',
+        refresh: 'refresh',
+        access: 'access',
+        expires: 1,
+        availableModelIds,
+      } as Credential))).rejects.toThrow(/availableModelIds.*array of non-empty strings/)
+    }
+  })
+
+  it('requires a non-empty enterprise URL when the OAuth field is present', async () => {
+    const harness = runtime(undefined)
+    await expect(harness.store.modify('github-copilot', async () => ({
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: 1,
+      enterpriseUrl: '',
+    }))).rejects.toThrow(/enterpriseUrl.*non-empty string/)
+  })
+
   it('refreshes the llm-pi-ai grant in-place and returns the Copilot API token', async () => {
     const freshToken = 'tid=test;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;'
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
