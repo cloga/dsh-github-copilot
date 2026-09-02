@@ -63,6 +63,7 @@ export type { InlineConfig } from './config.ts'
 export { assertDshCompatibility, DSH_COMPATIBILITY } from './compatibility.ts'
 export {
   GITHUB_COPILOT_CREDENTIAL_KEY,
+  GITHUB_COPILOT_ROUTE_REPLAY_MARKERS,
   GitHubCopilotAuthorizationController,
   LLM_PI_AI_SETTINGS_NAMESPACE,
 } from './authorization-controller.ts'

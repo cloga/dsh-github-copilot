@@ -5,6 +5,7 @@ import vm from 'node:vm'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
+const deploymentBaseline = JSON.parse(await readFile(resolve(root, 'deployment-baseline.json'), 'utf8'))
 if (packageJson.dependencies?.['@deepseek-ai/dsh-authorization'] === undefined) {
   throw new Error('package must install the rc.2 authorization bootstrap dependency')
 }
@@ -25,6 +26,15 @@ for (const [subpath, target] of Object.entries(packageJson.exports ?? {})) {
 
 for (const entry of ['lib/index.js', 'lib/client.js', 'lib/remote.js']) {
   await access(resolve(root, entry))
+}
+
+const hostCode = await readFile(resolve(root, 'lib/index.js'), 'utf8')
+for (const capability of deploymentBaseline.capabilities ?? []) {
+  for (const marker of capability.builtMarkers ?? []) {
+    if (!hostCode.includes(marker)) {
+      throw new Error(`built host is missing ${capability.id} marker: ${marker}`)
+    }
+  }
 }
 
 const clientCode = await readFile(resolve(root, 'lib/client.js'), 'utf8')

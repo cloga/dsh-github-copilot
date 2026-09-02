@@ -10,6 +10,10 @@ import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 export const GITHUB_COPILOT_CREDENTIAL_KEY = 'llm-pi-ai/github-copilot'
 export const GITHUB_COPILOT_PROVIDER_ID = 'github-copilot'
 export const LLM_PI_AI_SETTINGS_NAMESPACE = 'llm-pi-ai'
+export const GITHUB_COPILOT_ROUTE_REPLAY_MARKERS = [
+  'github-copilot-route-self-heal',
+  'github-copilot-route-model-id-api',
+] as const
 
 export interface AuthorizationNoticeView {
   readonly message: string
@@ -121,6 +125,31 @@ function hasProviderProfile(section: unknown): boolean {
     && Object.hasOwn(providers, GITHUB_COPILOT_PROVIDER_ID)
 }
 
+function providerProfileMatches(section: unknown, expected: Record<string, unknown>): boolean {
+  if (!hasProviderProfile(section)) return false
+  const providers = Reflect.get(section as object, 'providers') as object
+  const current = Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
+  if (typeof current !== 'object' || current === null) return false
+
+  const expectedModels = Reflect.get(expected, 'models')
+  if (!Array.isArray(expectedModels)) return Object.keys(current).length === 0
+  if (Object.keys(current).length !== 1) return false
+  const currentModels = Reflect.get(current, 'models')
+  if (!Array.isArray(currentModels) || currentModels.length !== expectedModels.length) return false
+  return currentModels.every((entry, index) => {
+    const expectedEntry = expectedModels[index]
+    return typeof entry === 'object'
+      && entry !== null
+      && typeof expectedEntry === 'object'
+      && expectedEntry !== null
+      && Object.keys(entry).length === 2
+      && Object.hasOwn(entry, 'id')
+      && Object.hasOwn(entry, 'api')
+      && Reflect.get(entry, 'id') === Reflect.get(expectedEntry, 'id')
+      && Reflect.get(entry, 'api') === Reflect.get(expectedEntry, 'api')
+  })
+}
+
 /**
  * Remote owner for the browser companion. No credential payload crosses this
  * service: status uses record descriptions, sign-in delegates to the
@@ -131,6 +160,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   private notices: AuthorizationNoticeView[] = []
   private failure: string | undefined
   private attempt: Promise<void> | undefined
+  private profileRepair: Promise<void> | undefined
 
   constructor(ctx: Context) {
     super(ctx, 'githubCopilotAuthorization', { namespace: 'githubCopilot' })
@@ -150,6 +180,9 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     )
     const record = await credentials.describeRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
     const inFlight = authorization.describe(GITHUB_COPILOT_CREDENTIAL_KEY)?.inFlight === true
+    if (record.configured && !inFlight && this.attempt === undefined) {
+      await this.ensureProviderProfile()
+    }
     return {
       phase: inFlight
         ? 'authorizing'
@@ -167,10 +200,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   @Remote
   async start(): Promise<GitHubCopilotAuthorizationView> {
     const current = await this.status()
-    if (current.configured) {
-      await this.ensureProviderProfile()
-      return this.status()
-    }
+    if (current.configured) return current
     if (current.inFlight || this.attempt !== undefined) return current
 
     const authorization = service<AuthorizationServiceView>(
@@ -259,14 +289,24 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   }
 
   private async ensureProviderProfile(): Promise<void> {
+    if (this.profileRepair !== undefined) return this.profileRepair
+    const running = this.repairProviderProfile().finally(() => {
+      this.profileRepair = undefined
+    })
+    this.profileRepair = running
+    return running
+  }
+
+  private async repairProviderProfile(): Promise<void> {
     const settings = service<SettingsServiceView>(this.ctx, 'settings', ['get', 'mutate'])
-    if (hasProviderProfile(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE))) return
     const credentials = service<CredentialRecordServiceView>(
       this.ctx,
       'credentials',
       ['readRecord'],
     )
     const profile = providerProfileFrom(await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY))
+    const section = settings.get(LLM_PI_AI_SETTINGS_NAMESPACE)
+    if (providerProfileMatches(section, profile)) return
     await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, [{
       op: 'set',
       path: ['providers', GITHUB_COPILOT_PROVIDER_ID],

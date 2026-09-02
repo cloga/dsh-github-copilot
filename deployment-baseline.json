@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.7"
+    "version": "0.3.0-cloga.8"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -116,7 +116,7 @@
         {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID]"}
       ],
       "tests": [
-        {"file": "tests/authorization-controller.spec.ts", "name": "does not replace an existing Copilot profile or unrelated provider settings"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not replace an exact Copilot profile or unrelated provider settings"},
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
         {"file": "tests/authorization-controller.spec.ts", "name": "fails loudly instead of enabling the full catalog when no installed model is available"},
         {"file": "tests/authorization-controller.spec.ts", "name": "signs out by deleting only the llm-pi-ai Copilot record and keeps the route profile"}
@@ -135,6 +135,23 @@
         {"file": "tests/authorization-controller.spec.ts", "name": "omits account model ids unsupported by the installed catalog"},
         {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "accepts both mixed-protocol model entries through the real Core config"},
         {"file": "tests/plan.spec.ts", "name": "excludes a model-level Completions route and admits a model-level Responses route"}
+      ]
+    },
+    {
+      "id": "existing-grant-route-self-heal",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/authorization-controller.ts", "marker": "record.configured && !inFlight && this.attempt === undefined"},
+        {"file": "src/authorization-controller.ts", "marker": "providerProfileMatches(section, profile)"}
+      ],
+      "builtMarkers": [
+        "github-copilot-route-self-heal",
+        "github-copilot-route-model-id-api"
+      ],
+      "tests": [
+        {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "self-heals an empty route from an existing OAuth grant during status refresh"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "self-heals an incomplete route to the exact reference-free mixed-protocol model shape"}
       ]
     },
     {
@@ -231,6 +248,7 @@
     ".": [
       "GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID",
       "GITHUB_COPILOT_CREDENTIAL_KEY",
+      "GITHUB_COPILOT_ROUTE_REPLAY_MARKERS",
       "GitHubCopilotAuthorizationController",
       "LLM_PI_AI_SETTINGS_NAMESPACE",
       "DSH_COMPATIBILITY",

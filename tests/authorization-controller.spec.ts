@@ -18,11 +18,19 @@ function runtime(options: {
   configured?: boolean
   withFlow?: boolean
   availableModelIds?: readonly string[]
+  providerProfile?: unknown
 } = {}): Runtime {
   let configured = options.configured ?? false
   let resolveAuthorization: (() => void) | undefined
   const settingsDocument: Record<string, unknown> = {
-    'llm-pi-ai': { providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } },
+    'llm-pi-ai': {
+      providers: {
+        openai: { apiKeyEnv: 'OPENAI_API_KEY' },
+        ...options.providerProfile === undefined
+          ? {}
+          : { 'github-copilot': options.providerProfile },
+      },
+    },
   }
   const mutate = vi.fn(async (_ns: string, operations: Array<{ path: string[]; value: unknown }>) => {
     const providers = (settingsDocument['llm-pi-ai'] as { providers: Record<string, unknown> }).providers
@@ -68,6 +76,9 @@ function runtime(options: {
             kind: 'grant',
             payload: {
               type: 'oauth',
+              refresh: 'refresh-token',
+              access: 'access-token',
+              expires: 1_900_000_000_000,
               availableModelIds: options.availableModelIds,
             },
           }
@@ -97,7 +108,7 @@ function runtime(options: {
 
 describe('GitHubCopilotAuthorizationController', () => {
   it('signs in through the built-in flow and adds only the reference-free Copilot profile', async () => {
-    const harness = runtime()
+    const harness = runtime({ availableModelIds: ['gpt-5.6-sol'] })
     const started = await harness.controller.start()
 
     expect(started.phase).toBe('authorizing')
@@ -114,25 +125,82 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
       op: 'set',
       path: ['providers', 'github-copilot'],
-      value: {},
+      value: { models: [{ id: 'gpt-5.6-sol', api: 'openai-responses' }] },
     }])
     expect(harness.settingsDocument['llm-pi-ai']).toEqual({
       providers: {
         openai: { apiKeyEnv: 'OPENAI_API_KEY' },
-        'github-copilot': {},
+        'github-copilot': {
+          models: [{ id: 'gpt-5.6-sol', api: 'openai-responses' }],
+        },
       },
     })
   })
 
-  it('does not replace an existing Copilot profile or unrelated provider settings', async () => {
-    const harness = runtime({ configured: true })
+  it('does not replace an exact Copilot profile or unrelated provider settings', async () => {
+    const profile = {
+      models: [
+        { id: 'gemini-3.6-flash', api: 'openai-completions' },
+        { id: 'gpt-5.6-sol', api: 'openai-responses' },
+      ],
+    }
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gemini-3.6-flash', 'gpt-5.6-sol'],
+      providerProfile: profile,
+    })
     const section = harness.settingsDocument['llm-pi-ai'] as { providers: Record<string, unknown> }
-    section.providers['github-copilot'] = { models: [{ id: 'gpt-5' }] }
 
-    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
+    await expect(harness.controller.status()).resolves.toMatchObject({ phase: 'signed-in' })
     expect(harness.mutate).not.toHaveBeenCalled()
     expect(section.providers.openai).toEqual({ apiKeyEnv: 'OPENAI_API_KEY' })
-    expect(section.providers['github-copilot']).toEqual({ models: [{ id: 'gpt-5' }] })
+    expect(section.providers['github-copilot']).toEqual(profile)
+  })
+
+  it('self-heals an empty route from an existing OAuth grant during status refresh', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gemini-3.6-flash', 'gpt-5.6-sol'],
+      providerProfile: {},
+    })
+
+    await expect(harness.controller.status()).resolves.toMatchObject({ phase: 'signed-in' })
+    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set',
+      path: ['providers', 'github-copilot'],
+      value: {
+        models: [
+          { id: 'gemini-3.6-flash', api: 'openai-completions' },
+          { id: 'gpt-5.6-sol', api: 'openai-responses' },
+        ],
+      },
+    }])
+  })
+
+  it('self-heals an incomplete route to the exact reference-free mixed-protocol model shape', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gemini-3.6-flash', 'gpt-5.6-sol'],
+      providerProfile: {
+        api: 'openai-responses',
+        baseURL: 'https://example.invalid',
+        apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
+        models: [
+          { id: 'gemini-3.6-flash' },
+          { id: 'gpt-5.6-sol', api: 'openai-completions', extra: true },
+        ],
+      },
+    })
+
+    await expect(harness.controller.status()).resolves.toMatchObject({ phase: 'signed-in' })
+    const section = harness.settingsDocument['llm-pi-ai'] as { providers: Record<string, unknown> }
+    expect(section.providers['github-copilot']).toEqual({
+      models: [
+        { id: 'gemini-3.6-flash', api: 'openai-completions' },
+        { id: 'gpt-5.6-sol', api: 'openai-responses' },
+      ],
+    })
+    expect(section.providers.openai).toEqual({ apiKeyEnv: 'OPENAI_API_KEY' })
   })
 
   it('materializes the exact mixed-protocol account route without route-level connection fields', async () => {
@@ -141,7 +209,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       availableModelIds: ['gemini-3.6-flash', 'gpt-5.6-sol'],
     })
 
-    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
+    await expect(harness.controller.status()).resolves.toMatchObject({ phase: 'signed-in' })
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
       op: 'set',
       path: ['providers', 'github-copilot'],

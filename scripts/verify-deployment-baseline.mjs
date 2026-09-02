@@ -40,6 +40,10 @@ assert(
   manifest.capabilities?.some(capability => capability.id === 'strict-json-oauth-grant-normalization'),
   'strict JSON OAuth grant normalization capability is missing',
 )
+assert(
+  manifest.capabilities?.some(capability => capability.id === 'existing-grant-route-self-heal'),
+  'existing grant route self-heal capability is missing',
+)
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(peerRange === '^0.1.1-rc.2 || ^0.1.2-alpha.4', 'DSH peer range must target rc.2 and alpha.4')
