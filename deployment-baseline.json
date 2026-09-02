@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.3"
+    "version": "0.3.0-cloga.4"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -54,6 +54,18 @@
     }
   },
   "capabilities": [
+    {
+      "id": "client-module-loader-handoff",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "tsdown.config.ts", "marker": "window.__ModuleLoader__.load"},
+        {"file": "tsdown.config.ts", "marker": "return module.exports"}
+      ],
+      "tests": [
+        {"file": "tests/client-bundle.spec.ts", "name": "hands off the built client with the exact plugin id and injected require"},
+        {"file": "tests/client-bundle.spec.ts", "name": "materializes the built client apply and inject exports"}
+      ]
+    },
     {
       "id": "authorization-service-bootstrap",
       "required": true,

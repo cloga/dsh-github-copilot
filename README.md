@@ -78,7 +78,8 @@ Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential refer
 - `src/remote.ts`: Client-safe Typert descriptors.
 - `src/current-provider.ts`, `src/plan.ts`: selected-route projection and fail-closed search planning.
 - `src/probe.ts`, `src/wire*.ts`, `src/traditional-search.ts`: hosted-search transports.
-- `lib/index.js`, `lib/client.js`, `lib/remote.js`: generated package entries; never edit them directly.
+- `lib/index.js`, `lib/remote.js`: generated ESM Host/Remote package entries.
+- `lib/client.js`: generated DSH client closure bundle. It registers `dsh-github-copilot` through `window.__ModuleLoader__.load`, resolves loader-table externals through the injected `require`, and returns `apply`/`inject`; never edit it directly.
 
 Public package entries are `.`, `./client`, `./remote`, and `./deployment-baseline.json`.
 
@@ -86,12 +87,14 @@ The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.3`; authori
 
 ## Build and verify
 
+The client build follows DSH's standard `packages/client/tsdown.client.ts` contract: tsdown emits CJS inside a loader factory instead of publishing plain browser ESM.
+
 ```sh
 pnpm install --frozen-lockfile
-pnpm test
 pnpm typecheck
 pnpm verify:baseline
 pnpm build
+pnpm test
 pnpm verify:package
 pnpm pack --pack-destination artifacts
 ```

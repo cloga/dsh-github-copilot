@@ -1,14 +1,38 @@
 import { defineConfig } from 'tsdown'
+import type { UserConfig } from 'tsdown'
 
 /**
- * Bundle the TypeScript-emitted entry into one ESM artifact, mirroring the
- * DeepSeek Harness package build: `tsc` (rewriteRelativeImportExtensions)
- * emits `lib/types/*.js` plus declarations, tsdown bundles the entry
- * into `lib/index.js` so `files` ships one runtime file. The build script
- * `rm -rf lib` first, so artifacts of sources deleted since the last build
- * never leak into the package; tsdown itself must NOT clean, because its
- * outDir is also the tsc output it bundles as its entry.
+ * Match DeepSeek Harness packages/client/tsdown.client.ts for a standalone
+ * package: emit CJS inside the ModuleLoader factory and leave only requested
+ * loader-table modules external. The banner/intro/footer are tsdown output
+ * configuration, so generated code owns the handoff rather than source code.
  */
+function clientBundle(id: string, entry: string): UserConfig {
+  const externals = new Set(['react'])
+  const isExternal = (specifier: string): boolean => externals.has(specifier)
+  return {
+    name: `${id}/client`,
+    entry: { client: entry },
+    outDir: 'lib',
+    format: 'cjs',
+    platform: 'browser',
+    target: 'es2024',
+    dts: false,
+    sourcemap: true,
+    clean: false,
+    deps: {
+      neverBundle: isExternal,
+      alwaysBundle: specifier => !isExternal(specifier),
+    },
+    outputOptions: {
+      entryFileNames: 'client.js',
+      banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(id)}, factory: (require) => {`,
+      footer: 'return module.exports; } });',
+      intro: 'var module = { exports: {} }; var exports = module.exports;',
+    },
+  }
+}
+
 export default defineConfig([
   {
     entry: ['lib/types/index.js'],
@@ -20,16 +44,7 @@ export default defineConfig([
     dts: false,
     clean: false,
   },
-  {
-    entry: ['lib/types/client.js'],
-    outDir: 'lib',
-    format: ['esm'],
-    platform: 'browser',
-    target: 'es2024',
-    fixedExtension: false,
-    dts: false,
-    clean: false,
-  },
+  clientBundle('dsh-github-copilot', 'lib/types/client.js'),
   {
     entry: ['lib/types/remote.js'],
     outDir: 'lib',
