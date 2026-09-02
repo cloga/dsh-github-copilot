@@ -1,5 +1,5 @@
 /**
- * Capability probe: one bounded request per candidate protocol that forces
+ * Capability probe: one bounded operation per candidate protocol that forces
  * the server-side web tool to run and checks the reply for the structured
  * evidence that it did. A protocol claim is trusted only after this passes —
  * several "Responses-compatible" gateways accept the `web_search` tool field
@@ -29,6 +29,9 @@ const USER_AGENT = `dsh-github-copilot/${version}`
 /** Upper bound on generated tokens for a probe reply; the verdict needs none of it. */
 const PROBE_MAX_TOKENS = 64
 
+/** Complete spelling rounds allowed after structurally valid transient replies. */
+const RESPONSES_PROBE_ROUNDS = 2
+
 /** The outcome of probing one candidate. */
 export interface ProbeOutcome {
   readonly supported: boolean
@@ -46,7 +49,7 @@ export interface ProbeOutcome {
 const MAX_PROBE_TIMEOUT_MS = 2_147_483_647
 
 /**
- * Probe one candidate protocol with a single bounded request. The verdict is
+ * Probe one candidate protocol with a bounded request sequence. The verdict is
  * structural: a Responses reply must contain a `web_search_call` item and a
  * Messages reply must contain a `web_search_tool_result` block; anything else
  * — HTTP error, unparseable body, silent tool ignore — is "not supported".
@@ -62,8 +65,8 @@ export async function probeCandidate(
   resolveApiKey: (candidate: SearchPlanCandidate) => Promise<string | ResolvedRequestAuth | undefined>,
   timeoutMs: number,
 ): Promise<ProbeOutcome> {
-  // Clamp: `AbortSignal.timeout` (and `setTimeout`) refuse values beyond 2^31-1
-  // in different ways; the clamp keeps an absurd config from throwing.
+  // Clamp: `setTimeout` refuses values beyond 2^31-1; the clamp keeps an
+  // absurd config from throwing.
   const bound = Math.min(Math.max(Math.trunc(timeoutMs), 1), MAX_PROBE_TIMEOUT_MS)
   const deadline = Date.now() + bound
   const cancellation = new AbortController()
@@ -83,7 +86,7 @@ export async function probeCandidate(
   }
 }
 
-/** Resolve the key and probe the endpoint; the fetch is bounded by the remaining deadline. */
+/** Resolve the key and probe the endpoint under the shared whole-probe deadline. */
 async function runProbe(
   candidate: SearchPlanCandidate,
   resolveApiKey: (candidate: SearchPlanCandidate) => Promise<string | ResolvedRequestAuth | undefined>,
@@ -102,16 +105,15 @@ async function runProbe(
     candidate = applyRequestAuth(candidate, auth)
     const apiKey = auth.apiKey
     // The race above returns the verdict at `bound`, but the work keeps
-    // running: a key that lands late must not start a FRESH fetch with a
-    // fresh timeout. Check the remaining budget and bound the fetch to it.
+    // running: a key that lands late must not start a fetch after the shared
+    // deadline. Every request uses the same cancellation signal and timer.
     const remaining = deadline - Date.now()
     if (cancellation.aborted || remaining <= 0) {
       return { supported: false, detail: `probe timed out after ${bound}ms` }
     }
-    const signal = AbortSignal.any([cancellation, AbortSignal.timeout(remaining)])
     return candidate.protocol === 'openai-responses'
-      ? await probeResponses(candidate, apiKey, signal)
-      : await probeAnthropic(candidate, apiKey, signal)
+      ? await probeResponses(candidate, apiKey, cancellation)
+      : await probeAnthropic(candidate, apiKey, cancellation)
   } catch (error) {
     if (error instanceof WebError) {
       return { supported: false, detail: error.message }
@@ -120,11 +122,11 @@ async function runProbe(
   }
 }
 
-/** The verdict of one spelling attempt; `retryOther` marks spelling-specific failures. */
+/** The verdict of one spelling attempt; only missing structural evidence is transient. */
 interface SpellingVerdict {
   readonly supported: boolean
   readonly detail: string
-  readonly retryOther: boolean
+  readonly transient: boolean
 }
 
 /**
@@ -135,8 +137,8 @@ interface SpellingVerdict {
  * @param apiKey - the resolved credential.
  * @param signal - the probe timeout signal.
  * @param spelling - the tool type spelling to exercise.
- * @returns the verdict; `retryOther` is true when the failure is specific to
- *   the spelling (refused tool type, or a 2xx that ignored the tool).
+ * @returns the verdict; `transient` is true only for a valid 2xx reply that
+ *   omitted the required structural evidence.
  */
 async function probeResponsesSpelling(
   candidate: SearchPlanCandidate,
@@ -170,8 +172,8 @@ async function probeResponsesSpelling(
       signal,
     })
   } catch (error) {
-    if (isAbortError(error)) return { supported: false, detail: 'probe timed out or was aborted', retryOther: false }
-    return { supported: false, detail: `probe request failed: ${String(error)}`, retryOther: false }
+    if (isAbortError(error)) return { supported: false, detail: 'probe timed out or was aborted', transient: false }
+    return { supported: false, detail: `probe request failed: ${String(error)}`, transient: false }
   }
 
   if (!response.ok) {
@@ -182,34 +184,35 @@ async function probeResponsesSpelling(
     } catch {
       // The error body is best-effort; the status alone already names the failure.
     }
-    // A 400 about the tool type is spelling-specific; auth, rate, and server
-    // failures are endpoint-level and a second spelling cannot fix them.
-    const retryOther = response.status === 400 && /tool|unsupported|unknown/i.test(detail)
-    return { supported: false, detail, retryOther }
+    return { supported: false, detail, transient: false }
   }
   let body: ResponsesResponse
   try {
-    body = JSON.parse(await readBounded(response, endpoint)) as ResponsesResponse
+    const parsed = JSON.parse(await readBounded(response, endpoint)) as unknown
+    if (typeof parsed !== 'object' || parsed === null || !Array.isArray((parsed as ResponsesResponse).output)) {
+      return { supported: false, detail: 'malformed probe reply: expected an output array', transient: false }
+    }
+    body = parsed as ResponsesResponse
   } catch (error) {
-    return { supported: false, detail: `unparseable probe reply: ${String(error)}`, retryOther: false }
+    return { supported: false, detail: `unparseable probe reply: ${String(error)}`, transient: false }
   }
-  const ranSearch = (body.output ?? []).some(item => item.type === 'web_search_call')
+  const ranSearch = body.output!.some(item => item.type === 'web_search_call')
   return ranSearch
-    ? { supported: true, detail: 'native web search answered the probe', retryOther: false }
+    ? { supported: true, detail: 'native web search answered the probe', transient: false }
     : {
         supported: false,
         detail: 'the endpoint accepted the request but executed no web_search_call; the web_search tool may be ignored',
-        retryOther: true,
+        transient: true,
       }
 }
 
 /**
- * Probe the Responses endpoint, falling back between the two tool spellings.
+ * Probe the Responses endpoint in bounded rounds over both tool spellings.
  * The candidate's primary spelling goes first (standard by default, versioned
- * for OpenCode Go hosts); a spelling-specific failure (refused tool type or a
- * 2xx that ignored the tool) retries with the other spelling, so unknown
- * gateway-style endpoints self-adapt. The verified spelling is reported back
- * for the wire to use.
+ * for OpenCode Go hosts). Only a structurally valid 2xx reply that omitted
+ * `web_search_call` advances to another attempt. All other failures stop
+ * immediately. Both rounds share the whole-probe deadline and signal. The
+ * verified spelling is reported back for the wire to use.
  */
 async function probeResponses(candidate: SearchPlanCandidate, apiKey: string, signal: AbortSignal): Promise<ProbeOutcome> {
   const primary = candidate.webSearchToolType ?? WEB_SEARCH_TOOL_TYPE
@@ -217,15 +220,22 @@ async function probeResponses(candidate: SearchPlanCandidate, apiKey: string, si
     ? [RESPONSES_WEB_SEARCH_TOOL_TYPE, WEB_SEARCH_TOOL_TYPE]
     : [WEB_SEARCH_TOOL_TYPE, RESPONSES_WEB_SEARCH_TOOL_TYPE]
   let firstDetail: string | undefined
-  for (const spelling of spellings) {
-    const verdict = await probeResponsesSpelling(candidate, apiKey, signal, spelling)
-    if (verdict.supported) {
-      return { supported: true, detail: verdict.detail, webSearchToolType: spelling }
+  let attempts = 0
+  for (let round = 0; round < RESPONSES_PROBE_ROUNDS; round += 1) {
+    for (const spelling of spellings) {
+      attempts += 1
+      const verdict = await probeResponsesSpelling(candidate, apiKey, signal, spelling)
+      if (verdict.supported) {
+        return { supported: true, detail: verdict.detail, webSearchToolType: spelling }
+      }
+      if (!verdict.transient) return { supported: false, detail: verdict.detail }
+      firstDetail ??= verdict.detail
     }
-    if (!verdict.retryOther) return { supported: false, detail: verdict.detail }
-    firstDetail ??= verdict.detail
   }
-  return { supported: false, detail: firstDetail ?? 'the endpoint accepted neither web_search spelling' }
+  return {
+    supported: false,
+    detail: `${firstDetail ?? 'the endpoint accepted neither web_search spelling'} after ${attempts} transient attempts`,
+  }
 }
 
 /** Probe the Messages endpoint: enable `web_search_20250305` and require a result block. */

@@ -24,7 +24,7 @@ Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录�
 - Sign out 只删除 `llm-pi-ai/github-copilot` credential；route profile 和其它设置保持不变。
 - Hosted search 使用同一 credential record 的刷新结果直接请求 `api.individual.githubcopilot.com`。
 - Inline 路径为符合条件的 agent-loop 请求加入供应方原生 web-search tool；`github-copilot-hosted` 通过 `ctx.web` 暴露相同能力。
-- 搜索默认 fail closed：当前 route 必须是 `github-copilot`，账号必须允许该模型，模型协议必须支持原生搜索，且 capability probe 必须成功。
+- 搜索默认 fail closed：当前 route 必须是 `github-copilot`，账号必须允许该模型，模型协议必须支持原生搜索，且 capability probe 必须成功。Responses probe 仅在有效 2xx 响应缺少 `web_search_call` 时重试，最多按两种受支持拼写执行两轮（共四次请求）；auth、HTTP、响应体格式错误、abort 与网络失败会立即停止，所有尝试共享配置的整段 probe 超时。
 
 仅支持 Chat Completions 的 Copilot 模型仍可通过 DSH 原生 `llm-pi-ai` 使用，但不会宣称 hosted search 可用。
 

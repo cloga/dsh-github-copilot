@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "First-class GitHub Copilot model and hosted-search integration for DeepSeek Harness.",
-  "version": "0.3.0-cloga.1",
+  "version": "0.3.0-cloga.2",
   "packageManager": "pnpm@11.7.0",
   "publishConfig": {
     "access": "public",
