@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.1"
+    "version": "0.3.0-cloga.2"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -98,7 +98,8 @@
       "sourceMarkers": [
         {"file": "src/plan.ts", "marker": "route.provider !== 'github-copilot'"},
         {"file": "src/copilot-request.ts", "marker": "Openai-Intent"},
-        {"file": "src/wire.ts", "marker": "WEB_SEARCH_TOOL_TYPE"}
+        {"file": "src/wire.ts", "marker": "WEB_SEARCH_TOOL_TYPE"},
+        {"file": "src/probe.ts", "marker": "RESPONSES_PROBE_ROUNDS = 2"}
       ],
       "tests": [
         {"file": "tests/plan.spec.ts", "name": "inherits model, endpoint, protocol, credential record, and catalog headers"},
@@ -107,6 +108,9 @@
         {"file": "tests/copilot-request.spec.ts", "name": "preserves the Anthropic v1 path on a credential-specific endpoint"},
         {"file": "tests/copilot-request.spec.ts", "name": "adds dynamic headers for business and enterprise Copilot endpoints"},
         {"file": "tests/probe.spec.ts", "name": "confirms support via the standard spelling and reports it"},
+        {"file": "tests/probe.spec.ts", "name": "retries a transient first round and succeeds in the next round"},
+        {"file": "tests/probe.spec.ts", "name": "bounds all-transient replies to two complete spelling rounds"},
+        {"file": "tests/probe.spec.ts", "name": "shares one whole-probe deadline and signal across retries"},
         {"file": "tests/inline/wire.spec.ts", "name": "skips web_search_call events and streams the answer normally"},
         {"file": "tests/inline/wire.spec.ts", "name": "skips a pass-through function_call named web_search without slotting it"}
       ]

@@ -8,6 +8,7 @@ import { probeCandidate } from '../src/probe.ts'
 import { makeCandidate } from './helpers.ts'
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
@@ -52,20 +53,12 @@ describe('probeCandidate (openai-responses)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('falls back to the versioned spelling when the standard one is refused', async () => {
-    const fetchMock = vi.fn(async (_url, init) => {
-      const body = JSON.parse(String((init as RequestInit).body))
-      const type = (body.tools as Array<{ type: string }>)[0]?.type
-      return type === 'web_search'
-        ? new Response(JSON.stringify({ error: { message: 'unsupported tool type' } }), { status: 400 })
-        : new Response(JSON.stringify({ output: [{ type: 'web_search_call', id: 'ws-1' }] }), { status: 200 })
-    })
-    vi.stubGlobal('fetch', fetchMock)
+  it('stops after a spelling-specific HTTP failure', async () => {
+    const fetchMock = stubFetch({ error: { message: 'unsupported tool type' } }, 400)
     const outcome = await probeCandidate(makeCandidate('openai-responses'), async () => KEY, 1000)
-    expect(outcome.supported).toBe(true)
-    // The fallback winner is what the wire must use.
-    expect(outcome.webSearchToolType).toBe('web_search_2025_08_26')
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(outcome.supported).toBe(false)
+    expect(outcome.detail).toContain('unsupported tool type')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('falls back when a 2xx reply executed no search', async () => {
@@ -80,13 +73,32 @@ describe('probeCandidate (openai-responses)', () => {
     const outcome = await probeCandidate(makeCandidate('openai-responses'), async () => KEY, 1000)
     expect(outcome.supported).toBe(true)
     expect(outcome.webSearchToolType).toBe('web_search_2025_08_26')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('rejects a 2xx reply that executed no search with either spelling', async () => {
-    stubFetch({ output: [{ type: 'message', content: [{ type: 'output_text', text: 'no search' }] }] })
+  it('retries a transient first round and succeeds in the next round', async () => {
+    const attemptedSpellings: string[] = []
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String((init as RequestInit).body))
+      attemptedSpellings.push((body.tools as Array<{ type: string }>)[0]?.type ?? '')
+      return attemptedSpellings.length === 3
+        ? new Response(JSON.stringify({ output: [{ type: 'web_search_call', id: 'ws-1' }] }), { status: 200 })
+        : new Response(JSON.stringify({ output: [{ type: 'message', content: [] }] }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const outcome = await probeCandidate(makeCandidate('openai-responses'), async () => KEY, 1000)
+    expect(outcome.supported).toBe(true)
+    expect(outcome.webSearchToolType).toBe('web_search')
+    expect(attemptedSpellings).toEqual(['web_search', 'web_search_2025_08_26', 'web_search'])
+  })
+
+  it('bounds all-transient replies to two complete spelling rounds', async () => {
+    const fetchMock = stubFetch({ output: [{ type: 'message', content: [{ type: 'output_text', text: 'no search' }] }] })
     const outcome = await probeCandidate(makeCandidate('openai-responses'), async () => KEY, 1000)
     expect(outcome.supported).toBe(false)
     expect(outcome.detail).toContain('no web_search_call')
+    expect(outcome.detail).toContain('4 transient attempts')
+    expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
   it('rejects an HTTP error and names the provider message', async () => {
@@ -104,11 +116,21 @@ describe('probeCandidate (openai-responses)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('does not retry a malformed successful response body', async () => {
+    const fetchMock = stubFetch({ id: 'response-without-output' })
+    const outcome = await probeCandidate(makeCandidate('openai-responses'), async () => KEY, 1000)
+    expect(outcome.supported).toBe(false)
+    expect(outcome.detail).toContain('malformed probe reply')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects a network failure', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED') }))
+    const fetchMock = vi.fn(async () => { throw new Error('ECONNREFUSED') })
+    vi.stubGlobal('fetch', fetchMock)
     const outcome = await probeCandidate(makeCandidate('openai-responses'), async () => KEY, 1000)
     expect(outcome.supported).toBe(false)
     expect(outcome.detail).toContain('ECONNREFUSED')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -136,6 +158,32 @@ describe('probeCandidate (credential gating)', () => {
 })
 
 describe('probeCandidate (timeout bound)', () => {
+  it('shares one whole-probe deadline and signal across retries', async () => {
+    vi.useFakeTimers()
+    const signals: AbortSignal[] = []
+    const fetchMock = vi.fn(async (_url, init) => {
+      const signal = (init as RequestInit).signal as AbortSignal
+      signals.push(signal)
+      if (signals.length <= 2) {
+        await new Promise(resolve => setTimeout(resolve, 20))
+        return new Response(JSON.stringify({ output: [{ type: 'message', content: [] }] }), { status: 200 })
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const outcomePromise = probeCandidate(makeCandidate('openai-responses'), async () => KEY, 50)
+    await vi.advanceTimersByTimeAsync(49)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1)
+
+    const outcome = await outcomePromise
+    expect(outcome).toEqual({ supported: false, detail: 'probe timed out after 50ms' })
+    expect(signals.every(signal => signal === signals[0])).toBe(true)
+  })
+
   it('bounds a hanging credential resolution', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('should never be called') }))
     const outcome = await probeCandidate(

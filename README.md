@@ -26,7 +26,7 @@ No `copilot2api` process, gateway URL, placeholder API key, pasted GitHub token,
 - Sign-out deletes only `llm-pi-ai/github-copilot`. It intentionally keeps the route profile and all unrelated settings.
 - Hosted search calls `api.individual.githubcopilot.com` directly with the refreshed credential from that same record.
 - The inline path adds the provider-native web-search tool to eligible agent-loop calls. The `github-copilot-hosted` provider exposes the same capability through `ctx.web`.
-- Search is fail-closed: the selected route must be `github-copilot`, the selected account must expose the model, its catalog protocol must support native search, and the capability probe must pass.
+- Search is fail-closed: the selected route must be `github-copilot`, the selected account must expose the model, its catalog protocol must support native search, and the capability probe must pass. Responses probes retry only a valid 2xx reply that omitted `web_search_call`, for at most two rounds over both supported spellings (four requests total); auth, HTTP, malformed-body, abort, and network failures stop immediately, and every attempt shares the configured whole-probe timeout.
 
 Models that only use Chat Completions are still usable through DSH's normal `llm-pi-ai` path, but they do not advertise hosted search. Responses and Anthropic Messages candidates are probed before use.
 
