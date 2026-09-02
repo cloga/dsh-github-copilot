@@ -73,12 +73,12 @@ interface SettingsServiceView {
   get(namespace: string): unknown
   mutate(
     namespace: string,
-    operations: readonly { op: 'set'; path: string[]; value: Record<string, unknown> }[],
+    operations: readonly { op: 'set'; path: string[]; value: unknown }[],
     expectedRevision?: number,
   ): Promise<void>
 }
 
-function providerProfileFrom(record: { readonly kind: string; readonly payload?: unknown } | undefined): Record<string, unknown> {
+function providerModelsFrom(record: { readonly kind: string; readonly payload?: unknown } | undefined): Record<string, string>[] {
   if (record?.kind !== 'grant') {
     throw new Error('github-copilot: the configured credential is not an OAuth grant')
   }
@@ -93,7 +93,7 @@ function providerProfileFrom(record: { readonly kind: string; readonly payload?:
   if (models.length === 0) {
     throw new Error('github-copilot: the signed-in account exposes no models from the installed pi-ai catalog')
   }
-  return { models }
+  return models
 }
 
 function service<T extends object>(
@@ -117,23 +117,22 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function providerProfileAt(section: unknown): unknown {
+function providerModelsAt(section: unknown): unknown {
   if (typeof section !== 'object' || section === null) return undefined
   const providers = Reflect.get(section, 'providers')
   if (typeof providers !== 'object' || providers === null) return undefined
-  return Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
+  const profile = Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
+  if (typeof profile !== 'object' || profile === null) return undefined
+  return Reflect.get(profile, 'models')
 }
 
-function sameProviderProfile(current: unknown, expected: Record<string, unknown>): boolean {
-  if (typeof current !== 'object' || current === null) return false
-  const record = current as Record<string, unknown>
-  if (Object.keys(record).length !== 1 || !Array.isArray(record.models)) return false
-  return JSON.stringify(record.models) === JSON.stringify(expected.models)
+function sameProviderModels(current: unknown, expected: readonly Record<string, string>[]): boolean {
+  return Array.isArray(current) && JSON.stringify(current) === JSON.stringify(expected)
 }
 
 /**
- * Materialize or repair the reference-free Copilot route from an existing
- * provider-owned OAuth grant. Returns false when no credential exists.
+ * Materialize or repair only the Copilot route's account model list from an
+ * existing provider-owned OAuth grant. Returns false when no credential exists.
  */
 async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<boolean> {
   const credentials = service<CredentialRecordServiceView>(
@@ -144,15 +143,15 @@ async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<boolean
   const record = await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
   if (record === undefined) return false
 
-  const profile = providerProfileFrom(record)
+  const models = providerModelsFrom(record)
   const settings = service<SettingsServiceView>(ctx, 'settings', ['get', 'mutate'])
-  if (sameProviderProfile(providerProfileAt(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE)), profile)) {
+  if (sameProviderModels(providerModelsAt(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE)), models)) {
     return false
   }
   await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, [{
     op: 'set',
-    path: ['providers', GITHUB_COPILOT_PROVIDER_ID],
-    value: profile,
+    path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
+    value: models,
   }])
   return true
 }

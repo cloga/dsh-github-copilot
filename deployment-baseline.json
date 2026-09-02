@@ -110,13 +110,13 @@
       ]
     },
     {
-      "id": "reference-free-route-mutation",
+      "id": "path-level-account-model-reconciliation",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID]"}
+        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models']"}
       ],
       "tests": [
-        {"file": "tests/authorization-controller.spec.ts", "name": "repairs an incomplete Copilot route while preserving unrelated provider settings"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "repairs only the model list while preserving the rest of the Copilot profile and unrelated providers"},
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
         {"file": "tests/authorization-controller.spec.ts", "name": "fails loudly instead of enabling the full catalog when no installed model is available"},
         {"file": "tests/authorization-controller.spec.ts", "name": "signs out by deleting only the llm-pi-ai Copilot record and keeps the route profile"}
@@ -142,13 +142,13 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/index.ts", "marker": "ensureGitHubCopilotProviderProfile(ctx)"},
-        {"file": "src/authorization-controller.ts", "marker": "sameProviderProfile"},
+        {"file": "src/authorization-controller.ts", "marker": "sameProviderModels"},
         {"file": "src/authorization-controller.ts", "marker": "normalizeGitHubCopilotOAuthCredential(record.payload)"}
       ],
       "tests": [
         {"file": "tests/loader-composition.spec.ts", "name": "repairs an existing valid Copilot grant during Host startup"},
         {"file": "tests/authorization-controller.spec.ts", "name": "repairs a pre-existing grant with an empty Copilot route"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "repairs an incomplete Copilot route while preserving unrelated provider settings"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "repairs only the model list while preserving the rest of the Copilot profile and unrelated providers"},
         {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing Copilot route already matches the account catalog"},
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"}
       ]

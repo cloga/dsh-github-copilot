@@ -57,10 +57,13 @@ async function mountProfile(
 }> {
   const settingsDocument = {
     'github-copilot': {},
-    'llm-pi-ai': { providers: { 'github-copilot': {} } },
+    'llm-pi-ai': { providers: { 'github-copilot': { customField: 'preserved' } } },
   }
   const mutate = vi.fn(async (_namespace: string, operations: Array<{ path: string[]; value: unknown }>) => {
-    settingsDocument['llm-pi-ai'].providers[operations[0]?.path[1] ?? ''] = operations[0]?.value
+    const operation = operations[0]
+    if (operation?.path.join('.') === 'providers.github-copilot.models') {
+      settingsDocument['llm-pi-ai'].providers['github-copilot'].models = operation.value
+    }
   })
   const fiber = ctx.plugin({
     name: providesAuthorization ? 'alpha3-web-profile' : 'rc2-web-profile',
@@ -142,12 +145,20 @@ describe('loader composition', () => {
 
     await vi.waitFor(() => {
       expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({
+        customField: 'preserved',
         models: [
           { id: 'gemini-3.6-flash', api: 'openai-completions' },
           { id: 'gpt-5.6-sol', api: 'openai-responses' },
         ],
       })
     })
-    expect(harness.mutate).toHaveBeenCalledTimes(1)
+    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set',
+      path: ['providers', 'github-copilot', 'models'],
+      value: [
+        { id: 'gemini-3.6-flash', api: 'openai-completions' },
+        { id: 'gpt-5.6-sol', api: 'openai-responses' },
+      ],
+    }])
   })
 })
