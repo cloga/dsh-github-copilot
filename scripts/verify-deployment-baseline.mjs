@@ -38,7 +38,7 @@ assert(
 )
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
-assert(peerRange === '^0.1.1-rc.2 || ^0.1.2-alpha.3', 'DSH peer range must target rc.2 and alpha.3')
+assert(peerRange === '^0.1.1-rc.2 || ^0.1.2-alpha.4', 'DSH peer range must target rc.2 and alpha.4')
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
 assert(dshBaselines.length === 2, 'exactly two DSH baselines must be declared')
 assert(
@@ -48,10 +48,11 @@ assert(
   'DSH Desktop rc.2 baseline is missing',
 )
 assert(
-  dshBaselines.some(entry => entry.release === '0.1.2-alpha.3'
-    && entry.commit === 'dd6322d604e00eec1ba5e0c8541159906a21094a'
-    && entry.modelsUi === 'provider-card'),
-  'DSH alpha.3 baseline is missing',
+  dshBaselines.some(entry => entry.release === '0.1.2-alpha.4'
+    && entry.commit === '4e84901e6471b79ec0338099867ebb4606d12bb5'
+    && entry.modelsUi === 'provider-card'
+    && entry.providerHeaders === 'fetch-validated-discovery'),
+  'DSH alpha.4 baseline is missing',
 )
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
@@ -122,7 +123,7 @@ assert((await read('CLAUDE.md')).includes('[AGENTS.md](./AGENTS.md)'), 'CLAUDE.m
 const workflow = await read('.github/workflows/ci.yml')
 for (const command of [
   'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e',
-  'dd6322d604e00eec1ba5e0c8541159906a21094a',
+  '4e84901e6471b79ec0338099867ebb4606d12bb5',
   'pnpm install --frozen-lockfile',
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify',
