@@ -16,9 +16,12 @@ Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录�
 
 不需要运行 `copilot2api`，不需要填写 gateway URL、placeholder API key 或原始 GitHub token，也不需要安装 `dsh-web-search-provider`。
 
+本包会将 `@deepseek-ai/dsh-authorization` 作为运行时依赖安装。Cordis bootstrap 会在只提供 credentials 与 `llm-pi-ai`、但未挂载 authorization 的 rc.2 web/headless profile 中补充该服务；alpha.3 Core 已提供 authorization 时则直接复用，不会重复注册。只有 authorization 与其它全部必需 DSH 服务可用后，主集成才会激活。
+
 ## 产品行为
 
 - DSH 的 dormant `llm-pi-ai` mount 负责 Copilot 模型 adapter、catalog、OAuth、credential record 和 token refresh。
+- DSH alpha.3 Core 负责 authorization service；仅在 rc.2 等未提供该服务的 profile 中由本包补充。
 - 本包只补充 Models provider-card UI、Host-only authorization Remote 和 hosted search。
 - 新 profile 会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集。
 - Sign out 只删除 `llm-pi-ai/github-copilot` credential；route profile 和其它设置保持不变。
@@ -33,6 +36,7 @@ Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录�
 | 表面 | 负责人 |
 |---|---|
 | Copilot chat/model transport 与 catalog | DSH `dsh-llm-pi-ai` 与 pi-ai |
+| Authorization service 生命周期 | 存在时由 DSH Core 负责，否则由本包的 rc.2 bootstrap 补充 |
 | OAuth/device flow 注册 | DSH authorization seam 与 `llm-pi-ai` |
 | Credential 存储与刷新 | DSH record `llm-pi-ai/github-copilot` 与 pi-ai |
 | Models 登录/状态/登出 UI | 本包 `./client` |
@@ -65,7 +69,7 @@ Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共
 
 ## 源码与发行物
 
-- `src/index.ts`：Host 插件组合。
+- `src/index.ts`：条件式 authorization bootstrap、依赖门控的 Host 组合。
 - `src/authorization-controller.ts`：Host authorization/settings bridge。
 - `src/copilot-auth.ts`：Host-only DSH credential-record 到 pi-ai refresh adapter。
 - `src/client.ts`：Models provider-card UI。
@@ -76,7 +80,7 @@ Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共
 
 公开入口为 `.`, `./client`, `./remote` 和 `./deployment-baseline.json`。
 
-Peer contract 同时支持 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.3`。已发布的 rc.2 package 是本地编译基线；CI 会分别 checkout 精确 rc.2 与 alpha.3 commit，并核验本插件依赖的 public seam。
+Peer contract 同时支持 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.3`；authorization 也是实际运行时依赖，因此 rc.2 只安装本包即可完整启动。已发布的 rc.2 package 是本地编译基线；CI 会分别 checkout 精确 rc.2 与 alpha.3 commit，并核验本插件依赖的 public seam。
 
 ## 构建与验证
 

@@ -18,9 +18,12 @@ On Desktop `0.1.1-rc.2`, open the dedicated **Settings → GitHub Copilot** page
 
 No `copilot2api` process, gateway URL, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
+The package installs `@deepseek-ai/dsh-authorization` as a runtime dependency. Its Cordis bootstrap mounts that service for the rc.2 web/headless profiles, which provide credentials and `llm-pi-ai` but not authorization. When alpha.3 Core already provides authorization, the bootstrap reuses that service and does not register a duplicate. The integration body remains dependency-gated until authorization and every other required DSH service are active.
+
 ## Product behavior
 
 - DSH's dormant `llm-pi-ai` mount owns the Copilot model adapter, catalog, OAuth flow, credential record, and token refresh.
+- DSH alpha.3 Core owns the authorization service; this package supplies the same service only for profiles such as rc.2 that omit it.
 - This package contributes the Models provider-card UI and its Host-only authorization Remote.
 - Successful sign-in intersects the account's `availableModelIds` with the installed pi-ai catalog when creating a new route profile.
 - Sign-out deletes only `llm-pi-ai/github-copilot`. It intentionally keeps the route profile and all unrelated settings.
@@ -35,6 +38,7 @@ Models that only use Chat Completions are still usable through DSH's normal `llm
 | Surface | Owner |
 |---|---|
 | Copilot chat/model transport and catalog | DSH `@deepseek-ai/dsh-llm-pi-ai` + pi-ai |
+| Authorization service lifecycle | DSH Core when present; this package's rc.2 bootstrap otherwise |
 | OAuth/device flow registration | DSH authorization seam + `llm-pi-ai` |
 | Credential storage and refresh | DSH credentials record `llm-pi-ai/github-copilot` + pi-ai |
 | Models sign-in/status/sign-out UI | This package's `./client` entry |
@@ -67,7 +71,7 @@ Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential refer
 
 ## Source and package entries
 
-- `src/index.ts`: Host plugin composition and hosted-search registration.
+- `src/index.ts`: conditional authorization bootstrap, dependency-gated Host composition, and hosted-search registration.
 - `src/authorization-controller.ts`: Host authorization/settings bridge.
 - `src/copilot-auth.ts`: Host-only DSH credential-record adapter for pi-ai refresh.
 - `src/client.ts`: Models provider-card UI.
@@ -78,7 +82,7 @@ Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential refer
 
 Public package entries are `.`, `./client`, `./remote`, and `./deployment-baseline.json`.
 
-The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.3`. The published rc.2 packages are the local compiler baseline; CI checks the exact rc.2 and alpha.3 source commits and their required public seams separately.
+The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.3`; authorization is additionally a real runtime dependency so one-package rc.2 installation is complete. The published rc.2 packages are the local compiler baseline; CI checks the exact rc.2 and alpha.3 source commits and their required public seams separately.
 
 ## Build and verify
 

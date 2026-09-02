@@ -1,0 +1,112 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import AuthorizationService from '@deepseek-ai/dsh-authorization'
+import * as GitHubCopilotPlugin from '../src/index.ts'
+import type { InlineConfig } from '../src/config.ts'
+
+const config: InlineConfig = {
+  enabled: true,
+  providers: [],
+  includeSources: true,
+  stripServerTools: true,
+  idleTimeoutMs: 300_000,
+  probe: false,
+  probeTimeoutMs: 30_000,
+}
+
+const disposers: Array<() => Promise<void>> = []
+
+afterEach(async () => {
+  await Promise.allSettled(disposers.splice(0).reverse().map(dispose => dispose()))
+})
+
+function credentialService() {
+  return {
+    resolve: async () => ({ value: 'unused' }),
+    describeRecord: async () => ({ configured: false, writable: true }),
+    readRecord: async () => undefined,
+    listRecords: async () => [],
+    modifyRecord: async (_key: string, mutate: (current: unknown) => unknown) => mutate(undefined),
+    deleteRecord: async () => undefined,
+  }
+}
+
+async function mountProfile(
+  ctx: Context,
+  providesAuthorization = false,
+): Promise<void> {
+  const settingsDocument = {
+    'github-copilot': {},
+    'llm-pi-ai': { providers: { 'github-copilot': {} } },
+  }
+  const fiber = ctx.plugin({
+    name: providesAuthorization ? 'alpha3-web-profile' : 'rc2-web-profile',
+    apply(profileCtx) {
+      profileCtx.provide('credentials', credentialService())
+      profileCtx.provide('llm', {})
+      profileCtx.provide('systemPrompt', { section: () => () => undefined })
+      profileCtx.provide('settings', {
+        get: (namespace: unknown) => settingsDocument[String(namespace) as keyof typeof settingsDocument],
+        mutate: async () => undefined,
+        installSection: (
+          _owner: Context,
+          _namespace: unknown,
+          _schema: unknown,
+          entry: InlineConfig,
+          hooks: { setSource(source: () => InlineConfig): void; onChange(): void },
+        ) => {
+          hooks.setSource(() => entry)
+          hooks.onChange()
+        },
+      })
+      profileCtx.provide('web', {
+        registerSearchProvider: () => () => undefined,
+        registerFetchProvider: () => () => undefined,
+      })
+      profileCtx.provide('agentDefaultModel', {
+        currentSelection: () => ({ provider: 'github-copilot', model: 'gpt-5.4' }),
+      })
+      if (providesAuthorization) profileCtx.plugin(AuthorizationService)
+    },
+  })
+  disposers.push(fiber.dispose)
+  await fiber
+  if (providesAuthorization) {
+    await vi.waitFor(() => {
+      expect(ctx.get('authorization') !== undefined).toBe(true)
+    })
+  }
+}
+
+async function mountIntegration(ctx: Context): Promise<void> {
+  const fiber = ctx.plugin(GitHubCopilotPlugin, config)
+  disposers.push(fiber.dispose)
+  await fiber
+  await vi.waitFor(() => {
+    expect(ctx.get('githubCopilotAuthorization')).toBeDefined()
+  })
+}
+
+describe('loader composition', () => {
+  it('bootstraps authorization in the rc.2 web profile before activating the integration', async () => {
+    const ctx = new Context()
+    await mountProfile(ctx)
+
+    expect(ctx.get('authorization')).toBeUndefined()
+    await mountIntegration(ctx)
+
+    expect(ctx.get('authorization') !== undefined).toBe(true)
+    expect(ctx.registry.get(AuthorizationService)?.fibers).toHaveLength(1)
+  })
+
+  it('reuses the alpha.3 authorization service without duplicate registration', async () => {
+    const ctx = new Context()
+    await mountProfile(ctx, true)
+    const authorizationFiberUid = ctx.registry.get(AuthorizationService)?.fibers[0]?.uid
+
+    await mountIntegration(ctx)
+
+    expect(ctx.registry.get(AuthorizationService)?.fibers).toHaveLength(1)
+    expect(ctx.registry.get(AuthorizationService)?.fibers[0]?.uid).toBe(authorizationFiberUid)
+  })
+})

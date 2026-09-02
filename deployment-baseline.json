@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.2"
+    "version": "0.3.0-cloga.3"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -48,9 +48,25 @@
         "@deepseek-ai/dsh-web"
       ]
     },
-    "piAi": "^0.84.2"
+    "piAi": "^0.84.2",
+    "runtimeDependencies": {
+      "@deepseek-ai/dsh-authorization": "^0.1.1-rc.2 || ^0.1.2-alpha.3"
+    }
   },
   "capabilities": [
+    {
+      "id": "authorization-service-bootstrap",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/index.ts", "marker": "ctx.get('authorization', false)"},
+        {"file": "src/index.ts", "marker": "ctx.plugin(AuthorizationService)"},
+        {"file": "src/index.ts", "marker": "ctx.inject(integrationInject"}
+      ],
+      "tests": [
+        {"file": "tests/loader-composition.spec.ts", "name": "bootstraps authorization in the rc.2 web profile before activating the integration"},
+        {"file": "tests/loader-composition.spec.ts", "name": "reuses the alpha.3 authorization service without duplicate registration"}
+      ]
+    },
     {
       "id": "models-provider-card-authorization",
       "required": true,

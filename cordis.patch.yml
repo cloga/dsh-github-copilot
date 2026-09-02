@@ -1,5 +1,6 @@
-# The package contributes only its integration entry. DSH Core continues to
-# own sandboxing, modes, model selection, attachments, and Desktop routing.
+# The integration entry bootstraps authorization only when Core has not
+# mounted it. DSH Core continues to own credentials, llm-pi-ai, sandboxing,
+# modes, model selection, attachments, and Desktop routing.
 - insert:
     - id: github-copilot
       name: dsh-github-copilot

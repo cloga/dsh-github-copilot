@@ -183,8 +183,8 @@ function buildRuntime(
         return () => undefined
       },
     },
-    inject: (servicesToInject: string[], callback: (sctx: Context) => void) => {
-      if (servicesToInject.every(name => store.has(name))) callback(ctx as unknown as Context)
+    inject: (_servicesToInject: string[], callback: (sctx: Context) => void) => {
+      callback(ctx as unknown as Context)
     },
     effect: (callback: () => unknown) => {
       const disposer = callback()

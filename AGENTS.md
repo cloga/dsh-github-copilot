@@ -8,14 +8,14 @@ This file is the authoritative entry point for humans and coding agents. Read it
 
 This repository owns four narrow surfaces:
 
-1. A Host authorization controller that joins DSH authorization, credentials, and settings.
+1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution and Client-safe Remote descriptors.
 3. Safe creation of a reference-free `llm-pi-ai.providers.github-copilot` profile.
 4. Direct provider-hosted search using the same Host-side credential lifecycle.
 
 ## File map
 
-- `src/index.ts`: Host entry, injections, settings registration, listener, and `ctx.web` provider composition.
+- `src/index.ts`: authorization bootstrap, dependency-gated Host entry, settings registration, listener, and `ctx.web` provider composition.
 - `src/authorization-controller.ts`: sign-in/status/sign-out and route mutation.
 - `src/copilot-auth.ts`: narrow pi-ai `CredentialStore` adapter over `llm-pi-ai/github-copilot`.
 - `src/client.ts`: `settings.models.provider-card` UI keyed by `llm-pi-ai`.
@@ -43,6 +43,7 @@ This repository owns four narrow surfaces:
 - Hosted search only serves the selected `github-copilot` route, only for an account-available model and a native search protocol, after a successful probe.
 - Misconfiguration and API drift fail loudly with a named missing seam. Do not fall back to process-local secrets or implicit machine state.
 - Host, Client, and Remote package entries must stay independently buildable and exported.
+- The package must self-provide authorization when Core omits it, reuse an existing service without duplicate registration, and never activate the integration body before authorization is available.
 
 ## Supported DSH seams
 
@@ -53,6 +54,7 @@ The supported upstream baselines are:
 
 - Models UI: alpha.3 uses `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
 - Authorization flow key: `llm-pi-ai/github-copilot`.
+- Authorization service: alpha.3 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
 - Settings: create the provider through a path operation at `providers.github-copilot`.
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
