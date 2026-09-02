@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.9"
+    "version": "0.3.0-cloga.10"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -28,14 +28,16 @@
           "source": "https://github.com/cloga/deepseek-harness",
           "branch": "cloga-pi-ai-model-api",
           "modelsUi": "settings-section-fallback",
-          "perModelApi": "model-entry"
+          "perModelApi": "model-entry",
+          "strictModeCompat": "route-switch"
         },
         {
           "release": "0.1.2-alpha.5",
           "tag": "dsh-v0.1.2-alpha.5",
           "commit": "db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5",
           "modelsUi": "provider-card",
-          "providerHeaders": "fetch-validated-discovery"
+          "providerHeaders": "fetch-validated-discovery",
+          "strictModeCompat": "route-switch"
         }
       ],
       "packages": [
@@ -117,9 +119,24 @@
       ],
       "tests": [
         {"file": "tests/authorization-controller.spec.ts", "name": "repairs an incomplete Copilot route while preserving unrelated provider settings"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "repairs forbidden route-level connection fields even when owned leaves match"},
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
         {"file": "tests/authorization-controller.spec.ts", "name": "fails loudly instead of enabling the full catalog when no installed model is available"},
         {"file": "tests/authorization-controller.spec.ts", "name": "signs out by deleting only the llm-pi-ai Copilot record and keeps the route profile"}
+      ]
+    },
+    {
+      "id": "copilot-optional-tool-arguments",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/authorization-controller.ts", "marker": "compat: { supportsStrictMode: false }"},
+        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"}
+      ],
+      "tests": [
+        {"file": "tests/authorization-controller.spec.ts", "name": "repairs a Copilot route that still enables strict tool schemas"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing resolved Copilot route matches the account catalog"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "materializes Anthropic and OpenAI models under the route compatibility override"},
+        {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "applies route strict-mode compatibility only to supported model protocols"}
       ]
     },
     {
@@ -133,7 +150,7 @@
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
         {"file": "tests/authorization-controller.spec.ts", "name": "deduplicates account model ids while preserving their first-seen order"},
         {"file": "tests/authorization-controller.spec.ts", "name": "omits account model ids unsupported by the installed catalog"},
-        {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "accepts both mixed-protocol model entries through the real Core config"},
+        {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "applies route strict-mode compatibility only to supported model protocols"},
         {"file": "tests/plan.spec.ts", "name": "excludes a model-level Completions route and admits a model-level Responses route"}
       ]
     },
@@ -149,7 +166,7 @@
         {"file": "tests/loader-composition.spec.ts", "name": "repairs an existing valid Copilot grant during Host startup"},
         {"file": "tests/authorization-controller.spec.ts", "name": "repairs a pre-existing grant with an empty Copilot route"},
         {"file": "tests/authorization-controller.spec.ts", "name": "repairs an incomplete Copilot route while preserving unrelated provider settings"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing Copilot route already matches the account catalog"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing resolved Copilot route matches the account catalog"},
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"}
       ]
     },

@@ -21,7 +21,6 @@ jobs:
           - release: 0.1.1-rc.2
             repository: cloga/deepseek-harness
             commit: a772dbbde82780bff2b9394427e9f0a24cafa1d5
-            controlledCore: true
           - release: 0.1.2-alpha.5
             repository: deepseek-ai/deepseek-harness
             commit: db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5
@@ -40,13 +39,11 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
-      - name: Install controlled Core pi-ai closure
-        if: matrix.dsh.controlledCore == true
+      - name: Install Core pi-ai closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
       - run: pnpm verify:upstream -- dsh-upstream
-      - name: Verify real controlled Core config integration
-        if: matrix.dsh.controlledCore == true
+      - name: Verify real Core config integration
         run: pnpm verify:controlled-core -- dsh-upstream
       - run: pnpm verify
       - run: mkdir artifacts

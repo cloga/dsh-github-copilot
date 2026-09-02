@@ -22,7 +22,7 @@ The package installs `@deepseek-ai/dsh-authorization` as a runtime dependency. I
 
 ### Installation-agent DSH practice
 
-This is agent-side DSH tool-call practice, not a Copilot runtime setting:
+The plugin writes `compat.supportsStrictMode: false` into its managed Copilot route. OpenAI strict tool schemas convert every optional property into a required nullable property, which conflicts with DSH's omission-sensitive sandbox escalation arguments. Copilot continues to use ordinary JSON-schema tool calling, while installation agents must also follow this payload practice:
 
 - Initial `pwsh` calls omit `sandbox_permissions` and `justification` entirely.
 - When approval prompts are disabled, never include either field.
@@ -38,7 +38,7 @@ To persist these rules user-wide, add them to `$DSH_HOME/AGENTS.md` (default `~/
 - DSH alpha.5 Core owns the authorization service; this package supplies the same service only for profiles such as rc.2 that omit it.
 - This package contributes the Models provider-card UI and its Host-only authorization Remote.
 - All four authorization Remote results use one strict Zod v4 codec, so rc.2 validates status/start/cancel/sign-out views while alpha.5 keeps the same wire contract.
-- Successful sign-in and Host startup intersect the account's `availableModelIds` with the installed pi-ai catalog when creating or repairing the route profile. Empty, incomplete, or stale profiles self-heal idempotently, including after the Models UI saves an empty provider entry. Each model entry carries its catalog `api`, so one route preserves mixed protocols without route-level `api`, `baseURL`, or `apiKeyEnv`.
+- Successful sign-in and Host startup intersect the account's `availableModelIds` with the installed pi-ai catalog when creating or repairing the route profile. Empty, incomplete, or stale profiles self-heal idempotently, including after the Models UI saves an empty provider entry. Each model entry carries its catalog `api`, so one route preserves mixed protocols without route-level `api`, `baseURL`, or `apiKeyEnv`. The managed route sets `compat.supportsStrictMode: false` so omission-sensitive DSH tool arguments remain genuinely optional on Copilot's OpenAI-compatible protocols.
 - Before a Copilot OAuth grant is persisted or reused, the Host adapter rebuilds pi-ai's documented fields into a fresh plain JSON object. Cross-module and null-prototype credentials are accepted when their owned fields are valid; unrelated extension members are discarded, model IDs are deduplicated in order, and malformed owned fields fail without logging their values.
 - Sign-out deletes only `llm-pi-ai/github-copilot`. It intentionally keeps the route profile and all unrelated settings.
 - Hosted search calls `api.individual.githubcopilot.com` directly with the refreshed credential from that same record.

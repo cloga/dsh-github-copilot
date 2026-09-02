@@ -142,6 +142,7 @@ describe('loader composition', () => {
 
     await vi.waitFor(() => {
       expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({
+        compat: { supportsStrictMode: false },
         models: [
           { id: 'gemini-3.6-flash', api: 'openai-completions' },
           { id: 'gpt-5.6-sol', api: 'openai-responses' },

@@ -59,6 +59,15 @@ if (baseline.perModelApi === 'model-entry') {
     'entry.api ?? request.api ?? base?.api ?? routeApi',
   ])
 }
+if (baseline.strictModeCompat === 'route-switch') {
+  await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', [
+    'supportsStrictMode: z.boolean()',
+  ])
+  await assertMarkers('packages/llm/llm-pi-ai/src/catalog.ts', [
+    'configuredCompatEntries(route)',
+    'gate?.[field] !== \'offer\'',
+  ])
+}
 await assertMarkers('packages/llm/llm-pi-ai/src/login.ts', [
   'registerPiAiFlows',
   'recordKeyFor(providerId)',

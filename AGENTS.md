@@ -88,7 +88,7 @@ Installation agents using the DSH `pwsh` tool must follow these rules:
 - Use both fields only once, when retrying the exact same command after a real sandbox denial, approval is available, and the target mode is strictly wider than the current mode.
 - Omit the keys rather than sending `null`, empty strings, or the current sandbox mode.
 
-This is agent-side DSH tool-call practice, not a Copilot runtime setting. The plugin does not and should not rewrite user-global agent instructions.
+The plugin also keeps its managed Copilot route on ordinary JSON-schema tool calling with `compat.supportsStrictMode: false`, because OpenAI strict schemas make omission-sensitive DSH escalation arguments required and nullable. The rules above remain agent-side practice, and the plugin does not rewrite user-global agent instructions.
 
 ## Mechanical verification
 
