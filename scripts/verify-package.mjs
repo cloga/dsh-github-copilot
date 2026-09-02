@@ -1,12 +1,15 @@
 import { access, readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import vm from 'node:vm'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 if (packageJson.dependencies?.['@deepseek-ai/dsh-authorization'] === undefined) {
   throw new Error('package must install the rc.2 authorization bootstrap dependency')
+}
+if (packageJson.dependencies?.zod === undefined) {
+  throw new Error('package must install the strict Remote codec runtime dependency')
 }
 
 for (const [subpath, target] of Object.entries(packageJson.exports ?? {})) {
@@ -45,6 +48,23 @@ const clientExports = handoff.factory((specifier) => {
 })
 if (typeof clientExports.apply !== 'function' || !Array.isArray(clientExports.inject)) {
   throw new Error('built client must materialize apply and inject exports')
+}
+
+const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)).default
+if (remote.descriptors.length !== 4) {
+  throw new Error('built Remote entry must expose all four authorization methods')
+}
+for (const descriptor of remote.descriptors) {
+  if (descriptor.invocation.kind !== 'direct' || descriptor.parameters.length !== 0) {
+    throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must remain a no-parameter direct call`)
+  }
+  if (
+    descriptor.result.mode !== 'strict'
+    || descriptor.result.typeSymbol !== 'dsh-github-copilot#GitHubCopilotAuthorizationView'
+    || typeof descriptor.result.schema?.parse !== 'function'
+  ) {
+    throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must expose the strict authorization view codec`)
+  }
 }
 
 console.log('Verified built host, client, remote, type, and metadata package exports.')
