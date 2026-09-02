@@ -4,6 +4,9 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
+if (packageJson.dependencies?.['@deepseek-ai/dsh-authorization'] === undefined) {
+  throw new Error('package must install the rc.2 authorization bootstrap dependency')
+}
 
 for (const [subpath, target] of Object.entries(packageJson.exports ?? {})) {
   if (typeof target === 'string') {

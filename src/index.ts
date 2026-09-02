@@ -7,6 +7,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import AuthorizationService from '@deepseek-ai/dsh-authorization'
 // Bring the `systemPrompt` service declaration (dsh-agent augmentation) into
 // the type graph: module augmentations only apply when their module is part
 // of the program.
@@ -36,9 +37,14 @@ export {
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'github-copilot'
 
-/** Services the plugin hooks into; `credentials` is declared so the
- * credential seam is settled before apply resolves keys. */
-export const inject = [
+/**
+ * Bootstrap dependency. The integration itself is mounted below only after
+ * every service in {@link integrationInject}, including authorization, is
+ * active.
+ */
+export const inject = ['credentials']
+
+const integrationInject = [
   'llm',
   'systemPrompt',
   'settings',
@@ -125,6 +131,25 @@ function installWebSearchSettings(
  * @param config - the composition entry config, used as the settings base layer.
  */
 export function apply(ctx: Context, config: InlineConfig): void {
+  ensureAuthorization(ctx)
+  ctx.inject(integrationInject, (integrationCtx) => {
+    activate(integrationCtx, config)
+  })
+}
+
+/**
+ * Reuse an authorization provider already mounted by Core. rc.2 profiles do
+ * not mount one, so the package's runtime dependency supplies it. The
+ * non-strict lookup also sees a provider whose owning fiber is still loading;
+ * the registry check covers this package's provider while it is pending.
+ */
+function ensureAuthorization(ctx: Context): void {
+  if (ctx.get('authorization', false) !== undefined || ctx.registry.has(AuthorizationService)) return
+  ctx.plugin(AuthorizationService)
+}
+
+/** Activate the integration only after the complete DSH service contract is available. */
+function activate(ctx: Context, config: InlineConfig): void {
   assertDshCompatibility(ctx)
   ctx.plugin(GitHubCopilotAuthorizationController)
   const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx)

@@ -29,6 +29,9 @@ assert(
   packageJson.dependencies?.['@earendil-works/pi-ai'] === manifest.supportedBaselines?.piAi,
   'pi-ai runtime range differs',
 )
+for (const [dependency, range] of Object.entries(manifest.supportedBaselines?.runtimeDependencies ?? {})) {
+  assert(packageJson.dependencies?.[dependency] === range, `${dependency} runtime range differs`)
+}
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(peerRange === '^0.1.1-rc.2 || ^0.1.2-alpha.3', 'DSH peer range must target rc.2 and alpha.3')
