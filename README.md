@@ -20,6 +20,18 @@ No `copilot2api` process, gateway URL, placeholder API key, pasted GitHub token,
 
 The package installs `@deepseek-ai/dsh-authorization` as a runtime dependency. Its Cordis bootstrap mounts that service for the rc.2 web/headless profiles, which provide credentials and `llm-pi-ai` but not authorization. When alpha.4 Core already provides authorization, the bootstrap reuses that service and does not register a duplicate. The integration body remains dependency-gated until authorization and every other required DSH service are active.
 
+### Installation-agent DSH practice
+
+This is agent-side DSH tool-call practice, not a Copilot runtime setting:
+
+- Initial `pwsh` calls omit `sandbox_permissions` and `justification` entirely.
+- When approval prompts are disabled, never include either field.
+- When the current sandbox mode is `danger-full-access`, never request escalation.
+- Use both fields only once, when retrying the exact same command after a real sandbox denial, approval is available, and the target mode is strictly wider than the current mode.
+- Omit the keys rather than sending `null`, empty strings, or the current sandbox mode.
+
+To persist these rules user-wide, add them to `$DSH_HOME/AGENTS.md` (default `~/.dsh/AGENTS.md`). Installers must merge them with existing user instructions rather than overwrite the file, and must never silently mutate it without explicit user consent. This plugin does not and should not rewrite user-global agent instructions.
+
 ## Product behavior
 
 - DSH's dormant `llm-pi-ai` mount owns the Copilot model adapter, catalog, OAuth flow, credential record, and token refresh.
