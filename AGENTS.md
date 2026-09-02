@@ -51,7 +51,8 @@ This repository owns four narrow surfaces:
 
 The supported upstream baselines are:
 
-- Desktop tag `dsh-v0.1.1-rc.2`, commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
+- Desktop `0.1.1-rc.2` with controlled Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5`
+  on `cloga-pi-ai-model-api`, based on tag commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
 - Tag `dsh-v0.1.2-alpha.4`, commit `4e84901e6471b79ec0338099867ebb4606d12bb5`.
 
 - Models UI: alpha.4 uses `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
@@ -60,6 +61,7 @@ The supported upstream baselines are:
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
 - Copilot grant schema: `type: oauth`, non-empty `refresh`/`access`, finite `expires`, optional non-empty `enterpriseUrl`, and optional deduplicated non-empty-string `availableModelIds`.
 - Settings: create the provider through a path operation at `providers.github-copilot`.
+- Per-model API: materialize each account model as `{ id, api }`; never flatten a mixed route to route-level connection fields.
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.
 - Provider headers: alpha.4 validates configured headers through Fetch and reuses Host-owned headers during model discovery.

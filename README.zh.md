@@ -24,7 +24,7 @@ Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录�
 - DSH alpha.4 Core 负责 authorization service；仅在 rc.2 等未提供该服务的 profile 中由本包补充。
 - 本包只补充 Models provider-card UI、Host-only authorization Remote 和 hosted search。
 - 四个 authorization Remote 结果共用一个严格的 Zod v4 codec，因此 rc.2 会验证 status/start/cancel/sign-out view，同时 alpha.4 保持相同 wire contract。
-- 新 profile 会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集。
+- 新 profile 会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集，并为每个模型写入 catalog `api`，从而在不写 route 级 `api`、`baseURL` 或 `apiKeyEnv` 的情况下保留混合协议。
 - Copilot OAuth grant 在写入或复用前，会由 Host adapter 将 pi-ai 文档化字段重建为新的普通 JSON 对象。只要归属字段有效，就可接受跨模块或 null-prototype credential；无关扩展字段会被丢弃，模型 ID 按原顺序去重，归属字段格式错误时也不会在错误中泄露字段值。
 - Sign out 只删除 `llm-pi-ai/github-copilot` credential；route profile 和其它设置保持不变。
 - Hosted search 使用同一 credential record 的刷新结果直接请求 `api.individual.githubcopilot.com`。
@@ -83,7 +83,7 @@ Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共
 
 公开入口为 `.`, `./client`, `./remote` 和 `./deployment-baseline.json`。
 
-Peer contract 同时支持 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.4`；authorization 与 Zod v4 都是实际运行时依赖，因此 rc.2 只安装本包即可完整启动并严格验证 Remote 结果。已发布的 rc.2 package 是本地编译基线；CI 会分别 checkout 精确 rc.2 与 alpha.4 commit，并核验本插件依赖的 public seam，包括 alpha.4 的 Fetch provider-header 校验与 Host-owned discovery headers。
+Peer contract 同时支持 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.4`；authorization 与 Zod v4 都是实际运行时依赖，因此 rc.2 只安装本包即可完整启动并严格验证 Remote 结果。rc.2 的混合协议 route 需要基于 rc.2 tag 的受控 Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5`（branch `cloga-pi-ai-model-api`）；原始 tag 尚不能解析 model entry 的 `api`。CI 会分别核验该受控 rc.2 commit 与 alpha.4 commit，并对受控 Core 运行真实 config 接受测试。
 
 ## 构建与验证
 
