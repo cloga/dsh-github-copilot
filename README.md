@@ -25,6 +25,7 @@ The package installs `@deepseek-ai/dsh-authorization` as a runtime dependency. I
 - DSH's dormant `llm-pi-ai` mount owns the Copilot model adapter, catalog, OAuth flow, credential record, and token refresh.
 - DSH alpha.3 Core owns the authorization service; this package supplies the same service only for profiles such as rc.2 that omit it.
 - This package contributes the Models provider-card UI and its Host-only authorization Remote.
+- All four authorization Remote results use one strict Zod v4 codec, so rc.2 validates status/start/cancel/sign-out views while alpha.3 keeps the same wire contract.
 - Successful sign-in intersects the account's `availableModelIds` with the installed pi-ai catalog when creating a new route profile.
 - Sign-out deletes only `llm-pi-ai/github-copilot`. It intentionally keeps the route profile and all unrelated settings.
 - Hosted search calls `api.individual.githubcopilot.com` directly with the refreshed credential from that same record.
@@ -75,7 +76,7 @@ Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential refer
 - `src/authorization-controller.ts`: Host authorization/settings bridge.
 - `src/copilot-auth.ts`: Host-only DSH credential-record adapter for pi-ai refresh.
 - `src/client.ts`: Models provider-card UI.
-- `src/remote.ts`: Client-safe Typert descriptors.
+- `src/remote.ts`: Client-safe Typert descriptors and the shared strict authorization-view result codec.
 - `src/current-provider.ts`, `src/plan.ts`: selected-route projection and fail-closed search planning.
 - `src/probe.ts`, `src/wire*.ts`, `src/traditional-search.ts`: hosted-search transports.
 - `lib/index.js`, `lib/remote.js`: generated ESM Host/Remote package entries.
@@ -83,7 +84,7 @@ Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential refer
 
 Public package entries are `.`, `./client`, `./remote`, and `./deployment-baseline.json`.
 
-The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.3`; authorization is additionally a real runtime dependency so one-package rc.2 installation is complete. The published rc.2 packages are the local compiler baseline; CI checks the exact rc.2 and alpha.3 source commits and their required public seams separately.
+The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.3`; authorization and Zod v4 are real runtime dependencies so one-package rc.2 installation and strict Remote result validation are complete. The published rc.2 packages are the local compiler baseline; CI checks the exact rc.2 and alpha.3 source commits and their required public seams separately.
 
 ## Build and verify
 
