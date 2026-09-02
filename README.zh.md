@@ -76,7 +76,8 @@ Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共
 - `src/remote.ts`：Client-safe Typert descriptors。
 - `src/current-provider.ts`、`src/plan.ts`：route 投影与 fail-closed 规划。
 - `src/probe.ts`、`src/wire*.ts`、`src/traditional-search.ts`：hosted-search transport。
-- `lib/`：构建生成的发行物，不要手工修改。
+- `lib/index.js`、`lib/remote.js`：构建生成的 Host/Remote ESM 入口。
+- `lib/client.js`：按 DSH 客户端闭包规范生成；通过 `window.__ModuleLoader__.load` 注册 `dsh-github-copilot`，用注入的 `require` 解析 loader-table 外部依赖，并返回 `apply`/`inject`。不要手工修改。
 
 公开入口为 `.`, `./client`, `./remote` 和 `./deployment-baseline.json`。
 
@@ -84,12 +85,14 @@ Peer contract 同时支持 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.3`；authorization 
 
 ## 构建与验证
 
+客户端构建遵循 DSH 标准 `packages/client/tsdown.client.ts` 契约：tsdown 将 CJS 输出封装在 loader factory 中，而不是发布普通浏览器 ESM。
+
 ```sh
 pnpm install --frozen-lockfile
-pnpm test
 pnpm typecheck
 pnpm verify:baseline
 pnpm build
+pnpm test
 pnpm verify:package
 pnpm pack --pack-destination artifacts
 ```
