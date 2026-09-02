@@ -93,7 +93,13 @@ function providerProfileFrom(record: { readonly kind: string; readonly payload?:
   if (models.length === 0) {
     throw new Error('github-copilot: the signed-in account exposes no models from the installed pi-ai catalog')
   }
-  return { models }
+  return {
+    models,
+    // OpenAI strict schemas turn every optional tool property into a required
+    // nullable property. DSH escalation arguments are omission-sensitive, so
+    // keep this Copilot route on ordinary JSON-schema tool calling.
+    compat: { supportsStrictMode: false },
+  }
 }
 
 function service<T extends object>(
@@ -124,11 +130,30 @@ function providerProfileAt(section: unknown): unknown {
   return Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
 }
 
+function providerModels(value: unknown): Array<{ id: string; api: string }> | undefined {
+  if (!Array.isArray(value)) return undefined
+  const models: Array<{ id: string; api: string }> = []
+  for (const candidate of value) {
+    if (typeof candidate !== 'object' || candidate === null) return undefined
+    const model = candidate as Record<string, unknown>
+    if (typeof model.id !== 'string' || typeof model.api !== 'string') return undefined
+    models.push({ id: model.id, api: model.api })
+  }
+  return models
+}
+
 function sameProviderProfile(current: unknown, expected: Record<string, unknown>): boolean {
   if (typeof current !== 'object' || current === null) return false
   const record = current as Record<string, unknown>
-  if (Object.keys(record).length !== 1 || !Array.isArray(record.models)) return false
-  return JSON.stringify(record.models) === JSON.stringify(expected.models)
+  if (record.api !== undefined || record.baseURL !== undefined || record.apiKeyEnv !== undefined) return false
+  const compat = record.compat
+  if (typeof compat !== 'object' || compat === null) return false
+  if ((compat as Record<string, unknown>).supportsStrictMode !== false) return false
+  const currentModels = providerModels(record.models)
+  const expectedModels = providerModels(expected.models)
+  return currentModels !== undefined
+    && expectedModels !== undefined
+    && JSON.stringify(currentModels) === JSON.stringify(expectedModels)
 }
 
 /**
