@@ -4,7 +4,7 @@ This file is the authoritative entry point for humans and coding agents. Read it
 
 ## Product and architecture
 
-`dsh-github-copilot` is a companion to DSH Desktop `0.1.1-rc.2` and DSH `0.1.2-alpha.4`. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth flow, credential format, token exchange, refresh, and normal model transport.
+`dsh-github-copilot` is a companion to DSH Desktop `0.1.1-rc.2` and DSH `0.1.2-alpha.5`. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth flow, credential format, token exchange, refresh, and normal model transport.
 
 This repository owns four narrow surfaces:
 
@@ -53,19 +53,19 @@ The supported upstream baselines are:
 
 - Desktop `0.1.1-rc.2` with controlled Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5`
   on `cloga-pi-ai-model-api`, based on tag commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
-- Tag `dsh-v0.1.2-alpha.4`, commit `4e84901e6471b79ec0338099867ebb4606d12bb5`.
+- Tag `dsh-v0.1.2-alpha.5`, commit `db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5`.
 
-- Models UI: alpha.4 uses `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
+- Models UI: alpha.5 uses `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
 - Authorization flow key: `llm-pi-ai/github-copilot`.
-- Authorization service: alpha.4 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
+- Authorization service: alpha.5 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
 - Copilot grant schema: `type: oauth`, non-empty `refresh`/`access`, finite `expires`, optional non-empty `enterpriseUrl`, and optional deduplicated non-empty-string `availableModelIds`.
 - Settings: create the provider through a path operation at `providers.github-copilot`.
 - Per-model API: materialize each account model as `{ id, api }`; never flatten a mixed route to route-level connection fields.
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.
-- Provider headers: alpha.4 validates configured headers through Fetch and reuses Host-owned headers during model discovery.
-- Remote results: all authorization methods share the Zod v4 `GitHubCopilotAuthorizationView` strict codec required by rc.2 and accepted by alpha.4.
+- Provider headers: alpha.5 validates configured headers through Fetch and reuses Host-owned headers during model discovery.
+- Remote results: all authorization methods share the Zod v4 `GitHubCopilotAuthorizationView` strict codec required by rc.2 and accepted by alpha.5.
 
 When upgrading DSH or pi-ai, inspect the exact tagged public exports and update the baseline, compatibility guard, tests, and docs together.
 
@@ -106,7 +106,7 @@ pnpm pack --pack-destination artifacts
 
 `pnpm verify` is the normal complete gate. Use a focused `vitest run <files...>` while iterating, then run the complete gate before commit. CI runs frozen install, `pnpm verify`, and package creation on Windows and Linux.
 
-The rc.2 development dependencies are the Desktop compiler and runtime baseline. CI separately checks out the exact rc.2 and alpha.4 upstream commits and runs `pnpm verify:upstream -- dsh-upstream` to verify every public seam this plugin consumes.
+The rc.2 development dependencies are the Desktop compiler and runtime baseline. CI separately checks out the exact rc.2 and alpha.5 upstream commits and runs `pnpm verify:upstream -- dsh-upstream` to verify every public seam this plugin consumes.
 
 ## Changing capabilities
 

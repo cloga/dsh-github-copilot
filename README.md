@@ -4,7 +4,7 @@
 
 [简体中文](./README.zh.md)
 
-One plugin for GitHub Copilot models and provider-hosted web search in DSH Desktop `0.1.1-rc.2` and DeepSeek Harness (DSH) `0.1.2-alpha.4`.
+One plugin for GitHub Copilot models and provider-hosted web search in DSH Desktop `0.1.1-rc.2` and DeepSeek Harness (DSH) `0.1.2-alpha.5`.
 
 ## Install and sign in
 
@@ -14,11 +14,11 @@ dsh plugin add dsh-github-copilot
 
 Then open **Settings → Models**, find **GitHub Copilot**, and select **Sign in**. Complete the GitHub device-code flow shown in the provider card. The plugin uses DSH's built-in `llm-pi-ai` provider and writes a reference-free `llm-pi-ai.providers.github-copilot` profile without replacing other settings.
 
-On Desktop `0.1.1-rc.2`, open the dedicated **Settings → GitHub Copilot** page because that release predates the Models provider-card extension slot. On `0.1.2-alpha.4`, the same controls render directly in the GitHub Copilot provider card.
+On Desktop `0.1.1-rc.2`, open the dedicated **Settings → GitHub Copilot** page because that release predates the Models provider-card extension slot. On `0.1.2-alpha.5`, the same controls render directly in the GitHub Copilot provider card.
 
 No `copilot2api` process, gateway URL, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
-The package installs `@deepseek-ai/dsh-authorization` as a runtime dependency. Its Cordis bootstrap mounts that service for the rc.2 web/headless profiles, which provide credentials and `llm-pi-ai` but not authorization. When alpha.4 Core already provides authorization, the bootstrap reuses that service and does not register a duplicate. The integration body remains dependency-gated until authorization and every other required DSH service are active.
+The package installs `@deepseek-ai/dsh-authorization` as a runtime dependency. Its Cordis bootstrap mounts that service for the rc.2 web/headless profiles, which provide credentials and `llm-pi-ai` but not authorization. When alpha.5 Core already provides authorization, the bootstrap reuses that service and does not register a duplicate. The integration body remains dependency-gated until authorization and every other required DSH service are active.
 
 ### Installation-agent DSH practice
 
@@ -35,9 +35,9 @@ To persist these rules user-wide, add them to `$DSH_HOME/AGENTS.md` (default `~/
 ## Product behavior
 
 - DSH's dormant `llm-pi-ai` mount owns the Copilot model adapter, catalog, OAuth flow, credential record, and token refresh.
-- DSH alpha.4 Core owns the authorization service; this package supplies the same service only for profiles such as rc.2 that omit it.
+- DSH alpha.5 Core owns the authorization service; this package supplies the same service only for profiles such as rc.2 that omit it.
 - This package contributes the Models provider-card UI and its Host-only authorization Remote.
-- All four authorization Remote results use one strict Zod v4 codec, so rc.2 validates status/start/cancel/sign-out views while alpha.4 keeps the same wire contract.
+- All four authorization Remote results use one strict Zod v4 codec, so rc.2 validates status/start/cancel/sign-out views while alpha.5 keeps the same wire contract.
 - Successful sign-in and Host startup intersect the account's `availableModelIds` with the installed pi-ai catalog when creating or repairing the route profile. Empty, incomplete, or stale profiles self-heal idempotently, including after the Models UI saves an empty provider entry. Each model entry carries its catalog `api`, so one route preserves mixed protocols without route-level `api`, `baseURL`, or `apiKeyEnv`.
 - Before a Copilot OAuth grant is persisted or reused, the Host adapter rebuilds pi-ai's documented fields into a fresh plain JSON object. Cross-module and null-prototype credentials are accepted when their owned fields are valid; unrelated extension members are discarded, model IDs are deduplicated in order, and malformed owned fields fail without logging their values.
 - Sign-out deletes only `llm-pi-ai/github-copilot`. It intentionally keeps the route profile and all unrelated settings.
@@ -97,7 +97,7 @@ Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential refer
 
 Public package entries are `.`, `./client`, `./remote`, and `./deployment-baseline.json`.
 
-The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.4`; authorization and Zod v4 are real runtime dependencies so one-package rc.2 installation and strict Remote result validation are complete. Mixed-protocol rc.2 routes require the controlled Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5` on `cloga-pi-ai-model-api`, based on the rc.2 tag; the stock tag does not resolve model-entry `api`. CI checks that exact controlled rc.2 commit and the alpha.4 source commit separately, including a real controlled-Core config acceptance test and alpha.4's Fetch-validated provider headers.
+The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.5`; authorization and Zod v4 are real runtime dependencies so one-package rc.2 installation and strict Remote result validation are complete. Mixed-protocol rc.2 routes require the controlled Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5` on `cloga-pi-ai-model-api`, based on the rc.2 tag; the stock tag does not resolve model-entry `api`. CI checks that exact controlled rc.2 commit and the alpha.5 source commit separately, including a real controlled-Core config acceptance test and alpha.5's Fetch-validated provider headers.
 
 ## Build and verify
 

@@ -22,9 +22,9 @@ jobs:
             repository: cloga/deepseek-harness
             commit: a772dbbde82780bff2b9394427e9f0a24cafa1d5
             controlledCore: true
-          - release: 0.1.2-alpha.4
+          - release: 0.1.2-alpha.5
             repository: deepseek-ai/deepseek-harness
-            commit: 4e84901e6471b79ec0338099867ebb4606d12bb5
+            commit: db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6

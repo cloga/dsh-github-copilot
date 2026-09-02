@@ -30,12 +30,12 @@ function context(overrides: Record<string, unknown> = {}): Context {
 }
 
 describe('assertDshCompatibility', () => {
-  it('declares desktop rc.2 and alpha.4 compatibility', () => {
+  it('declares desktop rc.2 and alpha.5 compatibility', () => {
     expect(DSH_COMPATIBILITY).toMatchObject({
-      release: '0.1.2-alpha.4',
+      release: '0.1.2-alpha.5',
       developmentRelease: '0.1.1-rc.2',
-      peerRange: '^0.1.1-rc.2 || ^0.1.2-alpha.4',
-      supportedReleases: ['0.1.1-rc.2', '0.1.2-alpha.4'],
+      peerRange: '^0.1.1-rc.2 || ^0.1.2-alpha.5',
+      supportedReleases: ['0.1.1-rc.2', '0.1.2-alpha.5'],
     })
   })
 
