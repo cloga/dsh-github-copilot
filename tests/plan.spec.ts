@@ -12,10 +12,10 @@ import { deepseekRoute, fakeContext, makeCandidate } from './helpers.ts'
 
 const planConfig = { probe: true, probeTimeoutMs: 1_000 }
 
-function copilotContext(model = 'gpt-5.4') {
+function copilotContext(model = 'gpt-5.4', profile: Record<string, unknown> = {}) {
   return fakeContext({
     agentDefaultModel: { currentSelection: () => ({ provider: 'github-copilot', model }) },
-    settings: { get: () => ({ providers: { 'github-copilot': {} } }) },
+    settings: { get: () => ({ providers: { 'github-copilot': profile } }) },
   })
 }
 
@@ -62,6 +62,23 @@ describe('Copilot candidate resolution', () => {
 
   it('fails closed for a Copilot model whose catalog protocol cannot host search', () => {
     expect(resolveCandidates(copilotContext('gpt-4.1'), planConfig)).toEqual([])
+  })
+
+  it('excludes a model-level Completions route and admits a model-level Responses route', () => {
+    const mixedRoute = {
+      models: [
+        { id: 'gemini-3.6-flash', api: 'openai-completions' },
+        { id: 'gpt-5.6-sol', api: 'openai-responses' },
+      ],
+    }
+    expect(resolveCandidates(copilotContext('gemini-3.6-flash', mixedRoute), planConfig)).toEqual([])
+    expect(resolveCandidates(copilotContext('gpt-5.6-sol', mixedRoute), planConfig)).toEqual([
+      expect.objectContaining({
+        protocol: 'openai-responses',
+        model: 'gpt-5.6-sol',
+        webSearchToolType: 'web_search',
+      }),
+    ])
   })
 })
 

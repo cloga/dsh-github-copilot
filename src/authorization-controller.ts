@@ -79,8 +79,13 @@ function providerProfileFrom(record: { readonly kind: string; readonly payload?:
   if (record?.kind !== 'grant' || typeof record.payload !== 'object' || record.payload === null) return {}
   const available = Reflect.get(record.payload, 'availableModelIds')
   if (!Array.isArray(available) || !available.every(id => typeof id === 'string')) return {}
-  const installed = new Set(getBuiltinModels('github-copilot').map(model => model.id))
-  const models = [...new Set(available)].filter(id => installed.has(id)).map(id => ({ id }))
+  const installed = new Map(
+    getBuiltinModels('github-copilot').map(model => [model.id, model.api] as const),
+  )
+  const models = [...new Set(available)].flatMap((id) => {
+    const api = installed.get(id)
+    return api === undefined ? [] : [{ id, api }]
+  })
   if (models.length === 0) {
     throw new Error('github-copilot: the signed-in account exposes no models from the installed pi-ai catalog')
   }

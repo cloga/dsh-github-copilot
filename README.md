@@ -26,7 +26,7 @@ The package installs `@deepseek-ai/dsh-authorization` as a runtime dependency. I
 - DSH alpha.4 Core owns the authorization service; this package supplies the same service only for profiles such as rc.2 that omit it.
 - This package contributes the Models provider-card UI and its Host-only authorization Remote.
 - All four authorization Remote results use one strict Zod v4 codec, so rc.2 validates status/start/cancel/sign-out views while alpha.4 keeps the same wire contract.
-- Successful sign-in intersects the account's `availableModelIds` with the installed pi-ai catalog when creating a new route profile.
+- Successful sign-in intersects the account's `availableModelIds` with the installed pi-ai catalog when creating a new route profile. Each model entry carries its catalog `api`, so one route preserves mixed protocols without route-level `api`, `baseURL`, or `apiKeyEnv`.
 - Before a Copilot OAuth grant is persisted or reused, the Host adapter rebuilds pi-ai's documented fields into a fresh plain JSON object. Cross-module and null-prototype credentials are accepted when their owned fields are valid; unrelated extension members are discarded, model IDs are deduplicated in order, and malformed owned fields fail without logging their values.
 - Sign-out deletes only `llm-pi-ai/github-copilot`. It intentionally keeps the route profile and all unrelated settings.
 - Hosted search calls `api.individual.githubcopilot.com` directly with the refreshed credential from that same record.
@@ -85,7 +85,7 @@ Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential refer
 
 Public package entries are `.`, `./client`, `./remote`, and `./deployment-baseline.json`.
 
-The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.4`; authorization and Zod v4 are real runtime dependencies so one-package rc.2 installation and strict Remote result validation are complete. The published rc.2 packages are the local compiler baseline; CI checks the exact rc.2 and alpha.4 source commits and their required public seams separately, including alpha.4's Fetch-validated provider headers and Host-owned discovery headers.
+The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.4`; authorization and Zod v4 are real runtime dependencies so one-package rc.2 installation and strict Remote result validation are complete. Mixed-protocol rc.2 routes require the controlled Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5` on `cloga-pi-ai-model-api`, based on the rc.2 tag; the stock tag does not resolve model-entry `api`. CI checks that exact controlled rc.2 commit and the alpha.4 source commit separately, including a real controlled-Core config acceptance test and alpha.4's Fetch-validated provider headers.
 
 ## Build and verify
 

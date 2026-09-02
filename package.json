@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "First-class GitHub Copilot model and hosted-search integration for DeepSeek Harness.",
-  "version": "0.3.0-cloga.6",
+  "version": "0.3.0-cloga.7",
   "packageManager": "pnpm@11.7.0",
   "publishConfig": {
     "access": "public",
@@ -65,6 +65,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "verify:baseline": "node scripts/verify-deployment-baseline.mjs",
     "verify:package": "node scripts/verify-package.mjs",
+    "verify:controlled-core": "node scripts/verify-controlled-core.mjs",
     "verify:upstream": "node scripts/verify-upstream-baseline.mjs",
     "verify": "pnpm typecheck && pnpm verify:baseline && pnpm build && pnpm test && pnpm verify:package"
   },

@@ -135,17 +135,66 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(section.providers['github-copilot']).toEqual({ models: [{ id: 'gpt-5' }] })
   })
 
-  it('materializes only account-available installed models for a new profile', async () => {
+  it('materializes the exact mixed-protocol account route without route-level connection fields', async () => {
     const harness = runtime({
       configured: true,
-      availableModelIds: ['gpt-5.4', 'not-in-installed-catalog', 'gpt-5.4'],
+      availableModelIds: ['gemini-3.6-flash', 'gpt-5.6-sol'],
     })
 
     await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
       op: 'set',
       path: ['providers', 'github-copilot'],
-      value: { models: [{ id: 'gpt-5.4' }] },
+      value: {
+        models: [
+          { id: 'gemini-3.6-flash', api: 'openai-completions' },
+          { id: 'gpt-5.6-sol', api: 'openai-responses' },
+        ],
+      },
+    }])
+    expect(harness.settingsDocument['llm-pi-ai']).toEqual({
+      providers: {
+        openai: { apiKeyEnv: 'OPENAI_API_KEY' },
+        'github-copilot': {
+          models: [
+            { id: 'gemini-3.6-flash', api: 'openai-completions' },
+            { id: 'gpt-5.6-sol', api: 'openai-responses' },
+          ],
+        },
+      },
+    })
+  })
+
+  it('deduplicates account model ids while preserving their first-seen order', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gpt-5.6-sol', 'gpt-5.6-sol', 'gemini-3.6-flash', 'gpt-5.6-sol'],
+    })
+
+    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
+    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set',
+      path: ['providers', 'github-copilot'],
+      value: {
+        models: [
+          { id: 'gpt-5.6-sol', api: 'openai-responses' },
+          { id: 'gemini-3.6-flash', api: 'openai-completions' },
+        ],
+      },
+    }])
+  })
+
+  it('omits account model ids unsupported by the installed catalog', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['not-in-installed-catalog', 'gpt-5.6-sol'],
+    })
+
+    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
+    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set',
+      path: ['providers', 'github-copilot'],
+      value: { models: [{ id: 'gpt-5.6-sol', api: 'openai-responses' }] },
     }])
   })
 

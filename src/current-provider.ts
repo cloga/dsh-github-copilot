@@ -118,11 +118,13 @@ function profileFacts(
     ? selected.apis.filter((api): api is string => typeof api === 'string')
     : []
   const selectedApi = typeof selected?.['api'] === 'string' ? selected.api : undefined
+  const routeApi = stringField('api')
+  const effectiveApi = selectedApi ?? routeApi
   const supportedApis = declaredApis.length > 0
     ? declaredApis
     : selectedApi === undefined ? undefined : [selectedApi]
   return {
-    ...stringField('api') === undefined ? {} : { api: stringField('api') },
+    ...effectiveApi === undefined ? {} : { api: effectiveApi },
     ...stringField('baseURL') === undefined ? {} : { baseURL: stringField('baseURL') },
     ...stringField('apiKeyEnv') === undefined ? {} : { apiKeyEnv: stringField('apiKeyEnv') },
     ...supportedApis === undefined ? {} : { supportedApis },

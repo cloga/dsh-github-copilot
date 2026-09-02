@@ -51,6 +51,14 @@ if (baseline.providerHeaders === 'fetch-validated-discovery') {
     'stored?.headers',
   ])
 }
+if (baseline.perModelApi === 'model-entry') {
+  await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', [
+    'api: z.union(supportedProtocols())',
+  ])
+  await assertMarkers('packages/llm/llm-pi-ai/src/catalog.ts', [
+    'entry.api ?? request.api ?? base?.api ?? routeApi',
+  ])
+}
 await assertMarkers('packages/llm/llm-pi-ai/src/login.ts', [
   'registerPiAiFlows',
   'recordKeyFor(providerId)',

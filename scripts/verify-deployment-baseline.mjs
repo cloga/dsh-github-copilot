@@ -47,9 +47,13 @@ const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
 assert(dshBaselines.length === 2, 'exactly two DSH baselines must be declared')
 assert(
   dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
-    && entry.commit === 'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e'
-    && entry.modelsUi === 'settings-section-fallback'),
-  'DSH Desktop rc.2 baseline is missing',
+    && entry.commit === 'a772dbbde82780bff2b9394427e9f0a24cafa1d5'
+    && entry.basedOnCommit === 'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e'
+    && entry.source === 'https://github.com/cloga/deepseek-harness'
+    && entry.branch === 'cloga-pi-ai-model-api'
+    && entry.modelsUi === 'settings-section-fallback'
+    && entry.perModelApi === 'model-entry'),
+  'controlled DSH Desktop rc.2 baseline is missing',
 )
 assert(
   dshBaselines.some(entry => entry.release === '0.1.2-alpha.4'
@@ -126,10 +130,13 @@ assert((await read('CLAUDE.md')).includes('[AGENTS.md](./AGENTS.md)'), 'CLAUDE.m
 
 const workflow = await read('.github/workflows/ci.yml')
 for (const command of [
-  'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e',
+  'a772dbbde82780bff2b9394427e9f0a24cafa1d5',
+  'repository: cloga/deepseek-harness',
   '4e84901e6471b79ec0338099867ebb4606d12bb5',
   'pnpm install --frozen-lockfile',
+  "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
   'pnpm verify:upstream -- dsh-upstream',
+  'pnpm verify:controlled-core -- dsh-upstream',
   'pnpm verify',
   'pnpm pack --pack-destination artifacts',
 ]) {
