@@ -18,6 +18,18 @@ Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录�
 
 本包会将 `@deepseek-ai/dsh-authorization` 作为运行时依赖安装。Cordis bootstrap 会在只提供 credentials 与 `llm-pi-ai`、但未挂载 authorization 的 rc.2 web/headless profile 中补充该服务；alpha.4 Core 已提供 authorization 时则直接复用，不会重复注册。只有 authorization 与其它全部必需 DSH 服务可用后，主集成才会激活。
 
+### 安装代理的 DSH 实践
+
+这是代理侧的 DSH 工具调用实践，不是 Copilot runtime 设置。可复用的英文规则如下：
+
+- Initial `pwsh` calls omit `sandbox_permissions` and `justification` entirely.
+- When approval prompts are disabled, never include either field.
+- When the current sandbox mode is `danger-full-access`, never request escalation.
+- Use both fields only once, when retrying the exact same command after a real sandbox denial, approval is available, and the target mode is strictly wider than the current mode.
+- Omit the keys rather than sending `null`, empty strings, or the current sandbox mode.
+
+如需在用户范围持久化这些规则，请将它们加入 `$DSH_HOME/AGENTS.md`（默认 `~/.dsh/AGENTS.md`）。安装程序必须把规则合并到现有用户指令中，而不是覆盖文件；未经用户明确同意，绝不能静默修改该文件。本插件本身不会、也不应重写用户全局代理指令。
+
 ## 产品行为
 
 - DSH 的 dormant `llm-pi-ai` mount 负责 Copilot 模型 adapter、catalog、OAuth、credential record 和 token refresh。

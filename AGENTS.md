@@ -78,6 +78,18 @@ When upgrading DSH or pi-ai, inspect the exact tagged public exports and update 
 - Do not commit generated archives, temporary files, `.env` files, tokens, or local credentials.
 - Keep design rationale in code/docs that enforce it; do not add empty templates or duplicate policy documents.
 
+## Installation-agent PowerShell practice
+
+Installation agents using the DSH `pwsh` tool must follow these rules:
+
+- Initial `pwsh` calls omit `sandbox_permissions` and `justification` entirely.
+- When approval prompts are disabled, never include either field.
+- When the current sandbox mode is `danger-full-access`, never request escalation.
+- Use both fields only once, when retrying the exact same command after a real sandbox denial, approval is available, and the target mode is strictly wider than the current mode.
+- Omit the keys rather than sending `null`, empty strings, or the current sandbox mode.
+
+This is agent-side DSH tool-call practice, not a Copilot runtime setting. The plugin does not and should not rewrite user-global agent instructions.
+
 ## Mechanical verification
 
 Run from the repository root:
