@@ -60,6 +60,7 @@ The supported upstream baselines are:
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.
 - Provider headers: alpha.4 validates configured headers through Fetch and reuses Host-owned headers during model discovery.
+- Remote results: all authorization methods share the Zod v4 `GitHubCopilotAuthorizationView` strict codec required by rc.2 and accepted by alpha.4.
 
 When upgrading DSH or pi-ai, inspect the exact tagged public exports and update the baseline, compatibility guard, tests, and docs together.
 

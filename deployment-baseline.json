@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.5"
+    "version": "0.3.0-cloga.6"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -51,7 +51,8 @@
     },
     "piAi": "^0.84.2",
     "runtimeDependencies": {
-      "@deepseek-ai/dsh-authorization": "^0.1.1-rc.2 || ^0.1.2-alpha.4"
+      "@deepseek-ai/dsh-authorization": "^0.1.1-rc.2 || ^0.1.2-alpha.4",
+      "zod": "^4.4.3"
     }
   },
   "capabilities": [
@@ -65,6 +66,18 @@
       "tests": [
         {"file": "tests/client-bundle.spec.ts", "name": "hands off the built client with the exact plugin id and injected require"},
         {"file": "tests/client-bundle.spec.ts", "name": "materializes the built client apply and inject exports"}
+      ]
+    },
+    {
+      "id": "strict-remote-result-codecs",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/remote.ts", "marker": "dsh-github-copilot#GitHubCopilotAuthorizationView"},
+        {"file": "src/remote.ts", "marker": "mode: 'strict'"},
+        {"file": "src/remote.ts", "marker": "GitHubCopilotAuthorizationViewSchema"}
+      ],
+      "tests": [
+        {"file": "tests/client-bundle.spec.ts", "name": "applies through the rc.2 client API with strict result codecs and rejects malformed views"}
       ]
     },
     {

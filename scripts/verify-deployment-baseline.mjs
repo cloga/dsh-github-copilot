@@ -32,6 +32,10 @@ assert(
 for (const [dependency, range] of Object.entries(manifest.supportedBaselines?.runtimeDependencies ?? {})) {
   assert(packageJson.dependencies?.[dependency] === range, `${dependency} runtime range differs`)
 }
+assert(
+  manifest.capabilities?.some(capability => capability.id === 'strict-remote-result-codecs'),
+  'strict Remote result codec capability is missing',
+)
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(peerRange === '^0.1.1-rc.2 || ^0.1.2-alpha.4', 'DSH peer range must target rc.2 and alpha.4')
