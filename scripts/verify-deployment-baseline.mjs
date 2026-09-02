@@ -106,6 +106,7 @@ const guardedSources = [
   'src/index.ts',
   'src/plan.ts',
   'src/copilot-auth.ts',
+  'src/copilot-grant.ts',
   'package.json',
   'cordis.patch.yml',
 ]

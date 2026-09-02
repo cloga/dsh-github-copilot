@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.7"
+    "version": "0.3.0-cloga.8"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -116,7 +116,7 @@
         {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID]"}
       ],
       "tests": [
-        {"file": "tests/authorization-controller.spec.ts", "name": "does not replace an existing Copilot profile or unrelated provider settings"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "repairs an incomplete Copilot route while preserving unrelated provider settings"},
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
         {"file": "tests/authorization-controller.spec.ts", "name": "fails loudly instead of enabling the full catalog when no installed model is available"},
         {"file": "tests/authorization-controller.spec.ts", "name": "signs out by deleting only the llm-pi-ai Copilot record and keeps the route profile"}
@@ -135,6 +135,22 @@
         {"file": "tests/authorization-controller.spec.ts", "name": "omits account model ids unsupported by the installed catalog"},
         {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "accepts both mixed-protocol model entries through the real Core config"},
         {"file": "tests/plan.spec.ts", "name": "excludes a model-level Completions route and admits a model-level Responses route"}
+      ]
+    },
+    {
+      "id": "existing-grant-route-self-healing",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/index.ts", "marker": "ensureGitHubCopilotProviderProfile(ctx)"},
+        {"file": "src/authorization-controller.ts", "marker": "sameProviderProfile"},
+        {"file": "src/authorization-controller.ts", "marker": "normalizeGitHubCopilotOAuthCredential(record.payload)"}
+      ],
+      "tests": [
+        {"file": "tests/loader-composition.spec.ts", "name": "repairs an existing valid Copilot grant during Host startup"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "repairs a pre-existing grant with an empty Copilot route"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "repairs an incomplete Copilot route while preserving unrelated provider settings"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing Copilot route already matches the account catalog"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"}
       ]
     },
     {
@@ -157,8 +173,8 @@
       "id": "strict-json-oauth-grant-normalization",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/copilot-auth.ts", "marker": "normalizeGitHubCopilotOAuthCredential"},
-        {"file": "src/copilot-auth.ts", "marker": "Number.isFinite(expires)"}
+        {"file": "src/copilot-grant.ts", "marker": "normalizeGitHubCopilotOAuthCredential"},
+        {"file": "src/copilot-grant.ts", "marker": "Number.isFinite(expires)"}
       ],
       "tests": [
         {"file": "tests/copilot-auth.spec.ts", "name": "normalizes cross-module OAuth grants for a strict JSON credential store"},
@@ -232,6 +248,7 @@
       "GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID",
       "GITHUB_COPILOT_CREDENTIAL_KEY",
       "GitHubCopilotAuthorizationController",
+      "ensureGitHubCopilotProviderProfile",
       "LLM_PI_AI_SETTINGS_NAMESPACE",
       "DSH_COMPATIBILITY",
       "assertDshCompatibility"

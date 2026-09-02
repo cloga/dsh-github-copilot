@@ -6,10 +6,13 @@
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
+import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 
 export const GITHUB_COPILOT_CREDENTIAL_KEY = 'llm-pi-ai/github-copilot'
 export const GITHUB_COPILOT_PROVIDER_ID = 'github-copilot'
 export const LLM_PI_AI_SETTINGS_NAMESPACE = 'llm-pi-ai'
+
+const profileRepairs = new WeakMap<Context, Promise<boolean>>()
 
 export interface AuthorizationNoticeView {
   readonly message: string
@@ -76,9 +79,10 @@ interface SettingsServiceView {
 }
 
 function providerProfileFrom(record: { readonly kind: string; readonly payload?: unknown } | undefined): Record<string, unknown> {
-  if (record?.kind !== 'grant' || typeof record.payload !== 'object' || record.payload === null) return {}
-  const available = Reflect.get(record.payload, 'availableModelIds')
-  if (!Array.isArray(available) || !available.every(id => typeof id === 'string')) return {}
+  if (record?.kind !== 'grant') {
+    throw new Error('github-copilot: the configured credential is not an OAuth grant')
+  }
+  const available = normalizeGitHubCopilotOAuthCredential(record.payload).availableModelIds ?? []
   const installed = new Map(
     getBuiltinModels('github-copilot').map(model => [model.id, model.api] as const),
   )
@@ -113,12 +117,54 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function hasProviderProfile(section: unknown): boolean {
-  if (typeof section !== 'object' || section === null) return false
+function providerProfileAt(section: unknown): unknown {
+  if (typeof section !== 'object' || section === null) return undefined
   const providers = Reflect.get(section, 'providers')
-  return typeof providers === 'object'
-    && providers !== null
-    && Object.hasOwn(providers, GITHUB_COPILOT_PROVIDER_ID)
+  if (typeof providers !== 'object' || providers === null) return undefined
+  return Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
+}
+
+function sameProviderProfile(current: unknown, expected: Record<string, unknown>): boolean {
+  if (typeof current !== 'object' || current === null) return false
+  const record = current as Record<string, unknown>
+  if (Object.keys(record).length !== 1 || !Array.isArray(record.models)) return false
+  return JSON.stringify(record.models) === JSON.stringify(expected.models)
+}
+
+/**
+ * Materialize or repair the reference-free Copilot route from an existing
+ * provider-owned OAuth grant. Returns false when no credential exists.
+ */
+async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<boolean> {
+  const credentials = service<CredentialRecordServiceView>(
+    ctx,
+    'credentials',
+    ['readRecord'],
+  )
+  const record = await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+  if (record === undefined) return false
+
+  const profile = providerProfileFrom(record)
+  const settings = service<SettingsServiceView>(ctx, 'settings', ['get', 'mutate'])
+  if (sameProviderProfile(providerProfileAt(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE)), profile)) {
+    return false
+  }
+  await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, [{
+    op: 'set',
+    path: ['providers', GITHUB_COPILOT_PROVIDER_ID],
+    value: profile,
+  }])
+  return true
+}
+
+export function ensureGitHubCopilotProviderProfile(ctx: Context): Promise<boolean> {
+  const active = profileRepairs.get(ctx)
+  if (active !== undefined) return active
+  const repair = repairGitHubCopilotProviderProfile(ctx).finally(() => {
+    if (profileRepairs.get(ctx) === repair) profileRepairs.delete(ctx)
+  })
+  profileRepairs.set(ctx, repair)
+  return repair
 }
 
 /**
@@ -149,6 +195,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       ['describeRecord', 'deleteRecord'],
     )
     const record = await credentials.describeRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+    if (record.configured) await ensureGitHubCopilotProviderProfile(this.ctx)
     const inFlight = authorization.describe(GITHUB_COPILOT_CREDENTIAL_KEY)?.inFlight === true
     return {
       phase: inFlight
@@ -259,19 +306,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   }
 
   private async ensureProviderProfile(): Promise<void> {
-    const settings = service<SettingsServiceView>(this.ctx, 'settings', ['get', 'mutate'])
-    if (hasProviderProfile(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE))) return
-    const credentials = service<CredentialRecordServiceView>(
-      this.ctx,
-      'credentials',
-      ['readRecord'],
-    )
-    const profile = providerProfileFrom(await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY))
-    await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, [{
-      op: 'set',
-      path: ['providers', GITHUB_COPILOT_PROVIDER_ID],
-      value: profile,
-    }])
+    await ensureGitHubCopilotProviderProfile(this.ctx)
   }
 }
 

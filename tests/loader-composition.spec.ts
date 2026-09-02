@@ -20,12 +20,25 @@ afterEach(async () => {
   await Promise.allSettled(disposers.splice(0).reverse().map(dispose => dispose()))
 })
 
-function credentialService() {
+function credentialService(configured = false) {
   return {
     resolve: async () => ({ value: 'unused' }),
-    describeRecord: async () => ({ configured: false, writable: true }),
-    readRecord: async () => undefined,
-    listRecords: async () => [],
+    describeRecord: async () => ({ configured, writable: true }),
+    readRecord: async () => configured
+      ? {
+          kind: 'grant',
+          payload: {
+            type: 'oauth',
+            refresh: 'github-device-grant',
+            access: 'copilot-api-token',
+            expires: Date.now() + 86_400_000,
+            availableModelIds: ['gemini-3.6-flash', 'gpt-5.6-sol'],
+          },
+        }
+      : undefined,
+    listRecords: async () => configured
+      ? [{ key: 'llm-pi-ai/github-copilot', kind: 'grant' }]
+      : [],
     modifyRecord: async (_key: string, mutate: (current: unknown) => unknown) => mutate(undefined),
     deleteRecord: async () => undefined,
   }
@@ -34,20 +47,30 @@ function credentialService() {
 async function mountProfile(
   ctx: Context,
   providesAuthorization = false,
-): Promise<void> {
+  configured = false,
+): Promise<{
+  readonly settingsDocument: {
+    readonly 'github-copilot': Record<string, unknown>
+    readonly 'llm-pi-ai': { readonly providers: Record<string, unknown> }
+  }
+  readonly mutate: ReturnType<typeof vi.fn>
+}> {
   const settingsDocument = {
     'github-copilot': {},
     'llm-pi-ai': { providers: { 'github-copilot': {} } },
   }
+  const mutate = vi.fn(async (_namespace: string, operations: Array<{ path: string[]; value: unknown }>) => {
+    settingsDocument['llm-pi-ai'].providers[operations[0]?.path[1] ?? ''] = operations[0]?.value
+  })
   const fiber = ctx.plugin({
     name: providesAuthorization ? 'alpha3-web-profile' : 'rc2-web-profile',
     apply(profileCtx) {
-      profileCtx.provide('credentials', credentialService())
+      profileCtx.provide('credentials', credentialService(configured))
       profileCtx.provide('llm', {})
       profileCtx.provide('systemPrompt', { section: () => () => undefined })
       profileCtx.provide('settings', {
         get: (namespace: unknown) => settingsDocument[String(namespace) as keyof typeof settingsDocument],
-        mutate: async () => undefined,
+        mutate,
         installSection: (
           _owner: Context,
           _namespace: unknown,
@@ -76,6 +99,7 @@ async function mountProfile(
       expect(ctx.get('authorization') !== undefined).toBe(true)
     })
   }
+  return { settingsDocument, mutate }
 }
 
 async function mountIntegration(ctx: Context): Promise<void> {
@@ -108,5 +132,22 @@ describe('loader composition', () => {
 
     expect(ctx.registry.get(AuthorizationService)?.fibers).toHaveLength(1)
     expect(ctx.registry.get(AuthorizationService)?.fibers[0]?.uid).toBe(authorizationFiberUid)
+  })
+
+  it('repairs an existing valid Copilot grant during Host startup', async () => {
+    const ctx = new Context()
+    const harness = await mountProfile(ctx, true, true)
+
+    await mountIntegration(ctx)
+
+    await vi.waitFor(() => {
+      expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({
+        models: [
+          { id: 'gemini-3.6-flash', api: 'openai-completions' },
+          { id: 'gpt-5.6-sol', api: 'openai-responses' },
+        ],
+      })
+    })
+    expect(harness.mutate).toHaveBeenCalledTimes(1)
   })
 })
