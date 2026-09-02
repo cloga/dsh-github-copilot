@@ -27,7 +27,9 @@ import { contentHasImageAttachments, inlineWireStream } from './wire.ts'
 import type { InlineHooks } from './wire.ts'
 import { createTraditionalSearchProvider } from './traditional-search.ts'
 import { assertDshCompatibility } from './compatibility.ts'
-import GitHubCopilotAuthorizationController from './authorization-controller.ts'
+import GitHubCopilotAuthorizationController, {
+  ensureGitHubCopilotProviderProfile,
+} from './authorization-controller.ts'
 import { createGitHubCopilotTokenResolver } from './copilot-auth.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -64,6 +66,7 @@ export { assertDshCompatibility, DSH_COMPATIBILITY } from './compatibility.ts'
 export {
   GITHUB_COPILOT_CREDENTIAL_KEY,
   GitHubCopilotAuthorizationController,
+  ensureGitHubCopilotProviderProfile,
   LLM_PI_AI_SETTINGS_NAMESPACE,
 } from './authorization-controller.ts'
 export type {
@@ -152,6 +155,10 @@ function ensureAuthorization(ctx: Context): void {
 function activate(ctx: Context, config: InlineConfig): void {
   assertDshCompatibility(ctx)
   ctx.plugin(GitHubCopilotAuthorizationController)
+  void ensureGitHubCopilotProviderProfile(ctx).catch((error: unknown) => {
+    ctx.logger.error('github-copilot: failed to repair the GitHub Copilot provider route during startup')
+    ctx.logger.error(error)
+  })
   const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx)
   let current: () => InlineConfig = () => config
   // The plan is built when the settings section attaches IF the chat route

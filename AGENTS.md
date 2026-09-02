@@ -18,7 +18,7 @@ This repository owns four narrow surfaces:
 
 - `src/index.ts`: authorization bootstrap, dependency-gated Host entry, settings registration, listener, and `ctx.web` provider composition.
 - `src/authorization-controller.ts`: sign-in/status/sign-out and route mutation.
-- `src/copilot-auth.ts`: narrow pi-ai `CredentialStore` adapter over `llm-pi-ai/github-copilot`.
+- `src/copilot-grant.ts`, `src/copilot-auth.ts`: strict grant normalization and narrow pi-ai `CredentialStore` adapter over `llm-pi-ai/github-copilot`.
 - `src/client.ts`: `settings.models.provider-card` UI keyed by `llm-pi-ai`.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/current-provider.ts`: selected DSH route plus installed pi-ai catalog facts.
