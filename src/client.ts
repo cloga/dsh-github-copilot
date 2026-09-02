@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createElement, useCallback, useEffect, useState } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
-import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-alpha3-types.ts'
+import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote from './remote.ts'
 
 export const inject = ['remote', 'slots']

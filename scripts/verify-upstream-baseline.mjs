@@ -41,6 +41,16 @@ if (baseline.modelsUi === 'provider-card') {
     'ProviderEditor',
   ])
 }
+if (baseline.providerHeaders === 'fetch-validated-discovery') {
+  await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', [
+    'assertValidHeaders',
+    'new Headers([[name, value]])',
+  ])
+  await assertMarkers('packages/llm/llm-pi-ai/src/discovery.ts', [
+    'StoredModelDiscoveryProfile',
+    'stored?.headers',
+  ])
+}
 await assertMarkers('packages/llm/llm-pi-ai/src/login.ts', [
   'registerPiAiFlows',
   'recordKeyFor(providerId)',
