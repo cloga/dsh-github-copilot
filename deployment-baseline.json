@@ -131,11 +131,13 @@
         {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode']"},
         {"file": "src/tool-schema-compat.ts", "marker": "assembly.variables.provider !== GITHUB_COPILOT_PROVIDER_ID"},
         {"file": "src/tool-schema-compat.ts", "marker": "ESCALATION_FIELDS"},
+        {"file": "src/tool-schema-compat.ts", "marker": "GOAL_UPDATE_TOOL_NAME"},
         {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"},
         {"file": "scripts/verify-upstream-baseline.mjs", "marker": "packages/core/agent/src/model-selection.ts"}
       ],
       "tests": [
         {"file": "tests/tool-schema-compat.spec.ts", "name": "removes escalation properties and required entries only for Copilot"},
+        {"file": "tests/tool-schema-compat.spec.ts", "name": "turns update_goal into action-specific schemas only for Copilot"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves every schema for non-Copilot providers"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "filters a real Cordis waterfall after model selection supplies the provider"},
         {"file": "tests/authorization-controller.spec.ts", "name": "repairs a Copilot route that still enables strict tool schemas"},
