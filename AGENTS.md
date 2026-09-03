@@ -6,13 +6,14 @@ This file is the authoritative entry point for humans and coding agents. Read it
 
 `dsh-github-copilot` is a companion to the controlled DSH Desktop `0.1.1-rc.2` Core baseline and DSH `0.1.2-rc.1`. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
 
-This repository owns five narrow surfaces:
+This repository owns six narrow surfaces:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution and Client-safe Remote descriptors.
 3. Strict JSON normalization of pi-ai's provider-owned Copilot OAuth grant.
 4. Reference-free creation of a missing `llm-pi-ai.providers.github-copilot` profile plus leaf-only reconciliation of existing profiles.
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
+6. Provider-scoped tool-schema compatibility for Copilot payload behaviors; Core remains the tool and execution owner.
 
 ## File map
 
@@ -22,7 +23,7 @@ This repository owns five narrow surfaces:
 - `src/client.ts`: `settings.models.provider-card` UI keyed by `llm-pi-ai`.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/current-provider.ts`: selected DSH route plus installed pi-ai catalog facts.
-- `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments.
+- `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments and action-specific Goal update schemas.
 - `src/plan.ts`: Copilot-only, fail-closed hosted-search candidate lifecycle.
 - `src/probe.ts`: bounded native-search capability proof.
 - `src/wire.ts`, `src/wire-anthropic.ts`: inline hosted-search streaming.
