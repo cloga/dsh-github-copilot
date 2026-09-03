@@ -1,12 +1,9 @@
 {
   "name": "dsh-github-copilot",
   "description": "First-class GitHub Copilot model and hosted-search integration for DeepSeek Harness.",
-  "version": "0.3.0-cloga.11",
+  "version": "0.3.0-cloga.12",
+  "private": true,
   "packageManager": "pnpm@11.7.0",
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cloga/dsh-github-copilot.git"
@@ -59,7 +56,6 @@
     "clean": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\"",
     "prepare": "tsc -p tsconfig.json && tsdown",
     "prepack": "pnpm verify:baseline",
-    "prepublishOnly": "pnpm test && pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
