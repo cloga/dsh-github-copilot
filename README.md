@@ -1,122 +1,147 @@
 # dsh-github-copilot
 
-[简体中文](./README.zh.md)
+[![CI](https://github.com/cloga/dsh-github-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/cloga/dsh-github-copilot/actions/workflows/ci.yml)
+[![Release](https://github.com/cloga/dsh-github-copilot/actions/workflows/release.yml/badge.svg)](https://github.com/cloga/dsh-github-copilot/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/cloga/dsh-github-copilot)](https://github.com/cloga/dsh-github-copilot/releases/latest)
+[![License](https://img.shields.io/github/license/cloga/dsh-github-copilot)](./LICENSE)
 
-One plugin for GitHub Copilot models and provider-hosted web search in DSH Desktop `0.1.1-rc.2` and DeepSeek Harness (DSH) `0.1.2-alpha.5`.
+**English** | [简体中文](./README.zh.md)
+
+A focused DSH companion for GitHub Copilot sign-in, account-aware model profiles, Copilot-specific tool compatibility, and provider-hosted search. It reuses DSH's built-in `@deepseek-ai/dsh-llm-pi-ai`; it is not a second Copilot model adapter or catalog.
+
+## Tested baselines
+
+| DSH surface | Tested source | Models UI |
+|---|---|---|
+| Controlled Desktop `0.1.1-rc.2` baseline | Controlled Core commit [`a772dbb`](https://github.com/cloga/deepseek-harness/commit/a772dbbde82780bff2b9394427e9f0a24cafa1d5) on `cloga-pi-ai-model-api` | Dedicated **Settings → GitHub Copilot** section |
+| DSH `0.1.2-alpha.5` | Tag commit [`db6bdc3`](https://github.com/deepseek-ai/deepseek-harness/commit/db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5) | **Settings → Models** provider card |
+
+The stock rc.2 tag does not resolve per-model `api` entries and is not the tested mixed-protocol baseline. Package peer ranges admit compatible `0.1.x` releases, but CI proves only the two exact sources above; newer DSH or pi-ai versions require a fresh compatibility review.
 
 ## Install and sign in
 
+Install the current release into the profile you use (replace `web` when targeting another profile):
+
 ```sh
-dsh plugin add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.12/dsh-github-copilot-0.3.0-cloga.12.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/dsh-github-copilot-0.3.0-cloga.13.tgz
 ```
 
-GitHub Releases are the authoritative distribution channel. The versioned tarball is immutable and can be pinned and hash-verified by deployment tooling; this package is intentionally not published to npm.
+Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
-Then open **Settings → Models**, find **GitHub Copilot**, and select **Sign in**. Complete the GitHub device-code flow shown in the provider card. The plugin uses DSH's built-in `llm-pi-ai` provider and writes a reference-free `llm-pi-ai.providers.github-copilot` profile without replacing other settings.
+GitHub Releases are the authoritative distribution channel. This repository intentionally does not publish to npm. Deployment automation should pin the versioned tarball and verify `SHA256SUMS` from the same Release.
 
-On Desktop `0.1.1-rc.2`, open the dedicated **Settings → GitHub Copilot** page because that release predates the Models provider-card extension slot. On `0.1.2-alpha.5`, the same controls render directly in the GitHub Copilot provider card.
+No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
-No `copilot2api` process, gateway URL, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
+## What this package owns
 
-The package installs `@deepseek-ai/dsh-authorization` as a runtime dependency. Its Cordis bootstrap mounts that service for the rc.2 web/headless profiles, which provide credentials and `llm-pi-ai` but not authorization. When alpha.5 Core already provides authorization, the bootstrap reuses that service and does not register a duplicate. The integration body remains dependency-gated until authorization and every other required DSH service are active.
+- A conditional authorization-service fallback for profiles such as rc.2 that omit Core's service.
+- The Models provider-card UI, Client-safe Remote descriptors, and Host authorization controller.
+- Strict normalization of pi-ai's provider-owned Copilot OAuth grant.
+- Account-aware reconciliation of the Copilot route's `models` and `compat.supportsStrictMode` leaves.
+- Direct provider-hosted search through inline agent-loop interception and a Responses-only `ctx.web` provider.
 
-### Installation-agent DSH practice
+DSH Core continues to own model selection, sandboxing, tools, attachments, and other providers. `@deepseek-ai/dsh-llm-pi-ai` owns the Copilot adapter, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport. Credentials remain Host-only.
 
-The plugin writes `compat.supportsStrictMode: false` into its managed Copilot route and removes `sandbox_permissions` plus `justification` from tool schemas assembled for the `github-copilot` provider. Copilot models repeatedly emit those fields even when ordinary JSON Schema marks them optional, so hiding them is the only verified way to preserve initial calls. Other providers retain DSH's one-shot escalation path. Copilot sessions that need wider access must select a sufficient standing permission before the call. Installation agents must also follow this payload practice:
+## Authorization and route behavior
 
-- Initial `pwsh` calls omit `sandbox_permissions` and `justification` entirely.
-- When approval prompts are disabled, never include either field.
-- When the current sandbox mode is `danger-full-access`, never request escalation.
-- Use both fields only once, when retrying the exact same command after a real sandbox denial, approval is available, and the target mode is strictly wider than the current mode.
-- Omit the keys rather than sending `null`, empty strings, or the current sandbox mode.
+`llm-pi-ai` registers the OAuth method; the authorization service orchestrates the interaction; this package contributes the UI/Remote controller and route reconciliation. Core supplies authorization on alpha.5. On rc.2 profiles that omit it, this package mounts its runtime dependency and reuses any provider already present.
 
-To persist these rules user-wide, add them to `$DSH_HOME/AGENTS.md` (default `~/.dsh/AGENTS.md`). Installers must merge them with existing user instructions rather than overwrite the file, and must never silently mutate it without explicit user consent. This plugin does not and should not rewrite user-global agent instructions.
+After sign-in and during Host startup, the package intersects the account's `availableModelIds` with the installed pi-ai catalog and materializes each model as `{ id, api }`. A missing profile is created without route-level connection references. For an existing profile, reconciliation intentionally changes only:
 
-## Product behavior
+- `providers.github-copilot.models`
+- `providers.github-copilot.compat.supportsStrictMode`
 
-- DSH's dormant `llm-pi-ai` mount owns the Copilot model adapter, catalog, OAuth flow, credential record, and token refresh.
-- DSH alpha.5 Core owns the authorization service; this package supplies the same service only for profiles such as rc.2 that omit it.
-- This package contributes the Models provider-card UI and its Host-only authorization Remote.
-- All four authorization Remote results use one strict Zod v4 codec, so rc.2 validates status/start/cancel/sign-out views while alpha.5 keeps the same wire contract.
-- Successful sign-in and Host startup intersect the account's `availableModelIds` with the installed pi-ai catalog when creating or repairing the route profile. Empty, incomplete, or stale model lists self-heal idempotently, including after the Models UI saves an empty provider entry. Model reconciliation updates only `providers.github-copilot.models`, preserving every other Copilot profile field and unrelated provider. Each model entry carries its catalog `api`, so one route preserves mixed protocols without requiring route-level connection fields. Independently, the managed route sets only `compat.supportsStrictMode: false`, and Copilot-scoped prompt assembly removes the two escalation arguments entirely because optional schema semantics alone are insufficient for these models.
-- Before a Copilot OAuth grant is persisted or reused, the Host adapter rebuilds pi-ai's documented fields into a fresh plain JSON object. Cross-module and null-prototype credentials are accepted when their owned fields are valid; unrelated extension members are discarded, model IDs are deduplicated in order, and malformed owned fields fail without logging their values.
-- Sign-out deletes only `llm-pi-ai/github-copilot`. It intentionally keeps the route profile and all unrelated settings.
-- Hosted search calls `api.individual.githubcopilot.com` directly with the refreshed credential from that same record.
-- The inline path adds the provider-native web-search tool to eligible agent-loop calls. The `github-copilot-hosted` provider exposes the same capability through `ctx.web`.
-- Search is fail-closed: the selected route must be `github-copilot`, the selected account must expose the model, its catalog protocol must support native search, and the capability probe must pass. Responses probes retry only a valid 2xx reply that omitted `web_search_call`, for at most two rounds over both supported spellings (four requests total); auth, HTTP, malformed-body, abort, and network failures stop immediately, and every attempt shares the configured whole-probe timeout.
+Every other Copilot field and unrelated provider is preserved, including legacy `baseURL` or `apiKeyEnv` values. Remove those legacy fields explicitly during migration. Sign-out deletes only the `llm-pi-ai/github-copilot` credential record and keeps route settings.
 
-Models that only use Chat Completions are still usable through DSH's normal `llm-pi-ai` path, but they do not advertise hosted search. Responses and Anthropic Messages candidates are probed before use.
+Before a grant is persisted or reused, the Host normalizer rebuilds only pi-ai's documented `type`, `refresh`, `access`, finite `expires`, optional `enterpriseUrl`, and optional deduplicated `availableModelIds` fields into a fresh plain JSON object.
 
-## Ownership boundary
+## Hosted search
 
-| Surface | Owner |
-|---|---|
-| Copilot chat/model transport and catalog | DSH `@deepseek-ai/dsh-llm-pi-ai` + pi-ai |
-| Authorization service lifecycle | DSH Core when present; this package's rc.2 bootstrap otherwise |
-| OAuth/device flow registration | DSH authorization seam + `llm-pi-ai` |
-| Credential storage and refresh | DSH credentials record `llm-pi-ai/github-copilot` + pi-ai |
-| Models sign-in/status/sign-out UI | This package's `./client` entry |
-| Browser-to-Host authorization calls | This package's `./remote` and Host controller |
-| Reference-free route mutation | This package, through DSH settings path mutation |
-| Hosted search probe, inline wire, and `ctx.web` bridge | This package, Host-only |
-| Model selection, sandboxing, tools, attachments, and other providers | DSH Core |
+- **Inline agent-loop path:** supports native-search candidates using OpenAI Responses or Anthropic Messages.
+- **`github-copilot-hosted` through `ctx.web.search()`:** supports OpenAI Responses candidates only.
+- **Chat Completions models:** remain usable through normal `llm-pi-ai` transport but do not advertise hosted search.
 
-Credential payloads never cross the Client Remote. The hosted-search adapter uses pi-ai's public `createModels()` and `Models.getAuth()` path, so refresh remains serialized inside DSH's credential-record mutation. Its strict Copilot normalizer persists only `type`, `refresh`, `access`, finite `expires`, optional `enterpriseUrl`, and optional `availableModelIds`.
+Requests go directly to the credential-resolved HTTPS Copilot endpoint after strict host validation: GitHub-hosted `api.*.githubcopilot.com`, or `copilot-api.<signed-in-enterprise-domain>` for an accepted GitHub Enterprise credential. No external gateway receives the credential.
+
+By default (`probe: true`), search fails closed unless the selected route is `github-copilot`, the account exposes the model, the installed protocol supports native search, and a bounded capability probe succeeds. Setting `probe: false` bypasses only capability proof and trusts the selected native protocol; route, account, protocol, endpoint, and authentication checks remain active. Authentication, HTTP, malformed-body, abort, and network probe failures do not fall back to an external search path.
+
+## Copilot tool compatibility
+
+To prevent observed invalid Copilot tool payloads, the package sets the managed route's `compat.supportsStrictMode` leaf to `false` and removes top-level `sandbox_permissions` and `justification` properties from every tool schema assembled when the selected provider is exactly `github-copilot`. Non-Copilot prompt assemblies are unchanged.
+
+Copilot sessions that need wider file or command access must select sufficient standing permissions before the call. Installation agents must also follow these payload rules:
+
+- Omit `sandbox_permissions` and `justification` on initial `pwsh` calls.
+- Never emit them when approval prompts are disabled or the current mode is already `danger-full-access`.
+- Use them only for the single exact-command retry allowed after a real sandbox denial when approval is available and the requested mode is wider.
+- Omit the keys entirely rather than sending null, empty, or current-mode values.
+
+The plugin does not rewrite `$DSH_HOME/AGENTS.md`. Installers may merge these rules into user instructions only with explicit user consent.
 
 ## Settings
 
-The `github-copilot` settings section contains only hosted-search behavior:
+The `github-copilot` settings section controls hosted search only:
 
-| Key | Default | Meaning |
+| Key | Default | Scope and meaning |
 |---|---:|---|
-| `enabled` | `true` | Enable the hosted-search integration. |
-| `providers` | `[]` | Optional route allowlist; empty follows the selected route. |
-| `includeSources` | `true` | Request and return provider citations. |
-| `stripServerTools` | `true` | Remove local function variants of provider-hosted search tools. |
-| `idleTimeoutMs` | `300000` | Inline stream idle timeout. |
-| `probe` | `true` | Require native hosted-search evidence before serving. |
-| `probeTimeoutMs` | `30000` | Capability probe timeout. |
+| `enabled` | `true` | Enable both hosted-search surfaces. |
+| `providers` | `[]` | Optional route allowlist for both surfaces; empty follows the selected route. |
+| `includeSources` | `true` | Request provider citations on the inline path. The `ctx.web` bridge always requests and returns sources. |
+| `stripServerTools` | `true` | On the inline path, remove local function variants of provider-hosted search tools. |
+| `idleTimeoutMs` | `300000` | Inline stream idle timeout and `ctx.web` request deadline, in milliseconds. |
+| `probe` | `true` | Require capability proof on both surfaces; `false` explicitly trusts the native protocol. |
+| `probeTimeoutMs` | `30000` | Whole capability-probe deadline, in milliseconds. |
 
 There are no token, API-key, model-catalog, or endpoint settings in this package.
 
-## Migration
+## Migration and troubleshooting
 
-Remove old Copilot gateway routes, `COPILOT_GITHUB_TOKEN`-style credential references, `copilot2api`, and `dsh-web-search-provider`. Install this package, sign in from **Settings → Models**, select an account-available Copilot model, and select `github-copilot-hosted` only when an explicit `ctx.web` search provider is needed.
+Remove old gateway routes, `COPILOT_GITHUB_TOKEN`-style references, `copilot2api`, and `dsh-web-search-provider` before relying on the managed route.
 
-## Source and package entries
+- **No sign-in control:** confirm the package is installed in the active profile and use the baseline-specific Models UI above.
+- **Signed in but no models:** the account must expose at least one model present in the installed pi-ai catalog; the package fails closed instead of enabling the full catalog.
+- **Hosted search unavailable:** select the `github-copilot` route, choose an account-available Responses or Anthropic model, and inspect the named probe error. The explicit `ctx.web` provider is Responses-only.
+- **Legacy endpoint/key still present:** reconciliation preserves unowned fields by design; remove legacy connection fields manually.
 
-- `src/index.ts`: conditional authorization bootstrap, dependency-gated Host composition, and hosted-search registration.
-- `src/authorization-controller.ts`: Host authorization/settings bridge.
-- `src/copilot-auth.ts`: Host-only DSH credential-record adapter for pi-ai refresh.
-- `src/client.ts`: Models provider-card UI.
-- `src/remote.ts`: Client-safe Typert descriptors and the shared strict authorization-view result codec.
-- `src/current-provider.ts`, `src/plan.ts`: selected-route projection and fail-closed search planning.
-- `src/probe.ts`, `src/wire*.ts`, `src/traditional-search.ts`: hosted-search transports.
-- `lib/index.js`, `lib/remote.js`: generated ESM Host/Remote package entries.
-- `lib/client.js`: generated DSH client closure bundle. It registers `dsh-github-copilot` through `window.__ModuleLoader__.load`, resolves loader-table externals through the injected `require`, and returns `apply`/`inject`; never edit it directly.
+## Package entries and source map
 
-Public package entries are `.`, `./client`, `./remote`, and `./deployment-baseline.json`.
+Public exports are `.`, `./client`, `./remote`, `./deployment-baseline.json`, and `./package.json`.
 
-The package peer contract supports DSH `0.1.1-rc.2` and `0.1.2-alpha.5`; authorization and Zod v4 are real runtime dependencies so one-package rc.2 installation and strict Remote result validation are complete. Mixed-protocol rc.2 routes require the controlled Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5` on `cloga-pi-ai-model-api`, based on the rc.2 tag; the stock tag does not resolve model-entry `api`. CI checks that exact controlled rc.2 commit and the alpha.5 source commit separately, including a real controlled-Core config acceptance test and alpha.5's Fetch-validated provider headers.
+- `src/index.ts`: authorization bootstrap, dependency-gated Host composition, settings, inline interception, and `ctx.web` registration.
+- `src/authorization-controller.ts`: Host authorization and path-level route reconciliation.
+- `src/copilot-grant.ts`, `src/copilot-auth.ts`: grant normalization and Host credential lifecycle.
+- `src/client.ts`, `src/remote.ts`: Models UI and Client-safe Remote contract.
+- `src/current-provider.ts`, `src/plan.ts`, `src/probe.ts`: selected-route projection, candidate planning, and capability proof.
+- `src/wire.ts`, `src/wire-anthropic.ts`, `src/traditional-search.ts`: hosted-search transports.
+- `deployment-baseline.json`: declared machine-readable compatibility/capability evidence inventory; `scripts/verify-deployment-baseline.mjs` checks its source and test markers for drift.
+- `lib/`: generated release output; never edit it directly.
 
 ## Build and verify
 
-The client build follows DSH's standard `packages/client/tsdown.client.ts` contract: tsdown emits CJS inside a loader factory instead of publishing plain browser ESM.
-
 ```sh
 pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm verify:baseline
-pnpm build
-pnpm test
-pnpm verify:package
+pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-`pnpm verify` runs the complete local test, typecheck, baseline, build, and package-smoke path. See [AGENTS.md](./AGENTS.md) for repository invariants and change workflow.
+`pnpm verify` runs typechecking, deployment-baseline checks, build, all tests, and package-export smoke checks. CI additionally verifies the exact controlled rc.2 and alpha.5 upstream sources on Windows and Linux.
 
-## Publishing
+## Release and checksum verification
 
-This repository publishes immutable tarballs through [GitHub Releases](https://github.com/cloga/dsh-github-copilot/releases), not npm. `package.json` is marked private to prevent accidental registry publication.
+`package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, and creates the GitHub Release only after every preceding step succeeds.
 
-A release tag must equal `v${package.json.version}`. Pushing that annotated tag runs `.github/workflows/release.yml`, which verifies the tag/version match, performs the frozen install and complete verification gate, packs the tarball, and creates the GitHub Release only after every preceding step succeeds. Never move or reuse a release tag; increment the package and deployment-baseline versions together for the next release.
+```sh
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/dsh-github-copilot-0.3.0-cloga.13.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/SHA256SUMS
+sha256sum --check SHA256SUMS
+```
+
+PowerShell can verify the same two downloaded files with:
+
+```powershell
+$expected = (Get-Content .\SHA256SUMS).Split()[0]
+$actual = (Get-FileHash .\dsh-github-copilot-0.3.0-cloga.13.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -cne $expected) { throw 'Release checksum mismatch' }
+```
+
+The checksum detects download corruption or asset drift; repository controls and the protected Release workflow establish publisher provenance. Never move or reuse a release tag. Increment the package and deployment-baseline versions together for every release. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the change workflow and [SECURITY.md](./SECURITY.md) for private vulnerability reporting.

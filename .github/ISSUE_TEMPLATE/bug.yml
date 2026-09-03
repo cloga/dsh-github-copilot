@@ -1,0 +1,70 @@
+name: Bug report
+description: Report a reproducible GitHub Copilot integration problem
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include live credentials, OAuth grants, raw provider responses, or other secrets. Report security issues privately through the Security tab.
+  - type: dropdown
+    id: baseline
+    attributes:
+      label: DSH baseline
+      options:
+        - Controlled Desktop 0.1.1-rc.2 (a772dbb)
+        - DSH 0.1.2-alpha.5 (db6bdc3)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin release or commit
+      placeholder: v0.3.0-cloga.13 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Sign-in or authorization UI
+        - Account model reconciliation
+        - Normal Copilot model transport
+        - Inline hosted search
+        - ctx.web hosted search
+        - Copilot Tool Schema compatibility
+        - Installation or release artifact
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include settings and logs only after removing secrets and sensitive provider data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed credentials, tokens, OAuth grants, and raw sensitive provider responses.
+          required: true
+        - label: This is not a security vulnerability requiring private disclosure.
+          required: true

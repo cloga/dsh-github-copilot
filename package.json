@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
-  "description": "First-class GitHub Copilot model and hosted-search integration for DeepSeek Harness.",
-  "version": "0.3.0-cloga.12",
+  "description": "DSH companion for GitHub Copilot sign-in, account-aware model profiles, tool compatibility, and provider-hosted search.",
+  "version": "0.3.0-cloga.13",
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "repository": {
@@ -28,11 +28,8 @@
   "files": [
     "cordis.patch.yml",
     "deployment-baseline.json",
-    "lib/index.js",
-    "lib/client.js",
-    "lib/client.js.map",
-    "lib/remote.js",
     "lib/*.js",
+    "lib/*.js.map",
     "lib/types/**/*.d.ts",
     "README.md",
     "README.zh.md"
@@ -41,11 +38,14 @@
     "dsh",
     "deepseek-harness",
     "plugin",
-    "web-search",
+    "cordis",
     "github-copilot",
+    "oauth",
     "model-provider",
-    "responses-api",
-    "openai"
+    "hosted-search",
+    "web-search",
+    "openai-responses",
+    "typescript"
   ],
   "license": "MIT",
   "engines": {

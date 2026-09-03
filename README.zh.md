@@ -1,120 +1,147 @@
 # dsh-github-copilot
 
-面向 DSH Desktop `0.1.1-rc.2` 与 DeepSeek Harness（DSH）`0.1.2-alpha.5` 的单插件 GitHub Copilot 模型与供应方托管搜索集成。
+[![CI](https://github.com/cloga/dsh-github-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/cloga/dsh-github-copilot/actions/workflows/ci.yml)
+[![Release](https://github.com/cloga/dsh-github-copilot/actions/workflows/release.yml/badge.svg)](https://github.com/cloga/dsh-github-copilot/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/cloga/dsh-github-copilot)](https://github.com/cloga/dsh-github-copilot/releases/latest)
+[![License](https://img.shields.io/github/license/cloga/dsh-github-copilot)](./LICENSE)
+
+[English](./README.md) | **简体中文**
+
+一个聚焦 GitHub Copilot 登录、账号感知模型 profile、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。它复用 DSH 内置的 `@deepseek-ai/dsh-llm-pi-ai`，不会再实现第二套 Copilot 模型 adapter 或 catalog。
+
+## 已测试基线
+
+| DSH 表面 | 已测试源码 | Models UI |
+|---|---|---|
+| 受控 Desktop `0.1.1-rc.2` 基线 | `cloga-pi-ai-model-api` 上的受控 Core commit [`a772dbb`](https://github.com/cloga/deepseek-harness/commit/a772dbbde82780bff2b9394427e9f0a24cafa1d5) | 独立的 **Settings → GitHub Copilot** section |
+| DSH `0.1.2-alpha.5` | Tag commit [`db6bdc3`](https://github.com/deepseek-ai/deepseek-harness/commit/db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5) | **Settings → Models** provider card |
+
+原始 rc.2 tag 不能解析逐模型 `api`，不是经过测试的混合协议基线。Package peer range 允许兼容的 `0.1.x` release，但 CI 只证明上表两个精确源码；升级 DSH 或 pi-ai 后必须重新做兼容性审查。
 
 ## 安装与登录
 
+将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
+
 ```sh
-dsh plugin add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.12/dsh-github-copilot-0.3.0-cloga.12.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/dsh-github-copilot-0.3.0-cloga.13.tgz
 ```
 
-GitHub Releases 是唯一权威分发渠道。带版本号的 tarball 不可变，可供部署工具精确 pin 并校验哈希；本包不会发布到 npm。
+随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
-打开 **Settings → Models**，找到 **GitHub Copilot** 并点击 **Sign in**，然后完成 provider card 展示的 GitHub device-code 流程。插件复用 DSH 内置的 `llm-pi-ai` provider，并通过路径级设置变更创建 reference-free `llm-pi-ai.providers.github-copilot` profile，不会替换其它 provider 设置。
+GitHub Releases 是唯一权威分发渠道；本仓库不会发布到 npm。部署自动化应 pin 带版本号的 tarball，并使用同一 Release 的 `SHA256SUMS` 校验。
 
-Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录控件位于独立的 **Settings → GitHub Copilot** 页面；在 `0.1.2-alpha.5` 中，同一组控件直接显示在 GitHub Copilot provider card 内。
+不需要运行 `copilot2api`，不需要外部 gateway、placeholder API key、原始 GitHub token 或单独安装 `dsh-web-search-provider`。
 
-不需要运行 `copilot2api`，不需要填写 gateway URL、placeholder API key 或原始 GitHub token，也不需要安装 `dsh-web-search-provider`。
+## 本包负责什么
 
-本包会将 `@deepseek-ai/dsh-authorization` 作为运行时依赖安装。Cordis bootstrap 会在只提供 credentials 与 `llm-pi-ai`、但未挂载 authorization 的 rc.2 web/headless profile 中补充该服务；alpha.5 Core 已提供 authorization 时则直接复用，不会重复注册。只有 authorization 与其它全部必需 DSH 服务可用后，主集成才会激活。
+- 为 rc.2 等未挂载 Core authorization service 的 profile 提供条件式 fallback。
+- Models provider-card UI、Client-safe Remote descriptor 与 Host authorization controller。
+- 对 pi-ai 所有的 Copilot OAuth grant 做严格规范化。
+- 按账号可用模型同步 Copilot route 的 `models` 与 `compat.supportsStrictMode` 叶节点。
+- 通过 inline agent-loop interception 与 Responses-only `ctx.web` provider 直连供应方 hosted search。
 
-### 安装代理的 DSH 实践
+DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider。`@deepseek-ai/dsh-llm-pi-ai` 负责 Copilot adapter、catalog、OAuth method/grant format、token exchange、refresh 与普通模型 transport。Credential 始终只留在 Host。
 
-插件会在其托管的 Copilot route 中写入 `compat.supportsStrictMode: false`，并从为 `github-copilot` provider 组装的 Tool Schema 中删除 `sandbox_permissions` 与 `justification`。Copilot 模型即使面对普通 JSON Schema 的 optional 字段也会反复生成这两个参数，因此彻底隐藏字段是目前唯一经过 A/B 验证的方案。其它 provider 仍保留 DSH 的一次性 escalation 路径；Copilot Session 如需更宽权限，应在调用前选择足够的 standing permission。安装代理仍须遵循以下英文 payload 实践：
+## 授权与 route 行为
 
-- Initial `pwsh` calls omit `sandbox_permissions` and `justification` entirely.
-- When approval prompts are disabled, never include either field.
-- When the current sandbox mode is `danger-full-access`, never request escalation.
-- Use both fields only once, when retrying the exact same command after a real sandbox denial, approval is available, and the target mode is strictly wider than the current mode.
-- Omit the keys rather than sending `null`, empty strings, or the current sandbox mode.
+`llm-pi-ai` 注册 OAuth method，authorization service 组织交互，本包只提供 UI/Remote controller 与 route reconciliation。alpha.5 由 Core 提供 authorization；rc.2 profile 缺失该服务时，本包挂载运行时依赖，并复用任何已经存在的 provider。
 
-如需在用户范围持久化这些规则，请将它们加入 `$DSH_HOME/AGENTS.md`（默认 `~/.dsh/AGENTS.md`）。安装程序必须把规则合并到现有用户指令中，而不是覆盖文件；未经用户明确同意，绝不能静默修改该文件。本插件本身不会、也不应重写用户全局代理指令。
+登录成功和 Host 启动时，本包会将账号 `availableModelIds` 与已安装 pi-ai catalog 取交集，并把每个模型物化为 `{ id, api }`。缺失的 profile 会以无 route 级连接引用的形式创建；已有 profile 只会修改：
 
-## 产品行为
+- `providers.github-copilot.models`
+- `providers.github-copilot.compat.supportsStrictMode`
 
-- DSH 的 dormant `llm-pi-ai` mount 负责 Copilot 模型 adapter、catalog、OAuth、credential record 和 token refresh。
-- DSH alpha.5 Core 负责 authorization service；仅在 rc.2 等未提供该服务的 profile 中由本包补充。
-- 本包只补充 Models provider-card UI、Host-only authorization Remote 和 hosted search。
-- 四个 authorization Remote 结果共用一个严格的 Zod v4 codec，因此 rc.2 会验证 status/start/cancel/sign-out view，同时 alpha.5 保持相同 wire contract。
-- 登录成功和 Host 启动时都会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集，用于创建或修复 route profile。空、缺字段或过期的模型列表会幂等自愈，包括 Models UI 保存空 provider entry 后的情况；模型同步只更新 `providers.github-copilot.models`，保留 Copilot profile 的其它全部字段和无关 provider。每个模型都会写入 catalog `api`，因此无需 route 级连接字段也能保留混合协议。托管 route 会独立地只设置 `compat.supportsStrictMode: false`，同时由 Copilot scoped prompt assembly 彻底删除两个 escalation 参数，因为仅依赖 optional schema 语义不足以约束这些模型。
-- Copilot OAuth grant 在写入或复用前，会由 Host adapter 将 pi-ai 文档化字段重建为新的普通 JSON 对象。只要归属字段有效，就可接受跨模块或 null-prototype credential；无关扩展字段会被丢弃，模型 ID 按原顺序去重，归属字段格式错误时也不会在错误中泄露字段值。
-- Sign out 只删除 `llm-pi-ai/github-copilot` credential；route profile 和其它设置保持不变。
-- Hosted search 使用同一 credential record 的刷新结果直接请求 `api.individual.githubcopilot.com`。
-- Inline 路径为符合条件的 agent-loop 请求加入供应方原生 web-search tool；`github-copilot-hosted` 通过 `ctx.web` 暴露相同能力。
-- 搜索默认 fail closed：当前 route 必须是 `github-copilot`，账号必须允许该模型，模型协议必须支持原生搜索，且 capability probe 必须成功。Responses probe 仅在有效 2xx 响应缺少 `web_search_call` 时重试，最多按两种受支持拼写执行两轮（共四次请求）；auth、HTTP、响应体格式错误、abort 与网络失败会立即停止，所有尝试共享配置的整段 probe 超时。
+其它 Copilot 字段和无关 provider 全部保留，包括旧的 `baseURL` 或 `apiKeyEnv`。迁移时必须显式删除这些旧字段。Sign out 只删除 `llm-pi-ai/github-copilot` credential record，保留 route settings。
 
-仅支持 Chat Completions 的 Copilot 模型仍可通过 DSH 原生 `llm-pi-ai` 使用，但不会宣称 hosted search 可用。
+Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`、`refresh`、`access`、有限数值 `expires`、可选 `enterpriseUrl` 和去重后的可选 `availableModelIds` 重建为新的普通 JSON 对象。
 
-## 职责边界
+## Hosted search
 
-| 表面 | 负责人 |
-|---|---|
-| Copilot chat/model transport 与 catalog | DSH `dsh-llm-pi-ai` 与 pi-ai |
-| Authorization service 生命周期 | 存在时由 DSH Core 负责，否则由本包的 rc.2 bootstrap 补充 |
-| OAuth/device flow 注册 | DSH authorization seam 与 `llm-pi-ai` |
-| Credential 存储与刷新 | DSH record `llm-pi-ai/github-copilot` 与 pi-ai |
-| Models 登录/状态/登出 UI | 本包 `./client` |
-| Browser 到 Host 的授权调用 | 本包 `./remote` 与 Host controller |
-| Reference-free route 变更 | 本包通过 DSH settings path mutation |
-| Hosted-search probe、inline wire、`ctx.web` bridge | 本包 Host 侧 |
-| 模型选择、sandbox、工具、附件与其它 provider | DSH Core |
+- **Inline agent-loop 路径：**支持 OpenAI Responses 与 Anthropic Messages 的原生搜索候选。
+- **通过 `ctx.web.search()` 使用 `github-copilot-hosted`：**只支持 OpenAI Responses 候选。
+- **Chat Completions 模型：**仍可走普通 `llm-pi-ai` transport，但不会宣称 hosted search 可用。
 
-Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共 `createModels()` 与 `Models.getAuth()`，刷新仍在 DSH credential-record 的串行 mutation 内完成。严格的 Copilot normalizer 只持久化 `type`、`refresh`、`access`、有限数值 `expires`、可选 `enterpriseUrl` 与可选 `availableModelIds`。
+请求经过严格 Host 校验后，直接发往 credential 解析出的 HTTPS Copilot endpoint：GitHub-hosted `api.*.githubcopilot.com`，或已接受 GitHub Enterprise credential 对应的 `copilot-api.<signed-in-enterprise-domain>`。Credential 不会经过外部 gateway。
+
+默认 `probe: true` 时，搜索 fail closed：当前 route 必须是 `github-copilot`，账号必须允许该模型，安装的协议必须支持原生搜索，且 bounded capability probe 必须成功。显式设置 `probe: false` 只会跳过 capability proof，并信任所选原生协议；route、account、protocol、endpoint 与 authentication 检查仍然生效。Authentication、HTTP、响应体格式、abort 或网络 probe 失败都不会回退到外部搜索路径。
+
+## Copilot Tool 兼容
+
+为避免已观察到的无效 Copilot Tool payload，本包会把托管 route 的 `compat.supportsStrictMode` 叶节点设为 `false`，并在所选 provider 严格等于 `github-copilot` 时，从组装出的每个 Tool Schema 顶层删除 `sandbox_permissions` 与 `justification`。非 Copilot prompt assembly 完全不变。
+
+Copilot Session 如需更宽的文件或命令权限，必须在调用前选择足够的 standing permission。安装代理还必须遵循：
+
+- 初次 `pwsh` 调用不发送 `sandbox_permissions` 和 `justification`。
+- Approval prompt 已关闭或当前已是 `danger-full-access` 时绝不发送。
+- 只有真实 sandbox denial、approval 可用且目标模式更宽时，才能在同一命令的一次重试中发送。
+- 必须完全省略字段，不能发送 null、空值或当前模式。
+
+插件不会重写 `$DSH_HOME/AGENTS.md`。安装程序只有取得用户明确同意后，才能把规则合并进用户指令。
 
 ## 设置
 
-`github-copilot` section 只包含 hosted-search 行为：
+`github-copilot` settings section 只控制 hosted search：
 
-| 键 | 默认值 | 含义 |
+| 键 | 默认值 | 作用范围与含义 |
 |---|---:|---|
-| `enabled` | `true` | 启用 hosted search。 |
-| `providers` | `[]` | 可选 route allowlist；空值跟随当前选择。 |
-| `includeSources` | `true` | 请求并返回供应方引用。 |
-| `stripServerTools` | `true` | 删除 hosted-search tool 的本地 function 变体。 |
-| `idleTimeoutMs` | `300000` | Inline stream 空闲超时。 |
-| `probe` | `true` | 服务前要求原生 hosted-search 证据。 |
-| `probeTimeoutMs` | `30000` | Capability probe 超时。 |
+| `enabled` | `true` | 启用两种 hosted-search 表面。 |
+| `providers` | `[]` | 两种表面的可选 route allowlist；空值跟随当前选择。 |
+| `includeSources` | `true` | Inline 路径请求供应方引用；`ctx.web` bridge 始终请求并返回 sources。 |
+| `stripServerTools` | `true` | Inline 路径删除 hosted-search tool 的本地 function 变体。 |
+| `idleTimeoutMs` | `300000` | Inline stream 空闲超时以及 `ctx.web` 请求 deadline，单位毫秒。 |
+| `probe` | `true` | 两种表面都要求 capability proof；`false` 表示显式信任原生协议。 |
+| `probeTimeoutMs` | `30000` | 整段 capability probe deadline，单位毫秒。 |
 
 本包不提供 token、API key、model catalog 或 endpoint 设置。
 
-## 迁移
+## 迁移与排障
 
-删除旧 Copilot gateway route、`COPILOT_GITHUB_TOKEN` 类 credential reference、`copilot2api` 和 `dsh-web-search-provider`。安装本包后从 **Settings → Models** 登录并选择账号可用的 Copilot 模型；只有显式使用 `ctx.web` 搜索时才需要选择 `github-copilot-hosted`。
+依赖托管 route 前，请删除旧 gateway route、`COPILOT_GITHUB_TOKEN` 类 reference、`copilot2api` 与 `dsh-web-search-provider`。
 
-## 源码与发行物
+- **看不到登录控件：**确认 package 安装在当前活动 profile，并使用上表对应的 Models UI。
+- **已登录但没有模型：**账号至少要暴露一个存在于当前 pi-ai catalog 的模型；本包会 fail closed，不会启用完整 catalog。
+- **Hosted search 不可用：**选择 `github-copilot` route 和账号可用的 Responses/Anthropic 模型，并检查命名明确的 probe error；显式 `ctx.web` provider 仅支持 Responses。
+- **仍有旧 endpoint/key：**reconciliation 会有意保留不归本包所有的字段，需要手工删除旧连接字段。
 
-- `src/index.ts`：条件式 authorization bootstrap、依赖门控的 Host 组合。
-- `src/authorization-controller.ts`：Host authorization/settings bridge。
-- `src/copilot-auth.ts`：Host-only DSH credential-record 到 pi-ai refresh adapter。
-- `src/client.ts`：Models provider-card UI。
-- `src/remote.ts`：Client-safe Typert descriptors 与共享的严格 authorization-view result codec。
-- `src/current-provider.ts`、`src/plan.ts`：route 投影与 fail-closed 规划。
-- `src/probe.ts`、`src/wire*.ts`、`src/traditional-search.ts`：hosted-search transport。
-- `lib/index.js`、`lib/remote.js`：构建生成的 Host/Remote ESM 入口。
-- `lib/client.js`：按 DSH 客户端闭包规范生成；通过 `window.__ModuleLoader__.load` 注册 `dsh-github-copilot`，用注入的 `require` 解析 loader-table 外部依赖，并返回 `apply`/`inject`。不要手工修改。
+## Package 入口与源码映射
 
-公开入口为 `.`, `./client`, `./remote` 和 `./deployment-baseline.json`。
+公开 export 为 `.`, `./client`, `./remote`, `./deployment-baseline.json` 和 `./package.json`。
 
-Peer contract 同时支持 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.5`；authorization 与 Zod v4 都是实际运行时依赖，因此 rc.2 只安装本包即可完整启动并严格验证 Remote 结果。rc.2 的混合协议 route 需要基于 rc.2 tag 的受控 Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5`（branch `cloga-pi-ai-model-api`）；原始 tag 尚不能解析 model entry 的 `api`。CI 会分别核验该受控 rc.2 commit 与 alpha.5 commit，并对受控 Core 运行真实 config 接受测试。
+- `src/index.ts`：authorization bootstrap、依赖门控 Host 组合、settings、inline interception 与 `ctx.web` 注册。
+- `src/authorization-controller.ts`：Host authorization 与路径级 route reconciliation。
+- `src/copilot-grant.ts`、`src/copilot-auth.ts`：grant normalization 与 Host credential lifecycle。
+- `src/client.ts`、`src/remote.ts`：Models UI 与 Client-safe Remote contract。
+- `src/current-provider.ts`、`src/plan.ts`、`src/probe.ts`：route 投影、候选规划与 capability proof。
+- `src/wire.ts`、`src/wire-anthropic.ts`、`src/traditional-search.ts`：hosted-search transport。
+- `deployment-baseline.json`：声明式、机器可读的兼容性/能力证据清单；`scripts/verify-deployment-baseline.mjs` 用源码与测试 marker 检查漂移。
+- `lib/`：构建生成的 release 输出，禁止手工修改。
 
 ## 构建与验证
 
-客户端构建遵循 DSH 标准 `packages/client/tsdown.client.ts` 契约：tsdown 将 CJS 输出封装在 loader factory 中，而不是发布普通浏览器 ESM。
-
 ```sh
 pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm verify:baseline
-pnpm build
-pnpm test
-pnpm verify:package
+pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-`pnpm verify` 执行完整的 test、typecheck、baseline、build 和 package smoke 路径。仓库不变量与修改工作流见 [AGENTS.md](./AGENTS.md)。
+`pnpm verify` 执行 typecheck、deployment baseline 检查、build、全部测试和 package export smoke。CI 还会在 Windows/Linux 上分别验证精确的受控 rc.2 与 alpha.5 upstream 源码。
 
-## 发布
+## Release 与 checksum 校验
 
-本仓库仅通过 [GitHub Releases](https://github.com/cloga/dsh-github-copilot/releases) 发布不可变 tarball，不发布到 npm。`package.json` 标记为 private，以防误发到 registry。
+`package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，并且只在前序步骤全部成功后创建 GitHub Release。
 
-Release tag 必须严格等于 `v${package.json.version}`。推送 annotated tag 后，`.github/workflows/release.yml` 会验证 tag 与版本一致，执行 frozen install 和完整验证门禁，打包 tarball，并且只在前序步骤全部成功后创建 GitHub Release。绝不能移动或复用已经发布的 tag；下一次发布必须同时递增 package 与 deployment baseline 版本。
+```sh
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/dsh-github-copilot-0.3.0-cloga.13.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/SHA256SUMS
+sha256sum --check SHA256SUMS
+```
+
+PowerShell 可以对已下载的同一组文件执行：
+
+```powershell
+$expected = (Get-Content .\SHA256SUMS).Split()[0]
+$actual = (Get-FileHash .\dsh-github-copilot-0.3.0-cloga.13.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -cne $expected) { throw 'Release checksum mismatch' }
+```
+
+Checksum 用于检测下载损坏或 asset 漂移；repository controls 与受保护的 Release workflow 用于建立发布方 provenance。绝不能移动或复用 release tag；每次发布必须同时递增 package 与 deployment baseline 版本。修改流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)，安全问题的私密报告方式见 [SECURITY.md](./SECURITY.md)。

@@ -18,12 +18,31 @@ function assert(condition, message) {
 
 const packageJson = await readJson('package.json')
 const manifest = await readJson('deployment-baseline.json')
+const readme = await read('README.md')
+const readmeZh = await read('README.zh.md')
+const releaseWorkflow = await read('.github/workflows/release.yml')
+const releaseTag = `v${packageJson.version}`
+const releaseAsset = `dsh-github-copilot-${packageJson.version}.tgz`
+const releaseBaseUrl = `https://github.com/cloga/dsh-github-copilot/releases/download/${releaseTag}`
+const releaseUrl = `${releaseBaseUrl}/${releaseAsset}`
+const releaseChecksumUrl = `${releaseBaseUrl}/SHA256SUMS`
 
 assert(manifest.schemaVersion === 1, 'schemaVersion must be 1')
 assert(manifest.baseline?.kind === 'standalone-dsh-plugin', 'standalone ownership marker is missing')
 assert(manifest.baseline?.source === 'https://github.com/cloga/dsh-github-copilot', 'canonical source changed')
 assert(manifest.package?.name === packageJson.name, 'package name differs')
 assert(manifest.package?.version === packageJson.version, 'package version differs')
+assert(packageJson.private === true, 'package must remain private for GitHub Release-only distribution')
+for (const [path, content] of [['README.md', readme], ['README.zh.md', readmeZh]]) {
+  const urls = content.match(/https:\/\/github\.com\/cloga\/dsh-github-copilot\/releases\/download\/v[^\s/)]+\/[^\s)]+/g) ?? []
+  assert(urls.filter(url => url === releaseUrl).length === 2, `${path} must use the current tarball URL for install and verification`)
+  assert(urls.filter(url => url === releaseChecksumUrl).length === 1, `${path} checksum URL differs from package version`)
+  assert(urls.every(url => url === releaseUrl || url === releaseChecksumUrl), `${path} contains a stale release URL`)
+  assert(content.includes(`dsh plugin --profile web add ${releaseUrl}`), `${path} install command must name the target profile and current asset`)
+  assert(content.includes('sha256sum --check SHA256SUMS'), `${path} must document release checksum verification`)
+}
+assert(readme.includes('[简体中文](./README.zh.md)'), 'README.md must link the Chinese guide')
+assert(readmeZh.includes('[English](./README.md)'), 'README.zh.md must link the English guide')
 assert(manifest.supportedBaselines?.node === packageJson.engines?.node, 'Node baseline differs')
 assert(
   packageJson.dependencies?.['@earendil-works/pi-ai'] === manifest.supportedBaselines?.piAi,
@@ -89,9 +108,11 @@ const index = await read('src/index.ts')
 for (const symbol of manifest.requiredExports?.['.'] ?? []) {
   assert(index.includes(symbol), `root export ${symbol} is missing`)
 }
-for (const subpath of Object.keys(manifest.requiredExports ?? {})) {
-  assert(packageJson.exports?.[subpath] !== undefined, `package export ${subpath} is missing`)
-}
+const expectedExportSubpaths = ['.', './client', './remote', './deployment-baseline.json', './package.json']
+const declaredExportSubpaths = Object.keys(manifest.requiredExports ?? {}).sort()
+const packageExportSubpaths = Object.keys(packageJson.exports ?? {}).sort()
+assert(JSON.stringify(declaredExportSubpaths) === JSON.stringify([...expectedExportSubpaths].sort()), 'required export inventory differs')
+assert(JSON.stringify(packageExportSubpaths) === JSON.stringify([...expectedExportSubpaths].sort()), 'package export set differs')
 
 for (const obsolete of ['src/model-catalog.ts', 'src/copilot-provider.ts']) {
   try {
@@ -122,12 +143,17 @@ for (const heading of [
   '## File map',
   '## Non-negotiable invariants',
   '## Supported DSH seams',
+  '## Distribution and release invariants',
   '## Mechanical verification',
   '## Issue, branch, and PR workflow',
 ]) {
   assert(agents.includes(heading), `AGENTS.md is missing ${heading}`)
 }
 assert((await read('CLAUDE.md')).includes('[AGENTS.md](./AGENTS.md)'), 'CLAUDE.md must link AGENTS.md')
+assert((await read('CONTRIBUTING.md')).includes('GitHub Releases are the only distribution channel'), 'CONTRIBUTING.md release contract is missing')
+assert((await read('SECURITY.md')).includes('/security/advisories/new'), 'SECURITY.md private reporting path is missing')
+assert((await read('.github/PULL_REQUEST_TEMPLATE.md')).includes('## Contract checklist'), 'pull request contract checklist is missing')
+assert((await read('.github/ISSUE_TEMPLATE/bug.yml')).includes('DSH baseline'), 'bug issue form is missing the DSH baseline')
 
 const workflow = await read('.github/workflows/ci.yml')
 for (const command of [
@@ -142,6 +168,39 @@ for (const command of [
   'pnpm pack --pack-destination artifacts',
 ]) {
   assert(workflow.includes(command), `CI is missing ${command}`)
+}
+for (const marker of [
+  "tags:\n      - 'v*'",
+  'permissions:\n  contents: write',
+  'runs-on: ubuntu-latest',
+  'if [[ "$GITHUB_REF_NAME" != "v$version" ]]',
+  'git cat-file -t "refs/tags/$GITHUB_REF_NAME"',
+  'if [[ "$tag_type" != "tag" ]]',
+]) {
+  assert(releaseWorkflow.includes(marker), `Release workflow is missing ${marker}`)
+}
+const orderedReleaseSteps = [
+  '- name: Verify tag matches package version',
+  '- run: pnpm install --frozen-lockfile',
+  '- run: pnpm verify',
+  '- run: pnpm pack --pack-destination artifacts',
+  '- name: Write SHA-256 manifest',
+  'sha256sum -- *.tgz > SHA256SUMS',
+  'sha256sum --check SHA256SUMS',
+  '- name: Create GitHub Release',
+  'gh release create "$GITHUB_REF_NAME" artifacts/*.tgz artifacts/SHA256SUMS',
+]
+let priorReleaseStep = -1
+for (const step of orderedReleaseSteps) {
+  const index = releaseWorkflow.indexOf(step)
+  assert(index > priorReleaseStep, `Release workflow step is missing or out of order: ${step}`)
+  priorReleaseStep = index
+}
+try {
+  await access(resolve(root, '.github/workflows/publish.yml'))
+  assert(false, 'obsolete npm Publish workflow still exists')
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error
 }
 
 const patch = await read('cordis.patch.yml')
