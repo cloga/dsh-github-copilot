@@ -57,10 +57,25 @@ async function mountProfile(
 }> {
   const settingsDocument = {
     'github-copilot': {},
-    'llm-pi-ai': { providers: { 'github-copilot': {} } },
+    'llm-pi-ai': { providers: { 'github-copilot': { customField: 'preserved' } } },
   }
   const mutate = vi.fn(async (_namespace: string, operations: Array<{ path: string[]; value: unknown }>) => {
-    settingsDocument['llm-pi-ai'].providers[operations[0]?.path[1] ?? ''] = operations[0]?.value
+    for (const operation of operations) {
+      let target = settingsDocument['llm-pi-ai'] as unknown as Record<string, unknown>
+      for (const segment of operation.path.slice(0, -1)) {
+        const value = target[segment]
+        if (typeof value === 'object' && value !== null) {
+          target = value as Record<string, unknown>
+        }
+        else {
+          const next: Record<string, unknown> = {}
+          target[segment] = next
+          target = next
+        }
+      }
+      const leaf = operation.path.at(-1)
+      if (leaf !== undefined) target[leaf] = operation.value
+    }
   })
   const fiber = ctx.plugin({
     name: providesAuthorization ? 'alpha3-web-profile' : 'rc2-web-profile',
@@ -142,6 +157,7 @@ describe('loader composition', () => {
 
     await vi.waitFor(() => {
       expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({
+        customField: 'preserved',
         compat: { supportsStrictMode: false },
         models: [
           { id: 'gemini-3.6-flash', api: 'openai-completions' },
@@ -149,6 +165,17 @@ describe('loader composition', () => {
         ],
       })
     })
-    expect(harness.mutate).toHaveBeenCalledTimes(1)
+    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set',
+      path: ['providers', 'github-copilot', 'models'],
+      value: [
+        { id: 'gemini-3.6-flash', api: 'openai-completions' },
+        { id: 'gpt-5.6-sol', api: 'openai-responses' },
+      ],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
+    }])
   })
 })

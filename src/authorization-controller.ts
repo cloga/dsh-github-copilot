@@ -73,12 +73,12 @@ interface SettingsServiceView {
   get(namespace: string): unknown
   mutate(
     namespace: string,
-    operations: readonly { op: 'set'; path: string[]; value: Record<string, unknown> }[],
+    operations: readonly { op: 'set'; path: string[]; value: unknown }[],
     expectedRevision?: number,
   ): Promise<void>
 }
 
-function providerProfileFrom(record: { readonly kind: string; readonly payload?: unknown } | undefined): Record<string, unknown> {
+function providerModelsFrom(record: { readonly kind: string; readonly payload?: unknown } | undefined): Record<string, string>[] {
   if (record?.kind !== 'grant') {
     throw new Error('github-copilot: the configured credential is not an OAuth grant')
   }
@@ -93,13 +93,7 @@ function providerProfileFrom(record: { readonly kind: string; readonly payload?:
   if (models.length === 0) {
     throw new Error('github-copilot: the signed-in account exposes no models from the installed pi-ai catalog')
   }
-  return {
-    models,
-    // OpenAI strict schemas turn every optional tool property into a required
-    // nullable property. DSH escalation arguments are omission-sensitive, so
-    // keep this Copilot route on ordinary JSON-schema tool calling.
-    compat: { supportsStrictMode: false },
-  }
+  return models
 }
 
 function service<T extends object>(
@@ -123,11 +117,13 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function providerProfileAt(section: unknown): unknown {
+function providerProfileAt(section: unknown): Record<string, unknown> | undefined {
   if (typeof section !== 'object' || section === null) return undefined
   const providers = Reflect.get(section, 'providers')
   if (typeof providers !== 'object' || providers === null) return undefined
-  return Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
+  const profile = Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
+  if (typeof profile !== 'object' || profile === null) return undefined
+  return profile as Record<string, unknown>
 }
 
 function providerModels(value: unknown): Array<{ id: string; api: string }> | undefined {
@@ -142,23 +138,23 @@ function providerModels(value: unknown): Array<{ id: string; api: string }> | un
   return models
 }
 
-function sameProviderProfile(current: unknown, expected: Record<string, unknown>): boolean {
-  if (typeof current !== 'object' || current === null) return false
-  const record = current as Record<string, unknown>
-  if (record.api !== undefined || record.baseURL !== undefined || record.apiKeyEnv !== undefined) return false
-  const compat = record.compat
-  if (typeof compat !== 'object' || compat === null) return false
-  if ((compat as Record<string, unknown>).supportsStrictMode !== false) return false
-  const currentModels = providerModels(record.models)
-  const expectedModels = providerModels(expected.models)
+function sameProviderModels(current: unknown, expected: readonly Record<string, string>[]): boolean {
+  const currentModels = providerModels(current)
+  const expectedModels = providerModels(expected)
   return currentModels !== undefined
     && expectedModels !== undefined
     && JSON.stringify(currentModels) === JSON.stringify(expectedModels)
 }
 
+function providerSupportsStrictMode(profile: Record<string, unknown> | undefined): unknown {
+  const compat = profile?.compat
+  if (typeof compat !== 'object' || compat === null) return undefined
+  return Reflect.get(compat, 'supportsStrictMode')
+}
+
 /**
- * Materialize or repair the reference-free Copilot route from an existing
- * provider-owned OAuth grant. Returns false when no credential exists.
+ * Reconcile only the Copilot route's account model list and strict-mode leaf
+ * from an existing provider-owned OAuth grant. Returns false when no credential exists.
  */
 async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<boolean> {
   const credentials = service<CredentialRecordServiceView>(
@@ -169,16 +165,26 @@ async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<boolean
   const record = await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
   if (record === undefined) return false
 
-  const profile = providerProfileFrom(record)
+  const models = providerModelsFrom(record)
   const settings = service<SettingsServiceView>(ctx, 'settings', ['get', 'mutate'])
-  if (sameProviderProfile(providerProfileAt(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE)), profile)) {
-    return false
+  const current = providerProfileAt(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE))
+  const operations: Array<{ op: 'set'; path: string[]; value: unknown }> = []
+  if (!sameProviderModels(current?.models, models)) {
+    operations.push({
+      op: 'set',
+      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
+      value: models,
+    })
   }
-  await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, [{
-    op: 'set',
-    path: ['providers', GITHUB_COPILOT_PROVIDER_ID],
-    value: profile,
-  }])
+  if (providerSupportsStrictMode(current) !== false) {
+    operations.push({
+      op: 'set',
+      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode'],
+      value: false,
+    })
+  }
+  if (operations.length === 0) return false
+  await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, operations)
   return true
 }
 
