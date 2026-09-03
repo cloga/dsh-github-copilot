@@ -60,9 +60,21 @@ async function mountProfile(
     'llm-pi-ai': { providers: { 'github-copilot': { customField: 'preserved' } } },
   }
   const mutate = vi.fn(async (_namespace: string, operations: Array<{ path: string[]; value: unknown }>) => {
-    const operation = operations[0]
-    if (operation?.path.join('.') === 'providers.github-copilot.models') {
-      settingsDocument['llm-pi-ai'].providers['github-copilot'].models = operation.value
+    for (const operation of operations) {
+      let target = settingsDocument['llm-pi-ai'] as unknown as Record<string, unknown>
+      for (const segment of operation.path.slice(0, -1)) {
+        const value = target[segment]
+        if (typeof value === 'object' && value !== null) {
+          target = value as Record<string, unknown>
+        }
+        else {
+          const next: Record<string, unknown> = {}
+          target[segment] = next
+          target = next
+        }
+      }
+      const leaf = operation.path.at(-1)
+      if (leaf !== undefined) target[leaf] = operation.value
     }
   })
   const fiber = ctx.plugin({
@@ -126,7 +138,7 @@ describe('loader composition', () => {
     expect(ctx.registry.get(AuthorizationService)?.fibers).toHaveLength(1)
   })
 
-  it('reuses the alpha.4 authorization service without duplicate registration', async () => {
+  it('reuses the alpha.5 authorization service without duplicate registration', async () => {
     const ctx = new Context()
     await mountProfile(ctx, true)
     const authorizationFiberUid = ctx.registry.get(AuthorizationService)?.fibers[0]?.uid
@@ -146,6 +158,7 @@ describe('loader composition', () => {
     await vi.waitFor(() => {
       expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({
         customField: 'preserved',
+        compat: { supportsStrictMode: false },
         models: [
           { id: 'gemini-3.6-flash', api: 'openai-completions' },
           { id: 'gpt-5.6-sol', api: 'openai-responses' },
@@ -159,6 +172,10 @@ describe('loader composition', () => {
         { id: 'gemini-3.6-flash', api: 'openai-completions' },
         { id: 'gpt-5.6-sol', api: 'openai-responses' },
       ],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
     }])
   })
 })

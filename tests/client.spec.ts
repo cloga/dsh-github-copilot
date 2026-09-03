@@ -44,7 +44,7 @@ describe('GitHub Copilot Models client', () => {
     return { ctx, disposeRemote, disposeUi, register, registrations, injections }
   }
 
-  it('mounts its Remote contribution and registers the alpha.4 provider-card seat', async () => {
+  it('mounts its Remote contribution and registers the alpha.5 provider-card seat', async () => {
     const { ctx, disposeRemote, disposeUi, register } = clientContext([
       'settings.models.provider-card',
       'settings.section',
@@ -91,7 +91,7 @@ describe('GitHub Copilot Models client', () => {
     await dispose()
   })
 
-  it('replaces the rc.2 fallback when the alpha.4 provider-card slot appears', async () => {
+  it('replaces the rc.2 fallback when the alpha.5 provider-card slot appears', async () => {
     const { ctx, register, registrations, injections } = clientContext(['settings.section'])
     await apply(ctx as never)
     const disposeFallback = registrations.get('settings.section')

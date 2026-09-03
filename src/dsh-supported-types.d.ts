@@ -1,6 +1,6 @@
 /**
  * Type augmentations for the DSH client contracts used across the supported
- * 0.1.1-rc.2 and 0.1.2-alpha.4 baselines. Runtime values continue to come from
+ * 0.1.1-rc.2 and 0.1.2-alpha.5 baselines. Runtime values continue to come from
  * the host installation.
  */
 

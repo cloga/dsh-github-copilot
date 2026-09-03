@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/dsh-github-copilot)](https://www.npmjs.com/package/dsh-github-copilot)
 
-面向 DSH Desktop `0.1.1-rc.2` 与 DeepSeek Harness（DSH）`0.1.2-alpha.4` 的单插件 GitHub Copilot 模型与供应方托管搜索集成。
+面向 DSH Desktop `0.1.1-rc.2` 与 DeepSeek Harness（DSH）`0.1.2-alpha.5` 的单插件 GitHub Copilot 模型与供应方托管搜索集成。
 
 ## 安装与登录
 
@@ -12,19 +12,31 @@ dsh plugin add dsh-github-copilot
 
 打开 **Settings → Models**，找到 **GitHub Copilot** 并点击 **Sign in**，然后完成 provider card 展示的 GitHub device-code 流程。插件复用 DSH 内置的 `llm-pi-ai` provider，并通过路径级设置变更创建 reference-free `llm-pi-ai.providers.github-copilot` profile，不会替换其它 provider 设置。
 
-Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录控件位于独立的 **Settings → GitHub Copilot** 页面；在 `0.1.2-alpha.4` 中，同一组控件直接显示在 GitHub Copilot provider card 内。
+Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录控件位于独立的 **Settings → GitHub Copilot** 页面；在 `0.1.2-alpha.5` 中，同一组控件直接显示在 GitHub Copilot provider card 内。
 
 不需要运行 `copilot2api`，不需要填写 gateway URL、placeholder API key 或原始 GitHub token，也不需要安装 `dsh-web-search-provider`。
 
-本包会将 `@deepseek-ai/dsh-authorization` 作为运行时依赖安装。Cordis bootstrap 会在只提供 credentials 与 `llm-pi-ai`、但未挂载 authorization 的 rc.2 web/headless profile 中补充该服务；alpha.4 Core 已提供 authorization 时则直接复用，不会重复注册。只有 authorization 与其它全部必需 DSH 服务可用后，主集成才会激活。
+本包会将 `@deepseek-ai/dsh-authorization` 作为运行时依赖安装。Cordis bootstrap 会在只提供 credentials 与 `llm-pi-ai`、但未挂载 authorization 的 rc.2 web/headless profile 中补充该服务；alpha.5 Core 已提供 authorization 时则直接复用，不会重复注册。只有 authorization 与其它全部必需 DSH 服务可用后，主集成才会激活。
+
+### 安装代理的 DSH 实践
+
+插件会在其托管的 Copilot route 中写入 `compat.supportsStrictMode: false`，并从为 `github-copilot` provider 组装的 Tool Schema 中删除 `sandbox_permissions` 与 `justification`。Copilot 模型即使面对普通 JSON Schema 的 optional 字段也会反复生成这两个参数，因此彻底隐藏字段是目前唯一经过 A/B 验证的方案。其它 provider 仍保留 DSH 的一次性 escalation 路径；Copilot Session 如需更宽权限，应在调用前选择足够的 standing permission。安装代理仍须遵循以下英文 payload 实践：
+
+- Initial `pwsh` calls omit `sandbox_permissions` and `justification` entirely.
+- When approval prompts are disabled, never include either field.
+- When the current sandbox mode is `danger-full-access`, never request escalation.
+- Use both fields only once, when retrying the exact same command after a real sandbox denial, approval is available, and the target mode is strictly wider than the current mode.
+- Omit the keys rather than sending `null`, empty strings, or the current sandbox mode.
+
+如需在用户范围持久化这些规则，请将它们加入 `$DSH_HOME/AGENTS.md`（默认 `~/.dsh/AGENTS.md`）。安装程序必须把规则合并到现有用户指令中，而不是覆盖文件；未经用户明确同意，绝不能静默修改该文件。本插件本身不会、也不应重写用户全局代理指令。
 
 ## 产品行为
 
 - DSH 的 dormant `llm-pi-ai` mount 负责 Copilot 模型 adapter、catalog、OAuth、credential record 和 token refresh。
-- DSH alpha.4 Core 负责 authorization service；仅在 rc.2 等未提供该服务的 profile 中由本包补充。
+- DSH alpha.5 Core 负责 authorization service；仅在 rc.2 等未提供该服务的 profile 中由本包补充。
 - 本包只补充 Models provider-card UI、Host-only authorization Remote 和 hosted search。
-- 四个 authorization Remote 结果共用一个严格的 Zod v4 codec，因此 rc.2 会验证 status/start/cancel/sign-out view，同时 alpha.4 保持相同 wire contract。
-- 登录成功和 Host 启动时都会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集，用于创建或修复 route profile。空、缺字段或过期的模型列表会幂等自愈，包括 Models UI 保存空 provider entry 后的情况；同步只更新 `providers.github-copilot.models`，保留 Copilot profile 的其它全部字段和无关 provider。每个模型都会写入 catalog `api`，从而保留混合协议。
+- 四个 authorization Remote 结果共用一个严格的 Zod v4 codec，因此 rc.2 会验证 status/start/cancel/sign-out view，同时 alpha.5 保持相同 wire contract。
+- 登录成功和 Host 启动时都会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集，用于创建或修复 route profile。空、缺字段或过期的模型列表会幂等自愈，包括 Models UI 保存空 provider entry 后的情况；模型同步只更新 `providers.github-copilot.models`，保留 Copilot profile 的其它全部字段和无关 provider。每个模型都会写入 catalog `api`，因此无需 route 级连接字段也能保留混合协议。托管 route 会独立地只设置 `compat.supportsStrictMode: false`，同时由 Copilot scoped prompt assembly 彻底删除两个 escalation 参数，因为仅依赖 optional schema 语义不足以约束这些模型。
 - Copilot OAuth grant 在写入或复用前，会由 Host adapter 将 pi-ai 文档化字段重建为新的普通 JSON 对象。只要归属字段有效，就可接受跨模块或 null-prototype credential；无关扩展字段会被丢弃，模型 ID 按原顺序去重，归属字段格式错误时也不会在错误中泄露字段值。
 - Sign out 只删除 `llm-pi-ai/github-copilot` credential；route profile 和其它设置保持不变。
 - Hosted search 使用同一 credential record 的刷新结果直接请求 `api.individual.githubcopilot.com`。
@@ -83,7 +95,7 @@ Credential payload 不会通过 Client Remote。Host adapter 使用 pi-ai 公共
 
 公开入口为 `.`, `./client`, `./remote` 和 `./deployment-baseline.json`。
 
-Peer contract 同时支持 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.4`；authorization 与 Zod v4 都是实际运行时依赖，因此 rc.2 只安装本包即可完整启动并严格验证 Remote 结果。rc.2 的混合协议 route 需要基于 rc.2 tag 的受控 Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5`（branch `cloga-pi-ai-model-api`）；原始 tag 尚不能解析 model entry 的 `api`。CI 会分别核验该受控 rc.2 commit 与 alpha.4 commit，并对受控 Core 运行真实 config 接受测试。
+Peer contract 同时支持 DSH `0.1.1-rc.2` 与 `0.1.2-alpha.5`；authorization 与 Zod v4 都是实际运行时依赖，因此 rc.2 只安装本包即可完整启动并严格验证 Remote 结果。rc.2 的混合协议 route 需要基于 rc.2 tag 的受控 Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5`（branch `cloga-pi-ai-model-api`）；原始 tag 尚不能解析 model entry 的 `api`。CI 会分别核验该受控 rc.2 commit 与 alpha.5 commit，并对受控 Core 运行真实 config 接受测试。
 
 ## 构建与验证
 

@@ -35,22 +35,22 @@ function runtime(options: {
     },
   }
   const mutate = vi.fn(async (_ns: string, operations: Array<{ path: string[]; value: unknown }>) => {
-    const operation = operations[0]
-    if (operation === undefined) return
-    let target = settingsDocument['llm-pi-ai'] as Record<string, unknown>
-    for (const segment of operation.path.slice(0, -1)) {
-      const value = target[segment]
-      if (typeof value === 'object' && value !== null) {
-        target = value as Record<string, unknown>
+    for (const operation of operations) {
+      let target = settingsDocument['llm-pi-ai'] as Record<string, unknown>
+      for (const segment of operation.path.slice(0, -1)) {
+        const value = target[segment]
+        if (typeof value === 'object' && value !== null) {
+          target = value as Record<string, unknown>
+        }
+        else {
+          const next: Record<string, unknown> = {}
+          target[segment] = next
+          target = next
+        }
       }
-      else {
-        const next: Record<string, unknown> = {}
-        target[segment] = next
-        target = next
-      }
+      const leaf = operation.path.at(-1)
+      if (leaf !== undefined) target[leaf] = operation.value
     }
-    const leaf = operation.path.at(-1)
-    if (leaf !== undefined) target[leaf] = operation.value
   })
   const deleteRecord = vi.fn(async () => { configured = false })
   const begin = vi.fn(async (request: {
@@ -143,11 +143,16 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'models'],
       value: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
     }])
     expect(harness.settingsDocument['llm-pi-ai']).toEqual({
       providers: {
         openai: { apiKeyEnv: 'OPENAI_API_KEY' },
         'github-copilot': {
+          compat: { supportsStrictMode: false },
           models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
         },
       },
@@ -162,6 +167,10 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'models'],
       value: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
     }])
   })
 
@@ -171,6 +180,8 @@ describe('GitHubCopilotAuthorizationController', () => {
       providerProfile: {
         baseURL: 'https://example.invalid',
         apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
+        customField: 'preserved',
+        compat: { supportsStrictMode: false, customCompat: 'preserved' },
         models: [{ id: 'gpt-5.4' }],
       },
     })
@@ -186,16 +197,72 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(section.providers['github-copilot']).toEqual({
       baseURL: 'https://example.invalid',
       apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
+      customField: 'preserved',
+      compat: { supportsStrictMode: false, customCompat: 'preserved' },
       models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
     })
   })
 
-  it('is idempotent when the existing Copilot route already matches the account catalog', async () => {
+  it('repairs a Copilot route that still enables strict tool schemas', async () => {
     const harness = runtime({
       configured: true,
       providerProfile: {
         customField: 'preserved',
+        compat: { supportsStrictMode: true },
         models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+      },
+    })
+
+    await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(true)
+    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
+    }])
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
+      providers: {
+        'github-copilot': {
+          customField: 'preserved',
+          compat: { supportsStrictMode: false },
+        },
+      },
+    })
+  })
+
+  it('preserves route-level connection fields when the owned leaves already match', async () => {
+    const harness = runtime({
+      configured: true,
+      providerProfile: {
+        baseURL: 'https://example.invalid',
+        apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
+        compat: { supportsStrictMode: false },
+        models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+      },
+    })
+
+    await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('is idempotent when the existing resolved Copilot route matches the account catalog', async () => {
+    const harness = runtime({
+      configured: true,
+      providerProfile: {
+        customField: 'preserved',
+        compat: {
+          supportsStrictMode: false,
+          chatTemplateKwargs: {},
+          chatTemplateArgs: {},
+        },
+        models: [{
+          id: 'gpt-5.4',
+          api: 'openai-responses',
+          input: ['text', 'image'],
+          compat: { supportsStrictMode: false },
+        }],
+        modelOverrides: {},
+        defaultContextWindow: 200_000,
+        headers: {},
       },
     })
 
@@ -206,7 +273,20 @@ describe('GitHubCopilotAuthorizationController', () => {
       providers: {
         'github-copilot': {
           customField: 'preserved',
-          models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+          compat: {
+            supportsStrictMode: false,
+            chatTemplateKwargs: {},
+            chatTemplateArgs: {},
+          },
+          models: [{
+            id: 'gpt-5.4',
+            api: 'openai-responses',
+            input: ['text', 'image'],
+            compat: { supportsStrictMode: false },
+          }],
+          modelOverrides: {},
+          defaultContextWindow: 200_000,
+          headers: {},
         },
       },
     })
@@ -226,11 +306,16 @@ describe('GitHubCopilotAuthorizationController', () => {
         { id: 'gemini-3.6-flash', api: 'openai-completions' },
         { id: 'gpt-5.6-sol', api: 'openai-responses' },
       ],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
     }])
     expect(harness.settingsDocument['llm-pi-ai']).toEqual({
       providers: {
         openai: { apiKeyEnv: 'OPENAI_API_KEY' },
         'github-copilot': {
+          compat: { supportsStrictMode: false },
           models: [
             { id: 'gemini-3.6-flash', api: 'openai-completions' },
             { id: 'gpt-5.6-sol', api: 'openai-responses' },
@@ -238,6 +323,27 @@ describe('GitHubCopilotAuthorizationController', () => {
         },
       },
     })
+  })
+
+  it('materializes Anthropic and OpenAI models under the route compatibility override', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['claude-sonnet-4.5', 'gpt-5.4'],
+    })
+
+    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
+    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set',
+      path: ['providers', 'github-copilot', 'models'],
+      value: [
+        { id: 'claude-sonnet-4.5', api: 'anthropic-messages' },
+        { id: 'gpt-5.4', api: 'openai-responses' },
+      ],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
+    }])
   })
 
   it('deduplicates account model ids while preserving their first-seen order', async () => {
@@ -254,6 +360,10 @@ describe('GitHubCopilotAuthorizationController', () => {
         { id: 'gpt-5.6-sol', api: 'openai-responses' },
         { id: 'gemini-3.6-flash', api: 'openai-completions' },
       ],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
     }])
   })
 
@@ -268,6 +378,10 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'models'],
       value: [{ id: 'gpt-5.6-sol', api: 'openai-responses' }],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
     }])
   })
 

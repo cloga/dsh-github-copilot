@@ -8,17 +8,17 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.8"
+    "version": "0.3.0-cloga.11"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
     "node": ">=22.0.0",
     "dsh": {
-      "release": "0.1.2-alpha.4",
-      "tag": "dsh-v0.1.2-alpha.4",
-      "commit": "4e84901e6471b79ec0338099867ebb4606d12bb5",
+      "release": "0.1.2-alpha.5",
+      "tag": "dsh-v0.1.2-alpha.5",
+      "commit": "db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5",
       "developmentRelease": "0.1.1-rc.2",
-      "peerRange": "^0.1.1-rc.2 || ^0.1.2-alpha.4",
+      "peerRange": "^0.1.1-rc.2 || ^0.1.2-alpha.5",
       "baselines": [
         {
           "release": "0.1.1-rc.2",
@@ -28,14 +28,16 @@
           "source": "https://github.com/cloga/deepseek-harness",
           "branch": "cloga-pi-ai-model-api",
           "modelsUi": "settings-section-fallback",
-          "perModelApi": "model-entry"
+          "perModelApi": "model-entry",
+          "strictModeCompat": "route-switch"
         },
         {
-          "release": "0.1.2-alpha.4",
-          "tag": "dsh-v0.1.2-alpha.4",
-          "commit": "4e84901e6471b79ec0338099867ebb4606d12bb5",
+          "release": "0.1.2-alpha.5",
+          "tag": "dsh-v0.1.2-alpha.5",
+          "commit": "db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5",
           "modelsUi": "provider-card",
-          "providerHeaders": "fetch-validated-discovery"
+          "providerHeaders": "fetch-validated-discovery",
+          "strictModeCompat": "route-switch"
         }
       ],
       "packages": [
@@ -55,7 +57,7 @@
     },
     "piAi": "^0.84.2",
     "runtimeDependencies": {
-      "@deepseek-ai/dsh-authorization": "^0.1.1-rc.2 || ^0.1.2-alpha.4",
+      "@deepseek-ai/dsh-authorization": "^0.1.1-rc.2 || ^0.1.2-alpha.5",
       "zod": "^4.4.3"
     }
   },
@@ -94,7 +96,7 @@
       ],
       "tests": [
         {"file": "tests/loader-composition.spec.ts", "name": "bootstraps authorization in the rc.2 web profile before activating the integration"},
-        {"file": "tests/loader-composition.spec.ts", "name": "reuses the alpha.4 authorization service without duplicate registration"}
+        {"file": "tests/loader-composition.spec.ts", "name": "reuses the alpha.5 authorization service without duplicate registration"}
       ]
     },
     {
@@ -105,7 +107,7 @@
         {"file": "src/authorization-controller.ts", "marker": "GitHubCopilotAuthorizationController"}
       ],
       "tests": [
-        {"file": "tests/client.spec.ts", "name": "mounts its Remote contribution and registers the alpha.4 provider-card seat"},
+        {"file": "tests/client.spec.ts", "name": "mounts its Remote contribution and registers the alpha.5 provider-card seat"},
         {"file": "tests/authorization-controller.spec.ts", "name": "signs in through the built-in flow and adds only the reference-free Copilot profile"}
       ]
     },
@@ -123,6 +125,26 @@
       ]
     },
     {
+      "id": "copilot-optional-tool-arguments",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode']"},
+        {"file": "src/tool-schema-compat.ts", "marker": "assembly.variables.provider !== GITHUB_COPILOT_PROVIDER_ID"},
+        {"file": "src/tool-schema-compat.ts", "marker": "ESCALATION_FIELDS"},
+        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"},
+        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "packages/core/agent/src/model-selection.ts"}
+      ],
+      "tests": [
+        {"file": "tests/tool-schema-compat.spec.ts", "name": "removes escalation properties and required entries only for Copilot"},
+        {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves every schema for non-Copilot providers"},
+        {"file": "tests/tool-schema-compat.spec.ts", "name": "filters a real Cordis waterfall after model selection supplies the provider"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "repairs a Copilot route that still enables strict tool schemas"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing resolved Copilot route matches the account catalog"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "materializes Anthropic and OpenAI models under the route compatibility override"},
+        {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "applies route strict-mode compatibility only to supported model protocols"}
+      ]
+    },
+    {
       "id": "per-model-api-route-materialization",
       "required": true,
       "sourceMarkers": [
@@ -133,7 +155,7 @@
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
         {"file": "tests/authorization-controller.spec.ts", "name": "deduplicates account model ids while preserving their first-seen order"},
         {"file": "tests/authorization-controller.spec.ts", "name": "omits account model ids unsupported by the installed catalog"},
-        {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "accepts both mixed-protocol model entries through the real Core config"},
+        {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "applies route strict-mode compatibility only to supported model protocols"},
         {"file": "tests/plan.spec.ts", "name": "excludes a model-level Completions route and admits a model-level Responses route"}
       ]
     },
@@ -149,7 +171,7 @@
         {"file": "tests/loader-composition.spec.ts", "name": "repairs an existing valid Copilot grant during Host startup"},
         {"file": "tests/authorization-controller.spec.ts", "name": "repairs a pre-existing grant with an empty Copilot route"},
         {"file": "tests/authorization-controller.spec.ts", "name": "repairs only the model list while preserving the rest of the Copilot profile and unrelated providers"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing Copilot route already matches the account catalog"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing resolved Copilot route matches the account catalog"},
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"}
       ]
     },
@@ -223,10 +245,10 @@
       "id": "dsh-supported-baselines-fail-loud-guard",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/compatibility.ts", "marker": "peerRange: '^0.1.1-rc.2 || ^0.1.2-alpha.4'"}
+        {"file": "src/compatibility.ts", "marker": "peerRange: '^0.1.1-rc.2 || ^0.1.2-alpha.5'"}
       ],
       "tests": [
-        {"file": "tests/compatibility.spec.ts", "name": "declares desktop rc.2 and alpha.4 compatibility"},
+        {"file": "tests/compatibility.spec.ts", "name": "declares desktop rc.2 and alpha.5 compatibility"},
         {"file": "tests/compatibility.spec.ts", "name": "accepts the supported DSH service contract"},
         {"file": "tests/compatibility.spec.ts", "name": "fails before startup when a required API is absent"}
       ]

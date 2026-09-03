@@ -42,7 +42,7 @@ assert(
 )
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
-assert(peerRange === '^0.1.1-rc.2 || ^0.1.2-alpha.4', 'DSH peer range must target rc.2 and alpha.4')
+assert(peerRange === '^0.1.1-rc.2 || ^0.1.2-alpha.5', 'DSH peer range must target rc.2 and alpha.5')
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
 assert(dshBaselines.length === 2, 'exactly two DSH baselines must be declared')
 assert(
@@ -56,11 +56,11 @@ assert(
   'controlled DSH Desktop rc.2 baseline is missing',
 )
 assert(
-  dshBaselines.some(entry => entry.release === '0.1.2-alpha.4'
-    && entry.commit === '4e84901e6471b79ec0338099867ebb4606d12bb5'
+  dshBaselines.some(entry => entry.release === '0.1.2-alpha.5'
+    && entry.commit === 'db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5'
     && entry.modelsUi === 'provider-card'
     && entry.providerHeaders === 'fetch-validated-discovery'),
-  'DSH alpha.4 baseline is missing',
+  'DSH alpha.5 baseline is missing',
 )
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
@@ -133,7 +133,7 @@ const workflow = await read('.github/workflows/ci.yml')
 for (const command of [
   'a772dbbde82780bff2b9394427e9f0a24cafa1d5',
   'repository: cloga/deepseek-harness',
-  '4e84901e6471b79ec0338099867ebb4606d12bb5',
+  'db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
   'pnpm verify:upstream -- dsh-upstream',
