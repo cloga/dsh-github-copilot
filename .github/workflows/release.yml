@@ -29,11 +29,22 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match package version $version" >&2
             exit 1
           fi
+          tag_type="$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")"
+          if [[ "$tag_type" != "tag" ]]; then
+            echo "Release tag $GITHUB_REF_NAME must be annotated, got $tag_type" >&2
+            exit 1
+          fi
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts
+      - name: Write SHA-256 manifest
+        shell: bash
+        run: |
+          cd artifacts
+          sha256sum -- *.tgz > SHA256SUMS
+          sha256sum --check SHA256SUMS
 
       - name: Create GitHub Release
         env:
@@ -41,7 +52,7 @@ jobs:
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
-          gh release create "$GITHUB_REF_NAME" artifacts/*.tgz \
+          gh release create "$GITHUB_REF_NAME" artifacts/*.tgz artifacts/SHA256SUMS \
             --verify-tag \
             --title "dsh-github-copilot $version" \
             --generate-notes

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/cloga/dsh-github-copilot/security/advisories/new
+    about: Report credential, OAuth, endpoint-validation, or other security issues privately.

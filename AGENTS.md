@@ -4,14 +4,14 @@ This file is the authoritative entry point for humans and coding agents. Read it
 
 ## Product and architecture
 
-`dsh-github-copilot` is a companion to DSH Desktop `0.1.1-rc.2` and DSH `0.1.2-alpha.5`. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth flow, credential format, token exchange, refresh, and normal model transport.
+`dsh-github-copilot` is a companion to the controlled DSH Desktop `0.1.1-rc.2` Core baseline and DSH `0.1.2-alpha.5`. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
 
-This repository owns four narrow surfaces:
+This repository owns five narrow surfaces:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution and Client-safe Remote descriptors.
 3. Strict JSON normalization of pi-ai's provider-owned Copilot OAuth grant.
-4. Safe creation of a reference-free `llm-pi-ai.providers.github-copilot` profile.
+4. Reference-free creation of a missing `llm-pi-ai.providers.github-copilot` profile plus leaf-only reconciliation of existing profiles.
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
 
 ## File map
@@ -29,7 +29,7 @@ This repository owns four narrow surfaces:
 - `src/traditional-search.ts`: `github-copilot-hosted` `ctx.web` provider.
 - `src/serialize.ts`, `src/sse.ts`, `src/failure.ts`: protocol conversion and bounded error handling.
 - `tests/`: unit and integration evidence; mirror the source area being changed.
-- `deployment-baseline.json`: machine-readable compatibility and capability evidence.
+- `deployment-baseline.json`: declared machine-readable compatibility and capability evidence inventory.
 - `scripts/verify-deployment-baseline.mjs`: invariant drift gate.
 - `lib/`: generated release output; never edit it.
 
@@ -43,7 +43,7 @@ This repository owns four narrow surfaces:
 - Copilot OAuth grant writes must rebuild only pi-ai's documented provider fields as a fresh plain JSON object; unrelated extension values never reach DSH credential storage.
 - Settings changes are path-level. Never replace the whole `llm-pi-ai` section or unrelated provider profiles.
 - Sign-out deletes only the Copilot credential record and keeps route settings.
-- Hosted search only serves the selected `github-copilot` route, only for an account-available model and a native search protocol, after a successful probe.
+- Hosted search only serves the selected `github-copilot` route for an account-available model and a native search protocol. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback.
 - Misconfiguration and API drift fail loudly with a named missing seam. Do not fall back to process-local secrets or implicit machine state.
 - Host, Client, and Remote package entries must stay independently buildable and exported.
 - The package must self-provide authorization when Core omits it, reuse an existing service without duplicate registration, and never activate the integration body before authorization is available.
@@ -78,6 +78,14 @@ When upgrading DSH or pi-ai, inspect the exact tagged public exports and update 
 - Provider/network errors must not leak credentials or raw sensitive response bodies.
 - Do not commit generated archives, temporary files, `.env` files, tokens, or local credentials.
 - Keep design rationale in code/docs that enforce it; do not add empty templates or duplicate policy documents.
+
+## Distribution and release invariants
+
+- GitHub Releases are the only distribution channel; `package.json` stays private and npm publishing must not return.
+- User-facing install commands must include the required DSH `--profile` option and derive the versioned Release URL from `package.json`.
+- Package version, deployment-baseline version, README URLs, and the annotated `v<version>` tag must agree.
+- The Release workflow must run the complete gate, pack the versioned tarball, publish `SHA256SUMS`, and create the Release only after every preceding step succeeds.
+- Release tags must never move or be reused. Repository tag rules and immutable-release settings enforce this for new releases.
 
 ## Installation-agent PowerShell practice
 

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.12"
+    "version": "0.3.0-cloga.13"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -277,6 +277,7 @@
     ],
     "./client": [],
     "./remote": [],
-    "./deployment-baseline.json": []
+    "./deployment-baseline.json": [],
+    "./package.json": []
   }
 }
