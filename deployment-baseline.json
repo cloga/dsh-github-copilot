@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.0-cloga.10"
+    "version": "0.3.0-cloga.11"
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -130,9 +130,15 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "compat: { supportsStrictMode: false }"},
-        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"}
+        {"file": "src/tool-schema-compat.ts", "marker": "assembly.variables.provider !== GITHUB_COPILOT_PROVIDER_ID"},
+        {"file": "src/tool-schema-compat.ts", "marker": "ESCALATION_FIELDS"},
+        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"},
+        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "packages/core/agent/src/model-selection.ts"}
       ],
       "tests": [
+        {"file": "tests/tool-schema-compat.spec.ts", "name": "removes escalation properties and required entries only for Copilot"},
+        {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves every schema for non-Copilot providers"},
+        {"file": "tests/tool-schema-compat.spec.ts", "name": "filters a real Cordis waterfall after model selection supplies the provider"},
         {"file": "tests/authorization-controller.spec.ts", "name": "repairs a Copilot route that still enables strict tool schemas"},
         {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing resolved Copilot route matches the account catalog"},
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes Anthropic and OpenAI models under the route compatibility override"},

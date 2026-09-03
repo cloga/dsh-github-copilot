@@ -22,6 +22,7 @@ This repository owns four narrow surfaces:
 - `src/client.ts`: `settings.models.provider-card` UI keyed by `llm-pi-ai`.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/current-provider.ts`: selected DSH route plus installed pi-ai catalog facts.
+- `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments.
 - `src/plan.ts`: Copilot-only, fail-closed hosted-search candidate lifecycle.
 - `src/probe.ts`: bounded native-search capability proof.
 - `src/wire.ts`, `src/wire-anthropic.ts`: inline hosted-search streaming.
@@ -88,7 +89,7 @@ Installation agents using the DSH `pwsh` tool must follow these rules:
 - Use both fields only once, when retrying the exact same command after a real sandbox denial, approval is available, and the target mode is strictly wider than the current mode.
 - Omit the keys rather than sending `null`, empty strings, or the current sandbox mode.
 
-The plugin also keeps its managed Copilot route on ordinary JSON-schema tool calling with `compat.supportsStrictMode: false`, because OpenAI strict schemas make omission-sensitive DSH escalation arguments required and nullable. The rules above remain agent-side practice, and the plugin does not rewrite user-global agent instructions.
+The plugin keeps its managed Copilot route on ordinary JSON-schema tool calling and removes `sandbox_permissions` plus `justification` only from tool schemas assembled for the `github-copilot` provider. Optional schema semantics alone do not stop these models from emitting invalid escalation requests. Other providers retain the native one-shot escalation surface; Copilot sessions must choose sufficient standing permissions before a call that needs wider access. The rules above remain agent-side practice, and the plugin does not rewrite user-global agent instructions.
 
 ## Mechanical verification
 

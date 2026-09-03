@@ -68,6 +68,11 @@ if (baseline.strictModeCompat === 'route-switch') {
     'gate?.[field] !== \'offer\'',
   ])
 }
+await assertMarkers('packages/core/agent/src/model-selection.ts', [
+  'const assembled = await next()',
+  'provider: selected.provider',
+  'model: selected.model',
+])
 await assertMarkers('packages/llm/llm-pi-ai/src/login.ts', [
   'registerPiAiFlows',
   'recordKeyFor(providerId)',

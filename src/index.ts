@@ -31,6 +31,7 @@ import GitHubCopilotAuthorizationController, {
   ensureGitHubCopilotProviderProfile,
 } from './authorization-controller.ts'
 import { createGitHubCopilotTokenResolver } from './copilot-auth.ts'
+import { installCopilotToolSchemaCompatibility } from './tool-schema-compat.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
   GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -134,6 +135,10 @@ function installWebSearchSettings(
  * @param config - the composition entry config, used as the settings base layer.
  */
 export function apply(ctx: Context, config: InlineConfig): void {
+  // Register before dependency-gated activation so every Agent-scoped model
+  // selection listener remains downstream. The filter must observe the
+  // provider/model variables that model selection adds while unwinding.
+  installCopilotToolSchemaCompatibility(ctx)
   ensureAuthorization(ctx)
   ctx.inject(integrationInject, (integrationCtx) => {
     activate(integrationCtx, config)

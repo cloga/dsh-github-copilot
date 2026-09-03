@@ -20,7 +20,7 @@ Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录�
 
 ### 安装代理的 DSH 实践
 
-插件会在其托管的 Copilot route 中写入 `compat.supportsStrictMode: false`。OpenAI strict tool schema 会把所有可选属性改成 required nullable 属性，这与 DSH 依赖“字段缺省”表达未申请 sandbox escalation 的语义冲突。Copilot 会继续使用普通 JSON-schema tool calling，同时安装代理仍须遵循以下英文 payload 实践：
+插件会在其托管的 Copilot route 中写入 `compat.supportsStrictMode: false`，并从为 `github-copilot` provider 组装的 Tool Schema 中删除 `sandbox_permissions` 与 `justification`。Copilot 模型即使面对普通 JSON Schema 的 optional 字段也会反复生成这两个参数，因此彻底隐藏字段是目前唯一经过 A/B 验证的方案。其它 provider 仍保留 DSH 的一次性 escalation 路径；Copilot Session 如需更宽权限，应在调用前选择足够的 standing permission。安装代理仍须遵循以下英文 payload 实践：
 
 - Initial `pwsh` calls omit `sandbox_permissions` and `justification` entirely.
 - When approval prompts are disabled, never include either field.
@@ -36,7 +36,7 @@ Desktop `0.1.1-rc.2` 尚未提供 Models provider-card 扩展槽，因此登录�
 - DSH alpha.5 Core 负责 authorization service；仅在 rc.2 等未提供该服务的 profile 中由本包补充。
 - 本包只补充 Models provider-card UI、Host-only authorization Remote 和 hosted search。
 - 四个 authorization Remote 结果共用一个严格的 Zod v4 codec，因此 rc.2 会验证 status/start/cancel/sign-out view，同时 alpha.5 保持相同 wire contract。
-- 登录成功和 Host 启动时都会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集，用于创建或修复 route profile。空、缺字段或过期的 profile 会幂等自愈，包括 Models UI 保存空 provider entry 后的情况；每个模型都写入 catalog `api`，从而在不写 route 级 `api`、`baseURL` 或 `apiKeyEnv` 的情况下保留混合协议。托管 route 会设置 `compat.supportsStrictMode: false`，确保 Copilot 的 OpenAI 兼容协议仍能真正省略 DSH 工具中的可选参数。
+- 登录成功和 Host 启动时都会将账号 credential 中的 `availableModelIds` 与当前安装的 pi-ai catalog 取交集，用于创建或修复 route profile。空、缺字段或过期的 profile 会幂等自愈，包括 Models UI 保存空 provider entry 后的情况；每个模型都写入 catalog `api`，从而在不写 route 级 `api`、`baseURL` 或 `apiKeyEnv` 的情况下保留混合协议。托管 route 会设置 `compat.supportsStrictMode: false`，同时由 Copilot scoped prompt assembly 彻底删除两个 escalation 参数，因为仅依赖 optional schema 语义不足以约束这些模型。
 - Copilot OAuth grant 在写入或复用前，会由 Host adapter 将 pi-ai 文档化字段重建为新的普通 JSON 对象。只要归属字段有效，就可接受跨模块或 null-prototype credential；无关扩展字段会被丢弃，模型 ID 按原顺序去重，归属字段格式错误时也不会在错误中泄露字段值。
 - Sign out 只删除 `llm-pi-ai/github-copilot` credential；route profile 和其它设置保持不变。
 - Hosted search 使用同一 credential record 的刷新结果直接请求 `api.individual.githubcopilot.com`。
