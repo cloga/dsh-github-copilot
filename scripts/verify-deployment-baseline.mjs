@@ -61,7 +61,7 @@ assert(
 )
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
-assert(peerRange === '^0.1.1-rc.2 || ^0.1.2-alpha.5', 'DSH peer range must target rc.2 and alpha.5')
+assert(peerRange === '0.1.1-rc.2 || 0.1.2-rc.1', 'DSH peer range must target rc.2 and rc.1')
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
 assert(dshBaselines.length === 2, 'exactly two DSH baselines must be declared')
 assert(
@@ -75,11 +75,11 @@ assert(
   'controlled DSH Desktop rc.2 baseline is missing',
 )
 assert(
-  dshBaselines.some(entry => entry.release === '0.1.2-alpha.5'
-    && entry.commit === 'db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5'
+  dshBaselines.some(entry => entry.release === '0.1.2-rc.1'
+    && entry.commit === 'a66e4702047846cdaa10c66c9d3df3951f5ea70d'
     && entry.modelsUi === 'provider-card'
     && entry.providerHeaders === 'fetch-validated-discovery'),
-  'DSH alpha.5 baseline is missing',
+  'DSH rc.1 baseline is missing',
 )
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
@@ -155,11 +155,24 @@ assert((await read('SECURITY.md')).includes('/security/advisories/new'), 'SECURI
 assert((await read('.github/PULL_REQUEST_TEMPLATE.md')).includes('## Contract checklist'), 'pull request contract checklist is missing')
 assert((await read('.github/ISSUE_TEMPLATE/bug.yml')).includes('DSH baseline'), 'bug issue form is missing the DSH baseline')
 
+for (const path of [
+  'AGENTS.md',
+  'CONTRIBUTING.md',
+  'README.md',
+  'README.zh.md',
+  '.github/ISSUE_TEMPLATE/bug.yml',
+  '.github/PULL_REQUEST_TEMPLATE.md',
+]) {
+  const source = await read(path)
+  assert(!source.includes('0.1.2-alpha.5'), `${path} retains the superseded alpha.5 release`)
+  assert(!source.includes('db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5'), `${path} retains the superseded alpha.5 commit`)
+}
+
 const workflow = await read('.github/workflows/ci.yml')
 for (const command of [
   'a772dbbde82780bff2b9394427e9f0a24cafa1d5',
   'repository: cloga/deepseek-harness',
-  'db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5',
+  'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
   'pnpm verify:upstream -- dsh-upstream',
@@ -176,13 +189,19 @@ for (const marker of [
   'if [[ "$GITHUB_REF_NAME" != "v$version" ]]',
   'git cat-file -t "refs/tags/$GITHUB_REF_NAME"',
   'if [[ "$tag_type" != "tag" ]]',
+  'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
+  'pnpm verify:upstream -- dsh-upstream',
+  'pnpm verify:controlled-core -- dsh-upstream',
 ]) {
   assert(releaseWorkflow.includes(marker), `Release workflow is missing ${marker}`)
 }
 const orderedReleaseSteps = [
   '- name: Verify tag matches package version',
   '- run: pnpm install --frozen-lockfile',
-  '- run: pnpm verify',
+  '- name: Install rc.1 Core pi-ai closure',
+  '- run: pnpm verify:upstream -- dsh-upstream',
+  '- run: pnpm verify:controlled-core -- dsh-upstream',
+  '- name: Verify plugin package',
   '- run: pnpm pack --pack-destination artifacts',
   '- name: Write SHA-256 manifest',
   'sha256sum -- *.tgz > SHA256SUMS',

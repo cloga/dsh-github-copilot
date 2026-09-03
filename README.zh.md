@@ -14,16 +14,16 @@
 | DSH 表面 | 已测试源码 | Models UI |
 |---|---|---|
 | 受控 Desktop `0.1.1-rc.2` 基线 | `cloga-pi-ai-model-api` 上的受控 Core commit [`a772dbb`](https://github.com/cloga/deepseek-harness/commit/a772dbbde82780bff2b9394427e9f0a24cafa1d5) | 独立的 **Settings → GitHub Copilot** section |
-| DSH `0.1.2-alpha.5` | Tag commit [`db6bdc3`](https://github.com/deepseek-ai/deepseek-harness/commit/db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5) | **Settings → Models** provider card |
+| DSH `0.1.2-rc.1` | Tag commit [`a66e470`](https://github.com/deepseek-ai/deepseek-harness/commit/a66e4702047846cdaa10c66c9d3df3951f5ea70d) | **Settings → Models** provider card |
 
-原始 rc.2 tag 不能解析逐模型 `api`，不是经过测试的混合协议基线。Package peer range 允许兼容的 `0.1.x` release，但 CI 只证明上表两个精确源码；升级 DSH 或 pi-ai 后必须重新做兼容性审查。
+原始 rc.2 tag 不能解析逐模型 `api`，不是经过测试的混合协议基线。Package peer range 只允许上表两个精确 DSH release；升级 DSH 或 pi-ai 后必须先重新做兼容性审查，再修改范围。
 
 ## 安装与登录
 
 将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/dsh-github-copilot-0.3.0-cloga.13.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.14/dsh-github-copilot-0.3.0-cloga.14.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
@@ -44,7 +44,7 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 
 ## 授权与 route 行为
 
-`llm-pi-ai` 注册 OAuth method，authorization service 组织交互，本包只提供 UI/Remote controller 与 route reconciliation。alpha.5 由 Core 提供 authorization；rc.2 profile 缺失该服务时，本包挂载运行时依赖，并复用任何已经存在的 provider。
+`llm-pi-ai` 注册 OAuth method，authorization service 组织交互，本包只提供 UI/Remote controller 与 route reconciliation。rc.1 由 Core 提供 authorization；rc.2 profile 缺失该服务时，本包挂载运行时依赖，并复用任何已经存在的 provider。
 
 登录成功和 Host 启动时，本包会将账号 `availableModelIds` 与已安装 pi-ai catalog 取交集，并把每个模型物化为 `{ id, api }`。缺失的 profile 会以无 route 级连接引用的形式创建；已有 profile 只会修改：
 
@@ -124,15 +124,15 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-`pnpm verify` 执行 typecheck、deployment baseline 检查、build、全部测试和 package export smoke。CI 还会在 Windows/Linux 上分别验证精确的受控 rc.2 与 alpha.5 upstream 源码。
+`pnpm verify` 执行 typecheck、deployment baseline 检查、build、全部测试和 package export smoke。CI 还会在 Windows/Linux 上分别验证精确的受控 rc.2 与 rc.1 upstream 源码。
 
 ## Release 与 checksum 校验
 
 `package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，并且只在前序步骤全部成功后创建 GitHub Release。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/dsh-github-copilot-0.3.0-cloga.13.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.14/dsh-github-copilot-0.3.0-cloga.14.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.14/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -140,7 +140,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.3.0-cloga.13.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.3.0-cloga.14.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

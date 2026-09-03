@@ -9,7 +9,7 @@
 - [ ] `pnpm install --frozen-lockfile`
 - [ ] `pnpm verify`
 - [ ] `pnpm pack --pack-destination artifacts`
-- [ ] Windows/Linux × controlled-rc.2/alpha.5 CI passes
+- [ ] Windows/Linux × controlled-rc.2/rc.1 CI passes
 
 ## Contract checklist
 

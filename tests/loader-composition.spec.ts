@@ -138,7 +138,7 @@ describe('loader composition', () => {
     expect(ctx.registry.get(AuthorizationService)?.fibers).toHaveLength(1)
   })
 
-  it('reuses the alpha.5 authorization service without duplicate registration', async () => {
+  it('reuses the rc.1 authorization service without duplicate registration', async () => {
     const ctx = new Context()
     await mountProfile(ctx, true)
     const authorizationFiberUid = ctx.registry.get(AuthorizationService)?.fibers[0]?.uid
