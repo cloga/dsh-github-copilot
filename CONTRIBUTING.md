@@ -21,7 +21,7 @@ Use a GitHub issue to describe the problem and the owning DSH seam before implem
    ```
 
 6. Inspect the complete diff, commit with the issue reference and required co-author trailer, and open a pull request with `Fixes #<issue>`.
-7. Merge only after the Windows/Linux × controlled-rc.2/alpha.5 matrix passes.
+7. Merge only after the Windows/Linux × controlled-rc.2/rc.1 matrix passes.
 
 Generated `lib/` output, archives, `.env`, tokens, local credentials, and machine-specific state must not be committed.
 

@@ -13,6 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: a66e4702047846cdaa10c66c9d3df3951f5ea70d
+          path: dsh-upstream
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v6
 
@@ -36,7 +42,13 @@ jobs:
           fi
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify
+      - name: Install rc.1 Core pi-ai closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
+      - run: pnpm verify:upstream -- dsh-upstream
+      - run: pnpm verify:controlled-core -- dsh-upstream
+      - name: Verify plugin package
+        run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts
       - name: Write SHA-256 manifest

@@ -14,16 +14,16 @@ A focused DSH companion for GitHub Copilot sign-in, account-aware model profiles
 | DSH surface | Tested source | Models UI |
 |---|---|---|
 | Controlled Desktop `0.1.1-rc.2` baseline | Controlled Core commit [`a772dbb`](https://github.com/cloga/deepseek-harness/commit/a772dbbde82780bff2b9394427e9f0a24cafa1d5) on `cloga-pi-ai-model-api` | Dedicated **Settings → GitHub Copilot** section |
-| DSH `0.1.2-alpha.5` | Tag commit [`db6bdc3`](https://github.com/deepseek-ai/deepseek-harness/commit/db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5) | **Settings → Models** provider card |
+| DSH `0.1.2-rc.1` | Tag commit [`a66e470`](https://github.com/deepseek-ai/deepseek-harness/commit/a66e4702047846cdaa10c66c9d3df3951f5ea70d) | **Settings → Models** provider card |
 
-The stock rc.2 tag does not resolve per-model `api` entries and is not the tested mixed-protocol baseline. Package peer ranges admit compatible `0.1.x` releases, but CI proves only the two exact sources above; newer DSH or pi-ai versions require a fresh compatibility review.
+The stock rc.2 tag does not resolve per-model `api` entries and is not the tested mixed-protocol baseline. Package peer ranges admit only the two exact DSH releases above. Newer DSH or pi-ai versions require a fresh compatibility review before the range changes.
 
 ## Install and sign in
 
 Install the current release into the profile you use (replace `web` when targeting another profile):
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/dsh-github-copilot-0.3.0-cloga.13.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.14/dsh-github-copilot-0.3.0-cloga.14.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
@@ -44,7 +44,7 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 ## Authorization and route behavior
 
-`llm-pi-ai` registers the OAuth method; the authorization service orchestrates the interaction; this package contributes the UI/Remote controller and route reconciliation. Core supplies authorization on alpha.5. On rc.2 profiles that omit it, this package mounts its runtime dependency and reuses any provider already present.
+`llm-pi-ai` registers the OAuth method; the authorization service orchestrates the interaction; this package contributes the UI/Remote controller and route reconciliation. Core supplies authorization on rc.1. On rc.2 profiles that omit it, this package mounts its runtime dependency and reuses any provider already present.
 
 After sign-in and during Host startup, the package intersects the account's `availableModelIds` with the installed pi-ai catalog and materializes each model as `{ id, api }`. A missing profile is created without route-level connection references. For an existing profile, reconciliation intentionally changes only:
 
@@ -124,15 +124,15 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-`pnpm verify` runs typechecking, deployment-baseline checks, build, all tests, and package-export smoke checks. CI additionally verifies the exact controlled rc.2 and alpha.5 upstream sources on Windows and Linux.
+`pnpm verify` runs typechecking, deployment-baseline checks, build, all tests, and package-export smoke checks. CI additionally verifies the exact controlled rc.2 and rc.1 upstream sources on Windows and Linux.
 
 ## Release and checksum verification
 
 `package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, and creates the GitHub Release only after every preceding step succeeds.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/dsh-github-copilot-0.3.0-cloga.13.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.13/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.14/dsh-github-copilot-0.3.0-cloga.14.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.14/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -140,7 +140,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.3.0-cloga.13.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.3.0-cloga.14.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
