@@ -1,7 +1,5 @@
 # dsh-github-copilot
 
-[![npm version](https://img.shields.io/npm/v/dsh-github-copilot)](https://www.npmjs.com/package/dsh-github-copilot)
-
 [简体中文](./README.zh.md)
 
 One plugin for GitHub Copilot models and provider-hosted web search in DSH Desktop `0.1.1-rc.2` and DeepSeek Harness (DSH) `0.1.2-alpha.5`.
@@ -9,8 +7,10 @@ One plugin for GitHub Copilot models and provider-hosted web search in DSH Deskt
 ## Install and sign in
 
 ```sh
-dsh plugin add dsh-github-copilot
+dsh plugin add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.12/dsh-github-copilot-0.3.0-cloga.12.tgz
 ```
+
+GitHub Releases are the authoritative distribution channel. The versioned tarball is immutable and can be pinned and hash-verified by deployment tooling; this package is intentionally not published to npm.
 
 Then open **Settings → Models**, find **GitHub Copilot**, and select **Sign in**. Complete the GitHub device-code flow shown in the provider card. The plugin uses DSH's built-in `llm-pi-ai` provider and writes a reference-free `llm-pi-ai.providers.github-copilot` profile without replacing other settings.
 
@@ -114,3 +114,9 @@ pnpm pack --pack-destination artifacts
 ```
 
 `pnpm verify` runs the complete local test, typecheck, baseline, build, and package-smoke path. See [AGENTS.md](./AGENTS.md) for repository invariants and change workflow.
+
+## Publishing
+
+This repository publishes immutable tarballs through [GitHub Releases](https://github.com/cloga/dsh-github-copilot/releases), not npm. `package.json` is marked private to prevent accidental registry publication.
+
+A release tag must equal `v${package.json.version}`. Pushing that annotated tag runs `.github/workflows/release.yml`, which verifies the tag/version match, performs the frozen install and complete verification gate, packs the tarball, and creates the GitHub Release only after every preceding step succeeds. Never move or reuse a release tag; increment the package and deployment-baseline versions together for the next release.

@@ -1,14 +1,14 @@
 # dsh-github-copilot
 
-[![npm version](https://img.shields.io/npm/v/dsh-github-copilot)](https://www.npmjs.com/package/dsh-github-copilot)
-
 面向 DSH Desktop `0.1.1-rc.2` 与 DeepSeek Harness（DSH）`0.1.2-alpha.5` 的单插件 GitHub Copilot 模型与供应方托管搜索集成。
 
 ## 安装与登录
 
 ```sh
-dsh plugin add dsh-github-copilot
+dsh plugin add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.12/dsh-github-copilot-0.3.0-cloga.12.tgz
 ```
+
+GitHub Releases 是唯一权威分发渠道。带版本号的 tarball 不可变，可供部署工具精确 pin 并校验哈希；本包不会发布到 npm。
 
 打开 **Settings → Models**，找到 **GitHub Copilot** 并点击 **Sign in**，然后完成 provider card 展示的 GitHub device-code 流程。插件复用 DSH 内置的 `llm-pi-ai` provider，并通过路径级设置变更创建 reference-free `llm-pi-ai.providers.github-copilot` profile，不会替换其它 provider 设置。
 
@@ -112,3 +112,9 @@ pnpm pack --pack-destination artifacts
 ```
 
 `pnpm verify` 执行完整的 test、typecheck、baseline、build 和 package smoke 路径。仓库不变量与修改工作流见 [AGENTS.md](./AGENTS.md)。
+
+## 发布
+
+本仓库仅通过 [GitHub Releases](https://github.com/cloga/dsh-github-copilot/releases) 发布不可变 tarball，不发布到 npm。`package.json` 标记为 private，以防误发到 registry。
+
+Release tag 必须严格等于 `v${package.json.version}`。推送 annotated tag 后，`.github/workflows/release.yml` 会验证 tag 与版本一致，执行 frozen install 和完整验证门禁，打包 tarball，并且只在前序步骤全部成功后创建 GitHub Release。绝不能移动或复用已经发布的 tag；下一次发布必须同时递增 package 与 deployment baseline 版本。
