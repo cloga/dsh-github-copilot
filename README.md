@@ -36,9 +36,11 @@ Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in*
 4. Return to DSH. The card polls automatically; success is shown as **Signed in to GitHub Copilot.** with a **Sign out** button. The one-time URL and code disappear after success.
 5. Select a model under the `github-copilot` provider. If no model appears, restart the profile once and see [Migration and troubleshooting](#migration-and-troubleshooting).
 
-The device code is temporary and should be visible only while authorization is in progress. The following screenshots show the affected pre-fix behavior: the full Models page and a close-up where a successful status was incorrectly displayed beside the stale code. Current builds clear that instruction after authorization settles.
+The entry path starts from **Add provider**, continues by selecting **github-copilot**, and then opens the GitHub Copilot authorization card:
 
-![Models page showing the stale device-code notice after a successful sign-in](./docs/images/copilot-auth-stale-notice.png)
+![Animated GitHub Copilot provider setup flow](./docs/images/github-copilot-auth-flow.gif)
+
+The device code is temporary and should be visible only while authorization is in progress. The close-up below records the affected pre-fix behavior, where a successful status was incorrectly displayed beside the stale code. Current builds clear that instruction after authorization settles.
 
 ![Close-up of the stale authorization notice](./docs/images/copilot-auth-card-stale-notice.png)
 

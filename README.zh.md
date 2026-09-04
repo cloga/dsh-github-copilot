@@ -36,9 +36,11 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 4. 返回 DSH。卡片会自动轮询；成功后只显示 **Signed in to GitHub Copilot.** 和 **Sign out** 按钮，一次性 URL 与代码会消失。
 5. 在 `github-copilot` provider 下选择模型。如果没有出现模型，可先重启一次 profile，再查看[迁移与排障](#迁移与排障)。
 
-Device code 是临时信息，只应在授权进行中显示。下面两张图记录了修复前的异常表现：Models 页面全图，以及“已登录”状态旁仍残留旧验证码的局部图。当前版本会在授权结束后清除该提示。
+入口流程从 **添加提供方** 开始，选择 **github-copilot** 后进入 GitHub Copilot 授权卡片：
 
-![登录成功后仍残留 device code 的 Models 页面](./docs/images/copilot-auth-stale-notice.png)
+![GitHub Copilot 提供方添加与授权入口动图](./docs/images/github-copilot-auth-flow.gif)
+
+Device code 是临时信息，只应在授权进行中显示。下面的局部图记录了修复前的异常表现：成功状态旁仍残留旧验证码。当前版本会在授权结束后清除该提示。
 
 ![残留授权提示的局部截图](./docs/images/copilot-auth-card-stale-notice.png)
 
