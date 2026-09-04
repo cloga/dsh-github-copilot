@@ -23,7 +23,7 @@ The stock rc.2 tag does not resolve per-model `api` entries and is not the teste
 Install the current release into the profile you use (replace `web` when targeting another profile):
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.14/dsh-github-copilot-0.3.0-cloga.14.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.15/dsh-github-copilot-0.3.0-cloga.15.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
@@ -156,8 +156,8 @@ pnpm pack --pack-destination artifacts
 `package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, and creates the GitHub Release only after every preceding step succeeds.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.14/dsh-github-copilot-0.3.0-cloga.14.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.14/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.15/dsh-github-copilot-0.3.0-cloga.15.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.0-cloga.15/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -165,7 +165,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.3.0-cloga.14.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.3.0-cloga.15.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

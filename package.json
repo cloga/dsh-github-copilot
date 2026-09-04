@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "DSH companion for GitHub Copilot sign-in, account-aware model profiles, tool compatibility, and provider-hosted search.",
-  "version": "0.3.0-cloga.14",
+  "version": "0.3.0-cloga.15",
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "repository": {
