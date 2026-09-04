@@ -28,6 +28,31 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
+### User authorization flow
+
+1. Open **Settings → Models** and find the `github-copilot` provider card.
+2. Select **Sign in with GitHub**. The card changes to **Waiting for GitHub authorization…** and shows an **Open GitHub** link plus a one-time device code.
+3. Open the link, sign in to the GitHub account that owns the Copilot entitlement, enter the displayed code, and approve the request. Never paste a GitHub token into DSH.
+4. Return to DSH. The card polls automatically; success is shown as **Signed in to GitHub Copilot.** with a **Sign out** button. The one-time URL and code disappear after success.
+5. Select a model under the `github-copilot` provider. If no model appears, restart the profile once and see [Migration and troubleshooting](#migration-and-troubleshooting).
+
+The device code is temporary and should be visible only while authorization is in progress. The following screenshots show the affected pre-fix behavior: the full Models page and a close-up where a successful status was incorrectly displayed beside the stale code. Current builds clear that instruction after authorization settles.
+
+![Models page showing the stale device-code notice after a successful sign-in](./docs/images/copilot-auth-stale-notice.png)
+
+![Close-up of the stale authorization notice](./docs/images/copilot-auth-card-stale-notice.png)
+
+### Agent and automation flow
+
+Agents should treat the browser authorization as a human handoff, not as a token-acquisition task:
+
+1. Install the pinned release into the requested profile and restart/reload that profile when required.
+2. Direct the user to **Settings → Models → GitHub Copilot → Sign in with GitHub**.
+3. Tell the user to open the displayed verification URL and enter the displayed one-time code. Do not ask for, read, copy, log, or persist the user's GitHub token.
+4. Wait for the user to complete the browser step. Do not repeatedly start new authorization attempts while one is in flight.
+5. Confirm that the card says **Signed in to GitHub Copilot.**, that the device-code notice is gone, and that Copilot models are available.
+6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
+
 GitHub Releases are the authoritative distribution channel. This repository intentionally does not publish to npm. Deployment automation should pin the versioned tarball and verify `SHA256SUMS` from the same Release.
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
