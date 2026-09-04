@@ -289,6 +289,10 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       },
     }).then(async (outcome) => {
       if (outcome.status === 'authorized') {
+        // Device-code notices are instructions for an in-flight attempt, not
+        // durable provider status. Clear them before the profile repair so a
+        // completed grant cannot render "Signed in" beside an expired code.
+        this.notices = []
         await this.ensureProviderProfile()
         return
       }

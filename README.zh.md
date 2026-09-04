@@ -28,6 +28,31 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
+### 用户授权流程
+
+1. 打开 **设置 → 模型**，找到 `github-copilot` provider 卡片。
+2. 点击 **Sign in with GitHub**。卡片会显示 **Waiting for GitHub authorization…**，并给出 **Open GitHub** 链接和一次性 device code。
+3. 打开链接，登录拥有 Copilot 权益的 GitHub 账号，输入页面显示的代码并批准授权。不要把 GitHub token 粘贴到 DSH。
+4. 返回 DSH。卡片会自动轮询；成功后只显示 **Signed in to GitHub Copilot.** 和 **Sign out** 按钮，一次性 URL 与代码会消失。
+5. 在 `github-copilot` provider 下选择模型。如果没有出现模型，可先重启一次 profile，再查看[迁移与排障](#迁移与排障)。
+
+Device code 是临时信息，只应在授权进行中显示。下面两张图记录了修复前的异常表现：Models 页面全图，以及“已登录”状态旁仍残留旧验证码的局部图。当前版本会在授权结束后清除该提示。
+
+![登录成功后仍残留 device code 的 Models 页面](./docs/images/copilot-auth-stale-notice.png)
+
+![残留授权提示的局部截图](./docs/images/copilot-auth-card-stale-notice.png)
+
+### Agent 与自动化流程
+
+Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行获取 token 的任务：
+
+1. 把固定版本的 release 安装到用户指定的 profile，并按该 profile 的要求 reload/restart。
+2. 引导用户进入 **设置 → 模型 → GitHub Copilot → Sign in with GitHub**。
+3. 请用户打开界面显示的验证链接并输入一次性代码；不得索取、读取、复制、记录或持久化用户的 GitHub token。
+4. 等待用户在浏览器完成授权；已有授权正在进行时，不要重复创建新的登录尝试。
+5. 确认卡片显示 **Signed in to GitHub Copilot.**、device-code 提示已消失，并且 Copilot 模型可用。
+6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
+
 GitHub Releases 是唯一权威分发渠道；本仓库不会发布到 npm。部署自动化应 pin 带版本号的 tarball，并使用同一 Release 的 `SHA256SUMS` 校验。
 
 不需要运行 `copilot2api`，不需要外部 gateway、placeholder API key、原始 GitHub token 或单独安装 `dsh-web-search-provider`。

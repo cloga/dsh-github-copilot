@@ -137,7 +137,10 @@ describe('GitHubCopilotAuthorizationController', () => {
 
     harness.authorize()
     await vi.waitFor(async () => {
-      expect((await harness.controller.status()).phase).toBe('signed-in')
+      expect(await harness.controller.status()).toMatchObject({
+        phase: 'signed-in',
+        notices: [],
+      })
     })
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
       op: 'set',
