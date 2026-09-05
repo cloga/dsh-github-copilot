@@ -14,6 +14,7 @@ import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import type {} from '@deepseek-ai/dsh-agent'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
+import * as dshLlm from '@deepseek-ai/dsh-llm'
 import * as dshSettings from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { resolveCandidates, sameCandidates, SearchPlan } from './plan.ts'
@@ -455,8 +456,23 @@ function preflight(request: GenerateOptions, cfg: InlineConfig, ctx: Context): b
   if (request.purpose !== undefined) return false
   if (!cfg.enabled) return false
   if (!providerAllowed(request, cfg, ctx)) return false
+  if (request.messages.some(message => contentHasFileCompat(message.content))) return false
   if (contentHasImageAttachments(request)) return false
   return true
+}
+
+/** Prefer Core's recursive file predicate while retaining the older supported baselines. */
+function contentHasFileCompat(content: readonly unknown[]): boolean {
+  const official = (dshLlm as { contentHasFile?: (blocks: readonly unknown[]) => boolean }).contentHasFile
+  if (official !== undefined) return official(content)
+  return content.some((block) => {
+    if (typeof block !== 'object' || block === null || !('type' in block)) return false
+    if (block.type === 'file') return true
+    return block.type === 'tool-result'
+      && 'content' in block
+      && Array.isArray(block.content)
+      && contentHasFileCompat(block.content)
+  })
 }
 
 /**

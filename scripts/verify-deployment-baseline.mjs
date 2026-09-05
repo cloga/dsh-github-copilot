@@ -61,9 +61,12 @@ assert(
 )
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
-assert(peerRange === '0.1.1-rc.2 || 0.1.2-rc.1', 'DSH peer range must target rc.2 and rc.1')
+assert(
+  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1',
+  'DSH peer range must target alpha.1, rc.2, and rc.1',
+)
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
-assert(dshBaselines.length === 2, 'exactly two DSH baselines must be declared')
+assert(dshBaselines.length === 3, 'exactly three DSH baselines must be declared')
 assert(
   dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
     && entry.commit === 'a772dbbde82780bff2b9394427e9f0a24cafa1d5'
@@ -80,6 +83,15 @@ assert(
     && entry.modelsUi === 'provider-card'
     && entry.providerHeaders === 'fetch-validated-discovery'),
   'DSH rc.1 baseline is missing',
+)
+assert(
+  dshBaselines.some(entry => entry.release === '0.1.3-alpha.1'
+    && entry.tag === 'dsh-v0.1.3-alpha.1'
+    && entry.commit === 'd347e703908d0406b7a7ef80e3a0e594d86b2215'
+    && entry.modelsUi === 'provider-card'
+    && entry.providerHeaders === 'fetch-validated-discovery'
+    && entry.fileContentHelper === 'contentHasFile'),
+  'DSH alpha.1 baseline is missing',
 )
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
@@ -173,6 +185,7 @@ for (const command of [
   'a772dbbde82780bff2b9394427e9f0a24cafa1d5',
   'repository: cloga/deepseek-harness',
   'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
+  'd347e703908d0406b7a7ef80e3a0e594d86b2215',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
   'pnpm verify:upstream -- dsh-upstream',
@@ -192,6 +205,7 @@ for (const marker of [
   'if [[ "$version" =~ -(alpha|beta|rc)\\. ]]',
   'release_flags+=(--prerelease)',
   'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
+  'd347e703908d0406b7a7ef80e3a0e594d86b2215',
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify:controlled-core -- dsh-upstream',
 ]) {
@@ -200,7 +214,7 @@ for (const marker of [
 const orderedReleaseSteps = [
   '- name: Verify tag matches package version',
   '- run: pnpm install --frozen-lockfile',
-  '- name: Install rc.1 Core pi-ai closure',
+  '- name: Install alpha.1 Core pi-ai closure',
   '- run: pnpm verify:upstream -- dsh-upstream',
   '- run: pnpm verify:controlled-core -- dsh-upstream',
   '- name: Verify plugin package',

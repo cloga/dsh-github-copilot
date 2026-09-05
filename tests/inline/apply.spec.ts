@@ -372,6 +372,70 @@ describe('github-copilot apply', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('preserves a top-level user file when bypassing the custom wire', () => {
+    const runtime = buildRuntime()
+    apply(runtime.ctx, config)
+    const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
+    vi.stubGlobal('fetch', fetchMock)
+    const attachment = { attachmentId: 'attachment-2', name: 'notes.txt', bytes: 12 } as never
+    const withFile = request({
+      messages: [{
+        id: 'u1' as Message['id'],
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Summarize this file.' },
+          { type: 'file', attachment },
+        ],
+        source: { kind: 'user' },
+      }],
+    })
+    const originalMessages = withFile.messages
+    const next = vi.fn(() => {
+      expect(withFile.messages).toBe(originalMessages)
+      expect(withFile.messages[0]?.content[1]).toMatchObject({ type: 'file', attachment })
+      return 'next-value'
+    })
+    expect(runtime.listener?.(withFile, next)).toBe('next-value')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('preserves a file nested in tool-result content when bypassing the custom wire', () => {
+    const runtime = buildRuntime()
+    apply(runtime.ctx, config)
+    const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
+    vi.stubGlobal('fetch', fetchMock)
+    const attachment = { attachmentId: 'attachment-3', name: 'report.pdf', bytes: 42 } as never
+    const withNestedFile = request({
+      messages: [{
+        id: 'tool-result-1' as Message['id'],
+        role: 'user',
+        content: [{
+          type: 'tool-result',
+          toolCallId: 'call-1' as never,
+          content: [
+            { type: 'text', text: 'Generated report.' },
+            { type: 'file', attachment },
+          ],
+          isError: false,
+        }],
+        source: { kind: 'tool', callId: 'call-1' as never },
+      }],
+    })
+    const originalMessages = withNestedFile.messages
+    const next = vi.fn(() => {
+      expect(withNestedFile.messages).toBe(originalMessages)
+      expect(withNestedFile.messages[0]?.content[0]).toMatchObject({
+        type: 'tool-result',
+        content: [{ type: 'text' }, { type: 'file', attachment }],
+      })
+      return 'next-value'
+    })
+    expect(runtime.listener?.(withNestedFile, next)).toBe('next-value')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('honors the enabled switch', () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, { ...config, enabled: false })
