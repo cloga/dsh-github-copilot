@@ -12,7 +12,7 @@
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
-    "node": ">=22.0.0",
+    "node": ">=22.19.0",
     "dsh": {
       "release": "0.1.3-alpha.1",
       "tag": "dsh-v0.1.3-alpha.1",
@@ -274,11 +274,13 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/plan.ts", "marker": "route.provider !== 'github-copilot'"},
+        {"file": "src/index.ts", "marker": "route.model !== request.model"},
         {"file": "src/copilot-request.ts", "marker": "Openai-Intent"},
         {"file": "src/wire.ts", "marker": "WEB_SEARCH_TOOL_TYPE"},
         {"file": "src/probe.ts", "marker": "RESPONSES_PROBE_ROUNDS = 2"}
       ],
       "tests": [
+        {"file": "tests/inline/apply.spec.ts", "name": "preserves session model overrides on the same provider without custom wire calls"},
         {"file": "tests/plan.spec.ts", "name": "inherits model, endpoint, protocol, credential record, and catalog headers"},
         {"file": "tests/copilot-request.spec.ts", "name": "combines installed catalog headers with provider-required request metadata"},
         {"file": "tests/copilot-request.spec.ts", "name": "applies a credential-specific Copilot endpoint before request construction"},

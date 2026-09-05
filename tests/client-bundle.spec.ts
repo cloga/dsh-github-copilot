@@ -94,7 +94,8 @@ describe('tsdown client artifact', () => {
       inFlight: false,
       notices: [{ message: 'Authorized', url: 'https://github.com/login/device', code: 'ABCD-1234' }],
     }
-    const rpcCall = vi.fn(async () => ({ ok: true, value: validView }))
+    // The transport receives untrusted values; the Remote codec validates them.
+    const rpcCall = vi.fn(async (): Promise<{ ok: true; value: unknown }> => ({ ok: true, value: validView }))
     const ctx = new Cordis.Context()
     ctx.provide('typert', {
       remotes: {
@@ -140,7 +141,8 @@ describe('tsdown client artifact', () => {
     const statusDescriptor = contributions[0]!.descriptors.find(
       descriptor => descriptor.method === 'status',
     )!
-    if (statusDescriptor.result.mode !== 'strict') {
+    const resultCodec = statusDescriptor.result
+    if (resultCodec.mode !== 'strict') {
       throw new Error('expected a strict result codec')
     }
     const malformedViews = [
@@ -150,7 +152,7 @@ describe('tsdown client artifact', () => {
       { ...validView, error: null },
     ]
     for (const malformed of malformedViews) {
-      expect(() => statusDescriptor.result.schema.parse(malformed)).toThrow()
+      expect(() => resultCodec.schema.parse(malformed)).toThrow()
     }
 
     rpcCall.mockResolvedValueOnce({ ok: true, value: malformedViews[0] })

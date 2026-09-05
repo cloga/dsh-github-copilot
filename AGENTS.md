@@ -2,6 +2,17 @@
 
 This file is the authoritative entry point for humans and coding agents. Read it before changing code.
 
+## Agent quick start
+
+1. Run `pwd`, `git status --short --branch`, and `git remote -v` in the bound checkout. Preserve user changes and existing worktrees; do not infer the project from the DSH installation path.
+2. Read this file, then `node scripts/agent.mjs describe --json`. `agent-contract.json` maps each task to its owning files, focused tests, risks and approval boundaries; package scripts and release URLs are derived from current metadata.
+3. Run `node scripts/agent.mjs doctor --json` before install. It is a dependency-free, read-only repository preflight: exit 0 means preflight passed, 1 means prerequisites missing, 2 means invalid arguments/metadata. Build presence is not build freshness, and no live DSH or credential readiness is claimed.
+4. Choose a task with `node scripts/agent.mjs plan models --json` (or authorization/search/client/compatibility/tooling/release). Output is an unexecuted argv plan, never implicit permission to run destructive operations.
+5. Use Node 24 LTS for development and the exact pnpm version in `package.json`; the runtime dependency floor is Node 22.19.0. Run frozen install in this checkout. Dependencies/build output are not carried into worktrees.
+6. Create/reuse a tracking issue and feature branch, implement a regression first, run the full gate, inspect the diff, and open a PR. Stop before merge, publication, live-profile install or worktree checkout without explicit user approval.
+
+Use native DSH tools for goals, background jobs and scoped subagents. Use local Git and the GitHub REST API for delivery; no external orchestration daemon, roster or `vcs_*` tool is required. Do not assume a model provider's identity is the assisting agent.
+
 ## Product and architecture
 
 `dsh-github-copilot` is a companion to DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
@@ -111,33 +122,46 @@ Run from the repository root:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm test
-pnpm typecheck
-pnpm verify:baseline
-pnpm build
-pnpm verify:package
+pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-`pnpm verify` is the normal complete gate. Use a focused `vitest run <files...>` while iterating, then run the complete gate before commit. CI runs frozen install, `pnpm verify`, and package creation on Windows and Linux.
+Then run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz` on that exact archive. `node scripts/agent.mjs plan release --json` supplies the versioned argument without shell interpolation or platform assumptions.
 
-The rc.2 development dependencies remain the installable compiler/runtime baseline. CI separately checks out the exact alpha.1, controlled rc.2, and rc.1 upstream commits and runs `pnpm verify:upstream -- dsh-upstream` to verify every public seam this plugin consumes.
+`pnpm verify` checks the Agent contract, source and local test types, baseline markers, a clean build, Vitest tests, Node tooling tests, and real built Host import/Client-loader/Remote smoke. `tests/fixtures` are intentionally excluded from local test typecheck because they import source from a separate pinned Core checkout. The checked-in code must pass; never suppress compiler errors or weaken a test to get a green report.
+
+CI runs on Windows/Linux against the three exact Core baselines. `verify:upstream` is static seam-marker evidence. `verify:controlled-core` exclusively installs a temporary config fixture, refuses an existing target, and removes only its own file; it is not full plugin activation. The published rc.2 adapter test covers model materialization, not live provider transport. The release job must wait for the complete reusable CI matrix on the tagged revision, then verify its own packed bytes before publishing.
+
+### Evidence and side effects
+
+| Operation | What it proves / changes |
+|---|---|
+| `agent.mjs describe/doctor/plan` | Read-only checkout metadata/preflight; never runtime health or credentials |
+| `pnpm verify:baseline` | Required source/test markers exist; not semantic or live proof |
+| `pnpm verify` | Local compiler, tests, clean build and import checks; no real OAuth/API requests |
+| `pnpm verify:tarball` | Archive structure/export/media and equality to local build; no extraction/execution |
+| Authorization `status()` / `inspectGitHubCopilotProviderProfile()` | Can reconcile and persist settings; NOT read-only diagnostic APIs |
+| Host attach/restart or search probe | Can issue authenticated capability requests; requires appropriate user intent |
+| Release install | Writes a named user profile; installed on disk is not loaded in the running Host |
+
+Never say GPT-6/search works merely because settings, typecheck or a package import passes. Report the layers separately. Keep synthetic credentials in fixtures; no real sign-in, logout or API call just to produce test evidence. Do not recommend disabling capability proof as a routine repair. Preserve logs locally and report only redacted facts; route security-sensitive findings through SECURITY.md.
 
 ## Changing capabilities
 
-1. Identify the owning seam above; do not duplicate an upstream owner.
+1. Identify the owning seam using `agent-contract.json`; do not duplicate an upstream owner.
 2. Add or update focused tests before changing deployment claims.
 3. Update both READMEs when user behavior, setup, migration, or boundaries change.
-4. Update `deployment-baseline.json` and its verifier for a new required capability or export.
+4. Update `deployment-baseline.json`, `agent-contract.json` and their verifiers when the corresponding contract changes.
 5. Build before package smoke; never hand-edit `lib/`.
 
 ## Issue, branch, and PR workflow
 
-- Every change starts from a tracking issue.
+- Every change starts from a tracking issue. Resolve the actual default branch through Git remote metadata.
 - Work on a feature branch; never commit directly to `main`.
-- Commit messages reference the issue and include the repository-required co-author trailer.
-- Run the complete verification gate before pushing.
-- Push the feature branch and open a PR targeting the resolved default branch with `Fixes #<issue>`.
-- Do not merge unless explicitly requested.
+- Reference the issue in the commit and use truthful tool attribution: `Assisted-by: DeepSeek Harness (DSH)` for this DSH session. For a different tool, name the tool actually used. `node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"` formats the trailer without inventing an identity.
+- `Co-authored-by` is reserved for actual collaborators with verified identities. Do not copy the Copilot App trailer from history or invent a bot email. The model provider is not the authoring tool. Keep the user's Git author unchanged and do not rewrite published history.
+- State expected results and scope before the complete gate; compare actual outcomes before pushing. All current CI checks must be green before any authorized merge.
+- Push only the feature branch and open a PR targeting the resolved default branch with `Fixes #<issue>`. Include risks, tests, evidence limits, and rollback.
+- Merge, release/tag publication, installing into a user profile, and worktree checkout each require explicit user approval. Task completion is not approval. Never bypass branch/tag protection.
 
-GitHub operations must use the repository owner's intended authenticated identity. Never print tokens or embed them in commands.
+GitHub operations must use the repository owner's intended authenticated identity. Inject credentials only into the current Git/API process; never print or persist them or add machine-specific credential paths here. Network failure is not an authentication failure: follow user-authorized network recovery, bound retries, preserve local work and report pending remote delivery honestly.

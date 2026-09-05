@@ -35,7 +35,7 @@ describe('parseSse', () => {
 
   it('joins multi-line data with newlines', async () => {
     const events = await collect('data: {"a":\ndata: 1}\n\n')
-    expect((events[0].data as { a: number }).a).toBe(1)
+    expect(events).toEqual([{ type: 'message', data: { a: 1 } }])
   })
 
   it('handles CRLF line endings', async () => {

@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process'
-import { copyFile, rm } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
+import { verifyControlledCore } from './lib/controlled-core.mjs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -12,22 +12,10 @@ if (input === undefined || input.length === 0) {
 
 const upstream = resolve(input)
 const fixture = resolve(root, 'tests/fixtures/controlled-core-per-model-api.fixture.ts')
-const target = resolve(
+const manifest = JSON.parse(await readFile(resolve(root, 'deployment-baseline.json'), 'utf8'))
+await verifyControlledCore({
   upstream,
-  'packages/llm/llm-pi-ai/tests/dsh-github-copilot-per-model-api.spec.ts',
-)
-const pnpmCli = process.env.npm_execpath
-if (pnpmCli === undefined || pnpmCli.length === 0) {
-  throw new Error('verify-controlled-core must run through pnpm')
-}
-
-try {
-  await copyFile(fixture, target)
-  execFileSync(
-    process.execPath,
-    [pnpmCli, 'exec', 'vitest', 'run', 'packages/llm/llm-pi-ai/tests/dsh-github-copilot-per-model-api.spec.ts'],
-    { cwd: upstream, stdio: 'inherit' },
-  )
-} finally {
-  await rm(target, { force: true })
-}
+  fixture,
+  supportedCommits: manifest.supportedBaselines.dsh.baselines.map(baseline => baseline.commit),
+  pnpmCli: process.env.npm_execpath,
+})

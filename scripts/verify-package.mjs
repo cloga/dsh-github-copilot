@@ -50,6 +50,17 @@ if (typeof clientExports.apply !== 'function' || !Array.isArray(clientExports.in
   throw new Error('built client must materialize apply and inject exports')
 }
 
+// Import the real built Host without Vitest aliases. Importing is not apply()
+// and must not activate services or make a provider request.
+const host = await import(pathToFileURL(resolve(root, 'lib/index.js')).href)
+const baseline = JSON.parse(await readFile(resolve(root, 'deployment-baseline.json'), 'utf8'))
+for (const symbol of baseline.requiredExports['.']) {
+  if (!(symbol in host)) throw new Error(`built Host export is missing: ${symbol}`)
+}
+if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
+  throw new Error('built Host must export apply and inject')
+}
+
 const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)).default
 if (remote.descriptors.length !== 4) {
   throw new Error('built Remote entry must expose all four authorization methods')
@@ -67,4 +78,4 @@ for (const descriptor of remote.descriptors) {
   }
 }
 
-console.log('Verified built host, client, remote, type, and metadata package exports.')
+console.log('Verified built Host import/exports, Client loader, Remote codecs, and type/metadata presence. No live DSH activation or model calls performed.')

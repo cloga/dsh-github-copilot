@@ -30,6 +30,7 @@ function event(type: string, data: unknown): string {
 const cfg: InlineConfig = {
   enabled: true,
   providers: [],
+  includeSources: true,
   stripServerTools: true,
   idleTimeoutMs: 300_000,
   probe: false,

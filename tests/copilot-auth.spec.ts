@@ -38,7 +38,7 @@ function strictJsonRoundTrip<T>(value: T): T {
 }
 
 function runtime(record: GrantRecord | undefined, onCredentialChanged?: () => Promise<void>): {
-  readonly resolve: (modelId: string) => Promise<string | undefined>
+  readonly resolve: ReturnType<typeof createGitHubCopilotTokenResolver>
   readonly store: ReturnType<typeof createGitHubCopilotCredentialStore>
   readonly modifyRecord: ReturnType<typeof vi.fn>
   current(): GrantRecord | undefined

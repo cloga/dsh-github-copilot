@@ -1,8 +1,14 @@
 node_modules/
-lib/
+/lib/
 .pnpm-store/
 .pnpm-cache/
 .npm-cache/
 *.log
 .worktrees/
 artifacts/
+*.tgz
+.env
+.env.*
+*.tsbuildinfo
+coverage/
+.capture-*

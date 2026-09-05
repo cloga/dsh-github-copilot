@@ -86,7 +86,7 @@ After sign-in, during Host startup, and after this package refreshes the OAuth c
 - `providers.github-copilot.compat.supportsStrictMode`
 - `providers.github-copilot.headers` when the temporary GPT-6 overlay requires Copilot client headers
 
-Every other Copilot field and unrelated provider is preserved, including legacy `baseURL` or `apiKeyEnv` values. Before taking temporary ownership, the plugin stores a hidden JSON backup of the route's original `api`, `models`, and `headers` leaves in its own settings namespace. Retirement restores that backup—even when the refreshed account has no usable models—then removes the marker; it never deletes unrelated route fields. Remove legacy connection fields explicitly during migration. Sign-out itself still deletes only the `llm-pi-ai/github-copilot` credential record and keeps route settings.
+Normal reconciliation preserves other Copilot fields and unrelated providers, including legacy `baseURL` or `apiKeyEnv` values. Temporary ownership records `api`/`models` leaves and preserved standard header names in a hidden JSON marker in this plugin's settings namespace; header values and credentials are not copied into the marker. Retirement restores owned leaves and removes matching overlay headers before clearing the marker. An overlay-created profile with no remaining models can be removed; manual edits during the temporary mode need special care (see the readiness audit). Remove legacy connection fields explicitly during migration. Sign-out itself still deletes only the `llm-pi-ai/github-copilot` credential record and keeps route settings.
 
 Before a grant is persisted or reused, the Host normalizer rebuilds only pi-ai's documented `type`, `refresh`, `access`, finite `expires`, optional `enterpriseUrl`, and optional deduplicated `availableModelIds` fields into a fresh plain JSON object.
 
@@ -173,7 +173,24 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-`pnpm verify` runs typechecking, deployment-baseline checks, build, all tests, and package-export smoke checks. CI additionally verifies the exact controlled rc.2 and rc.1 upstream sources on Windows and Linux.
+Use Node 24 LTS for development and the pinned pnpm version; runtime dependencies require Node >=22.19.0. `pnpm verify` runs the Agent contract check, source and local test typechecking, baseline markers, clean build, Vitest and Node tooling tests, and a real built Host import plus Client/Remote smoke. After packing, run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz` to verify archive exports, media, allowed contents and equality to that build. CI checks the exact controlled rc.2, rc.1 and alpha.1 Core sources/config fixtures on Windows and Linux; release publication depends on that full matrix.
+
+### Agent-driven development
+
+From a source checkout, use these read-only entrypoints (no dependencies needed for discovery):
+
+```sh
+node scripts/agent.mjs describe --json
+node scripts/agent.mjs doctor --json
+node scripts/agent.mjs plan models --json
+node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
+```
+
+`agent-contract.json` maps authorization, models, search, client, compatibility, tooling and release tasks to owning files and tests. Plans return unexecuted argument arrays, including the exact package-version archive path. Doctor checks repository prerequisites only: exit 0 means preflight passed, 1 means missing prerequisites, 2 means invalid input/metadata. For clean machine-readable output prefer the direct `node` command rather than parsing pnpm progress logs.
+
+Attribution follows the actual tool: `Assisted-by: DeepSeek Harness (DSH)` for DSH-assisted changes, not a Copilot App co-author inferred from the model provider. Keep the human Git author and reserve `Co-authored-by` for verified collaborators. Merge, release, profile install, sign-out and worktree checkout require explicit approval.
+
+Evidence is layered: package presence/import and passing synthetic tests do not prove live DSH activation, account entitlement, model transport or hosted search. Authorization `status()` can write settings, and Host startup can issue a search probe; neither is a safe read-only health check. Session model overrides that differ from the default plan now keep Core transport instead of using the default model. See the [readiness audit](./docs/agent-readiness.md) for evidence and remaining limitations.
 
 ## Release and checksum verification
 
