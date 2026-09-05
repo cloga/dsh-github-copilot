@@ -39,7 +39,7 @@ This repository owns seven narrow surfaces:
 ## Non-negotiable invariants
 
 - Do not add a second general Copilot LLM adapter or model catalog.
-- Temporary model overlays must name exact IDs, remain gated by the OAuth grant's `availableModelIds`, defer to an installed pi-ai entry with the same ID, and be removed after upstream publication.
+- Temporary model overlays must name exact IDs, remain gated by the OAuth grant's `availableModelIds`, defer to an installed pi-ai entry with the same ID, and be removed after upstream publication. Any route-level protocol override must persist an ownership backup in this plugin's settings namespace and restore only owned leaves on retirement.
 - Do not require or silently support `copilot2api`, an external gateway, a pasted GitHub token, a placeholder key, or `dsh-web-search-provider`.
 - The credential record key is `llm-pi-ai/github-copilot`.
 - OAuth credential payloads stay Host-only. Client Remote methods may expose status, notices, and errors only.
@@ -67,7 +67,7 @@ The supported upstream baselines are:
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
 - Copilot grant schema: `type: oauth`, non-empty `refresh`/`access`, finite `expires`, optional non-empty `enterpriseUrl`, and optional deduplicated non-empty-string `availableModelIds`.
 - Settings: create the provider through a path operation at `providers.github-copilot`.
-- Per-model API: materialize each account model as `{ id, api }`; never flatten a mixed route to route-level connection fields.
+- Per-model API: normally materialize each account model as `{ id, api }`. The only route-level exception is an exact temporary model absent from published pi-ai: select its protocol and filter the route to models using that same protocol, then unset the route protocol when the overlay retires.
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.
 - Provider headers: rc.1 validates configured headers through Fetch and reuses Host-owned headers during model discovery.

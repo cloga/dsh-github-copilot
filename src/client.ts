@@ -27,13 +27,20 @@ function messageOf(result: Awaited<ReturnType<GitHubCopilotProviderCardProps['re
 }
 
 export function catalogWarningOf(status: GitHubCopilotAuthorizationView | undefined): string | undefined {
-  if (status?.catalog?.state === 'partially-outdated') {
-    return `${status.catalog.unknownModelIds.length} account model(s) require a newer Copilot model catalog: ${status.catalog.unknownModelIds.join(', ')}.`
+  const catalog = status?.catalog
+  if (catalog === undefined) return undefined
+  const warnings: string[] = []
+  if (catalog.state === 'partially-outdated') {
+    warnings.push(`${catalog.unknownModelIds.length} account model(s) require a newer Copilot model catalog: ${catalog.unknownModelIds.join(', ')}.`)
   }
-  if (status?.catalog?.state === 'outdated') {
-    return `This account exposes only models unknown to the installed Copilot model catalog: ${status.catalog.unknownModelIds.join(', ')}. Update the integration and restart DSH.`
+  if (catalog.state === 'outdated') {
+    warnings.push(`This account exposes only models unknown to the installed Copilot model catalog: ${catalog.unknownModelIds.join(', ')}. Update the integration and restart DSH.`)
   }
-  return undefined
+  const unavailable = catalog.temporarilyUnavailableModelIds ?? []
+  if (unavailable.length > 0) {
+    warnings.push(`Temporarily hidden while GPT-6 compatibility selects the Responses protocol: ${unavailable.join(', ')}.`)
+  }
+  return warnings.length === 0 ? undefined : warnings.join(' ')
 }
 
 export function activeAuthorizationNotice(

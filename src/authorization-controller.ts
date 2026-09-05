@@ -16,6 +16,7 @@ import {
 export const GITHUB_COPILOT_CREDENTIAL_KEY = 'llm-pi-ai/github-copilot'
 export const GITHUB_COPILOT_PROVIDER_ID = 'github-copilot'
 export const LLM_PI_AI_SETTINGS_NAMESPACE = 'llm-pi-ai'
+const GITHUB_COPILOT_SETTINGS_NAMESPACE = 'github-copilot'
 
 export type GitHubCopilotModelCatalogState = 'current' | 'partially-outdated' | 'outdated'
 
@@ -24,6 +25,7 @@ export interface GitHubCopilotModelCatalogView {
   readonly accountModelCount: number
   readonly supportedModelCount: number
   readonly unknownModelIds: readonly string[]
+  readonly temporarilyUnavailableModelIds?: readonly string[]
 }
 
 export interface GitHubCopilotProviderProfileResult {
@@ -89,11 +91,15 @@ interface CredentialRecordServiceView {
   deleteRecord(key: string): Promise<void>
 }
 
+type SettingsMutation =
+  | { readonly op: 'set'; readonly path: string[]; readonly value: unknown }
+  | { readonly op: 'unset'; readonly path: string[] }
+
 interface SettingsServiceView {
   get(namespace: string): unknown
   mutate(
     namespace: string,
-    operations: readonly { op: 'set'; path: string[]; value: unknown }[],
+    operations: readonly SettingsMutation[],
     expectedRevision?: number,
   ): Promise<void>
 }
@@ -102,7 +108,9 @@ function providerModelsFrom(
   record: { readonly kind: string; readonly payload?: unknown } | undefined,
 ): {
   readonly models: Record<string, unknown>[]
+  readonly restorationModels: Record<string, unknown>[]
   readonly requiredHeaders?: Readonly<Record<string, string>>
+  readonly requiredRouteApi?: string
   readonly catalog: GitHubCopilotModelCatalogView
 } {
   if (record?.kind !== 'grant') {
@@ -114,34 +122,50 @@ function providerModelsFrom(
   const installedModels = getBuiltinModels('github-copilot')
   const installed = new Map(installedModels.map(model => [model.id, model.api] as const))
   const installedIds = new Set(installed.keys())
+  const temporary = new Map(available.flatMap((id) => {
+    const model = temporaryGitHubCopilotModel(id, installedIds)
+    return model === undefined ? [] : [[id, model] as const]
+  }))
+  const requiredApis = new Set([...temporary.values()].map(model => model.api))
+  if (requiredApis.size > 1) {
+    throw new Error('github-copilot: temporary account models require incompatible route protocols')
+  }
+  const requiredRouteApi = requiredApis.values().next().value as string | undefined
   const models: Record<string, unknown>[] = []
+  const restorationModels: Record<string, unknown>[] = []
   const unknownModelIds: string[] = []
+  const temporarilyUnavailableModelIds: string[] = []
   let requiredHeaders: Readonly<Record<string, string>> | undefined
   for (const id of available) {
     const api = installed.get(id)
     if (api !== undefined) {
-      models.push({ id, api })
+      restorationModels.push({ id, api })
+      if (requiredRouteApi === undefined || api === requiredRouteApi) models.push({ id, api })
+      else temporarilyUnavailableModelIds.push(id)
       continue
     }
-    const temporary = temporaryGitHubCopilotModel(id, installedIds)
-    if (temporary === undefined) {
+    const temporaryModel = temporary.get(id)
+    if (temporaryModel === undefined) {
       unknownModelIds.push(id)
       continue
     }
-    models.push(temporaryGitHubCopilotModelProfile(temporary))
-    requiredHeaders = temporary.headers
+    models.push(temporaryGitHubCopilotModelProfile(temporaryModel))
+    requiredHeaders = temporaryModel.headers
   }
   const state: GitHubCopilotModelCatalogState = unknownModelIds.length === 0
     ? 'current'
     : models.length === 0 ? 'outdated' : 'partially-outdated'
   return {
     models,
+    restorationModels,
     ...requiredHeaders === undefined ? {} : { requiredHeaders },
+    ...requiredRouteApi === undefined ? {} : { requiredRouteApi },
     catalog: {
       state,
       accountModelCount: available.length,
       supportedModelCount: models.length,
       unknownModelIds,
+      temporarilyUnavailableModelIds,
     },
   }
 }
@@ -182,13 +206,19 @@ function providerModels(value: unknown): Array<Record<string, unknown>> | undefi
   for (const candidate of value) {
     if (typeof candidate !== 'object' || candidate === null) return undefined
     const model = candidate as Record<string, unknown>
-    if (typeof model.id !== 'string' || typeof model.api !== 'string') return undefined
+    if (typeof model.id !== 'string') return undefined
+    if (model.api !== undefined && typeof model.api !== 'string') return undefined
     models.push(model)
   }
   return models
 }
 
-function sameProviderModels(current: unknown, expected: readonly Record<string, unknown>[]): boolean {
+function sameProviderModels(
+  current: unknown,
+  expected: readonly Record<string, unknown>[],
+  currentRouteApi?: string,
+  expectedRouteApi?: string,
+): boolean {
   const currentModels = providerModels(current)
   const expectedModels = providerModels(expected)
   if (currentModels === undefined || expectedModels === undefined || currentModels.length !== expectedModels.length) {
@@ -200,8 +230,12 @@ function sameProviderModels(current: unknown, expected: readonly Record<string, 
     const currentOverlay = temporaryGitHubCopilotModelFromProfile(currentModel)
     const expectedOverlay = temporaryGitHubCopilotModelFromProfile(expectedModel)
     if (currentOverlay !== undefined && expectedOverlay === undefined) return false
-    return Object.entries(expectedModel).every(([field, value]) =>
-      JSON.stringify(currentModel[field]) === JSON.stringify(value))
+    return Object.entries(expectedModel).every(([field, value]) => {
+      if (field === 'api') {
+        return (currentModel.api ?? currentRouteApi) === (value ?? expectedRouteApi)
+      }
+      return JSON.stringify(currentModel[field]) === JSON.stringify(value)
+    })
   })
 }
 
@@ -211,6 +245,17 @@ function providerHeaders(profile: Record<string, unknown> | undefined): Record<s
   return Object.fromEntries(
     Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   )
+}
+
+function conflictingRequiredHeader(
+  current: Readonly<Record<string, string>>,
+  required: Readonly<Record<string, string>>,
+): string | undefined {
+  const currentByName = new Map(Object.entries(current).map(([name, value]) => [name.toLowerCase(), value]))
+  return Object.entries(required).find(([name, value]) => {
+    const existing = currentByName.get(name.toLowerCase())
+    return existing !== undefined && existing !== value
+  })?.[0]
 }
 
 function withRequiredHeaders(
@@ -234,6 +279,132 @@ function withoutOwnedHeaders(
   }
   return Object.fromEntries(Object.entries(current).filter(([name, value]) =>
     ownedValues.get(name.toLowerCase()) !== value))
+}
+
+function providerApi(profile: Record<string, unknown> | undefined): string | undefined {
+  return typeof profile?.api === 'string' ? profile.api : undefined
+}
+
+interface TemporaryRouteBackup {
+  readonly providerExisted: boolean
+  readonly leaves: Readonly<Record<string, unknown>>
+  readonly preservedHeaderNames: readonly string[]
+}
+
+function temporaryRouteBackup(settings: SettingsServiceView): TemporaryRouteBackup | undefined {
+  const section = settings.get(GITHUB_COPILOT_SETTINGS_NAMESPACE)
+  if (typeof section !== 'object' || section === null) return undefined
+  const encoded = Reflect.get(section, 'temporaryRouteBackup')
+  if (encoded === undefined) return undefined
+  if (typeof encoded !== 'string') {
+    throw new Error('github-copilot: temporary route backup must be a JSON string')
+  }
+  const value: unknown = JSON.parse(encoded)
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('github-copilot: temporary route backup must decode to an object')
+  }
+  const providerExisted = Reflect.get(value, 'providerExisted')
+  const leaves = Reflect.get(value, 'leaves')
+  const preservedHeaderNames = Reflect.get(value, 'preservedHeaderNames')
+  if (
+    typeof providerExisted !== 'boolean'
+    || typeof leaves !== 'object'
+    || leaves === null
+    || Array.isArray(leaves)
+    || !Array.isArray(preservedHeaderNames)
+    || !preservedHeaderNames.every(name => typeof name === 'string')
+  ) {
+    throw new Error('github-copilot: temporary route backup has an invalid shape')
+  }
+  const leafRecord = leaves as Record<string, unknown>
+  if (
+    Object.keys(leafRecord).some(field => field !== 'api' && field !== 'models')
+    || (leafRecord.api !== undefined && typeof leafRecord.api !== 'string')
+    || (leafRecord.models !== undefined && providerModels(leafRecord.models) === undefined)
+  ) {
+    throw new Error('github-copilot: temporary route backup has invalid route leaves')
+  }
+  return {
+    providerExisted,
+    leaves: leafRecord,
+    preservedHeaderNames,
+  }
+}
+
+function createTemporaryRouteBackup(
+  current: Record<string, unknown> | undefined,
+  currentHasOverlay: boolean,
+  restorationModels: readonly Record<string, unknown>[],
+  requiredHeaders: Readonly<Record<string, string>> | undefined,
+): TemporaryRouteBackup {
+  if (current === undefined) {
+    return { providerExisted: false, leaves: {}, preservedHeaderNames: [] }
+  }
+  if (currentHasOverlay) {
+    return {
+      providerExisted: true,
+      leaves: { models: restorationModels },
+      preservedHeaderNames: [],
+    }
+  }
+  const leaves: Record<string, unknown> = {}
+  for (const field of ['api', 'models'] as const) {
+    if (Object.hasOwn(current, field)) leaves[field] = current[field]
+  }
+  const requiredByName = new Map(
+    Object.entries(requiredHeaders ?? {}).map(([name, value]) => [name.toLowerCase(), value]),
+  )
+  const preservedHeaderNames = Object.entries(providerHeaders(current)).flatMap(([name, value]) =>
+    requiredByName.get(name.toLowerCase()) === value ? [name.toLowerCase()] : [])
+  return { providerExisted: true, leaves, preservedHeaderNames }
+}
+
+function restoreTemporaryRouteOperations(
+  backup: TemporaryRouteBackup,
+  currentModels: readonly Record<string, unknown>[],
+  currentHeaders: Readonly<Record<string, string>>,
+  ownedHeaders: readonly Readonly<Record<string, string>>[],
+): SettingsMutation[] {
+  if (!backup.providerExisted && currentModels.length === 0) {
+    return [{ op: 'unset', path: ['providers', GITHUB_COPILOT_PROVIDER_ID] }]
+  }
+  const operations: SettingsMutation[] = []
+  operations.push(Object.hasOwn(backup.leaves, 'api')
+    ? {
+        op: 'set',
+        path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'api'],
+        value: backup.leaves.api,
+      }
+    : { op: 'unset', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'api'] })
+  const preservedNames = new Set(backup.preservedHeaderNames.map(name => name.toLowerCase()))
+  const removableHeaders = ownedHeaders.map(headers => Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !preservedNames.has(name.toLowerCase())),
+  ))
+  const restoredHeaders = withoutOwnedHeaders(currentHeaders, removableHeaders)
+  if (JSON.stringify(currentHeaders) !== JSON.stringify(restoredHeaders)) {
+    operations.push({
+      op: 'set',
+      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'headers'],
+      value: restoredHeaders,
+    })
+  }
+  if (currentModels.length > 0) {
+    operations.push({
+      op: 'set',
+      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
+      value: currentModels,
+    })
+  }
+  else {
+    operations.push(Object.hasOwn(backup.leaves, 'models')
+      ? {
+          op: 'set',
+          path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
+          value: backup.leaves.models,
+        }
+      : { op: 'unset', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'] })
+  }
+  return operations
 }
 
 function providerSupportsStrictMode(profile: Record<string, unknown> | undefined): unknown {
@@ -262,21 +433,91 @@ async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<GitHubC
         accountModelCount: 0,
         supportedModelCount: 0,
         unknownModelIds: [],
+        temporarilyUnavailableModelIds: [],
       },
     }
   }
 
-  const { models, requiredHeaders, catalog } = providerModelsFrom(record)
-  // Do not create or widen a route when every account model is unknown. An
-  // existing usable profile remains untouched until verified catalog metadata
-  // is installed; an absent profile remains absent rather than inheriting the
-  // provider's complete static catalog.
-  if (models.length === 0) return { changed: false, catalog }
-
+  const { models, restorationModels, requiredHeaders, requiredRouteApi, catalog } = providerModelsFrom(record)
   const settings = service<SettingsServiceView>(ctx, 'settings', ['get', 'mutate'])
   const current = providerProfileAt(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE))
-  const operations: Array<{ op: 'set'; path: string[]; value: unknown }> = []
-  if (models.length > 0 && !sameProviderModels(current?.models, models)) {
+  const currentRouteApi = providerApi(current)
+  const currentHeaders = providerHeaders(current)
+  const currentModelEntries = providerModels(current?.models) ?? []
+  const currentOverlays = currentModelEntries.flatMap((entry) => {
+    const overlay = temporaryGitHubCopilotModelFromProfile(entry)
+    return overlay === undefined ? [] : [overlay]
+  })
+  const currentHasOverlay = currentOverlays.length > 0
+  let backup = temporaryRouteBackup(settings)
+  if (requiredRouteApi !== undefined) {
+    if (currentRouteApi !== undefined && currentRouteApi !== requiredRouteApi) {
+      throw new Error(
+        `github-copilot: temporary model protocol "${requiredRouteApi}" conflicts with configured route api "${currentRouteApi}"`,
+      )
+    }
+    if (currentRouteApi === requiredRouteApi && !currentHasOverlay && backup === undefined) {
+      throw new Error(
+        `github-copilot: configured route api "${currentRouteApi}" is not owned by the temporary GPT-6 overlay`,
+      )
+    }
+    if (requiredHeaders !== undefined) {
+      const conflict = conflictingRequiredHeader(currentHeaders, requiredHeaders)
+      if (conflict !== undefined) {
+        throw new Error(`github-copilot: temporary GPT-6 header "${conflict}" conflicts with the configured route`)
+      }
+    }
+    if (backup === undefined) {
+      backup = createTemporaryRouteBackup(
+        current,
+        currentHasOverlay,
+        restorationModels,
+        requiredHeaders,
+      )
+      await settings.mutate(GITHUB_COPILOT_SETTINGS_NAMESPACE, [{
+        op: 'set',
+        path: ['temporaryRouteBackup'],
+        value: JSON.stringify(backup),
+      }])
+    }
+  }
+  else if (backup !== undefined) {
+    await settings.mutate(
+      LLM_PI_AI_SETTINGS_NAMESPACE,
+      restoreTemporaryRouteOperations(
+        backup,
+        models,
+        providerHeaders(current),
+        currentOverlays.map(model => model.headers),
+      ),
+    )
+    await settings.mutate(GITHUB_COPILOT_SETTINGS_NAMESPACE, [{
+      op: 'unset',
+      path: ['temporaryRouteBackup'],
+    }])
+    return { changed: true, catalog }
+  }
+  else if (currentHasOverlay) {
+    throw new Error('github-copilot: temporary GPT-6 route has no ownership backup; reconnect before cleanup')
+  }
+  if (models.length === 0) return { changed: false, catalog }
+
+  const operations: SettingsMutation[] = []
+  if (requiredRouteApi !== undefined) {
+    if (currentRouteApi !== requiredRouteApi) {
+      operations.push({
+        op: 'set',
+        path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'api'],
+        value: requiredRouteApi,
+      })
+    }
+  }
+  if (models.length > 0 && !sameProviderModels(
+    current?.models,
+    models,
+    currentRouteApi,
+    requiredRouteApi,
+  )) {
     operations.push({
       op: 'set',
       path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
@@ -290,7 +531,6 @@ async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<GitHubC
       value: false,
     })
   }
-  const currentModelEntries = providerModels(current?.models) ?? []
   const retiringOverlays = currentModelEntries.flatMap((entry) => {
     const overlay = temporaryGitHubCopilotModelFromProfile(entry)
     if (overlay === undefined) return []
@@ -299,7 +539,6 @@ async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<GitHubC
       ? []
       : [overlay]
   })
-  const currentHeaders = providerHeaders(current)
   const retainedHeaders = withoutOwnedHeaders(currentHeaders, retiringOverlays.map(model => model.headers))
   const headers = requiredHeaders === undefined
     ? retainedHeaders

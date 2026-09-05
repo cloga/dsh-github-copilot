@@ -47,6 +47,7 @@ const TEMPORARY_MODELS = new Map<string, TemporaryGitHubCopilotModel>([
   [GPT_6_ASTRA.id, GPT_6_ASTRA],
 ])
 
+
 /** Return a temporary model only while the installed pi-ai catalog lacks it. */
 export function temporaryGitHubCopilotModel(
   modelId: string,
@@ -77,7 +78,9 @@ export function temporaryGitHubCopilotModelFromProfile(
   if (model === undefined) return undefined
   const expected = temporaryGitHubCopilotModelProfile(model)
   return Object.entries(expected).every(([field, expectedValue]) =>
-    JSON.stringify(value[field]) === JSON.stringify(expectedValue))
+    field === 'api' && value.api === undefined
+      ? true
+      : JSON.stringify(value[field]) === JSON.stringify(expectedValue))
     ? model
     : undefined
 }

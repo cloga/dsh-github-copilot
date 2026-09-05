@@ -26,6 +26,8 @@ export interface InlineConfig {
   probe: boolean
   /** Bound on one probe request, in milliseconds. */
   probeTimeoutMs: number
+  /** Internal JSON backup of route leaves temporarily owned by the GPT-6 overlay. */
+  temporaryRouteBackup?: string
 }
 
 /** Longest timer either bound may take; `setTimeout`/`AbortSignal.timeout` refuse more. */
@@ -40,4 +42,5 @@ export const Config: z<InlineConfig> = z.object({
   idleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(300_000),
   probe: z.boolean().default(true),
   probeTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(30_000),
+  temporaryRouteBackup: z.string().hidden(),
 })
