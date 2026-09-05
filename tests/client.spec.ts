@@ -1,7 +1,49 @@
 import { describe, expect, it, vi } from 'vitest'
-import { apply } from '../src/client.ts'
+import { apply, catalogWarningOf } from '../src/client.ts'
 
 describe('GitHub Copilot Models client', () => {
+  it('explains partial and complete installed-catalog mismatches', () => {
+    expect(catalogWarningOf({
+      phase: 'signed-in',
+      configured: true,
+      writable: true,
+      inFlight: false,
+      notices: [],
+      catalog: {
+        state: 'partially-outdated',
+        accountModelCount: 2,
+        supportedModelCount: 1,
+        unknownModelIds: ['gpt-6-astra'],
+      },
+    })).toContain('gpt-6-astra')
+    expect(catalogWarningOf({
+      phase: 'signed-in',
+      configured: true,
+      writable: true,
+      inFlight: false,
+      notices: [],
+      catalog: {
+        state: 'outdated',
+        accountModelCount: 1,
+        supportedModelCount: 0,
+        unknownModelIds: ['gpt-6-astra'],
+      },
+    })).toContain('Update the integration and restart DSH')
+    expect(catalogWarningOf({
+      phase: 'signed-in',
+      configured: true,
+      writable: true,
+      inFlight: false,
+      notices: [],
+      catalog: {
+        state: 'current',
+        accountModelCount: 1,
+        supportedModelCount: 1,
+        unknownModelIds: [],
+      },
+    })).toBeUndefined()
+  })
+
   function clientContext(declaredSlots: readonly string[]) {
     const disposeRemote = vi.fn(async () => undefined)
     const disposeUi = vi.fn(async () => undefined)

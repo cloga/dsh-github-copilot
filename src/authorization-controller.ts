@@ -12,7 +12,21 @@ export const GITHUB_COPILOT_CREDENTIAL_KEY = 'llm-pi-ai/github-copilot'
 export const GITHUB_COPILOT_PROVIDER_ID = 'github-copilot'
 export const LLM_PI_AI_SETTINGS_NAMESPACE = 'llm-pi-ai'
 
-const profileRepairs = new WeakMap<Context, Promise<boolean>>()
+export type GitHubCopilotModelCatalogState = 'current' | 'partially-outdated' | 'outdated'
+
+export interface GitHubCopilotModelCatalogView {
+  readonly state: GitHubCopilotModelCatalogState
+  readonly accountModelCount: number
+  readonly supportedModelCount: number
+  readonly unknownModelIds: readonly string[]
+}
+
+export interface GitHubCopilotProviderProfileResult {
+  readonly changed: boolean
+  readonly catalog: GitHubCopilotModelCatalogView
+}
+
+const profileRepairs = new WeakMap<Context, Promise<GitHubCopilotProviderProfileResult>>()
 
 export interface AuthorizationNoticeView {
   readonly message: string
@@ -32,6 +46,7 @@ export interface GitHubCopilotAuthorizationView {
   readonly writable: boolean
   readonly inFlight: boolean
   readonly notices: readonly AuthorizationNoticeView[]
+  readonly catalog?: GitHubCopilotModelCatalogView
   readonly error?: string
 }
 
@@ -78,22 +93,37 @@ interface SettingsServiceView {
   ): Promise<void>
 }
 
-function providerModelsFrom(record: { readonly kind: string; readonly payload?: unknown } | undefined): Record<string, string>[] {
+function providerModelsFrom(
+  record: { readonly kind: string; readonly payload?: unknown } | undefined,
+): { readonly models: Record<string, string>[]; readonly catalog: GitHubCopilotModelCatalogView } {
   if (record?.kind !== 'grant') {
     throw new Error('github-copilot: the configured credential is not an OAuth grant')
   }
-  const available = normalizeGitHubCopilotOAuthCredential(record.payload).availableModelIds ?? []
+  const available = [...new Set(
+    normalizeGitHubCopilotOAuthCredential(record.payload).availableModelIds ?? [],
+  )]
   const installed = new Map(
     getBuiltinModels('github-copilot').map(model => [model.id, model.api] as const),
   )
-  const models = [...new Set(available)].flatMap((id) => {
+  const models: Record<string, string>[] = []
+  const unknownModelIds: string[] = []
+  for (const id of available) {
     const api = installed.get(id)
-    return api === undefined ? [] : [{ id, api }]
-  })
-  if (models.length === 0) {
-    throw new Error('github-copilot: the signed-in account exposes no models from the installed pi-ai catalog')
+    if (api === undefined) unknownModelIds.push(id)
+    else models.push({ id, api })
   }
-  return models
+  const state: GitHubCopilotModelCatalogState = unknownModelIds.length === 0
+    ? 'current'
+    : models.length === 0 ? 'outdated' : 'partially-outdated'
+  return {
+    models,
+    catalog: {
+      state,
+      accountModelCount: available.length,
+      supportedModelCount: models.length,
+      unknownModelIds,
+    },
+  }
 }
 
 function service<T extends object>(
@@ -153,23 +183,40 @@ function providerSupportsStrictMode(profile: Record<string, unknown> | undefined
 }
 
 /**
- * Reconcile only the Copilot route's account model list and strict-mode leaf
- * from an existing provider-owned OAuth grant. Returns false when no credential exists.
+ * Reconcile only the Copilot route's known account models and strict-mode leaf
+ * from an existing provider-owned OAuth grant. Unknown account model IDs are
+ * reported separately and never assigned a guessed protocol.
  */
-async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<boolean> {
+async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<GitHubCopilotProviderProfileResult> {
   const credentials = service<CredentialRecordServiceView>(
     ctx,
     'credentials',
     ['readRecord'],
   )
   const record = await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
-  if (record === undefined) return false
+  if (record === undefined) {
+    return {
+      changed: false,
+      catalog: {
+        state: 'current',
+        accountModelCount: 0,
+        supportedModelCount: 0,
+        unknownModelIds: [],
+      },
+    }
+  }
 
-  const models = providerModelsFrom(record)
+  const { models, catalog } = providerModelsFrom(record)
+  // Do not create or widen a route when every account model is unknown. An
+  // existing usable profile remains untouched until verified catalog metadata
+  // is installed; an absent profile remains absent rather than inheriting the
+  // provider's complete static catalog.
+  if (models.length === 0) return { changed: false, catalog }
+
   const settings = service<SettingsServiceView>(ctx, 'settings', ['get', 'mutate'])
   const current = providerProfileAt(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE))
   const operations: Array<{ op: 'set'; path: string[]; value: unknown }> = []
-  if (!sameProviderModels(current?.models, models)) {
+  if (models.length > 0 && !sameProviderModels(current?.models, models)) {
     operations.push({
       op: 'set',
       path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
@@ -183,12 +230,13 @@ async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<boolean
       value: false,
     })
   }
-  if (operations.length === 0) return false
-  await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, operations)
-  return true
+  if (operations.length > 0) await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, operations)
+  return { changed: operations.length > 0, catalog }
 }
 
-export function ensureGitHubCopilotProviderProfile(ctx: Context): Promise<boolean> {
+export async function inspectGitHubCopilotProviderProfile(
+  ctx: Context,
+): Promise<GitHubCopilotProviderProfileResult> {
   const active = profileRepairs.get(ctx)
   if (active !== undefined) return active
   const repair = repairGitHubCopilotProviderProfile(ctx).finally(() => {
@@ -196,6 +244,10 @@ export function ensureGitHubCopilotProviderProfile(ctx: Context): Promise<boolea
   })
   profileRepairs.set(ctx, repair)
   return repair
+}
+
+export async function ensureGitHubCopilotProviderProfile(ctx: Context): Promise<boolean> {
+  return (await inspectGitHubCopilotProviderProfile(ctx)).changed
 }
 
 /**
@@ -226,7 +278,9 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       ['describeRecord', 'deleteRecord'],
     )
     const record = await credentials.describeRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
-    if (record.configured) await ensureGitHubCopilotProviderProfile(this.ctx)
+    const profile = record.configured
+      ? await inspectGitHubCopilotProviderProfile(this.ctx)
+      : undefined
     const inFlight = authorization.describe(GITHUB_COPILOT_CREDENTIAL_KEY)?.inFlight === true
     return {
       phase: inFlight
@@ -238,6 +292,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       writable: record.writable,
       inFlight,
       notices: [...this.notices],
+      ...profile === undefined ? {} : { catalog: profile.catalog },
       ...this.failure === undefined ? {} : { error: this.failure },
     }
   }

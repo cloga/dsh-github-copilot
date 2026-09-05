@@ -37,7 +37,7 @@ function strictJsonRoundTrip<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-function runtime(record: GrantRecord | undefined): {
+function runtime(record: GrantRecord | undefined, onCredentialChanged?: () => Promise<void>): {
   readonly resolve: (modelId: string) => Promise<string | undefined>
   readonly store: ReturnType<typeof createGitHubCopilotCredentialStore>
   readonly modifyRecord: ReturnType<typeof vi.fn>
@@ -65,7 +65,7 @@ function runtime(record: GrantRecord | undefined): {
   const ctx = new Context()
   ctx.get = ((name: string) => name === 'credentials' ? credentials : undefined) as typeof ctx.get
   return {
-    resolve: createGitHubCopilotTokenResolver(ctx),
+    resolve: createGitHubCopilotTokenResolver(ctx, onCredentialChanged),
     store: createGitHubCopilotCredentialStore(ctx),
     modifyRecord,
     current: () => current,
@@ -261,6 +261,69 @@ describe('GitHub Copilot credential adapter', () => {
     })
 
     await expect(harness.resolve('gpt-5.4')).rejects.toThrow(/not available for the signed-in Copilot account/)
+  })
+
+  it('reconciles the provider profile after every successful auth resolution', async () => {
+    const onCredentialChanged = vi.fn(async () => undefined)
+    const freshToken = 'tid=test;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;'
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url === 'https://api.github.com/copilot_internal/v2/token') {
+        return new Response(JSON.stringify({
+          token: freshToken,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+        }), { status: 200 })
+      }
+      if (url === 'https://api.individual.githubcopilot.com/models') {
+        return new Response(JSON.stringify({
+          data: [{
+            id: 'gpt-5.4',
+            model_picker_enabled: true,
+            policy: { state: 'enabled' },
+            capabilities: { supports: { tool_calls: true } },
+          }],
+        }), { status: 200 })
+      }
+      throw new Error(`unexpected request: ${url}`)
+    }))
+    const harness = runtime({
+      kind: 'grant',
+      payload: {
+        type: 'oauth',
+        refresh: 'github-device-grant',
+        access: 'expired-copilot-token',
+        expires: 0,
+        availableModelIds: ['gpt-5-mini'],
+      },
+    }, onCredentialChanged)
+
+    await expect(harness.resolve('gpt-5.4')).resolves.toMatchObject({ apiKey: freshToken })
+    await expect(harness.resolve('gpt-5.4')).resolves.toMatchObject({ apiKey: freshToken })
+    expect(onCredentialChanged).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps auth usable and retries reconciliation after a transient failure', async () => {
+    const onCredentialChanged = vi.fn()
+      .mockRejectedValueOnce(new Error('settings unavailable'))
+      .mockResolvedValue(undefined)
+    const harness = runtime({
+      kind: 'grant',
+      payload: {
+        type: 'oauth',
+        refresh: 'github-device-grant',
+        access: 'tid=test;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;',
+        expires: Date.now() + 86_400_000,
+        availableModelIds: ['gpt-5.4'],
+      },
+    }, onCredentialChanged)
+
+    await expect(harness.resolve('gpt-5.4')).resolves.toMatchObject({
+      baseURL: 'https://api.individual.githubcopilot.com',
+    })
+    await expect(harness.resolve('gpt-5.4')).resolves.toMatchObject({
+      baseURL: 'https://api.individual.githubcopilot.com',
+    })
+    expect(onCredentialChanged).toHaveBeenCalledTimes(2)
   })
 
   it('rechecks model availability after refreshing the credential', async () => {
