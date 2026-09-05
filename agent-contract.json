@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "entrypoints": ["AGENTS.md", "CONTRIBUTING.md", "README.md", "README.zh.md", "SECURITY.md", "deployment-baseline.json"],
+  "boundaries": {
+    "credentialOwner": "DSH credentials and pi-ai OAuth; never request, log or export grants",
+    "transportOwner": "DSH llm-pi-ai; no second general Copilot adapter",
+    "diagnostics": "Repository checks only; no live profile, credential, network or model calls",
+    "approvalRequired": ["merge", "release", "install into a user profile", "sign-out", "worktree checkout"],
+    "attribution": "Assisted-by identifies the actual assisting tool; never infer a co-author from a model provider"
+  },
+  "tasks": {
+    "authorization": {
+      "purpose": "OAuth lifecycle, grant normalization, route projection and account availability",
+      "read": ["src/authorization-controller.ts", "src/copilot-auth.ts", "src/copilot-grant.ts"],
+      "tests": ["tests/authorization-controller.spec.ts", "tests/copilot-auth.spec.ts", "tests/loader-composition.spec.ts"],
+      "risk": "Settings writes and sign-out are not read-only diagnostics; use synthetic grants in tests."
+    },
+    "models": {
+      "purpose": "Catalog lag, GPT-6 temporary route and ownership restoration",
+      "read": ["src/temporary-models.ts", "src/current-provider.ts", "src/authorization-controller.ts"],
+      "tests": ["tests/temporary-models.spec.ts", "tests/temporary-model-runtime.spec.ts", "tests/temporary-model-retirement.spec.ts", "tests/authorization-controller.spec.ts"],
+      "risk": "Settings snapshots, catalog discovery and actual transport must be tested separately; never guess protocols."
+    },
+    "search": {
+      "purpose": "Inline native search and the optional ctx.web provider",
+      "read": ["src/index.ts", "src/plan.ts", "src/probe.ts", "src/traditional-search.ts", "src/content-file.ts"],
+      "tests": ["tests/plan.spec.ts", "tests/probe.spec.ts", "tests/traditional-search.spec.ts", "tests/inline/apply.spec.ts", "tests/content-file.spec.ts"],
+      "risk": "Registration does not select the global Web provider. Preserve file delegation, protocol/account gates and no implicit fallback."
+    },
+    "client": {
+      "purpose": "Models provider card, device-code copy UX and strict Remote results",
+      "read": ["src/client.ts", "src/remote.ts", "src/dsh-supported-types.d.ts"],
+      "tests": ["tests/client.spec.ts", "tests/client-bundle.spec.ts", "tests/authorization-controller.spec.ts"],
+      "risk": "Use synthetic device codes. Element-tree tests are not browser interaction or activation evidence."
+    },
+    "compatibility": {
+      "purpose": "Supported DSH seams, tool schemas and exact upstream fixture checks",
+      "read": ["src/compatibility.ts", "src/tool-schema-compat.ts", "scripts/verify-upstream-baseline.mjs", "scripts/verify-controlled-core.mjs"],
+      "tests": ["tests/compatibility.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/temporary-model-runtime.spec.ts"],
+      "risk": "A package version alone cannot prove a controlled Core patch; test every declared exact upstream commit."
+    },
+    "tooling": {
+      "purpose": "Agent contract, preflight, verification, packaging and attribution",
+      "read": ["agent-contract.json", "scripts/agent.mjs", "scripts/verify-agent-contract.mjs", "scripts/verify-package.mjs", ".github/workflows/ci.yml"],
+      "tests": [],
+      "risk": "Machine reports must distinguish not checked from failed and never claim live runtime or release success."
+    },
+    "release": {
+      "purpose": "Version alignment and immutable GitHub prerelease/release delivery",
+      "read": ["package.json", "deployment-baseline.json", ".github/workflows/release.yml", "scripts/verify-package.mjs"],
+      "tests": ["tests/client-bundle.spec.ts"],
+      "risk": "Requires explicit release approval, green CI, a fresh annotated tag and verified remote checksums; never reuse tags."
+    }
+  }
+}

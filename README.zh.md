@@ -86,7 +86,7 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 - `providers.github-copilot.compat.supportsStrictMode`
 - 临时 GPT-6 兼容层需要 Copilot 客户端 headers 时的 `providers.github-copilot.headers`
 
-其它 Copilot 字段和无关 provider 全部保留，包括旧的 `baseURL` 或 `apiKeyEnv`。插件取得临时所有权之前，会把 route 原始的 `api`、`models` 和 `headers` 叶节点编码为隐藏 JSON，存入自己的 settings namespace。兼容层退役时，即使刷新后的账号没有任何可用模型，也会恢复该备份并删除 ownership marker，不会删除其它 route 字段。迁移时必须显式删除旧连接字段。Sign out 本身仍只删除 `llm-pi-ai/github-copilot` credential record，保留 route settings。
+普通 reconciliation 会保留其它 Copilot 字段和无关 provider，包括旧的 `baseURL` 或 `apiKeyEnv`。临时所有权 marker 在本插件 settings namespace 中记录 `api`/`models` 叶节点及需要保留的标准 header 名称，不复制 header 值或 credential。退役时先恢复拥有的叶节点并清除匹配的 overlay headers，再清理 marker。若 profile 原由 overlay 创建且没有剩余模型，整个 profile 可能被移除；临时模式期间的手工编辑需要特别注意（详见 readiness 审计）。迁移时必须显式删除旧连接字段。Sign out 本身仍只删除 `llm-pi-ai/github-copilot` credential record，保留 route settings。
 
 Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`、`refresh`、`access`、有限数值 `expires`、可选 `enterpriseUrl` 和去重后的可选 `availableModelIds` 重建为新的普通 JSON 对象。
 
@@ -173,7 +173,24 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-`pnpm verify` 执行 typecheck、deployment baseline 检查、build、全部测试和 package export smoke。CI 还会在 Windows/Linux 上分别验证精确的受控 rc.2 与 rc.1 upstream 源码。
+开发建议使用 Node 24 LTS 和固定的 pnpm 版本；运行时依赖要求 Node >=22.19.0。`pnpm verify` 检查 Agent contract、源码与本地测试类型、baseline marker、干净构建、Vitest 与 Node 工具测试，以及真实构建 Host 导入和 Client/Remote smoke。打包后执行 `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`，检查归档 export、图片、允许的文件以及与本次构建的一致性。CI 在 Windows/Linux 上验证受控 rc.2、rc.1、alpha.1 的精确 Core 源码与配置 fixture；发布必须等待完整矩阵通过。
+
+### Agent 驱动开发
+
+在源码 checkout 中可使用以下只读入口；发现命令无需先安装依赖：
+
+```sh
+node scripts/agent.mjs describe --json
+node scripts/agent.mjs doctor --json
+node scripts/agent.mjs plan models --json
+node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
+```
+
+`agent-contract.json` 把 authorization、models、search、client、compatibility、tooling、release 任务映射到负责文件和测试。Plan 返回尚未执行的参数数组，包含当前包版本对应的归档路径。Doctor 仅检查仓库前置条件：退出码 0 表示 preflight 通过，1 表示缺少依赖，2 表示参数或元数据错误。需要纯 JSON 时直接运行 `node`，不要解析 pnpm 的进度日志。
+
+署名依据实际工具：DSH 协助的改动使用 `Assisted-by: DeepSeek Harness (DSH)`，不能因为模型来自 Copilot 就添加 Copilot App co-author。保留人类 Git author；`Co-authored-by` 只用于身份经过确认的真实协作者。合并、发布、安装到 profile、登出和 worktree checkout 都需要明确批准。
+
+验证证据必须分层：包存在、模块导入和合成测试通过，不证明真实 DSH 已激活、账号权限有效、模型请求或搜索成功。Authorization `status()` 可能写入 settings，Host 启动可能发起搜索 probe，都不是安全的只读健康检查。会话模型与默认 plan 不一致时，现在保留 Core transport，避免误用默认模型。完整发现、证据与剩余限制见[readiness 审计](./docs/agent-readiness.md)。
 
 ## Release 与 checksum 校验
 

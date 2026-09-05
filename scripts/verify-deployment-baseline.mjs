@@ -44,6 +44,7 @@ for (const [path, content] of [['README.md', readme], ['README.zh.md', readmeZh]
 assert(readme.includes('[简体中文](./README.zh.md)'), 'README.md must link the Chinese guide')
 assert(readmeZh.includes('[English](./README.md)'), 'README.zh.md must link the English guide')
 assert(manifest.supportedBaselines?.node === packageJson.engines?.node, 'Node baseline differs')
+assert(packageJson.engines.node === '>=22.19.0', 'Node floor must cover the pi-ai runtime dependency')
 assert(
   packageJson.dependencies?.['@earendil-works/pi-ai'] === manifest.supportedBaselines?.piAi,
   'pi-ai runtime range differs',
@@ -222,6 +223,8 @@ const orderedReleaseSteps = [
   '- run: pnpm verify:controlled-core -- dsh-upstream',
   '- name: Verify plugin package',
   '- run: pnpm pack --pack-destination artifacts',
+  '- name: Verify packed archive',
+  'pnpm verify:tarball --',
   '- name: Write SHA-256 manifest',
   'sha256sum -- *.tgz > SHA256SUMS',
   'sha256sum --check SHA256SUMS',

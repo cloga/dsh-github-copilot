@@ -9,7 +9,12 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
   release:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -51,6 +56,11 @@ jobs:
         run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts
+      - name: Verify packed archive
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          pnpm verify:tarball -- "artifacts/dsh-github-copilot-$version.tgz"
       - name: Write SHA-256 manifest
         shell: bash
         run: |

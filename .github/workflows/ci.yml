@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches:
@@ -51,9 +52,8 @@ jobs:
       - run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts
-      - name: Verify deployment metadata is packed
-        if: runner.os == 'Linux'
+      - name: Verify packed archive
+        shell: bash
         run: |
-          tarball="$(find artifacts -maxdepth 1 -name '*.tgz' -print -quit)"
-          test -n "$tarball"
-          tar -tf "$tarball" | grep -Fx 'package/deployment-baseline.json'
+          version="$(node -p "require('./package.json').version")"
+          pnpm verify:tarball -- "artifacts/dsh-github-copilot-$version.tgz"

@@ -449,25 +449,25 @@ describe('inlineWireStream', () => {
   it('dispatches to the Responses wire for a responses candidate', async () => {
     const plan = { settle: async () => candidate } as unknown as SearchPlan
     const stream = textOnlyStream()
-    const fetchMock = vi.fn(async () => new Response(sseBody(stream), { status: 200 }))
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(sseBody(stream), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     const chunks: StreamChunk[] = []
     for await (const chunk of inlineWireStream(request(), plan, hooks, cfg)) chunks.push(chunk)
     expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
-    const [url] = fetchMock.mock.calls[0] as [string]
+    const url = fetchMock.mock.calls[0]?.[0]
     expect(url).toContain('/responses')
   })
 
   it('serves the wire body with the candidate spelling the probe verified', async () => {
     const versionedCandidate: SearchPlanCandidate = { ...candidate, webSearchToolType: 'web_search_2025_08_26' }
     const plan = { settle: async () => versionedCandidate } as unknown as SearchPlan
-    const fetchMock = vi.fn(async () => new Response(sseBody(textOnlyStream()), { status: 200 }))
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(sseBody(textOnlyStream()), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     const chunks: StreamChunk[] = []
     for await (const chunk of inlineWireStream(request(), plan, hooks, cfg)) chunks.push(chunk)
     expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect((JSON.parse(String(init.body)) as { tools: unknown[] }).tools).toContainEqual({ type: 'web_search_2025_08_26' })
+    const init = fetchMock.mock.calls[0]?.[1]
+    expect((JSON.parse(String(init?.body)) as { tools: unknown[] }).tools).toContainEqual({ type: 'web_search_2025_08_26' })
   })
 
   it('dispatches to the Anthropic wire when the settled candidate is anthropic', async () => {
@@ -481,12 +481,12 @@ describe('inlineWireStream', () => {
       event('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 1 } }),
       event('message_stop', { type: 'message_stop' }),
     ]
-    const fetchMock = vi.fn(async () => new Response(sseBody(stream), { status: 200 }))
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(sseBody(stream), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     const chunks: StreamChunk[] = []
     for await (const chunk of inlineWireStream(request(), plan, hooks, cfg)) chunks.push(chunk)
     expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
-    const [url] = fetchMock.mock.calls[0] as [string]
+    const url = fetchMock.mock.calls[0]?.[0]
     expect(url).toContain('/messages')
   })
 

@@ -7,11 +7,11 @@
 import { describe, expect, it } from 'vitest'
 import { buildAnthropicWireBody, buildWireBody, flattenText, pairedToolCallIds, serializeMessage, shortHash, splitCallId, wireTools } from '../../src/serialize.ts'
 import { RESPONSES_WEB_SEARCH_TOOL_TYPE } from '../../src/plan.ts'
-import type { Message } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
 import { markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 
 function message(role: Message['role'], blocks: unknown[]): Message {
-  return { id: `m-${role}-1`, role, content: blocks as Message['content'], source: { kind: 'user' } as Message['source'] }
+  return { id: `m-${role}-1` as Message['id'], role, content: blocks as Message['content'], source: { kind: 'user' } as Message['source'] }
 }
 
 describe('shortHash', () => {
@@ -175,7 +175,7 @@ describe('buildWireBody', () => {
       tools: [{ name: 'bash', description: 'run', parameters: {} }],
       maxTokens: 100,
       temperature: 0.5,
-      sessionId: 'sess-1234567890abcdef',
+      sessionId: 'sess-1234567890abcdef' as NonNullable<GenerateOptions['sessionId']>,
     })
     const body = buildWireBody(request, { includeSources: true, stripServerTools: true }, 'configured-model', 'web_search') as Record<string, unknown>
     expect(body.model).toBe('configured-model')

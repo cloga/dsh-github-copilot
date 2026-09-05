@@ -57,7 +57,17 @@ function fakeSettings(document: Record<string, unknown>): FakeSettings {
       return {
         // Re-resolve on every read so a mutated document is visible to the
         // source thunk after a committed change.
-        get: () => schema({ ...options?.base, ...document[namespace] }),
+        get: () => {
+          const base = options?.base
+          const saved = document[namespace]
+          if (base !== undefined && (typeof base !== 'object' || base === null || Array.isArray(base))) {
+            throw new Error('fake settings base must be a record')
+          }
+          if (saved !== undefined && (typeof saved !== 'object' || saved === null || Array.isArray(saved))) {
+            throw new Error('fake settings document must be a record')
+          }
+          return schema({ ...base, ...saved })
+        },
         watch: (callback: () => void) => {
           watchers.set(namespace, callback)
           return () => { watchers.delete(namespace) }
@@ -86,6 +96,15 @@ function fakeSettings(document: Record<string, unknown>): FakeSettings {
 /** Mutable default-model selection; `current: null` simulates an unsettled
  * boot or a transient route gap. */
 type SelectionRef = { current: { provider: string; model: string } | null }
+
+/** Later Core file blocks are deliberately absent from the rc.2 development types. */
+function compatibilityFileBlock(attachment: {
+  attachmentId: string
+  name: string
+  bytes: number
+}): Message['content'][number] {
+  return { type: 'file', attachment } as unknown as Message['content'][number]
+}
 
 function buildRuntime(
   overrides: Partial<FakeRuntime> = {},
@@ -377,14 +396,14 @@ describe('github-copilot apply', () => {
     apply(runtime.ctx, config)
     const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
     vi.stubGlobal('fetch', fetchMock)
-    const attachment = { attachmentId: 'attachment-2', name: 'notes.txt', bytes: 12 } as never
+    const attachment = { attachmentId: 'attachment-2', name: 'notes.txt', bytes: 12 }
     const withFile = request({
       messages: [{
         id: 'u1' as Message['id'],
         role: 'user',
         content: [
           { type: 'text', text: 'Summarize this file.' },
-          { type: 'file', attachment },
+          compatibilityFileBlock(attachment),
         ],
         source: { kind: 'user' },
       }],
@@ -405,7 +424,7 @@ describe('github-copilot apply', () => {
     apply(runtime.ctx, config)
     const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
     vi.stubGlobal('fetch', fetchMock)
-    const attachment = { attachmentId: 'attachment-3', name: 'report.pdf', bytes: 42 } as never
+    const attachment = { attachmentId: 'attachment-3', name: 'report.pdf', bytes: 42 }
     const withNestedFile = request({
       messages: [{
         id: 'tool-result-1' as Message['id'],
@@ -415,7 +434,7 @@ describe('github-copilot apply', () => {
           toolCallId: 'call-1' as never,
           content: [
             { type: 'text', text: 'Generated report.' },
-            { type: 'file', attachment },
+            compatibilityFileBlock(attachment),
           ],
           isError: false,
         }],
@@ -461,6 +480,27 @@ describe('github-copilot apply', () => {
     const next = vi.fn(() => 'next-value')
     expect(runtime.listener?.(request({ provider: 'other-route' }), next)).toBe('next-value')
     expect(next).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('preserves session model overrides on the same provider without custom wire calls', async () => {
+    const runtime = buildRuntime()
+    apply(runtime.ctx, config)
+    const fetchMock = vi.fn(async () => { throw new Error('must preserve Core transport') })
+    vi.stubGlobal('fetch', fetchMock)
+    // The default is gpt-5.4. Neither another Responses model nor an Anthropic
+    // model may be substituted with that default, even when requests overlap.
+    const requests = [request({ model: 'gpt-5-mini' }), request({ model: 'claude-sonnet-4.5' })]
+    const next = vi.fn(() => 'core-result')
+    const results = await Promise.all(requests.map(async original => {
+      const messages = original.messages
+      const result = runtime.listener?.(original, next)
+      expect(original.messages).toBe(messages)
+      return result
+    }))
+    expect(results).toEqual(['core-result', 'core-result'])
+    expect(requests.map(original => original.model)).toEqual(['gpt-5-mini', 'claude-sonnet-4.5'])
+    expect(next).toHaveBeenCalledTimes(2)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

@@ -15,10 +15,9 @@ export interface FakeServices {
 
 /** Build a context whose `ctx.get` serves the given fakes. */
 export function fakeContext(services: FakeServices): Context {
-  const store = new Map<string, unknown>([
-    ...(services.agentDefaultModel !== undefined ? [['agentDefaultModel', services.agentDefaultModel]] : []),
-    ...(services.settings !== undefined ? [['settings', services.settings]] : []),
-  ])
+  const store = new Map<string, unknown>()
+  if (services.agentDefaultModel !== undefined) store.set('agentDefaultModel', services.agentDefaultModel)
+  if (services.settings !== undefined) store.set('settings', services.settings)
   return {
     get: (name: string) => store.get(name),
   } as unknown as Context

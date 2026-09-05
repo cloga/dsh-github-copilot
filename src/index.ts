@@ -467,14 +467,14 @@ function preflight(request: GenerateOptions, cfg: InlineConfig, ctx: Context): b
 
 /**
  * Provider whitelist; empty config follows the current chat route. The
- * request provider must ALWAYS be the current chat route's provider: the
- * plan's candidates (baseURL/model/key) are derived from that route, so
- * serving any other provider would send its request to the wrong endpoint.
+ * request provider AND model must match the default route used by the plan.
+ * Session overrides may select another model on the same provider; those must
+ * keep Core's normal transport instead of silently using the default model.
  * The whitelist only restricts which of the route's providers may be served;
  * it can never extend serving to a provider the plan was not built for.
  */
 function providerAllowed(request: GenerateOptions, cfg: InlineConfig, ctx: Context): boolean {
   const route = currentChatRoute(ctx)
-  if (route === undefined || route.provider !== request.provider) return false
+  if (route === undefined || route.provider !== request.provider || route.model !== request.model) return false
   return cfg.providers.length === 0 || cfg.providers.includes(request.provider)
 }

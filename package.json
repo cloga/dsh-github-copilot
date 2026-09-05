@@ -32,7 +32,12 @@
     "lib/*.js.map",
     "lib/types/**/*.d.ts",
     "README.md",
-    "README.zh.md"
+    "README.zh.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "AGENTS.md",
+    "docs/agent-readiness.md",
+    "docs/images/"
   ],
   "keywords": [
     "dsh",
@@ -49,7 +54,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.19.0"
   },
   "scripts": {
     "build": "pnpm clean && tsc -p tsconfig.json && tsdown",
@@ -59,11 +64,18 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.tests.json",
+    "test:scripts": "node --test \"tests/scripts/*.test.mjs\"",
+    "agent:describe": "node scripts/agent.mjs describe --json",
+    "agent:doctor": "node scripts/agent.mjs doctor --json",
+    "agent:plan": "node scripts/agent.mjs plan",
+    "verify:agent": "node scripts/verify-agent-contract.mjs",
+    "verify:tarball": "node scripts/verify-tarball.mjs",
     "verify:baseline": "node scripts/verify-deployment-baseline.mjs",
     "verify:package": "node scripts/verify-package.mjs",
     "verify:controlled-core": "node scripts/verify-controlled-core.mjs",
     "verify:upstream": "node scripts/verify-upstream-baseline.mjs",
-    "verify": "pnpm typecheck && pnpm verify:baseline && pnpm build && pnpm test && pnpm verify:package"
+    "verify": "pnpm verify:agent && pnpm typecheck && pnpm typecheck:tests && pnpm verify:baseline && pnpm build && pnpm test && pnpm test:scripts && pnpm verify:package"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

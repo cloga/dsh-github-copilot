@@ -141,12 +141,13 @@ describe('loader composition', () => {
   it('reuses the rc.1 authorization service without duplicate registration', async () => {
     const ctx = new Context()
     await mountProfile(ctx, true)
-    const authorizationFiberUid = ctx.registry.get(AuthorizationService)?.fibers[0]?.uid
+    const authorizationFiberUid = Array.from(ctx.registry.get(AuthorizationService)?.fibers ?? [])[0]?.uid
+    expect(authorizationFiberUid).toBeDefined()
 
     await mountIntegration(ctx)
 
     expect(ctx.registry.get(AuthorizationService)?.fibers).toHaveLength(1)
-    expect(ctx.registry.get(AuthorizationService)?.fibers[0]?.uid).toBe(authorizationFiberUid)
+    expect(Array.from(ctx.registry.get(AuthorizationService)?.fibers ?? [])[0]?.uid).toBe(authorizationFiberUid)
   })
 
   it('repairs an existing valid Copilot grant during Host startup', async () => {
