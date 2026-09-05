@@ -23,10 +23,12 @@ function runtime(options: {
   availableModelIds?: readonly string[]
   providerProfile?: unknown
   beginFailure?: Error
+  beforeMutate?: (namespace: string) => void
 } = {}): Runtime {
   let configured = options.configured ?? false
   let resolveAuthorization: (() => void) | undefined
   const settingsDocument: Record<string, unknown> = {
+    'github-copilot': {},
     'llm-pi-ai': {
       providers: {
         openai: { apiKeyEnv: 'OPENAI_API_KEY' },
@@ -36,9 +38,13 @@ function runtime(options: {
       },
     },
   }
-  const mutate = vi.fn(async (_ns: string, operations: Array<{ path: string[]; value: unknown }>) => {
+  const mutate = vi.fn(async (ns: string, operations: Array<
+    | { op: 'set'; path: string[]; value: unknown }
+    | { op: 'unset'; path: string[] }
+  >) => {
+    options.beforeMutate?.(ns)
     for (const operation of operations) {
-      let target = settingsDocument['llm-pi-ai'] as Record<string, unknown>
+      let target = settingsDocument[ns] as Record<string, unknown>
       for (const segment of operation.path.slice(0, -1)) {
         const value = target[segment]
         if (typeof value === 'object' && value !== null) {
@@ -51,7 +57,10 @@ function runtime(options: {
         }
       }
       const leaf = operation.path.at(-1)
-      if (leaf !== undefined) target[leaf] = operation.value
+      if (leaf !== undefined) {
+        if (operation.op === 'unset') delete target[leaf]
+        else target[leaf] = operation.value
+      }
     }
   })
   const deleteRecord = vi.fn(async () => { configured = false })
@@ -123,6 +132,37 @@ function runtime(options: {
     authorize: () => {
       resolveAuthorization?.()
     },
+  }
+}
+
+function activeTemporaryGpt6Profile(): Record<string, unknown> {
+  return {
+    api: 'openai-responses',
+    customField: 'preserved',
+    compat: { supportsStrictMode: false },
+    headers: {
+      'X-Custom': 'preserved',
+      'User-Agent': 'GitHubCopilotChat/0.35.0',
+      'Editor-Version': 'vscode/1.107.0',
+      'Editor-Plugin-Version': 'copilot-chat/0.35.0',
+      'Copilot-Integration-Id': 'vscode-chat',
+    },
+    models: [{
+      id: 'gpt-6-astra',
+      name: 'GPT-6 Astra',
+      api: 'openai-responses',
+      contextWindow: 1_050_000,
+      maxTokens: 128_000,
+      input: ['text', 'image'],
+      reasoningEfforts: {
+        off: null,
+        low: 'low',
+        medium: 'medium',
+        high: 'high',
+        xhigh: 'xhigh',
+        max: 'max',
+      },
+    }],
   }
 }
 
@@ -399,7 +439,7 @@ describe('GitHubCopilotAuthorizationController', () => {
   it('materializes the temporary GPT-6 Astra overlay only for an entitled account', async () => {
     const harness = runtime({
       configured: true,
-      availableModelIds: ['gpt-6-astra', 'gpt-5.6-sol'],
+      availableModelIds: ['gpt-6-astra', 'gpt-5.6-sol', 'claude-sonnet-4.5'],
       providerProfile: {
         headers: { 'X-Custom': 'preserved' },
       },
@@ -409,12 +449,26 @@ describe('GitHubCopilotAuthorizationController', () => {
       phase: 'signed-in',
       catalog: {
         state: 'current',
-        accountModelCount: 2,
+        accountModelCount: 3,
         supportedModelCount: 2,
         unknownModelIds: [],
+        temporarilyUnavailableModelIds: ['claude-sonnet-4.5'],
       },
     })
+    expect(harness.mutate).toHaveBeenCalledWith('github-copilot', [{
+      op: 'set',
+      path: ['temporaryRouteBackup'],
+      value: JSON.stringify({
+        providerExisted: true,
+        leaves: {},
+        preservedHeaderNames: [],
+      }),
+    }])
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set',
+      path: ['providers', 'github-copilot', 'api'],
+      value: 'openai-responses',
+    }, {
       op: 'set',
       path: ['providers', 'github-copilot', 'models'],
       value: [
@@ -451,6 +505,192 @@ describe('GitHubCopilotAuthorizationController', () => {
         'Copilot-Integration-Id': 'vscode-chat',
       },
     }])
+  })
+
+  it('retries route activation after the ownership backup commits first', async () => {
+    let failRouteWrite = true
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gpt-6-astra', 'gpt-5.4'],
+      providerProfile: { headers: { 'X-Custom': 'preserved' } },
+      beforeMutate(namespace) {
+        if (namespace === 'llm-pi-ai' && failRouteWrite) {
+          failRouteWrite = false
+          throw new Error('route write failed')
+        }
+      },
+    })
+
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow('route write failed')
+    expect(harness.settingsDocument['github-copilot']).toMatchObject({
+      temporaryRouteBackup: expect.any(String),
+    })
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({ changed: true })
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
+      providers: {
+        'github-copilot': {
+          api: 'openai-responses',
+          models: expect.arrayContaining([expect.objectContaining({ id: 'gpt-6-astra' })]),
+        },
+      },
+    })
+  })
+
+  it('retries backup cleanup after route restoration commits first', async () => {
+    let failBackupCleanup = true
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gpt-5.4'],
+      providerProfile: activeTemporaryGpt6Profile(),
+      beforeMutate(namespace) {
+        if (namespace === 'github-copilot' && failBackupCleanup) {
+          failBackupCleanup = false
+          throw new Error('backup cleanup failed')
+        }
+      },
+    })
+    harness.settingsDocument['github-copilot'] = {
+      temporaryRouteBackup: JSON.stringify({
+        providerExisted: true,
+        leaves: { models: [{ id: 'gpt-5.4', api: 'openai-responses' }] },
+        preservedHeaderNames: [],
+      }),
+    }
+
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow('backup cleanup failed')
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
+      providers: {
+        'github-copilot': {
+          models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+        },
+      },
+    })
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({ changed: true })
+    expect(harness.settingsDocument['github-copilot']).toEqual({})
+  })
+
+  it('rejects malformed temporary route backup leaves before replay', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gpt-5.4'],
+      providerProfile: activeTemporaryGpt6Profile(),
+    })
+    harness.settingsDocument['github-copilot'] = {
+      temporaryRouteBackup: JSON.stringify({
+        providerExisted: true,
+        leaves: { headers: { Authorization: 'must-not-replay' } },
+        preservedHeaderNames: [],
+      }),
+    }
+
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
+      /temporary route backup has invalid route leaves/,
+    )
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('refuses to overwrite a conflicting user-configured route protocol for GPT-6', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gpt-6-astra'],
+      providerProfile: {
+        api: 'anthropic-messages',
+        models: [{ id: 'claude-sonnet-4.5', api: 'anthropic-messages' }],
+      },
+    })
+
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
+      /temporary model protocol "openai-responses" conflicts with configured route api "anthropic-messages"/,
+    )
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('refuses to overwrite a conflicting user-configured Copilot header', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gpt-6-astra'],
+      providerProfile: {
+        headers: { 'user-agent': 'my-client' },
+      },
+    })
+
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
+      /temporary GPT-6 header "User-Agent" conflicts with the configured route/,
+    )
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('does not claim ownership of an existing matching route protocol', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gpt-6-astra'],
+      providerProfile: {
+        api: 'openai-responses',
+        models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+      },
+    })
+
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
+      /configured route api "openai-responses" is not owned by the temporary GPT-6 overlay/,
+    )
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  async function expectTemporaryRouteRemoved(availableModelIds: readonly string[]): Promise<void> {
+    const harness = runtime({
+      configured: true,
+      availableModelIds,
+      providerProfile: activeTemporaryGpt6Profile(),
+    })
+    harness.settingsDocument['github-copilot'] = {
+      temporaryRouteBackup: JSON.stringify({
+        providerExisted: true,
+        leaves: {
+          models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+        },
+        preservedHeaderNames: [],
+      }),
+    }
+
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({
+      changed: true,
+      catalog: { supportedModelCount: 0 },
+    })
+    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'unset',
+      path: ['providers', 'github-copilot', 'api'],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'headers'],
+      value: { 'X-Custom': 'preserved' },
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'models'],
+      value: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+    }])
+    expect(harness.mutate).toHaveBeenCalledWith('github-copilot', [{
+      op: 'unset',
+      path: ['temporaryRouteBackup'],
+    }])
+    expect(harness.settingsDocument['llm-pi-ai']).toEqual({
+      providers: {
+        openai: { apiKeyEnv: 'OPENAI_API_KEY' },
+        'github-copilot': {
+          customField: 'preserved',
+          compat: { supportsStrictMode: false },
+          headers: { 'X-Custom': 'preserved' },
+          models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+        },
+      },
+    })
+  }
+
+  it('restores the original route after an empty account model list', async () => {
+    await expectTemporaryRouteRemoved([])
+  })
+
+  it('restores the original route after an unknown-only account model list', async () => {
+    await expectTemporaryRouteRemoved(['future-unknown-model'])
   })
 
   it('reports account model ids unsupported by the installed catalog', async () => {
@@ -496,6 +736,7 @@ describe('GitHubCopilotAuthorizationController', () => {
         accountModelCount: 1,
         supportedModelCount: 0,
         unknownModelIds: ['not-in-installed-catalog'],
+        temporarilyUnavailableModelIds: [],
       },
     })
     await expect(harness.controller.status()).resolves.toMatchObject({

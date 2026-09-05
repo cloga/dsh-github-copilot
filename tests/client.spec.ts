@@ -143,6 +143,20 @@ describe('GitHub Copilot Models client', () => {
       notices: [],
       catalog: {
         state: 'current',
+        accountModelCount: 2,
+        supportedModelCount: 1,
+        unknownModelIds: [],
+        temporarilyUnavailableModelIds: ['claude-sonnet-4.5'],
+      },
+    })).toContain('Temporarily hidden')
+    expect(catalogWarningOf({
+      phase: 'signed-in',
+      configured: true,
+      writable: true,
+      inFlight: false,
+      notices: [],
+      catalog: {
+        state: 'current',
         accountModelCount: 1,
         supportedModelCount: 1,
         unknownModelIds: [],

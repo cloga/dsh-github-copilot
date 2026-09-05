@@ -92,6 +92,10 @@ await assertMarkers('packages/llm/llm-pi-ai/src/auth.ts', [
 ])
 await assertMarkers('packages/llm/llm-pi-ai/src/catalog.ts', [
   'catalogProviderIds',
+  'request.api ?? base?.api ?? routeApi',
+])
+await assertMarkers('packages/settings/settings/src/index.ts', [
+  "op: 'unset'",
 ])
 await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',

@@ -161,10 +161,6 @@ function ensureAuthorization(ctx: Context): void {
 function activate(ctx: Context, config: InlineConfig): void {
   assertDshCompatibility(ctx)
   ctx.plugin(GitHubCopilotAuthorizationController)
-  void ensureGitHubCopilotProviderProfile(ctx).catch((error: unknown) => {
-    ctx.logger.error('github-copilot: failed to repair the GitHub Copilot provider route during startup')
-    ctx.logger.error(error)
-  })
   const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx, async () => {
     await ensureGitHubCopilotProviderProfile(ctx)
   })
@@ -333,6 +329,13 @@ function activate(ctx: Context, config: InlineConfig): void {
       traditionalPlanProbe = undefined
       traditionalPlanCandidates = undefined
     },
+  })
+
+  // The temporary GPT-6 route writes its ownership backup into this plugin's
+  // settings namespace, so reconcile only after that section is installed.
+  void ensureGitHubCopilotProviderProfile(ctx).catch((error: unknown) => {
+    ctx.logger.error('github-copilot: failed to repair the GitHub Copilot provider route during startup')
+    ctx.logger.error(error)
   })
 
   ctx.on('llm/stream', (request: GenerateOptions, next: () => AsyncIterable<StreamChunk>) => {
