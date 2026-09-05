@@ -13,6 +13,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
     githubCopilot: {
       status(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      reconcile(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       cancel(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       signOut(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -41,6 +42,10 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
     unknownModelIds: z.array(z.string()),
     temporarilyUnavailableModelIds: z.array(z.string()).optional(),
   }).strict().optional(),
+  route: z.object({
+    state: z.enum(['ready', 'needs-repair', 'not-configured', 'conflict', 'error']),
+    diagnosticCode: z.enum(['ROUTE_READ_FAILED', 'RECONCILIATION_FAILED', 'ROUTE_CONFLICT']).optional(),
+  }).strict().optional(),
   error: z.string().optional(),
 }).strict()
 
@@ -52,7 +57,7 @@ const result = {
 
 const contribution: TypertRemoteContribution = {
   package: 'dsh-github-copilot',
-  descriptors: ['status', 'start', 'cancel', 'signOut'].map(method => ({
+  descriptors: ['status', 'reconcile', 'start', 'cancel', 'signOut'].map(method => ({
     id: `dsh-github-copilot:githubCopilot.${method}`,
     service: 'githubCopilotAuthorization',
     namespace: 'githubCopilot',

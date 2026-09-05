@@ -5,6 +5,7 @@ import {
   activeAuthorizationNotice,
   apply,
   catalogWarningOf,
+  routeStatusMessage,
   copyAuthorizationCode,
   GitHubCopilotAuthorizationNotice,
 } from '../src/client.ts'
@@ -16,6 +17,17 @@ describe('GitHub Copilot Models client', () => {
     const element = root as ReactElement<{ children?: unknown }>
     return [element, ...descendants(element.props.children)]
   }
+
+  it('distinguishes route repair and conflicts from authentication state', () => {
+    const base = { configured: true, writable: true, inFlight: false, phase: 'signed-in' as const, notices: [] }
+    expect(routeStatusMessage({ ...base, route: { state: 'needs-repair' } })).toContain('does not refresh GitHub access')
+    expect(routeStatusMessage({ ...base, route: { state: 'needs-repair', diagnosticCode: 'RECONCILIATION_FAILED' } })).toContain('sign-in is retained')
+    expect(routeStatusMessage({ ...base, route: { state: 'conflict' } })).toContain('without rolling back user edits')
+    expect(routeStatusMessage({ ...base, route: { state: 'error' } })).toContain('sign-in is retained')
+    expect(routeStatusMessage({ ...base, route: { state: 'not-configured' } })).toContain('No usable account model')
+    expect(routeStatusMessage({ ...base, route: { state: 'ready' } })).toBeUndefined()
+    expect(routeStatusMessage(undefined)).toBeUndefined()
+  })
 
   it('exposes a device code only while authorization is in flight', () => {
     const notice = { message: 'Enter this code on GitHub.', code: 'ABCD-EFGH' }

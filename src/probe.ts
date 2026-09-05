@@ -58,21 +58,34 @@ const MAX_PROBE_TIMEOUT_MS = 2_147_483_647
  * @param candidate - the resolved endpoint facts to verify.
  * @param resolveApiKey - resolves the candidate's credential reference.
  * @param timeoutMs - bound on the whole probe.
+ * @param signal - optional owner lifecycle cancellation; abort forbids later attempts.
  * @returns the verdict and a diagnostic detail.
  */
 export async function probeCandidate(
   candidate: SearchPlanCandidate,
   resolveApiKey: (candidate: SearchPlanCandidate) => Promise<string | ResolvedRequestAuth | undefined>,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<ProbeOutcome> {
+  const aborted = (): ProbeOutcome => ({ supported: false, detail: 'probe was aborted' })
+  if (signal?.aborted === true) return aborted()
   // Clamp: `setTimeout` refuses values beyond 2^31-1; the clamp keeps an
   // absurd config from throwing.
   const bound = Math.min(Math.max(Math.trunc(timeoutMs), 1), MAX_PROBE_TIMEOUT_MS)
   const deadline = Date.now() + bound
   const cancellation = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
+  let onAbort: (() => void) | undefined
+  const cancelled = new Promise<ProbeOutcome>((resolve) => {
+    onAbort = () => {
+      cancellation.abort()
+      resolve(aborted())
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
   try {
     return await Promise.race([
+      cancelled,
       runProbe(candidate, resolveApiKey, bound, deadline, cancellation.signal),
       new Promise<ProbeOutcome>((resolve) => {
         timer = setTimeout(() => {
@@ -83,6 +96,7 @@ export async function probeCandidate(
     ])
   } finally {
     clearTimeout(timer)
+    if (onAbort !== undefined) signal?.removeEventListener('abort', onAbort)
   }
 }
 
@@ -223,8 +237,10 @@ async function probeResponses(candidate: SearchPlanCandidate, apiKey: string, si
   let attempts = 0
   for (let round = 0; round < RESPONSES_PROBE_ROUNDS; round += 1) {
     for (const spelling of spellings) {
+      if (signal.aborted) return { supported: false, detail: 'probe was aborted' }
       attempts += 1
       const verdict = await probeResponsesSpelling(candidate, apiKey, signal, spelling)
+      if (signal.aborted) return { supported: false, detail: 'probe was aborted' }
       if (verdict.supported) {
         return { supported: true, detail: verdict.detail, webSearchToolType: spelling }
       }

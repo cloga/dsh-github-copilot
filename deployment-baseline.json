@@ -200,6 +200,57 @@
       ]
     },
     {
+      "id": "read-only-authorization-status",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/authorization-controller.ts", "marker": "describeGitHubCopilotProviderProfile"},
+        {"file": "src/authorization-controller.ts", "marker": "async reconcile()"},
+        {"file": "src/remote.ts", "marker": "'status', 'reconcile', 'start', 'cancel', 'signOut'"},
+        {"file": "src/compatibility.ts", "marker": "settings.describe"}
+      ],
+      "tests": [
+        {"file": "tests/authorization-controller.spec.ts", "name": "reads status repeatedly without repairing, authorizing or making network calls"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "retains configured authentication when route inspection fails without leaking the failure"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "explicitly reconciles the stored snapshot without forcing sign-in or network access"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "reports retryable repair failure separately from successful authentication"},
+        {"file": "tests/client.spec.ts", "name": "distinguishes route repair and conflicts from authentication state"}
+      ]
+    },
+    {
+      "id": "credential-bound-lazy-search-proof",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/index.ts", "marker": "credentials/record-updated"},
+        {"file": "src/index.ts", "marker": "invalidatePlans"},
+        {"file": "src/probe.ts", "marker": "signal?: AbortSignal"}
+      ],
+      "tests": [
+        {"file": "tests/inline/apply.spec.ts", "name": "retries a cached missing-grant failure on a same-route credential event"},
+        {"file": "tests/inline/apply.spec.ts", "name": "evicts a successful proof for revocation/account changes and coalesces event bursts"},
+        {"file": "tests/inline/apply.spec.ts", "name": "ignores unrelated record updates and retains the verified proof"},
+        {"file": "tests/inline/apply.spec.ts", "name": "rejects account replacement during search auth after a successful proof"},
+        {"file": "tests/inline/apply.spec.ts", "name": "makes no network calls at attach, availability checks, settings or credential events"},
+        {"file": "tests/inline/apply.spec.ts", "name": "removes its Fiber listener and makes retained entry points inert on disposal"}
+      ]
+    },
+    {
+      "id": "temporary-route-conflict-protection",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/route-ownership.ts", "marker": "postimage"},
+        {"file": "src/route-ownership.ts", "marker": "TEMPORARY_ROUTE_LEGACY_CONFLICT"},
+        {"file": "src/route-ownership.ts", "marker": "sourceEpoch"},
+        {"file": "src/route-ownership.ts", "marker": "redactSecrets: true"}
+      ],
+      "tests": [
+        {"file": "tests/route-ownership.spec.ts", "name": "compares raw model ownership despite schema-materialized defaults"},
+        {"file": "tests/route-ownership.spec.ts", "name": "refuses unsafe preimage extras without copying sensitive data"},
+        {"file": "tests/route-ownership.spec.ts", "name": "uses namespace revisions to reject races after ownership backup commits"},
+        {"file": "tests/route-ownership.spec.ts", "name": "does not guess ownership for legacy or malformed backups"},
+        {"file": "tests/route-ownership.spec.ts", "name": "read-only planning reports ready only after reconciliation"}
+      ]
+    },
+    {
       "id": "temporary-gpt6-copilot-overlay",
       "required": true,
       "sourceMarkers": [
@@ -221,7 +272,7 @@
         {"file": "tests/temporary-model-runtime.spec.ts", "name": "materializes GPT-6 with the temporary Responses route mode"},
         {"file": "tests/temporary-models.spec.ts", "name": "does not synthesize arbitrary unknown account models"},
         {"file": "tests/authorization-controller.spec.ts", "name": "materializes the temporary GPT-6 Astra overlay only for an entitled account"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "retries route activation after the ownership backup commits first"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "preserves a prepared activation after a failed route write for review"},
         {"file": "tests/authorization-controller.spec.ts", "name": "retries backup cleanup after route restoration commits first"},
         {"file": "tests/authorization-controller.spec.ts", "name": "rejects malformed temporary route backup leaves before replay"},
         {"file": "tests/authorization-controller.spec.ts", "name": "refuses to overwrite a conflicting user-configured route protocol for GPT-6"},
@@ -350,6 +401,7 @@
       "GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID",
       "GITHUB_COPILOT_CREDENTIAL_KEY",
       "GitHubCopilotAuthorizationController",
+      "describeGitHubCopilotProviderProfile",
       "ensureGitHubCopilotProviderProfile",
       "LLM_PI_AI_SETTINGS_NAMESPACE",
       "DSH_COMPATIBILITY",

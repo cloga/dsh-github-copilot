@@ -20,6 +20,47 @@ function stubFetch(body: unknown, status = 200): ReturnType<typeof vi.fn> {
   return mock
 }
 
+describe('probeCandidate cancellation', () => {
+  it('does not resolve credentials or fetch for an already aborted owner', async () => {
+    const cancellation = new AbortController()
+    cancellation.abort()
+    const resolve = vi.fn(async () => KEY)
+    const fetchMock = stubFetch({ output: [] })
+    await expect(probeCandidate(makeCandidate('openai-responses'), resolve, 1000, cancellation.signal))
+      .resolves.toMatchObject({ supported: false, detail: 'probe was aborted' })
+    expect(resolve).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('settles cancellation during auth and prevents a late credential from fetching', async () => {
+    const cancellation = new AbortController()
+    let release!: (key: string) => void
+    const fetchMock = stubFetch({ output: [] })
+    const remove = vi.spyOn(cancellation.signal, 'removeEventListener')
+    const pending = probeCandidate(makeCandidate('openai-responses'), async () => new Promise(resolve => { release = resolve }), 1000, cancellation.signal)
+    cancellation.abort()
+    await expect(pending).resolves.toMatchObject({ supported: false })
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function))
+    release(KEY)
+    for (let index = 0; index < 10; index++) await Promise.resolve()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('prevents fallback after an aborted HTTP request resolves transiently', async () => {
+    const cancellation = new AbortController()
+    let release!: (response: Response) => void
+    const fetchMock = vi.fn(async () => new Promise<Response>(resolve => { release = resolve }))
+    vi.stubGlobal('fetch', fetchMock)
+    const pending = probeCandidate(makeCandidate('openai-responses'), async () => KEY, 1000, cancellation.signal)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    cancellation.abort()
+    await expect(pending).resolves.toMatchObject({ supported: false })
+    release(new Response(JSON.stringify({ output: [] })))
+    for (let index = 0; index < 20; index++) await Promise.resolve()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('probeCandidate (openai-responses)', () => {
   it('confirms support via the standard spelling and reports it', async () => {
     const fetchMock = stubFetch({ output: [{ type: 'web_search_call', id: 'ws-1', action: { type: 'search', queries: ['q'] } }] })

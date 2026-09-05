@@ -14,6 +14,7 @@ vi.mock('@earendil-works/pi-ai/providers/all', async (importOriginal) => {
   }
 })
 
+import { ROUTE_OWNERSHIP_EPOCH } from '../src/route-ownership.ts'
 import { inspectGitHubCopilotProviderProfile } from '../src/authorization-controller.ts'
 import { temporaryGitHubCopilotModel, temporaryGitHubCopilotModelProfile } from '../src/temporary-models.ts'
 
@@ -35,23 +36,30 @@ describe('temporary GitHub Copilot model retirement', () => {
       headers: { 'X-Custom': 'preserved', ...COPILOT_HEADERS },
       models: [
         temporaryGitHubCopilotModelProfile(overlay),
-        { id: 'gpt-5.4', api: 'openai-responses', customField: 'preserved-until-list-replacement' },
+        { id: 'gpt-5.4', api: 'openai-responses' },
       ],
     }
     const settingsDocuments: Record<string, Record<string, unknown>> = {
       'llm-pi-ai': { providers: { 'github-copilot': profile } },
       'github-copilot': {
         temporaryRouteBackup: JSON.stringify({
+          version: 2,
+          phase: 'overlay',
+          sourceRevision: 0,
+          sourceEpoch: ROUTE_OWNERSHIP_EPOCH,
           providerExisted: true,
-          leaves: {},
-          preservedHeaderNames: [],
+          preimage: {},
+          postimage: { api: profile.api, models: profile.models },
+          ownedHeaders: COPILOT_HEADERS,
         }),
       },
     }
+    const revisions: Record<string, number> = { 'llm-pi-ai': 0, 'github-copilot': 0 }
     const mutate = vi.fn(async (namespace: string, operations: Array<
       | { op: 'set'; path: string[]; value: unknown }
       | { op: 'unset'; path: string[] }
-    >) => {
+    >, revision?: number) => {
+      expect(revision).toBe(revisions[namespace])
       for (const operation of operations) {
         let target = settingsDocuments[namespace]!
         for (const segment of operation.path.slice(0, -1)) {
@@ -62,6 +70,7 @@ describe('temporary GitHub Copilot model retirement', () => {
         if (operation.op === 'unset') delete target[leaf]
         else target[leaf] = operation.value
       }
+      revisions[namespace]!++
     })
     const ctx = new Context()
     ctx.get = ((name: string) => name === 'credentials'
@@ -78,28 +87,23 @@ describe('temporary GitHub Copilot model retirement', () => {
           }),
         }
       : name === 'settings'
-        ? { get: (namespace: string) => settingsDocuments[namespace], mutate }
+        ? { get: (namespace: string) => settingsDocuments[namespace], mutate,
+             describe: () => Object.entries(settingsDocuments).map(([ns, user]) => ({ ns, user, revision: revisions[ns] })) }
         : undefined) as typeof ctx.get
 
     await expect(inspectGitHubCopilotProviderProfile(ctx)).resolves.toMatchObject({ changed: true })
-    expect(mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'unset',
-      path: ['providers', 'github-copilot', 'api'],
-    }, {
-      op: 'set',
-      path: ['providers', 'github-copilot', 'headers'],
-      value: { 'X-Custom': 'preserved' },
-    }, {
-      op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [
+    expect(profile).toEqual({
+      compat: { supportsStrictMode: false },
+      headers: { 'X-Custom': 'preserved' },
+      models: [
         { id: 'gpt-6-astra', api: 'openai-responses' },
         { id: 'gpt-5.4', api: 'openai-responses' },
       ],
-    }])
+    })
     expect(mutate).toHaveBeenCalledWith('github-copilot', [{
       op: 'unset',
       path: ['temporaryRouteBackup'],
-    }])
+    }], 1)
+    expect(settingsDocuments['github-copilot']).toEqual({})
   })
 })

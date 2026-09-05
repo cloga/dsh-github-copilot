@@ -140,8 +140,11 @@ CI runs on Windows/Linux against the three exact Core baselines. `verify:upstrea
 | `pnpm verify:baseline` | Required source/test markers exist; not semantic or live proof |
 | `pnpm verify` | Local compiler, tests, clean build and import checks; no real OAuth/API requests |
 | `pnpm verify:tarball` | Archive structure/export/media and equality to local build; no extraction/execution |
-| Authorization `status()` / `inspectGitHubCopilotProviderProfile()` | Can reconcile and persist settings; NOT read-only diagnostic APIs |
-| Host attach/restart or search probe | Can issue authenticated capability requests; requires appropriate user intent |
+| Authorization `status()` / `describeGitHubCopilotProviderProfile()` | Read-only grant snapshot and route planning; no settings mutation, OAuth refresh or network proof |
+| Authorization `reconcile()` / `inspectGitHubCopilotProviderProfile()` | Explicit stored-snapshot repair; revision-checked settings writes; NOT token/model discovery refresh |
+| Host attach/restart | Reconciles the stored profile; search proofs stay lazy and do not start at attach |
+| Credential/settings notifications | Invalidate cached proof only; no eager authenticated/network calls |
+| Eligible model/search request | May resolve/refresh credentials and run bounded capability proof; changes during proof must fail closed rather than reuse another account's proof |
 | Release install | Writes a named user profile; installed on disk is not loaded in the running Host |
 
 Never say GPT-6/search works merely because settings, typecheck or a package import passes. Report the layers separately. Keep synthetic credentials in fixtures; no real sign-in, logout or API call just to produce test evidence. Do not recommend disabling capability proof as a routine repair. Preserve logs locally and report only redacted facts; route security-sensitive findings through SECURITY.md.

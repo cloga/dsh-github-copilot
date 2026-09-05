@@ -96,6 +96,12 @@ await assertMarkers('packages/llm/llm-pi-ai/src/catalog.ts', [
 ])
 await assertMarkers('packages/settings/settings/src/index.ts', [
   "op: 'unset'",
+  'redactSecrets',
+  'expectedRevision',
+  'describe(',
+])
+await assertMarkers('packages/credentials/credentials/src/types.ts', [
+  'credentials/record-updated',
 ])
 await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',

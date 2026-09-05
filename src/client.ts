@@ -43,6 +43,19 @@ export function catalogWarningOf(status: GitHubCopilotAuthorizationView | undefi
   return warnings.length === 0 ? undefined : warnings.join(' ')
 }
 
+export function routeStatusMessage(status: GitHubCopilotAuthorizationView | undefined): string | undefined {
+  if (!status?.configured) return undefined
+  switch (status.route?.state) {
+    case 'needs-repair': return status.route.diagnosticCode === 'RECONCILIATION_FAILED'
+      ? 'Model configuration repair failed. Your sign-in is retained; review settings before retrying.'
+      : 'Model configuration needs reconciliation. Repair uses the stored account snapshot; it does not refresh GitHub access.'
+    case 'conflict': return 'Model configuration conflicts with manual edits or a legacy ownership backup. Automatic repair stopped without rolling back user edits. Review settings before repairing; do not reconnect to force ownership.'
+    case 'error': return 'Model configuration could not be inspected. Your sign-in is retained; check the settings service.'
+    case 'not-configured': return 'No usable account model configuration is available. Check account availability and the installed catalog.'
+    default: return undefined
+  }
+}
+
 export function activeAuthorizationNotice(
   status: GitHubCopilotAuthorizationView | undefined,
 ): GitHubCopilotAuthorizationView['notices'][number] | undefined {
@@ -147,6 +160,8 @@ export function GitHubCopilotProviderCard(
 ): ReturnType<typeof createElement> | null {
   const [status, setStatus] = useState<GitHubCopilotAuthorizationView>()
   const [error, setError] = useState<string>()
+  const [repairing, setRepairing] = useState(false)
+  const repairInFlight = useRef(false)
   const [copyState, setCopyState] = useState<CopyState>('idle')
   const copyAttempt = useRef(0)
 
@@ -208,6 +223,7 @@ export function GitHubCopilotProviderCard(
   const signedIn = status?.configured === true
   const busy = status?.inFlight === true
   const catalogWarning = catalogWarningOf(status)
+  const routeMessage = routeStatusMessage(status)
   return createElement('div', { 'data-dsh-github-copilot': true },
     createElement('div', { role: 'status', 'aria-live': 'polite' },
       error ?? status?.error ?? (busy ? 'Waiting for GitHub authorization…' : signedIn ? 'Signed in to GitHub Copilot.' : 'Sign in to use GitHub Copilot models.')),
@@ -215,6 +231,24 @@ export function GitHubCopilotProviderCard(
       role: 'alert',
       'data-dsh-github-copilot-catalog-warning': status?.catalog?.state,
     }, catalogWarning),
+    routeMessage === undefined ? null : createElement('div', {
+      role: 'status', 'data-dsh-github-copilot-route-state': status?.route?.state,
+    }, routeMessage),
+    signedIn && !busy && status?.route?.state === 'needs-repair' ? createElement('button', {
+      type: 'button',
+      disabled: repairing,
+      onClick: () => {
+        if (repairInFlight.current) return
+        repairInFlight.current = true
+        setRepairing(true)
+        void invoke(() => props.remote.reconcile()).catch(() => {
+          setError('Model configuration repair could not be completed.')
+        }).finally(() => {
+          repairInFlight.current = false
+          setRepairing(false)
+        })
+      },
+    }, repairing ? 'Repairing model configuration…' : 'Repair model configuration') : null,
     !busy || notice === undefined ? null : createElement(GitHubCopilotAuthorizationNotice, {
       message: notice.message,
       url: notice.url,

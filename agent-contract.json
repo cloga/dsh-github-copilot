@@ -13,13 +13,13 @@
       "purpose": "OAuth lifecycle, grant normalization, route projection and account availability",
       "read": ["src/authorization-controller.ts", "src/copilot-auth.ts", "src/copilot-grant.ts"],
       "tests": ["tests/authorization-controller.spec.ts", "tests/copilot-auth.spec.ts", "tests/loader-composition.spec.ts"],
-      "risk": "Settings writes and sign-out are not read-only diagnostics; use synthetic grants in tests."
+      "risk": "status and describeGitHubCopilotProviderProfile are read-only; reconcile is an explicit stored-snapshot settings write, not OAuth refresh or capability proof. Configured credentials do not prove transport readiness."
     },
     "models": {
       "purpose": "Catalog lag, GPT-6 temporary route and ownership restoration",
-      "read": ["src/temporary-models.ts", "src/current-provider.ts", "src/authorization-controller.ts"],
-      "tests": ["tests/temporary-models.spec.ts", "tests/temporary-model-runtime.spec.ts", "tests/temporary-model-retirement.spec.ts", "tests/authorization-controller.spec.ts"],
-      "risk": "Settings snapshots, catalog discovery and actual transport must be tested separately; never guess protocols."
+      "read": ["src/temporary-models.ts", "src/current-provider.ts", "src/authorization-controller.ts", "src/route-ownership.ts"],
+      "tests": ["tests/temporary-models.spec.ts", "tests/temporary-model-runtime.spec.ts", "tests/temporary-model-retirement.spec.ts", "tests/authorization-controller.spec.ts", "tests/route-ownership.spec.ts"],
+      "risk": "Raw preimage/postimage and revision/epoch guards protect owned writes. Legacy or changed ownership conflicts preserve state for review; never force adoption or discard a journal automatically."
     },
     "search": {
       "purpose": "Inline native search and the optional ctx.web provider",
