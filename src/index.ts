@@ -14,7 +14,6 @@ import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import type {} from '@deepseek-ai/dsh-agent'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
-import * as dshLlm from '@deepseek-ai/dsh-llm'
 import * as dshSettings from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { resolveCandidates, sameCandidates, SearchPlan } from './plan.ts'
@@ -33,6 +32,7 @@ import GitHubCopilotAuthorizationController, {
 } from './authorization-controller.ts'
 import { createGitHubCopilotTokenResolver } from './copilot-auth.ts'
 import { installCopilotToolSchemaCompatibility } from './tool-schema-compat.ts'
+import { contentHasFileCompat } from './content-file.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
   GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -461,19 +461,6 @@ function preflight(request: GenerateOptions, cfg: InlineConfig, ctx: Context): b
   return true
 }
 
-/** Prefer Core's recursive file predicate while retaining the older supported baselines. */
-function contentHasFileCompat(content: readonly unknown[]): boolean {
-  const official = (dshLlm as { contentHasFile?: (blocks: readonly unknown[]) => boolean }).contentHasFile
-  if (official !== undefined) return official(content)
-  return content.some((block) => {
-    if (typeof block !== 'object' || block === null || !('type' in block)) return false
-    if (block.type === 'file') return true
-    return block.type === 'tool-result'
-      && 'content' in block
-      && Array.isArray(block.content)
-      && contentHasFileCompat(block.content)
-  })
-}
 
 /**
  * Provider whitelist; empty config follows the current chat route. The

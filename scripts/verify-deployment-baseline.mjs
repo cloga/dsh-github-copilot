@@ -97,12 +97,16 @@ for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
   assert(
     packageJson.devDependencies?.[dependency] === `^${manifest.supportedBaselines.dsh.developmentRelease}`,
-    `${dependency} development range differs`,
+    `${dependency} development dependency range differs`,
   )
 }
 
 const compatibility = await read('src/compatibility.ts')
 assert(compatibility.includes(`peerRange: '${peerRange}'`), 'runtime compatibility range differs')
+assert(
+  compatibility.includes(`developmentRelease: '${manifest.supportedBaselines.dsh.developmentRelease}'`),
+  'runtime development release differs',
+)
 
 for (const capability of manifest.capabilities ?? []) {
   assert(capability.required === true, `${capability.id} must be required`)
@@ -204,7 +208,6 @@ for (const marker of [
   'if [[ "$tag_type" != "tag" ]]',
   'if [[ "$version" =~ -(alpha|beta|rc)\\. ]]',
   'release_flags+=(--prerelease)',
-  'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
   'd347e703908d0406b7a7ef80e3a0e594d86b2215',
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify:controlled-core -- dsh-upstream',
