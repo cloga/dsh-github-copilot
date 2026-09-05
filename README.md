@@ -96,6 +96,20 @@ Before a grant is persisted or reused, the Host normalizer rebuilds only pi-ai's
 - **`github-copilot-hosted` through `ctx.web.search()`:** supports OpenAI Responses candidates only.
 - **Chat Completions models:** remain usable through normal `llm-pi-ai` transport but do not advertise hosted search.
 
+Installing this package registers `github-copilot-hosted` but deliberately does not replace the profile-wide `web.searchProvider`. This keeps mixed-provider profiles unchanged. A Copilot-focused profile can opt in by adding the following row to `$DSH_HOME/profiles/<profile>/cordis.patch.yml` (merge it into the existing top-level patch list):
+
+```yaml
+# Optional: route the Core web_search Tool through GitHub Copilot.
+- id: web
+  config:
+    searchProvider: github-copilot-hosted
+    fetchProvider: http
+```
+
+A patch row replaces the target row's complete `config`, so keep `fetchProvider: http` for the default HTTP fetcher (or retain your explicitly configured fetch provider). If a `web` override already exists, update that row rather than replacing the whole patch file; keep unrelated configuration. Restart that profile after editing. This is a global profile choice, not model-aware routing: on a non-Copilot or non-Responses route, `web_search` reports the configured Copilot provider unavailable and does not fall back to DeepSeek. To undo it, remove only the row added for this opt-in or restore your previous `web` configuration.
+
+An explicit `web.searchProvider` takes precedence over `DSH_WEB_SEARCH_PROVIDER`. Setting that environment variable alone will not override a bundle that already selects `deepseek-official`. A `DEEPSEEK_API_KEY` search error therefore means the direct search Tool still selected DeepSeek; Copilot sign-in does not configure DeepSeek credentials. The Copilot search path uses its own OAuth grant and does not require that key.
+
 Requests go directly to the credential-resolved HTTPS Copilot endpoint after strict host validation: GitHub-hosted `api.*.githubcopilot.com`, or `copilot-api.<signed-in-enterprise-domain>` for an accepted GitHub Enterprise credential. No external gateway receives the credential.
 
 By default (`probe: true`), search fails closed unless the selected route is `github-copilot`, the account exposes the model, the installed protocol supports native search, and a bounded capability probe succeeds. Setting `probe: false` bypasses only capability proof and trusts the selected native protocol; route, account, protocol, endpoint, and authentication checks remain active. Authentication, HTTP, malformed-body, abort, and network probe failures do not fall back to an external search path. Requests containing any Core file block—including files nested in tool-result content—also fail closed to `next()`, preserving Core's file projection instead of letting the hosted-search serializer drop that context.

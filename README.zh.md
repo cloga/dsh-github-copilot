@@ -96,6 +96,20 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
 - **通过 `ctx.web.search()` 使用 `github-copilot-hosted`：**只支持 OpenAI Responses 候选。
 - **Chat Completions 模型：**仍可走普通 `llm-pi-ai` transport，但不会宣称 hosted search 可用。
 
+安装本包只会注册 `github-copilot-hosted`，不会默认替换整个 profile 的 `web.searchProvider`，因此混合 provider profile 的原行为保持不变。以 Copilot 为主的 profile 可以选择加入下面的配置：把它合并到 `$DSH_HOME/profiles/<profile>/cordis.patch.yml` 的顶层 patch 列表中。
+
+```yaml
+# 可选：让 Core web_search Tool 使用 GitHub Copilot。
+- id: web
+  config:
+    searchProvider: github-copilot-hosted
+    fetchProvider: http
+```
+
+Patch row 会整体替换目标 row 的 `config`，所以使用默认 HTTP 抓取器时保留 `fetchProvider: http`；若已配置其它 fetch provider，则保留原选择。如果已有 `web` override，应修改原 row，而不是覆盖整个 patch 文件，并保留无关配置。修改后重启对应 profile。这是 profile 全局选择，不会按模型动态路由：当前 route 不是 Copilot Responses 时，`web_search` 会报告已配置的 Copilot provider 不可用，也不会回退 DeepSeek。撤销时只删除为本次可选配置新增的 row，或恢复之前的 `web` 配置。
+
+显式 `web.searchProvider` 优先于 `DSH_WEB_SEARCH_PROVIDER`。如果 bundle 已选择 `deepseek-official`，仅设置该环境变量不能覆盖它。因此搜索提示缺少 `DEEPSEEK_API_KEY`，说明直接搜索 Tool 仍选择了 DeepSeek；Copilot 登录不会配置 DeepSeek 凭据。Copilot 搜索路径使用自己的 OAuth grant，不需要该 key。
+
 请求经过严格 Host 校验后，直接发往 credential 解析出的 HTTPS Copilot endpoint：GitHub-hosted `api.*.githubcopilot.com`，或已接受 GitHub Enterprise credential 对应的 `copilot-api.<signed-in-enterprise-domain>`。Credential 不会经过外部 gateway。
 
 默认 `probe: true` 时，搜索 fail closed：当前 route 必须是 `github-copilot`，账号必须允许该模型，安装的协议必须支持原生搜索，且 bounded capability probe 必须成功。显式设置 `probe: false` 只会跳过 capability proof，并信任所选原生协议；route、account、protocol、endpoint 与 authentication 检查仍然生效。Authentication、HTTP、响应体格式、abort 或网络 probe 失败都不会回退到外部搜索路径。请求只要包含任意 Core file block（包括嵌套在 tool-result content 内的文件），也会 fail closed 到 `next()`，由 Core 保留文件投影，避免 hosted-search serializer 静默丢弃文件上下文。
