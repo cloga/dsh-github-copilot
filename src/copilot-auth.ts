@@ -10,9 +10,11 @@ import {
   type CredentialInfo,
   type CredentialStore,
 } from '@earendil-works/pi-ai'
+import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
 import { GITHUB_COPILOT_CREDENTIAL_KEY } from './authorization-controller.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
+import { temporaryGitHubCopilotModel } from './temporary-models.ts'
 
 export { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 
@@ -113,12 +115,16 @@ export function createGitHubCopilotTokenResolver(
 ): (modelId: string) => Promise<GitHubCopilotRequestAuth | undefined> {
   const models = createModels({ credentials: createGitHubCopilotCredentialStore(ctx) })
   models.setProvider(githubCopilotProvider())
+  const installedModelIds = new Set(getBuiltinModels('github-copilot').map(model => model.id))
   return async (modelId) => {
     const catalogModel = models.getModel('github-copilot', modelId)
-    if (catalogModel === undefined) {
+    const temporaryModel = temporaryGitHubCopilotModel(modelId, installedModelIds)
+    if (catalogModel === undefined && temporaryModel === undefined) {
       throw new Error(`github-copilot: pi-ai catalog has no GitHub Copilot model "${modelId}"`)
     }
-    const resolved = await models.getAuth(catalogModel)
+    const resolved = catalogModel === undefined
+      ? await models.getAuth('github-copilot')
+      : await models.getAuth(catalogModel)
     if (resolved === undefined) return undefined
     if (onCredentialChanged !== undefined) {
       try {
@@ -128,17 +134,20 @@ export function createGitHubCopilotTokenResolver(
         ctx.logger.warn(error)
       }
     }
-    const available = (await models.getAvailable('github-copilot')).some(candidate => candidate.id === modelId)
+    const stored = await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+    const available = temporaryModel === undefined
+      ? (await models.getAvailable('github-copilot')).some(candidate => candidate.id === modelId)
+      : stored?.kind === 'grant'
+        && (normalizeGitHubCopilotOAuthCredential(stored.payload).availableModelIds ?? []).includes(modelId)
     if (!available) {
       throw new Error(`github-copilot: model "${modelId}" is not available for the signed-in Copilot account`)
     }
     const apiKey = resolved.auth.apiKey
     if (apiKey === undefined) return undefined
-    const stored = await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
     return {
       apiKey,
       baseURL: trustedCopilotBaseUrl(
-        resolved.auth.baseUrl ?? catalogModel.baseUrl,
+        resolved.auth.baseUrl ?? catalogModel?.baseUrl ?? temporaryModel?.baseUrl,
         enterpriseDomainOf(stored),
       ),
       ...resolved.auth.headers === undefined ? {} : { headers: resolved.auth.headers },

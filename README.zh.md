@@ -65,6 +65,7 @@ GitHub Releases 是唯一权威分发渠道；本仓库不会发布到 npm。部
 - Models provider-card UI、Client-safe Remote descriptor 与 Host authorization controller。
 - 对 pi-ai 所有的 Copilot OAuth grant 做严格规范化。
 - 按账号可用模型同步 Copilot route 的 `models` 与 `compat.supportsStrictMode` 叶节点。
+- 提供临时、账号权限门控的 GPT-6 Astra 兼容层；安装的 pi-ai catalog 原生支持后自动停用。
 - 通过 inline agent-loop interception 与 Responses-only `ctx.web` provider 直连供应方 hosted search。
 
 DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider。`@deepseek-ai/dsh-llm-pi-ai` 负责 Copilot adapter、catalog、OAuth method/grant format、token exchange、refresh 与普通模型 transport。Credential 始终只留在 Host。
@@ -73,10 +74,11 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 
 `llm-pi-ai` 注册 OAuth method，authorization service 组织交互，本包只提供 UI/Remote controller 与 route reconciliation。rc.1 由 Core 提供 authorization；rc.2 profile 缺失该服务时，本包挂载运行时依赖，并复用任何已经存在的 provider。
 
-登录成功、Host 启动以及本包刷新 OAuth credential 后，本包会将账号 `availableModelIds` 与已安装 pi-ai catalog 取交集，并把每个已知模型物化为 `{ id, api }`。对于当前 catalog 不认识的账号模型，本包不会猜测协议；Models 卡片会提示 catalog 部分或完全过期，并建议升级集成。缺失的 profile 会以无 route 级连接引用的形式创建；已有 profile 只会修改：
+登录成功、Host 启动以及本包刷新 OAuth credential 后，本包会将账号 `availableModelIds` 与已安装 pi-ai catalog 取交集，并把每个已知模型物化为 `{ id, api }`。对于当前 catalog 不认识的账号模型，本包通常不会猜测协议；唯一例外是精确 ID `gpt-6-astra` 的临时兼容层，其元数据来自 pi 上游与 models.dev。该兼容层仍受账号权限约束，并在安装的 pi-ai catalog 原生拥有同一 ID 后自动停用。其它未知 ID 会在 Models 卡片中显示 catalog 警告。缺失的 profile 会以无 route 级连接引用的形式创建；已有 profile 只会修改：
 
 - `providers.github-copilot.models`
 - `providers.github-copilot.compat.supportsStrictMode`
+- 临时 GPT-6 兼容层需要 Copilot 客户端 headers 时的 `providers.github-copilot.headers`
 
 其它 Copilot 字段和无关 provider 全部保留，包括旧的 `baseURL` 或 `apiKeyEnv`。迁移时必须显式删除这些旧字段。Sign out 只删除 `llm-pi-ai/github-copilot` credential record，保留 route settings。
 
@@ -126,7 +128,7 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 依赖托管 route 前，请删除旧 gateway route、`COPILOT_GITHUB_TOKEN` 类 reference、`copilot2api` 与 `dsh-web-search-provider`。
 
 - **看不到登录控件：**确认 package 安装在当前活动 profile，并使用上表对应的 Models UI。
-- **已登录但新模型缺失：**查看 Models 卡片中的已安装 catalog 警告。账号中已知的模型仍然可用，未知 ID 会等到新版集成提供经过验证的协议元数据后再开放。如果账号模型全部未知，本包会保留此前可用的 route 列表，而不会写入猜测值或空列表。
+- **已登录但新模型缺失：**查看 Models 卡片中的已安装 catalog 警告。账号返回精确 ID `gpt-6-astra` 时，插件会临时识别 GPT-6 Astra；其它未知 ID 会等到经过验证的元数据可用后再开放。如果账号模型全部未知，本包会保留此前可用的 route 列表，而不会写入猜测值或空列表。
 - **Hosted search 不可用：**选择 `github-copilot` route 和账号可用的 Responses/Anthropic 模型，并检查命名明确的 probe error；显式 `ctx.web` provider 仅支持 Responses。
 - **仍有旧 endpoint/key：**reconciliation 会有意保留不归本包所有的字段，需要手工删除旧连接字段。
 
@@ -138,7 +140,7 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 - `src/authorization-controller.ts`：Host authorization 与路径级 route reconciliation。
 - `src/copilot-grant.ts`、`src/copilot-auth.ts`：grant normalization 与 Host credential lifecycle。
 - `src/client.ts`、`src/remote.ts`：Models UI 与 Client-safe Remote contract。
-- `src/current-provider.ts`、`src/plan.ts`、`src/probe.ts`：route 投影、候选规划与 capability proof。
+- `src/current-provider.ts`、`src/temporary-models.ts`、`src/plan.ts`、`src/probe.ts`：route 投影、自动退役的 GPT-6 兼容层、候选规划与 capability proof。
 - `src/wire.ts`、`src/wire-anthropic.ts`、`src/traditional-search.ts`：hosted-search transport。
 - `deployment-baseline.json`：声明式、机器可读的兼容性/能力证据清单；`scripts/verify-deployment-baseline.mjs` 用源码与测试 marker 检查漂移。
 - `lib/`：构建生成的 release 输出，禁止手工修改。

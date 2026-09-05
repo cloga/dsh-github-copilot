@@ -371,6 +371,63 @@ describe('GitHubCopilotAuthorizationController', () => {
     }])
   })
 
+  it('materializes the temporary GPT-6 Astra overlay only for an entitled account', async () => {
+    const harness = runtime({
+      configured: true,
+      availableModelIds: ['gpt-6-astra', 'gpt-5.6-sol'],
+      providerProfile: {
+        headers: { 'X-Custom': 'preserved' },
+      },
+    })
+
+    await expect(harness.controller.status()).resolves.toMatchObject({
+      phase: 'signed-in',
+      catalog: {
+        state: 'current',
+        accountModelCount: 2,
+        supportedModelCount: 2,
+        unknownModelIds: [],
+      },
+    })
+    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
+      op: 'set',
+      path: ['providers', 'github-copilot', 'models'],
+      value: [
+        {
+          id: 'gpt-6-astra',
+          name: 'GPT-6 Astra',
+          api: 'openai-responses',
+          contextWindow: 1_050_000,
+          maxTokens: 128_000,
+          input: ['text', 'image'],
+          reasoningEfforts: {
+            off: null,
+            low: 'low',
+            medium: 'medium',
+            high: 'high',
+            xhigh: 'xhigh',
+            max: 'max',
+          },
+        },
+        { id: 'gpt-5.6-sol', api: 'openai-responses' },
+      ],
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
+      value: false,
+    }, {
+      op: 'set',
+      path: ['providers', 'github-copilot', 'headers'],
+      value: {
+        'X-Custom': 'preserved',
+        'User-Agent': 'GitHubCopilotChat/0.35.0',
+        'Editor-Version': 'vscode/1.107.0',
+        'Editor-Plugin-Version': 'copilot-chat/0.35.0',
+        'Copilot-Integration-Id': 'vscode-chat',
+      },
+    }])
+  })
+
   it('reports account model ids unsupported by the installed catalog', async () => {
     const harness = runtime({
       configured: true,

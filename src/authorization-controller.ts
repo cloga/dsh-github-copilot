@@ -7,6 +7,11 @@ import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
+import {
+  temporaryGitHubCopilotModel,
+  temporaryGitHubCopilotModelFromProfile,
+  temporaryGitHubCopilotModelProfile,
+} from './temporary-models.ts'
 
 export const GITHUB_COPILOT_CREDENTIAL_KEY = 'llm-pi-ai/github-copilot'
 export const GITHUB_COPILOT_PROVIDER_ID = 'github-copilot'
@@ -95,28 +100,43 @@ interface SettingsServiceView {
 
 function providerModelsFrom(
   record: { readonly kind: string; readonly payload?: unknown } | undefined,
-): { readonly models: Record<string, string>[]; readonly catalog: GitHubCopilotModelCatalogView } {
+): {
+  readonly models: Record<string, unknown>[]
+  readonly requiredHeaders?: Readonly<Record<string, string>>
+  readonly catalog: GitHubCopilotModelCatalogView
+} {
   if (record?.kind !== 'grant') {
     throw new Error('github-copilot: the configured credential is not an OAuth grant')
   }
   const available = [...new Set(
     normalizeGitHubCopilotOAuthCredential(record.payload).availableModelIds ?? [],
   )]
-  const installed = new Map(
-    getBuiltinModels('github-copilot').map(model => [model.id, model.api] as const),
-  )
-  const models: Record<string, string>[] = []
+  const installedModels = getBuiltinModels('github-copilot')
+  const installed = new Map(installedModels.map(model => [model.id, model.api] as const))
+  const installedIds = new Set(installed.keys())
+  const models: Record<string, unknown>[] = []
   const unknownModelIds: string[] = []
+  let requiredHeaders: Readonly<Record<string, string>> | undefined
   for (const id of available) {
     const api = installed.get(id)
-    if (api === undefined) unknownModelIds.push(id)
-    else models.push({ id, api })
+    if (api !== undefined) {
+      models.push({ id, api })
+      continue
+    }
+    const temporary = temporaryGitHubCopilotModel(id, installedIds)
+    if (temporary === undefined) {
+      unknownModelIds.push(id)
+      continue
+    }
+    models.push(temporaryGitHubCopilotModelProfile(temporary))
+    requiredHeaders = temporary.headers
   }
   const state: GitHubCopilotModelCatalogState = unknownModelIds.length === 0
     ? 'current'
     : models.length === 0 ? 'outdated' : 'partially-outdated'
   return {
     models,
+    ...requiredHeaders === undefined ? {} : { requiredHeaders },
     catalog: {
       state,
       accountModelCount: available.length,
@@ -156,24 +176,64 @@ function providerProfileAt(section: unknown): Record<string, unknown> | undefine
   return profile as Record<string, unknown>
 }
 
-function providerModels(value: unknown): Array<{ id: string; api: string }> | undefined {
+function providerModels(value: unknown): Array<Record<string, unknown>> | undefined {
   if (!Array.isArray(value)) return undefined
-  const models: Array<{ id: string; api: string }> = []
+  const models: Array<Record<string, unknown>> = []
   for (const candidate of value) {
     if (typeof candidate !== 'object' || candidate === null) return undefined
     const model = candidate as Record<string, unknown>
     if (typeof model.id !== 'string' || typeof model.api !== 'string') return undefined
-    models.push({ id: model.id, api: model.api })
+    models.push(model)
   }
   return models
 }
 
-function sameProviderModels(current: unknown, expected: readonly Record<string, string>[]): boolean {
+function sameProviderModels(current: unknown, expected: readonly Record<string, unknown>[]): boolean {
   const currentModels = providerModels(current)
   const expectedModels = providerModels(expected)
-  return currentModels !== undefined
-    && expectedModels !== undefined
-    && JSON.stringify(currentModels) === JSON.stringify(expectedModels)
+  if (currentModels === undefined || expectedModels === undefined || currentModels.length !== expectedModels.length) {
+    return false
+  }
+  return expectedModels.every((expectedModel, index) => {
+    const currentModel = currentModels[index]
+    if (currentModel === undefined) return false
+    const currentOverlay = temporaryGitHubCopilotModelFromProfile(currentModel)
+    const expectedOverlay = temporaryGitHubCopilotModelFromProfile(expectedModel)
+    if (currentOverlay !== undefined && expectedOverlay === undefined) return false
+    return Object.entries(expectedModel).every(([field, value]) =>
+      JSON.stringify(currentModel[field]) === JSON.stringify(value))
+  })
+}
+
+function providerHeaders(profile: Record<string, unknown> | undefined): Record<string, string> {
+  const value = profile?.headers
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  )
+}
+
+function withRequiredHeaders(
+  current: Readonly<Record<string, string>>,
+  required: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const requiredNames = new Set(Object.keys(required).map(name => name.toLowerCase()))
+  return {
+    ...Object.fromEntries(Object.entries(current).filter(([name]) => !requiredNames.has(name.toLowerCase()))),
+    ...required,
+  }
+}
+
+function withoutOwnedHeaders(
+  current: Readonly<Record<string, string>>,
+  owned: readonly Readonly<Record<string, string>>[],
+): Record<string, string> {
+  const ownedValues = new Map<string, string>()
+  for (const headers of owned) {
+    for (const [name, value] of Object.entries(headers)) ownedValues.set(name.toLowerCase(), value)
+  }
+  return Object.fromEntries(Object.entries(current).filter(([name, value]) =>
+    ownedValues.get(name.toLowerCase()) !== value))
 }
 
 function providerSupportsStrictMode(profile: Record<string, unknown> | undefined): unknown {
@@ -206,7 +266,7 @@ async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<GitHubC
     }
   }
 
-  const { models, catalog } = providerModelsFrom(record)
+  const { models, requiredHeaders, catalog } = providerModelsFrom(record)
   // Do not create or widen a route when every account model is unknown. An
   // existing usable profile remains untouched until verified catalog metadata
   // is installed; an absent profile remains absent rather than inheriting the
@@ -228,6 +288,27 @@ async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<GitHubC
       op: 'set',
       path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode'],
       value: false,
+    })
+  }
+  const currentModelEntries = providerModels(current?.models) ?? []
+  const retiringOverlays = currentModelEntries.flatMap((entry) => {
+    const overlay = temporaryGitHubCopilotModelFromProfile(entry)
+    if (overlay === undefined) return []
+    const expected = models.find(model => model.id === overlay.id)
+    return expected !== undefined && temporaryGitHubCopilotModelFromProfile(expected) !== undefined
+      ? []
+      : [overlay]
+  })
+  const currentHeaders = providerHeaders(current)
+  const retainedHeaders = withoutOwnedHeaders(currentHeaders, retiringOverlays.map(model => model.headers))
+  const headers = requiredHeaders === undefined
+    ? retainedHeaders
+    : withRequiredHeaders(retainedHeaders, requiredHeaders)
+  if (JSON.stringify(currentHeaders) !== JSON.stringify(headers)) {
+    operations.push({
+      op: 'set',
+      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'headers'],
+      value: headers,
     })
   }
   if (operations.length > 0) await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, operations)

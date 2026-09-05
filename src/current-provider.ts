@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { builtinProviders, getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import type { BuiltinProvider } from '@earendil-works/pi-ai/providers/all'
+import { temporaryGitHubCopilotModel } from './temporary-models.ts'
 
 /** Settings namespace of the harness's pi-ai LLM adapter (its `providers` dict). */
 const LLM_PI_AI_NAMESPACE = 'llm-pi-ai' as SettingsNamespace
@@ -89,9 +90,13 @@ function catalogModelFacts(
 ): { api?: string; baseUrl?: string; headers?: Readonly<Record<string, string | null>> } {
   const catalog = catalogById().get(provider)
   if (catalog === undefined) return {}
-  const found = modelTableOf(provider).find(candidate => candidate.id === model)
-  if (found === undefined) return {}
-  return { api: found.api, baseUrl: found.baseUrl, headers: found.headers }
+  const table = modelTableOf(provider)
+  const found = table.find(candidate => candidate.id === model)
+  if (found !== undefined) return { api: found.api, baseUrl: found.baseUrl, headers: found.headers }
+  if (provider !== 'github-copilot') return {}
+  const temporary = temporaryGitHubCopilotModel(model, new Set(table.map(candidate => candidate.id)))
+  if (temporary === undefined) return {}
+  return { api: temporary.api, baseUrl: temporary.baseUrl, headers: temporary.headers }
 }
 
 /** Read one route profile from the llm-pi-ai settings section, defensively narrowed. */
