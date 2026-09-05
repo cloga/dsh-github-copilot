@@ -64,7 +64,12 @@ jobs:
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
+          release_flags=()
+          if [[ "$version" =~ -(alpha|beta|rc)\. ]]; then
+            release_flags+=(--prerelease)
+          fi
           gh release create "$GITHUB_REF_NAME" artifacts/*.tgz artifacts/SHA256SUMS \
             --verify-tag \
             --title "dsh-github-copilot $version" \
-            --generate-notes
+            --generate-notes \
+            "${release_flags[@]}"
