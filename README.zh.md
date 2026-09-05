@@ -37,17 +37,19 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 4. 返回 DSH。卡片会自动轮询；成功后只显示 **Signed in to GitHub Copilot.** 和 **Sign out** 按钮，一次性 URL 与代码会消失。
 5. 在 `github-copilot` provider 下选择模型。如果没有出现模型，可先重启一次 profile，再查看[迁移与排障](#迁移与排障)。
 
-入口流程从 **添加提供方** 开始，选择 **github-copilot** 后进入 GitHub Copilot 授权卡片：
+如果没有看到卡片，先选择 **添加提供方 → github-copilot**。动图从已有卡片开始，展示 **Sign in with GitHub → Copy code → Copied → Signed in**。最后两个状态之间需要用户在 GitHub 完成授权，这一步未录制。
 
-![GitHub Copilot 提供方添加与授权入口动图](./docs/images/github-copilot-auth-flow.gif)
+![GitHub Copilot 登录、验证码复制反馈与授权成功动图](./docs/images/github-copilot-auth-flow.gif)
 
-最终的授权中卡片会突出显示验证码并提供一键复制。截图使用合成的文档示例代码 `ABCD-EFGH`，未发起真实授权请求，也未记录任何 credential。
+这些文档预览使用当前 Models 页面外观和仓库当前的卡片组件，授权状态为模拟数据。`ABCD-EFGH` 是不可用于登录的合成示例；未发起真实授权请求、记录 credential 或变更账号。预览不代表真实登录或模型可用性验证。
 
-![醒目的 GitHub device code 与一键复制按钮](./docs/images/copilot-device-code-copy.png)
+授权中的卡片突出显示一次性验证码，并提供 **Copy code** 按钮：
 
-Device code 是临时信息，只应在授权进行中显示。下面的局部图记录了修复前的异常表现：成功状态旁仍残留旧验证码。当前版本会在授权结束后清除该提示。
+![GitHub Copilot 授权中卡片，包含合成验证码与 Copy code 按钮](./docs/images/copilot-device-code-copy.png)
 
-![残留授权提示的局部截图](./docs/images/copilot-auth-card-stale-notice.png)
+授权成功后，验证码、验证链接和复制反馈都会消失。成功卡片保留 **Signed in to GitHub Copilot.** 与 **Sign out**；如存在模型配置警告，会单独显示。
+
+![GitHub Copilot 登录成功卡片，不再残留验证码或授权提示](./docs/images/copilot-auth-card-signed-in.png)
 
 ### Agent 与自动化流程
 
