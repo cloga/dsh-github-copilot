@@ -4,6 +4,7 @@ import {
   GITHUB_COPILOT_CREDENTIAL_KEY,
   GitHubCopilotAuthorizationController,
   ensureGitHubCopilotProviderProfile,
+  inspectGitHubCopilotProviderProfile,
 } from '../src/authorization-controller.ts'
 
 interface Runtime {
@@ -370,13 +371,21 @@ describe('GitHubCopilotAuthorizationController', () => {
     }])
   })
 
-  it('omits account model ids unsupported by the installed catalog', async () => {
+  it('reports account model ids unsupported by the installed catalog', async () => {
     const harness = runtime({
       configured: true,
       availableModelIds: ['not-in-installed-catalog', 'gpt-5.6-sol'],
     })
 
-    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
+    await expect(harness.controller.start()).resolves.toMatchObject({
+      phase: 'signed-in',
+      catalog: {
+        state: 'partially-outdated',
+        accountModelCount: 2,
+        supportedModelCount: 1,
+        unknownModelIds: ['not-in-installed-catalog'],
+      },
+    })
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
       op: 'set',
       path: ['providers', 'github-copilot', 'models'],
@@ -388,14 +397,37 @@ describe('GitHubCopilotAuthorizationController', () => {
     }])
   })
 
-  it('fails loudly instead of enabling the full catalog when no installed model is available', async () => {
+  it('reports an outdated catalog without replacing a previously usable model list', async () => {
     const harness = runtime({
       configured: true,
       availableModelIds: ['not-in-installed-catalog'],
+      providerProfile: {
+        compat: { supportsStrictMode: false },
+        models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+      },
     })
 
-    await expect(harness.controller.start()).rejects.toThrow(/exposes no models from the installed pi-ai catalog/)
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({
+      changed: false,
+      catalog: {
+        state: 'outdated',
+        accountModelCount: 1,
+        supportedModelCount: 0,
+        unknownModelIds: ['not-in-installed-catalog'],
+      },
+    })
+    await expect(harness.controller.status()).resolves.toMatchObject({
+      phase: 'signed-in',
+      catalog: { state: 'outdated' },
+    })
     expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
+      providers: {
+        'github-copilot': {
+          models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
+        },
+      },
+    })
   })
 
   it('signs out by deleting only the llm-pi-ai Copilot record and keeps the route profile', async () => {

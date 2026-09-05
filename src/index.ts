@@ -164,7 +164,9 @@ function activate(ctx: Context, config: InlineConfig): void {
     ctx.logger.error('github-copilot: failed to repair the GitHub Copilot provider route during startup')
     ctx.logger.error(error)
   })
-  const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx)
+  const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx, async () => {
+    await ensureGitHubCopilotProviderProfile(ctx)
+  })
   let current: () => InlineConfig = () => config
   // The plan is built when the settings section attaches IF the chat route
   // is already detectable (so the probe verdict and the prompt guidance are

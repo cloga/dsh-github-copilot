@@ -109,6 +109,7 @@ export function createGitHubCopilotCredentialStore(ctx: Context): CredentialStor
  */
 export function createGitHubCopilotTokenResolver(
   ctx: Context,
+  onCredentialChanged?: () => Promise<void>,
 ): (modelId: string) => Promise<GitHubCopilotRequestAuth | undefined> {
   const models = createModels({ credentials: createGitHubCopilotCredentialStore(ctx) })
   models.setProvider(githubCopilotProvider())
@@ -119,6 +120,14 @@ export function createGitHubCopilotTokenResolver(
     }
     const resolved = await models.getAuth(catalogModel)
     if (resolved === undefined) return undefined
+    if (onCredentialChanged !== undefined) {
+      try {
+        await onCredentialChanged()
+      } catch (error) {
+        ctx.logger.warn('github-copilot: provider route reconciliation will retry after a later auth resolution')
+        ctx.logger.warn(error)
+      }
+    }
     const available = (await models.getAvailable('github-copilot')).some(candidate => candidate.id === modelId)
     if (!available) {
       throw new Error(`github-copilot: model "${modelId}" is not available for the signed-in Copilot account`)

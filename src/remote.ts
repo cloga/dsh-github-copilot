@@ -34,6 +34,12 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
     url: z.string().optional(),
     code: z.string().optional(),
   }).strict()),
+  catalog: z.object({
+    state: z.enum(['current', 'partially-outdated', 'outdated']),
+    accountModelCount: z.number().int().nonnegative(),
+    supportedModelCount: z.number().int().nonnegative(),
+    unknownModelIds: z.array(z.string()),
+  }).strict().optional(),
   error: z.string().optional(),
 }).strict()
 

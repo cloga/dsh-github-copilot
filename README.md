@@ -73,7 +73,7 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 `llm-pi-ai` registers the OAuth method; the authorization service orchestrates the interaction; this package contributes the UI/Remote controller and route reconciliation. Core supplies authorization on rc.1. On rc.2 profiles that omit it, this package mounts its runtime dependency and reuses any provider already present.
 
-After sign-in and during Host startup, the package intersects the account's `availableModelIds` with the installed pi-ai catalog and materializes each model as `{ id, api }`. A missing profile is created without route-level connection references. For an existing profile, reconciliation intentionally changes only:
+After sign-in, during Host startup, and after this package refreshes the OAuth credential, the package intersects the account's `availableModelIds` with the installed pi-ai catalog and materializes each known model as `{ id, api }`. Account model IDs missing from the installed catalog are never assigned a guessed protocol: the Models card reports a partial or complete catalog mismatch and advises upgrading the integration. A missing profile is created without route-level connection references. For an existing profile, reconciliation intentionally changes only:
 
 - `providers.github-copilot.models`
 - `providers.github-copilot.compat.supportsStrictMode`
@@ -126,7 +126,7 @@ There are no token, API-key, model-catalog, or endpoint settings in this package
 Remove old gateway routes, `COPILOT_GITHUB_TOKEN`-style references, `copilot2api`, and `dsh-web-search-provider` before relying on the managed route.
 
 - **No sign-in control:** confirm the package is installed in the active profile and use the baseline-specific Models UI above.
-- **Signed in but no models:** the account must expose at least one model present in the installed pi-ai catalog; the package fails closed instead of enabling the full catalog.
+- **Signed in but a new model is missing:** check the Models card for an installed-catalog warning. Known account models remain available, while unknown IDs are withheld until a newer integration supplies verified protocol metadata. If every account model is unknown, the previous usable route list is preserved rather than replaced with guessed or empty metadata.
 - **Hosted search unavailable:** select the `github-copilot` route, choose an account-available Responses or Anthropic model, and inspect the named probe error. The explicit `ctx.web` provider is Responses-only.
 - **Legacy endpoint/key still present:** reconciliation preserves unowned fields by design; remove legacy connection fields manually.
 

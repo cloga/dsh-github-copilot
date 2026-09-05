@@ -25,6 +25,16 @@ function messageOf(result: Awaited<ReturnType<GitHubCopilotProviderCardProps['re
   return result.ok ? '' : result.error.message
 }
 
+export function catalogWarningOf(status: GitHubCopilotAuthorizationView | undefined): string | undefined {
+  if (status?.catalog?.state === 'partially-outdated') {
+    return `${status.catalog.unknownModelIds.length} account model(s) require a newer Copilot model catalog: ${status.catalog.unknownModelIds.join(', ')}.`
+  }
+  if (status?.catalog?.state === 'outdated') {
+    return `This account exposes only models unknown to the installed Copilot model catalog: ${status.catalog.unknownModelIds.join(', ')}. Update the integration and restart DSH.`
+  }
+  return undefined
+}
+
 /** Models-card sign-in/status/sign-out controls for the catalog Copilot row. */
 export function GitHubCopilotProviderCard(
   props: GitHubCopilotProviderCardProps,
@@ -80,9 +90,14 @@ export function GitHubCopilotProviderCard(
   const notice = status?.notices.at(-1)
   const signedIn = status?.configured === true
   const busy = status?.inFlight === true
+  const catalogWarning = catalogWarningOf(status)
   return createElement('div', { 'data-dsh-github-copilot': true },
     createElement('div', { role: 'status', 'aria-live': 'polite' },
       error ?? status?.error ?? (busy ? 'Waiting for GitHub authorization…' : signedIn ? 'Signed in to GitHub Copilot.' : 'Sign in to use GitHub Copilot models.')),
+    catalogWarning === undefined ? null : createElement('div', {
+      role: 'alert',
+      'data-dsh-github-copilot-catalog-warning': status?.catalog?.state,
+    }, catalogWarning),
     notice === undefined ? null : createElement('div', null,
       createElement('span', null, notice.message),
       notice.url === undefined ? null : createElement('a', {

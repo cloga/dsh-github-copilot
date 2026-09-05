@@ -73,7 +73,7 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 
 `llm-pi-ai` 注册 OAuth method，authorization service 组织交互，本包只提供 UI/Remote controller 与 route reconciliation。rc.1 由 Core 提供 authorization；rc.2 profile 缺失该服务时，本包挂载运行时依赖，并复用任何已经存在的 provider。
 
-登录成功和 Host 启动时，本包会将账号 `availableModelIds` 与已安装 pi-ai catalog 取交集，并把每个模型物化为 `{ id, api }`。缺失的 profile 会以无 route 级连接引用的形式创建；已有 profile 只会修改：
+登录成功、Host 启动以及本包刷新 OAuth credential 后，本包会将账号 `availableModelIds` 与已安装 pi-ai catalog 取交集，并把每个已知模型物化为 `{ id, api }`。对于当前 catalog 不认识的账号模型，本包不会猜测协议；Models 卡片会提示 catalog 部分或完全过期，并建议升级集成。缺失的 profile 会以无 route 级连接引用的形式创建；已有 profile 只会修改：
 
 - `providers.github-copilot.models`
 - `providers.github-copilot.compat.supportsStrictMode`
@@ -126,7 +126,7 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 依赖托管 route 前，请删除旧 gateway route、`COPILOT_GITHUB_TOKEN` 类 reference、`copilot2api` 与 `dsh-web-search-provider`。
 
 - **看不到登录控件：**确认 package 安装在当前活动 profile，并使用上表对应的 Models UI。
-- **已登录但没有模型：**账号至少要暴露一个存在于当前 pi-ai catalog 的模型；本包会 fail closed，不会启用完整 catalog。
+- **已登录但新模型缺失：**查看 Models 卡片中的已安装 catalog 警告。账号中已知的模型仍然可用，未知 ID 会等到新版集成提供经过验证的协议元数据后再开放。如果账号模型全部未知，本包会保留此前可用的 route 列表，而不会写入猜测值或空列表。
 - **Hosted search 不可用：**选择 `github-copilot` route 和账号可用的 Responses/Anthropic 模型，并检查命名明确的 probe error；显式 `ctx.web` provider 仅支持 Responses。
 - **仍有旧 endpoint/key：**reconciliation 会有意保留不归本包所有的字段，需要手工删除旧连接字段。
 
