@@ -1,7 +1,113 @@
+import { isValidElement } from 'react'
+import type { ReactElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { apply, catalogWarningOf } from '../src/client.ts'
+import {
+  activeAuthorizationNotice,
+  apply,
+  catalogWarningOf,
+  copyAuthorizationCode,
+  GitHubCopilotAuthorizationNotice,
+} from '../src/client.ts'
 
 describe('GitHub Copilot Models client', () => {
+  function descendants(root: unknown): ReactElement[] {
+    if (Array.isArray(root)) return root.flatMap(descendants)
+    if (!isValidElement(root)) return []
+    const element = root as ReactElement<{ children?: unknown }>
+    return [element, ...descendants(element.props.children)]
+  }
+
+  it('exposes a device code only while authorization is in flight', () => {
+    const notice = { message: 'Enter this code on GitHub.', code: 'ABCD-EFGH' }
+    const base = {
+      configured: false,
+      writable: true,
+      notices: [notice],
+    }
+    expect(activeAuthorizationNotice({
+      ...base,
+      phase: 'authorizing',
+      inFlight: true,
+    })).toEqual(notice)
+    for (const phase of ['signed-out', 'signed-in', 'error'] as const) {
+      expect(activeAuthorizationNotice({
+        ...base,
+        phase,
+        inFlight: false,
+      })).toBeUndefined()
+    }
+  })
+
+  it('renders the device code prominently with an explicit copy action', () => {
+    const onCopy = vi.fn()
+    const tree = GitHubCopilotAuthorizationNotice({
+      message: 'Enter this code on GitHub.',
+      url: 'https://github.com/login/device',
+      code: 'ABCD-EFGH',
+      copyState: 'idle',
+      onCopy,
+    })
+    const elements = descendants(tree)
+    const code = elements.find(element => element.props['data-dsh-github-copilot-device-code'] === true)
+    const button = elements.find(element => element.type === 'button')
+    const link = elements.find(element => element.type === 'a')
+
+    expect(code?.props).toMatchObject({
+      children: 'ABCD-EFGH',
+      'aria-label': 'GitHub device code ABCD-EFGH',
+      style: expect.objectContaining({
+        fontSize: '1.5rem',
+        fontWeight: 700,
+        letterSpacing: '0.12em',
+        userSelect: 'all',
+      }),
+    })
+    expect(button?.props.children).toBe('Copy code')
+    expect(link?.props).toMatchObject({
+      href: 'https://github.com/login/device',
+      children: 'Open GitHub verification page',
+    })
+    button?.props.onClick()
+    expect(onCopy).toHaveBeenCalledOnce()
+  })
+
+  it('announces successful and failed copy outcomes accessibly', () => {
+    for (const [copyState, expected, role, buttonLabel] of [
+      ['copying', 'Copying code…', 'status', 'Copying…'],
+      ['copied', 'Code copied to clipboard.', 'status', 'Copied'],
+      ['failed', 'Copy failed. Select the code and copy it manually.', 'alert', 'Copy code'],
+    ] as const) {
+      const elements = descendants(GitHubCopilotAuthorizationNotice({
+        message: 'Enter this code on GitHub.',
+        code: 'ABCD-EFGH',
+        copyState,
+        onCopy: vi.fn(),
+      }))
+      const feedback = elements.find(element =>
+        element.props['data-dsh-github-copilot-copy-feedback'] === copyState)
+      expect(feedback?.props).toMatchObject({ role, children: expected })
+      const button = elements.find(element => element.type === 'button')
+      expect(button?.props.children).toBe(buttonLabel)
+      expect(button?.props.disabled).toBe(copyState === 'copying')
+    }
+    const idle = descendants(GitHubCopilotAuthorizationNotice({
+      message: 'Enter this code on GitHub.',
+      code: 'ABCD-EFGH',
+      copyState: 'idle',
+      onCopy: vi.fn(),
+    }))
+    expect(idle.some(element => element.props['data-dsh-github-copilot-copy-feedback'] !== undefined)).toBe(false)
+  })
+
+  it('copies the exact one-time code through the supplied clipboard writer', async () => {
+    const writeText = vi.fn(async () => undefined)
+    await expect(copyAuthorizationCode('ABCD-EFGH', { writeText })).resolves.toBeUndefined()
+    expect(writeText).toHaveBeenCalledWith('ABCD-EFGH')
+    await expect(copyAuthorizationCode('ABCD-EFGH', undefined)).rejects.toThrow(
+      /Clipboard access is unavailable/,
+    )
+  })
+
   it('explains partial and complete installed-catalog mismatches', () => {
     expect(catalogWarningOf({
       phase: 'signed-in',

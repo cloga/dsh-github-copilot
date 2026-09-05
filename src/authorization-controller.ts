@@ -434,6 +434,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       }
       this.notices = []
     }).catch((error: unknown) => {
+      this.notices = []
       this.failure = messageOf(error)
       this.ctx.logger.error('github-copilot: GitHub Copilot authorization failed')
       this.ctx.logger.error(error)
@@ -451,6 +452,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       'authorization',
       ['describe', 'begin', 'cancel'],
     )
+    this.notices = []
     authorization.cancel(GITHUB_COPILOT_CREDENTIAL_KEY)
     return this.status()
   }

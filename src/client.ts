@@ -6,7 +6,8 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { createElement, useCallback, useEffect, useState } from 'react'
+import { createElement, useCallback, useEffect, useRef, useState } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote from './remote.ts'
@@ -35,12 +36,112 @@ export function catalogWarningOf(status: GitHubCopilotAuthorizationView | undefi
   return undefined
 }
 
+export function activeAuthorizationNotice(
+  status: GitHubCopilotAuthorizationView | undefined,
+): GitHubCopilotAuthorizationView['notices'][number] | undefined {
+  return status?.inFlight === true ? status.notices.at(-1) : undefined
+}
+
+type ClipboardWriter = Pick<Clipboard, 'writeText'>
+type CopyState = 'idle' | 'copying' | 'copied' | 'failed'
+
+const noticePanelStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.75rem',
+  marginTop: '0.75rem',
+  marginBottom: '0.75rem',
+  padding: '1rem',
+  border: '1px solid color-mix(in srgb, currentColor 24%, transparent)',
+  borderRadius: '0.75rem',
+  background: 'color-mix(in srgb, currentColor 5%, transparent)',
+}
+
+const codeRowStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '0.75rem',
+}
+
+const deviceCodeStyle: CSSProperties = {
+  display: 'inline-block',
+  minWidth: '10ch',
+  padding: '0.65rem 0.9rem',
+  border: '2px solid color-mix(in srgb, currentColor 55%, transparent)',
+  borderRadius: '0.5rem',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  fontSize: '1.5rem',
+  fontWeight: 700,
+  letterSpacing: '0.12em',
+  lineHeight: 1.2,
+  textAlign: 'center',
+  userSelect: 'all',
+}
+
+/** Copy a one-time authorization code through the browser clipboard boundary. */
+export async function copyAuthorizationCode(code: string, clipboard?: ClipboardWriter): Promise<void> {
+  const writer = clipboard ?? globalThis.navigator?.clipboard
+  if (writer === undefined) throw new Error('Clipboard access is unavailable')
+  await writer.writeText(code)
+}
+
+interface AuthorizationNoticeProps {
+  readonly message: string
+  readonly url?: string
+  readonly code?: string
+  readonly copyState: CopyState
+  readonly onCopy: () => void
+}
+
+/** Pure presentation for the in-flight GitHub device-code handoff. */
+export function GitHubCopilotAuthorizationNotice(props: AuthorizationNoticeProps): ReactElement {
+  const feedback = props.copyState === 'copying'
+    ? 'Copying code…'
+    : props.copyState === 'copied'
+      ? 'Code copied to clipboard.'
+      : props.copyState === 'failed'
+        ? 'Copy failed. Select the code and copy it manually.'
+        : ''
+  return createElement('div', {
+    'data-dsh-github-copilot-auth-notice': true,
+    style: noticePanelStyle,
+  },
+  createElement('div', null, props.message),
+  props.url === undefined ? null : createElement('a', {
+    href: props.url,
+    target: '_blank',
+    rel: 'noreferrer',
+  }, 'Open GitHub verification page'),
+  props.code === undefined ? null : createElement('div', null,
+    createElement('div', { style: { marginBottom: '0.4rem', fontWeight: 600 } }, 'Your one-time code'),
+    createElement('div', { style: codeRowStyle },
+      createElement('code', {
+        'data-dsh-github-copilot-device-code': true,
+        'aria-label': `GitHub device code ${props.code}`,
+        style: deviceCodeStyle,
+      }, props.code),
+      createElement('button', {
+        type: 'button',
+        disabled: props.copyState === 'copying',
+        onClick: props.onCopy,
+      }, props.copyState === 'copying'
+        ? 'Copying…'
+        : props.copyState === 'copied' ? 'Copied' : 'Copy code'))),
+  feedback.length === 0 ? null : createElement('div', {
+    role: props.copyState === 'failed' ? 'alert' : 'status',
+    'aria-live': 'polite',
+    'data-dsh-github-copilot-copy-feedback': props.copyState,
+  }, feedback))
+}
+
 /** Models-card sign-in/status/sign-out controls for the catalog Copilot row. */
 export function GitHubCopilotProviderCard(
   props: GitHubCopilotProviderCardProps,
 ): ReturnType<typeof createElement> | null {
   const [status, setStatus] = useState<GitHubCopilotAuthorizationView>()
   const [error, setError] = useState<string>()
+  const [copyState, setCopyState] = useState<CopyState>('idle')
+  const copyAttempt = useRef(0)
 
   const refresh = useCallback(async () => {
     const result = await props.remote.status()
@@ -57,6 +158,15 @@ export function GitHubCopilotProviderCard(
     if (props.provider.provider !== 'github-copilot') return
     void refresh()
   }, [props.provider.provider, refresh])
+
+  useEffect(() => {
+    copyAttempt.current += 1
+    setCopyState('idle')
+  }, [status?.notices.at(-1)?.code])
+
+  useEffect(() => () => {
+    copyAttempt.current += 1
+  }, [])
 
   useEffect(() => {
     if (props.provider.provider !== 'github-copilot' || status?.inFlight !== true) return
@@ -87,7 +197,7 @@ export function GitHubCopilotProviderCard(
     setError(messageOf(result))
   }
 
-  const notice = status?.notices.at(-1)
+  const notice = activeAuthorizationNotice(status)
   const signedIn = status?.configured === true
   const busy = status?.inFlight === true
   const catalogWarning = catalogWarningOf(status)
@@ -98,14 +208,25 @@ export function GitHubCopilotProviderCard(
       role: 'alert',
       'data-dsh-github-copilot-catalog-warning': status?.catalog?.state,
     }, catalogWarning),
-    notice === undefined ? null : createElement('div', null,
-      createElement('span', null, notice.message),
-      notice.url === undefined ? null : createElement('a', {
-        href: notice.url,
-        target: '_blank',
-        rel: 'noreferrer',
-      }, 'Open GitHub'),
-      notice.code === undefined ? null : createElement('code', null, notice.code)),
+    !busy || notice === undefined ? null : createElement(GitHubCopilotAuthorizationNotice, {
+      message: notice.message,
+      url: notice.url,
+      code: notice.code,
+      copyState,
+      onCopy: () => {
+        if (notice.code === undefined || copyState === 'copying') return
+        const attempt = ++copyAttempt.current
+        setCopyState('copying')
+        void copyAuthorizationCode(notice.code).then(
+          () => {
+            if (copyAttempt.current === attempt) setCopyState('copied')
+          },
+          () => {
+            if (copyAttempt.current === attempt) setCopyState('failed')
+          },
+        )
+      },
+    }),
     busy
       ? createElement('button', {
         type: 'button',

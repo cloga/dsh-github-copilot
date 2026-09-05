@@ -32,14 +32,18 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 ### 用户授权流程
 
 1. 打开 **设置 → 模型**，找到 `github-copilot` provider 卡片。
-2. 点击 **Sign in with GitHub**。卡片会显示 **Waiting for GitHub authorization…**，并给出 **Open GitHub** 链接和一次性 device code。
-3. 打开链接，登录拥有 Copilot 权益的 GitHub 账号，输入页面显示的代码并批准授权。不要把 GitHub token 粘贴到 DSH。
+2. 点击 **Sign in with GitHub**。卡片会显示 **Waiting for GitHub authorization…**，将一次性 device code 作为醒目的独立代码块展示，并提供 **Open GitHub verification page** 链接和 **Copy code** 按钮。
+3. 一键复制代码，打开链接，登录拥有 Copilot 权益的 GitHub 账号，粘贴代码并批准授权。复制成功时卡片会给出确认；剪贴板不可用时会提示手工复制。不要把 GitHub token 粘贴到 DSH。
 4. 返回 DSH。卡片会自动轮询；成功后只显示 **Signed in to GitHub Copilot.** 和 **Sign out** 按钮，一次性 URL 与代码会消失。
 5. 在 `github-copilot` provider 下选择模型。如果没有出现模型，可先重启一次 profile，再查看[迁移与排障](#迁移与排障)。
 
 入口流程从 **添加提供方** 开始，选择 **github-copilot** 后进入 GitHub Copilot 授权卡片：
 
 ![GitHub Copilot 提供方添加与授权入口动图](./docs/images/github-copilot-auth-flow.gif)
+
+最终的授权中卡片会突出显示验证码并提供一键复制。截图使用合成的文档示例代码 `ABCD-EFGH`，未发起真实授权请求，也未记录任何 credential。
+
+![醒目的 GitHub device code 与一键复制按钮](./docs/images/copilot-device-code-copy.png)
 
 Device code 是临时信息，只应在授权进行中显示。下面的局部图记录了修复前的异常表现：成功状态旁仍残留旧验证码。当前版本会在授权结束后清除该提示。
 

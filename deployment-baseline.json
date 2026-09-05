@@ -113,11 +113,19 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/client.ts", "marker": "settings.models.provider-card"},
+        {"file": "src/client.ts", "marker": "copyAuthorizationCode"},
+        {"file": "src/client.ts", "marker": "data-dsh-github-copilot-device-code"},
         {"file": "src/authorization-controller.ts", "marker": "GitHubCopilotAuthorizationController"}
       ],
       "tests": [
+        {"file": "tests/client.spec.ts", "name": "exposes a device code only while authorization is in flight"},
+        {"file": "tests/client.spec.ts", "name": "renders the device code prominently with an explicit copy action"},
+        {"file": "tests/client.spec.ts", "name": "announces successful and failed copy outcomes accessibly"},
+        {"file": "tests/client.spec.ts", "name": "copies the exact one-time code through the supplied clipboard writer"},
         {"file": "tests/client.spec.ts", "name": "mounts its Remote contribution and registers the rc.1 provider-card seat"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "signs in through the built-in flow and adds only the reference-free Copilot profile"}
+        {"file": "tests/authorization-controller.spec.ts", "name": "signs in through the built-in flow and adds only the reference-free Copilot profile"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "clears the one-time device code immediately when sign-in is cancelled"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "clears the one-time device code when authorization fails"}
       ]
     },
     {
