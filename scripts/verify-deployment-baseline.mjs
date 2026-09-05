@@ -189,6 +189,8 @@ for (const marker of [
   'if [[ "$GITHUB_REF_NAME" != "v$version" ]]',
   'git cat-file -t "refs/tags/$GITHUB_REF_NAME"',
   'if [[ "$tag_type" != "tag" ]]',
+  'if [[ "$version" =~ -(alpha|beta|rc)\\. ]]',
+  'release_flags+=(--prerelease)',
   'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify:controlled-core -- dsh-upstream',

@@ -88,6 +88,7 @@ When upgrading DSH or pi-ai, inspect the exact tagged public exports and update 
 - GitHub Releases are the only distribution channel; `package.json` stays private and npm publishing must not return.
 - User-facing install commands must include the required DSH `--profile` option and derive the versioned Release URL from `package.json`.
 - Package version, deployment-baseline version, README URLs, and the annotated `v<version>` tag must agree.
+- New versions use standard SemVer prerelease identifiers (`alpha`, `beta`, `rc`); do not add owner/user names to new version strings.
 - The Release workflow must run the complete gate, pack the versioned tarball, publish `SHA256SUMS`, and create the Release only after every preceding step succeeds.
 - Release tags must never move or be reused. Repository tag rules and immutable-release settings enforce this for new releases.
 
