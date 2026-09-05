@@ -65,6 +65,7 @@ No `copilot2api` process, external gateway, placeholder API key, pasted GitHub t
 - The Models provider-card UI, Client-safe Remote descriptors, and Host authorization controller.
 - Strict normalization of pi-ai's provider-owned Copilot OAuth grant.
 - Account-aware reconciliation of the Copilot route's `models` and `compat.supportsStrictMode` leaves.
+- A temporary, account-gated GPT-6 Astra compatibility overlay that retires automatically when the installed pi-ai catalog owns the model.
 - Direct provider-hosted search through inline agent-loop interception and a Responses-only `ctx.web` provider.
 
 DSH Core continues to own model selection, sandboxing, tools, attachments, and other providers. `@deepseek-ai/dsh-llm-pi-ai` owns the Copilot adapter, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport. Credentials remain Host-only.
@@ -73,10 +74,11 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 `llm-pi-ai` registers the OAuth method; the authorization service orchestrates the interaction; this package contributes the UI/Remote controller and route reconciliation. Core supplies authorization on rc.1. On rc.2 profiles that omit it, this package mounts its runtime dependency and reuses any provider already present.
 
-After sign-in, during Host startup, and after this package refreshes the OAuth credential, the package intersects the account's `availableModelIds` with the installed pi-ai catalog and materializes each known model as `{ id, api }`. Account model IDs missing from the installed catalog are never assigned a guessed protocol: the Models card reports a partial or complete catalog mismatch and advises upgrading the integration. A missing profile is created without route-level connection references. For an existing profile, reconciliation intentionally changes only:
+After sign-in, during Host startup, and after this package refreshes the OAuth credential, the package intersects the account's `availableModelIds` with the installed pi-ai catalog and materializes each known model as `{ id, api }`. Account model IDs missing from the installed catalog are never assigned a guessed protocol, except for the exact `gpt-6-astra` compatibility overlay whose metadata is derived from upstream pi and models.dev. That overlay remains account-gated and is ignored automatically once the installed pi-ai catalog owns the same ID. Other unknown IDs produce a Models-card catalog warning. A missing profile is created without route-level connection references. For an existing profile, reconciliation intentionally changes only:
 
 - `providers.github-copilot.models`
 - `providers.github-copilot.compat.supportsStrictMode`
+- `providers.github-copilot.headers` when the temporary GPT-6 overlay requires Copilot client headers
 
 Every other Copilot field and unrelated provider is preserved, including legacy `baseURL` or `apiKeyEnv` values. Remove those legacy fields explicitly during migration. Sign-out deletes only the `llm-pi-ai/github-copilot` credential record and keeps route settings.
 
@@ -126,7 +128,7 @@ There are no token, API-key, model-catalog, or endpoint settings in this package
 Remove old gateway routes, `COPILOT_GITHUB_TOKEN`-style references, `copilot2api`, and `dsh-web-search-provider` before relying on the managed route.
 
 - **No sign-in control:** confirm the package is installed in the active profile and use the baseline-specific Models UI above.
-- **Signed in but a new model is missing:** check the Models card for an installed-catalog warning. Known account models remain available, while unknown IDs are withheld until a newer integration supplies verified protocol metadata. If every account model is unknown, the previous usable route list is preserved rather than replaced with guessed or empty metadata.
+- **Signed in but a new model is missing:** check the Models card for an installed-catalog warning. GPT-6 Astra is temporarily recognized when the account advertises the exact `gpt-6-astra` ID. Other unknown IDs are withheld until verified metadata is available. If every account model is unknown, the previous usable route list is preserved rather than replaced with guessed or empty metadata.
 - **Hosted search unavailable:** select the `github-copilot` route, choose an account-available Responses or Anthropic model, and inspect the named probe error. The explicit `ctx.web` provider is Responses-only.
 - **Legacy endpoint/key still present:** reconciliation preserves unowned fields by design; remove legacy connection fields manually.
 
@@ -138,7 +140,7 @@ Public exports are `.`, `./client`, `./remote`, `./deployment-baseline.json`, an
 - `src/authorization-controller.ts`: Host authorization and path-level route reconciliation.
 - `src/copilot-grant.ts`, `src/copilot-auth.ts`: grant normalization and Host credential lifecycle.
 - `src/client.ts`, `src/remote.ts`: Models UI and Client-safe Remote contract.
-- `src/current-provider.ts`, `src/plan.ts`, `src/probe.ts`: selected-route projection, candidate planning, and capability proof.
+- `src/current-provider.ts`, `src/temporary-models.ts`, `src/plan.ts`, `src/probe.ts`: selected-route projection, the self-retiring GPT-6 overlay, candidate planning, and capability proof.
 - `src/wire.ts`, `src/wire-anthropic.ts`, `src/traditional-search.ts`: hosted-search transports.
 - `deployment-baseline.json`: declared machine-readable compatibility/capability evidence inventory; `scripts/verify-deployment-baseline.mjs` checks its source and test markers for drift.
 - `lib/`: generated release output; never edit it directly.

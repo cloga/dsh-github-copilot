@@ -60,6 +60,21 @@ describe('Copilot candidate resolution', () => {
     })
   })
 
+  it('uses the temporary GPT-6 Astra Responses metadata for hosted search', () => {
+    expect(resolveCandidates(copilotContext('gpt-6-astra', {
+      models: [{ id: 'gpt-6-astra', api: 'openai-responses' }],
+    }), planConfig)).toEqual([
+      expect.objectContaining({
+        protocol: 'openai-responses',
+        baseURL: 'https://api.individual.githubcopilot.com',
+        model: 'gpt-6-astra',
+        headers: expect.objectContaining({
+          'Copilot-Integration-Id': 'vscode-chat',
+        }),
+      }),
+    ])
+  })
+
   it('fails closed for a Copilot model whose catalog protocol cannot host search', () => {
     expect(resolveCandidates(copilotContext('gpt-4.1'), planConfig)).toEqual([])
   })

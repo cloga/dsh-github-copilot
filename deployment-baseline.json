@@ -183,6 +183,26 @@
       ]
     },
     {
+      "id": "temporary-gpt6-copilot-overlay",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/temporary-models.ts", "marker": "id: 'gpt-6-astra'"},
+        {"file": "src/temporary-models.ts", "marker": "api: 'openai-responses'"},
+        {"file": "src/temporary-models.ts", "marker": "if (installedModelIds.has(modelId)) return undefined"},
+        {"file": "src/copilot-auth.ts", "marker": "availableModelIds ?? []).includes(modelId)"}
+      ],
+      "tests": [
+        {"file": "tests/temporary-models.spec.ts", "name": "supplies verified GPT-6 Astra Responses metadata while pi-ai lacks it"},
+        {"file": "tests/temporary-models.spec.ts", "name": "retires the overlay automatically when the installed catalog owns GPT-6 Astra"},
+        {"file": "tests/temporary-model-retirement.spec.ts", "name": "removes overlay-owned metadata and headers after pi-ai owns the model"},
+        {"file": "tests/temporary-models.spec.ts", "name": "does not synthesize arbitrary unknown account models"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "materializes the temporary GPT-6 Astra overlay only for an entitled account"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "resolves temporary GPT-6 Astra auth only when the account exposes it"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "rejects temporary GPT-6 Astra when the account does not expose it"},
+        {"file": "tests/plan.spec.ts", "name": "uses the temporary GPT-6 Astra Responses metadata for hosted search"}
+      ]
+    },
+    {
       "id": "shared-copilot-credential-refresh",
       "required": true,
       "sourceMarkers": [

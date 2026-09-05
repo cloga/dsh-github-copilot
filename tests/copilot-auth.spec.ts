@@ -368,6 +368,40 @@ describe('GitHub Copilot credential adapter', () => {
     })
   })
 
+  it('resolves temporary GPT-6 Astra auth only when the account exposes it', async () => {
+    const harness = runtime({
+      kind: 'grant',
+      payload: {
+        type: 'oauth',
+        refresh: 'github-device-grant',
+        access: 'tid=test;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;',
+        expires: Date.now() + 86_400_000,
+        availableModelIds: ['gpt-6-astra'],
+      },
+    })
+
+    await expect(harness.resolve('gpt-6-astra')).resolves.toMatchObject({
+      baseURL: 'https://api.individual.githubcopilot.com',
+    })
+  })
+
+  it('rejects temporary GPT-6 Astra when the account does not expose it', async () => {
+    const harness = runtime({
+      kind: 'grant',
+      payload: {
+        type: 'oauth',
+        refresh: 'github-device-grant',
+        access: 'tid=test;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;',
+        expires: Date.now() + 86_400_000,
+        availableModelIds: ['gpt-5.4'],
+      },
+    })
+
+    await expect(harness.resolve('gpt-6-astra')).rejects.toThrow(
+      /not available for the signed-in Copilot account/,
+    )
+  })
+
   it('accepts the credential-specific endpoint for a signed-in GitHub Enterprise domain', async () => {
     const harness = runtime({
       kind: 'grant',
