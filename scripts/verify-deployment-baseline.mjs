@@ -242,6 +242,7 @@ try {
 }
 
 const patch = await read('cordis.patch.yml')
+assert(!/^\s*(?:-\s*)?searchProvider\s*:/mu.test(patch), 'bundle must not override the profile-wide search provider')
 assert((patch.match(/^- insert:/gmu) ?? []).length === 1, 'bundle patch must have one insert')
 assert((patch.match(/^\s+- id: github-copilot$/gmu) ?? []).length === 1, 'bundle patch must have one integration entry')
 

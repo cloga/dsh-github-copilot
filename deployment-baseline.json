@@ -307,7 +307,11 @@
       "id": "traditional-search-bridge",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/traditional-search.ts", "marker": "github-copilot-hosted"}
+        {"file": "src/traditional-search.ts", "marker": "github-copilot-hosted"},
+        {"file": "README.md", "marker": "searchProvider: github-copilot-hosted"},
+        {"file": "README.md", "marker": "fetchProvider: http"},
+        {"file": "README.zh.md", "marker": "searchProvider: github-copilot-hosted"},
+        {"file": "README.zh.md", "marker": "fetchProvider: http"}
       ],
       "tests": [
         {"file": "tests/traditional-search.spec.ts", "name": "normalizes generated content and deduplicated sources"},
