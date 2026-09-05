@@ -37,17 +37,19 @@ Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in*
 4. Return to DSH. The card polls automatically; success is shown as **Signed in to GitHub Copilot.** with a **Sign out** button. The one-time URL and code disappear after success.
 5. Select a model under the `github-copilot` provider. If no model appears, restart the profile once and see [Migration and troubleshooting](#migration-and-troubleshooting).
 
-The entry path starts from **Add provider**, continues by selecting **github-copilot**, and then opens the GitHub Copilot authorization card:
+If the card is missing, choose **Add provider → github-copilot** first. The animation starts at the existing card and shows **Sign in with GitHub → Copy code → Copied → Signed in**. Completing authorization on GitHub happens between the last two states and is not recorded.
 
-![Animated GitHub Copilot provider setup flow](./docs/images/github-copilot-auth-flow.gif)
+![GitHub Copilot sign-in, device-code copy feedback, and successful authorization](./docs/images/github-copilot-auth-flow.gif)
 
-The final in-flight card makes the code prominent and provides one-click copy. The screenshot uses the synthetic documentation code `ABCD-EFGH`; no real authorization request or credential was captured.
+These documentation previews use the current Models page shell and the repository's current card component with simulated authorization states. `ABCD-EFGH` is a synthetic example, not a usable code. No real authorization request, credential, or account change was involved; the previews do not prove live sign-in or model availability.
 
-![Prominent GitHub device code with one-click copy](./docs/images/copilot-device-code-copy.png)
+The in-flight card keeps the one-time code prominent and provides a **Copy code** button:
 
-The device code is temporary and should be visible only while authorization is in progress. The close-up below records the affected pre-fix behavior, where a successful status was incorrectly displayed beside the stale code. Current builds clear that instruction after authorization settles.
+![GitHub Copilot authorization in progress with a synthetic code and Copy code button](./docs/images/copilot-device-code-copy.png)
 
-![Close-up of the stale authorization notice](./docs/images/copilot-auth-card-stale-notice.png)
+After authorization completes, the code, verification link, and copy feedback disappear. The success card retains **Signed in to GitHub Copilot.** and **Sign out**; any model-configuration warning is shown separately when applicable.
+
+![GitHub Copilot signed-in card with no device code or stale authorization notice](./docs/images/copilot-auth-card-signed-in.png)
 
 ### Agent and automation flow
 
