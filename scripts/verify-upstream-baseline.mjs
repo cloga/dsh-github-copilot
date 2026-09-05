@@ -59,6 +59,15 @@ if (baseline.perModelApi === 'model-entry') {
     'entry.api ?? request.api ?? base?.api ?? routeApi',
   ])
 }
+if (baseline.fileContentHelper === 'contentHasFile') {
+  await assertMarkers('packages/llm/llm/src/content.ts', [
+    'export function contentHasFile',
+    "block.type === 'tool-result' && contentHasFile(block.content)",
+  ])
+  await assertMarkers('packages/llm/llm/src/index.ts', [
+    'contentHasFile, contentHasImage',
+  ])
+}
 if (baseline.strictModeCompat === 'route-switch') {
   await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', [
     'supportsStrictMode: z.boolean()',

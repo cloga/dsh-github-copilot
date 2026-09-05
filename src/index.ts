@@ -32,6 +32,7 @@ import GitHubCopilotAuthorizationController, {
 } from './authorization-controller.ts'
 import { createGitHubCopilotTokenResolver } from './copilot-auth.ts'
 import { installCopilotToolSchemaCompatibility } from './tool-schema-compat.ts'
+import { contentHasFileCompat } from './content-file.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
   GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -455,9 +456,11 @@ function preflight(request: GenerateOptions, cfg: InlineConfig, ctx: Context): b
   if (request.purpose !== undefined) return false
   if (!cfg.enabled) return false
   if (!providerAllowed(request, cfg, ctx)) return false
+  if (request.messages.some(message => contentHasFileCompat(message.content))) return false
   if (contentHasImageAttachments(request)) return false
   return true
 }
+
 
 /**
  * Provider whitelist; empty config follows the current chat route. The

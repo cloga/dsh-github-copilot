@@ -4,7 +4,7 @@ This file is the authoritative entry point for humans and coding agents. Read it
 
 ## Product and architecture
 
-`dsh-github-copilot` is a companion to the controlled DSH Desktop `0.1.1-rc.2` Core baseline and DSH `0.1.2-rc.1`. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
+`dsh-github-copilot` is a companion to DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
 
 This repository owns seven narrow surfaces:
 
@@ -47,7 +47,7 @@ This repository owns seven narrow surfaces:
 - Copilot OAuth grant writes must rebuild only pi-ai's documented provider fields as a fresh plain JSON object; unrelated extension values never reach DSH credential storage.
 - Settings changes are path-level. Never replace the whole `llm-pi-ai` section or unrelated provider profiles.
 - Sign-out deletes only the Copilot credential record and keeps route settings.
-- Hosted search only serves the selected `github-copilot` route for an account-available model and a native search protocol. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback.
+- Hosted search only serves the selected `github-copilot` route for an account-available model and a native search protocol. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback. Any request containing a file block, including one nested in tool-result content, must bypass the custom wire through `next()` so Core retains file projection ownership.
 - Misconfiguration and API drift fail loudly with a named missing seam. Do not fall back to process-local secrets or implicit machine state.
 - Host, Client, and Remote package entries must stay independently buildable and exported.
 - The package must self-provide authorization when Core omits it, reuse an existing service without duplicate registration, and never activate the integration body before authorization is available.
@@ -59,8 +59,9 @@ The supported upstream baselines are:
 - Desktop `0.1.1-rc.2` with controlled Core commit `a772dbbde82780bff2b9394427e9f0a24cafa1d5`
   on `cloga-pi-ai-model-api`, based on tag commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
 - Tag `dsh-v0.1.2-rc.1`, commit `a66e4702047846cdaa10c66c9d3df3951f5ea70d`.
+- Tag `dsh-v0.1.3-alpha.1`, commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`.
 
-- Models UI: rc.1 uses `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
+- Models UI: rc.1 and alpha.1 use `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
 - Authorization flow key: `llm-pi-ai/github-copilot`.
 - Authorization service: rc.1 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
@@ -120,7 +121,7 @@ pnpm pack --pack-destination artifacts
 
 `pnpm verify` is the normal complete gate. Use a focused `vitest run <files...>` while iterating, then run the complete gate before commit. CI runs frozen install, `pnpm verify`, and package creation on Windows and Linux.
 
-The rc.2 development dependencies are the Desktop compiler and runtime baseline. CI separately checks out the exact rc.2 and rc.1 upstream commits and runs `pnpm verify:upstream -- dsh-upstream` to verify every public seam this plugin consumes.
+The rc.2 development dependencies remain the installable compiler/runtime baseline. CI separately checks out the exact alpha.1, controlled rc.2, and rc.1 upstream commits and runs `pnpm verify:upstream -- dsh-upstream` to verify every public seam this plugin consumes.
 
 ## Changing capabilities
 
