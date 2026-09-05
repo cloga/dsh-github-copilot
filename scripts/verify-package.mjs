@@ -62,8 +62,9 @@ if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
 }
 
 const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)).default
-if (remote.descriptors.length !== 4) {
-  throw new Error('built Remote entry must expose all four authorization methods')
+const methods = remote.descriptors.map(descriptor => descriptor.method).sort()
+if (JSON.stringify(methods) !== JSON.stringify(['cancel', 'reconcile', 'signOut', 'start', 'status'])) {
+  throw new Error('built Remote entry must expose status, explicit reconciliation and authorization controls')
 }
 for (const descriptor of remote.descriptors) {
   if (descriptor.invocation.kind !== 'direct' || descriptor.parameters.length !== 0) {

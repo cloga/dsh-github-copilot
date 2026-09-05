@@ -17,13 +17,14 @@ function context(overrides: Record<string, unknown> = {}): Context {
       modifyRecord: async () => undefined,
       deleteRecord: async () => undefined,
     },
-    settings: { get: () => undefined, mutate: async () => undefined, installSection: () => undefined },
+    settings: { get: () => undefined, describe: () => [], mutate: async () => undefined, installSection: () => undefined },
     web: { registerSearchProvider: () => undefined },
     ...overrides,
   }
   return {
     get: (key: string) => services[key],
     on: () => undefined,
+    effect: () => () => undefined,
     plugin: () => undefined,
     systemPrompt: { section: () => undefined },
   } as unknown as Context
@@ -48,6 +49,8 @@ describe('assertDshCompatibility', () => {
       .toThrow('agentDefaultModel.currentSelection')
     expect(() => assertDshCompatibility(context({ credentials: {} })))
       .toThrow('credentials.describeRecord')
+    expect(() => assertDshCompatibility(context({ settings: { get: () => undefined, mutate: async () => undefined } })))
+      .toThrow('settings.describe')
     expect(() => assertDshCompatibility(context({ web: {} })))
       .toThrow('web.registerSearchProvider')
   })

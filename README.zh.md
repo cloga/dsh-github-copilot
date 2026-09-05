@@ -86,7 +86,15 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 - `providers.github-copilot.compat.supportsStrictMode`
 - 临时 GPT-6 兼容层需要 Copilot 客户端 headers 时的 `providers.github-copilot.headers`
 
-普通 reconciliation 会保留其它 Copilot 字段和无关 provider，包括旧的 `baseURL` 或 `apiKeyEnv`。临时所有权 marker 在本插件 settings namespace 中记录 `api`/`models` 叶节点及需要保留的标准 header 名称，不复制 header 值或 credential。退役时先恢复拥有的叶节点并清除匹配的 overlay headers，再清理 marker。若 profile 原由 overlay 创建且没有剩余模型，整个 profile 可能被移除；临时模式期间的手工编辑需要特别注意（详见 readiness 审计）。迁移时必须显式删除旧连接字段。Sign out 本身仍只删除 `llm-pi-ai/github-copilot` credential record，保留 route settings。
+临时所有权使用有大小限制的 version-2 journal：记录原始 `api`/`models` 修改前后值、准备恢复的目标、namespace revision 与进程 epoch。只有固定公开的 Copilot headers 可进入 journal，不复制任意 header 值、credential payload 或自定义模型扩展。每次写入都检查 namespace revision；当前拥有字段必须仍匹配记录值。冲突时保留 journal 和用户修改，不猜测所有权。删除新建 profile 还要求完整原始形状都属于插件，且没有 base profile、用户新增字段或已设置的 secret。普通 reconciliation 只合并真实的原始用户字段，不把 schema 默认值写回。这是保守的恢复保障，不是跨 settings namespace 和 credential 存储的原子事务。
+
+**升级边界：**没有 postimage/epoch 的旧备份会报告 `conflict`，不会自动接管。显式迁移或移除 marker 前应核对现有 route 与备份；不要通过重新登录或直接删除 marker 强行取得所有权。后续调用不会自动重放已经准备但未提交的启用或恢复写入：Core revision 不仅在重启时、也在 namespace 重新注册时归零，且没有公开的持久化注册身份。因此即使记录中的 epoch/revision 仍匹配，也不能据此证明跨该边界的所有权。稳定的已应用 postimage 可以开始新的恢复；已经完成恢复的 target 可以直接清理 journal，不重放写入。临时模式中的账号模型集合变化可能要求重新审核所有权周期。迁移时显式删除旧连接字段。Sign out 本身仍只删除 `llm-pi-ai/github-copilot` credential record，保留 route settings。
+
+### 只读状态与显式修复
+
+`githubCopilot.status()` 与 Host `describeGitHubCopilotProviderProfile()` 只读取已存状态并计算准确的 route 变更计划，不写 settings、不刷新 OAuth、不测试网络。状态区分凭据是否已配置，以及 route 的 `ready`、`needs-repair`、`not-configured`、`conflict`、`error`；route 读取或修复失败不会抹掉有效登录。`ready` 只说明配置与已存账号快照一致，不代表模型或搜索请求已经成功。
+
+点击 **Repair model configuration**（Remote `githubCopilot.reconcile()`）可显式执行有 revision 检查的快照修复，不拉取新的 GitHub 模型列表，也不会强行覆盖冲突。登录成功和 Host 启动时仍保留自动 reconciliation；浏览器状态轮询本身为只读。部署新增 Remote 方法时需一起更新 Host 与 Client bundle。
 
 Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`、`refresh`、`access`、有限数值 `expires`、可选 `enterpriseUrl` 和去重后的可选 `availableModelIds` 重建为新的普通 JSON 对象。
 
@@ -113,6 +121,8 @@ Patch row 会整体替换目标 row 的 `config`，所以使用默认 HTTP 抓�
 请求经过严格 Host 校验后，直接发往 credential 解析出的 HTTPS Copilot endpoint：GitHub-hosted `api.*.githubcopilot.com`，或已接受 GitHub Enterprise credential 对应的 `copilot-api.<signed-in-enterprise-domain>`。Credential 不会经过外部 gateway。
 
 默认 `probe: true` 时，搜索 fail closed：当前 route 必须是 `github-copilot`，账号必须允许该模型，安装的协议必须支持原生搜索，且 bounded capability probe 必须成功。显式设置 `probe: false` 只会跳过 capability proof，并信任所选原生协议；route、account、protocol、endpoint 与 authentication 检查仍然生效。Authentication、HTTP、响应体格式、abort 或网络 probe 失败都不会回退到外部搜索路径。请求只要包含任意 Core file block（包括嵌套在 tool-result content 内的文件），也会 fail closed 到 `next()`，由 Core 保留文件投影，避免 hosted-search serializer 静默丢弃文件上下文。
+
+搜索 proof 采用惰性验证：attach、settings 更新以及 `llm-pi-ai/github-copilot` 的 `credentials/record-updated` 事件只使缓存计划失效，不启动网络工作。下一次真实且符合条件的请求才重新验证；忽略无关凭据更新，连续事件不会引发重复的提前 probe。失效或卸载会取消正在执行的 proof。如果凭据在 proof 或最终认证解析期间改变，当前请求会 fail closed，避免把账号 A 的 proof 用于账号 B。更新后可重新提交请求；不会自动循环重试，也不会隐式使用 `probe: false`。
 
 ## Copilot Tool 兼容
 
@@ -190,7 +200,7 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 
 署名依据实际工具：DSH 协助的改动使用 `Assisted-by: DeepSeek Harness (DSH)`，不能因为模型来自 Copilot 就添加 Copilot App co-author。保留人类 Git author；`Co-authored-by` 只用于身份经过确认的真实协作者。合并、发布、安装到 profile、登出和 worktree checkout 都需要明确批准。
 
-验证证据必须分层：包存在、模块导入和合成测试通过，不证明真实 DSH 已激活、账号权限有效、模型请求或搜索成功。Authorization `status()` 可能写入 settings，Host 启动可能发起搜索 probe，都不是安全的只读健康检查。会话模型与默认 plan 不一致时，现在保留 Core transport，避免误用默认模型。完整发现、证据与剩余限制见[readiness 审计](./docs/agent-readiness.md)。
+验证证据必须分层：包存在、模块导入和合成测试通过，不证明真实 DSH 已激活、账号权限有效、模型请求或搜索成功。Authorization `status()` 现在为只读；显式 reconciliation 或启动仍可能持久化配置，能力 probe 只在真实且符合条件的请求中运行。没有真实请求时，这些状态均不能证明 transport 已成功。会话模型与默认 plan 不一致时，现在保留 Core transport，避免误用默认模型。完整发现、证据与剩余限制见[readiness 审计](./docs/agent-readiness.md)。
 
 ## Release 与 checksum 校验
 

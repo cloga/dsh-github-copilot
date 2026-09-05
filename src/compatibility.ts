@@ -24,11 +24,13 @@ export const DSH_COMPATIBILITY = {
     'credentials.modifyRecord',
     'credentials.deleteRecord',
     'settings.get',
+    'settings.describe',
     'settings.mutate',
     'settings.installSection',
     'web.registerSearchProvider',
     'systemPrompt.section',
     'context.on',
+    'context.effect',
     'context.plugin',
   ],
 } as const
@@ -64,6 +66,7 @@ export function assertDshCompatibility(ctx: Context): void {
   }
   const settings = ctx.get('settings')
   if (!method(settings, 'get')) incompatible('settings.get')
+  if (!method(settings, 'describe')) incompatible('settings.describe')
   if (!method(settings, 'mutate')) incompatible('settings.mutate')
   const legacyInstaller = (dshSettings as LegacySettingsModule).installSettingsSection
   if (typeof legacyInstaller !== 'function' && !method(settings, 'installSection')) {
@@ -72,5 +75,6 @@ export function assertDshCompatibility(ctx: Context): void {
   if (!method(ctx.get('web'), 'registerSearchProvider')) incompatible('web.registerSearchProvider')
   if (!method((ctx as unknown as Record<string, unknown>)['systemPrompt'], 'section')) incompatible('systemPrompt.section')
   if (typeof (ctx as unknown as Record<string, unknown>)['on'] !== 'function') incompatible('context.on')
+  if (typeof (ctx as unknown as Record<string, unknown>)['effect'] !== 'function') incompatible('context.effect')
   if (typeof (ctx as unknown as Record<string, unknown>)['plugin'] !== 'function') incompatible('context.plugin')
 }

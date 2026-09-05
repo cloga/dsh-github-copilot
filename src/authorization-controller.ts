@@ -8,6 +8,11 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import {
+  ROUTE_OWNERSHIP_EPOCH, TemporaryRouteConflictError, assertOwned, encodeBackup, equalJson, leafOperations,
+  leavesOf, object, ownedHeaderRemoval, settingsSnapshot, wholeProfileOwned,
+  type RouteBackup, type RouteMutation, type RouteSettings,
+} from './route-ownership.ts'
+import {
   temporaryGitHubCopilotModel,
   temporaryGitHubCopilotModelFromProfile,
   temporaryGitHubCopilotModelProfile,
@@ -47,6 +52,11 @@ export type GitHubCopilotAuthorizationPhase =
   | 'signed-in'
   | 'error'
 
+export interface GitHubCopilotRouteView {
+  readonly state: 'ready' | 'needs-repair' | 'not-configured' | 'conflict' | 'error'
+  readonly diagnosticCode?: 'ROUTE_READ_FAILED' | 'RECONCILIATION_FAILED' | 'ROUTE_CONFLICT'
+}
+
 export interface GitHubCopilotAuthorizationView {
   readonly phase: GitHubCopilotAuthorizationPhase
   readonly configured: boolean
@@ -54,6 +64,7 @@ export interface GitHubCopilotAuthorizationView {
   readonly inFlight: boolean
   readonly notices: readonly AuthorizationNoticeView[]
   readonly catalog?: GitHubCopilotModelCatalogView
+  readonly route?: GitHubCopilotRouteView
   readonly error?: string
 }
 
@@ -89,19 +100,6 @@ interface CredentialRecordServiceView {
   describeRecord(key: string): Promise<CredentialRecordInfoView>
   readRecord(key: string): Promise<{ readonly kind: string; readonly payload?: unknown } | undefined>
   deleteRecord(key: string): Promise<void>
-}
-
-type SettingsMutation =
-  | { readonly op: 'set'; readonly path: string[]; readonly value: unknown }
-  | { readonly op: 'unset'; readonly path: string[] }
-
-interface SettingsServiceView {
-  get(namespace: string): unknown
-  mutate(
-    namespace: string,
-    operations: readonly SettingsMutation[],
-    expectedRevision?: number,
-  ): Promise<void>
 }
 
 function providerModelsFrom(
@@ -191,15 +189,6 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function providerProfileAt(section: unknown): Record<string, unknown> | undefined {
-  if (typeof section !== 'object' || section === null) return undefined
-  const providers = Reflect.get(section, 'providers')
-  if (typeof providers !== 'object' || providers === null) return undefined
-  const profile = Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
-  if (typeof profile !== 'object' || profile === null) return undefined
-  return profile as Record<string, unknown>
-}
-
 function providerModels(value: unknown): Array<Record<string, unknown>> | undefined {
   if (!Array.isArray(value)) return undefined
   const models: Array<Record<string, unknown>> = []
@@ -239,173 +228,10 @@ function sameProviderModels(
   })
 }
 
-function providerHeaders(profile: Record<string, unknown> | undefined): Record<string, string> {
-  const value = profile?.headers
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-  return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-  )
-}
-
-function conflictingRequiredHeader(
-  current: Readonly<Record<string, string>>,
-  required: Readonly<Record<string, string>>,
-): string | undefined {
-  const currentByName = new Map(Object.entries(current).map(([name, value]) => [name.toLowerCase(), value]))
-  return Object.entries(required).find(([name, value]) => {
-    const existing = currentByName.get(name.toLowerCase())
-    return existing !== undefined && existing !== value
-  })?.[0]
-}
-
-function withRequiredHeaders(
-  current: Readonly<Record<string, string>>,
-  required: Readonly<Record<string, string>>,
-): Record<string, string> {
-  const requiredNames = new Set(Object.keys(required).map(name => name.toLowerCase()))
-  return {
-    ...Object.fromEntries(Object.entries(current).filter(([name]) => !requiredNames.has(name.toLowerCase()))),
-    ...required,
-  }
-}
-
-function withoutOwnedHeaders(
-  current: Readonly<Record<string, string>>,
-  owned: readonly Readonly<Record<string, string>>[],
-): Record<string, string> {
-  const ownedValues = new Map<string, string>()
-  for (const headers of owned) {
-    for (const [name, value] of Object.entries(headers)) ownedValues.set(name.toLowerCase(), value)
-  }
-  return Object.fromEntries(Object.entries(current).filter(([name, value]) =>
-    ownedValues.get(name.toLowerCase()) !== value))
-}
-
 function providerApi(profile: Record<string, unknown> | undefined): string | undefined {
   return typeof profile?.api === 'string' ? profile.api : undefined
 }
 
-interface TemporaryRouteBackup {
-  readonly providerExisted: boolean
-  readonly leaves: Readonly<Record<string, unknown>>
-  readonly preservedHeaderNames: readonly string[]
-}
-
-function temporaryRouteBackup(settings: SettingsServiceView): TemporaryRouteBackup | undefined {
-  const section = settings.get(GITHUB_COPILOT_SETTINGS_NAMESPACE)
-  if (typeof section !== 'object' || section === null) return undefined
-  const encoded = Reflect.get(section, 'temporaryRouteBackup')
-  if (encoded === undefined) return undefined
-  if (typeof encoded !== 'string') {
-    throw new Error('github-copilot: temporary route backup must be a JSON string')
-  }
-  const value: unknown = JSON.parse(encoded)
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error('github-copilot: temporary route backup must decode to an object')
-  }
-  const providerExisted = Reflect.get(value, 'providerExisted')
-  const leaves = Reflect.get(value, 'leaves')
-  const preservedHeaderNames = Reflect.get(value, 'preservedHeaderNames')
-  if (
-    typeof providerExisted !== 'boolean'
-    || typeof leaves !== 'object'
-    || leaves === null
-    || Array.isArray(leaves)
-    || !Array.isArray(preservedHeaderNames)
-    || !preservedHeaderNames.every(name => typeof name === 'string')
-  ) {
-    throw new Error('github-copilot: temporary route backup has an invalid shape')
-  }
-  const leafRecord = leaves as Record<string, unknown>
-  if (
-    Object.keys(leafRecord).some(field => field !== 'api' && field !== 'models')
-    || (leafRecord.api !== undefined && typeof leafRecord.api !== 'string')
-    || (leafRecord.models !== undefined && providerModels(leafRecord.models) === undefined)
-  ) {
-    throw new Error('github-copilot: temporary route backup has invalid route leaves')
-  }
-  return {
-    providerExisted,
-    leaves: leafRecord,
-    preservedHeaderNames,
-  }
-}
-
-function createTemporaryRouteBackup(
-  current: Record<string, unknown> | undefined,
-  currentHasOverlay: boolean,
-  restorationModels: readonly Record<string, unknown>[],
-  requiredHeaders: Readonly<Record<string, string>> | undefined,
-): TemporaryRouteBackup {
-  if (current === undefined) {
-    return { providerExisted: false, leaves: {}, preservedHeaderNames: [] }
-  }
-  if (currentHasOverlay) {
-    return {
-      providerExisted: true,
-      leaves: { models: restorationModels },
-      preservedHeaderNames: [],
-    }
-  }
-  const leaves: Record<string, unknown> = {}
-  for (const field of ['api', 'models'] as const) {
-    if (Object.hasOwn(current, field)) leaves[field] = current[field]
-  }
-  const requiredByName = new Map(
-    Object.entries(requiredHeaders ?? {}).map(([name, value]) => [name.toLowerCase(), value]),
-  )
-  const preservedHeaderNames = Object.entries(providerHeaders(current)).flatMap(([name, value]) =>
-    requiredByName.get(name.toLowerCase()) === value ? [name.toLowerCase()] : [])
-  return { providerExisted: true, leaves, preservedHeaderNames }
-}
-
-function restoreTemporaryRouteOperations(
-  backup: TemporaryRouteBackup,
-  currentModels: readonly Record<string, unknown>[],
-  currentHeaders: Readonly<Record<string, string>>,
-  ownedHeaders: readonly Readonly<Record<string, string>>[],
-): SettingsMutation[] {
-  if (!backup.providerExisted && currentModels.length === 0) {
-    return [{ op: 'unset', path: ['providers', GITHUB_COPILOT_PROVIDER_ID] }]
-  }
-  const operations: SettingsMutation[] = []
-  operations.push(Object.hasOwn(backup.leaves, 'api')
-    ? {
-        op: 'set',
-        path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'api'],
-        value: backup.leaves.api,
-      }
-    : { op: 'unset', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'api'] })
-  const preservedNames = new Set(backup.preservedHeaderNames.map(name => name.toLowerCase()))
-  const removableHeaders = ownedHeaders.map(headers => Object.fromEntries(
-    Object.entries(headers).filter(([name]) => !preservedNames.has(name.toLowerCase())),
-  ))
-  const restoredHeaders = withoutOwnedHeaders(currentHeaders, removableHeaders)
-  if (JSON.stringify(currentHeaders) !== JSON.stringify(restoredHeaders)) {
-    operations.push({
-      op: 'set',
-      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'headers'],
-      value: restoredHeaders,
-    })
-  }
-  if (currentModels.length > 0) {
-    operations.push({
-      op: 'set',
-      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
-      value: currentModels,
-    })
-  }
-  else {
-    operations.push(Object.hasOwn(backup.leaves, 'models')
-      ? {
-          op: 'set',
-          path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
-          value: backup.leaves.models,
-        }
-      : { op: 'unset', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'] })
-  }
-  return operations
-}
 
 function providerSupportsStrictMode(profile: Record<string, unknown> | undefined): unknown {
   const compat = profile?.compat
@@ -413,145 +239,181 @@ function providerSupportsStrictMode(profile: Record<string, unknown> | undefined
   return Reflect.get(compat, 'supportsStrictMode')
 }
 
-/**
- * Reconcile only the Copilot route's known account models and strict-mode leaf
- * from an existing provider-owned OAuth grant. Unknown account model IDs are
- * reported separately and never assigned a guessed protocol.
- */
-async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<GitHubCopilotProviderProfileResult> {
-  const credentials = service<CredentialRecordServiceView>(
-    ctx,
-    'credentials',
-    ['readRecord'],
-  )
-  const record = await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
-  if (record === undefined) {
-    return {
-      changed: false,
-      catalog: {
-        state: 'current',
-        accountModelCount: 0,
-        supportedModelCount: 0,
-        unknownModelIds: [],
-        temporarilyUnavailableModelIds: [],
-      },
-    }
-  }
+interface RoutePlan {
+  readonly operations: RouteMutation[]
+  readonly backup?: RouteBackup
+  readonly clearBackup?: boolean
+}
 
-  const { models, restorationModels, requiredHeaders, requiredRouteApi, catalog } = providerModelsFrom(record)
-  const settings = service<SettingsServiceView>(ctx, 'settings', ['get', 'mutate'])
-  const current = providerProfileAt(settings.get(LLM_PI_AI_SETTINGS_NAMESPACE))
-  const currentRouteApi = providerApi(current)
-  const currentHeaders = providerHeaders(current)
-  const currentModelEntries = providerModels(current?.models) ?? []
-  const currentOverlays = currentModelEntries.flatMap((entry) => {
-    const overlay = temporaryGitHubCopilotModelFromProfile(entry)
-    return overlay === undefined ? [] : [overlay]
-  })
-  const currentHasOverlay = currentOverlays.length > 0
-  let backup = temporaryRouteBackup(settings)
-  if (requiredRouteApi !== undefined) {
-    if (currentRouteApi !== undefined && currentRouteApi !== requiredRouteApi) {
-      throw new Error(
-        `github-copilot: temporary model protocol "${requiredRouteApi}" conflicts with configured route api "${currentRouteApi}"`,
-      )
-    }
-    if (currentRouteApi === requiredRouteApi && !currentHasOverlay && backup === undefined) {
-      throw new Error(
-        `github-copilot: configured route api "${currentRouteApi}" is not owned by the temporary GPT-6 overlay`,
-      )
-    }
-    if (requiredHeaders !== undefined) {
-      const conflict = conflictingRequiredHeader(currentHeaders, requiredHeaders)
-      if (conflict !== undefined) {
-        throw new Error(`github-copilot: temporary GPT-6 header "${conflict}" conflicts with the configured route`)
+/** Pure planning: a conflict never acquires or extends ownership. */
+function planRoute(
+  snapshot: ReturnType<typeof settingsSnapshot>,
+  projection: ReturnType<typeof providerModelsFrom>,
+): RoutePlan {
+  const { current, raw, backup } = snapshot
+  const { models, requiredHeaders, requiredRouteApi } = projection
+  const currentHasOverlay = (providerModels(current?.models) ?? [])
+    .some(entry => temporaryGitHubCopilotModelFromProfile(entry) !== undefined)
+  if (backup !== undefined) {
+    if (snapshot.hasOwnedSecrets) throw new TemporaryRouteConflictError()
+    const ownership = assertOwned(raw, backup)
+    // Core revisions reset when a namespace is registered again, and the public
+    // settings seam exposes no registration identity or lifecycle event. Even a
+    // matching process epoch/revision cannot prove a prepared write is fresh.
+    // A later call may clear an already-restored target, but must never replay
+    // an uncommitted activation/restoration from persisted pre/postimages.
+    if ((backup.phase === 'overlay' && ownership === 'preimage')
+      || (backup.phase === 'restoring' && ownership === 'postimage')) throw new TemporaryRouteConflictError()
+    if (backup.phase === 'restoring' || requiredRouteApi === undefined) {
+      if (backup.phase === 'restoring' && ownership === 'target') {
+        // Restoration committed already. In particular do not replay header removal.
+        return { operations: [], clearBackup: true }
       }
+      const restoring: RouteBackup = backup.phase === 'restoring' ? backup : {
+        ...backup,
+        phase: 'restoring',
+        sourceRevision: snapshot.routeRevision,
+        sourceEpoch: ROUTE_OWNERSHIP_EPOCH,
+        target: { ...backup.preimage, ...models.length === 0 ? {} : { models: leavesOf({ models }).models } },
+        removeProfile: models.length === 0 && wholeProfileOwned(snapshot, backup),
+      }
+      if (restoring.removeProfile && !wholeProfileOwned(snapshot, backup)) throw new TemporaryRouteConflictError()
+      const operations: RouteMutation[] = restoring.removeProfile
+        ? [{ op: 'unset', path: ['providers', GITHUB_COPILOT_PROVIDER_ID] }]
+        : [...leafOperations(raw, restoring.target!), ...ownedHeaderRemoval(current, backup)]
+      return { operations, backup: restoring, clearBackup: true }
     }
-    if (backup === undefined) {
-      backup = createTemporaryRouteBackup(
-        current,
-        currentHasOverlay,
-        restorationModels,
-        requiredHeaders,
-      )
-      await settings.mutate(GITHUB_COPILOT_SETTINGS_NAMESPACE, [{
-        op: 'set',
-        path: ['temporaryRouteBackup'],
-        value: JSON.stringify(backup),
-      }])
+    if (!equalJson(backup.postimage, leavesOf({ api: requiredRouteApi, models }))) {
+      // Catalog changes during an active overlay need a new explicit ownership cycle.
+      throw new TemporaryRouteConflictError()
     }
-  }
-  else if (backup !== undefined) {
-    await settings.mutate(
-      LLM_PI_AI_SETTINGS_NAMESPACE,
-      restoreTemporaryRouteOperations(
-        backup,
-        models,
-        providerHeaders(current),
-        currentOverlays.map(model => model.headers),
-      ),
-    )
-    await settings.mutate(GITHUB_COPILOT_SETTINGS_NAMESPACE, [{
-      op: 'unset',
-      path: ['temporaryRouteBackup'],
-    }])
-    return { changed: true, catalog }
   }
   else if (currentHasOverlay) {
-    throw new Error('github-copilot: temporary GPT-6 route has no ownership backup; reconnect before cleanup')
+    throw new TemporaryRouteConflictError('TEMPORARY_ROUTE_LEGACY_CONFLICT')
   }
-  if (models.length === 0) return { changed: false, catalog }
-
-  const operations: SettingsMutation[] = []
+  if (models.length === 0) return { operations: [] }
+  let nextBackup = backup
   if (requiredRouteApi !== undefined) {
-    if (currentRouteApi !== requiredRouteApi) {
-      operations.push({
-        op: 'set',
-        path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'api'],
-        value: requiredRouteApi,
-      })
+    if (backup === undefined && current?.api !== undefined) throw new TemporaryRouteConflictError()
+    const headers = object(current?.headers) ?? {}
+    if (Object.entries(requiredHeaders ?? {}).some(([name, value]) =>
+      Object.entries(headers).some(([existingName, existingValue]) => existingName.toLowerCase() === name.toLowerCase() && existingValue !== value))) {
+      throw new TemporaryRouteConflictError()
+    }
+    if (nextBackup === undefined) {
+      if (snapshot.hasOwnedSecrets) throw new TemporaryRouteConflictError()
+      nextBackup = {
+        version: 2, phase: 'overlay', sourceRevision: snapshot.routeRevision,
+        sourceEpoch: ROUTE_OWNERSHIP_EPOCH, providerExisted: current !== undefined,
+        preimage: leavesOf(raw), postimage: leavesOf({ api: requiredRouteApi, models }),
+        ownedHeaders: Object.fromEntries(Object.entries(requiredHeaders ?? {}).filter(([name]) =>
+          !Object.keys(headers).some(existing => existing.toLowerCase() === name.toLowerCase()))),
+      }
     }
   }
-  if (models.length > 0 && !sameProviderModels(
-    current?.models,
-    models,
-    currentRouteApi,
-    requiredRouteApi,
+  const operations: RouteMutation[] = []
+  if (requiredRouteApi !== undefined) operations.push(...leafOperations(raw, nextBackup!.postimage))
+  else if (!sameProviderModels(
+    (providerModels(current?.models) ?? []).map(entry => ({
+      id: entry.id,
+      api: entry.api
+        ?? (providerModels(raw?.models) ?? []).find(model => model.id === entry.id)?.api
+        ?? providerApi(current)
+        ?? getBuiltinModels('github-copilot').find(model => model.id === entry.id)?.api,
+    })), models,
   )) {
-    operations.push({
-      op: 'set',
-      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
-      value: models,
-    })
+    // Only the raw user layer establishes ownership of extras. Schema defaults
+    // and inherited composition values must never be copied into user settings.
+    const entries = providerModels(raw?.models) ?? []
+    if (snapshot.hasOwnedSecrets) throw new TemporaryRouteConflictError()
+    if (entries.some(entry => !models.some(model => model.id === entry.id)
+      && Object.keys(entry).some(key => key !== 'id' && key !== 'api'))) throw new TemporaryRouteConflictError()
+    operations.push({ op: 'set', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'],
+      value: models.map(model => ({ ...entries.find(entry => entry.id === model.id), ...model })) })
   }
   if (providerSupportsStrictMode(current) !== false) {
-    operations.push({
-      op: 'set',
-      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode'],
-      value: false,
-    })
+    operations.push({ op: 'set', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode'], value: false })
   }
-  const retiringOverlays = currentModelEntries.flatMap((entry) => {
-    const overlay = temporaryGitHubCopilotModelFromProfile(entry)
-    if (overlay === undefined) return []
-    const expected = models.find(model => model.id === overlay.id)
-    return expected !== undefined && temporaryGitHubCopilotModelFromProfile(expected) !== undefined
-      ? []
-      : [overlay]
-  })
-  const retainedHeaders = withoutOwnedHeaders(currentHeaders, retiringOverlays.map(model => model.headers))
-  const headers = requiredHeaders === undefined
-    ? retainedHeaders
-    : withRequiredHeaders(retainedHeaders, requiredHeaders)
-  if (JSON.stringify(currentHeaders) !== JSON.stringify(headers)) {
-    operations.push({
-      op: 'set',
-      path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'headers'],
-      value: headers,
-    })
+  const currentHeaders = object(current?.headers) ?? {}
+  for (const [name, value] of Object.entries(requiredHeaders ?? {})) {
+    if (!Object.entries(currentHeaders).some(([existing, entry]) => existing.toLowerCase() === name.toLowerCase() && entry === value)) {
+      operations.push({ op: 'set', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'headers', name], value })
+    }
   }
-  if (operations.length > 0) await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, operations)
-  return { changed: operations.length > 0, catalog }
+  return { operations, ...nextBackup === undefined ? {} : { backup: nextBackup } }
+}
+
+const emptyCatalog: GitHubCopilotModelCatalogView = {
+  state: 'current', accountModelCount: 0, supportedModelCount: 0,
+  unknownModelIds: [], temporarilyUnavailableModelIds: [],
+}
+
+/** Read-only catalog and exact repair planning; never mutates, authorizes, or probes. */
+export async function describeGitHubCopilotProviderProfile(ctx: Context): Promise<{
+  state: 'ready' | 'needs-repair' | 'not-configured' | 'conflict'
+  catalog?: GitHubCopilotModelCatalogView
+}> {
+  const credentials = service<CredentialRecordServiceView>(ctx, 'credentials', ['readRecord'])
+  const record = await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+  if (record === undefined) return { state: 'not-configured' }
+  const projection = providerModelsFrom(record)
+  try {
+    const settings = service<RouteSettings>(ctx, 'settings', ['get', 'describe'])
+    const snapshot = settingsSnapshot(settings)
+    const plan = planRoute(snapshot, projection)
+    const needsRepair = plan.operations.length > 0 || plan.clearBackup === true
+      || (plan.backup !== undefined && !equalJson(plan.backup, snapshot.backup))
+    return { state: needsRepair ? 'needs-repair' : snapshot.current === undefined || projection.models.length === 0 ? 'not-configured' : 'ready', catalog: projection.catalog }
+  }
+  catch (error) {
+    if (error instanceof TemporaryRouteConflictError) return { state: 'conflict', catalog: projection.catalog }
+    throw error
+  }
+}
+
+async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<GitHubCopilotProviderProfileResult> {
+  const credentials = service<CredentialRecordServiceView>(ctx, 'credentials', ['readRecord'])
+  const record = await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+  if (record === undefined) return { changed: false, catalog: emptyCatalog }
+  const projection = providerModelsFrom(record)
+  const settings = service<RouteSettings>(ctx, 'settings', ['get', 'describe', 'mutate'])
+  const snapshot = settingsSnapshot(settings)
+  const plan = planRoute(snapshot, projection)
+  let markerRevision = snapshot.markerRevision
+  let changed = false
+  const write = async (namespace: string, operations: readonly RouteMutation[], revision: number) => {
+    try { await settings.mutate(namespace, operations, revision) }
+    catch (error) {
+      if (object(error)?.code === 'SETTINGS_CONFLICT') throw new TemporaryRouteConflictError()
+      throw error
+    }
+  }
+  if (plan.backup !== undefined && !equalJson(plan.backup, snapshot.backup)) {
+    await write(GITHUB_COPILOT_SETTINGS_NAMESPACE, [{ op: 'set', path: ['temporaryRouteBackup'], value: encodeBackup(plan.backup) }], markerRevision)
+    // Read the exact committed descriptor revision, never assume it increments by one.
+    const after = settingsSnapshot(settings)
+    if (!equalJson(after.backup, plan.backup)) throw new TemporaryRouteConflictError()
+    markerRevision = after.markerRevision
+    changed = true
+  }
+  if (plan.operations.length > 0) {
+    await write(LLM_PI_AI_SETTINGS_NAMESPACE, plan.operations, snapshot.routeRevision)
+    // The settings seam has no cross-namespace transaction. Detect a lost or
+    // replaced marker after the await; never claim success or blindly roll back.
+    const after = settingsSnapshot(settings)
+    if (!equalJson(after.backup, plan.backup ?? snapshot.backup)) throw new TemporaryRouteConflictError()
+    changed = true
+  }
+  if (plan.clearBackup) {
+    // Validate the restored target again before clearing. A failed clear is a
+    // durable restoring journal, not permission to overwrite a later user edit.
+    const after = settingsSnapshot(settings)
+    const restoring = plan.backup ?? snapshot.backup!
+    if (assertOwned(after.raw, restoring) !== 'target') throw new TemporaryRouteConflictError()
+    await write(GITHUB_COPILOT_SETTINGS_NAMESPACE, [{ op: 'unset', path: ['temporaryRouteBackup'] }], markerRevision)
+    changed = true
+  }
+  return { changed, catalog: projection.catalog }
 }
 
 export async function inspectGitHubCopilotProviderProfile(
@@ -579,6 +441,7 @@ export async function ensureGitHubCopilotProviderProfile(ctx: Context): Promise<
 export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   private notices: AuthorizationNoticeView[] = []
   private failure: string | undefined
+  private reconciliationFailed = false
   private attempt: Promise<void> | undefined
 
   constructor(ctx: Context) {
@@ -590,17 +453,31 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     const authorization = service<AuthorizationServiceView>(
       this.ctx,
       'authorization',
-      ['describe', 'begin', 'cancel'],
+      ['describe'],
     )
     const credentials = service<CredentialRecordServiceView>(
       this.ctx,
       'credentials',
-      ['describeRecord', 'deleteRecord'],
+      ['describeRecord'],
     )
     const record = await credentials.describeRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
-    const profile = record.configured
-      ? await inspectGitHubCopilotProviderProfile(this.ctx)
-      : undefined
+    let route: GitHubCopilotRouteView = { state: 'not-configured' }
+    let catalog: GitHubCopilotModelCatalogView | undefined
+    if (record.configured) {
+      try {
+        const profile = await describeGitHubCopilotProviderProfile(this.ctx)
+        catalog = profile.catalog
+        route = {
+          state: profile.state,
+          ...profile.state === 'conflict' ? { diagnosticCode: 'ROUTE_CONFLICT' as const } : {},
+        }
+      } catch {
+        route = { state: 'error', diagnosticCode: 'ROUTE_READ_FAILED' }
+      }
+      if (this.reconciliationFailed && route.state === 'needs-repair') {
+        route = { state: 'needs-repair', diagnosticCode: 'RECONCILIATION_FAILED' }
+      }
+    }
     const inFlight = authorization.describe(GITHUB_COPILOT_CREDENTIAL_KEY)?.inFlight === true
     return {
       phase: inFlight
@@ -611,20 +488,27 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       configured: record.configured,
       writable: record.writable,
       inFlight,
-      notices: [...this.notices],
-      ...profile === undefined ? {} : { catalog: profile.catalog },
+      notices: inFlight ? [...this.notices] : [],
+      route,
+      ...catalog === undefined ? {} : { catalog },
       ...this.failure === undefined ? {} : { error: this.failure },
     }
+  }
+
+  /** Explicit route repair over the stored account snapshot; never forces OAuth or a network probe. */
+  @Remote
+  async reconcile(): Promise<GitHubCopilotAuthorizationView> {
+    const current = await this.status()
+    if (!current.configured || current.inFlight || this.attempt !== undefined) return current
+    await this.ensureProviderProfile()
+    return this.status()
   }
 
   @Remote
   async start(): Promise<GitHubCopilotAuthorizationView> {
     const current = await this.status()
-    if (current.configured) {
-      await this.ensureProviderProfile()
-      return this.status()
-    }
     if (current.inFlight || this.attempt !== undefined) return current
+    if (current.configured) return this.reconcile()
 
     const authorization = service<AuthorizationServiceView>(
       this.ctx,
@@ -646,6 +530,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
     this.notices = []
     this.failure = undefined
+    this.reconciliationFailed = false
     const running = authorization.begin({
       key: GITHUB_COPILOT_CREDENTIAL_KEY,
       method: oauth.id,
@@ -714,11 +599,20 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     await credentials.deleteRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
     this.notices = []
     this.failure = undefined
+    this.reconciliationFailed = false
     return this.status()
   }
 
   private async ensureProviderProfile(): Promise<void> {
-    await ensureGitHubCopilotProviderProfile(this.ctx)
+    try {
+      await ensureGitHubCopilotProviderProfile(this.ctx)
+      this.reconciliationFailed = false
+    } catch {
+      // Valid authentication is independent of configuration repair. Keep
+      // credentials and expose only classified, retryable route diagnostics.
+      this.reconciliationFailed = true
+      this.ctx.logger.warn('github-copilot: route reconciliation failed; review route status before retrying')
+    }
   }
 }
 

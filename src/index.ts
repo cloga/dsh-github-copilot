@@ -16,7 +16,7 @@ import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import * as dshSettings from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { resolveCandidates, sameCandidates, SearchPlan } from './plan.ts'
+import { GITHUB_COPILOT_CREDENTIAL_KEY, resolveCandidates, sameCandidates, SearchPlan } from './plan.ts'
 import type { PlanConfig, SearchPlanCandidate } from './plan.ts'
 import { probeCandidate } from './probe.ts'
 import { currentChatRoute } from './current-provider.ts'
@@ -68,6 +68,7 @@ export { assertDshCompatibility, DSH_COMPATIBILITY } from './compatibility.ts'
 export {
   GITHUB_COPILOT_CREDENTIAL_KEY,
   GitHubCopilotAuthorizationController,
+  describeGitHubCopilotProviderProfile,
   ensureGitHubCopilotProviderProfile,
   LLM_PI_AI_SETTINGS_NAMESPACE,
 } from './authorization-controller.ts'
@@ -75,6 +76,7 @@ export type {
   AuthorizationNoticeView,
   GitHubCopilotAuthorizationPhase,
   GitHubCopilotAuthorizationView,
+  GitHubCopilotRouteView,
 } from './authorization-controller.ts'
 
 interface SettingsSectionHooks {
@@ -165,16 +167,15 @@ function activate(ctx: Context, config: InlineConfig): void {
     await ensureGitHubCopilotProviderProfile(ctx)
   })
   let current: () => InlineConfig = () => config
-  // The plan is built when the settings section attaches IF the chat route
-  // is already detectable (so the probe verdict and the prompt guidance are
-  // ready before the first conversation turn); otherwise it is deferred to
-  // the FIRST model request that passes the gate. The deferral matters: at
-  // apply time the settings document (llm-pi-ai section) and the credentials
-  // seam may not be settled yet, so route detection returns unknowns and the
-  // probe would target the wrong endpoint with the wrong key (observed at
-  // boot: api/baseURL/key all unknown). By first request the harness has
-  // already driven the LLM, so the route and credential facts are guaranteed
-  // settled.
+  // Only an actual eligible request creates a plan. Attach, settings, and
+  // credential notifications must never start authenticated capability work.
+  // A record notification cannot distinguish token refresh from account
+  // replacement: invalidate even the current request's proof, without retrying
+  // automatically. Only a later actual request may prove the new credentials.
+  let active = true
+  let generation = 0
+  let proofCancellation = new AbortController()
+  const candidateGenerations = new WeakMap<SearchPlanCandidate, number>()
   let currentPlan: SearchPlan | undefined
   // The route snapshot the current plan was built for: model/provider
   // switches in the web UI must rebuild the plan (and re-probe) instead of
@@ -189,12 +190,47 @@ function activate(ctx: Context, config: InlineConfig): void {
   let traditionalPlanProbe: { enabled: boolean; timeoutMs: number } | undefined
   let traditionalPlanCandidates: readonly SearchPlanCandidate[] | undefined
 
+  function invalidatePlans(): void {
+    generation++
+    proofCancellation.abort()
+    proofCancellation = new AbortController()
+    currentPlan = undefined
+    planRoute = undefined
+    planProbe = undefined
+    traditionalPlan = undefined
+    traditionalPlanRoute = undefined
+    traditionalPlanProbe = undefined
+    traditionalPlanCandidates = undefined
+  }
+
+  // Public emit seam: the payload is a record key, not a grant. ctx.on owns
+  // the listener in this Fiber; do not resolve auth or inspect settings here.
+  ctx.on('credentials/record-updated', (key) => {
+    if (key === GITHUB_COPILOT_CREDENTIAL_KEY) invalidatePlans()
+  })
+  ctx.effect(() => () => {
+    active = false
+    invalidatePlans()
+  })
+
+  function assertCurrentCandidate(candidate: SearchPlanCandidate): void {
+    if (!active) throw new Error('github-copilot: hosted search integration was disposed')
+    if (candidateGenerations.get(candidate) !== generation) {
+      throw new Error('github-copilot: search proof invalidated; retry with current credentials')
+    }
+  }
+
   const hooks: InlineHooks = {
     resolveApiKey: async (candidate) => {
+      assertCurrentCandidate(candidate)
       if (!isDirectGitHubCopilot(candidate)) {
         throw new Error('github-copilot: hosted search refuses non-Copilot endpoints')
       }
-      return resolveGitHubCopilotToken(candidate.model)
+      const auth = await resolveGitHubCopilotToken(candidate.model)
+      // A credential lookup started before unload must not launch a late probe
+      // or search request after the integration has been disposed.
+      assertCurrentCandidate(candidate)
+      return auth
     },
   }
 
@@ -206,16 +242,46 @@ function activate(ctx: Context, config: InlineConfig): void {
     }
   }
 
+  function createPlan(candidates: readonly SearchPlanCandidate[], cfg: InlineConfig): SearchPlan {
+    const startedAt = generation
+    const signal = proofCancellation.signal
+    for (const candidate of candidates) candidateGenerations.set(candidate, startedAt)
+    const nextPlan = new SearchPlan(
+      candidates,
+      candidate => probeCandidate(candidate, hooks.resolveApiKey, cfg.probeTimeoutMs, signal),
+      cfg.probe,
+    )
+    // SearchPlan may clone the candidate when a fallback spelling wins. Bind
+    // that exact chosen object before any caller awaits settle() to use it.
+    void nextPlan.settled.then(() => {
+      const chosen = nextPlan.chosenCandidate()
+      if (chosen !== undefined) candidateGenerations.set(chosen, startedAt)
+    })
+    return nextPlan
+  }
+
   /** The live plan, built on first use and rebuilt when the chat route moves. */
   function plan(): SearchPlan {
     const route = currentChatRoute(ctx)
-    if (currentPlan !== undefined && sameRoute(route, planRoute)) return currentPlan
-    currentPlan = buildPlan(ctx, current(), hooks)
-    planRoute = route
-    planProbe = probeSettings(current())
+    const cfg = current()
+    const probe = probeSettings(cfg)
+    const candidates = resolveCandidates(ctx, planConfigOf(cfg))
+    if (currentPlan !== undefined && sameRoute(route, planRoute)
+      && planProbe?.enabled === probe.enabled
+      && planProbe.timeoutMs === probe.timeoutMs
+      && sameCandidates(candidates, currentPlan.candidates)) return currentPlan
+    const startedAt = generation
+    const nextPlan = createPlan(candidates, cfg)
+    // A resolver can synchronously emit before the constructor returns. Never
+    // install a plan across that invalidation, even before its first await.
+    if (generation === startedAt && active) {
+      currentPlan = nextPlan
+      planRoute = route
+      planProbe = probe
+    }
     reportRoute(ctx)
-    reportPlan(ctx, currentPlan)
-    return currentPlan
+    reportPlan(ctx, nextPlan, () => active && currentPlan === nextPlan)
+    return nextPlan
   }
 
   /** Responses-only plan used by the traditional `ctx.web.search()` bridge. */
@@ -230,15 +296,15 @@ function activate(ctx: Context, config: InlineConfig): void {
       && traditionalPlanCandidates !== undefined
       && sameCandidates(candidates, traditionalPlanCandidates)) return traditionalPlan
     const cfg = current()
-    traditionalPlan = new SearchPlan(
-      candidates,
-      (candidate: SearchPlanCandidate) => probeCandidate(candidate, hooks.resolveApiKey, cfg.probeTimeoutMs),
-      cfg.probe,
-    )
-    traditionalPlanRoute = route
-    traditionalPlanProbe = probe
-    traditionalPlanCandidates = candidates
-    return traditionalPlan
+    const startedAt = generation
+    const nextPlan = createPlan(candidates, cfg)
+    if (generation === startedAt && active) {
+      traditionalPlan = nextPlan
+      traditionalPlanRoute = route
+      traditionalPlanProbe = probe
+      traditionalPlanCandidates = candidates
+    }
+    return nextPlan
   }
 
   /** Responses candidates admitted by the current route whitelist. */
@@ -252,6 +318,7 @@ function activate(ctx: Context, config: InlineConfig): void {
 
   /** Local/provisional availability, refined by a matching cached probe verdict. */
   function traditionalAvailable(): boolean {
+    if (!active) return false
     const route = currentChatRoute(ctx)
     const probe = probeSettings(current())
     const candidates = traditionalCandidates()
@@ -276,59 +343,9 @@ function activate(ctx: Context, config: InlineConfig): void {
     setSource: (source) => {
       current = source
     },
-    onChange: () => {
-      const cfg = current()
-      if (!cfg.enabled) {
-        // Disabled: drop the plan and its probe so nothing runs and the
-        // prompt section (which reads the plan) goes dark.
-        currentPlan = undefined
-        planRoute = undefined
-        planProbe = undefined
-        traditionalPlan = undefined
-        traditionalPlanRoute = undefined
-        traditionalPlanProbe = undefined
-        traditionalPlanCandidates = undefined
-        return
-      }
-      // Route facts may not be settled at attach time (the llm-pi-ai
-      // section or the credentials seam may still be initializing), or the
-      // selection may be briefly unavailable mid-session: without a route
-      // the plan cannot resolve candidates, and a STALE plan must not
-      // survive the gap — drop it so the next request rebuilds with the
-      // current config (a later restore of the same route snapshot would
-      // otherwise reuse the old baseURL/model).
-      const route = currentChatRoute(ctx)
-      if (route === undefined) {
-        currentPlan = undefined
-        planRoute = undefined
-        planProbe = undefined
-        traditionalPlan = undefined
-        traditionalPlanRoute = undefined
-        traditionalPlanProbe = undefined
-        traditionalPlanCandidates = undefined
-        return
-      }
-      // Resolve the candidate set WITHOUT starting probes; only a real
-      // difference (candidates, or the probe knobs that decide their
-      // verdict) rebuilds the plan. This keeps no-op edits (idleTimeoutMs,
-      // includeSources, …) from wasting a probe round-trip.
-      const candidates = resolveCandidates(ctx, planConfigOf(cfg))
-      const probe = probeSettings(cfg)
-      if (currentPlan === undefined
-        || planProbe === undefined
-        || !sameCandidates(candidates, currentPlan.candidates)
-        || probe.enabled !== planProbe.enabled
-        || probe.timeoutMs !== planProbe.timeoutMs) {
-        currentPlan = buildPlan(ctx, cfg, hooks)
-        planRoute = route
-        planProbe = probe
-        reportPlan(ctx, currentPlan)
-      }
-      traditionalPlan = undefined
-      traditionalPlanRoute = undefined
-      traditionalPlanProbe = undefined
-      traditionalPlanCandidates = undefined
-    },
+    // Invalidate only. Even an event burst coalesces into one fresh proof per
+    // search surface on its next actual request, never one probe per event.
+    onChange: invalidatePlans,
   })
 
   // The temporary GPT-6 route writes its ownership backup into this plugin's
@@ -343,7 +360,7 @@ function activate(ctx: Context, config: InlineConfig): void {
     // Zero-cost gate first: disabled plugins, non-loop requests, purposed
     // calls, provider mismatches, and image-bearing requests never build a
     // plan and never start a probe.
-    if (!preflight(request, cfg, ctx)) return next()
+    if (!active || !preflight(request, cfg, ctx)) return next()
     const p = plan()
     if (!p.available()) return next()
     return inlineWireStream(request, p, hooks, cfg)
@@ -383,8 +400,9 @@ function servingPrompt(current: () => InlineConfig, plan: SearchPlan | undefined
  * @param ctx - the plugin context whose logger receives the line.
  * @param plan - the plan whose settled verdict to announce.
  */
-function reportPlan(ctx: Context, plan: SearchPlan): void {
+function reportPlan(ctx: Context, plan: SearchPlan, isCurrent: () => boolean): void {
   void plan.settled.then(() => {
+    if (!isCurrent()) return
     const chosen = plan.chosenCandidate()
     if (chosen === undefined) {
       ctx.logger.warn('[github-copilot] %s', plan.failureReason() ?? 'web search is disabled')
@@ -412,15 +430,6 @@ function reportRoute(ctx: Context): void {
     route.provider,
     route.api ?? 'unknown',
     route.baseURL ?? 'unknown',
-  )
-}
-
-/** Build one plan from the section; `hooks` is referenced lazily via closure. */
-function buildPlan(ctx: Context, cfg: InlineConfig, hooks: InlineHooks): SearchPlan {
-  return new SearchPlan(
-    resolveCandidates(ctx, planConfigOf(cfg)),
-    (candidate: SearchPlanCandidate) => probeCandidate(candidate, hooks.resolveApiKey, cfg.probeTimeoutMs),
-    cfg.probe,
   )
 }
 

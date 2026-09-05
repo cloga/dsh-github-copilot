@@ -85,6 +85,7 @@ async function mountProfile(
       profileCtx.provide('systemPrompt', { section: () => () => undefined })
       profileCtx.provide('settings', {
         get: (namespace: unknown) => settingsDocument[String(namespace) as keyof typeof settingsDocument],
+        describe: () => Object.entries(settingsDocument).map(([ns, value]) => ({ ns, revision: 0, user: value, value })),
         mutate,
         installSection: (
           _owner: Context,
@@ -177,6 +178,6 @@ describe('loader composition', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
-    }])
+    }], 0)
   })
 })

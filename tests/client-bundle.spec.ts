@@ -119,7 +119,9 @@ describe('tsdown client artifact', () => {
     ) => Promise<() => Promise<void>>)(ctx)
 
     expect(contributions).toHaveLength(1)
-    expect(contributions[0]?.descriptors).toHaveLength(4)
+    expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
+      'status', 'reconcile', 'start', 'cancel', 'signOut',
+    ])
     for (const descriptor of contributions[0]!.descriptors) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       expect(descriptor.parameters).toEqual([])
@@ -138,6 +140,14 @@ describe('tsdown client artifact', () => {
       expect.any(AbortSignal),
     )
 
+    await expect(ctx.remote.githubCopilot.reconcile()).resolves.toEqual({ ok: true, value: validView })
+    expect(rpcCall).toHaveBeenLastCalledWith(
+      '/api',
+      'githubCopilot/reconcile',
+      { args: {} },
+      expect.any(AbortSignal),
+    )
+
     const statusDescriptor = contributions[0]!.descriptors.find(
       descriptor => descriptor.method === 'status',
     )!
@@ -150,6 +160,9 @@ describe('tsdown client artifact', () => {
       { ...validView, configured: 'yes' },
       { ...validView, notices: [{ message: 42 }] },
       { ...validView, error: null },
+      { ...validView, route: { state: 'healthy' } },
+      { ...validView, route: { state: 'error', diagnosticCode: 'RAW_PROVIDER_BODY' } },
+      { ...validView, route: { state: 'ready', credential: 'synthetic' } },
     ]
     for (const malformed of malformedViews) {
       expect(() => resultCodec.schema.parse(malformed)).toThrow()

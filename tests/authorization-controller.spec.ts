@@ -1,11 +1,12 @@
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   GITHUB_COPILOT_CREDENTIAL_KEY,
   GitHubCopilotAuthorizationController,
   ensureGitHubCopilotProviderProfile,
   inspectGitHubCopilotProviderProfile,
 } from '../src/authorization-controller.ts'
+import { encodeBackup, leavesOf, ROUTE_OWNERSHIP_EPOCH } from '../src/route-ownership.ts'
 
 interface Runtime {
   readonly ctx: Context
@@ -14,6 +15,8 @@ interface Runtime {
   readonly mutate: ReturnType<typeof vi.fn>
   readonly deleteRecord: ReturnType<typeof vi.fn>
   readonly begin: ReturnType<typeof vi.fn>
+  readonly readRecord: ReturnType<typeof vi.fn>
+  readonly describeSettings: ReturnType<typeof vi.fn>
   authorize(): void
 }
 
@@ -23,7 +26,8 @@ function runtime(options: {
   availableModelIds?: readonly string[]
   providerProfile?: unknown
   beginFailure?: Error
-  beforeMutate?: (namespace: string) => void
+  beforeMutate?: (namespace: string, operations: readonly { op: 'set' | 'unset' }[]) => void
+  readFailure?: boolean
 } = {}): Runtime {
   let configured = options.configured ?? false
   let resolveAuthorization: (() => void) | undefined
@@ -38,11 +42,18 @@ function runtime(options: {
       },
     },
   }
+  const revisions = new Map<string, number>()
+  const describeSettings = vi.fn(() => Object.entries(settingsDocument).map(([ns, value]) => ({
+    ns, revision: revisions.get(ns) ?? 0, user: value, value,
+  })))
   const mutate = vi.fn(async (ns: string, operations: Array<
     | { op: 'set'; path: string[]; value: unknown }
     | { op: 'unset'; path: string[] }
-  >) => {
-    options.beforeMutate?.(ns)
+  >, expectedRevision?: number) => {
+    options.beforeMutate?.(ns, operations)
+    if (expectedRevision !== undefined && expectedRevision !== (revisions.get(ns) ?? 0)) {
+      throw new Error('settings revision conflict')
+    }
     for (const operation of operations) {
       let target = settingsDocument[ns] as Record<string, unknown>
       for (const segment of operation.path.slice(0, -1)) {
@@ -62,6 +73,18 @@ function runtime(options: {
         else target[leaf] = operation.value
       }
     }
+    revisions.set(ns, (revisions.get(ns) ?? 0) + 1)
+  })
+  const readRecord = vi.fn(async () => {
+    if (options.readFailure) throw new Error('SYNTHETIC_PRIVATE_ERROR')
+    return configured ? {
+      kind: 'grant',
+      payload: {
+        type: 'oauth', refresh: 'github-device-grant', access: 'copilot-api-token',
+        expires: Date.now() + 86_400_000,
+        availableModelIds: options.availableModelIds ?? ['gpt-5.4'],
+      },
+    } : undefined
   })
   const deleteRecord = vi.fn(async () => { configured = false })
   const begin = vi.fn(async (request: {
@@ -99,22 +122,12 @@ function runtime(options: {
     ['authorization', authorization],
     ['credentials', {
       describeRecord: async () => ({ configured, writable: true }),
-      readRecord: async () => configured
-        ? {
-            kind: 'grant',
-            payload: {
-              type: 'oauth',
-              refresh: 'github-device-grant',
-              access: 'copilot-api-token',
-              expires: Date.now() + 86_400_000,
-              availableModelIds: options.availableModelIds ?? ['gpt-5.4'],
-            },
-          }
-        : undefined,
+      readRecord,
       deleteRecord,
     }],
     ['settings', {
       get: (namespace: string) => settingsDocument[namespace],
+      describe: describeSettings,
       mutate,
     }],
   ])
@@ -129,6 +142,8 @@ function runtime(options: {
     mutate,
     deleteRecord,
     begin,
+    readRecord,
+    describeSettings,
     authorize: () => {
       resolveAuthorization?.()
     },
@@ -166,7 +181,107 @@ function activeTemporaryGpt6Profile(): Record<string, unknown> {
   }
 }
 
+function activeTemporaryRouteBackup(): string {
+  const active = activeTemporaryGpt6Profile()
+  return encodeBackup({
+    version: 2, phase: 'overlay', sourceRevision: 0, sourceEpoch: ROUTE_OWNERSHIP_EPOCH, providerExisted: true,
+    preimage: { models: [{ id: 'gpt-5.4', api: 'openai-responses' }] },
+    postimage: leavesOf(active),
+    ownedHeaders: {
+      'User-Agent': 'GitHubCopilotChat/0.35.0',
+      'Editor-Version': 'vscode/1.107.0',
+      'Editor-Plugin-Version': 'copilot-chat/0.35.0',
+      'Copilot-Integration-Id': 'vscode-chat',
+    },
+  })
+}
+
+afterEach(() => vi.unstubAllGlobals())
+
 describe('GitHubCopilotAuthorizationController', () => {
+  it('reads status repeatedly without repairing, authorizing or making network calls', async () => {
+    const harness = runtime({ configured: true, providerProfile: {} })
+    const fetchMock = vi.fn(() => { throw new Error('status must not perform network I/O') })
+    vi.stubGlobal('fetch', fetchMock)
+    for (let i = 0; i < 2; i++) {
+      const view = await harness.controller.status()
+      expect(view).toMatchObject({
+        configured: true, phase: 'signed-in', route: { state: 'needs-repair' },
+        catalog: { supportedModelCount: 1 },
+      })
+      expect(JSON.stringify(view)).not.toContain('copilot-api-token')
+      expect(JSON.stringify(view)).not.toContain('github-device-grant')
+    }
+    expect(harness.describeSettings).toHaveBeenCalledWith({ redactSecrets: true })
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.begin).not.toHaveBeenCalled()
+    expect(harness.deleteRecord).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('retains configured authentication when route inspection fails without leaking the failure', async () => {
+    const harness = runtime({ configured: true, readFailure: true })
+    const view = await harness.controller.status()
+    expect(view).toMatchObject({
+      configured: true, phase: 'signed-in',
+      route: { state: 'error', diagnosticCode: 'ROUTE_READ_FAILED' },
+    })
+    expect(JSON.stringify(view)).not.toContain('SYNTHETIC_PRIVATE_ERROR')
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.begin).not.toHaveBeenCalled()
+  })
+
+  it('explicitly reconciles the stored snapshot without forcing sign-in or network access', async () => {
+    const harness = runtime({ configured: true, providerProfile: {} })
+    const fetchMock = vi.fn(() => { throw new Error('repair must not force network I/O') })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(harness.controller.status()).resolves.toMatchObject({ route: { state: 'needs-repair' } })
+    expect(harness.mutate).not.toHaveBeenCalled()
+    await expect(harness.controller.reconcile()).resolves.toMatchObject({ route: { state: 'ready' } })
+    expect(harness.mutate).toHaveBeenCalled()
+    harness.mutate.mockClear()
+    await expect(harness.controller.status()).resolves.toMatchObject({ route: { state: 'ready' } })
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.begin).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('reports retryable repair failure separately from successful authentication', async () => {
+    let fail = true
+    const harness = runtime({
+      configured: true, providerProfile: {},
+      beforeMutate() { if (fail) throw new Error('SYNTHETIC_PRIVATE_REPAIR_ERROR') },
+    })
+    await expect(harness.controller.reconcile()).resolves.toMatchObject({
+      phase: 'signed-in', configured: true,
+      route: { state: 'needs-repair', diagnosticCode: 'RECONCILIATION_FAILED' },
+    })
+    expect(JSON.stringify(await harness.controller.status())).not.toContain('SYNTHETIC_PRIVATE_REPAIR_ERROR')
+    fail = false
+    await expect(harness.controller.reconcile()).resolves.toMatchObject({ route: { state: 'ready' } })
+  })
+
+  it('returns a read-only ownership conflict for a legacy marker and preserves it on repair', async () => {
+    const harness = runtime({ configured: true, providerProfile: activeTemporaryGpt6Profile() })
+    harness.settingsDocument['github-copilot'] = {
+      temporaryRouteBackup: JSON.stringify({ providerExisted: true, leaves: {}, preservedHeaderNames: [] }),
+    }
+    await expect(harness.controller.status()).resolves.toMatchObject({
+      phase: 'signed-in', route: { state: 'conflict', diagnosticCode: 'ROUTE_CONFLICT' },
+    })
+    await expect(harness.controller.reconcile()).resolves.toMatchObject({
+      phase: 'signed-in', route: { state: 'conflict' },
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('does not reconcile while an authorization attempt is in flight', async () => {
+    const harness = runtime()
+    await harness.controller.start()
+    await expect(harness.controller.reconcile()).resolves.toMatchObject({ inFlight: true })
+    expect(harness.mutate).not.toHaveBeenCalled()
+    await harness.controller.cancel()
+  })
   it('signs in through the built-in flow and adds only the reference-free Copilot profile', async () => {
     const harness = runtime()
     const started = await harness.controller.start()
@@ -193,7 +308,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
-    }])
+    }], expect.any(Number))
     expect(harness.settingsDocument['llm-pi-ai']).toEqual({
       providers: {
         openai: { apiKeyEnv: 'OPENAI_API_KEY' },
@@ -240,7 +355,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
-    }])
+    }], expect.any(Number))
   })
 
   it('repairs only the model list while preserving the rest of the Copilot profile and unrelated providers', async () => {
@@ -251,7 +366,9 @@ describe('GitHubCopilotAuthorizationController', () => {
         apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
         customField: 'preserved',
         compat: { supportsStrictMode: false, customCompat: 'preserved' },
-        models: [{ id: 'gpt-5.4' }],
+        // A known model may legitimately inherit its API; use an actual stale
+        // account model to exercise list repair rather than forcing needless writes.
+        models: [{ id: 'gpt-5-mini' }],
       },
     })
     const section = harness.settingsDocument['llm-pi-ai'] as { providers: Record<string, unknown> }
@@ -261,7 +378,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'models'],
       value: [{ id: 'gpt-5.4', api: 'openai-responses' }],
-    }])
+    }], expect.any(Number))
     expect(section.providers.openai).toEqual({ apiKeyEnv: 'OPENAI_API_KEY' })
     expect(section.providers['github-copilot']).toEqual({
       baseURL: 'https://example.invalid',
@@ -287,7 +404,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
-    }])
+    }], expect.any(Number))
     expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
       providers: {
         'github-copilot': {
@@ -379,7 +496,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
-    }])
+    }], expect.any(Number))
     expect(harness.settingsDocument['llm-pi-ai']).toEqual({
       providers: {
         openai: { apiKeyEnv: 'OPENAI_API_KEY' },
@@ -412,7 +529,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
-    }])
+    }], expect.any(Number))
   })
 
   it('deduplicates account model ids while preserving their first-seen order', async () => {
@@ -433,7 +550,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
-    }])
+    }], expect.any(Number))
   })
 
   it('materializes the temporary GPT-6 Astra overlay only for an entitled account', async () => {
@@ -445,8 +562,9 @@ describe('GitHubCopilotAuthorizationController', () => {
       },
     })
 
-    await expect(harness.controller.status()).resolves.toMatchObject({
+    await expect(harness.controller.reconcile()).resolves.toMatchObject({
       phase: 'signed-in',
+      route: { state: 'ready' },
       catalog: {
         state: 'current',
         accountModelCount: 3,
@@ -458,12 +576,8 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.mutate).toHaveBeenCalledWith('github-copilot', [{
       op: 'set',
       path: ['temporaryRouteBackup'],
-      value: JSON.stringify({
-        providerExisted: true,
-        leaves: {},
-        preservedHeaderNames: [],
-      }),
-    }])
+      value: expect.any(String),
+    }], expect.any(Number))
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
       op: 'set',
       path: ['providers', 'github-copilot', 'api'],
@@ -494,20 +608,20 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
-    }, {
-      op: 'set',
-      path: ['providers', 'github-copilot', 'headers'],
-      value: {
-        'X-Custom': 'preserved',
-        'User-Agent': 'GitHubCopilotChat/0.35.0',
-        'Editor-Version': 'vscode/1.107.0',
-        'Editor-Plugin-Version': 'copilot-chat/0.35.0',
-        'Copilot-Integration-Id': 'vscode-chat',
-      },
-    }])
+    }, ...Object.entries({
+      'User-Agent': 'GitHubCopilotChat/0.35.0',
+      'Editor-Version': 'vscode/1.107.0',
+      'Editor-Plugin-Version': 'copilot-chat/0.35.0',
+      'Copilot-Integration-Id': 'vscode-chat',
+    }).map(([name, value]) => ({
+      op: 'set', path: ['providers', 'github-copilot', 'headers', name], value,
+    }))], expect.any(Number))
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
+      providers: { 'github-copilot': { headers: { 'X-Custom': 'preserved' } } },
+    })
   })
 
-  it('retries route activation after the ownership backup commits first', async () => {
+  it('preserves a prepared activation after a failed route write for review', async () => {
     let failRouteWrite = true
     const harness = runtime({
       configured: true,
@@ -525,14 +639,12 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.settingsDocument['github-copilot']).toMatchObject({
       temporaryRouteBackup: expect.any(String),
     })
-    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({ changed: true })
+    harness.mutate.mockClear()
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(/TEMPORARY_ROUTE_OWNERSHIP_CONFLICT/)
+    await expect(harness.controller.status()).resolves.toMatchObject({ route: { state: 'conflict' } })
+    expect(harness.mutate).not.toHaveBeenCalled()
     expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
-      providers: {
-        'github-copilot': {
-          api: 'openai-responses',
-          models: expect.arrayContaining([expect.objectContaining({ id: 'gpt-6-astra' })]),
-        },
-      },
+      providers: { 'github-copilot': { headers: { 'X-Custom': 'preserved' } } },
     })
   })
 
@@ -542,19 +654,15 @@ describe('GitHubCopilotAuthorizationController', () => {
       configured: true,
       availableModelIds: ['gpt-5.4'],
       providerProfile: activeTemporaryGpt6Profile(),
-      beforeMutate(namespace) {
-        if (namespace === 'github-copilot' && failBackupCleanup) {
+      beforeMutate(namespace, operations) {
+        if (namespace === 'github-copilot' && operations[0]?.op === 'unset' && failBackupCleanup) {
           failBackupCleanup = false
           throw new Error('backup cleanup failed')
         }
       },
     })
     harness.settingsDocument['github-copilot'] = {
-      temporaryRouteBackup: JSON.stringify({
-        providerExisted: true,
-        leaves: { models: [{ id: 'gpt-5.4', api: 'openai-responses' }] },
-        preservedHeaderNames: [],
-      }),
+      temporaryRouteBackup: activeTemporaryRouteBackup(),
     }
 
     await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow('backup cleanup failed')
@@ -577,14 +685,14 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
     harness.settingsDocument['github-copilot'] = {
       temporaryRouteBackup: JSON.stringify({
-        providerExisted: true,
-        leaves: { headers: { Authorization: 'must-not-replay' } },
-        preservedHeaderNames: [],
+        version: 2, sourceRevision: 0, sourceEpoch: ROUTE_OWNERSHIP_EPOCH, providerExisted: true, phase: 'overlay',
+        preimage: { headers: { Authorization: 'must-not-replay' } },
+        postimage: {}, ownedHeaders: {},
       }),
     }
 
     await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
-      /temporary route backup has invalid route leaves/,
+      /TEMPORARY_ROUTE_INVALID_BACKUP/,
     )
     expect(harness.mutate).not.toHaveBeenCalled()
   })
@@ -600,7 +708,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
 
     await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
-      /temporary model protocol "openai-responses" conflicts with configured route api "anthropic-messages"/,
+      /TEMPORARY_ROUTE_OWNERSHIP_CONFLICT/,
     )
     expect(harness.mutate).not.toHaveBeenCalled()
   })
@@ -615,7 +723,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
 
     await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
-      /temporary GPT-6 header "User-Agent" conflicts with the configured route/,
+      /TEMPORARY_ROUTE_OWNERSHIP_CONFLICT/,
     )
     expect(harness.mutate).not.toHaveBeenCalled()
   })
@@ -631,7 +739,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
 
     await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
-      /configured route api "openai-responses" is not owned by the temporary GPT-6 overlay/,
+      /TEMPORARY_ROUTE_OWNERSHIP_CONFLICT/,
     )
     expect(harness.mutate).not.toHaveBeenCalled()
   })
@@ -643,13 +751,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       providerProfile: activeTemporaryGpt6Profile(),
     })
     harness.settingsDocument['github-copilot'] = {
-      temporaryRouteBackup: JSON.stringify({
-        providerExisted: true,
-        leaves: {
-          models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
-        },
-        preservedHeaderNames: [],
-      }),
+      temporaryRouteBackup: activeTemporaryRouteBackup(),
     }
 
     await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({
@@ -661,17 +763,15 @@ describe('GitHubCopilotAuthorizationController', () => {
       path: ['providers', 'github-copilot', 'api'],
     }, {
       op: 'set',
-      path: ['providers', 'github-copilot', 'headers'],
-      value: { 'X-Custom': 'preserved' },
-    }, {
-      op: 'set',
       path: ['providers', 'github-copilot', 'models'],
       value: [{ id: 'gpt-5.4', api: 'openai-responses' }],
-    }])
+    }, ...['User-Agent', 'Editor-Version', 'Editor-Plugin-Version', 'Copilot-Integration-Id'].map(name => ({
+      op: 'unset', path: ['providers', 'github-copilot', 'headers', name],
+    }))], expect.any(Number))
     expect(harness.mutate).toHaveBeenCalledWith('github-copilot', [{
       op: 'unset',
       path: ['temporaryRouteBackup'],
-    }])
+    }], expect.any(Number))
     expect(harness.settingsDocument['llm-pi-ai']).toEqual({
       providers: {
         openai: { apiKeyEnv: 'OPENAI_API_KEY' },
@@ -716,7 +816,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
-    }])
+    }], expect.any(Number))
   })
 
   it('reports an outdated catalog without replacing a previously usable model list', async () => {

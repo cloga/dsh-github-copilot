@@ -1,8 +1,8 @@
 /**
  * Composition tests of the inline plugin: the narrow gate, the llm/stream
  * short-circuit registration, the prompt section, and plan rebuild
- * semantics. The runtime is faked exactly like tests/apply.spec.ts; probe is
- * disabled so no network runs.
+ * semantics. The runtime, credentials, and network are synthetic; proof
+ * lifecycle tests enable probing only against mocked fetch responses.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -25,6 +25,12 @@ interface FakeRuntime {
   searchProviders: WebSearchProvider[]
   fetchProviders: WebFetchProvider[]
   credentialResolve: ReturnType<typeof vi.fn>
+  credentialRead: ReturnType<typeof vi.fn>
+  settingsGet: ReturnType<typeof vi.fn>
+  settingsMutate: ReturnType<typeof vi.fn>
+  emitCredentialUpdate(key: string): void
+  credentialListenerCount(): number
+  dispose(): void
   installedSettingsSections: string[]
   /** Commit a change to one settings namespace, as the settings service would. */
   triggerSettingsChange(ns: string): void
@@ -42,6 +48,8 @@ const config: InlineConfig = {
 
 interface FakeSettings {
   settings: unknown
+  get: ReturnType<typeof vi.fn>
+  mutate: ReturnType<typeof vi.fn>
   installedSections: string[]
   triggerChange(ns: string): void
 }
@@ -50,8 +58,9 @@ function fakeSettings(document: Record<string, unknown>): FakeSettings {
   const watchers = new Map<string, () => void>()
   const installedSections: string[] = []
   const settings = {
-    get: (ns: unknown) => document[String(ns)],
-    mutate: async () => undefined,
+    get: vi.fn((ns: unknown) => document[String(ns)]),
+    describe: () => Object.entries(document).map(([ns, value]) => ({ ns, revision: 0, user: value, value })),
+    mutate: vi.fn(async () => undefined),
     register: (ns: unknown, schema: (value: unknown) => unknown, options?: { base?: unknown }) => {
       const namespace = String(ns)
       return {
@@ -90,7 +99,7 @@ function fakeSettings(document: Record<string, unknown>): FakeSettings {
       scope.watch(hooks.onChange)
     },
   }
-  return { settings, installedSections, triggerChange: (ns) => watchers.get(ns)?.() }
+  return { settings, get: settings.get, mutate: settings.mutate, installedSections, triggerChange: (ns) => watchers.get(ns)?.() }
 }
 
 /** Mutable default-model selection; `current: null` simulates an unsettled
@@ -117,6 +126,15 @@ function buildRuntime(
   const searchProviders: WebSearchProvider[] = []
   const fetchProviders: WebFetchProvider[] = []
   const credentialResolve = vi.fn(async () => ({ value: 'secret' }))
+  const credentialRead = vi.fn<() => Promise<unknown>>(async () => ({
+    kind: 'grant',
+    payload: {
+      type: 'oauth', refresh: 'github-device-grant', access: 'copilot-api-token',
+      expires: Date.now() + 86_400_000, availableModelIds: ['gpt-5.4'],
+    },
+  }))
+  const credentialListeners = new Set<(key: string) => void>()
+  const disposers: (() => void)[] = []
   let promptSection: FakeRuntime['promptSection']
   const settingsDocument: Record<string, unknown> = {
     [GITHUB_COPILOT_SETTINGS_NAMESPACE]: {},
@@ -145,16 +163,7 @@ function buildRuntime(
     ['credentials', {
       resolve: credentialResolve,
       describeRecord: async () => ({ configured: false, writable: true }),
-      readRecord: async () => ({
-        kind: 'grant',
-        payload: {
-          type: 'oauth',
-          refresh: 'github-device-grant',
-          access: 'copilot-api-token',
-          expires: Date.now() + 86_400_000,
-          availableModelIds: ['gpt-5.4'],
-        },
-      }),
+      readRecord: credentialRead,
       listRecords: async () => [{ key: 'llm-pi-ai/github-copilot', kind: 'grant' }],
       modifyRecord: async (_key: string, mutate: (current: unknown) => Promise<unknown>) => mutate({
         kind: 'grant',
@@ -184,12 +193,21 @@ function buildRuntime(
     // The settings seam reads `ctx.fiber.state` to skip change callbacks
     // while a fiber is unloading; a live fiber is what this fake is.
     fiber: { state: 1 },
-    logger: { info: () => undefined, warn: () => undefined },
+    logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
     plugin: () => undefined,
     on: (event: string, handler: (request: GenerateOptions, next: () => unknown) => unknown) => {
+      if (event === 'credentials/record-updated') {
+        const credentialHandler = handler as unknown as (key: string) => void
+        credentialListeners.add(credentialHandler)
+        const dispose = () => { credentialListeners.delete(credentialHandler) }
+        disposers.push(dispose)
+        return dispose
+      }
       if (event === 'llm/stream') listener = handler
       listeners.set(event, handler)
-      return () => { listeners.delete(event) }
+      const dispose = () => { listeners.delete(event) }
+      disposers.push(dispose)
+      return dispose
     },
     waterfall: (_self: unknown, event: string, payload: GenerateOptions, next: () => unknown) => {
       const handler = listeners.get(event)
@@ -207,7 +225,9 @@ function buildRuntime(
     },
     effect: (callback: () => unknown) => {
       const disposer = callback()
-      return () => { if (typeof disposer === 'function') disposer() }
+      const dispose = () => { if (typeof disposer === 'function') disposer() }
+      disposers.push(dispose)
+      return dispose
     },
   }
   // Attach store entries as context properties so injected service contexts
@@ -222,6 +242,12 @@ function buildRuntime(
     searchProviders,
     fetchProviders,
     credentialResolve,
+    credentialRead,
+    settingsGet: fake.get,
+    settingsMutate: fake.mutate,
+    emitCredentialUpdate: key => { for (const handler of credentialListeners) handler(key) },
+    credentialListenerCount: () => credentialListeners.size,
+    dispose: () => { for (const dispose of disposers.splice(0).reverse()) dispose() },
     installedSettingsSections: fake.installedSections,
     settingsDocument,
     get promptSection() { return promptSection },
@@ -246,11 +272,261 @@ async function drain(stream: AsyncIterable<StreamChunk> | undefined): Promise<St
   return chunks
 }
 
+const credentialKey = 'llm-pi-ai/github-copilot'
+
+/** Synthetic proof and search replies: never reaches provider transport. */
+function searchFetch() {
+  return vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { stream?: boolean }
+    return body.stream === true
+      ? new Response('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}\n\n')
+      : new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] }))
+  })
+}
+
+function proofCount(fetchMock: ReturnType<typeof searchFetch>): number {
+  return fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('Probe web search capability.')).length
+}
+
+async function search(runtime: FakeRuntime, surface: 'inline' | 'web'): Promise<unknown> {
+  return surface === 'inline'
+    ? drain(runtime.listener?.(request(), () => undefined) as AsyncIterable<StreamChunk> | undefined)
+    : runtime.searchProviders[0]!.search({ query: 'news' })
+}
+
+// Inline failures become terminal chunks; ctx.web failures reject.
+async function failedSearch(runtime: FakeRuntime, surface: 'inline' | 'web'): Promise<void> {
+  if (surface === 'web') await expect(search(runtime, surface)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+  else await search(runtime, surface)
+}
+
+async function flushStartup(): Promise<void> {
+  // Drain the synthetic startup reconciliation independently of event-handler
+  // assertions; no timer or live provider call is involved.
+  for (let index = 0; index < 30; index++) await Promise.resolve()
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe.each(['inline', 'web'] as const)('%s credential proof cache lifecycle', surface => {
+  it('retries a cached missing-grant failure on a same-route credential event', async () => {
+    const runtime = buildRuntime()
+    const originalRead = runtime.credentialRead.getMockImplementation()!
+    runtime.credentialRead.mockImplementation(async () => undefined)
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await failedSearch(runtime, surface)
+    expect(fetchMock).not.toHaveBeenCalled()
+    runtime.credentialRead.mockImplementation(originalRead)
+    runtime.emitCredentialUpdate(credentialKey)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await search(runtime, surface)
+    expect(proofCount(fetchMock)).toBe(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('evicts a successful proof for revocation/account changes and coalesces event bursts', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await search(runtime, surface)
+    expect(proofCount(fetchMock)).toBe(1)
+    await flushStartup()
+    runtime.credentialRead.mockClear()
+    runtime.settingsGet.mockClear()
+    runtime.settingsMutate.mockClear()
+    for (let index = 0; index < 20; index++) runtime.emitCredentialUpdate(credentialKey)
+    expect(runtime.credentialRead).not.toHaveBeenCalled()
+    expect(runtime.settingsGet).not.toHaveBeenCalled()
+    expect(runtime.settingsMutate).not.toHaveBeenCalled()
+    expect(proofCount(fetchMock)).toBe(1)
+    if (surface === 'inline') expect(runtime.promptSection?.text()).toBe('')
+    await Promise.all([search(runtime, surface), search(runtime, surface)])
+    expect(proofCount(fetchMock)).toBe(2)
+    runtime.credentialRead.mockImplementation(async () => undefined)
+    runtime.emitCredentialUpdate(credentialKey)
+    const priorCalls = fetchMock.mock.calls.length
+    await failedSearch(runtime, surface)
+    expect(fetchMock).toHaveBeenCalledTimes(priorCalls)
+  })
+
+  it('ignores unrelated record updates and retains the verified proof', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await search(runtime, surface)
+    runtime.emitCredentialUpdate('llm-pi-ai/other-provider')
+    runtime.emitCredentialUpdate('other/github-copilot')
+    await search(runtime, surface)
+    expect(proofCount(fetchMock)).toBe(1)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not reuse an in-flight proof after a credential refresh or eagerly retry it', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    let release!: (response: Response) => void
+    fetchMock.mockImplementationOnce(async () => new Promise<Response>(resolve => { release = resolve }))
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    const first = failedSearch(runtime, surface)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    for (let index = 0; index < 10; index++) runtime.emitCredentialUpdate(credentialKey)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    release(new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] })))
+    await first
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(proofCount(fetchMock)).toBe(1)
+    if (surface === 'inline') expect(runtime.promptSection?.text()).toBe('')
+    await search(runtime, surface)
+    expect(proofCount(fetchMock)).toBe(2)
+  })
+
+  it('fails closed on credential refresh within the current proof without a retry loop', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await flushStartup()
+    const originalRead = runtime.credentialRead.getMockImplementation()!
+    runtime.credentialRead.mockImplementationOnce(async () => {
+      runtime.emitCredentialUpdate(credentialKey)
+      return originalRead()
+    })
+    await failedSearch(runtime, surface)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await search(runtime, surface)
+    expect(proofCount(fetchMock)).toBe(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not start late network work when disposed during credential resolution', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await flushStartup()
+    const originalRead = runtime.credentialRead.getMockImplementation()!
+    let release!: (value: unknown) => void
+    runtime.credentialRead.mockImplementationOnce(async () => new Promise(resolve => { release = resolve }))
+    const first = failedSearch(runtime, surface)
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    runtime.dispose()
+    release(await originalRead())
+    await first
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['dispose', 'credential'] as const)('aborts a pending HTTP proof on %s without fallback or search fetches', async action => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    let release!: (response: Response) => void
+    fetchMock.mockImplementationOnce(async () => new Promise<Response>(resolve => { release = resolve }))
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    const first = failedSearch(runtime, surface)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    if (action === 'dispose') runtime.dispose()
+    else runtime.emitCredentialUpdate(credentialKey)
+    expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
+    await first
+    // Even a transport mock that ignores abort cannot start fallback rounds.
+    release(new Response(JSON.stringify({ output: [] })))
+    await flushStartup()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    if (action === 'credential') {
+      await search(runtime, surface)
+      expect(proofCount(fetchMock)).toBe(2)
+    }
+  })
+
+  it('binds the fallback-spelling candidate to its original proof generation', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ output: [] })))
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await search(runtime, surface)
+    expect(proofCount(fetchMock)).toBe(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    runtime.emitCredentialUpdate(credentialKey)
+    await search(runtime, surface)
+    expect(proofCount(fetchMock)).toBe(3)
+  })
+
+  it('rejects account replacement during search auth after a successful proof', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await search(runtime, surface)
+    const originalRead = runtime.credentialRead.getMockImplementation()!
+    runtime.credentialRead.mockImplementationOnce(async () => {
+      runtime.emitCredentialUpdate(credentialKey)
+      return originalRead()
+    })
+    const result = search(runtime, surface)
+    if (surface === 'web') await expect(result).rejects.toBeDefined()
+    else await result
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await search(runtime, surface)
+    expect(proofCount(fetchMock)).toBe(2)
+  })
+
+  it('removes its Fiber listener and makes retained entry points inert on disposal', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await search(runtime, surface)
+    expect(runtime.credentialListenerCount()).toBe(1)
+    runtime.dispose()
+    expect(runtime.credentialListenerCount()).toBe(0)
+    runtime.emitCredentialUpdate(credentialKey)
+    const priorCalls = fetchMock.mock.calls.length
+    await failedSearch(runtime, surface)
+    expect(fetchMock).toHaveBeenCalledTimes(priorCalls)
+    expect(runtime.promptSection?.text()).toBe('')
+  })
+})
+
 describe('github-copilot apply', () => {
+  it('rejects a trust-override stream consumed after its plan generation was invalidated', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const stream = runtime.listener?.(request(), () => undefined) as AsyncIterable<StreamChunk>
+    runtime.emitCredentialUpdate(credentialKey)
+    await drain(stream)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await search(runtime, 'inline')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('makes no network calls at attach, availability checks, settings or credential events', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await flushStartup()
+    expect(runtime.searchProviders[0]?.available()).toBe(true)
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
+    runtime.emitCredentialUpdate(credentialKey)
+    expect(runtime.promptSection?.text()).toBe('')
+    const next = vi.fn(() => undefined)
+    runtime.listener?.(request({ purpose: 'compaction' }), next)
+    runtime.listener?.(request({ model: 'claude-sonnet-4.5' }), next)
+    await flushStartup()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledTimes(2)
+  })
+
   it('uses the settings provider instance API when legacy helpers are absent', () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, config)
@@ -565,8 +841,8 @@ describe('github-copilot apply', () => {
   it('fills the prompt section once a plan can serve', async () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, config)
-    // The route is settled in this fake, so the plan is ready right after
-    // attach: the guidance appears.
+    expect(runtime.promptSection?.text()).toBe('')
+    runtime.listener?.(request(), () => undefined)
     expect(runtime.promptSection?.text()).toContain('web_search')
   })
 
@@ -603,7 +879,7 @@ describe('github-copilot apply', () => {
     expect(next).toHaveBeenCalled()
   })
 
-  it('does not re-probe when a settings change leaves candidates identical', async () => {
+  it('invalidates settings without eager probing even when candidates are identical', async () => {
     const probingConfig: InlineConfig = { ...config, probe: true, probeTimeoutMs: 30_000 }
     // A spelling-independent 401 fails the probe with exactly one request per
     // plan build, keeping the call-count assertions meaningful under the
@@ -612,14 +888,14 @@ describe('github-copilot apply', () => {
     vi.stubGlobal('fetch', fetchMock)
     const runtime = buildRuntime()
     apply(runtime.ctx, probingConfig)
-    // The plan builds (and probes once) at settings attach.
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    // A no-op edit for the plan (idle bound, sources, tool stripping) must
-    // not start a second probe.
+    expect(fetchMock).not.toHaveBeenCalled()
+    await drain(runtime.listener?.(request(), () => undefined) as AsyncIterable<StreamChunk>)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = { idleTimeoutMs: 600_000 }
     runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
-    await new Promise((resolve) => setTimeout(resolve, 20))
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    await drain(runtime.listener?.(request(), () => undefined) as AsyncIterable<StreamChunk>)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('rebuilds the plan when the probe knobs change, recovering a failed plan', async () => {
@@ -631,12 +907,15 @@ describe('github-copilot apply', () => {
     vi.stubGlobal('fetch', fetchMock)
     const runtime = buildRuntime()
     apply(runtime.ctx, probingConfig)
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await drain(runtime.listener?.(request(), () => undefined) as AsyncIterable<StreamChunk>)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     // The first plan failed (the endpoint never confirms search); raising the
     // probe bound must rebuild and re-probe even though the candidates are
     // the same.
     runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = { probeTimeoutMs: 60_000 }
     runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await drain(runtime.listener?.(request(), () => undefined) as AsyncIterable<StreamChunk>)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
