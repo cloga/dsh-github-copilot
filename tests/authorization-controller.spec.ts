@@ -22,6 +22,7 @@ function runtime(options: {
   withFlow?: boolean
   availableModelIds?: readonly string[]
   providerProfile?: unknown
+  beginFailure?: Error
 } = {}): Runtime {
   let configured = options.configured ?? false
   let resolveAuthorization: (() => void) | undefined
@@ -69,6 +70,7 @@ function runtime(options: {
       url: 'https://github.com/login/device',
       code: 'ABCD-EFGH',
     })
+    if (options.beginFailure !== undefined) throw options.beginFailure
     await new Promise<void>((resolve) => { resolveAuthorization = resolve })
     configured = true
     resolveAuthorization = undefined
@@ -160,6 +162,29 @@ describe('GitHubCopilotAuthorizationController', () => {
           models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
         },
       },
+    })
+  })
+
+  it('clears the one-time device code immediately when sign-in is cancelled', async () => {
+    const harness = runtime()
+    await expect(harness.controller.start()).resolves.toMatchObject({
+      phase: 'authorizing',
+      notices: [expect.objectContaining({ code: 'ABCD-EFGH' })],
+    })
+
+    await expect(harness.controller.cancel()).resolves.toMatchObject({ notices: [] })
+  })
+
+  it('clears the one-time device code when authorization fails', async () => {
+    const harness = runtime({ beginFailure: new Error('network unavailable') })
+    await harness.controller.start()
+
+    await vi.waitFor(async () => {
+      expect(await harness.controller.status()).toMatchObject({
+        phase: 'error',
+        notices: [],
+        error: 'network unavailable',
+      })
     })
   })
 

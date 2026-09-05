@@ -32,14 +32,18 @@ Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in*
 ### User authorization flow
 
 1. Open **Settings → Models** and find the `github-copilot` provider card.
-2. Select **Sign in with GitHub**. The card changes to **Waiting for GitHub authorization…** and shows an **Open GitHub** link plus a one-time device code.
-3. Open the link, sign in to the GitHub account that owns the Copilot entitlement, enter the displayed code, and approve the request. Never paste a GitHub token into DSH.
+2. Select **Sign in with GitHub**. The card changes to **Waiting for GitHub authorization…**, shows a prominent standalone one-time code, an **Open GitHub verification page** link, and a **Copy code** button.
+3. Copy the code with one click, open the link, sign in to the GitHub account that owns the Copilot entitlement, paste the code, and approve the request. The card confirms when copying succeeds and provides a manual-copy fallback if clipboard access fails. Never paste a GitHub token into DSH.
 4. Return to DSH. The card polls automatically; success is shown as **Signed in to GitHub Copilot.** with a **Sign out** button. The one-time URL and code disappear after success.
 5. Select a model under the `github-copilot` provider. If no model appears, restart the profile once and see [Migration and troubleshooting](#migration-and-troubleshooting).
 
 The entry path starts from **Add provider**, continues by selecting **github-copilot**, and then opens the GitHub Copilot authorization card:
 
 ![Animated GitHub Copilot provider setup flow](./docs/images/github-copilot-auth-flow.gif)
+
+The final in-flight card makes the code prominent and provides one-click copy. The screenshot uses the synthetic documentation code `ABCD-EFGH`; no real authorization request or credential was captured.
+
+![Prominent GitHub device code with one-click copy](./docs/images/copilot-device-code-copy.png)
 
 The device code is temporary and should be visible only while authorization is in progress. The close-up below records the affected pre-fix behavior, where a successful status was incorrectly displayed beside the stale code. Current builds clear that instruction after authorization settles.
 
