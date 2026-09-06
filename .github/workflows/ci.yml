@@ -46,7 +46,14 @@ jobs:
       - name: Install Core pi-ai closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
+      - name: Install optional Chat verification closure
+        if: matrix.dsh.release != '0.1.1-rc.2'
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-client-ui-chat...'
       - run: pnpm verify:upstream -- dsh-upstream
+      - name: Verify reasoning presentation with real Core services
+        if: matrix.dsh.release != '0.1.1-rc.2'
+        run: pnpm verify:reasoning-ui -- dsh-upstream
       - name: Verify real Core config integration
         run: pnpm verify:controlled-core -- dsh-upstream
       - run: pnpm verify

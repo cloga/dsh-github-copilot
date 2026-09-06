@@ -19,7 +19,7 @@ function sameIdentity(left, right) {
 }
 
 /** Refuse observable replacement; this is not an atomic defense against hostile concurrent filesystem mutation. */
-async function cleanupOwnedFixture(target, parent, identity, bytes, remove) {
+export async function cleanupOwnedFixture(target, parent, identity, bytes, remove) {
   const preserve = () => new Error(
     `verify-controlled-core preserved a changed or replaced fixture at ${target}; inspect it manually before retrying`,
   )

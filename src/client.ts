@@ -11,6 +11,7 @@ import type { CSSProperties, ReactElement } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote from './remote.ts'
+import { installReasoningPresentation } from './reasoning-presentation.ts'
 
 export const inject = ['remote', 'slots']
 
@@ -369,7 +370,14 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     await disposeRemote()
     throw error
   }
+  // The optional Chat contribution must not hold authorization activation on older Cores.
+  const presentation = ctx.inject(['uiConversation', 'slots'], scope => installReasoningPresentation({
+    slots: scope.slots,
+    uiConversation: scope.get('uiConversation'),
+    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
+  }))
   return async () => {
+    await presentation.dispose()
     await ui.dispose()
     await disposeRemote()
   }

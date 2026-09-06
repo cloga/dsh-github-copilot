@@ -17,7 +17,7 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 `dsh-github-copilot` is a companion to DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
 
-This repository owns seven narrow surfaces:
+This repository owns eight narrow surfaces:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution and Client-safe Remote descriptors.
@@ -26,13 +26,15 @@ This repository owns seven narrow surfaces:
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
 6. Provider-scoped tool-schema compatibility for Copilot payload behaviors; Core remains the tool and execution owner.
 7. A narrow, self-retiring compatibility overlay for exact account-advertised Copilot models that upstream pi-ai already specifies but has not yet published in its Copilot catalog.
+8. Optional, provider-scoped Chat presentation for completed empty reasoning disclosures; durable content and encrypted replay metadata remain Core-owned.
 
 ## File map
 
 - `src/index.ts`: authorization bootstrap, dependency-gated Host entry, settings registration, listener, and `ctx.web` provider composition.
 - `src/authorization-controller.ts`: sign-in/status/sign-out and route mutation.
 - `src/copilot-grant.ts`, `src/copilot-auth.ts`: strict grant normalization and narrow pi-ai `CredentialStore` adapter over `llm-pi-ai/github-copilot`.
-- `src/client.ts`: `settings.models.provider-card` UI keyed by `llm-pi-ai`.
+- `src/client.ts`: `settings.models.provider-card` UI keyed by `llm-pi-ai` and independently managed optional Chat integration.
+- `src/reasoning-presentation.ts`: guarded native Chat delegation and historical Copilot provenance; filters temporary view props only, never messages, signatures, replay indexes or usage.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/current-provider.ts`: selected DSH route plus installed pi-ai catalog facts.
 - `src/temporary-models.ts`: exact, account-gated compatibility metadata that self-retires when the installed pi-ai catalog owns the same model ID.

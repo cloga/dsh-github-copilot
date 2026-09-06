@@ -28,14 +28,14 @@
       "risk": "Registration does not select the global Web provider. Preserve file delegation, protocol/account gates and no implicit fallback."
     },
     "client": {
-      "purpose": "Models provider card, device-code copy UX and strict Remote results",
-      "read": ["src/client.ts", "src/remote.ts", "src/dsh-supported-types.d.ts"],
-      "tests": ["tests/client.spec.ts", "tests/client-bundle.spec.ts", "tests/authorization-controller.spec.ts"],
-      "risk": "Use synthetic device codes. Element-tree tests are not browser interaction or activation evidence."
+      "purpose": "Models provider card, device-code copy UX, strict Remote results and replay-safe reasoning presentation",
+      "read": ["src/client.ts", "src/remote.ts", "src/dsh-supported-types.d.ts", "src/reasoning-presentation.ts"],
+      "tests": ["tests/client.spec.ts", "tests/client-bundle.spec.ts", "tests/reasoning-presentation.spec.ts", "tests/authorization-controller.spec.ts"],
+      "risk": "Use synthetic device codes and message fixtures. Empty reasoning filtering is render-only: never change durable content, encrypted signatures, replay indexes or other providers. Unsupported or conflicting UI registrations retain native rendering. Element-tree tests are not live browser activation evidence."
     },
     "compatibility": {
       "purpose": "Supported DSH seams, tool schemas and exact upstream fixture checks",
-      "read": ["src/compatibility.ts", "src/tool-schema-compat.ts", "scripts/verify-upstream-baseline.mjs", "scripts/verify-controlled-core.mjs"],
+      "read": ["src/compatibility.ts", "src/tool-schema-compat.ts", "scripts/verify-upstream-baseline.mjs", "scripts/verify-controlled-core.mjs", "scripts/verify-reasoning-presentation.mjs"],
       "tests": ["tests/compatibility.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/temporary-model-runtime.spec.ts"],
       "risk": "A package version alone cannot prove a controlled Core patch; test every declared exact upstream commit."
     },

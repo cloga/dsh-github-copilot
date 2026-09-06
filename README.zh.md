@@ -126,6 +126,16 @@ Patch row 会整体替换目标 row 的 `config`，所以使用默认 HTTP 抓�
 
 搜索 proof 采用惰性验证：attach、settings 更新以及 `llm-pi-ai/github-copilot` 的 `credentials/record-updated` 事件只使缓存计划失效，不启动网络工作。下一次真实且符合条件的请求才重新验证；忽略无关凭据更新，连续事件不会引发重复的提前 probe。失效或卸载会取消正在执行的 proof。如果凭据在 proof 或最终认证解析期间改变，当前请求会 fail closed，避免把账号 A 的 proof 用于账号 B。更新后可重新提交请求；不会自动循环重试，也不会隐式使用 `probe: false`。
 
+## 空 Think 条目
+
+部分 Copilot Responses 请求（包括已观察到的 GPT-6 Astra 回复）会返回加密推理项，但没有公开的摘要文字。这是协议允许的行为：[思考摘要是可选的](https://developers.openai.com/api/docs/guides/reasoning)，加密回传数据也不是给用户阅读的说明。插件不会解密、编造或自动要求模型返回思考摘要。
+
+在通过兼容检查的 Chat 渲染接口上，Client 会隐藏已完成回复中空白或仅含空格的 Think 条目，且只处理该条回复自身记录的 provider 为 `github-copilot` 的情况；其余显示仍交给 DSH 原生渲染器。真实摘要、答案、工具、图片与操作保持不变。正在运行、已中断、来源不明或非 Copilot 的回复保持原生行为，之后切换模型不会改变历史回复的归属。由于处理的是显示视图而不是搜索传输，它也能覆盖原生／图片请求路径及已加载历史，前提是存在相应的来源记录。
+
+过滤只改变临时渲染 props，不改写持久化消息、加密签名、replay-state 块索引或 token 统计，后续请求仍保留原始推理上下文。不使用 DOM 轮询或全页面观察器；卸载插件会撤回该贡献并恢复原生显示。
+
+此可选集成使用公开的 `conversation.chat.node` keyed slot 与 `uiConversation` location data。检查会核对当前名为 `AssistantNodeView` 的简单 memo 渲染器；未来改名或压缩后不匹配时保留原样。这是兼容检查，不是模块所有权或安全证明：公开注册器无法区分故意使用相同名称和元数据的替代实现。该集成不会因旧版 Core 缺少它们而阻塞登录。扩展接口缺失、不兼容或存在其他 assistant renderer 时，保留原生输出并给出命名明确的兼容诊断。新增显示行为不代表真实 GPT-6 transport 已验证；不支持该接口的 Core 仍可能显示空 Think。它不会修改只控制 hosted search 的 `github-copilot.enabled` 设置。
+
 ## Copilot Tool 兼容
 
 为避免已观察到的无效 Copilot Tool payload，本包会把托管 route 的 `compat.supportsStrictMode` 叶节点设为 `false`，并在所选 provider 严格等于 `github-copilot` 时执行两项仅作用于 Schema 的修复：从 Tool Schema 顶层删除 `sandbox_permissions` 与 `justification`，并把 Core 的多动作 `update_goal` 参数改写为带判别字段的 `oneOf`。这样每种 Goal action 只暴露合法字段：`complete`、`pause`、`resume` 不会携带编辑或阻塞字段，`blocked` 必须提供 `blocked_reason`，只有 `edit` 暴露替换字段。执行仍使用 Core 原本的 Goal Tool 与 Service。非 Copilot prompt assembly 完全不变。
@@ -186,6 +196,8 @@ pnpm pack --pack-destination artifacts
 ```
 
 开发建议使用 Node 24 LTS 和固定的 pnpm 版本；运行时依赖要求 Node >=22.19.0。`pnpm verify` 检查 Agent contract、源码与本地测试类型、baseline marker、干净构建、Vitest 与 Node 工具测试，以及真实构建 Host 导入和 Client/Remote smoke。打包后执行 `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`，检查归档 export、图片、允许的文件以及与本次构建的一致性。CI 在 Windows/Linux 上验证受控 rc.2、rc.1、alpha.1 的精确 Core 源码与配置 fixture；发布必须等待完整矩阵通过。
+
+对于可选的思考显示集成，`pnpm verify:reasoning-ui -- <Core checkout>` 会在已安装 Chat 依赖的干净、精确 pin 的 rc.1 或 alpha.1 checkout 中，执行合成的原生渲染器、Slot 注册器与历史组装 fixture。它只会独占创建一个临时测试文件，并仅在文件未被修改时清理。这是本地集成／静态渲染证据，不是真实浏览器或 Copilot API 测试；CI 在两个支持该 Chat 接口的基线上运行此项。
 
 ### Agent 驱动开发
 

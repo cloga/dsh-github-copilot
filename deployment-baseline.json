@@ -72,6 +72,23 @@
   },
   "capabilities": [
     {
+      "id": "replay-safe-copilot-reasoning-presentation",
+      "required": true,
+      "activation": "optional-guarded-client-seam",
+      "sourceMarkers": [
+        {"file": "src/client.ts", "marker": "ctx.inject(['uiConversation', 'slots']"},
+        {"file": "src/reasoning-presentation.ts", "marker": "projectReasoningPresentation"},
+        {"file": "src/reasoning-presentation.ts", "marker": "github-copilot-assistant-origin"}
+      ],
+      "tests": [
+        {"file": "tests/reasoning-presentation.spec.ts", "name": "removes fifteen empty rows without reading or changing encrypted durable replay material"},
+        {"file": "tests/reasoning-presentation.spec.ts", "name": "reconstructs cold/prepended history without step/start and never borrows a current route"},
+        {"file": "tests/reasoning-presentation.spec.ts", "name": "retires on any third-party override conflict and resumes only when safe"},
+        {"file": "tests/client.spec.ts", "name": "does not delay authorization while the optional reasoning presentation waits for Core services"},
+        {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "renders answers and public summaries without the fifteen empty native Think rows"}
+      ]
+    },
+    {
       "id": "client-module-loader-handoff",
       "required": true,
       "sourceMarkers": [
