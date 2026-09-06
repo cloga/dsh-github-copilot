@@ -74,6 +74,7 @@
     "verify:baseline": "node scripts/verify-deployment-baseline.mjs",
     "verify:package": "node scripts/verify-package.mjs",
     "verify:controlled-core": "node scripts/verify-controlled-core.mjs",
+    "verify:reasoning-ui": "node scripts/verify-reasoning-presentation.mjs",
     "verify:upstream": "node scripts/verify-upstream-baseline.mjs",
     "verify": "pnpm verify:agent && pnpm typecheck && pnpm typecheck:tests && pnpm verify:baseline && pnpm build && pnpm test && pnpm test:scripts && pnpm verify:package"
   },

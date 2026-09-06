@@ -179,6 +179,7 @@ describe('GitHub Copilot Models client', () => {
   function clientContext(declaredSlots: readonly string[]) {
     const disposeRemote = vi.fn(async () => undefined)
     const disposeUi = vi.fn(async () => undefined)
+    const disposePresentation = vi.fn(async () => undefined)
     const registrations = new Map<string, ReturnType<typeof vi.fn>>()
     const injections = new Map<string, () => unknown>()
     const register = vi.fn((options: { name: string }) => {
@@ -197,7 +198,10 @@ describe('GitHub Copilot Models client', () => {
       }
       inject: ReturnType<typeof vi.fn>
     }
-    const inject = vi.fn((_services: string[], callback: (value: unknown) => void) => {
+    const inject = vi.fn((services: string[], callback: (value: unknown) => void) => {
+      if (services.includes('uiConversation')) {
+        return Object.assign(new Promise<void>(() => {}), { dispose: disposePresentation })
+      }
       callback(ctx)
       return Object.assign(Promise.resolve(), { dispose: disposeUi })
     })
@@ -215,8 +219,19 @@ describe('GitHub Copilot Models client', () => {
       },
       inject,
     }
-    return { ctx, disposeRemote, disposeUi, register, registrations, injections }
+    return { ctx, disposeRemote, disposeUi, disposePresentation, register, registrations, injections }
   }
+
+  it('does not delay authorization while the optional reasoning presentation waits for Core services', async () => {
+    const { ctx, disposeRemote, disposeUi, disposePresentation } = clientContext(['settings.section'])
+    const dispose = await apply(ctx as never)
+    expect(ctx.inject).toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))
+    expect(disposePresentation).not.toHaveBeenCalled()
+    await dispose()
+    expect(disposePresentation).toHaveBeenCalledOnce()
+    expect(disposeUi).toHaveBeenCalledOnce()
+    expect(disposeRemote).toHaveBeenCalledOnce()
+  })
 
   it('mounts its Remote contribution and registers the rc.1 provider-card seat', async () => {
     const { ctx, disposeRemote, disposeUi, register } = clientContext([

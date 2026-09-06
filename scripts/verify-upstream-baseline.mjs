@@ -36,6 +36,15 @@ if (baseline.modelsUi === 'provider-card') {
     'settings.models.provider-card',
     'settings.models.footer',
   ])
+  await assertMarkers('packages/client/ui-chat/src/client/contract/slots.ts', [
+    "'conversation.chat.node'", "keyProps: { [Kind in ChatNodeKind]",
+  ])
+  await assertMarkers('packages/client/ui-chat/src/client/chat/register-node-renderers.ts', [
+    "key: 'assistant-step', locale: NS", 'AssistantNodeView',
+  ])
+  await assertMarkers('packages/client/ui-conversation/src/client/contract/conversation.ts', [
+    'buildLocationData', 'ConversationLocationDataSource', 'ConversationStepDataMap',
+  ])
 } else {
   await assertMarkers('packages/client/ui-settings-models/src/client/ModelsSection.tsx', [
     'ProviderEditor',

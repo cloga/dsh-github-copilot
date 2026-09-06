@@ -102,6 +102,10 @@ for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   )
 }
 
+const reasoningPresentation = manifest.capabilities?.find(capability => capability.id === 'replay-safe-copilot-reasoning-presentation')
+assert(reasoningPresentation?.activation === 'optional-guarded-client-seam', 'reasoning presentation must remain optional and guarded')
+assert((await read('src/client.ts')).includes("export const inject = ['remote', 'slots']"), 'optional Chat services must not become authorization prerequisites')
+
 const compatibility = await read('src/compatibility.ts')
 assert(compatibility.includes(`peerRange: '${peerRange}'`), 'runtime compatibility range differs')
 assert(
