@@ -212,9 +212,17 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 
 `agent-contract.json` 把 authorization、models、search、client、compatibility、tooling、release 任务映射到负责文件和测试。Plan 返回尚未执行的参数数组，包含当前包版本对应的归档路径。Doctor 仅检查仓库前置条件：退出码 0 表示 preflight 通过，1 表示缺少依赖，2 表示参数或元数据错误。需要纯 JSON 时直接运行 `node`，不要解析 pnpm 的进度日志。
 
-署名依据实际工具：DSH 协助的改动使用 `Assisted-by: DeepSeek Harness (DSH)`，不能因为模型来自 Copilot 就添加 Copilot App co-author。保留人类 Git author；`Co-authored-by` 只用于身份经过确认的真实协作者。合并、发布、安装到 profile、登出和 worktree checkout 都需要明确批准。
+署名依据实际工具：DSH 协助的改动使用 `Assisted-by: DeepSeek Harness (DSH)`，不能因为模型来自 Copilot 就添加 Copilot App co-author。保留人类 Git author；`Co-authored-by` 只用于身份经过确认的真实协作者。合并、安装到 profile、登出和 worktree checkout 仍需要明确批准。重要更新默认包含合并后的发版交付，按下文规则继续推进，不再重复询问是否发版。
 
 验证证据必须分层：包存在、模块导入和合成测试通过，不证明真实 DSH 已激活、账号权限有效、模型请求或搜索成功。Authorization `status()` 现在为只读；显式 reconciliation 或启动仍可能持久化配置，能力 probe 只在真实且符合条件的请求中运行。没有真实请求时，这些状态均不能证明 transport 已成功。会话模型与默认 plan 不一致时，现在保留 Core transport，避免误用默认模型。完整发现、证据与剩余限制见[readiness 审计](./docs/agent-readiness.md)。
+
+## 重要更新的发版交付
+
+用户要求的重要功能、行为修复、兼容性修复以及安全或稳定性修复，默认包含授权合并且必要 CI 通过后的版本发布。Agent 必须继续完成版本准备、受保护的 tag／Release 流程和制品核验，不再等用户另外催一次“发版”。能在实现 PR 中准备好版本信息时一并完成；除非明确要求转正式版，否则保留预发布通道。
+
+用户明确要求“只改代码／只评审／不要发布”时优先遵守。纯文档、纯内部改动不默认发版。合并仍需批准，包括额外的版本 PR；本机安装、会中重启仍分别保留授权与安全检查。这是 Agent 的交付规则，不是把 CI 改成所有 PR 一合并就无条件发包。
+
+只有报告了已发布的 Release 链接、版本、tag／commit 及核验后的制品 SHA-256，才能称为发版交付完成。若被 CI、权限或网络阻塞，必须说明具体原因和待执行步骤，不能把“已合并”或“本地已构建”说成“已发布”。完整规则见 [AGENTS.md](./AGENTS.md#important-update-release-delivery)。
 
 ## Release 与 checksum 校验
 
