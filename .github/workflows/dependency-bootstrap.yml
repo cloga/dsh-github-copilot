@@ -1,0 +1,78 @@
+name: Plugin dependency bootstrap
+
+on:
+  push:
+    branches:
+      - cloga-dependency-bootstrap-83
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - name: Resolve and verify public dependencies without executing package scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Download both development platforms into a portable content-addressed store.
+          # This temporary runner setting is not a Core patch or a plugin runtime config.
+          cat > pnpm-workspace.yaml <<'YAML'
+          supportedArchitectures:
+            os: [linux, win32]
+            cpu: [x64]
+          YAML
+          store="$RUNNER_TEMP/copilot-dependency-store"
+          pnpm install --lockfile-only --ignore-scripts --registry=https://registry.npmjs.org --store-dir="$store"
+          pnpm install --frozen-lockfile --ignore-scripts --registry=https://registry.npmjs.org --store-dir="$store"
+          pnpm store status --store-dir="$store"
+          mkdir -p dependency-bootstrap
+          cp package.json pnpm-lock.yaml pnpm-workspace.yaml dependency-bootstrap/
+          tar -czf dependency-bootstrap/pnpm-store.tgz -C "$store" .
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto'
+          import { createReadStream } from 'node:fs'
+          import { readFile, writeFile } from 'node:fs/promises'
+          const sha = async path => {
+            const hash = createHash('sha256')
+            for await (const part of createReadStream(path)) hash.update(part)
+            return hash.digest('hex')
+          }
+          const pkg = JSON.parse(await readFile('package.json', 'utf8'))
+          const receipt = {
+            schemaVersion: 1,
+            repository: process.env.GITHUB_REPOSITORY,
+            commit: process.env.GITHUB_SHA,
+            runId: process.env.GITHUB_RUN_ID,
+            node: process.version,
+            packageManager: pkg.packageManager,
+            registry: 'https://registry.npmjs.org',
+            architectures: { os: ['linux', 'win32'], cpu: ['x64'] },
+            packageJsonSha256: await sha('package.json'),
+            packageDataSha256: createHash('sha256').update(JSON.stringify(pkg)).digest('hex'),
+            lockfileSha256: await sha('pnpm-lock.yaml'),
+            storeSha256: await sha('dependency-bootstrap/pnpm-store.tgz'),
+            evidence: 'Dependency resolution, frozen install without scripts, and store integrity only. No plugin tests, Core changes, release, OAuth or model calls.',
+          }
+          await writeFile('dependency-bootstrap/receipt.json', JSON.stringify(receipt, null, 2) + '\n')
+          console.log(JSON.stringify(receipt))
+          NODE
+      - uses: actions/upload-artifact@v6
+        with:
+          name: plugin-dependency-bootstrap-${{ github.sha }}
+          path: dependency-bootstrap/
+          retention-days: 7
+          if-no-files-found: error
