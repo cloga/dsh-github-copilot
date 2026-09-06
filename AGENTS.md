@@ -9,7 +9,7 @@ This file is the authoritative entry point for humans and coding agents. Read it
 3. Run `node scripts/agent.mjs doctor --json` before install. It is a dependency-free, read-only repository preflight: exit 0 means preflight passed, 1 means prerequisites missing, 2 means invalid arguments/metadata. Build presence is not build freshness, and no live DSH or credential readiness is claimed.
 4. Choose a task with `node scripts/agent.mjs plan models --json` (or authorization/search/client/compatibility/tooling/release). Output is an unexecuted argv plan, never implicit permission to run destructive operations.
 5. Use Node 24 LTS for development and the exact pnpm version in `package.json`; the runtime dependency floor is Node 22.19.0. Run frozen install in this checkout. Dependencies/build output are not carried into worktrees.
-6. Create/reuse a tracking issue and feature branch, implement a regression first, run the full gate, inspect the diff, and open a PR. Stop before merge, publication, live-profile install or worktree checkout without explicit user approval.
+6. Create/reuse a tracking issue and feature branch, implement a regression first, run the full gate, inspect the diff, and open a PR. After an authorized merge of an important update, continue through the release-delivery rule below without another release prompt. Merge, live-profile install and worktree checkout still require explicit user approval.
 
 Use native DSH tools for goals, background jobs and scoped subagents. Use local Git and the GitHub REST API for delivery; no external orchestration daemon, roster or `vcs_*` tool is required. Do not assume a model provider's identity is the assisting agent.
 
@@ -106,6 +106,15 @@ When upgrading DSH or pi-ai, inspect the exact tagged public exports and update 
 - The Release workflow must run the complete gate, pack the versioned tarball, publish `SHA256SUMS`, and create the Release only after every preceding step succeeds.
 - Release tags must never move or be reused. Repository tag rules and immutable-release settings enforce this for new releases.
 
+## Important-update release delivery
+
+- User-requested important updates include user-visible features, behavior fixes, compatibility fixes, and security or stability fixes. Their default delivery includes publication after an authorized merge and green required CI; do not stop at a merged PR or ask a second time whether to release.
+- Explicit user restrictions such as code-only, review-only or do-not-release take precedence. Pure documentation and internal-only changes are not automatically release-bearing; they need an explicit release request if publication is desired. A task plan is not permission for an unrelated release.
+- Plan version alignment with the implementation PR whenever possible. If the prepared version/tag is unused and aligned, release it; otherwise prepare the next appropriate SemVer version through the normal PR path. Preserve the prerelease channel unless promotion is explicitly requested. Any additional version PR still needs merge approval, not a repeated release-scope question.
+- Check all required CI, tag rules and package/archive checks. Create a fresh annotated tag only on the verified merged revision, let the protected Release workflow publish, and verify the non-draft Release, intended prerelease flag, tag/commit, assets and SHA-256. Never bypass failing CI, move a tag or substitute an unverified local archive.
+- A release-bearing update is not fully delivered until the published Release URL and verified version/commit/assets/checksum are reported. If CI, permissions or network prevents release, report the concrete blocker and the exact pending step; never describe merged-only work as released.
+- This standing release authorization does not authorize profile installation, sign-out, worktree checkout or interruption of running Sessions. Keep published, installed-on-disk and loaded-runtime status separate; a session-interrupting restart still requires explicit acknowledgement.
+
 ## Installation-agent PowerShell practice
 
 Installation agents using the DSH `pwsh` tool must follow these rules:
@@ -167,6 +176,6 @@ Never say GPT-6/search works merely because settings, typecheck or a package imp
 - `Co-authored-by` is reserved for actual collaborators with verified identities. Do not copy the Copilot App trailer from history or invent a bot email. The model provider is not the authoring tool. Keep the user's Git author unchanged and do not rewrite published history.
 - State expected results and scope before the complete gate; compare actual outcomes before pushing. All current CI checks must be green before any authorized merge.
 - Push only the feature branch and open a PR targeting the resolved default branch with `Fixes #<issue>`. Include risks, tests, evidence limits, and rollback.
-- Merge, release/tag publication, installing into a user profile, and worktree checkout each require explicit user approval. Task completion is not approval. Never bypass branch/tag protection.
+- Merge, installing into a user profile, sign-out and worktree checkout require explicit user approval. Important-update publication follows the standing release-delivery rule above, not a second release prompt; other releases need an explicit request. Never bypass branch/tag protection.
 
 GitHub operations must use the repository owner's intended authenticated identity. Inject credentials only into the current Git/API process; never print or persist them or add machine-specific credential paths here. Network failure is not an authentication failure: follow user-authorized network recovery, bound retries, preserve local work and report pending remote delivery honestly.

@@ -24,6 +24,43 @@ test('plans only known task IDs with unexecuted argument arrays', async () => {
   assert.ok((await planTask('tooling')).commands.some(command => command.argv[1] === 'test:scripts'))
 })
 
+test('important updates carry release follow-through without a second approval prompt', async () => {
+  const plan = await planTask('release')
+  const policy = plan.boundaries.releaseDelivery
+  assert.equal(policy.mode, 'important-update-follow-through')
+  assert.equal(policy.repeatApprovalRequired, false)
+  assert.equal(policy.userRestrictionsTakePrecedence, true)
+  assert.equal(policy.otherChangesRequireExplicitReleaseRequest, true)
+  assert.deepEqual(policy.requiredConditions, ['authorized-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets'])
+  assert.deepEqual(policy.completionEvidence, ['published-release-url', 'tag-and-commit', 'asset-and-sha256'])
+  assert.ok(!plan.boundaries.approvalRequired.includes('release'))
+  for (const boundary of ['merge', 'install into a user profile', 'sign-out', 'worktree checkout']) {
+    assert.ok(plan.boundaries.approvalRequired.includes(boundary))
+  }
+  assert.match(plan.delivery, /important updates continue to verified Release/)
+  assert.ok(plan.commands.every(command => command.executed === false))
+})
+
+test('contract validation rejects a redundant release prompt or weakened release prerequisites', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-release-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    for (const mutate of [
+      contract => contract.boundaries.approvalRequired.push('release'),
+      contract => { contract.boundaries.releaseDelivery.repeatApprovalRequired = true },
+      contract => { contract.boundaries.releaseDelivery.userRestrictionsTakePrecedence = false },
+      contract => { contract.boundaries.releaseDelivery.requiredConditions = ['authorized-merge'] },
+      contract => { contract.boundaries.releaseDelivery.completionEvidence = [] },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /release delivery/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('attribution names the actual tool without inventing a co-author email', () => {
   assert.equal(attribution('DeepSeek Harness (DSH)'), 'Assisted-by: DeepSeek Harness (DSH)')
   for (const value of ['', 'DSH\nCo-authored-by: fake@example.com', 'fake@example.com']) {

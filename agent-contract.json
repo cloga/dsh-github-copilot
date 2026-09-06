@@ -5,7 +5,16 @@
     "credentialOwner": "DSH credentials and pi-ai OAuth; never request, log or export grants",
     "transportOwner": "DSH llm-pi-ai; no second general Copilot adapter",
     "diagnostics": "Repository checks only; no live profile, credential, network or model calls",
-    "approvalRequired": ["merge", "release", "install into a user profile", "sign-out", "worktree checkout"],
+    "approvalRequired": ["merge", "install into a user profile", "sign-out", "worktree checkout"],
+    "releaseDelivery": {
+      "mode": "important-update-follow-through",
+      "importantChanges": ["user-visible-feature", "behavior-fix", "compatibility-fix", "security-fix", "stability-fix"],
+      "repeatApprovalRequired": false,
+      "userRestrictionsTakePrecedence": true,
+      "otherChangesRequireExplicitReleaseRequest": true,
+      "requiredConditions": ["authorized-merge", "green-required-ci", "fresh-annotated-tag", "verified-release-assets"],
+      "completionEvidence": ["published-release-url", "tag-and-commit", "asset-and-sha256"]
+    },
     "attribution": "Assisted-by identifies the actual assisting tool; never infer a co-author from a model provider"
   },
   "tasks": {
@@ -49,7 +58,7 @@
       "purpose": "Version alignment and immutable GitHub prerelease/release delivery",
       "read": ["package.json", "deployment-baseline.json", ".github/workflows/release.yml", "scripts/verify-package.mjs"],
       "tests": ["tests/client-bundle.spec.ts"],
-      "risk": "Requires explicit release approval, green CI, a fresh annotated tag and verified remote checksums; never reuse tags."
+      "risk": "Important updates continue to publication after authorized merge and green required CI without a second release prompt, unless the user restricts delivery. Other changes need an explicit release request. Preserve fresh annotated tags and verified remote assets/checksums; report a concrete blocker instead of calling a merge complete. Profile installation and interrupting restarts remain separate."
     }
   }
 }
