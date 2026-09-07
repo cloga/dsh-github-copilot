@@ -33,8 +33,8 @@ function runtimeExport(value) {
   return runtimeExport(value.default ?? value.import)
 }
 async function sourceEntry(core, directory, output, tracked) {
-  if (typeof output !== 'string' || !output.startsWith('./lib/') || !output.endsWith('.js')) return undefined
-  const stem = output.slice('./lib/'.length, -3)
+  if (typeof output !== 'string' || !output.startsWith('./lib/') || !/\.(?:mjs|cjs|js)$/.test(output)) return undefined
+  const stem = output.slice('./lib/'.length).replace(/\.(?:mjs|cjs|js)$/, '')
   const options = [join(directory, 'src', `${stem}.ts`), join(directory, 'src', `${stem}.tsx`), join(directory, 'src', stem, 'index.ts')]
   const found = []
   for (const path of options) {

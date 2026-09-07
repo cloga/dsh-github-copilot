@@ -99,6 +99,22 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   assert.throws(() => guard.resolveId('@deepseek-ai/dsh-unmapped', join(value.root, 'src/index.ts')), /PUBLIC_EXPORT_UNMAPPED/)
 }))
 
+test('maps import-condition mjs vendor exports without aliasing the plugin vendor copy', async () => withFixture(async value => {
+  const dir = join(value.core, 'vendor/schemastery')
+  await mkdir(join(dir, 'src'), { recursive: true })
+  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: '@deepseek-ai/schemastery', version: '3.18.2', type: 'module', exports: {
+    '.': { types: './lib/types/index.d.ts', import: './lib/index.mjs', require: './lib/index.cjs' },
+  } }))
+  await writeFile(join(dir, 'src/index.ts'), 'export const schema = true\n')
+  value.tracked.push('vendor/schemastery/package.json', 'vendor/schemastery/src/index.ts')
+  const report = await prepareTaggedCoreFixture(value, value)
+  assert.ok(report.vendors.some(item => item.name === '@deepseek-ai/schemastery' && item.entry === join(dir, 'src/index.ts')))
+  const config = (await import(pathToFileURL(report.configPath).href)).default
+  const resolver = config.plugins.find(item => item.name === 'tagged-core-public-import-guard')
+  assert.equal(resolver.resolveId('@deepseek-ai/schemastery', join(value.core, 'packages/llm/llm/src/retry-policy.ts')), join(dir, 'src/index.ts'))
+  assert.equal(resolver.resolveId('@deepseek-ai/schemastery', join(value.root, 'src/config.ts')), null)
+}))
+
 test('rejects unknown or mismatched release pins before creating scratch', async () => withFixture(async value => {
   await assert.rejects(prepareTaggedCoreFixture({ ...value, release: 'latest' }, value), /unsupported/)
   const git = (_core, args) => args[0] === 'rev-parse' ? 'bad-sha' : ''
