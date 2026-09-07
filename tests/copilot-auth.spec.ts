@@ -7,6 +7,8 @@ import {
   createGitHubCopilotTokenResolver,
 } from '../src/copilot-auth.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY } from '../src/authorization-controller.ts'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../src/copilot-identity.ts'
+import { applyRequestAuth } from '../src/copilot-request.ts'
 
 interface GrantRecord {
   kind: 'grant'
@@ -37,7 +39,7 @@ function strictJsonRoundTrip<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-function runtime(record: GrantRecord | undefined, onCredentialChanged?: () => Promise<void>): {
+function runtime(record: GrantRecord | undefined, onCredentialChanged?: () => Promise<void>, mountedProtocol?: unknown): {
   readonly resolve: ReturnType<typeof createGitHubCopilotTokenResolver>
   readonly store: ReturnType<typeof createGitHubCopilotCredentialStore>
   readonly modifyRecord: ReturnType<typeof vi.fn>
@@ -50,7 +52,7 @@ function runtime(record: GrantRecord | undefined, onCredentialChanged?: () => Pr
   ) => {
     expect(key).toBe(GITHUB_COPILOT_CREDENTIAL_KEY)
     const next = await mutate(current)
-    current = next === undefined ? undefined : strictJsonRoundTrip(next)
+    if (next !== undefined) current = strictJsonRoundTrip(next)
     return current
   })
   const credentials = {
@@ -63,7 +65,8 @@ function runtime(record: GrantRecord | undefined, onCredentialChanged?: () => Pr
     deleteRecord: vi.fn(async () => { current = undefined }),
   }
   const ctx = new Context()
-  ctx.get = ((name: string) => name === 'credentials' ? credentials : undefined) as typeof ctx.get
+  ctx.get = ((name: string) => name === 'credentials' ? credentials
+    : name === 'llmPiAiModelProtocol' ? mountedProtocol : undefined) as typeof ctx.get
   return {
     resolve: createGitHubCopilotTokenResolver(ctx, onCredentialChanged),
     store: createGitHubCopilotCredentialStore(ctx),
@@ -77,6 +80,59 @@ afterEach(() => {
 })
 
 describe('GitHub Copilot credential adapter', () => {
+  it('does not overwrite request-owned headers with local model metadata', async () => {
+    const headers = { 'User-Agent': 'Request-Agent', 'Editor-Version': 'Request-Editor' }
+    const harness = runtime({ kind: 'grant', payload: {
+      type: 'oauth', refresh: 'synthetic-refresh', access: 'synthetic-access',
+      expires: Date.now() + 86_400_000, availableModelIds: ['gpt-5.4'],
+    } })
+    const fetchMock = vi.fn(async () => { throw new Error('no network in header projection test') })
+    vi.stubGlobal('fetch', fetchMock)
+    const auth = await harness.resolve('gpt-5.4')
+    expect(auth).toBeDefined()
+    const request = applyRequestAuth({ protocol: 'openai-responses', model: 'gpt-5.4',
+      baseURL: 'https://api.individual.githubcopilot.com', headers, apiKeyEnv: GITHUB_COPILOT_CREDENTIAL_KEY, apiVersion: '2023-06-01' }, auth!)
+    expect(request.headers).toEqual(headers)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not use an unshipped Core service to authorize arbitrary unknown model IDs', async () => {
+    const getCatalogModels = vi.fn(() => [{ id: 'core-only-model', api: 'openai-responses' }])
+    const core = { perModelApi: true, precedence: 'model-route-catalog', preservesCatalogProvider: true, getCatalogModels }
+    const harness = runtime({ kind: 'grant', payload: {
+      type: 'oauth', refresh: 'synthetic-refresh', access: 'synthetic-access',
+      expires: Date.now() + 86_400_000, availableModelIds: ['core-only-model'],
+    } }, undefined, core)
+    const fetchMock = vi.fn(async () => { throw new Error('no network in model ownership test') })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(harness.resolve('core-only-model')).rejects.toThrow(/catalog has no GitHub Copilot model/)
+    expect(getCatalogModels).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects logical provider mismatches before touching shared credential storage', async () => {
+    const ctx = new Context()
+    const get = vi.fn(() => { throw new Error('credential storage must not be reached') })
+    ctx.get = get as typeof ctx.get
+    const store = createGitHubCopilotCredentialStore(ctx, GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    await expect(store.read('github-copilot')).rejects.toThrow('COPILOT_CREDENTIAL_PROVIDER_MISMATCH')
+    await expect(store.modify('github-copilot', async () => undefined)).rejects.toThrow('COPILOT_CREDENTIAL_PROVIDER_MISMATCH')
+    await expect(store.delete('other-provider')).rejects.toThrow('COPILOT_CREDENTIAL_PROVIDER_MISMATCH')
+    expect(get).not.toHaveBeenCalled()
+  })
+
+  it('preserves the canonical grant when a serialized modification declines to change it', async () => {
+    const record: GrantRecord = { kind: 'grant', payload: {
+      type: 'oauth', refresh: 'synthetic-refresh', access: 'synthetic-access',
+      expires: Date.now() + 86_400_000, availableModelIds: ['gpt-5.4'],
+    } }
+    const harness = runtime(record)
+    await expect(harness.store.modify('github-copilot', async () => undefined)).resolves.toMatchObject({ access: 'synthetic-access' })
+    expect(harness.current()).toBe(record)
+    await harness.store.delete('github-copilot')
+    expect(harness.current()).toBeUndefined()
+  })
+
   it('normalizes cross-module OAuth grants for a strict JSON credential store', async () => {
     const credential = vm.runInNewContext(`(() => {
       const value = Object.create(null)

@@ -9,9 +9,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, GITHUB_COPILOT_SETTINGS_NAMESPACE } from '../../src/index.ts'
 import type { InlineConfig } from '../../src/config.ts'
 import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
+import { markAgentLoopRequest, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Context } from '@deepseek-ai/cordis'
 import type { WebFetchProvider, WebSearchProvider } from '@deepseek-ai/dsh-web'
+import { GITHUB_COPILOT_PREVIEW_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../../src/copilot-identity.ts'
 
 vi.mock('@deepseek-ai/dsh-settings', () => ({ installSettingsSection: undefined }))
 
@@ -119,6 +120,7 @@ function buildRuntime(
   overrides: Partial<FakeRuntime> = {},
   selectionRef: SelectionRef = { current: { provider: 'github-copilot', model: 'gpt-5.4' } },
   extraSettings: Record<string, unknown> = {},
+  mountedPreview?: unknown,
 ): FakeRuntime {
   let listener: FakeRuntime['listener']
   const listeners = new Map<string, (request: GenerateOptions, next: () => unknown) => unknown>()
@@ -145,6 +147,7 @@ function buildRuntime(
   const fake = fakeSettings(settingsDocument)
   const store = new Map<string, unknown>([
     ['settings', fake.settings],
+    ['githubCopilotPreview', mountedPreview],
     // Mutable selection so route-switch tests can move between providers; a
     // null ref simulates a boot where the default-model service has not
     // settled a selection yet (route facts undetectable), read live so a
@@ -308,6 +311,56 @@ async function flushStartup(): Promise<void> {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('Responses reasoning composition', () => {
+  it('keeps preview conversations on their registered native adapter before any probe', () => {
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: GITHUB_COPILOT_PREVIEW_MODEL_ID } }, {},
+      { getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }) })
+    apply(runtime.ctx, config)
+    const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
+    vi.stubGlobal('fetch', fetchMock)
+    const next = vi.fn(() => 'registered-preview-adapter')
+    const prepared = request({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: GITHUB_COPILOT_PREVIEW_MODEL_ID })
+    expect(runtime.listener?.(prepared, next)).toBe('registered-preview-adapter')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('delegates native effort selection to Core when its catalog service is absent', () => {
+    const runtime = buildRuntime()
+    apply(runtime.ctx, config)
+    const fetchMock = vi.fn(async () => { throw new Error('no probe or custom model request') })
+    vi.stubGlobal('fetch', fetchMock)
+    const next = vi.fn(() => 'native-effort')
+    expect(runtime.listener?.(request({ reasoningEffort: ReasoningEffortId('high') }), next)).toBe('native-effort')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('transmits the selected effort and preserves the returned public summary', async () => {
+    const runtime = buildRuntime({}, undefined, {
+      'llm-pi-ai': { providers: { 'github-copilot': { reasoning: 'low', models: [
+        { id: 'gpt-5.4', api: 'openai-responses', reasoningEfforts: { low: 'low', high: 'high' } },
+      ] } } },
+    })
+    const events = [
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs_synthetic' } },
+      { type: 'response.reasoning_summary_text.delta', output_index: 0, summary_index: 0, delta: 'Synthetic public summary.' },
+      { type: 'response.output_item.done', output_index: 0, item: { type: 'reasoning', id: 'rs_synthetic', summary: [{ type: 'summary_text', text: 'Synthetic public summary.' }] } },
+      { type: 'response.output_item.added', output_index: 1, item: { type: 'message', id: 'msg_synthetic' } },
+      { type: 'response.output_text.delta', output_index: 1, delta: 'Synthetic answer.' },
+      { type: 'response.completed', response: { status: 'completed' } },
+    ]
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body)).reasoning).toEqual({ effort: 'high', summary: 'auto' })
+      return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    await flushStartup()
+    const chunks = await drain(runtime.listener?.(request({ reasoningEffort: ReasoningEffortId('high') }), () => undefined) as AsyncIterable<StreamChunk>)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(chunks).toContainEqual(expect.objectContaining({ type: 'reasoning-delta', text: 'Synthetic public summary.' }))
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
+  })
 })
 
 describe.each(['inline', 'web'] as const)('%s credential proof cache lifecycle', surface => {
@@ -572,6 +625,41 @@ describe('github-copilot apply', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('uses managed account authorization for a new model without static catalog membership', async () => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const resolveRequestAuth = vi.fn(async () => ({ apiKey: 'managed-synthetic-access', baseURL }))
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'future-lab-r17' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }), resolveRequestAuth,
+    })
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer managed-synthetic-access')
+      return new Response(JSON.stringify({ output: [{ type: 'message', content: [{ type: 'output_text', text: 'Synthetic search result.' }] }] }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, providers: [], probe: false })
+    const attachReads = runtime.credentialRead.mock.calls.length
+    expect(runtime.searchProviders[0]?.available()).toBe(true)
+    await runtime.searchProviders[0]!.search({ query: 'synthetic query' })
+    expect(resolveRequestAuth).toHaveBeenCalledWith('future-lab-r17', expect.any(AbortSignal))
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${baseURL}/responses`)
+    expect(runtime.credentialRead).toHaveBeenCalledTimes(attachReads)
+  })
+
+  it('refuses a managed search whose metadata changes during auth resolution', async () => {
+    let api = 'openai-responses'
+    const baseURL = 'https://api.individual.githubcopilot.com'
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'future-lab-r17' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }), routeFacts: () => ({ api, baseURL }),
+      resolveRequestAuth: async () => { api = 'openai-completions'; return { apiKey: 'synthetic', baseURL } },
+    })
+    const fetchMock = vi.fn(async () => { throw new Error('stale protocol must not be sent') })
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, providers: [], probe: false })
+    await expect(runtime.searchProviders[0]!.search({ query: 'synthetic query' })).rejects.toThrow()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('reflects a cached failed probe and becomes ready after probing is disabled', async () => {
     const runtime = buildRuntime()
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
@@ -663,6 +751,44 @@ describe('github-copilot apply', () => {
       return 'next-value'
     })
     expect(runtime.listener?.(withImage, next)).toBe('next-value')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['Synthetic public reasoning summary.', ''])('delegates reasoning history to Core before probing: %j', (text) => {
+    const runtime = buildRuntime()
+    apply(runtime.ctx, config)
+    const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
+    vi.stubGlobal('fetch', fetchMock)
+    const withReasoning = request({ messages: [{
+      id: 'assistant-with-summary' as Message['id'], role: 'assistant',
+      source: { kind: 'model', provider: 'github-copilot', model: 'gpt-5.4' },
+      content: [{ type: 'reasoning', text }, { type: 'text', text: 'Synthetic answer.' }],
+    }] })
+    const originalMessages = withReasoning.messages
+    const next = vi.fn(() => {
+      expect(withReasoning.messages).toBe(originalMessages)
+      expect(withReasoning.messages[0]?.content[0]).toEqual({ type: 'reasoning', text })
+      return 'core-replay'
+    })
+    expect(runtime.listener?.(withReasoning, next)).toBe('core-replay')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('delegates opaque assistant replay state without serializing its fields', () => {
+    const runtime = buildRuntime()
+    apply(runtime.ctx, config)
+    const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
+    vi.stubGlobal('fetch', fetchMock)
+    const replay = Object.defineProperty({}, 'encrypted', { enumerable: true, get() { throw new Error('do not inspect replay payload') } })
+    const withReplay = request({ messages: [{
+      id: 'assistant-with-replay' as Message['id'], role: 'assistant',
+      source: { kind: 'model', provider: 'github-copilot', model: 'gpt-5.4', replayState: replay },
+      content: [{ type: 'text', text: 'Synthetic answer.' }],
+    }] })
+    const next = vi.fn(() => 'core-replay')
+    expect(runtime.listener?.(withReplay, next)).toBe('core-replay')
     expect(next).toHaveBeenCalledTimes(1)
     expect(fetchMock).not.toHaveBeenCalled()
   })

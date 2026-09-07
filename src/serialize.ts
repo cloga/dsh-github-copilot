@@ -1,7 +1,7 @@
 /**
- * Message and tool serialization for the inline wire path: dsh messages and
- * tool schemas project onto the OpenAI Responses input vocabulary exactly
- * like the pi-ai adapter, plus the server-side `web_search` tool injection.
+ * Text/tool serialization for the inline wire path, plus server-side web
+ * search injection. Reasoning and opaque replay histories remain Core-owned;
+ * this limited serializer refuses them instead of inventing Responses items.
  * @module dsh-github-copilot/serialize
  */
 
@@ -10,7 +10,21 @@ import { ANTHROPIC_WEB_SEARCH_TOOL_TYPE } from './plan.ts'
 import type { ResponsesWebSearchToolType } from './plan.ts'
 import type { InlineConfig } from './config.ts'
 
-/** Thrown for content the inline wire cannot express (images). */
+/** Mapped only after the selected model's native capability checks succeed. */
+export interface ResponsesReasoningOptions {
+  readonly effort: string
+  readonly summary: 'auto'
+}
+
+/** Keep Core-owned reasoning provenance and opaque replay state out of this serializer. */
+export function hasResponsesReplayContext(messages: readonly Message[]): boolean {
+  return messages.some(message => message.role === 'assistant'
+    && ((message.source.kind === 'model' && message.source.replayState !== undefined)
+      || ('replayState' in message && message.replayState !== undefined)
+      || message.content.some(block => block.type === 'reasoning')))
+}
+
+/** Thrown for content whose projection must remain with Core. */
 export class UnsupportedContentError extends Error {
   constructor(detail: string) {
     super(`inline web search cannot serialize ${detail}`)
@@ -57,9 +71,12 @@ export function flattenText(content: readonly ContentBlock[]): string {
  * Serialize one dsh message into Responses input items.
  * @param message - the harness message.
  * @returns the wire input items; may be empty for content-free messages.
- * @throws UnsupportedContentError for image content.
+ * @throws UnsupportedContentError for image or Core-owned reasoning/replay content.
  */
 export function serializeMessage(message: Message, pairedCallIds?: ReadonlySet<string>): unknown[] {
+  if (hasResponsesReplayContext([message])) {
+    throw new UnsupportedContentError('Core-owned reasoning or replay context')
+  }
   if (message.role === 'user') {
     if (message.content.some(block => block.type === 'image')) {
       throw new UnsupportedContentError('image content')
@@ -83,15 +100,7 @@ export function serializeMessage(message: Message, pairedCallIds?: ReadonlySet<s
   const items: unknown[] = []
   for (const block of message.content) {
     const suffix = items.length
-    if (block.type === 'reasoning') {
-      items.push({
-        type: 'reasoning',
-        id: `rs_${shortHash(`${message.id}:${suffix}`)}`,
-        summary: [],
-        content: [{ type: 'reasoning_text', text: block.text }],
-        status: 'completed',
-      })
-    } else if (block.type === 'text') {
+    if (block.type === 'text') {
       items.push({
         type: 'message',
         id: `msg_${shortHash(`${message.id}:${suffix}`)}`,
@@ -173,6 +182,7 @@ export function buildWireBody(
   cfg: Pick<InlineConfig, 'includeSources' | 'stripServerTools'>,
   model: string,
   webSearchToolType: ResponsesWebSearchToolType,
+  reasoning?: ResponsesReasoningOptions,
 ): unknown {
   const input: unknown[] = []
   const pairedCalls = pairedToolCallIds(request.messages)
@@ -190,6 +200,7 @@ export function buildWireBody(
     model,
     input,
     tools: wireTools(request.tools, cfg.stripServerTools, webSearchToolType),
+    ...reasoning === undefined ? {} : { reasoning: { effort: reasoning.effort, summary: reasoning.summary } },
     ...cfg.includeSources ? { include: ['web_search_call.action.sources'] } : {},
     stream: true,
     // The caller's cap is honored (never floored upward); a zero is raised

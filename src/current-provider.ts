@@ -12,7 +12,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { builtinProviders, getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import type { BuiltinProvider } from '@earendil-works/pi-ai/providers/all'
-import { temporaryGitHubCopilotModel } from './temporary-models.ts'
+import type { Api, Model } from '@earendil-works/pi-ai'
+import { readCopilotCatalog, isPluginPreviewProvider } from './model-protocol.ts'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 
 /** Settings namespace of the harness's pi-ai LLM adapter (its `providers` dict). */
 const LLM_PI_AI_NAMESPACE = 'llm-pi-ai' as SettingsNamespace
@@ -50,19 +52,9 @@ function catalogById(): ReadonlyMap<string, { readonly baseUrl?: string }> {
 }
 
 /** Per-provider model tables, cached the same way. */
-const modelTableCache = new Map<string, readonly {
-  readonly id: string
-  readonly api?: string
-  readonly baseUrl?: string
-  readonly headers?: Readonly<Record<string, string | null>>
-}[]>()
+const modelTableCache = new Map<string, readonly Model<Api>[]>()
 
-function modelTableOf(provider: string): readonly {
-  readonly id: string
-  readonly api?: string
-  readonly baseUrl?: string
-  readonly headers?: Readonly<Record<string, string | null>>
-}[] {
+function modelTableOf(provider: string): readonly Model<Api>[] {
   const cached = modelTableCache.get(provider)
   if (cached !== undefined) return cached
   try {
@@ -85,18 +77,32 @@ function modelTableOf(provider: string): readonly {
  * @returns the catalog protocol and base URL, when known.
  */
 function catalogModelFacts(
+  ctx: Context,
   provider: string,
   model: string,
 ): { api?: string; baseUrl?: string; headers?: Readonly<Record<string, string | null>> } {
+  if (provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
+    if (!isPluginPreviewProvider(ctx, provider)) return {}
+    const owner: unknown = ctx.get('githubCopilotPreview')
+    if (typeof owner !== 'object' || owner === null) return {}
+    const method: unknown = Reflect.get(owner, 'routeFacts')
+    if (typeof method !== 'function') return {}
+    const facts: unknown = method.call(owner, model)
+    if (typeof facts !== 'object' || facts === null) return {}
+    const api: unknown = Reflect.get(facts, 'api'), baseURL: unknown = Reflect.get(facts, 'baseURL')
+    if (typeof api !== 'string' || typeof baseURL !== 'string') return {}
+    // The owning route validates this endpoint and freshness. Never use another
+    // pi copy or a model-name correction as evidence for managed requests.
+    return { api, baseUrl: baseURL }
+  }
+  if (provider === 'github-copilot') {
+    const found = readCopilotCatalog(ctx).models.find(candidate => candidate.id === model)
+    return found === undefined ? {} : { api: found.api, baseUrl: found.baseUrl, headers: found.headers }
+  }
   const catalog = catalogById().get(provider)
   if (catalog === undefined) return {}
-  const table = modelTableOf(provider)
-  const found = table.find(candidate => candidate.id === model)
-  if (found !== undefined) return { api: found.api, baseUrl: found.baseUrl, headers: found.headers }
-  if (provider !== 'github-copilot') return {}
-  const temporary = temporaryGitHubCopilotModel(model, new Set(table.map(candidate => candidate.id)))
-  if (temporary === undefined) return {}
-  return { api: temporary.api, baseUrl: temporary.baseUrl, headers: temporary.headers }
+  const found = modelTableOf(provider).find(candidate => candidate.id === model)
+  return found === undefined ? {} : { api: found.api, baseUrl: found.baseUrl, headers: found.headers }
 }
 
 /** Read one route profile from the llm-pi-ai settings section, defensively narrowed. */
@@ -124,8 +130,10 @@ function profileFacts(
     : []
   const selectedApi = typeof selected?.['api'] === 'string' ? selected.api : undefined
   const routeApi = stringField('api')
-  const effectiveApi = selectedApi ?? routeApi
-  const supportedApis = declaredApis.length > 0
+  // Stock Core canonical profiles do not implement model-entry API precedence.
+  // Managed models bypass this settings path and use their owner's routeFacts.
+  const effectiveApi = provider === 'github-copilot' ? routeApi : selectedApi ?? routeApi
+  const supportedApis = provider === 'github-copilot' ? undefined : declaredApis.length > 0
     ? declaredApis
     : selectedApi === undefined ? undefined : [selectedApi]
   return {
@@ -147,8 +155,11 @@ function profileFacts(
 export function currentChatRoute(ctx: Context): CurrentChatRoute | undefined {
   const selection = ctx.get('agentDefaultModel')?.currentSelection()
   if (selection === undefined) return undefined
-  const profile = profileFacts(ctx.get('settings')?.get(LLM_PI_AI_NAMESPACE), selection.provider, selection.model)
-  const catalog = catalogModelFacts(selection.provider, selection.model)
+  if (selection.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+    && !isPluginPreviewProvider(ctx, selection.provider)) return undefined
+  const profile = selection.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+    ? undefined : profileFacts(ctx.get('settings')?.get(LLM_PI_AI_NAMESPACE), selection.provider, selection.model)
+  const catalog = catalogModelFacts(ctx, selection.provider, selection.model)
   return {
     provider: selection.provider,
     model: selection.model,

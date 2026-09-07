@@ -11,6 +11,10 @@ import type { SearchPlanCandidate } from '../src/plan.ts'
 export interface FakeServices {
   agentDefaultModel?: { currentSelection(): { provider: string; model: string } | undefined }
   settings?: { get(namespace: unknown): unknown }
+  githubCopilotPreview?: {
+    getView(): { provider: string }
+    routeFacts(modelId: string): { api: string; baseURL: string } | undefined
+  }
 }
 
 /** Build a context whose `ctx.get` serves the given fakes. */
@@ -18,6 +22,7 @@ export function fakeContext(services: FakeServices): Context {
   const store = new Map<string, unknown>()
   if (services.agentDefaultModel !== undefined) store.set('agentDefaultModel', services.agentDefaultModel)
   if (services.settings !== undefined) store.set('settings', services.settings)
+  if (services.githubCopilotPreview !== undefined) store.set('githubCopilotPreview', services.githubCopilotPreview)
   return {
     get: (name: string) => store.get(name),
   } as unknown as Context

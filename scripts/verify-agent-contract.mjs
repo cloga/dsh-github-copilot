@@ -8,6 +8,17 @@ export async function verifyAgentContract(root = repositoryRoot) {
   const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
   const require = (condition, message) => { if (!condition) throw new Error(`Agent contract: ${message}`) }
   require(contract.schemaVersion === 1, 'unsupported schemaVersion')
+  const implementation = contract.boundaries?.implementationScope
+  require(implementation?.mode === 'plugin-only', 'plugin-only implementation policy is missing')
+  const implementationKeys = ['mode', 'coreInspection', 'allowedIntegration', 'coreSourceChanges', 'coreArtifactPatching', 'coreRuntimeMonkeyPatching', 'corePatchDependency', 'coreCommitPrRelease', 'unsupportedCapability', 'scopeException']
+  require(Object.keys(implementation).every(key => implementationKeys.includes(key)), 'plugin-only policy contains an unrecognized override')
+  require(implementation.coreInspection === 'read-only', 'plugin-only Core inspection must remain read-only')
+  require(implementation.allowedIntegration === 'published-public-apis', 'plugin-only integrations must use published public APIs')
+  for (const field of ['coreSourceChanges', 'coreArtifactPatching', 'coreRuntimeMonkeyPatching', 'corePatchDependency', 'coreCommitPrRelease']) {
+    require(implementation[field] === false, `plugin-only policy must forbid ${field}`)
+  }
+  require(implementation.unsupportedCapability === 'report-limitation-and-plugin-local-alternative', 'plugin-only missing capabilities must not trigger Core patches')
+  require(implementation.scopeException === 'separate-explicit-human-request-only', 'plugin-only scope must not expand from an inferred compatibility task')
   require(contract.boundaries?.approvalRequired?.includes('merge'), 'merge approval boundary is missing')
   require(!contract.boundaries?.approvalRequired?.includes('release'), 'release delivery must not require a second blanket release approval')
   for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {
@@ -38,8 +49,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
   for (const script of ['verify:agent', 'typecheck:tests', 'test:scripts']) {
     require(pkg.scripts.verify.includes(`pnpm ${script}`), `${script} is absent from the full gate`)
   }
-  for (const path of ['AGENTS.md', 'CONTRIBUTING.md', '.github/PULL_REQUEST_TEMPLATE.md']) {
+  for (const path of ['AGENTS.md', 'CONTRIBUTING.md', '.github/PULL_REQUEST_TEMPLATE.md', 'README.md', 'README.zh.md']) {
     const text = await readFile(resolve(root, path), 'utf8')
+    require(text.includes('plugin-only'), `plugin-only guidance is missing from ${path}`)
     require(text.includes('Assisted-by'), `${path} needs accurate tool attribution guidance`)
     require(!text.includes('required co-author trailer') && !text.includes('repository-required co-author trailer'), `${path} mandates unverified co-author attribution`)
   }

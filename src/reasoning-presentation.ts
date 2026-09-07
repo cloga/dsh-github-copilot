@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 
 /** Plugin-owned, Step-scoped provenance; never a model route or durable message. */
 export const ASSISTANT_ORIGIN_KEY = 'github-copilot-assistant-origin'
@@ -119,8 +120,10 @@ export function projectReasoningPresentation<Props extends object>(props: Props,
   const node = props.node
   const data = node.data as Record<string, unknown>
   if (data.status !== 'settled' || !record(data.finalNode) || !sequence(data.finalNode.seq)
-    || origin.seq !== data.finalNode.seq || origin.provider !== 'github-copilot'
-    || typeof origin.model !== 'string' || origin.model.trim() === '' || !Array.isArray(data.blocks)) return props
+    || origin.seq !== data.finalNode.seq) return props
+  const copilotReply = origin.provider === GITHUB_COPILOT_PROVIDER_ID
+    || origin.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+  if (!copilotReply || typeof origin.model !== 'string' || origin.model.trim() === '' || !Array.isArray(data.blocks)) return props
   const blocks = data.blocks.filter((block: unknown) => !(
     record(block) && block.kind === 'reasoning' && typeof block.text === 'string' && block.text.trim() === ''
   ))

@@ -64,3 +64,44 @@ jobs:
         run: |
           version="$(node -p "require('./package.json').version")"
           pnpm verify:tarball -- "artifacts/dsh-github-copilot-$version.tgz"
+
+  published-adapter:
+    name: Published adapter (${{ matrix.release }}, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        release: [0.1.2-rc.1, 0.1.3-alpha.1]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Prepare an isolated plugin fixture for published Core APIs
+        shell: bash
+        run: |
+          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release "${{ matrix.release }}"
+      - name: Install unchanged public dependency artifacts
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/copilot-published-core"
+          pnpm install --ignore-scripts --strict-peer-dependencies --registry=https://registry.npmjs.org
+      - name: Verify actual dependency paths and class identities
+        shell: bash
+        run: |
+          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release "${{ matrix.release }}"
+      - name: Typecheck and exercise the published native adapter
+        shell: bash
+        env:
+          DSH_PUBLISHED_CORE_RELEASE: ${{ matrix.release }}
+        run: |
+          cd "$RUNNER_TEMP/copilot-published-core"
+          node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
+          node node_modules/typescript/bin/tsc -p tsconfig.tests.json
+          node node_modules/vitest/vitest.mjs run tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts

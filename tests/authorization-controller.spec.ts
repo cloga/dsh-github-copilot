@@ -8,9 +8,21 @@ import {
 } from '../src/authorization-controller.ts'
 import { encodeBackup, leavesOf, ROUTE_OWNERSHIP_EPOCH } from '../src/route-ownership.ts'
 
+const catalogDrift = vi.hoisted(() => ({ wrongGpt6Api: false }))
+vi.mock('@earendil-works/pi-ai/providers/all', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@earendil-works/pi-ai/providers/all')>()
+  return { ...original, getBuiltinModels(provider: Parameters<typeof original.getBuiltinModels>[0]) {
+    const native = original.getBuiltinModels(provider).filter(model => provider !== 'github-copilot' || model.id !== 'claude-sonnet-4.5')
+    return provider !== 'github-copilot' || !catalogDrift.wrongGpt6Api ? native : [...native, {
+      ...native[0]!, id: 'gpt-6-astra', name: 'GPT-6 Astra', api: 'openai-completions' as const,
+    }]
+  } }
+})
+
 interface Runtime {
   readonly ctx: Context
   readonly controller: GitHubCopilotAuthorizationController
+  readonly services: Map<string, unknown>
   readonly settingsDocument: Record<string, unknown>
   readonly mutate: ReturnType<typeof vi.fn>
   readonly deleteRecord: ReturnType<typeof vi.fn>
@@ -138,6 +150,7 @@ function runtime(options: {
   return {
     ctx,
     controller,
+    services,
     settingsDocument,
     mutate,
     deleteRecord,
@@ -196,9 +209,73 @@ function activeTemporaryRouteBackup(): string {
   })
 }
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); catalogDrift.wrongGpt6Api = false })
 
 describe('GitHubCopilotAuthorizationController', () => {
+  it('exposes only owned model presentation leaves and never discovers during status', async () => {
+    const harness = runtime({ configured: true })
+    const discover = vi.fn(async () => { throw new Error('status cannot discover') })
+    const view = Object.defineProperty({ state: 'ready', models: [{ id: 'future-lab-r17', name: 'Future model', api: 'openai-responses' }],
+      rejected: [{ id: 'unsupported-model', code: 'UNSUPPORTED_ENDPOINTS' }], discoveredAt: 100 }, 'accountKey', {
+      get() { throw new Error('private account key must not be read') },
+    })
+    harness.services.set('githubCopilotPreview', { getView: () => view, discover })
+    await expect(harness.controller.status()).resolves.toMatchObject({ accountModels: {
+      state: 'ready', models: [{ id: 'future-lab-r17', name: 'Future model', api: 'openai-responses' }], discoveredAt: 100,
+    } })
+    expect((await harness.controller.status()).accountModels).not.toHaveProperty('accountKey')
+    expect(discover).not.toHaveBeenCalled()
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('projects capability warnings separately without rejecting selectable models or exposing extras', async () => {
+    const harness = runtime({ configured: true })
+    const warning = Object.defineProperty({ id: 'future-model', code: 'INPUT_LIMIT_NOT_ENFORCED_BY_CORE' }, 'private', {
+      enumerable: true, get() { throw new Error('private warning data must not be read') },
+    })
+    harness.services.set('githubCopilotPreview', { getView: () => ({ state: 'ready',
+      models: [{ id: 'future-model', name: 'Future model', api: 'openai-responses' }], rejected: [], warnings: [warning],
+    }) })
+    expect((await harness.controller.status()).accountModels).toEqual({ state: 'ready',
+      models: [{ id: 'future-model', name: 'Future model', api: 'openai-responses' }], rejected: [],
+      warnings: [{ id: 'future-model', code: 'INPUT_LIMIT_NOT_ENFORCED_BY_CORE' }],
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('discovers account models only on an explicit action without changing selection or settings', async () => {
+    const harness = runtime({ configured: true })
+    const discover = vi.fn(async () => undefined)
+    harness.services.set('githubCopilotPreview', { discover, getView: () => ({ state: 'ready', models: [], rejected: [] }) })
+    await expect(harness.controller.discoverModels()).resolves.toMatchObject({ accountModels: { state: 'ready' } })
+    expect(discover).toHaveBeenCalledExactlyOnceWith({ force: true })
+    expect(harness.begin).not.toHaveBeenCalled()
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.deleteRecord).not.toHaveBeenCalled()
+  })
+
+  it('keeps discovery unavailable or failed separate from sign-in and sanitizes failures', async () => {
+    const harness = runtime({ configured: true })
+    await expect(harness.controller.discoverModels()).resolves.toMatchObject({ phase: 'signed-in', accountModels: {
+      state: 'error', error: 'COPILOT_MODEL_DISCOVERY_UNAVAILABLE',
+    } })
+    harness.services.set('githubCopilotPreview', { getView: () => ({ state: 'idle', models: [], rejected: [] }),
+      discover: async () => { throw new Error('SYNTHETIC_PRIVATE_DISCOVERY_ERROR') },
+    })
+    const result = await harness.controller.discoverModels()
+    expect(result).toMatchObject({ phase: 'signed-in', accountModels: { error: 'COPILOT_MODEL_DISCOVERY_FAILED' } })
+    expect(JSON.stringify(result)).not.toContain('SYNTHETIC_PRIVATE')
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('does not start model discovery while signed out', async () => {
+    const harness = runtime({ configured: false })
+    const discover = vi.fn()
+    harness.services.set('githubCopilotPreview', { discover, getView: () => ({ state: 'unconfigured', models: [], rejected: [] }) })
+    await harness.controller.discoverModels()
+    expect(discover).not.toHaveBeenCalled()
+  })
+
   it('reads status repeatedly without repairing, authorizing or making network calls', async () => {
     const harness = runtime({ configured: true, providerProfile: {} })
     const fetchMock = vi.fn(() => { throw new Error('status must not perform network I/O') })
@@ -207,7 +284,6 @@ describe('GitHubCopilotAuthorizationController', () => {
       const view = await harness.controller.status()
       expect(view).toMatchObject({
         configured: true, phase: 'signed-in', route: { state: 'needs-repair' },
-        catalog: { supportedModelCount: 1 },
       })
       expect(JSON.stringify(view)).not.toContain('copilot-api-token')
       expect(JSON.stringify(view)).not.toContain('github-device-grant')
@@ -302,10 +378,6 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
       op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [{ id: 'gpt-5.4', api: 'openai-responses' }],
-    }, {
-      op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
     }], expect.any(Number))
@@ -314,7 +386,6 @@ describe('GitHubCopilotAuthorizationController', () => {
         openai: { apiKeyEnv: 'OPENAI_API_KEY' },
         'github-copilot': {
           compat: { supportsStrictMode: false },
-          models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
         },
       },
     })
@@ -349,44 +420,23 @@ describe('GitHubCopilotAuthorizationController', () => {
     await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
       op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [{ id: 'gpt-5.4', api: 'openai-responses' }],
-    }, {
-      op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
     }], expect.any(Number))
   })
 
-  it('repairs only the model list while preserving the rest of the Copilot profile and unrelated providers', async () => {
-    const harness = runtime({
-      configured: true,
-      providerProfile: {
-        baseURL: 'https://example.invalid',
-        apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
-        customField: 'preserved',
-        compat: { supportsStrictMode: false, customCompat: 'preserved' },
-        // A known model may legitimately inherit its API; use an actual stale
-        // account model to exercise list repair rather than forcing needless writes.
-        models: [{ id: 'gpt-5-mini' }],
-      },
-    })
-    const section = harness.settingsDocument['llm-pi-ai'] as { providers: Record<string, unknown> }
-
-    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
-    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [{ id: 'gpt-5.4', api: 'openai-responses' }],
-    }], expect.any(Number))
-    expect(section.providers.openai).toEqual({ apiKeyEnv: 'OPENAI_API_KEY' })
-    expect(section.providers['github-copilot']).toEqual({
-      baseURL: 'https://example.invalid',
-      apiKeyEnv: 'COPILOT_GITHUB_TOKEN',
-      customField: 'preserved',
+  it('preserves canonical models and all unrelated profile fields instead of projecting the companion catalog', async () => {
+    const profile = {
+      baseURL: 'https://example.invalid', apiKeyEnv: 'COPILOT_GITHUB_TOKEN', customField: 'preserved',
       compat: { supportsStrictMode: false, customCompat: 'preserved' },
-      models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
-    })
+      models: [{ id: 'claude-sonnet-4.5', customCapability: 'user-owned' }, { id: 'arbitrary-core-model' }],
+      headers: { 'X-Custom': 'preserved' },
+    }
+    const harness = runtime({ configured: true, providerProfile: profile, availableModelIds: ['gpt-5.4'] })
+    const before = structuredClone(harness.settingsDocument)
+    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in', route: { state: 'ready' } })
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.settingsDocument).toEqual(before)
   })
 
   it('repairs a Copilot route that still enables strict tool schemas', async () => {
@@ -478,174 +528,131 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
   })
 
-  it('materializes the exact mixed-protocol account route without route-level connection fields', async () => {
-    const harness = runtime({
-      configured: true,
-      availableModelIds: ['gemini-3.6-flash', 'gpt-5.6-sol'],
-    })
-
+  it('creates only a minimal canonical profile without assigning model protocols or connections', async () => {
+    const harness = runtime({ configured: true, availableModelIds: ['gemini-3.8-flash', 'future-responses-model'] })
     await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
-    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [
-        { id: 'gemini-3.6-flash', api: 'openai-completions' },
-        { id: 'gpt-5.6-sol', api: 'openai-responses' },
-      ],
-    }, {
-      op: 'set',
-      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
-      value: false,
-    }], expect.any(Number))
-    expect(harness.settingsDocument['llm-pi-ai']).toEqual({
-      providers: {
-        openai: { apiKeyEnv: 'OPENAI_API_KEY' },
-        'github-copilot': {
-          compat: { supportsStrictMode: false },
-          models: [
-            { id: 'gemini-3.6-flash', api: 'openai-completions' },
-            { id: 'gpt-5.6-sol', api: 'openai-responses' },
-          ],
-        },
-      },
-    })
+    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', [{
+      op: 'set', path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'], value: false,
+    }], 0)
+    expect(harness.settingsDocument['llm-pi-ai']).toEqual({ providers: {
+      openai: { apiKeyEnv: 'OPENAI_API_KEY' }, 'github-copilot': { compat: { supportsStrictMode: false } },
+    } })
   })
 
-  it('materializes Anthropic and OpenAI models under the route compatibility override', async () => {
-    const harness = runtime({
-      configured: true,
-      availableModelIds: ['claude-sonnet-4.5', 'gpt-5.4'],
-    })
-
+  it('preserves configured Anthropic and OpenAI models while repairing only strict mode', async () => {
+    const models = [{ id: 'claude-sonnet-4.5', api: 'anthropic-messages' }, { id: 'gpt-5.4', api: 'openai-responses' }]
+    const profile = { models, headers: { 'X-Custom': 'preserved' }, compat: { supportsStrictMode: true } }
+    const harness = runtime({ configured: true, availableModelIds: ['claude-sonnet-4.5', 'gpt-5.4'], providerProfile: profile })
     await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
-    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [
-        { id: 'claude-sonnet-4.5', api: 'anthropic-messages' },
-        { id: 'gpt-5.4', api: 'openai-responses' },
-      ],
-    }, {
-      op: 'set',
-      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
-      value: false,
-    }], expect.any(Number))
+    expect(profile.models).toBe(models)
+    expect(profile.models).toEqual(models)
+    expect(profile.headers).toEqual({ 'X-Custom': 'preserved' })
+    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', [{
+      op: 'set', path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'], value: false,
+    }], 0)
   })
 
-  it('deduplicates account model ids while preserving their first-seen order', async () => {
-    const harness = runtime({
-      configured: true,
-      availableModelIds: ['gpt-5.6-sol', 'gpt-5.6-sol', 'gemini-3.6-flash', 'gpt-5.6-sol'],
-    })
-
+  it('does not reorder or replace canonical models when account IDs are duplicated or reordered', async () => {
+    const profile = { compat: { supportsStrictMode: false }, models: [{ id: 'core-first' }, { id: 'core-second' }] }
+    const harness = runtime({ configured: true, providerProfile: profile,
+      availableModelIds: ['core-second', 'core-second', 'core-first', 'new-model'] })
+    const before = structuredClone(harness.settingsDocument)
     await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
-    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [
-        { id: 'gpt-5.6-sol', api: 'openai-responses' },
-        { id: 'gemini-3.6-flash', api: 'openai-completions' },
-      ],
-    }, {
-      op: 'set',
-      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
-      value: false,
-    }], expect.any(Number))
+    expect(harness.settingsDocument).toEqual(before)
+    expect(harness.mutate).not.toHaveBeenCalled()
   })
 
-  it('materializes the temporary GPT-6 Astra overlay only for an entitled account', async () => {
-    const harness = runtime({
-      configured: true,
-      availableModelIds: ['gpt-6-astra', 'gpt-5.6-sol', 'claude-sonnet-4.5'],
-      providerProfile: {
-        headers: { 'X-Custom': 'preserved' },
-      },
-    })
-
-    await expect(harness.controller.reconcile()).resolves.toMatchObject({
-      phase: 'signed-in',
-      route: { state: 'ready' },
-      catalog: {
-        state: 'current',
-        accountModelCount: 3,
-        supportedModelCount: 2,
-        unknownModelIds: [],
-        temporarilyUnavailableModelIds: ['claude-sonnet-4.5'],
-      },
-    })
-    expect(harness.mutate).toHaveBeenCalledWith('github-copilot', [{
-      op: 'set',
-      path: ['temporaryRouteBackup'],
-      value: expect.any(String),
-    }], expect.any(Number))
-    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'api'],
-      value: 'openai-responses',
-    }, {
-      op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [
-        {
-          id: 'gpt-6-astra',
-          name: 'GPT-6 Astra',
-          api: 'openai-responses',
-          contextWindow: 1_050_000,
-          maxTokens: 128_000,
-          input: ['text', 'image'],
-          reasoningEfforts: {
-            off: null,
-            low: 'low',
-            medium: 'medium',
-            high: 'high',
-            xhigh: 'xhigh',
-            max: 'max',
-          },
-        },
-        { id: 'gpt-5.6-sol', api: 'openai-responses' },
-      ],
-    }, {
-      op: 'set',
-      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
-      value: false,
-    }, ...Object.entries({
-      'User-Agent': 'GitHubCopilotChat/0.35.0',
-      'Editor-Version': 'vscode/1.107.0',
-      'Editor-Plugin-Version': 'copilot-chat/0.35.0',
-      'Copilot-Integration-Id': 'vscode-chat',
-    }).map(([name, value]) => ({
-      op: 'set', path: ['providers', 'github-copilot', 'headers', name], value,
-    }))], expect.any(Number))
-    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
-      providers: { 'github-copilot': { headers: { 'X-Custom': 'preserved' } } },
-    })
+  it('keeps managed discovery independent from canonical configuration', async () => {
+    const profile = { models: [{ id: 'claude-sonnet-4.5' }], compat: { supportsStrictMode: false } }
+    const harness = runtime({ configured: true, providerProfile: profile, availableModelIds: ['arbitrary-new-model'] })
+    harness.services.set('githubCopilotPreview', { getView: () => ({ state: 'ready',
+      models: [{ id: 'arbitrary-new-model', name: 'Discovered model', api: 'openai-responses' }], rejected: [] }) })
+    const view = await harness.controller.reconcile()
+    expect(view).toMatchObject({ route: { state: 'ready' }, accountModels: { models: [{ id: 'arbitrary-new-model' }] } })
+    expect(view).not.toHaveProperty('catalog')
+    expect(profile.models).toEqual([{ id: 'claude-sonnet-4.5' }])
+    expect(harness.mutate).not.toHaveBeenCalled()
   })
 
-  it('preserves a prepared activation after a failed route write for review', async () => {
-    let failRouteWrite = true
-    const harness = runtime({
-      configured: true,
-      availableModelIds: ['gpt-6-astra', 'gpt-5.4'],
-      providerProfile: { headers: { 'X-Custom': 'preserved' } },
-      beforeMutate(namespace) {
-        if (namespace === 'llm-pi-ai' && failRouteWrite) {
-          failRouteWrite = false
-          throw new Error('route write failed')
-        }
-      },
-    })
+  it('does not judge a user route protocol using another catalog copy', async () => {
+    const profile = { api: 'anthropic-messages', models: [{ id: 'claude-sonnet-4.5' }], compat: { supportsStrictMode: false } }
+    const harness = runtime({ configured: true, availableModelIds: ['gpt-6-astra', 'gemini-3.6-flash'], providerProfile: profile })
+    const before = structuredClone(profile)
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ changed: false })
+    expect(profile).toEqual(before)
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
 
-    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow('route write failed')
-    expect(harness.settingsDocument['github-copilot']).toMatchObject({
-      temporaryRouteBackup: expect.any(String),
-    })
+  it('does not change canonical settings when account entitlement becomes empty', async () => {
+    const availableModelIds = ['gpt-6-astra', 'gemini-3.6-flash']
+    const profile = { models: [{ id: 'user-model', userField: 'keep' }], headers: { 'X-Custom': 'preserved' } }
+    const harness = runtime({ configured: true, availableModelIds, providerProfile: profile })
+    await inspectGitHubCopilotProviderProfile(harness.ctx)
+    const before = structuredClone(harness.settingsDocument)
+    availableModelIds.splice(0)
     harness.mutate.mockClear()
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ changed: false })
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.settingsDocument).toEqual(before)
+  })
+
+  it('does not add or remove canonical models based on a conflicting local GPT-6 entry', async () => {
+    catalogDrift.wrongGpt6Api = true
+    const profile = { models: [{ id: 'claude-sonnet-4.5' }], compat: { supportsStrictMode: false } }
+    const harness = runtime({ configured: true, providerProfile: profile, availableModelIds: ['gpt-6-astra', 'gemini-3.6-flash'] })
+    await expect(harness.controller.reconcile()).resolves.toMatchObject({ route: { state: 'ready' } })
+    expect(profile.models).toEqual([{ id: 'claude-sonnet-4.5' }])
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('restores the owned canonical override without creating another ownership cycle', async () => {
+    const harness = runtime({ configured: true,
+      availableModelIds: ['gpt-6-astra', 'gpt-5.4', 'gemini-3.6-flash'],
+      providerProfile: activeTemporaryGpt6Profile(),
+    })
+    harness.settingsDocument['github-copilot'] = { temporaryRouteBackup: activeTemporaryRouteBackup() }
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({
+      changed: true,
+    })
+    const providers = (harness.settingsDocument['llm-pi-ai'] as { providers: Record<string, Record<string, unknown>> }).providers
+    expect(providers['github-copilot']?.api).toBeUndefined()
+    expect(providers['github-copilot']).toMatchObject({ customField: 'preserved', headers: { 'X-Custom': 'preserved' } })
+    expect(harness.settingsDocument['github-copilot']).toEqual({})
+    expect(providers['github-copilot']?.models).toEqual([
+      { id: 'gpt-5.4', api: 'openai-responses' },
+    ])
+    harness.mutate.mockClear()
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({ changed: false })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('does not install global protocols or headers for new account models', async () => {
+    const harness = runtime({ configured: true, availableModelIds: ['future-model-a', 'future-model-b'],
+      providerProfile: { headers: { 'X-Custom': 'preserved' } } })
+    const view = await harness.controller.reconcile()
+    expect(view).toMatchObject({ phase: 'signed-in', route: { state: 'ready' } })
+    expect(view).not.toHaveProperty('catalog')
+    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', [{
+      op: 'set', path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'], value: false,
+    }], 0)
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({ providers: { 'github-copilot': {
+      headers: { 'X-Custom': 'preserved' }, compat: { supportsStrictMode: false },
+    } } })
+    expect(harness.settingsDocument['github-copilot']).toEqual({})
+  })
+
+  it('refuses a legacy prepared activation without replaying its route write', async () => {
+    const marker = activeTemporaryRouteBackup()
+    const journal = JSON.parse(marker)
+    const harness = runtime({ configured: true, availableModelIds: ['gpt-6-astra', 'gpt-5.4'],
+      providerProfile: { ...journal.preimage, headers: { 'X-Custom': 'preserved' } },
+    })
+    harness.settingsDocument['github-copilot'] = { temporaryRouteBackup: marker }
     await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(/TEMPORARY_ROUTE_OWNERSHIP_CONFLICT/)
     await expect(harness.controller.status()).resolves.toMatchObject({ route: { state: 'conflict' } })
     expect(harness.mutate).not.toHaveBeenCalled()
-    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
-      providers: { 'github-copilot': { headers: { 'X-Custom': 'preserved' } } },
-    })
+    expect(harness.settingsDocument['github-copilot']).toEqual({ temporaryRouteBackup: marker })
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({ providers: { 'github-copilot': { headers: { 'X-Custom': 'preserved' } } } })
   })
 
   it('retries backup cleanup after route restoration commits first', async () => {
@@ -702,15 +709,16 @@ describe('GitHubCopilotAuthorizationController', () => {
       configured: true,
       availableModelIds: ['gpt-6-astra'],
       providerProfile: {
+        compat: { supportsStrictMode: false },
         api: 'anthropic-messages',
         models: [{ id: 'claude-sonnet-4.5', api: 'anthropic-messages' }],
       },
     })
 
-    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
-      /TEMPORARY_ROUTE_OWNERSHIP_CONFLICT/,
-    )
+    const before = structuredClone(harness.settingsDocument)
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({ changed: false })
     expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.settingsDocument).toEqual(before)
   })
 
   it('refuses to overwrite a conflicting user-configured Copilot header', async () => {
@@ -718,14 +726,15 @@ describe('GitHubCopilotAuthorizationController', () => {
       configured: true,
       availableModelIds: ['gpt-6-astra'],
       providerProfile: {
+        compat: { supportsStrictMode: false },
         headers: { 'user-agent': 'my-client' },
       },
     })
 
-    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
-      /TEMPORARY_ROUTE_OWNERSHIP_CONFLICT/,
-    )
+    const before = structuredClone(harness.settingsDocument)
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({ changed: false })
     expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.settingsDocument).toEqual(before)
   })
 
   it('does not claim ownership of an existing matching route protocol', async () => {
@@ -733,15 +742,16 @@ describe('GitHubCopilotAuthorizationController', () => {
       configured: true,
       availableModelIds: ['gpt-6-astra'],
       providerProfile: {
+        compat: { supportsStrictMode: false },
         api: 'openai-responses',
         models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
       },
     })
 
-    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(
-      /TEMPORARY_ROUTE_OWNERSHIP_CONFLICT/,
-    )
+    const before = structuredClone(harness.settingsDocument)
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({ changed: false })
     expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.settingsDocument).toEqual(before)
   })
 
   async function expectTemporaryRouteRemoved(availableModelIds: readonly string[]): Promise<void> {
@@ -756,7 +766,6 @@ describe('GitHubCopilotAuthorizationController', () => {
 
     await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toMatchObject({
       changed: true,
-      catalog: { supportedModelCount: 0 },
     })
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
       op: 'unset',
@@ -793,64 +802,38 @@ describe('GitHubCopilotAuthorizationController', () => {
     await expectTemporaryRouteRemoved(['future-unknown-model'])
   })
 
-  it('reports account model ids unsupported by the installed catalog', async () => {
-    const harness = runtime({
-      configured: true,
-      availableModelIds: ['not-in-installed-catalog', 'gpt-5.6-sol'],
-    })
-
-    await expect(harness.controller.start()).resolves.toMatchObject({
-      phase: 'signed-in',
-      catalog: {
-        state: 'partially-outdated',
-        accountModelCount: 2,
-        supportedModelCount: 1,
-        unknownModelIds: ['not-in-installed-catalog'],
-      },
-    })
-    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [{ id: 'gpt-5.6-sol', api: 'openai-responses' }],
-    }, {
-      op: 'set',
-      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
-      value: false,
-    }], expect.any(Number))
+  it('reports managed discovery rejections without claiming the Core catalog is outdated', async () => {
+    const harness = runtime({ configured: true, availableModelIds: ['unseen-model'],
+      providerProfile: { compat: { supportsStrictMode: false }, models: [{ id: 'core-model' }] } })
+    harness.services.set('githubCopilotPreview', { getView: () => ({ state: 'ready', models: [],
+      rejected: [{ id: 'unseen-model', code: 'UNSUPPORTED_ENDPOINTS' }] }) })
+    const view = await harness.controller.start()
+    expect(view).toMatchObject({ phase: 'signed-in', accountModels: { rejected: [{ id: 'unseen-model', code: 'UNSUPPORTED_ENDPOINTS' }] } })
+    expect(view).not.toHaveProperty('catalog')
+    expect(harness.mutate).not.toHaveBeenCalled()
   })
 
-  it('reports an outdated catalog without replacing a previously usable model list', async () => {
-    const harness = runtime({
-      configured: true,
-      availableModelIds: ['not-in-installed-catalog'],
-      providerProfile: {
-        compat: { supportsStrictMode: false },
-        models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
-      },
-    })
-
-    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({
-      changed: false,
-      catalog: {
-        state: 'outdated',
-        accountModelCount: 1,
-        supportedModelCount: 0,
-        unknownModelIds: ['not-in-installed-catalog'],
-        temporarilyUnavailableModelIds: [],
-      },
-    })
-    await expect(harness.controller.status()).resolves.toMatchObject({
-      phase: 'signed-in',
-      catalog: { state: 'outdated' },
-    })
+  it('does not derive canonical readiness from local model availability', async () => {
+    const harness = runtime({ configured: true, availableModelIds: ['not-in-installed-catalog'],
+      providerProfile: { compat: { supportsStrictMode: false }, models: [{ id: 'claude-sonnet-4.5' }] } })
+    const before = structuredClone(harness.settingsDocument)
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ changed: false })
+    const view = await harness.controller.status()
+    expect(view).toMatchObject({ phase: 'signed-in', route: { state: 'ready' } })
+    expect(view).not.toHaveProperty('catalog')
+    expect(harness.settingsDocument).toEqual(before)
     expect(harness.mutate).not.toHaveBeenCalled()
-    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
-      providers: {
-        'github-copilot': {
-          models: [{ id: 'gpt-5.4', api: 'openai-responses' }],
-        },
-      },
-    })
+  })
+
+  it('never changes the user default selection while restoring canonical configuration', async () => {
+    const harness = runtime({ configured: true, providerProfile: activeTemporaryGpt6Profile() })
+    harness.settingsDocument['github-copilot'] = { temporaryRouteBackup: activeTemporaryRouteBackup() }
+    const selection = { provider: 'user-selected-provider', model: 'user-selected-model' }
+    harness.settingsDocument['agent-default-model'] = selection
+    await inspectGitHubCopilotProviderProfile(harness.ctx)
+    expect(harness.settingsDocument['agent-default-model']).toBe(selection)
+    expect(selection).toEqual({ provider: 'user-selected-provider', model: 'user-selected-model' })
+    expect(harness.mutate.mock.calls.every(([namespace]) => namespace === 'llm-pi-ai' || namespace === 'github-copilot')).toBe(true)
   })
 
   it('signs out by deleting only the llm-pi-ai Copilot record and keeps the route profile', async () => {

@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ProbeOutcome } from './probe.ts'
 import { currentChatRoute } from './current-provider.ts'
 import type { CurrentChatRoute } from './current-provider.ts'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 
 /** The two search-capable wire protocols this package speaks. */
 export type SearchProtocol = 'openai-responses' | 'anthropic-messages'
@@ -99,7 +100,8 @@ export function ensureV1Base(baseURL: string): string {
 export function siblingCandidates(
   route: CurrentChatRoute,
 ): readonly { protocol: SearchProtocol; baseURL: string }[] {
-  if (route.provider !== 'github-copilot') return []
+  if (route.provider !== 'github-copilot'
+    && route.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) return []
   const base = route.baseURL?.replace(/\/+$/, '') ?? ''
   if (base.length === 0) return []
   if (route.api === 'openai-responses' || route.api === 'anthropic-messages') {
@@ -140,7 +142,8 @@ function buildCandidate(
  */
 export function resolveCandidates(ctx: Context, _config: PlanConfig): readonly SearchPlanCandidate[] {
   const route = currentChatRoute(ctx)
-  if (route === undefined || route.provider !== 'github-copilot') return []
+  if (route === undefined || (route.provider !== 'github-copilot'
+    && route.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID)) return []
   // A route whose protocol could not be resolved (no profile `api`, no
   // catalog entry — e.g. the legacy `deepseek-official` alias) is treated as
   // Chat Completions: that is the wire the legacy adapters speak, and it is

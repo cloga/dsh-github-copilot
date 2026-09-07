@@ -1,14 +1,14 @@
 /**
  * Serialization tests: dsh Message blocks and tool schemas project onto the
  * OpenAI Responses input vocabulary with the exact shapes the gateway
- * requires (reasoning pass-back, call_id pairing, versioned web tool).
+ * requires (Core-owned replay delegation, call_id pairing, versioned web tool).
  */
 
 import { describe, expect, it } from 'vitest'
 import { buildAnthropicWireBody, buildWireBody, flattenText, pairedToolCallIds, serializeMessage, shortHash, splitCallId, wireTools } from '../../src/serialize.ts'
 import { RESPONSES_WEB_SEARCH_TOOL_TYPE } from '../../src/plan.ts'
 import type { GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
-import { markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
+import { markAgentLoopRequest, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 
 function message(role: Message['role'], blocks: unknown[]): Message {
   return { id: `m-${role}-1` as Message['id'], role, content: blocks as Message['content'], source: { kind: 'user' } as Message['source'] }
@@ -85,12 +85,25 @@ describe('serializeMessage', () => {
     expect(item.content).toEqual([{ type: 'output_text', text: 'hi', annotations: [] }])
   })
 
-  it('serializes reasoning blocks with a synthesized id', () => {
-    const result = serializeMessage(message('assistant', [{ type: 'reasoning', text: 'think' }]))
-    const item = result[0] as { type: string; id: string; content: Array<{ type: string; text: string }> }
-    expect(item.type).toBe('reasoning')
-    expect(item.id).toMatch(/^rs_/)
-    expect(item.content).toEqual([{ type: 'reasoning_text', text: 'think' }])
+  it('refuses to forge a public summary into a raw reasoning replay item', () => {
+    expect(() => serializeMessage(message('assistant', [{ type: 'reasoning', text: 'Public summary' }])))
+      .toThrow(/Core.*reasoning|reasoning.*Core/u)
+  })
+
+  it('refuses empty reasoning and does not read opaque replay state', () => {
+    expect(() => serializeMessage(message('assistant', [{ type: 'reasoning', text: '' }])))
+      .toThrow(/Core/u)
+    const replay = Object.defineProperty({}, 'payload', { get() { throw new Error('Must not read replay payload') } })
+    const input = { ...message('assistant', [{ type: 'text', text: 'Answer' }]), replayState: replay } as Message
+    expect(() => serializeMessage(input)).toThrow(/Core/u)
+  })
+
+  it('refuses the actual Core source.replayState location without opening its payload', () => {
+    const replay = Object.defineProperty({}, 'payload', { get() { throw new Error('Must not read replay payload') } })
+    const input: Message = { ...message('assistant', [{ type: 'text', text: 'Answer' }]),
+      source: { kind: 'model', provider: 'github-copilot', model: 'gpt-6-astra', replayState: replay },
+    }
+    expect(() => serializeMessage(input)).toThrow(/Core/u)
   })
 
   it('serializes tool calls as function_call with split ids', () => {
@@ -166,6 +179,19 @@ describe('wireTools', () => {
 })
 
 describe('buildWireBody', () => {
+  it('passes already validated and mapped reasoning options without replacing source includes', () => {
+    const request = markAgentLoopRequest({ provider: 'github-copilot', model: 'gpt-6-astra', messages: [], reasoningEffort: ReasoningEffortId('high') })
+    const body = buildWireBody(request, { includeSources: true, stripServerTools: true }, 'gpt-6-astra', 'web_search', { effort: 'high', summary: 'auto' }) as Record<string, unknown>
+    expect(body.reasoning).toEqual({ effort: 'high', summary: 'auto' })
+    expect(body.include).toEqual(['web_search_call.action.sources'])
+  })
+
+  it('does not invent a reasoning level or summary without resolved metadata', () => {
+    const request = markAgentLoopRequest({ provider: 'github-copilot', model: 'gpt-6-astra', messages: [] })
+    const body = buildWireBody(request, { includeSources: false, stripServerTools: true }, 'gpt-6-astra', 'web_search') as Record<string, unknown>
+    expect(body.reasoning).toBeUndefined()
+  })
+
   it('builds the complete request body', () => {
     const request = markAgentLoopRequest({
       provider: 'opencode-go-response',

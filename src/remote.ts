@@ -14,6 +14,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     githubCopilot: {
       status(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       reconcile(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      discoverModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       cancel(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       signOut(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -41,6 +42,15 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
     supportedModelCount: z.number().int().nonnegative(),
     unknownModelIds: z.array(z.string()),
     temporarilyUnavailableModelIds: z.array(z.string()).optional(),
+    previewModelIds: z.array(z.string()).optional(),
+  }).strict().optional(),
+  accountModels: z.object({
+    state: z.enum(['idle', 'loading', 'ready', 'stale', 'error', 'disposed', 'unconfigured', 'unavailable']),
+    models: z.array(z.object({ id: z.string(), name: z.string(), api: z.string() }).strict()).max(512),
+    rejected: z.array(z.object({ id: z.string().optional(), code: z.string() }).strict()).max(1024),
+    warnings: z.array(z.object({ id: z.string(), code: z.string() }).strict()).max(1024).optional(),
+    discoveredAt: z.number().int().nonnegative().optional(),
+    error: z.string().optional(),
   }).strict().optional(),
   route: z.object({
     state: z.enum(['ready', 'needs-repair', 'not-configured', 'conflict', 'error']),
@@ -57,7 +67,7 @@ const result = {
 
 const contribution: TypertRemoteContribution = {
   package: 'dsh-github-copilot',
-  descriptors: ['status', 'reconcile', 'start', 'cancel', 'signOut'].map(method => ({
+  descriptors: ['status', 'reconcile', 'discoverModels', 'start', 'cancel', 'signOut'].map(method => ({
     id: `dsh-github-copilot:githubCopilot.${method}`,
     service: 'githubCopilotAuthorization',
     namespace: 'githubCopilot',
