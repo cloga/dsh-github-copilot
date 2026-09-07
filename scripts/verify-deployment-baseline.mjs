@@ -1,10 +1,13 @@
 import { access, readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 async function read(path) {
+  assert(typeof path === 'string' && path.length > 0 && !path.startsWith('/')
+    && !path.includes('\\') && !path.includes(':') && !path.split('/').includes('..'), 'unsafe evidence path')
   return readFile(resolve(root, path), 'utf8')
 }
 
@@ -14,6 +17,78 @@ async function readJson(path) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(`deployment baseline verification failed: ${message}`)
+}
+
+const parsedSources = new Map()
+async function syntax(path) {
+  if (!parsedSources.has(path)) {
+    const source = ts.createSourceFile(path, await read(path), ts.ScriptTarget.Latest, true,
+      path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
+    assert(source.parseDiagnostics.length === 0, `invalid TypeScript evidence syntax: ${path}`)
+    parsedSources.set(path, source)
+  }
+  return parsedSources.get(path)
+}
+
+// Required test evidence must be an actual enabled call, not a comment that
+// happens to contain it('...'). Parameterized templates retain their exact name.
+function testFactory(node) {
+  if (ts.isIdentifier(node)) return node.text === 'it' || node.text === 'test'
+  const factory = ts.isCallExpression(node) ? node.expression : ts.isTaggedTemplateExpression(node) ? node.tag : undefined
+  return factory !== undefined && ts.isPropertyAccessExpression(factory)
+    && (factory.name.text === 'each' || factory.name.text === 'for')
+    && testFactory(factory.expression)
+}
+async function testNames(path) {
+  const names = new Set()
+  const visit = node => {
+    if (ts.isCallExpression(node) && testFactory(node.expression)) {
+      const name = node.arguments[0]
+      const body = node.arguments[1]
+      let disabled = false
+      for (let parent = node.parent; parent; parent = parent.parent) {
+        if (ts.isCallExpression(parent) && ts.isPropertyAccessExpression(parent.expression)
+          && ts.isIdentifier(parent.expression.expression) && parent.expression.expression.text === 'describe'
+          && ['skip', 'todo', 'only'].includes(parent.expression.name.text)) disabled = true
+      }
+      if (!disabled && body && (ts.isArrowFunction(body) || ts.isFunctionExpression(body))
+        && name && (ts.isStringLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name))) names.add(name.text)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(await syntax(path))
+  return names
+}
+
+function modelLabel(node) {
+  if (ts.isIdentifier(node)) return ['id', 'modelId', 'modelName', 'candidateId'].includes(node.text)
+  return ts.isPropertyAccessExpression(node) && ['id', 'name'].includes(node.name.text)
+    && ts.isIdentifier(node.expression) && /model|descriptor|candidate|entry|item/i.test(node.expression.text)
+}
+async function verifyGenericSource(path) {
+  const source = await syntax(path)
+  const comparison = new Set([ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
+    ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken])
+  const visit = node => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const imported = node.moduleSpecifier.text
+      assert(!/^@deepseek-ai\/dsh-[^/]+\/(?:src|lib)(?:\/|$)/u.test(imported), `${path} imports unpublished Core internals`)
+      assert(!/(?:^|\/)temporary-models(?:\.ts|\.js)?$/u.test(imported), `${path} imports the legacy static model table into generic routing`)
+    }
+    if (ts.isIdentifier(node)) assert(node.text !== 'GITHUB_COPILOT_PREVIEW_MODEL_ID', `${path} retains an exact-model routing constant`)
+    if (ts.isStringLiteral(node)) assert(node.text !== 'llmPiAiModelProtocol', `${path} depends on an unshipped Core service`)
+    if (ts.isBinaryExpression(node) && comparison.has(node.operatorToken.kind)) {
+      const literal = modelLabel(node.left) ? node.right : modelLabel(node.right) ? node.left : undefined
+      if (literal && ts.isStringLiteral(literal)) assert(literal.text === '', `${path} compares a model identifier/name to a fixed literal`)
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && modelLabel(node.expression.expression) && ['startsWith', 'endsWith', 'includes', 'match', 'search'].includes(node.expression.name.text)) {
+      const pattern = node.arguments[0]
+      if (pattern && ts.isStringLiteral(pattern)) assert(!/[a-z0-9]/iu.test(pattern.text), `${path} routes by a model-name pattern`)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
 }
 
 const packageJson = await readJson('package.json')
@@ -33,6 +108,11 @@ assert(manifest.baseline?.source === 'https://github.com/cloga/dsh-github-copilo
 assert(manifest.package?.name === packageJson.name, 'package name differs')
 assert(manifest.package?.version === packageJson.version, 'package version differs')
 assert(packageJson.private === true, 'package must remain private for GitHub Release-only distribution')
+assert(manifest.evidence?.kind === 'source-and-synthetic-test-inventory', 'evidence scope must distinguish local inventory from live proof')
+assert(manifest.evidence.peerRangeMeaning === 'package-admission-not-runtime-validation', 'peer admission must not claim every Core runtime is validated')
+for (const limit of ['live-discovery', 'live-model-transport', 'all-admitted-core-versions', 'published-release', 'local-upgrade']) {
+  assert(manifest.evidence.doesNotProve?.includes(limit), `evidence limit is missing: ${limit}`)
+}
 for (const [path, content] of [['README.md', readme], ['README.zh.md', readmeZh]]) {
   const urls = content.match(/https:\/\/github\.com\/cloga\/dsh-github-copilot\/releases\/download\/v[^\s/)]+\/[^\s)]+/g) ?? []
   assert(urls.filter(url => url === releaseUrl).length === 2, `${path} must use the current tarball URL for install and verification`)
@@ -97,10 +177,40 @@ assert(
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
   assert(
-    packageJson.devDependencies?.[dependency] === `^${manifest.supportedBaselines.dsh.developmentRelease}`,
-    `${dependency} development dependency range differs`,
+    packageJson.devDependencies?.[dependency] === manifest.supportedBaselines.dsh.developmentRelease,
+    `${dependency} development dependency must use the exact published baseline`,
   )
 }
+
+assert(manifest.supportedBaselines.dsh.developmentRelease === '0.1.2-rc.1', 'development must use the published rc.1 API baseline')
+const declaredPackages = [...manifest.supportedBaselines.dsh.packages].sort()
+const actualDshPeers = Object.keys(packageJson.peerDependencies).filter(name => name.startsWith('@deepseek-ai/dsh-')).sort()
+assert(JSON.stringify(declaredPackages) === JSON.stringify(actualDshPeers), 'Core peer package inventory differs')
+for (const [name, version] of Object.entries(packageJson.devDependencies)) {
+  if (name.startsWith('@deepseek-ai/dsh-')) assert(version === manifest.supportedBaselines.dsh.developmentRelease, `${name} must use the exact development Core version`)
+}
+assert(packageJson.dependencies['@deepseek-ai/dsh-authorization'] === '0.1.2-rc.1', 'authorization runtime must use published rc.1')
+assert(manifest.supportedBaselines.piAi === '0.85.1', 'managed provider evidence targets exact pi-ai 0.85.1')
+const oldCore = dshBaselines.find(entry => entry.release === '0.1.1-rc.2')
+assert(oldCore.evidenceScope === 'historical-regression-only' && oldCore.managedProviderValidation === 'not-verified', 'historical rc.2 must not claim new managed-provider validation')
+const devCore = dshBaselines.find(entry => entry.release === '0.1.2-rc.1')
+assert(devCore.evidenceScope === 'published-api-target' && devCore.managedProviderValidation === 'synthetic-published-adapter', 'rc.1 evidence must stay scoped to synthetic published-adapter tests')
+assert(JSON.stringify(devCore.managedProviderTests) === JSON.stringify(['tests/preview-provider.spec.ts', 'tests/preview-route.spec.ts', 'tests/pi-provider-bridge.spec.ts']), 'published adapter evidence inventory differs')
+const alphaCore = dshBaselines.find(entry => entry.release === '0.1.3-alpha.1')
+assert(alphaCore.evidenceScope === 'unchanged-tagged-source-target'
+  && alphaCore.standaloneNpmArtifacts === 'not-published'
+  && alphaCore.managedProviderValidation === 'not-verified', 'alpha.1 source evidence must not pretend unavailable npm artifacts were tested')
+const metadata = manifest.capabilities?.find(capability => capability.id === 'account-driven-provider-metadata')
+assert(metadata?.activation === 'validated-account-endpoints-and-capabilities', 'managed models must follow account endpoint and capability evidence')
+const publicAdapter = manifest.capabilities?.find(capability => capability.id === 'public-adapter-account-model-route')
+assert(publicAdapter?.activation === 'published-adapter-and-native-sdk', 'managed route must reuse the public adapter and native SDK')
+assert(!manifest.capabilities.some(capability => capability.id === 'capability-gated-mixed-copilot-protocols'), 'unshipped Core capability requirement must be retired')
+const genericSources = ['src/account-model-catalog.ts', 'src/account-model-source.ts', 'src/account-model-auth.ts', 'src/preview-provider.ts', 'src/preview-route.ts', 'src/pi-provider-bridge.ts']
+for (const path of genericSources) await verifyGenericSource(path)
+assert(!(await read('src/model-protocol.ts')).includes('llmPiAiModelProtocol'), 'local catalog facts must not depend on an unshipped Core service')
+const legacyRestore = manifest.capabilities.find(capability => capability.id === 'legacy-global-override-restoration')
+assert(legacyRestore?.activation === 'legacy-restoration-only' && legacyRestore.newGlobalProtocolOverrides === false, 'legacy restoration must not acquire a new global protocol override')
+assert(manifest.capabilities?.some(capability => capability.id === 'responses-public-reasoning-and-safe-replay-delegation'), 'Responses reasoning and Core replay delegation evidence is missing')
 
 const reasoningPresentation = manifest.capabilities?.find(capability => capability.id === 'replay-safe-copilot-reasoning-presentation')
 assert(reasoningPresentation?.activation === 'optional-guarded-client-seam', 'reasoning presentation must remain optional and guarded')
@@ -113,7 +223,16 @@ assert(
   'runtime development release differs',
 )
 
-for (const capability of manifest.capabilities ?? []) {
+assert(Array.isArray(manifest.capabilities) && manifest.capabilities.length > 0, 'capability inventory is missing')
+const capabilityIds = new Set(manifest.capabilities.map(capability => capability.id))
+assert(capabilityIds.size === manifest.capabilities.length, 'capability IDs must be unique')
+for (const required of ['account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
+  'public-adapter-account-model-route', 'managed-model-generation-and-lifetime', 'account-discovery-native-oauth',
+  'canonical-owner-preservation', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
+  'read-only-status-and-explicit-discovery', 'shared-copilot-credential-refresh']) {
+  assert(capabilityIds.has(required), `required plugin-only capability is missing: ${required}`)
+}
+for (const capability of manifest.capabilities) {
   assert(capability.required === true, `${capability.id} must be required`)
   assert(capability.sourceMarkers?.length > 0, `${capability.id} has no source evidence`)
   assert(capability.tests?.length > 0, `${capability.id} has no test evidence`)
@@ -121,7 +240,7 @@ for (const capability of manifest.capabilities ?? []) {
     assert((await read(evidence.file)).includes(evidence.marker), `${capability.id} marker missing from ${evidence.file}`)
   }
   for (const test of capability.tests) {
-    assert((await read(test.file)).includes(`it('${test.name}'`), `${capability.id} test missing: ${test.name}`)
+    assert((await testNames(test.file)).has(test.name), `${capability.id} enabled test missing: ${test.name} (${test.file})`)
   }
 }
 
@@ -135,16 +254,10 @@ const packageExportSubpaths = Object.keys(packageJson.exports ?? {}).sort()
 assert(JSON.stringify(declaredExportSubpaths) === JSON.stringify([...expectedExportSubpaths].sort()), 'required export inventory differs')
 assert(JSON.stringify(packageExportSubpaths) === JSON.stringify([...expectedExportSubpaths].sort()), 'package export set differs')
 
-for (const obsolete of ['src/model-catalog.ts', 'src/copilot-provider.ts']) {
-  try {
-    await access(resolve(root, obsolete))
-    assert(false, `obsolete gateway owner ${obsolete} still exists`)
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error
-  }
-}
-
+// A validated account metadata snapshot is allowed; an external proxy,
+// ambient token dependency, or private Core import is not.
 const guardedSources = [
+  ...genericSources,
   'src/index.ts',
   'src/plan.ts',
   'src/copilot-auth.ts',
@@ -156,6 +269,11 @@ for (const path of guardedSources) {
   const source = await read(path)
   assert(!source.includes('copilot2api'), `${path} retains an external proxy dependency`)
   assert(!source.includes('COPILOT_GITHUB_TOKEN'), `${path} retains a placeholder token dependency`)
+  assert(!source.includes('dsh-web-search-provider'), `${path} retains an external search integration dependency`)
+  assert(!/@deepseek-ai\/dsh-[^/'"\s]+\/(?:src|lib)\//u.test(source), `${path} imports private Core artifacts`)
+}
+for (const path of genericSources) {
+  assert(!/\b(?:process|Bun|Deno)\s*\.\s*env\b/u.test(await read(path)), `${path} reads ambient environment credentials`)
 }
 
 const agents = await read('AGENTS.md')

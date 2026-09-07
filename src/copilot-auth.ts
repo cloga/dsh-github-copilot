@@ -10,11 +10,10 @@ import {
   type CredentialInfo,
   type CredentialStore,
 } from '@earendil-works/pi-ai'
-import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
-import { GITHUB_COPILOT_CREDENTIAL_KEY } from './authorization-controller.ts'
+import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
-import { temporaryGitHubCopilotModel } from './temporary-models.ts'
+import { readCopilotCatalog } from './model-protocol.ts'
 
 export { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 
@@ -80,16 +79,27 @@ function toRecord(credential: Credential): CredentialRecord {
   return { kind: 'grant', payload: normalizeGitHubCopilotOAuthCredential(credential) }
 }
 
-export function createGitHubCopilotCredentialStore(ctx: Context): CredentialStore {
+/** Bind exactly one logical route to the canonical Host-owned credential record. */
+export function createGitHubCopilotCredentialStore(
+  ctx: Context,
+  logicalProviderId: typeof GITHUB_COPILOT_PROVIDER_ID | typeof GITHUB_COPILOT_PREVIEW_PROVIDER_ID = GITHUB_COPILOT_PROVIDER_ID,
+): CredentialStore {
+  const assertProvider = (providerId: string): void => {
+    if (providerId !== logicalProviderId) throw new Error('COPILOT_CREDENTIAL_PROVIDER_MISMATCH')
+  }
   return {
-    read: async () => toCredential(await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)),
+    read: async (providerId) => {
+      assertProvider(providerId)
+      return toCredential(await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY))
+    },
     list: async (): Promise<readonly CredentialInfo[]> => {
       const record = await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
       return record === undefined
         ? []
-        : [{ providerId: 'github-copilot', type: record.kind === 'api-key' ? 'api_key' : 'oauth' }]
+        : [{ providerId: logicalProviderId, type: record.kind === 'api-key' ? 'api_key' : 'oauth' }]
     },
-    modify: async (_providerId, mutate) => {
+    modify: async (providerId, mutate) => {
+      assertProvider(providerId)
       const stored = await credentialService(ctx).modifyRecord(
         GITHUB_COPILOT_CREDENTIAL_KEY,
         async current => {
@@ -99,7 +109,8 @@ export function createGitHubCopilotCredentialStore(ctx: Context): CredentialStor
       )
       return toCredential(stored)
     },
-    delete: async () => {
+    delete: async (providerId) => {
+      assertProvider(providerId)
       await credentialService(ctx).deleteRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
     },
   }
@@ -114,17 +125,18 @@ export function createGitHubCopilotTokenResolver(
   onCredentialChanged?: () => Promise<void>,
 ): (modelId: string) => Promise<GitHubCopilotRequestAuth | undefined> {
   const models = createModels({ credentials: createGitHubCopilotCredentialStore(ctx) })
-  models.setProvider(githubCopilotProvider())
-  const installedModelIds = new Set(getBuiltinModels('github-copilot').map(model => model.id))
+  const provider = githubCopilotProvider()
+  if (provider.auth.oauth === undefined) throw new Error('github-copilot: native OAuth method is unavailable')
+  models.setProvider({ ...provider, auth: { oauth: provider.auth.oauth } })
   return async (modelId) => {
-    const catalogModel = models.getModel('github-copilot', modelId)
-    const temporaryModel = temporaryGitHubCopilotModel(modelId, installedModelIds)
-    if (catalogModel === undefined && temporaryModel === undefined) {
+    const snapshot = readCopilotCatalog(ctx)
+    const installedModels = new Map(snapshot.models.map(model => [model.id, model]))
+    const native = installedModels.get(modelId)
+    if (native === undefined) {
       throw new Error(`github-copilot: pi-ai catalog has no GitHub Copilot model "${modelId}"`)
     }
-    const resolved = catalogModel === undefined
-      ? await models.getAuth('github-copilot')
-      : await models.getAuth(catalogModel)
+    // Resolve OAuth only. A local model would inject headers from another pi copy.
+    const resolved = await models.getAuth('github-copilot')
     if (resolved === undefined) return undefined
     if (onCredentialChanged !== undefined) {
       try {
@@ -135,10 +147,8 @@ export function createGitHubCopilotTokenResolver(
       }
     }
     const stored = await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
-    const available = temporaryModel === undefined
-      ? (await models.getAvailable('github-copilot')).some(candidate => candidate.id === modelId)
-      : stored?.kind === 'grant'
-        && (normalizeGitHubCopilotOAuthCredential(stored.payload).availableModelIds ?? []).includes(modelId)
+    const available = stored?.kind === 'grant'
+      && (normalizeGitHubCopilotOAuthCredential(stored.payload).availableModelIds ?? []).includes(modelId)
     if (!available) {
       throw new Error(`github-copilot: model "${modelId}" is not available for the signed-in Copilot account`)
     }
@@ -147,7 +157,7 @@ export function createGitHubCopilotTokenResolver(
     return {
       apiKey,
       baseURL: trustedCopilotBaseUrl(
-        resolved.auth.baseUrl ?? catalogModel?.baseUrl ?? temporaryModel?.baseUrl,
+        resolved.auth.baseUrl ?? native.baseUrl,
         enterpriseDomainOf(stored),
       ),
       ...resolved.auth.headers === undefined ? {} : { headers: resolved.auth.headers },
@@ -173,6 +183,12 @@ function enterpriseDomainOf(record: CredentialRecord | undefined): string | unde
   }
 }
 
+/** Validate an OAuth-derived endpoint without disclosing its value or credential payload. */
+export function trustedGitHubCopilotBaseUrl(value: string | undefined, grant: unknown): string {
+  const normalized = normalizeGitHubCopilotOAuthCredential(grant)
+  return trustedCopilotBaseUrl(value, enterpriseDomainOf({ kind: 'grant', payload: normalized }))
+}
+
 function trustedCopilotBaseUrl(value: string | undefined, enterpriseDomain: string | undefined): string {
   if (value === undefined) {
     throw new Error('github-copilot: pi-ai resolved no Copilot API base URL')
@@ -184,7 +200,7 @@ function trustedCopilotBaseUrl(value: string | undefined, enterpriseDomain: stri
     && hostname === `copilot-api.${enterpriseDomain}`
   const trusted = url.protocol === 'https:' && (githubHosted || enterpriseHosted)
   if (!trusted || url.username.length > 0 || url.password.length > 0) {
-    throw new Error(`github-copilot: pi-ai resolved an untrusted Copilot API base URL "${value}"`)
+    throw new Error('github-copilot: pi-ai resolved an untrusted Copilot API base URL')
   }
   return url.origin
 }

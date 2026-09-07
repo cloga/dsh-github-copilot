@@ -74,7 +74,7 @@ function safeModels(value: unknown): Record<string, unknown>[] {
     if (!model || typeof model.id !== 'string' || !/^[a-zA-Z0-9._:/-]{1,200}$/.test(model.id)) throw new TemporaryRouteConflictError()
     // Check only plugin-authored keys against public constants; never inspect,
     // serialize or persist arbitrary extras (which may contain credentials).
-    const overlay = temporaryGitHubCopilotModel(model.id, new Set())
+    const overlay = temporaryGitHubCopilotModel(model.id, new Map())
     if (overlay && Object.keys(model).some(key => key !== 'id' && key !== 'api')) {
       const known = temporaryGitHubCopilotModelProfile(overlay)
       if (!equalJson(model, known)) throw new TemporaryRouteConflictError()

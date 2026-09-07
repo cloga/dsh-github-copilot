@@ -14,7 +14,9 @@
  * @module dsh-github-copilot/wire
  */
 
-import type { CallId, GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
+
+type CallId = Extract<ContentBlock, { type: 'tool-call' }>['id']
 import { attributionHeaders, contentHasImage } from '@deepseek-ai/dsh-llm'
 import type { SearchPlan, SearchPlanCandidate } from './plan.ts'
 import { WEB_SEARCH_TOOL_TYPE } from './plan.ts'
@@ -22,7 +24,9 @@ import { abortedFinish, classifyHttpStatus, classifyWireError, errorFinish, pars
 import { abortable } from './http.ts'
 import { mapUsage } from './usage.ts'
 import type { WireUsage } from './usage.ts'
-import { buildWireBody, flattenText } from './serialize.ts'
+import { buildWireBody, flattenText, UnsupportedContentError } from './serialize.ts'
+import type { ResponsesReasoningOptions } from './serialize.ts'
+import { responseIndex, ResponsesReasoningText } from './responses-reasoning-text.ts'
 import { applyRequestAuth, normalizeRequestAuth, providerRequestHeaders } from './copilot-request.ts'
 import type { ResolvedRequestAuth } from './copilot-request.ts'
 import { parseSse } from './sse.ts'
@@ -40,6 +44,8 @@ const SANDBOX_DENIAL_MARKER = '[sandbox: file access denied under'
 export interface InlineHooks {
   /** Resolve one credential reference through the credentials seam. */
   resolveApiKey: (candidate: SearchPlanCandidate) => Promise<string | ResolvedRequestAuth | undefined>
+  /** Validate effective model/profile reasoning and return its mapped wire value. */
+  resolveResponsesReasoning?: (request: GenerateOptions, candidate: SearchPlanCandidate) => ResponsesReasoningOptions | undefined
 }
 
 /** One in-flight server output item, keyed by the server output_index. */
@@ -54,6 +60,9 @@ interface Slot {
   arguments: string
   /** Whether a block-start was emitted (text slots open lazily). */
   opened?: boolean
+  /** A final reasoning item cannot be reopened by duplicate snapshot events. */
+  closed?: boolean
+  reasoning?: ResponsesReasoningText
 }
 
 /**
@@ -170,6 +179,26 @@ export async function* inlineStream(
       yield abortedFinish()
       return
     }
+    let wireBody: unknown
+    try {
+      if (request.reasoningEffort !== undefined && hooks.resolveResponsesReasoning === undefined) {
+        throw new Error('COPILOT_RESPONSES_REASONING_RESOLVER_REQUIRED')
+      }
+      const reasoning = hooks.resolveResponsesReasoning?.(request, candidate)
+      wireBody = buildWireBody(request, cfg, candidate.model, candidate.webSearchToolType ?? WEB_SEARCH_TOOL_TYPE, reasoning)
+    } catch (error) {
+      // The hook may fail inside a settings service. Report only owned codes,
+      // never an arbitrary service exception or payload-bearing message.
+      const message = error instanceof UnsupportedContentError
+        ? 'COPILOT_RESPONSES_CORE_PROJECTION_REQUIRED: Core-owned or unsupported content must use the native adapter'
+        : error instanceof Error && error.message === 'COPILOT_RESPONSES_REASONING_RESOLVER_REQUIRED'
+          ? 'COPILOT_RESPONSES_REASONING_RESOLVER_REQUIRED'
+          : error instanceof Error && error.message.startsWith('COPILOT_RESPONSES_REASONING_UNSUPPORTED:')
+            ? 'COPILOT_RESPONSES_REASONING_UNSUPPORTED'
+            : 'COPILOT_RESPONSES_REQUEST_UNSUPPORTED'
+      yield errorFinish({ code: 'INVALID_REQUEST', message })
+      return
+    }
     watchdog = new IdleWatchdog(cfg.idleTimeoutMs)
     watchdog.signal.addEventListener('abort', onAbort, { once: true })
     let auth: ResolvedRequestAuth | undefined
@@ -215,7 +244,7 @@ export async function* inlineStream(
             ? { 'x-client-request-id': String(request.sessionId), session_id: String(request.sessionId) }
             : {},
         },
-        body: JSON.stringify(buildWireBody(request, cfg, candidate.model, candidate.webSearchToolType ?? WEB_SEARCH_TOOL_TYPE)),
+        body: JSON.stringify(wireBody),
       })
     } catch (error) {
       if (request.signal?.aborted === true) {
@@ -252,7 +281,44 @@ export async function* inlineStream(
     const open = new Set<number>()
     let localIndex = 0
 
+    const reasoningSlot = (outputIndex: unknown): Slot | undefined => {
+      const index = responseIndex(outputIndex)
+      if (index === undefined) return undefined
+      let slot = slots.get(index)
+      if (slot === undefined) {
+        slot = { index: localIndex++, blockType: 'reasoning', text: '', arguments: '', reasoning: new ResponsesReasoningText() }
+        slots.set(index, slot)
+      }
+      return slot?.blockType === 'reasoning' ? slot : undefined
+    }
+
+    const emitReasoning = function* (outputIndex: number, slot: Slot, delta: string): Generator<StreamChunk> {
+      if (delta.length === 0) return
+      slot.text = slot.reasoning?.text ?? slot.text
+      if (slot.opened !== true) {
+        slot.opened = true
+        open.add(outputIndex)
+        yield { type: 'block-start', index: slot.index, blockType: 'reasoning' }
+      }
+      yield { type: 'reasoning-delta', index: slot.index, text: delta }
+    }
+
+    const finishReasoning = function* (outputIndex: number, item: unknown): Generator<StreamChunk> {
+      const slot = reasoningSlot(outputIndex)
+      if (slot === undefined || (slot.closed === true && slot.opened === true)) return
+      yield* emitReasoning(outputIndex, slot, slot.reasoning?.snapshot(item) ?? '')
+      yield* emitReasoning(outputIndex, slot, slot.reasoning?.finish() ?? '')
+      slot.closed = true
+      if (!open.delete(outputIndex)) return
+      yield { type: 'block-end', index: slot.index, block: { type: 'reasoning', text: slot.text } }
+    }
+
     const closeOpenSlots = function* (): Generator<StreamChunk> {
+      for (const [outputIndex, slot] of slots) {
+        if (slot.blockType === 'reasoning' && slot.closed !== true && slot.opened !== true) {
+          yield* emitReasoning(outputIndex, slot, slot.reasoning?.finish() ?? '')
+        }
+      }
       for (const outputIndex of open) {
         const slot = slots.get(outputIndex)
         if (slot === undefined) continue
@@ -269,6 +335,8 @@ export async function* inlineStream(
             },
           }
         } else if (slot.blockType === 'reasoning') {
+          yield* emitReasoning(outputIndex, slot, slot.reasoning?.finish() ?? '')
+          slot.closed = true
           yield { type: 'block-end', index: slot.index, block: { type: 'reasoning', text: slot.text } }
         } else {
           yield { type: 'block-end', index: slot.index, block: { type: 'text', text: slot.text } }
@@ -279,6 +347,8 @@ export async function* inlineStream(
     try {
       let sawTerminal = false
       for await (const parsed of parseSse(response.body)) {
+        if (request.signal?.aborted ?? false) throw new Error('aborted')
+        if (watchdog.signal.aborted) throw new Error('inline stream idle timeout')
         watchdog.reset()
         // A non-object payload (e.g. `data: null`) carries no event fields;
         // skipping it keeps a malformed event from crashing the stream.
@@ -287,7 +357,10 @@ export async function* inlineStream(
           type?: string
           output_index?: number
           item?: { type?: string; id?: string; call_id?: string; name?: string; arguments?: string; content?: Array<{ type?: string; text?: string }> }
-          response?: { status?: string; usage?: WireUsage; incomplete_details?: { reason?: string }; error?: { message?: string } }
+          response?: { status?: string; usage?: WireUsage; output?: Array<{ type?: string }>; incomplete_details?: { reason?: string }; error?: { message?: string } }
+          summary_index?: number
+          content_index?: number
+          part?: { type?: string; text?: string }
           delta?: string
           text?: string
           arguments?: string
@@ -305,10 +378,14 @@ export async function* inlineStream(
             // so the harness never dispatches a server-side tool locally.
             if (itemType === 'function_call'
               && (data.item?.name === 'web_search' || data.item?.name === 'open_page' || data.item?.name === 'find_in_page')) break
+            if (itemType === 'reasoning') {
+              reasoningSlot(data.output_index)
+              break
+            }
             const outputIndex = data.output_index ?? -1
             const slot: Slot = {
               index: localIndex++,
-              blockType: itemType === 'function_call' ? 'tool-call' : itemType === 'message' ? 'text' : 'reasoning',
+              blockType: itemType === 'function_call' ? 'tool-call' : 'text',
               ...itemType === 'function_call' ? { id: `${data.item?.call_id ?? 'call'}|${data.item?.id ?? 'item'}` } : {},
               ...itemType === 'function_call' ? { name: data.item?.name } : {},
               text: '',
@@ -337,21 +414,22 @@ export async function* inlineStream(
             yield { type: 'text-delta', index: slot.index, text: delta }
             break
           }
-          case 'response.reasoning_text.delta': {
-            const slot = slots.get(data.output_index ?? -1)
-            if (slot === undefined || slot.blockType !== 'reasoning') break
-            const delta = data.delta ?? ''
-            if (delta.length === 0) break
-            slot.text += delta
-            if (slot.opened !== true) {
-              if (slot.text.trim().length === 0) break
-              slot.opened = true
-              open.add(data.output_index ?? -1)
-              yield { type: 'block-start', index: slot.index, blockType: 'reasoning' }
-              yield { type: 'reasoning-delta', index: slot.index, text: slot.text }
-              break
-            }
-            yield { type: 'reasoning-delta', index: slot.index, text: delta }
+          case 'response.reasoning_summary_text.delta':
+          case 'response.reasoning_summary_text.done':
+          case 'response.reasoning_summary_part.done':
+          case 'response.reasoning_text.delta':
+          case 'response.reasoning_text.done': {
+            const outputIndex = responseIndex(data.output_index)
+            if (outputIndex === undefined) break
+            const slot = reasoningSlot(outputIndex)
+            if (slot === undefined || slot.closed === true) break
+            const summary = data.type.startsWith('response.reasoning_summary_')
+            const done = data.type.endsWith('.done')
+            const value = data.type === 'response.reasoning_summary_part.done'
+              ? data.part?.type === 'summary_text' ? data.part.text : undefined
+              : done ? data.text : data.delta
+            const delta = slot.reasoning?.update(summary ? 'summary' : 'raw', summary ? data.summary_index : data.content_index, value, done) ?? ''
+            yield* emitReasoning(outputIndex, slot, delta)
             break
           }
           case 'response.function_call_arguments.delta': {
@@ -366,6 +444,10 @@ export async function* inlineStream(
           case 'response.output_item.done': {
             const outputIndex = data.output_index ?? -1
             if (data.item?.type === 'web_search_call') break
+            if (data.item?.type === 'reasoning' && responseIndex(outputIndex) !== undefined) {
+              yield* finishReasoning(outputIndex, data.item)
+              break
+            }
             const slot = slots.get(outputIndex)
             if (slot === undefined) break
             if (slot.blockType === 'tool-call') {
@@ -386,9 +468,7 @@ export async function* inlineStream(
                 },
               }
             } else if (slot.blockType === 'reasoning') {
-              if (!open.has(outputIndex)) break
-              open.delete(outputIndex)
-              yield { type: 'block-end', index: slot.index, block: { type: 'reasoning', text: slot.text } }
+              yield* finishReasoning(outputIndex, data.item)
             }
             // Text slots never emit block-end: the assembler assembles them
             // from the deltas it received.
@@ -397,6 +477,11 @@ export async function* inlineStream(
           case 'response.completed':
           case 'response.incomplete': {
             sawTerminal = true
+            if (Array.isArray(data.response?.output)) {
+              for (const [index, item] of data.response.output.entries()) {
+                if (item?.type === 'reasoning') yield* finishReasoning(index, item)
+              }
+            }
             yield* closeOpenSlots()
             const usage = data.response?.usage
             if (usage !== undefined) yield { type: 'usage', usage: mapUsage(usage) }
@@ -451,6 +536,7 @@ export async function* inlineStream(
       }
     } catch (error) {
       if (request.signal?.aborted ?? false) {
+        yield* closeOpenSlots()
         yield abortedFinish()
         return
       }

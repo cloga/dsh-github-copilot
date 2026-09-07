@@ -2,6 +2,20 @@
 
 This file is the authoritative entry point for humans and coding agents. Read it before changing code.
 
+## Plugin-only implementation boundary
+
+This repository follows a **plugin-only** policy: implement fixes in `dsh-github-copilot` through existing published public Core/pi-ai APIs. This rule applies to agents, subagents, scripts, installers and release plans, not just the final diff.
+
+- Do not edit DSH Core source, create Core implementation worktrees, prepare Core commits/PRs/releases, or rebuild/install a modified Core to complete this project's work.
+- Do not patch deployed Core or dependency artifacts in `node_modules`, ship hidden Core patches, replace Core prototypes/private registries, or mutate shared upstream model catalogs. Create only plugin-owned objects and reversible registrations through public APIs.
+- Do not make a Core patch, a new Core export, or an upstream Core PR being merged/released a prerequisite for delivering a plugin fix.
+- Read-only Core/API inspection and isolated compatibility tests against unchanged pinned artifacts are allowed. Test-only fixtures must not alter tracked Core implementation or a live deployment and must clean up only their own temporary files. Historical controlled baselines are regression evidence, not permission for new Core changes.
+- If the existing API cannot support the desired behavior, report the limit and choose a tested plugin-local alternative or defer that capability. Do not expand into Core work to preserve an earlier design claim. Reusing a published adapter class for an account-scoped, metadata-driven Copilot route is allowed; a second wire implementation, independently maintained static model catalog, copied credentials, or a fabricated single-route claim is not.
+- General model compatibility must be data-driven: new account models with supported endpoint/capability metadata must work without adding model IDs or name-prefix branches to code. Unknown or incomplete metadata must produce a diagnostic rather than guessed capabilities. Follow [the current acceptance checklist](./docs/model-compatibility-acceptance.md), including Thinking, pi version compatibility, PR/merge/release and the requested local upgrade.
+- Any future Core work requires a separate, explicit human request and separate task scope. Generic requests to fix compatibility, add models, optimize, or continue a goal do not grant that permission. Preserve abandoned Core work without resuming, publishing or deleting it automatically.
+
+`agent-contract.json` records this boundary; `pnpm verify:agent` and tooling regressions reject missing or weakened policy. These checks detect repository policy drift, not filesystem access outside the repository; they do not replace agent compliance or sandbox enforcement.
+
 ## Agent quick start
 
 1. Run `pwd`, `git status --short --branch`, and `git remote -v` in the bound checkout. Preserve user changes and existing worktrees; do not infer the project from the DSH installation path.
@@ -25,7 +39,7 @@ This repository owns eight narrow surfaces:
 4. Reference-free creation of a missing `llm-pi-ai.providers.github-copilot` profile plus leaf-only reconciliation of existing profiles.
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
 6. Provider-scoped tool-schema compatibility for Copilot payload behaviors; Core remains the tool and execution owner.
-7. A narrow, self-retiring compatibility overlay for exact account-advertised Copilot models that upstream pi-ai already specifies but has not yet published in its Copilot catalog.
+7. A bounded account-discovery route that supplies validated endpoint/capability metadata to the published native adapter, without maintaining model-ID routing rules or changing Core's catalog.
 8. Optional, provider-scoped Chat presentation for completed empty reasoning disclosures; durable content and encrypted replay metadata remain Core-owned.
 
 ## File map
@@ -37,7 +51,9 @@ This repository owns eight narrow surfaces:
 - `src/reasoning-presentation.ts`: guarded native Chat delegation and historical Copilot provenance; filters temporary view props only, never messages, signatures, replay indexes or usage.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/current-provider.ts`: selected DSH route plus installed pi-ai catalog facts.
-- `src/temporary-models.ts`: exact, account-gated compatibility metadata that self-retires when the installed pi-ai catalog owns the same model ID.
+- `src/temporary-models.ts`: exact, account-gated corrections with semantic protocol/capability retirement.
+- `src/model-protocol.ts`: explicit Core capability detection and conservative legacy fallback.
+- `src/responses-reasoning.ts`, `src/responses-reasoning-text.ts`: selected-model effort mapping and public summary assembly.
 - `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments and action-specific Goal update schemas.
 - `src/plan.ts`: Copilot-only, fail-closed hosted-search candidate lifecycle.
 - `src/probe.ts`: bounded native-search capability proof.
@@ -51,8 +67,10 @@ This repository owns eight narrow surfaces:
 
 ## Non-negotiable invariants
 
-- Do not add a second general Copilot LLM adapter or model catalog.
-- Temporary model overlays must name exact IDs, remain gated by the OAuth grant's `availableModelIds`, defer to an installed pi-ai entry with the same ID, and be removed after upstream publication. Any route-level protocol override must persist an ownership backup in this plugin's settings namespace and restore only owned leaves on retirement.
+- Do not implement a second general wire adapter or independently maintained static Copilot model catalog. The account-scoped route composes the published adapter and SDK with validated supplier metadata.
+- Protocol and capability corrections must follow authenticated, current account metadata; new model IDs must not need new implementation tables. Native pi metadata may be reused only where it agrees with advertised endpoints and capabilities. Matching IDs alone do not prove correctness or authorize migration back into another Core catalog. Preserve old bounded ownership journals solely for verified restoration of legacy writes, never for new global protocol overrides.
+- Solve protocol gaps inside the plugin using existing published extension points. Do not require a new Core capability/service or patch Core to keep a single route. The managed account-model route reuses the published adapter with one shared OAuth grant; label multiple routes honestly. Keep canonical Core models/configuration under their existing owner instead of rewriting them from the companion's pi catalog.
+- Preserve public Responses summaries and the effective selected-model reasoning effort. Never synthesize raw reasoning replay from summaries or read/decrypt opaque replay data; assistant reasoning/replay histories delegate to Core before probing.
 - Do not require or silently support `copilot2api`, an external gateway, a pasted GitHub token, a placeholder key, or `dsh-web-search-provider`.
 - The credential record key is `llm-pi-ai/github-copilot`.
 - OAuth credential payloads stay Host-only. Client Remote methods may expose status, notices, and errors only.
@@ -74,13 +92,15 @@ The supported upstream baselines are:
 - Tag `dsh-v0.1.2-rc.1`, commit `a66e4702047846cdaa10c66c9d3df3951f5ea70d`.
 - Tag `dsh-v0.1.3-alpha.1`, commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`.
 
+These pins document compatibility evidence. They do not authorize creating another controlled Core patch or making one a prerequisite for new plugin fixes.
+
 - Models UI: rc.1 and alpha.1 use `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
 - Authorization flow key: `llm-pi-ai/github-copilot`.
 - Authorization service: rc.1 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
 - Copilot grant schema: `type: oauth`, non-empty `refresh`/`access`, finite `expires`, optional non-empty `enterpriseUrl`, and optional deduplicated non-empty-string `availableModelIds`.
 - Settings: create the provider through a path operation at `providers.github-copilot`.
-- Per-model API: normally materialize each account model as `{ id, api }`. The only route-level exception is an exact temporary model absent from published pi-ai: select its protocol and filter the route to models using that same protocol, then unset the route protocol when the overlay retires.
+- Per-model API: do not assume stock Core honors a configured model.api. Verify the existing published behavior; where it cannot serve a model, use a plugin-local, exact-model alternative or report the limitation rather than patching Core.
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.
 - Provider headers: rc.1 validates configured headers through Fetch and reuses Host-owned headers during model discovery.

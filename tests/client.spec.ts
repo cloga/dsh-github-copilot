@@ -1,13 +1,34 @@
+import * as React from 'react'
 import { isValidElement } from 'react'
 import type { ReactElement } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID } from '../src/copilot-identity.ts'
+import type { GitHubCopilotAuthorizationView } from '../src/authorization-controller.ts'
+
+// Element/lifecycle evidence, not a browser or live Remote integration. Keep the
+// actual React element implementation and control only hooks exercised below.
+vi.mock('react', async importOriginal => {
+  const actual = await importOriginal<typeof import('react')>()
+  return { ...actual, useState: vi.fn(actual.useState), useEffect: vi.fn(actual.useEffect),
+    useCallback: vi.fn(actual.useCallback), useRef: vi.fn(actual.useRef) }
+})
+
+const panelCleanups: Array<() => void> = []
+afterEach(() => { for (const cleanup of panelCleanups.splice(0)) cleanup(); vi.resetAllMocks(); vi.useRealTimers() })
 import {
   activeAuthorizationNotice,
+  authorizationViewFrom,
   apply,
   catalogWarningOf,
   routeStatusMessage,
   copyAuthorizationCode,
   GitHubCopilotAuthorizationNotice,
+  GitHubCopilotPreviewFooter,
+  GitHubCopilotProviderCard,
+  GitHubCopilotSettingsSection,
+  previewAssignmentMessage,
+  GitHubCopilotAccountModelsPanel,
+  GitHubCopilotAccountModelsSummary,
 } from '../src/client.ts'
 
 describe('GitHub Copilot Models client', () => {
@@ -17,6 +38,126 @@ describe('GitHub Copilot Models client', () => {
     const element = root as ReactElement<{ children?: unknown }>
     return [element, ...descendants(element.props.children)]
   }
+
+  type AccountModels = NonNullable<GitHubCopilotAuthorizationView['accountModels']>
+  function accountResult(accountModels?: AccountModels) {
+    return { ok: true as const, value: { phase: 'signed-in' as const, configured: true, writable: true, inFlight: false, notices: [],
+      ...accountModels === undefined ? {} : { accountModels },
+    } }
+  }
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    let reject!: (reason: Error) => void
+    const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail })
+    return { promise, resolve, reject }
+  }
+  function modelRemote(discoverModels: ReturnType<typeof vi.fn> = vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] }))) {
+    return { discoverModels, status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn() }
+  }
+  // Tiny deterministic hook host: component state/ref identity and effect cleanup,
+  // without mounting a browser or invoking any real Remote implementation.
+  function panelHarness(initialRemote: object) {
+    let remote = initialRemote
+    const states: unknown[] = []
+    const setters: ReturnType<typeof vi.fn>[] = []
+    const refs: Array<{ current: unknown }> = []
+    const effects: Array<{ deps: React.DependencyList | undefined; cleanup?: (() => void) | undefined }> = []
+    let pending: Array<() => void> = []
+    let mounted = true
+    const renderOnce = () => {
+      let stateIndex = 0, refIndex = 0, effectIndex = 0
+      vi.mocked(React.useState).mockImplementation((initial?: unknown): ReturnType<typeof React.useState> => {
+        const index = stateIndex++
+        if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial
+        setters[index] ??= vi.fn((value: unknown) => { states[index] = typeof value === 'function' ? value(states[index]) : value })
+        return [states[index], setters[index]!]
+      })
+      vi.mocked(React.useRef).mockImplementation((initial?: unknown) => {
+        const index = refIndex++
+        return refs[index] ??= { current: initial }
+      })
+      vi.mocked(React.useEffect).mockImplementation((setup, deps) => {
+        const index = effectIndex++
+        const previous = effects[index]
+        if (!previous || !deps || !previous.deps || deps.length !== previous.deps.length || deps.some((value, at) => !Object.is(value, previous.deps?.[at]))) {
+          pending.push(() => {
+            previous?.cleanup?.()
+            const cleanup = setup()
+            effects[index] = { deps, cleanup: typeof cleanup === 'function' ? cleanup : undefined }
+          })
+        }
+      })
+      return GitHubCopilotAccountModelsPanel({ remote: remote as never })
+    }
+    const render = (nextRemote = remote) => {
+      if (!mounted) throw new Error('test panel is unmounted')
+      remote = nextRemote
+      let tree = renderOnce()
+      const queued = pending
+      pending = []
+      for (const effect of queued) effect()
+      if (queued.length > 0) tree = renderOnce()
+      return tree
+    }
+    const unmount = () => {
+      if (!mounted) return
+      mounted = false
+      for (const effect of effects) effect.cleanup?.()
+    }
+    panelCleanups.push(unmount)
+    return { render, unmount, setters }
+  }
+  function refreshButton(tree: ReactElement) {
+    const button = descendants(tree).find(element => element.props['data-dsh-github-copilot-refresh-models'] === true)
+    expect(button).toBeDefined()
+    return button!
+  }
+
+  it('validates a field-safe authorization view without reading unknown credential fields', () => {
+    const raw = Object.defineProperty({ ...accountResult().value,
+      notices: [{ message: 'Continue on GitHub', url: 'https://github.com/login/device', code: 'ABCD-EFGH' }],
+    }, 'accountKey', { enumerable: true, get() { throw new Error('do not read accountKey') } })
+    const view = authorizationViewFrom(raw)
+    expect(view?.configured).toBe(true)
+    expect(view?.notices[0]?.url).toBe('https://github.com/login/device')
+    expect(view === raw).toBe(false)
+    expect(view).not.toHaveProperty('accountKey')
+  })
+
+  it.each([
+    { phase: 'unexpected' }, { configured: 'true' }, { writable: undefined }, { inFlight: 1 }, { notices: {} },
+    { notices: [{ message: 17 }] }, { accountModels: { state: 'ready', models: [{ id: 17, name: 'Invalid', api: 'openai-responses' }], rejected: [] } },
+  ])('rejects malformed raw Remote view fields: %j', malformed => {
+    expect(authorizationViewFrom({ ...accountResult().value, ...malformed })).toBeUndefined()
+  })
+
+  it.each(['javascript:alert(1)', 'data:text/html,hello', 'http://github.com/login/device', 'https://user:password@github.com/login/device'])('refuses an unsafe authorization link: %s', url => {
+    expect(authorizationViewFrom({ ...accountResult().value, notices: [{ message: 'Continue', url }] })).toBeUndefined()
+  })
+
+  it('contains a throwing known view getter without exposing its value', () => {
+    const raw = Object.defineProperty({ ...accountResult().value }, 'notices', { get() { throw new Error('PRIVATE_NOTICE_VALUE') } })
+    expect(authorizationViewFrom(raw)).toBeUndefined()
+  })
+
+  it('does not accept a malformed status view into the authorization card', async () => {
+    const setStatus = vi.fn(), setError = vi.fn()
+    const effects: React.EffectCallback[] = []
+    vi.mocked(React.useEffect).mockImplementation(setup => { effects.push(setup) })
+    vi.mocked(React.useCallback).mockImplementation(callback => callback)
+    vi.mocked(React.useRef).mockImplementation(initial => ({ current: initial }))
+    vi.mocked(React.useState)
+      .mockReturnValueOnce([undefined, setStatus]).mockReturnValueOnce([undefined, setError])
+      .mockReturnValueOnce([false, vi.fn()]).mockReturnValueOnce(['idle', vi.fn()])
+    const remote = { status: vi.fn(async () => ({ ok: true, value: { phase: 'signed-in', configured: 'invalid', writable: true, inFlight: false, notices: [] } })) }
+    GitHubCopilotProviderCard({ provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
+      configured: true, keyConfigured: false, remote: remote as never })
+    const disposers = effects.map(setup => setup())
+    await Promise.resolve()
+    expect(setStatus).not.toHaveBeenCalled()
+    expect(setError).toHaveBeenCalledWith('COPILOT_AUTHORIZATION_VIEW_INVALID')
+    for (const dispose of disposers) if (typeof dispose === 'function') dispose()
+  })
 
   it('distinguishes route repair and conflicts from authentication state', () => {
     const base = { configured: true, writable: true, inFlight: false, phase: 'signed-in' as const, notices: [] }
@@ -146,7 +287,7 @@ describe('GitHub Copilot Models client', () => {
         supportedModelCount: 0,
         unknownModelIds: ['gpt-6-astra'],
       },
-    })).toContain('Update the integration and restart DSH')
+    })).toContain('Refresh account models')
     expect(catalogWarningOf({
       phase: 'signed-in',
       configured: true,
@@ -176,13 +317,329 @@ describe('GitHub Copilot Models client', () => {
     })).toBeUndefined()
   })
 
+  it('explains two routes and keeps shared authorization collapsed without reading status', () => {
+    const remote = { status: vi.fn(), discoverModels: vi.fn(), start: vi.fn(), signOut: vi.fn() }
+    const setOpen = vi.fn()
+    vi.mocked(React.useState).mockReturnValueOnce([false, setOpen])
+    const elements = descendants(GitHubCopilotPreviewFooter({ remote: remote as never }))
+    const text = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
+    expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    expect(text).toContain(`Ordinary Copilot models remain under ${GITHUB_COPILOT_PROVIDER_ID}.`)
+    expect(text).toContain('account models')
+    expect(text).not.toContain('gpt-6-astra')
+    expect(elements.filter(element => element.type === GitHubCopilotAccountModelsPanel)).toHaveLength(1)
+    expect(text).toContain('two routes')
+    expect(text).toContain('one GitHub sign-in')
+    expect(text).toContain('does not verify')
+    const details = elements.find(element => element.type === 'details')
+    expect(details?.props.open).not.toBe(true)
+    expect(elements.some(element => element.type === GitHubCopilotProviderCard)).toBe(false)
+    expect(elements.some(element => element.type === 'input' || element.type === 'form')).toBe(false)
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.start).not.toHaveBeenCalled()
+    expect(remote.signOut).not.toHaveBeenCalled()
+    details?.props.onToggle({ currentTarget: { open: true } })
+    expect(setOpen).toHaveBeenCalledWith(true)
+  })
+
+  it('mounts the canonical shared controls only after explicit expansion and unmounts on collapse', () => {
+    const remote = { status: vi.fn(), discoverModels: vi.fn(), start: vi.fn(), signOut: vi.fn() }
+    const setOpen = vi.fn()
+    vi.mocked(React.useState).mockReturnValueOnce([true, setOpen])
+    const elements = descendants(GitHubCopilotPreviewFooter({ remote: remote as never }))
+    const controls = elements.filter(element => element.type === GitHubCopilotProviderCard)
+    expect(controls).toHaveLength(1)
+    expect(controls[0]?.props.provider.provider).toBe(GITHUB_COPILOT_PROVIDER_ID)
+    expect(controls[0]?.props.remote).toBe(remote)
+    const details = elements.find(element => element.type === 'details')
+    details?.props.onToggle({ currentTarget: { open: false } })
+    expect(setOpen).toHaveBeenCalledWith(false)
+    vi.mocked(React.useState).mockReturnValueOnce([false, setOpen])
+    const collapsed = descendants(GitHubCopilotPreviewFooter({ remote: remote as never }))
+    expect(collapsed.some(element => element.type === GitHubCopilotProviderCard)).toBe(false)
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.start).not.toHaveBeenCalled()
+  })
+
+  it('does not poll shared status after a signed-in render', async () => {
+    vi.useFakeTimers()
+    const signedIn = { phase: 'signed-in' as const, configured: true, writable: true, inFlight: false, notices: [] }
+    const remote = { status: vi.fn(async () => ({ ok: true as const, value: signedIn })) }
+    const effects: React.EffectCallback[] = []
+    vi.mocked(React.useEffect).mockImplementation(setup => { effects.push(setup) })
+    vi.mocked(React.useCallback).mockImplementation(callback => callback)
+    vi.mocked(React.useRef).mockImplementation(initial => ({ current: initial }))
+    vi.mocked(React.useState)
+      .mockReturnValueOnce([signedIn, vi.fn()])
+      .mockReturnValueOnce([undefined, vi.fn()])
+      .mockReturnValueOnce([false, vi.fn()])
+      .mockReturnValueOnce(['idle', vi.fn()])
+    GitHubCopilotProviderCard({
+      provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
+      configured: true, keyConfigured: false, remote: remote as never,
+    })
+    const disposers = effects.map(setup => setup())
+    await Promise.resolve()
+    expect(remote.status).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(remote.status).toHaveBeenCalledTimes(1)
+    for (const dispose of disposers) if (typeof dispose === 'function') dispose()
+  })
+
+  it('cancels the shared authorization polling timer when the expanded controls unmount', async () => {
+    vi.useFakeTimers()
+    const pending = { phase: 'authorizing' as const, configured: false, writable: true, inFlight: true, notices: [] }
+    const remote = { status: vi.fn(async () => ({ ok: true as const, value: pending })), cancel: vi.fn() }
+    const effects: React.EffectCallback[] = []
+    vi.mocked(React.useEffect).mockImplementation(setup => { effects.push(setup) })
+    vi.mocked(React.useCallback).mockImplementation(callback => callback)
+    vi.mocked(React.useRef).mockImplementation(initial => ({ current: initial }))
+    vi.mocked(React.useState)
+      .mockReturnValueOnce([pending, vi.fn()])
+      .mockReturnValueOnce([undefined, vi.fn()])
+      .mockReturnValueOnce([false, vi.fn()])
+      .mockReturnValueOnce(['idle', vi.fn()])
+    GitHubCopilotProviderCard({
+      provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
+      configured: false, keyConfigured: false, remote: remote as never,
+    })
+    const disposers = effects.map(setup => setup())
+    await Promise.resolve()
+    expect(remote.status).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(1)
+    for (const dispose of disposers) if (typeof dispose === 'function') dispose()
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(remote.status).toHaveBeenCalledTimes(1)
+    expect(remote.cancel).not.toHaveBeenCalled()
+  })
+
+  it('describes generic preview allocation as stored metadata rather than live availability', () => {
+    const base = { phase: 'signed-in' as const, configured: true, writable: true, inFlight: false, notices: [],
+      catalog: { state: 'current' as const, accountModelCount: 2, supportedModelCount: 2, unknownModelIds: [] } }
+    const assigned = { ...base, catalog: { ...base.catalog, previewModelIds: ['unseen-model-a', 'another-provider-model'] } }
+    expect(previewAssignmentMessage(assigned)).toContain('Stored account snapshot')
+    expect(previewAssignmentMessage(assigned)).toContain('2 model(s)')
+    expect(previewAssignmentMessage(assigned)).toContain('not a live availability check')
+    expect(previewAssignmentMessage(base)).toBeUndefined()
+    expect(previewAssignmentMessage({ ...assigned, configured: false })).toBeUndefined()
+    expect(previewAssignmentMessage({ ...base, catalog: { ...base.catalog, previewModelIds: [] } })).toBeUndefined()
+  })
+
+  it('discovers account models only on a click and deduplicates clicks while busy', async () => {
+    const response = deferred<ReturnType<typeof accountResult>>()
+    const remote = modelRemote(vi.fn(() => response.promise))
+    const panel = panelHarness(remote)
+    const button = refreshButton(panel.render())
+    expect(button.props.disabled).toBe(false)
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.status).not.toHaveBeenCalled()
+    const first = button.props.onClick()
+    const second = button.props.onClick()
+    expect(remote.discoverModels).toHaveBeenCalledTimes(1)
+    expect(refreshButton(panel.render()).props.disabled).toBe(true)
+    const models = [
+      { id: 'never-seen-a', name: 'New A', api: 'openai-responses' },
+      { id: 'vendor-future-b', name: 'New B', api: 'openai-completions' },
+      { id: 'arbitrary-c', name: 'New C', api: 'anthropic-messages' },
+    ]
+    response.resolve(accountResult({ state: 'ready', models, rejected: [] }))
+    await Promise.all([first, second])
+    const elements = descendants(panel.render())
+    const summary = elements.find(element => element.type === GitHubCopilotAccountModelsSummary)
+    expect(summary?.props.snapshot.models).toEqual(models)
+    expect(summary?.props.snapshot.models).not.toBe(models)
+    expect(refreshButton(panel.render()).props.disabled).toBe(false)
+    for (const method of [remote.status, remote.reconcile, remote.start, remote.signOut]) expect(method).not.toHaveBeenCalled()
+  })
+
+  it('stores only account-model presentation leaves from a successful refresh', async () => {
+    const model = Object.defineProperty({ id: 'new-model', name: 'New model', api: 'openai-responses' }, 'token', {
+      enumerable: true, get() { throw new Error('must not read token') },
+    })
+    const snapshot = Object.defineProperty({ state: 'ready' as const, models: [model], rejected: [] }, 'accountKey', {
+      enumerable: true, get() { throw new Error('must not read accountKey') },
+    })
+    const panel = panelHarness(modelRemote(vi.fn(async () => accountResult(snapshot))))
+    await refreshButton(panel.render()).props.onClick()
+    const summary = descendants(panel.render()).find(element => element.type === GitHubCopilotAccountModelsSummary)
+    expect(summary).toBeDefined()
+    expect(summary?.props.snapshot === snapshot).toBe(false)
+    expect(summary?.props.snapshot).not.toHaveProperty('accountKey')
+    expect(summary?.props.snapshot.models[0]).toEqual({ id: 'new-model', name: 'New model', api: 'openai-responses' })
+  })
+
+  it('reports discovery failures safely and permits an explicit retry', async () => {
+    const remote = modelRemote(vi.fn()
+      .mockRejectedValueOnce(new Error('PRIVATE_TOKEN=value'))
+      .mockResolvedValueOnce(accountResult({ state: 'ready', models: [], rejected: [] })))
+    const panel = panelHarness(remote)
+    await refreshButton(panel.render()).props.onClick()
+    const failed = descendants(panel.render())
+    const error = failed.find(element => element.props['data-dsh-github-copilot-discovery-error'] === true)
+    expect(error?.props.children).toBe('COPILOT_MODEL_DISCOVERY_FAILED')
+    expect(failed.some(element => String(element.props.children).includes('PRIVATE_TOKEN'))).toBe(false)
+    expect(refreshButton(panel.render()).props.disabled).toBe(false)
+    await refreshButton(panel.render()).props.onClick()
+    expect(remote.discoverModels).toHaveBeenCalledTimes(2)
+    expect(descendants(panel.render()).some(element => element.props['data-dsh-github-copilot-discovery-error'] === true)).toBe(false)
+  })
+
+  it.each(['leaf', 'getter'])('rejects malformed discovery %s data before displaying it', async failure => {
+    const invalid = failure === 'leaf'
+      ? { state: 'ready', models: [{ id: 17, name: 'Invalid', api: 'openai-responses' }], rejected: [] }
+      : Object.defineProperty({ state: 'ready', rejected: [] }, 'models', { get() { throw new Error('PRIVATE_MODEL_VALUE') } })
+    const remote = modelRemote(vi.fn(async () => ({ ok: true, value: { ...accountResult().value, accountModels: invalid } })))
+    const panel = panelHarness(remote)
+    await refreshButton(panel.render()).props.onClick()
+    const elements = descendants(panel.render())
+    expect(elements.some(element => element.type === GitHubCopilotAccountModelsSummary)).toBe(false)
+    expect(elements.find(element => element.props['data-dsh-github-copilot-discovery-error'] === true)?.props.children)
+      .toBe('COPILOT_MODEL_DISCOVERY_INVALID_VIEW')
+  })
+
+  it('does not show an unsafe Remote error body as a discovery diagnostic', async () => {
+    const remote = modelRemote(vi.fn(async () => ({ ok: false, error: { message: 'PRIVATE_ACCOUNT_KEY', code: 'PRIVATE_TOKEN' } })))
+    const panel = panelHarness(remote)
+    await refreshButton(panel.render()).props.onClick()
+    const error = descendants(panel.render()).find(element => element.props['data-dsh-github-copilot-discovery-error'] === true)
+    expect(error?.props.children).toBe('COPILOT_MODEL_DISCOVERY_FAILED')
+  })
+
+  it.each(['method', 'view'])('keeps authorization independent when discovery %s is unavailable', async missing => {
+    const remote = modelRemote(vi.fn(async () => accountResult()))
+    if (missing === 'method') Reflect.deleteProperty(remote, 'discoverModels')
+    const panel = panelHarness(remote)
+    await refreshButton(panel.render()).props.onClick()
+    const error = descendants(panel.render()).find(element => element.props['data-dsh-github-copilot-discovery-error'] === true)
+    expect(error?.props.children).toBe('COPILOT_MODEL_DISCOVERY_UNAVAILABLE')
+    expect(remote.start).not.toHaveBeenCalled()
+    expect(remote.signOut).not.toHaveBeenCalled()
+  })
+
+  it.each(['success', 'failure'])('ignores a late discovery %s after unmount', async outcome => {
+    const response = deferred<ReturnType<typeof accountResult>>()
+    const panel = panelHarness(modelRemote(vi.fn(() => response.promise)))
+    const request = refreshButton(panel.render()).props.onClick()
+    const writes = panel.setters.map(setter => setter.mock.calls.length)
+    panel.unmount()
+    if (outcome === 'success') response.resolve(accountResult({ state: 'ready', models: [{ id: 'late', name: 'Late', api: 'openai-responses' }], rejected: [] }))
+    else response.reject(new Error('PRIVATE_LATE_FAILURE'))
+    await request
+    expect(panel.setters.map(setter => setter.mock.calls.length)).toEqual(writes)
+  })
+
+  it('does not let a previous Remote overwrite a newly mounted discovery result', async () => {
+    const old = deferred<ReturnType<typeof accountResult>>()
+    const panel = panelHarness(modelRemote(vi.fn(() => old.promise)))
+    const oldRequest = refreshButton(panel.render()).props.onClick()
+    const latest = deferred<ReturnType<typeof accountResult>>()
+    const newer = modelRemote(vi.fn(() => latest.promise))
+    const newRequest = refreshButton(panel.render(newer)).props.onClick()
+    old.resolve(accountResult({ state: 'ready', models: [{ id: 'previous', name: 'Previous', api: 'openai-responses' }], rejected: [] }))
+    await oldRequest
+    expect(refreshButton(panel.render()).props.disabled).toBe(true)
+    await refreshButton(panel.render()).props.onClick()
+    expect(newer.discoverModels).toHaveBeenCalledTimes(1)
+    latest.resolve(accountResult({ state: 'ready', models: [{ id: 'current', name: 'Current', api: 'anthropic-messages' }], rejected: [] }))
+    await newRequest
+    const summary = descendants(panel.render()).find(element => element.type === GitHubCopilotAccountModelsSummary)
+    expect(summary?.props.snapshot.models.map((model: { id: string }) => model.id)).toEqual(['current'])
+    expect(newer.discoverModels).toHaveBeenCalledTimes(1)
+  })
+
+  it('makes explicit account discovery available in the old-Core settings fallback', () => {
+    const remote = modelRemote()
+    const elements = descendants(GitHubCopilotSettingsSection({ remote: remote as never, close: vi.fn() }))
+    expect(elements.filter(element => element.type === GitHubCopilotAccountModelsPanel)).toHaveLength(1)
+    expect(elements.filter(element => element.type === GitHubCopilotProviderCard)).toHaveLength(1)
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+  })
+
+  it('does not poll or automatically rediscover a loading server snapshot', async () => {
+    vi.useFakeTimers()
+    const remote = modelRemote(vi.fn(async () => accountResult({ state: 'loading', models: [], rejected: [] })))
+    const panel = panelHarness(remote)
+    panel.render()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    await refreshButton(panel.render()).props.onClick()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(remote.discoverModels).toHaveBeenCalledTimes(1)
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('renders metadata lists, counts and safe diagnostics without exposing unknown fields', () => {
+    const model = Object.defineProperty({ id: 'arbitrary-new-id', name: '<Untrusted name>', api: 'openai-responses' }, 'token', { get() { throw new Error('token read') } })
+    const snapshot = Object.defineProperty({ state: 'ready' as const, models: [model],
+      rejected: [{ id: 'unsupported-id', code: 'UNSUPPORTED_ENDPOINT' }, { code: 'secret=value' }],
+      discoveredAt: 1_700_000_000_000, error: 'secret=value',
+    }, 'accountKey', { get() { throw new Error('accountKey read') } })
+    const elements = descendants(GitHubCopilotAccountModelsSummary({ snapshot }))
+    const text = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
+    expect(text).toContain('1 accepted model(s)')
+    expect(text).toContain('2 rejected model(s)')
+    expect(text).toContain('arbitrary-new-id')
+    expect(text).toContain('openai-responses')
+    expect(text).toContain('UNSUPPORTED_ENDPOINT')
+    expect(text).toContain('COPILOT_MODEL_METADATA_REJECTED')
+    expect(text).not.toContain('secret=value')
+    expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    expect(text).toContain('does not prove')
+    expect(elements.some(element => element.type === 'script' || element.props.dangerouslySetInnerHTML !== undefined)).toBe(false)
+  })
+
+  it('shows capability warnings separately without rejecting otherwise accepted models', () => {
+    const snapshot = { state: 'ready' as const, models: [{ id: 'new-model', name: 'New model', api: 'openai-responses' }], rejected: [],
+      warnings: [{ id: 'new-model', code: 'INPUT_LIMIT_NOT_ENFORCED_BY_CORE' }, { id: 'new-model', code: 'REASONING_EFFORTS_UNSUPPORTED' }],
+    }
+    const elements = descendants(GitHubCopilotAccountModelsSummary({ snapshot }))
+    const text = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
+    expect(text).toContain('1 accepted model(s)')
+    expect(text).toContain('0 rejected model(s)')
+    expect(text).toContain('2 capability warning(s)')
+    expect(text).toContain('do not reject')
+    expect(text).toContain('INPUT_LIMIT_NOT_ENFORCED_BY_CORE')
+    expect(text).toContain('REASONING_EFFORTS_UNSUPPORTED')
+    expect(text).toContain('not offered')
+  })
+
+  it('preserves safe warnings from discovery while accepting older responses without them', async () => {
+    const warning = Object.defineProperty({ id: 'new-model', code: 'REASONING_EFFORTS_UNSUPPORTED' }, 'accountKey', {
+      enumerable: true, get() { throw new Error('must not read warning extras') },
+    })
+    const remote = modelRemote(vi.fn()
+      .mockResolvedValueOnce(accountResult({ state: 'ready', models: [], rejected: [], warnings: [warning] }))
+      .mockResolvedValueOnce(accountResult({ state: 'ready', models: [], rejected: [] })))
+    const panel = panelHarness(remote)
+    await refreshButton(panel.render()).props.onClick()
+    const first = descendants(panel.render()).find(element => element.type === GitHubCopilotAccountModelsSummary)
+    expect(first?.props.snapshot.warnings).toEqual([{ id: 'new-model', code: 'REASONING_EFFORTS_UNSUPPORTED' }])
+    expect(first?.props.snapshot.warnings[0] === warning).toBe(false)
+    await refreshButton(panel.render()).props.onClick()
+    const second = descendants(panel.render()).find(element => element.type === GitHubCopilotAccountModelsSummary)
+    expect(second?.props.snapshot).not.toHaveProperty('warnings')
+  })
+
+  it.each(['idle', 'loading', 'ready', 'stale', 'error', 'disposed', 'unconfigured', 'unavailable'] as const)('shows the %s discovery snapshot without inventing a successful call', state => {
+    const elements = descendants(GitHubCopilotAccountModelsSummary({ snapshot: { state, models: [], rejected: [], error: state === 'error' ? 'COPILOT_MODEL_DISCOVERY_FAILED' : undefined } }))
+    const status = elements.find(element => element.props['data-dsh-github-copilot-account-models-state'] === state)
+    expect(status).toBeDefined()
+    expect(elements.some(element => String(element.props.children).includes('does not prove'))).toBe(true)
+  })
+
   function clientContext(declaredSlots: readonly string[]) {
     const disposeRemote = vi.fn(async () => undefined)
-    const disposeUi = vi.fn(async () => undefined)
+    let cleanupUi: (() => void) | undefined
+    const disposeUi = vi.fn(async () => { cleanupUi?.(); cleanupUi = undefined })
     const disposePresentation = vi.fn(async () => undefined)
     const registrations = new Map<string, ReturnType<typeof vi.fn>>()
     const injections = new Map<string, () => unknown>()
-    const register = vi.fn((options: { name: string }) => {
+    const register = vi.fn((options: { name: string; id?: string; order?: number }, _component: unknown) => {
       const dispose = vi.fn()
       registrations.set(options.name, dispose)
       return dispose
@@ -195,14 +652,17 @@ describe('GitHub Copilot Models client', () => {
       slots: {
         inject(name: string, callback: () => unknown): unknown
         register: ReturnType<typeof vi.fn>
+        spec: ReturnType<typeof vi.fn>
       }
+      logger: { warn: ReturnType<typeof vi.fn> }
       inject: ReturnType<typeof vi.fn>
     }
-    const inject = vi.fn((services: string[], callback: (value: unknown) => void) => {
+    const inject = vi.fn((services: string[], callback: (value: unknown) => unknown) => {
       if (services.includes('uiConversation')) {
         return Object.assign(new Promise<void>(() => {}), { dispose: disposePresentation })
       }
-      callback(ctx)
+      const cleanup = callback(ctx)
+      if (typeof cleanup === 'function') cleanupUi = cleanup as () => void
       return Object.assign(Promise.resolve(), { dispose: disposeUi })
     })
     ctx = {
@@ -212,15 +672,92 @@ describe('GitHub Copilot Models client', () => {
       },
       slots: {
         inject: (name, callback) => {
-          injections.set(name, callback)
-          return declaredSlots.includes(name) ? callback() : () => undefined
+          let active = true
+          let cleanup: (() => void) | undefined
+          const activate = () => {
+            if (!active) return
+            cleanup?.()
+            const result = callback()
+            cleanup = typeof result === 'function' ? result as () => void : undefined
+            return cleanup
+          }
+          injections.set(name, activate)
+          if (declaredSlots.includes(name)) activate()
+          return () => { if (!active) return; active = false; cleanup?.(); cleanup = undefined }
         },
         register,
+        spec: vi.fn((name: string) => ({ kind: name === 'settings.models.provider-card' ? 'keyed' : 'list', scope: 'root' })),
       },
+      logger: { warn: vi.fn() },
       inject,
     }
     return { ctx, disposeRemote, disposeUi, disposePresentation, register, registrations, injections }
   }
+
+  it('registers a removable Models footer without replacing provider-card authorization', async () => {
+    const { ctx, register, registrations, injections } = clientContext([
+      'settings.models.provider-card', 'settings.models.footer', 'settings.section',
+    ])
+    const dispose = await apply(ctx as never)
+    expect(register).toHaveBeenCalledWith({ name: 'settings.models.footer', id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, order: 10 }, expect.any(Function))
+    const render = register.mock.calls.find(([options]) => options.name === 'settings.models.footer')?.[1] as (() => ReactElement) | undefined
+    const element = render?.()
+    expect(element?.type).toBe(GitHubCopilotPreviewFooter)
+    expect(element?.props.remote).toBe(ctx.remote.githubCopilot)
+    expect(register).toHaveBeenCalledWith({ name: 'settings.models.provider-card', key: 'llm-pi-ai' }, expect.any(Function))
+    expect(registrations.has('settings.section')).toBe(false)
+    const removeFooter = registrations.get('settings.models.footer')
+    await dispose()
+    expect(removeFooter).toHaveBeenCalledOnce()
+    const count = register.mock.calls.length
+    injections.get('settings.models.footer')?.()
+    expect(register).toHaveBeenCalledTimes(count)
+  })
+
+  it('waits for footer declaration without blocking old-Core authorization and follows redeclaration', async () => {
+    const { ctx, register, registrations, injections } = clientContext(['settings.section'])
+    const dispose = await apply(ctx as never)
+    expect(registrations.has('settings.section')).toBe(true)
+    expect(registrations.has('settings.models.footer')).toBe(false)
+    injections.get('settings.models.footer')?.()
+    const first = registrations.get('settings.models.footer')
+    expect(first).toBeDefined()
+    injections.get('settings.models.footer')?.()
+    expect(first).toHaveBeenCalledOnce()
+    const second = registrations.get('settings.models.footer')
+    expect(second).not.toBe(first)
+    expect(register.mock.calls.filter(([options]) => options.name === 'settings.models.footer')).toHaveLength(2)
+    await dispose()
+    expect(second).toHaveBeenCalledOnce()
+  })
+
+  it('leaves authorization active when the optional footer contract is incompatible or registration fails', async () => {
+    for (const failure of ['contract', 'missing-spec', 'registration', 'injection'] as const) {
+      const fixture = clientContext(['settings.models.footer', 'settings.section'])
+      if (failure === 'contract') fixture.ctx.slots.spec.mockReturnValue({ kind: 'keyed', scope: 'session' })
+      if (failure === 'missing-spec') Reflect.deleteProperty(fixture.ctx.slots, 'spec')
+      if (failure === 'registration') {
+        const register = fixture.register.getMockImplementation()!
+        fixture.register.mockImplementation((options, component) => {
+          if (options.name === 'settings.models.footer') throw new Error('PRIVATE_FOOTER_ERROR')
+          return register(options, component)
+        })
+      }
+      if (failure === 'injection') {
+        const inject = fixture.ctx.slots.inject
+        fixture.ctx.slots.inject = (name, callback) => {
+          if (name === 'settings.models.footer') throw new Error('PRIVATE_FOOTER_ERROR')
+          return inject(name, callback)
+        }
+      }
+      const dispose = await apply(fixture.ctx as never)
+      expect(fixture.registrations.has('settings.section')).toBe(true)
+      expect(fixture.registrations.has('settings.models.footer')).toBe(false)
+      expect(fixture.ctx.logger.warn).toHaveBeenCalled()
+      expect(fixture.ctx.logger.warn.mock.calls.flat().join(' ')).not.toContain('PRIVATE_FOOTER_ERROR')
+      await dispose()
+    }
+  })
 
   it('does not delay authorization while the optional reasoning presentation waits for Core services', async () => {
     const { ctx, disposeRemote, disposeUi, disposePresentation } = clientContext(['settings.section'])

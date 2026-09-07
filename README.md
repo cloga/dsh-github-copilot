@@ -17,14 +17,14 @@ A focused DSH companion for GitHub Copilot sign-in, account-aware model profiles
 | DSH `0.1.2-rc.1` | Tag commit [`a66e470`](https://github.com/deepseek-ai/deepseek-harness/commit/a66e4702047846cdaa10c66c9d3df3951f5ea70d) | **Settings → Models** provider card |
 | DSH `0.1.3-alpha.1` | Tag commit [`d347e70`](https://github.com/deepseek-ai/deepseek-harness/commit/d347e703908d0406b7a7ef80e3a0e594d86b2215) | **Settings → Models** provider card |
 
-The stock rc.2 tag does not resolve per-model `api` entries and is not the tested mixed-protocol baseline. Package peer ranges admit only the three exact DSH releases above. Newer DSH or pi-ai versions require a fresh compatibility review before the range changes.
+The table retains historical source pins; it does not imply the new account-model route has been verified on every baseline. Its current synthetic transport tests use the **published rc.1 adapter with pi 0.85.1**. The controlled rc.2 pin is historical regression evidence only. Alpha.1 has a source release but no standalone npm artifacts; CI therefore exercises its unchanged tagged source through an isolated test resolver, without building or patching Core. That runtime check must pass before claiming alpha.1 compatibility. Stock Core model-entry `api` support is not a prerequisite for the plugin-owned route. Package peer ranges are admission constraints, not live compatibility proof. No Core patch is installed by this plugin.
 
 ## Install and sign in
 
 Install the current release into the profile you use (replace `web` when targeting another profile):
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.1-alpha.2/dsh-github-copilot-0.3.1-alpha.2.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.1/dsh-github-copilot-0.4.0-alpha.1.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
@@ -71,8 +71,8 @@ No `copilot2api` process, external gateway, placeholder API key, pasted GitHub t
 - A conditional authorization-service fallback for profiles such as rc.2 that omit Core's service.
 - The Models provider-card UI, Client-safe Remote descriptors, and Host authorization controller.
 - Strict normalization of pi-ai's provider-owned Copilot OAuth grant.
-- Account-aware reconciliation of the Copilot route's `models` and `compat.supportsStrictMode` leaves.
-- A temporary, account-gated GPT-6 Astra compatibility overlay that retires automatically when the installed pi-ai catalog owns the model.
+- Conservative canonical-route setup and restoration of verified legacy overrides, without replacing Core's model list from another pi catalog.
+- A data-driven account-model route using pi `0.85.1`, authenticated Copilot metadata, and the published native DSH adapter. New model IDs do not require a model-specific code patch when their advertised protocol and capabilities are supported.
 - Direct provider-hosted search through inline agent-loop interception and a Responses-only `ctx.web` provider.
 
 DSH Core continues to own model selection, sandboxing, tools, attachments, and other providers. `@deepseek-ai/dsh-llm-pi-ai` owns the Copilot adapter, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport. Credentials remain Host-only.
@@ -81,16 +81,23 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 `llm-pi-ai` registers the OAuth method; the authorization service orchestrates the interaction; this package contributes the UI/Remote controller and route reconciliation. Core supplies authorization on rc.1. On rc.2 profiles that omit it, this package mounts its runtime dependency and reuses any provider already present.
 
-After sign-in, during Host startup, and after this package refreshes the OAuth credential, the package intersects the account's `availableModelIds` with the installed pi-ai catalog and materializes each known model as `{ id, api }`. Account model IDs missing from the installed catalog are never assigned a guessed protocol, except for the exact `gpt-6-astra` compatibility overlay whose metadata is derived from upstream pi and models.dev. Because released llm-pi-ai builds require a route protocol for a model absent from pi-ai, the overlay temporarily selects `openai-responses` at route level and exposes only account models that speak Responses; Claude, Gemini, and other protocol models are reported as temporarily hidden rather than misrouted. The route protocol and filtering retire automatically once the installed catalog owns GPT-6 or the account no longer exposes it. Other unknown IDs produce a Models-card catalog warning. A missing profile is created without unrelated connection references. For an existing profile, reconciliation intentionally changes only:
+Use **Refresh account models** in Models settings to fetch the signed-in account's current Copilot `/models` metadata. Select the resulting models under **GitHub Copilot (account models)**, whose stable route ID is `github-copilot-preview`. The original `github-copilot` route remains owned by Core. Both routes share one GitHub sign-in; discovery never changes the selected model automatically.
 
-- `providers.github-copilot.api` while the temporary GPT-6 Responses route mode is active
-- `providers.github-copilot.models`
-- `providers.github-copilot.compat.supportsStrictMode`
-- `providers.github-copilot.headers` when the temporary GPT-6 overlay requires Copilot client headers
+The managed route selects Responses, Chat Completions or Anthropic Messages from advertised `supported_endpoints`, not model names or a per-model allowlist. An existing pi protocol is retained only if the server also advertises it. New IDs with complete supported metadata can therefore work without another plugin release. Missing endpoints, disabled policy, unsupported protocols or malformed limits produce explicit diagnostics rather than guesses. Updating pi or seeing a model ID in its catalog does not itself prove the protocol is correct.
+
+Discovery is bounded and cached for five minutes. Attach, status reads and credential notifications do not start it automatically; an explicit refresh or an actual model preparation can perform discovery and native OAuth refresh. Each request is tied to the account, token, permission snapshot and catalog generation. Account changes, revoked permissions, expired metadata and disposal invalidate old requests. A newly advertised, server-enabled model may work even before an older grant's cached ID list includes it; this does not rewrite the grant.
+
+**Plugin-only development boundary:** fixes in this project must use existing published public APIs and remain in the plugin. Do not patch Core source, installed binaries, `node_modules`, private runtime registries or shared upstream catalogs; do not make a new Core export or upstream Core PR a delivery prerequisite. Read-only inspection and isolated verification against unchanged pinned Core artifacts are allowed. If a stock API cannot support a requested feature, state the limitation and use a tested plugin-local alternative rather than changing Core. The authoritative policy and its machine checks are documented in [AGENTS.md](./AGENTS.md#plugin-only-implementation-boundary).
+
+A single Copilot login does not necessarily mean one model route. Protocol alternatives must be labelled honestly, preserve the shared Host-only OAuth lifecycle, and reuse existing adapter implementations instead of introducing a second general Copilot adapter. Model metadata from another dependency copy is not proof that the actual Core supports a model or protocol.
+
+The plugin no longer installs a global Responses override that hides Gemini or Claude models. Ordinary canonical profiles keep their existing model lists, protocol, headers and custom fields. A missing canonical profile is created with only `compat.supportsStrictMode: false`; normal reconciliation changes that compatibility leaf only. Core continues to use its own catalog, which may differ from the plugin's account-discovered directory.
+
+Previously installed plugin overrides are restored only through a verified ownership journal, to the recorded original `api`/`models` values. Owned public headers are removed only if their values still match. User edits, ambiguous legacy markers and interrupted uncommitted writes remain conflicts rather than being forcibly adopted. Restoring an absent or empty model list returns Core to its default catalog; it does not mean an empty set of models.
 
 Temporary ownership uses a bounded version-2 journal: raw `api`/`models` preimage and postimage, prepared restoration target, namespace revision and process epoch. Only fixed public Copilot headers can enter the journal; arbitrary header values, credential payloads and custom model extras are never copied into it. Every write uses the namespace revision; current owned fields must still match the recorded values. Conflicts retain the journal and user edits instead of guessing ownership. Deleting a created profile additionally requires its complete raw shape to be plugin-owned, with no base profile, user additions or set secrets. Normal reconciliation merges actual raw user extras only, not schema defaults. These checks are conservative recovery safeguards, not an atomic transaction across settings namespaces and credential storage.
 
-**Upgrade boundary:** older backups without postimages/epoch are reported as `conflict`, not automatically adopted. Review the existing route and backup before explicitly migrating or removing the marker; do not reconnect or delete it to force ownership. A later invocation never replays a prepared but uncommitted activation/restoration automatically: Core revision counters reset on namespace re-registration as well as restart, and there is no public durable registration identity. Even matching recorded epoch/revision is not enough to prove ownership across that boundary. Steady owned postimages can begin a fresh restoration, and already-restored targets can clear their journal without replaying writes. New account model sets during an active overlay can require a new reviewed ownership cycle. Remove legacy connection fields explicitly during migration. Sign-out itself still deletes only the `llm-pi-ai/github-copilot` credential record and keeps route settings.
+**Upgrade boundary:** older backups without postimages/epoch are reported as `conflict`, not automatically adopted. Review the existing route and backup before explicitly migrating or removing the marker; do not reconnect or delete it to force ownership. A later invocation never replays a prepared but uncommitted activation/restoration automatically: Core revision counters reset on namespace re-registration as well as restart, and there is no public durable registration identity. Even matching recorded epoch/revision is not enough to prove ownership across that boundary. Steady owned postimages can begin a fresh restoration, and already-restored targets can clear their journal without replaying writes. An existing recorded restoration target that differs from the original preimage remains a conflict for explicit review; a new account model set never authorizes overwriting that evidence. Remove legacy connection fields explicitly during migration. Sign-out itself still deletes only the `llm-pi-ai/github-copilot` credential record and keeps route settings.
 
 ### Read-only status and explicit repair
 
@@ -122,23 +129,34 @@ An explicit `web.searchProvider` takes precedence over `DSH_WEB_SEARCH_PROVIDER`
 
 Requests go directly to the credential-resolved HTTPS Copilot endpoint after strict host validation: GitHub-hosted `api.*.githubcopilot.com`, or `copilot-api.<signed-in-enterprise-domain>` for an accepted GitHub Enterprise credential. No external gateway receives the credential.
 
-By default (`probe: true`), search fails closed unless the selected route is `github-copilot`, the account exposes the model, the installed protocol supports native search, and a bounded capability probe succeeds. Setting `probe: false` bypasses only capability proof and trusts the selected native protocol; route, account, protocol, endpoint, and authentication checks remain active. Authentication, HTTP, malformed-body, abort, and network probe failures do not fall back to an external search path. Requests containing any Core file block—including files nested in tool-result content—also fail closed to `next()`, preserving Core's file projection instead of letting the hosted-search serializer drop that context.
+By default (`probe: true`), search fails closed unless the selected route is canonical `github-copilot` or the plugin-owned `github-copilot-preview`, the account authorizes the model, its verified protocol supports native search, and a bounded capability probe succeeds. Managed-model conversations always use their native adapter; independent Responses `ctx.web` search uses account-bound authorization without the old static-catalog ID restriction. Setting `probe: false` bypasses only capability proof and trusts the selected native protocol; route, account, protocol, endpoint, and authentication checks remain active. Authentication, HTTP, malformed-body, abort, and network probe failures do not fall back to an external search path. Requests containing any Core file block—including files nested in tool-result content—also fail closed to `next()`, preserving Core's file projection instead of letting the hosted-search serializer drop that context.
 
 Search proof is lazy: attach, settings updates and `credentials/record-updated` for `llm-pi-ai/github-copilot` only invalidate cached plans, without starting network work. The next actual eligible request proves capability again; unrelated credentials are ignored and event bursts do not trigger repeated eager probes. In-flight proofs are cancelled on invalidation/disposal. If credentials change during proof or final auth resolution, the current request fails closed rather than applying account A's proof to account B. Submit a new request after the update; there is no automatic retry loop or implicit `probe: false` fallback.
 
-## Empty Think disclosures
+## Reasoning summaries and empty Think disclosures
 
-Some Copilot Responses requests, including observed GPT-6 Astra replies, return encrypted reasoning items without public summary text. This is valid protocol behavior: [reasoning summaries are optional](https://developers.openai.com/api/docs/guides/reasoning), and encrypted replay data is not a user-readable explanation. The companion does not decrypt, invent, or automatically request a reasoning summary.
+On the eligible custom Responses path, an explicit request reasoning effort overrides the provider profile default. The companion validates it against the selected model's declared/native efforts, maps its wire value, and requests `summary: "auto"`, matching the native pi-ai path. No effort selection leaves provider defaults unchanged; Core's `off` omission is preserved rather than represented as a guaranteed server-side disable. Unsupported or missing model metadata fails with a named error before the custom model request; the separate capability probe retains its existing lifecycle.
 
-On the guarded Chat rendering contract, the Client hides completed, empty or whitespace-only reasoning disclosures for replies whose own recorded provider is `github-copilot`. It delegates the remaining view to DSH's native renderer. Nonempty summaries, answers, tools, images and actions remain unchanged. Running or interrupted steps, unknown provenance, and non-Copilot replies retain their native rendering; selecting a different model later does not reclassify historical replies. Because this runs on the rendered view rather than the search transport, it also covers native/image request paths and loaded history when the necessary provenance is present.
+The Responses parser preserves public `reasoning_summary_text` and `reasoning_text` events, final-only summaries, and interleaved parts without repeating delta text from completion snapshots. Empty or encrypted-only items do not become fabricated explanations. Some Copilot Responses requests still return encrypted reasoning without public text: [summaries are optional](https://developers.openai.com/api/docs/guides/reasoning), and requesting one does not guarantee it. The companion never decrypts or invents reasoning.
+
+Requests whose assistant history contains reasoning blocks or opaque `replayState` bypass the custom wire through Core **before probing**. A public summary must not be reconstructed as a raw `reasoning_text` input item, and encrypted replay belongs to Core. This deliberately limits inline search on such histories; the separate Responses-only `ctx.web` provider remains available under its usual route/probe gates.
+
+On the guarded Chat rendering contract, the Client hides completed, empty or whitespace-only reasoning disclosures for replies whose own recorded provider is `github-copilot` or `github-copilot-preview`, for any valid model ID. It delegates the remaining view to DSH's native renderer. Nonempty summaries, answers, tools, images and actions remain unchanged. Running or interrupted steps, unknown provenance, and non-Copilot replies retain their native rendering; selecting a different model later does not reclassify historical replies. Because this runs on the rendered view rather than the search transport, it also covers native/image request paths and loaded history when the necessary provenance is present.
 
 Filtering changes only temporary render props. Durable messages, encrypted signatures, replay-state block indexes and token usage are not rewritten, so future requests retain the original reasoning context. There is no DOM polling or whole-page observer. Removing the plugin withdraws the contribution and restores native rendering.
 
 This optional integration uses the public `conversation.chat.node` keyed slot and `uiConversation` location data. Its guard checks the current plain memo renderer named `AssistantNodeView`; renamed/minified future renderers are left alone. This is a compatibility check, not module-ownership or security proof: a deliberate replacement with identical naming and metadata cannot be distinguished through this registry. It does not block authorization on older Cores. Missing or incompatible extension contracts, or a competing assistant renderer, leave native output unchanged with a named compatibility diagnostic. The new display behavior is not a claim of live GPT-6 transport success; unsupported Core versions may still show empty Think rows. It does not change the `github-copilot.enabled` setting, which controls hosted search only.
 
+### Capability warnings and adapter limits
+
+- `REASONING_EFFORTS_UNSUPPORTED` means some advertised reasoning labels cannot be expressed faithfully by the selected native SDK protocol. They are not guessed, and ordinary requests remain available. Explicit unsupported efforts—including an unadvertised `off`—are rejected rather than silently treated as defaults.
+- `INPUT_LIMIT_NOT_ENFORCED_BY_CORE` means the provider advertises a separate prompt limit smaller than its combined context. The plugin retains both values, but the published Core model-info interface exposes only combined context; it does not automatically enforce the independent input limit. Oversized requests can still be rejected by the provider.
+- The Core-facing integration uses the published adapter's normal `streamSimple` path. Its advanced `stream` entry explicitly rejects incompatible protocol-specific SDK client objects; this does not disable normal conversation streaming.
+- Unknown pricing is represented as unpriced metadata, not a claim that a model is free. Public summaries remain optional provider output.
+
 ## Copilot tool compatibility
 
-To prevent observed invalid Copilot tool payloads, the package sets the managed route's `compat.supportsStrictMode` leaf to `false` and applies two schema-only fixes when the selected provider is exactly `github-copilot`: it removes top-level `sandbox_permissions` and `justification` properties, and rewrites Core's multi-action `update_goal` parameters as a discriminated `oneOf`. Each Goal action then advertises only its legal fields: `complete`, `pause`, and `resume` cannot carry edit or blocker fields; `blocked` requires `blocked_reason`; and `edit` alone exposes replacement fields. Execution still uses Core's original Goal tool and service. Non-Copilot prompt assemblies are unchanged.
+To prevent observed invalid Copilot tool payloads, the package sets the managed route's `compat.supportsStrictMode` leaf to `false` and applies two schema-only fixes when the selected provider is canonical `github-copilot` or the plugin-owned account route `github-copilot-preview`: it removes top-level `sandbox_permissions` and `justification` properties, and rewrites Core's multi-action `update_goal` parameters as a discriminated `oneOf`. Each Goal action then advertises only its legal fields: `complete`, `pause`, and `resume` cannot carry edit or blocker fields; `blocked` requires `blocked_reason`; and `edit` alone exposes replacement fields. Execution still uses Core's original Goal tool and service. Non-Copilot prompt assemblies are unchanged.
 
 Copilot sessions that need wider file or command access must select sufficient standing permissions before the call. Installation agents must also follow these payload rules:
 
@@ -170,7 +188,8 @@ There are no token, API-key, model-catalog, or endpoint settings in this package
 Remove old gateway routes, `COPILOT_GITHUB_TOKEN`-style references, `copilot2api`, and `dsh-web-search-provider` before relying on the managed route.
 
 - **No sign-in control:** confirm the package is installed in the active profile and use the baseline-specific Models UI above.
-- **Signed in but a new model is missing:** check the Models card for a catalog warning. GPT-6 Astra is temporarily recognized when the account advertises the exact `gpt-6-astra` ID. While that compatibility mode is active, non-Responses account models are listed as temporarily hidden; remove GPT-6 from the account policy or install native pi-ai support to restore the mixed route. Other unknown IDs are withheld until verified metadata is available.
+- **Signed in but a new model is missing:** click **Refresh account models**, then choose the account-model route. Read the per-model rejection or warning rather than assuming the SDK needs another model-ID patch. Unsupported endpoints or incomplete provider metadata are not guessed. The canonical route may have a different, Core-owned catalog; a valid legacy restoration removes the old global Responses override without rewriting it from the plugin's pi copy.
+- **No Think text:** the provider may omit public summaries, but nonempty summaries must survive the Responses parser. Check the selected reasoning effort and named capability errors. Empty UI disclosures are hidden only after completion; encrypted replay data is never displayed. Reasoning/replay-bearing histories use Core's native transport rather than the limited custom serializer.
 - **Hosted search unavailable:** select the `github-copilot` route, choose an account-available Responses or Anthropic model, and inspect the named probe error. The explicit `ctx.web` provider is Responses-only.
 - **Legacy endpoint/key still present:** reconciliation preserves unowned fields by design; remove legacy connection fields manually.
 
@@ -182,7 +201,12 @@ Public exports are `.`, `./client`, `./remote`, `./deployment-baseline.json`, an
 - `src/authorization-controller.ts`: Host authorization and path-level route reconciliation.
 - `src/copilot-grant.ts`, `src/copilot-auth.ts`: grant normalization and Host credential lifecycle.
 - `src/client.ts`, `src/remote.ts`: Models UI and Client-safe Remote contract.
-- `src/current-provider.ts`, `src/temporary-models.ts`, `src/plan.ts`, `src/probe.ts`: selected-route projection, the self-retiring GPT-6 overlay, candidate planning, and capability proof.
+- `src/account-model-catalog.ts`, `src/account-model-source.ts`, `src/account-model-auth.ts`: bounded account discovery, endpoint/capability normalization and native OAuth binding.
+- `src/preview-route.ts`, `src/preview-provider.ts`, `src/pi-provider-bridge.ts`: data-driven account models and the public native adapter/SDK boundary.
+- `src/current-provider.ts`, `src/plan.ts`, `src/probe.ts`: owned route facts, candidate planning and capability proof.
+- `src/temporary-models.ts`, `src/route-ownership.ts`: recognition and conservative restoration of historical configuration writes; not a new-model routing table.
+- `src/model-protocol.ts`: public local facts with explicit ownership limits; no unshipped Core service dependency.
+- `src/responses-reasoning.ts`, `src/responses-reasoning-text.ts`: selected-model effort mapping and public summary assembly.
 - `src/wire.ts`, `src/wire-anthropic.ts`, `src/traditional-search.ts`: hosted-search transports.
 - `deployment-baseline.json`: declared machine-readable compatibility/capability evidence inventory; `scripts/verify-deployment-baseline.mjs` checks its source and test markers for drift.
 - `lib/`: generated release output; never edit it directly.
@@ -229,8 +253,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`); the historical `cloga` suffix identified downstream fork builds and is no longer used for new versions. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, marks prerelease versions accordingly, and creates the GitHub Release only after every preceding step succeeds.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.1-alpha.2/dsh-github-copilot-0.3.1-alpha.2.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.3.1-alpha.2/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.1/dsh-github-copilot-0.4.0-alpha.1.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.1/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -238,7 +262,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.3.1-alpha.2.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.1.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

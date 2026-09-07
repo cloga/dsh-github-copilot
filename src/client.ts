@@ -7,11 +7,15 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, ReactElement } from 'react'
+import type { CSSProperties, ReactElement, SyntheticEvent } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
-import githubCopilotRemote from './remote.ts'
+import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { installReasoningPresentation } from './reasoning-presentation.ts'
+import {
+  GITHUB_COPILOT_PROVIDER_ID,
+  GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
+} from './copilot-identity.ts'
 
 export const inject = ['remote', 'slots']
 
@@ -24,7 +28,72 @@ interface GitHubCopilotSettingsSectionProps extends SettingsSectionOwnerProps {
 }
 
 function messageOf(result: Awaited<ReturnType<GitHubCopilotProviderCardProps['remote']['status']>>): string {
-  return result.ok ? '' : result.error.message
+  return result.ok ? '' : 'COPILOT_AUTHORIZATION_REQUEST_FAILED'
+}
+
+function viewRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Invalid Client view')
+  return value as Record<string, unknown>
+}
+
+function viewFields(value: unknown, keys: readonly string[]): Record<string, unknown> {
+  const source = viewRecord(value)
+  const result: Record<string, unknown> = {}
+  for (const key of keys) {
+    const field = source[key]
+    if (field !== undefined) result[key] = field
+  }
+  return result
+}
+
+function viewStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new Error('Invalid Client strings')
+  const result: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string') throw new Error('Invalid Client string')
+    result.push(item)
+  }
+  return result
+}
+
+/** Older Remote clients may not decode results: project known fields before validating our own copy. */
+export function authorizationViewFrom(value: unknown): GitHubCopilotAuthorizationView | undefined {
+  try {
+    const source = viewRecord(value)
+    const owned = viewFields(source, ['phase', 'configured', 'writable', 'inFlight', 'error'])
+    if (typeof owned.phase !== 'string' || !['signed-out', 'authorizing', 'signed-in', 'error'].includes(owned.phase)
+      || typeof owned.configured !== 'boolean' || typeof owned.writable !== 'boolean' || typeof owned.inFlight !== 'boolean') return undefined
+    const notices = source.notices
+    if (!Array.isArray(notices)) return undefined
+    owned.notices = notices.map(notice => {
+      const next = viewFields(notice, ['message', 'url', 'code'])
+      if (typeof next.message !== 'string' || (next.code !== undefined && typeof next.code !== 'string')) throw new Error('Invalid Client notice')
+      if (next.url !== undefined) {
+        if (typeof next.url !== 'string') throw new Error('Invalid Client URL')
+        const url = new URL(next.url)
+        if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') throw new Error('Unsafe Client URL')
+      }
+      return next
+    })
+    const catalog = source.catalog
+    if (catalog !== undefined) {
+      const next = viewFields(catalog, ['state', 'accountModelCount', 'supportedModelCount'])
+      const fields = viewRecord(catalog)
+      next.unknownModelIds = viewStrings(fields.unknownModelIds)
+      for (const key of ['temporarilyUnavailableModelIds', 'previewModelIds']) {
+        if (fields[key] !== undefined) next[key] = viewStrings(fields[key])
+      }
+      owned.catalog = next
+    }
+    const route = source.route
+    if (route !== undefined) owned.route = viewFields(route, ['state', 'diagnosticCode'])
+    const accountModels = source.accountModels
+    if (accountModels !== undefined) owned.accountModels = accountModelsSnapshot(accountModels)
+    const parsed = GitHubCopilotAuthorizationViewSchema.safeParse(owned)
+    return parsed.success ? parsed.data : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export function catalogWarningOf(status: GitHubCopilotAuthorizationView | undefined): string | undefined {
@@ -32,16 +101,23 @@ export function catalogWarningOf(status: GitHubCopilotAuthorizationView | undefi
   if (catalog === undefined) return undefined
   const warnings: string[] = []
   if (catalog.state === 'partially-outdated') {
-    warnings.push(`${catalog.unknownModelIds.length} account model(s) require a newer Copilot model catalog: ${catalog.unknownModelIds.join(', ')}.`)
+    warnings.push(`${catalog.unknownModelIds.length} account model(s) are not represented in the installed catalog: ${catalog.unknownModelIds.join(', ')}. Use Refresh account models to read provider endpoint and capability metadata; unsupported metadata will be reported rather than guessed.`)
   }
   if (catalog.state === 'outdated') {
-    warnings.push(`This account exposes only models unknown to the installed Copilot model catalog: ${catalog.unknownModelIds.join(', ')}. Update the integration and restart DSH.`)
+    warnings.push(`The installed catalog does not describe these account models: ${catalog.unknownModelIds.join(', ')}. Use Refresh account models to request current metadata and review any rejection diagnostics.`)
   }
   const unavailable = catalog.temporarilyUnavailableModelIds ?? []
   if (unavailable.length > 0) {
-    warnings.push(`Temporarily hidden while GPT-6 compatibility selects the Responses protocol: ${unavailable.join(', ')}.`)
+    warnings.push(`Temporarily hidden by the legacy route configuration: ${unavailable.join(', ')}. Refresh account models for the managed account-model route.`)
   }
   return warnings.length === 0 ? undefined : warnings.join(' ')
+}
+
+/** Account allocation is not a claim that a route is loaded or a model request succeeded. */
+export function previewAssignmentMessage(status: GitHubCopilotAuthorizationView | undefined): string | undefined {
+  const ids = status?.catalog?.previewModelIds
+  if (status?.configured !== true || ids === undefined || ids.length === 0) return undefined
+  return `Stored account snapshot assigns ${ids.length} model(s) to ${GITHUB_COPILOT_PREVIEW_PROVIDER_ID}; this is not a live availability check.`
 }
 
 export function routeStatusMessage(status: GitHubCopilotAuthorizationView | undefined): string | undefined {
@@ -169,16 +245,18 @@ export function GitHubCopilotProviderCard(
   const refresh = useCallback(async () => {
     const result = await props.remote.status()
     if (result.ok) {
-      setStatus(result.value)
+      const view = authorizationViewFrom(result.value)
+      if (view === undefined) { setError('COPILOT_AUTHORIZATION_VIEW_INVALID'); return undefined }
+      setStatus(view)
       setError(undefined)
-      return result.value
+      return view
     }
     setError(messageOf(result))
     return undefined
   }, [props.remote])
 
   useEffect(() => {
-    if (props.provider.provider !== 'github-copilot') return
+    if (props.provider.provider !== GITHUB_COPILOT_PROVIDER_ID) return
     void refresh()
   }, [props.provider.provider, refresh])
 
@@ -192,7 +270,7 @@ export function GitHubCopilotProviderCard(
   }, [])
 
   useEffect(() => {
-    if (props.provider.provider !== 'github-copilot' || status?.inFlight !== true) return
+    if (props.provider.provider !== GITHUB_COPILOT_PROVIDER_ID || status?.inFlight !== true) return
     let disposed = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const poll = async (): Promise<void> => {
@@ -206,14 +284,16 @@ export function GitHubCopilotProviderCard(
     }
   }, [props.provider.provider, refresh, status?.inFlight])
 
-  if (props.provider.provider !== 'github-copilot') return null
+  if (props.provider.provider !== GITHUB_COPILOT_PROVIDER_ID) return null
 
   const invoke = async (
     operation: () => ReturnType<GitHubCopilotProviderCardProps['remote']['status']>,
   ): Promise<void> => {
     const result = await operation()
     if (result.ok) {
-      setStatus(result.value)
+      const view = authorizationViewFrom(result.value)
+      if (view === undefined) { setError('COPILOT_AUTHORIZATION_VIEW_INVALID'); return }
+      setStatus(view)
       setError(undefined)
       return
     }
@@ -225,6 +305,7 @@ export function GitHubCopilotProviderCard(
   const busy = status?.inFlight === true
   const catalogWarning = catalogWarningOf(status)
   const routeMessage = routeStatusMessage(status)
+  const previewMessage = previewAssignmentMessage(status)
   return createElement('div', { 'data-dsh-github-copilot': true },
     createElement('div', { role: 'status', 'aria-live': 'polite' },
       error ?? status?.error ?? (busy ? 'Waiting for GitHub authorization…' : signedIn ? 'Signed in to GitHub Copilot.' : 'Sign in to use GitHub Copilot models.')),
@@ -235,6 +316,9 @@ export function GitHubCopilotProviderCard(
     routeMessage === undefined ? null : createElement('div', {
       role: 'status', 'data-dsh-github-copilot-route-state': status?.route?.state,
     }, routeMessage),
+    previewMessage === undefined ? null : createElement('div', {
+      'data-dsh-github-copilot-preview-allocation': true,
+    }, previewMessage),
     signedIn && !busy && status?.route?.state === 'needs-repair' ? createElement('button', {
       type: 'button',
       disabled: repairing,
@@ -286,6 +370,166 @@ export function GitHubCopilotProviderCard(
         }, 'Sign in with GitHub'))
 }
 
+type AccountModelsSnapshot = NonNullable<GitHubCopilotAuthorizationView['accountModels']>
+
+function discoveryCode(value: string | undefined, fallback: string): string {
+  return value !== undefined && /^[A-Z][A-Z0-9_]{0,100}$/.test(value) ? value : fallback
+}
+
+/** Copy only the Client presentation fields; unknown account or credential fields never enter UI state. */
+function accountModelsSnapshot(value: unknown): AccountModelsSnapshot {
+  const source = viewRecord(value)
+  const models = source.models, rejected = source.rejected, warnings = source.warnings
+  if (!Array.isArray(models) || models.length > 512 || !Array.isArray(rejected) || rejected.length > 1024
+    || (warnings !== undefined && (!Array.isArray(warnings) || warnings.length > 1024))) throw new Error('Invalid model view lists')
+  const owned = viewFields(source, ['state', 'discoveredAt'])
+  owned.models = models.map(model => viewFields(model, ['id', 'name', 'api']))
+  const diagnostics = (items: unknown[], fallback: string) => items.map(item => {
+    const next = viewFields(item, ['id', 'code'])
+    if (typeof next.code !== 'string') throw new Error('Invalid model diagnostic')
+    next.code = discoveryCode(next.code, fallback)
+    return next
+  })
+  owned.rejected = diagnostics(rejected, 'COPILOT_MODEL_METADATA_REJECTED')
+  if (warnings !== undefined) owned.warnings = diagnostics(warnings, 'COPILOT_MODEL_CAPABILITY_WARNING')
+  const error = source.error
+  if (error !== undefined) {
+    if (typeof error !== 'string') throw new Error('Invalid model error')
+    owned.error = discoveryCode(error, 'COPILOT_MODEL_DISCOVERY_FAILED')
+  }
+  const parsed = GitHubCopilotAuthorizationViewSchema.shape.accountModels.unwrap().safeParse(owned)
+  if (!parsed.success) throw new Error('Invalid model view fields')
+  return parsed.data
+}
+
+function capabilityWarningMessage(code: string): string {
+  if (code === 'INPUT_LIMIT_NOT_ENFORCED_BY_CORE') return 'Core does not independently enforce this model\'s input-token limit.'
+  if (code === 'REASONING_EFFORTS_UNSUPPORTED') return 'Some advertised thinking levels are not supported by the installed SDK and are not offered.'
+  return 'Review this model capability warning before relying on the affected feature.'
+}
+
+/** A discovery snapshot is metadata evidence, not proof of a successful model call. */
+export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: AccountModelsSnapshot }): ReactElement {
+  const { snapshot } = props
+  const messages: Record<AccountModelsSnapshot['state'], string> = {
+    idle: 'Account models have not been refreshed.',
+    loading: 'Account model discovery is still in progress. This panel does not poll automatically.',
+    ready: `Account metadata is ready. Select discovered models under ${GITHUB_COPILOT_PREVIEW_PROVIDER_ID} (GitHub Copilot account models).`,
+    stale: 'This account model snapshot is stale. Refresh before relying on its metadata.',
+    error: 'Account model discovery failed. Use Refresh account models to retry.',
+    disposed: 'Account model discovery is no longer active in this profile.',
+    unconfigured: 'Sign in with GitHub before refreshing account models.',
+    unavailable: 'Account model discovery is unavailable in this profile.',
+  }
+  const timestamp = snapshot.discoveredAt === undefined ? undefined : new Date(snapshot.discoveredAt)
+  const iso = timestamp !== undefined && Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : undefined
+  return createElement('section', { 'data-dsh-github-copilot-account-models': true },
+    createElement('p', { role: 'status', 'aria-live': 'polite', 'data-dsh-github-copilot-account-models-state': snapshot.state }, messages[snapshot.state]),
+    createElement('p', null, 'Discovery does not prove a successful model call or hosted search. No default model or account policy is changed.'),
+    iso === undefined ? null : createElement('p', null, 'Snapshot time: ', createElement('time', { dateTime: iso }, iso)),
+    snapshot.error === undefined ? null : createElement('p', { role: 'alert' }, discoveryCode(snapshot.error, 'COPILOT_MODEL_DISCOVERY_FAILED')),
+    createElement('details', null,
+      createElement('summary', null, `${snapshot.models.length} accepted model(s)`),
+      createElement('ul', null, snapshot.models.map((model, index) => createElement('li', { key: `${model.id}:${index}` },
+        `${model.name} (${model.id}) — ${model.api}`)))),
+    createElement('details', null,
+      createElement('summary', null, `${snapshot.rejected.length} rejected model(s)`),
+      createElement('ul', null, snapshot.rejected.map((item, index) => createElement('li', { key: `${item.id ?? 'unknown'}:${index}` },
+        `${item.id ?? 'Unidentified model'} — ${discoveryCode(item.code, 'COPILOT_MODEL_METADATA_REJECTED')}`)))),
+    snapshot.warnings === undefined || snapshot.warnings.length === 0 ? null : createElement('details', null,
+      createElement('summary', null, `${snapshot.warnings.length} capability warning(s)`),
+      createElement('p', null, 'Capability warnings do not reject the listed models; they describe limits of specific features.'),
+      createElement('ul', null, snapshot.warnings.map((item, index) => createElement('li', { key: `${item.id}:${index}` },
+        `${item.id} — ${discoveryCode(item.code, 'COPILOT_MODEL_CAPABILITY_WARNING')}: ${capabilityWarningMessage(item.code)}`)))))
+}
+
+/** Explicit account discovery only: no mount-time request, polling, or automatic retry. */
+export function GitHubCopilotAccountModelsPanel(props: { readonly remote: ClientContext['remote']['githubCopilot'] }): ReactElement {
+  const [snapshot, setSnapshot] = useState<AccountModelsSnapshot>()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+  const lifecycle = useRef({ active: true, epoch: 0, pending: false })
+  const latestRemote = useRef(props.remote)
+  latestRemote.current = props.remote
+
+  useEffect(() => {
+    const scope = lifecycle.current
+    scope.active = true
+    scope.epoch++
+    scope.pending = false
+    setSnapshot(undefined)
+    setError(undefined)
+    setBusy(false)
+    return () => { scope.active = false; scope.epoch++; scope.pending = false }
+  }, [props.remote])
+
+  const refreshAccountModels = async (): Promise<void> => {
+    const scope = lifecycle.current
+    if (!scope.active || scope.pending || latestRemote.current !== props.remote) return
+    const epoch = scope.epoch
+    const remote = props.remote
+    const current = () => scope.active && scope.epoch === epoch && latestRemote.current === remote
+    scope.pending = true
+    setBusy(true)
+    setError(undefined)
+    setSnapshot(undefined)
+    try {
+      if (typeof remote.discoverModels !== 'function') {
+        if (current()) setError('COPILOT_MODEL_DISCOVERY_UNAVAILABLE')
+        return
+      }
+      const result = await remote.discoverModels()
+      if (!current()) return
+      if (!result.ok) { setError('COPILOT_MODEL_DISCOVERY_FAILED'); return }
+      const view = authorizationViewFrom(result.value)
+      if (view === undefined) { setError('COPILOT_MODEL_DISCOVERY_INVALID_VIEW'); return }
+      if (view.accountModels === undefined) { setError('COPILOT_MODEL_DISCOVERY_UNAVAILABLE'); return }
+      setSnapshot(view.accountModels)
+    } catch {
+      if (current()) setError('COPILOT_MODEL_DISCOVERY_FAILED')
+    } finally {
+      if (current()) { scope.pending = false; setBusy(false) }
+    }
+  }
+  return createElement('section', { 'data-dsh-github-copilot-account-models-panel': true, 'aria-busy': busy },
+    createElement('p', null, 'Refresh account models explicitly requests provider metadata and may refresh the stored OAuth grant. It does not start another sign-in or change your selected model.'),
+    createElement('button', { type: 'button', disabled: busy, onClick: refreshAccountModels, 'data-dsh-github-copilot-refresh-models': true },
+      busy ? 'Refreshing account models…' : 'Refresh account models'),
+    error === undefined ? null : createElement('p', { role: 'alert', 'data-dsh-github-copilot-discovery-error': true }, error),
+    snapshot === undefined ? null : createElement(GitHubCopilotAccountModelsSummary, { snapshot }))
+}
+
+interface GitHubCopilotPreviewFooterProps {
+  readonly remote: ClientContext['remote']['githubCopilot']
+}
+
+/** Static route guidance; shared account controls mount only while the user expands them. */
+export function GitHubCopilotPreviewFooter(props: GitHubCopilotPreviewFooterProps): ReactElement {
+  const [showSharedAuthorization, setShowSharedAuthorization] = useState(false)
+  return createElement('section', {
+    'data-dsh-github-copilot-preview-footer': true,
+    style: noticePanelStyle,
+  },
+  createElement('h3', { style: { margin: 0 } }, 'GitHub Copilot account models'),
+  createElement('p', { style: { margin: 0 } },
+    `Discovered account models are selected under ${GITHUB_COPILOT_PREVIEW_PROVIDER_ID} in the model picker; the historical route ID is retained. Ordinary Copilot models remain under ${GITHUB_COPILOT_PROVIDER_ID}. These are two routes sharing one GitHub sign-in.`),
+  createElement('p', { style: { margin: 0 } },
+    'Availability depends on your account and plugin configuration. This notice does not verify a live model or search request and does not change your selected model.'),
+  createElement(GitHubCopilotAccountModelsPanel, { remote: props.remote }),
+  createElement('details', {
+    onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => setShowSharedAuthorization(event.currentTarget.open),
+  },
+  createElement('summary', null, 'Manage the shared GitHub sign-in'),
+  showSharedAuthorization ? createElement('div', { 'data-dsh-github-copilot-shared-controls': true },
+    createElement('p', null, 'These are the same account controls as the GitHub Copilot card. Signing out disconnects both routes.'),
+    createElement(GitHubCopilotProviderCard, {
+      provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
+      configured: false,
+      keyConfigured: false,
+      remote: props.remote,
+    })) : null))
+}
+
 /** rc.2 fallback for Models pages that predate the provider-card extension slot. */
 export function GitHubCopilotSettingsSection(
   props: GitHubCopilotSettingsSectionProps,
@@ -301,7 +545,8 @@ export function GitHubCopilotSettingsSection(
       configured: false,
       keyConfigured: false,
       remote: props.remote,
-    }))
+    }),
+    createElement(GitHubCopilotAccountModelsPanel, { remote: props.remote }))
 }
 
 function registerUi(ctx: ClientContext): () => void {
@@ -352,7 +597,33 @@ function registerUi(ctx: ClientContext): () => void {
     }
   })
 
+  let disposeFooterInjection: () => void = () => {}
+  const reportFooterUnavailable = () => ctx.logger.warn('[github-copilot] COPILOT_PREVIEW_FOOTER_UNAVAILABLE')
+  try {
+    disposeFooterInjection = ctx.slots.inject('settings.models.footer', () => {
+      try {
+        const spec = ctx.slots.spec?.('settings.models.footer')
+        if (spec?.kind !== 'list' || spec.scope !== 'root') {
+          reportFooterUnavailable()
+          return () => {}
+        }
+        return ctx.slots.register({
+          name: 'settings.models.footer',
+          id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
+          order: 10,
+        }, () => createElement(GitHubCopilotPreviewFooter, { remote: ctx.remote.githubCopilot }))
+      } catch {
+        // Unsupported optional UI must not turn off the canonical sign-in controls.
+        reportFooterUnavailable()
+        return () => {}
+      }
+    })
+  } catch {
+    reportFooterUnavailable()
+  }
+
   return () => {
+    disposeFooterInjection()
     disposeProviderCardInjection()
     disposeSettingsSectionInjection()
     disposeFallback?.()

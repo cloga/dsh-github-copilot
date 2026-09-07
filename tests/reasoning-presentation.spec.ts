@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID } from '../src/copilot-identity.ts'
 import {
   ASSISTANT_ORIGIN_KEY,
   assistantOriginDefinition as definition,
@@ -158,6 +159,51 @@ describe('Copilot reasoning presentation projection', () => {
     const projected = projectReasoningPresentation(view(blocks), origin)
     expect(projected.node.data.blocks).toEqual([blocks[0], ...blocks.slice(3)])
     for (const block of projected.node.data.blocks) expect(blocks.some(original => original === block)).toBe(true)
+  })
+
+  it('filters a reserved managed-route reply without hardcoding its model and preserves durable references', () => {
+    const summary = Object.freeze({ kind: 'reasoning', text: 'Public preview summary' })
+    const blocks = Object.freeze([empty, summary, answer])
+    const props = view(blocks)
+    const durable = Object.freeze({
+      get source(): never { throw new Error('must not read original source') },
+      get replayState(): never { throw new Error('must not read encrypted replay') },
+      get messages(): never { throw new Error('must not read durable messages') },
+    })
+    const original = Object.freeze({ ...props, durable })
+    const previewOrigin = Object.freeze({ seq: 42, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'arbitrary-unseen-model' })
+    const projected = projectReasoningPresentation(original, previewOrigin)
+    expect(projected.node.data.blocks).toEqual([summary, answer])
+    expect(projected.node.data.blocks[0]).toBe(summary)
+    expect(projected.node.data.finalNode).toBe(props.node.data.finalNode)
+    expect(projected.node.data.finalNode.blocks).toBe(blocks)
+    expect(projected.durable).toBe(durable)
+    const nonempty = view([summary, answer])
+    expect(projectReasoningPresentation(nonempty, previewOrigin)).toBe(nonempty)
+    expect(projectReasoningPresentation(props, { ...previewOrigin, provider: GITHUB_COPILOT_PROVIDER_ID, model: 'gpt-5.4' }).node.data.blocks)
+      .toEqual([summary, answer])
+  })
+
+  it.each(['gpt-5.4', 'gpt-6-astra-future', 'vendor/unknown-version', 'completely-new-model'])('filters empty reasoning for any named model on the managed route: %s', model => {
+    const props = view()
+    const projected = projectReasoningPresentation(props, { seq: 42, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model })
+    expect(projected.node.data.blocks).toEqual([answer])
+    expect(projected.node.data.finalNode).toBe(props.node.data.finalNode)
+  })
+
+  it.each([
+    { provider: `${GITHUB_COPILOT_PREVIEW_PROVIDER_ID}-other`, model: 'arbitrary-unseen-model' },
+    { provider: 'openai', model: 'arbitrary-unseen-model' },
+    { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: '' },
+    { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: ' \t\n' },
+  ])('leaves nonreserved preview provenance unchanged: %j', evidence => {
+    const props = view()
+    expect(projectReasoningPresentation(props, { seq: 42, ...evidence })).toBe(props)
+  })
+
+  it.each(['running', 'interrupted'])('preserves %s preview rows for generic managed provenance', status => {
+    const props = view(undefined, status)
+    expect(projectReasoningPresentation(props, { seq: 42, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'arbitrary-unseen-model' })).toBe(props)
   })
 
   it.each(['running', 'interrupted'])('leaves %s placeholders unchanged', status => {

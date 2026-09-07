@@ -49,10 +49,15 @@ declare module '@deepseek-ai/cordis' {
       section(entry: { name: string; order?: number; text: () => string }): () => void
     }
     slots: {
+      spec?(name: string): { kind: string; scope: string } | undefined
       inject(name: string, callback: () => unknown): () => void
       register(
         options: { name: 'settings.models.provider-card'; key: string },
         component: (props: ProviderCardExtrasOwnerProps) => ReactNode,
+      ): () => void
+      register(
+        options: { name: 'settings.models.footer'; id: string; order?: number },
+        component: (props: { children?: never }) => ReactNode,
       ): () => void
       register(
         options: { name: 'settings.section'; id: string; order?: number; label: string },

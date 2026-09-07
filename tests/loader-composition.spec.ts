@@ -161,20 +161,9 @@ describe('loader composition', () => {
       expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({
         customField: 'preserved',
         compat: { supportsStrictMode: false },
-        models: [
-          { id: 'gemini-3.6-flash', api: 'openai-completions' },
-          { id: 'gpt-5.6-sol', api: 'openai-responses' },
-        ],
       })
     })
     expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'models'],
-      value: [
-        { id: 'gemini-3.6-flash', api: 'openai-completions' },
-        { id: 'gpt-5.6-sol', api: 'openai-responses' },
-      ],
-    }, {
       op: 'set',
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,

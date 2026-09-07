@@ -8,7 +8,12 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.3.1-alpha.2"
+    "version": "0.4.0-alpha.1"
+  },
+  "evidence": {
+    "kind": "source-and-synthetic-test-inventory",
+    "peerRangeMeaning": "package-admission-not-runtime-validation",
+    "doesNotProve": ["live-discovery", "live-model-transport", "all-admitted-core-versions", "published-release", "local-upgrade"]
   },
   "supportedBaselines": {
     "platforms": ["windows", "linux"],
@@ -17,7 +22,7 @@
       "release": "0.1.3-alpha.1",
       "tag": "dsh-v0.1.3-alpha.1",
       "commit": "d347e703908d0406b7a7ef80e3a0e594d86b2215",
-      "developmentRelease": "0.1.1-rc.2",
+      "developmentRelease": "0.1.2-rc.1",
       "peerRange": "0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1",
       "baselines": [
         {
@@ -29,7 +34,9 @@
           "branch": "cloga-pi-ai-model-api",
           "modelsUi": "settings-section-fallback",
           "perModelApi": "model-entry",
-          "strictModeCompat": "route-switch"
+          "strictModeCompat": "route-switch",
+          "evidenceScope": "historical-regression-only",
+          "managedProviderValidation": "not-verified"
         },
         {
           "release": "0.1.2-rc.1",
@@ -37,7 +44,10 @@
           "commit": "a66e4702047846cdaa10c66c9d3df3951f5ea70d",
           "modelsUi": "provider-card",
           "providerHeaders": "fetch-validated-discovery",
-          "strictModeCompat": "route-switch"
+          "strictModeCompat": "route-switch",
+          "evidenceScope": "published-api-target",
+          "managedProviderValidation": "synthetic-published-adapter",
+          "managedProviderTests": ["tests/preview-provider.spec.ts", "tests/preview-route.spec.ts", "tests/pi-provider-bridge.spec.ts"]
         },
         {
           "release": "0.1.3-alpha.1",
@@ -46,7 +56,10 @@
           "modelsUi": "provider-card",
           "providerHeaders": "fetch-validated-discovery",
           "strictModeCompat": "route-switch",
-          "fileContentHelper": "contentHasFile"
+          "fileContentHelper": "contentHasFile",
+          "evidenceScope": "unchanged-tagged-source-target",
+          "standaloneNpmArtifacts": "not-published",
+          "managedProviderValidation": "not-verified"
         }
       ],
       "packages": [
@@ -59,18 +72,149 @@
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-credentials",
         "@deepseek-ai/dsh-llm",
+        "@deepseek-ai/dsh-llm-pi-ai",
         "@deepseek-ai/dsh-settings",
         "@deepseek-ai/dsh-typert-protocol",
         "@deepseek-ai/dsh-web"
       ]
     },
-    "piAi": "^0.84.2",
+    "piAi": "0.85.1",
     "runtimeDependencies": {
-      "@deepseek-ai/dsh-authorization": "0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1",
+      "@deepseek-ai/dsh-authorization": "0.1.2-rc.1",
+      "@deepseek-ai/schemastery": "^3.18.2",
+      "@earendil-works/pi-ai": "0.85.1",
       "zod": "^4.4.3"
     }
   },
   "capabilities": [
+    {
+      "id": "account-driven-provider-metadata",
+      "required": true,
+      "activation": "validated-account-endpoints-and-capabilities",
+      "sourceMarkers": [
+        {"file": "src/account-model-catalog.ts", "marker": "normalizeAccountModelCatalog"},
+        {"file": "src/account-model-catalog.ts", "marker": "supported_endpoints"},
+        {"file": "src/account-model-catalog.ts", "marker": "maxInputTokens"},
+        {"file": "src/account-model-catalog.ts", "marker": "DUPLICATE_CONFLICT"},
+        {"file": "src/preview-provider.ts", "marker": "accountModelFromDescriptor"}
+      ],
+      "tests": [
+        {"file": "tests/account-model-catalog.spec.ts", "name": "routes an unseen identifier using %s rather than its model name"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "uses advertised Responses when an older local catalog says GPT-6 is Completions"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "accepts new Gemini and Sol Fast IDs without adding model-specific rules"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "prefers native API only when the server advertises the matching endpoint"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "uses a caller-proven account ID only for an absent policy and records the evidence source"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "preserves context, input and output limits as different facts"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "deduplicates equal IDs but rejects all versions of a conflicting duplicate"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "keeps only safe endpoint evidence and never extracts supplied URLs, headers, or secrets"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "normalizes only owned data and freezes all nested public output"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "keeps image support when valid document media types accompany image types"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "keeps a text model available without claiming images when only document media types are explicit"}
+      ]
+    },
+    {
+      "id": "account-scoped-discovery-snapshot",
+      "required": true,
+      "activation": "lazy-account-bound-discovery-no-stale-fallback",
+      "sourceMarkers": [
+        {"file": "src/account-model-source.ts", "marker": "createAccountModelSource"},
+        {"file": "src/account-model-source.ts", "marker": "redirect: 'error'"},
+        {"file": "src/account-model-source.ts", "marker": "assertAuthCurrent"},
+        {"file": "src/account-model-source.ts", "marker": "ACCOUNT_MODEL_CATALOG_LIMITS.maxBytes"}
+      ],
+      "tests": [
+        {"file": "tests/account-model-source.spec.ts", "name": "is lazy, uses exact trusted root GET with non-forwarding redirects, and freezes only public snapshot data"},
+        {"file": "tests/account-model-source.spec.ts", "name": "coalesces force and ordinary callers while one request is in flight"},
+        {"file": "tests/account-model-source.spec.ts", "name": "does not let a cancelled waiter abort another waiter"},
+        {"file": "tests/account-model-source.spec.ts", "name": "cancels orphaned work when all waiters abort and does not publish a late result"},
+        {"file": "tests/account-model-source.spec.ts", "name": "does not fall back to an old cached account after a forced refresh failure"},
+        {"file": "tests/account-model-source.spec.ts", "name": "invalidate is network-free and an invalidated HTTP result cannot overwrite a newer load"},
+        {"file": "tests/account-model-source.spec.ts", "name": "bounds timeout during %s even if the dependency ignores cancellation"},
+        {"file": "tests/account-model-source.spec.ts", "name": "enforces cumulative UTF-8 byte limits rather than trusting content length"},
+        {"file": "tests/account-model-source.spec.ts", "name": "rejects malformed UTF-8 and clears the reader without preserving response contents"},
+        {"file": "tests/account-model-source.spec.ts", "name": "refuses sensitive header override %s"}
+      ]
+    },
+    {
+      "id": "public-adapter-account-model-route",
+      "required": true,
+      "activation": "published-adapter-and-native-sdk",
+      "sourceMarkers": [
+        {"file": "src/preview-route.ts", "marker": "extends PiAiAdapter"},
+        {"file": "src/preview-route.ts", "marker": "ctx.llm.registerAdapter"},
+        {"file": "src/preview-route.ts", "marker": "createAccountModelSource"},
+        {"file": "src/preview-provider.ts", "marker": "native.streamSimple"},
+        {"file": "src/pi-provider-bridge.ts", "marker": "PiStreamPublicCompatibility"}
+      ],
+      "tests": [
+        {"file": "tests/preview-provider.spec.ts", "name": "routes an unseen ID through published Core and native %s with Bearer auth"},
+        {"file": "tests/preview-provider.spec.ts", "name": "takes protocol and independent input limits from descriptor evidence rather than the local GPT-6 catalog"},
+        {"file": "tests/preview-provider.spec.ts", "name": "does not infer controls from a name or unfamiliar advertised effort labels"},
+        {"file": "tests/preview-route.spec.ts", "name": "discovers mixed and unseen account models without model-name routing rules"},
+        {"file": "tests/preview-route.spec.ts", "name": "uses unmodified stock LlmRuntime preparation and leaves canonical model registration alone"},
+        {"file": "tests/preview-route.spec.ts", "name": "replays opaque reasoning and tool-call identities through the native adapter on a second turn"},
+        {"file": "tests/pi-provider-bridge.spec.ts", "name": "preserves the stream object rather than copying or replacing its private queue"},
+        {"file": "tests/pi-provider-bridge.spec.ts", "name": "passes the checked simple input through and rejects unsupported advanced entry without I/O"}
+      ]
+    },
+    {
+      "id": "managed-model-generation-and-lifetime",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/preview-route.ts", "marker": "COPILOT_PREVIEW_METADATA_STALE"},
+        {"file": "src/preview-route.ts", "marker": "copilotEntitlementKey"},
+        {"file": "src/preview-route.ts", "marker": "credentials/record-updated"}
+      ],
+      "tests": [
+        {"file": "tests/preview-route.spec.ts", "name": "requires rediscovery when an already prepared token rotates without a credential notification"},
+        {"file": "tests/preview-route.spec.ts", "name": "rejects silent same-token entitlement removal before dispatch and requires rediscovery"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not serve expired catalog facts or prepared model snapshots"},
+        {"file": "tests/preview-route.spec.ts", "name": "invalidates prepared model metadata on an explicit force-discovery without changing the selected ID"},
+        {"file": "tests/preview-route.spec.ts", "name": "cancels an in-flight SDK request on disposal without deleting the shared grant"},
+        {"file": "tests/preview-route.spec.ts", "name": "allows Core retry middleware to re-dispatch the same prepared adapter snapshot"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not let a retry cross to another account after its first attempt"},
+        {"file": "tests/preview-route.spec.ts", "name": "refuses a duplicate route through the public registry without taking over the existing adapter"},
+        {"file": "tests/preview-route.spec.ts", "name": "withdraws only its own route and refuses an already-prepared call after disposal"}
+      ]
+    },
+    {
+      "id": "account-discovery-native-oauth",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/account-model-auth.ts", "marker": "models.getAuth(GITHUB_COPILOT_PROVIDER_ID"},
+        {"file": "src/account-model-auth.ts", "marker": "auth: { oauth: guardedOAuth }"},
+        {"file": "src/account-model-auth.ts", "marker": "trustedGitHubCopilotBaseUrl"}
+      ],
+      "tests": [
+        {"file": "tests/account-model-auth.spec.ts", "name": "resolves provider OAuth without a model catalog entry or environment fallback"},
+        {"file": "tests/account-model-auth.spec.ts", "name": "refreshes through native Models and persists only the canonical credential"},
+        {"file": "tests/account-model-auth.spec.ts", "name": "rejects account replacement during refresh without overwriting the replacement"},
+        {"file": "tests/account-model-auth.spec.ts", "name": "validates credential-specific Enterprise endpoints and rejects token-controlled foreign origins"},
+        {"file": "tests/account-model-auth.spec.ts", "name": "sanitizes credential backend failures and keeps account identity independent of token rotation"}
+      ]
+    },
+    {
+      "id": "responses-public-reasoning-and-safe-replay-delegation",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/wire.ts", "marker": "response.reasoning_summary_text.delta"},
+        {"file": "src/responses-reasoning.ts", "marker": "request.reasoningEffort ?? profile?.reasoning"},
+        {"file": "src/serialize.ts", "marker": "reasoning: { effort: reasoning.effort, summary: reasoning.summary }"},
+        {"file": "src/serialize.ts", "marker": "message.source.replayState"},
+        {"file": "src/index.ts", "marker": "hasResponsesReplayContext(request.messages)"}
+      ],
+      "tests": [
+        {"file": "tests/inline/apply.spec.ts", "name": "transmits the selected effort and preserves the returned public summary"},
+        {"file": "tests/inline/apply.spec.ts", "name": "keeps preview conversations on their registered native adapter before any probe"},
+        {"file": "tests/inline/apply.spec.ts", "name": "delegates opaque assistant replay state without serializing its fields"},
+        {"file": "tests/inline/serialize.spec.ts", "name": "refuses the actual Core source.replayState location without opening its payload"},
+        {"file": "tests/responses-reasoning.spec.ts", "name": "honors request effort before the profile default and asks for a public summary"},
+        {"file": "tests/responses-reasoning.spec.ts", "name": "does not force a reasoning mode without a selection"},
+        {"file": "tests/responses-reasoning.spec.ts", "name": "preserves the Core off omission rather than claiming to disable server reasoning"},
+        {"file": "tests/preview-provider.spec.ts", "name": "does not synthesize none or disabled thinking by default for %s"},
+        {"file": "tests/preview-route.spec.ts", "name": "preserves the native enabled reasoning setting %s and summary request"}
+      ]
+    },
     {
       "id": "replay-safe-copilot-reasoning-presentation",
       "required": true,
@@ -106,10 +250,13 @@
       "sourceMarkers": [
         {"file": "src/remote.ts", "marker": "dsh-github-copilot#GitHubCopilotAuthorizationView"},
         {"file": "src/remote.ts", "marker": "mode: 'strict'"},
-        {"file": "src/remote.ts", "marker": "GitHubCopilotAuthorizationViewSchema"}
+        {"file": "src/remote.ts", "marker": "accountModels: z.object"}
       ],
       "tests": [
-        {"file": "tests/client-bundle.spec.ts", "name": "applies through the rc.2 client API with strict result codecs and rejects malformed views"}
+        {"file": "tests/client-bundle.spec.ts", "name": "mounts strict Host result codecs through the published rc.1 client carrier"},
+        {"file": "tests/account-model-remote.spec.ts", "name": "registers explicit discovery with the same strict safe authorization view codec"},
+        {"file": "tests/account-model-remote.spec.ts", "name": "rejects private or unrequested discovery field %s"},
+        {"file": "tests/account-model-remote.spec.ts", "name": "rejects secret-bearing model entries and oversized model lists"}
       ]
     },
     {
@@ -146,15 +293,18 @@
       ]
     },
     {
-      "id": "path-level-account-model-reconciliation",
+      "id": "canonical-owner-preservation",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models']"}
+        {"file": "src/authorization-controller.ts", "marker": "Canonical models, APIs and headers belong to Core/user settings"},
+        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode']"}
       ],
       "tests": [
-        {"file": "tests/authorization-controller.spec.ts", "name": "repairs only the model list while preserving the rest of the Copilot profile and unrelated providers"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "reports an outdated catalog without replacing a previously usable model list"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "preserves canonical models and all unrelated profile fields instead of projecting the companion catalog"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "creates only a minimal canonical profile without assigning model protocols or connections"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not reorder or replace canonical models when account IDs are duplicated or reordered"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not add or remove canonical models based on a conflicting local GPT-6 entry"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not judge a user route protocol using another catalog copy"},
         {"file": "tests/authorization-controller.spec.ts", "name": "signs out by deleting only the llm-pi-ai Copilot record and keeps the route profile"}
       ]
     },
@@ -162,75 +312,66 @@
       "id": "copilot-optional-tool-arguments",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode']"},
         {"file": "src/tool-schema-compat.ts", "marker": "assembly.variables.provider !== GITHUB_COPILOT_PROVIDER_ID"},
         {"file": "src/tool-schema-compat.ts", "marker": "ESCALATION_FIELDS"},
         {"file": "src/tool-schema-compat.ts", "marker": "GOAL_UPDATE_TOOL_NAME"},
-        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"},
-        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "packages/core/agent/src/model-selection.ts"}
+        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"}
       ],
       "tests": [
         {"file": "tests/tool-schema-compat.spec.ts", "name": "removes escalation properties and required entries only for Copilot"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "turns update_goal into action-specific schemas only for Copilot"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves every schema for non-Copilot providers"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "filters a real Cordis waterfall after model selection supplies the provider"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "repairs a Copilot route that still enables strict tool schemas"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing resolved Copilot route matches the account catalog"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "materializes Anthropic and OpenAI models under the route compatibility override"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "preserves configured Anthropic and OpenAI models while repairing only strict mode"},
         {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "applies route strict-mode compatibility only to supported model protocols"}
       ]
     },
     {
-      "id": "per-model-api-route-materialization",
+      "id": "selected-account-route-protocol-facts",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/authorization-controller.ts", "marker": "model.api"},
-        {"file": "src/current-provider.ts", "marker": "selectedApi ?? routeApi"}
+        {"file": "src/current-provider.ts", "marker": "routeFacts"},
+        {"file": "src/preview-route.ts", "marker": "source.readSnapshot()"},
+        {"file": "src/preview-provider.ts", "marker": "api: descriptor.api"}
       ],
       "tests": [
-        {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "deduplicates account model ids while preserving their first-seen order"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "reports account model ids unsupported by the installed catalog"},
-        {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "applies route strict-mode compatibility only to supported model protocols"},
-        {"file": "tests/plan.spec.ts", "name": "excludes a model-level Completions route and admits a model-level Responses route"}
+        {"file": "tests/current-provider.spec.ts", "name": "uses the owning account snapshot for an arbitrary new model on %s"},
+        {"file": "tests/current-provider.spec.ts", "name": "does not fall back to the local GPT-6 catalog when account evidence expires"},
+        {"file": "tests/current-provider.spec.ts", "name": "copies only protocol and endpoint leaves without exposing private snapshot fields"},
+        {"file": "tests/current-provider.spec.ts", "name": "does not claim an unmounted route belongs to the plugin"}
       ]
     },
     {
-      "id": "existing-grant-route-self-healing",
+      "id": "existing-grant-minimal-profile-repair",
       "required": true,
       "sourceMarkers": [
         {"file": "src/index.ts", "marker": "ensureGitHubCopilotProviderProfile(ctx)"},
-        {"file": "src/authorization-controller.ts", "marker": "sameProviderModels"},
-        {"file": "src/authorization-controller.ts", "marker": "normalizeGitHubCopilotOAuthCredential(record.payload)"},
-        {"file": "src/authorization-controller.ts", "marker": "unknownModelIds"},
-        {"file": "src/client.ts", "marker": "catalogWarningOf"}
+        {"file": "src/authorization-controller.ts", "marker": "validateGrant(record)"},
+        {"file": "src/authorization-controller.ts", "marker": "providerSupportsStrictMode"}
       ],
       "tests": [
         {"file": "tests/loader-composition.spec.ts", "name": "repairs an existing valid Copilot grant during Host startup"},
         {"file": "tests/authorization-controller.spec.ts", "name": "repairs a pre-existing grant with an empty Copilot route"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "repairs only the model list while preserving the rest of the Copilot profile and unrelated providers"},
         {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing resolved Copilot route matches the account catalog"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "materializes the exact mixed-protocol account route without route-level connection fields"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "reports account model ids unsupported by the installed catalog"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "reports an outdated catalog without replacing a previously usable model list"},
-        {"file": "tests/client.spec.ts", "name": "explains partial and complete installed-catalog mismatches"}
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not install global protocols or headers for new account models"}
       ]
     },
     {
-      "id": "read-only-authorization-status",
+      "id": "read-only-status-and-explicit-discovery",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/authorization-controller.ts", "marker": "describeGitHubCopilotProviderProfile"},
-        {"file": "src/authorization-controller.ts", "marker": "async reconcile()"},
-        {"file": "src/remote.ts", "marker": "'status', 'reconcile', 'start', 'cancel', 'signOut'"},
-        {"file": "src/compatibility.ts", "marker": "settings.describe"}
+        {"file": "src/authorization-controller.ts", "marker": "accountModelsView"},
+        {"file": "src/authorization-controller.ts", "marker": "async discoverModels()"},
+        {"file": "src/remote.ts", "marker": "'status', 'reconcile', 'discoverModels', 'start', 'cancel', 'signOut'"}
       ],
       "tests": [
         {"file": "tests/authorization-controller.spec.ts", "name": "reads status repeatedly without repairing, authorizing or making network calls"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "retains configured authentication when route inspection fails without leaking the failure"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "explicitly reconciles the stored snapshot without forcing sign-in or network access"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "reports retryable repair failure separately from successful authentication"},
-        {"file": "tests/client.spec.ts", "name": "distinguishes route repair and conflicts from authentication state"}
+        {"file": "tests/authorization-controller.spec.ts", "name": "exposes only owned model presentation leaves and never discovers during status"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "discovers account models only on an explicit action without changing selection or settings"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "keeps discovery unavailable or failed separate from sign-in and sanitizes failures"},
+        {"file": "tests/client.spec.ts", "name": "discovers account models only on a click and deduplicates clicks while busy"},
+        {"file": "tests/client.spec.ts", "name": "does not poll or automatically rediscover a loading server snapshot"},
+        {"file": "tests/client.spec.ts", "name": "does not let a previous Remote overwrite a newly mounted discovery result"}
       ]
     },
     {
@@ -251,8 +392,9 @@
       ]
     },
     {
-      "id": "temporary-route-conflict-protection",
+      "id": "legacy-route-conflict-protection",
       "required": true,
+      "activation": "legacy-restoration-only",
       "sourceMarkers": [
         {"file": "src/route-ownership.ts", "marker": "postimage"},
         {"file": "src/route-ownership.ts", "marker": "TEMPORARY_ROUTE_LEGACY_CONFLICT"},
@@ -264,62 +406,46 @@
         {"file": "tests/route-ownership.spec.ts", "name": "refuses unsafe preimage extras without copying sensitive data"},
         {"file": "tests/route-ownership.spec.ts", "name": "uses namespace revisions to reject races after ownership backup commits"},
         {"file": "tests/route-ownership.spec.ts", "name": "does not guess ownership for legacy or malformed backups"},
+        {"file": "tests/route-ownership.spec.ts", "name": "fails closed on prepared activation retry without registration lifetime evidence"},
         {"file": "tests/route-ownership.spec.ts", "name": "read-only planning reports ready only after reconciliation"}
       ]
     },
     {
-      "id": "temporary-gpt6-copilot-overlay",
+      "id": "legacy-global-override-restoration",
       "required": true,
+      "activation": "legacy-restoration-only",
+      "newGlobalProtocolOverrides": false,
       "sourceMarkers": [
-        {"file": "src/temporary-models.ts", "marker": "id: 'gpt-6-astra'"},
-        {"file": "src/temporary-models.ts", "marker": "api: 'openai-responses'"},
-        {"file": "src/temporary-models.ts", "marker": "if (installedModelIds.has(modelId)) return undefined"},
-        {"file": "src/authorization-controller.ts", "marker": "requiredRouteApi"},
-        {"file": "src/authorization-controller.ts", "marker": "temporarilyUnavailableModelIds"},
+        {"file": "src/authorization-controller.ts", "marker": "target: { ...backup.preimage }"},
         {"file": "src/authorization-controller.ts", "marker": "op: 'unset'"},
         {"file": "src/config.ts", "marker": "temporaryRouteBackup: z.string().hidden()"},
-        {"file": "src/copilot-auth.ts", "marker": "availableModelIds ?? []).includes(modelId)"},
-        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "request.api ?? base?.api ?? routeApi"},
-        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "op: 'unset'"}
+        {"file": "src/route-ownership.ts", "marker": "wholeProfileOwned"}
       ],
       "tests": [
-        {"file": "tests/temporary-models.spec.ts", "name": "supplies verified GPT-6 Astra Responses metadata while pi-ai lacks it"},
-        {"file": "tests/temporary-models.spec.ts", "name": "retires the overlay automatically when the installed catalog owns GPT-6 Astra"},
-        {"file": "tests/temporary-model-retirement.spec.ts", "name": "removes overlay-owned metadata and headers after pi-ai owns the model"},
-        {"file": "tests/temporary-model-runtime.spec.ts", "name": "materializes GPT-6 with the temporary Responses route mode"},
-        {"file": "tests/temporary-models.spec.ts", "name": "does not synthesize arbitrary unknown account models"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "materializes the temporary GPT-6 Astra overlay only for an entitled account"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "preserves a prepared activation after a failed route write for review"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "restores the owned canonical override without creating another ownership cycle"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "refuses a legacy prepared activation without replaying its route write"},
         {"file": "tests/authorization-controller.spec.ts", "name": "retries backup cleanup after route restoration commits first"},
         {"file": "tests/authorization-controller.spec.ts", "name": "rejects malformed temporary route backup leaves before replay"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "refuses to overwrite a conflicting user-configured route protocol for GPT-6"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "refuses to overwrite a conflicting user-configured Copilot header"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "does not claim ownership of an existing matching route protocol"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "restores the original route after an empty account model list"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "restores the original route after an unknown-only account model list"},
-        {"file": "tests/client.spec.ts", "name": "explains partial and complete installed-catalog mismatches"},
-        {"file": "tests/copilot-auth.spec.ts", "name": "resolves temporary GPT-6 Astra auth only when the account exposes it"},
-        {"file": "tests/copilot-auth.spec.ts", "name": "rejects temporary GPT-6 Astra when the account does not expose it"},
-        {"file": "tests/plan.spec.ts", "name": "uses the temporary GPT-6 Astra Responses metadata for hosted search"}
+        {"file": "tests/route-ownership.spec.ts", "name": "restores a historical bounded journal without copying unrelated sensitive leaves"},
+        {"file": "tests/route-ownership.spec.ts", "name": "retains a user-edited formerly owned header during restoration"}
       ]
     },
     {
       "id": "shared-copilot-credential-refresh",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/copilot-auth.ts", "marker": "models.getAuth(catalogModel)"},
+        {"file": "src/copilot-auth.ts", "marker": "models.getAuth('github-copilot')"},
         {"file": "src/copilot-auth.ts", "marker": "GITHUB_COPILOT_CREDENTIAL_KEY"},
         {"file": "src/index.ts", "marker": "createGitHubCopilotTokenResolver(ctx, async () =>"}
       ],
       "tests": [
         {"file": "tests/copilot-auth.spec.ts", "name": "refreshes the llm-pi-ai grant in-place and returns the Copilot API token"},
-        {"file": "tests/copilot-auth.spec.ts", "name": "reconciles the provider profile after every successful auth resolution"},
-        {"file": "tests/copilot-auth.spec.ts", "name": "keeps auth usable and retries reconciliation after a transient failure"},
-        {"file": "tests/copilot-auth.spec.ts", "name": "rejects models excluded by the signed-in account model list"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "does not overwrite request-owned headers with local model metadata"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "rejects logical provider mismatches before touching shared credential storage"},
+        {"file": "tests/copilot-auth.spec.ts", "name": "preserves the canonical grant when a serialized modification declines to change it"},
         {"file": "tests/copilot-auth.spec.ts", "name": "rechecks model availability after refreshing the credential"},
-        {"file": "tests/copilot-auth.spec.ts", "name": "accepts the credential-specific endpoint for a signed-in GitHub Enterprise domain"},
-        {"file": "tests/copilot-auth.spec.ts", "name": "rejects a credential-derived endpoint outside GitHub Copilot boundaries"},
-        {"file": "tests/copilot-auth.spec.ts", "name": "fails loudly when the DSH credential record API is unavailable"}
+        {"file": "tests/preview-route.spec.ts", "name": "serializes canonical and preview refresh through the same credential key"},
+        {"file": "tests/preview-route.spec.ts", "name": "persists token-refresh revocation after preparation but never authorizes it from the earlier live catalog"}
       ]
     },
     {
@@ -343,19 +469,18 @@
       "sourceMarkers": [
         {"file": "src/plan.ts", "marker": "route.provider !== 'github-copilot'"},
         {"file": "src/index.ts", "marker": "route.model !== request.model"},
+        {"file": "src/index.ts", "marker": "resolveRequestAuth"},
         {"file": "src/copilot-request.ts", "marker": "Openai-Intent"},
-        {"file": "src/wire.ts", "marker": "WEB_SEARCH_TOOL_TYPE"},
         {"file": "src/probe.ts", "marker": "RESPONSES_PROBE_ROUNDS = 2"}
       ],
       "tests": [
         {"file": "tests/inline/apply.spec.ts", "name": "preserves session model overrides on the same provider without custom wire calls"},
-        {"file": "tests/plan.spec.ts", "name": "inherits model, endpoint, protocol, credential record, and catalog headers"},
+        {"file": "tests/preview-route.spec.ts", "name": "resolves Host-only search auth from the live generic snapshot without exposing it in status"},
         {"file": "tests/copilot-request.spec.ts", "name": "combines installed catalog headers with provider-required request metadata"},
         {"file": "tests/copilot-request.spec.ts", "name": "applies a credential-specific Copilot endpoint before request construction"},
         {"file": "tests/copilot-request.spec.ts", "name": "preserves the Anthropic v1 path on a credential-specific endpoint"},
         {"file": "tests/copilot-request.spec.ts", "name": "adds dynamic headers for business and enterprise Copilot endpoints"},
         {"file": "tests/probe.spec.ts", "name": "confirms support via the standard spelling and reports it"},
-        {"file": "tests/probe.spec.ts", "name": "retries a transient first round and succeeds in the next round"},
         {"file": "tests/probe.spec.ts", "name": "bounds all-transient replies to two complete spelling rounds"},
         {"file": "tests/probe.spec.ts", "name": "shares one whole-probe deadline and signal across retries"},
         {"file": "tests/inline/wire.spec.ts", "name": "skips web_search_call events and streams the answer normally"},
@@ -365,12 +490,12 @@
     {
       "id": "hosted-search-file-context-fail-closed",
       "required": true,
-      "sourceMarkers": [
-        {"file": "src/index.ts", "marker": "contentHasFileCompat(message.content)"}
-      ],
+      "sourceMarkers": [{"file": "src/index.ts", "marker": "contentHasFileCompat(message.content)"}],
       "tests": [
         {"file": "tests/inline/apply.spec.ts", "name": "preserves a top-level user file when bypassing the custom wire"},
-        {"file": "tests/inline/apply.spec.ts", "name": "preserves a file nested in tool-result content when bypassing the custom wire"}
+        {"file": "tests/inline/apply.spec.ts", "name": "preserves a file nested in tool-result content when bypassing the custom wire"},
+        {"file": "tests/preview-route.spec.ts", "name": "uses native attachment projection and execution-world mapping when available: %s"},
+        {"file": "tests/preview-route.spec.ts", "name": "keeps the mapped read-only path when Core offloads an image to fit its request budget"}
       ]
     },
     {
@@ -402,14 +527,20 @@
       ]
     },
     {
-      "id": "dsh-rc2-models-settings-fallback",
+      "id": "dsh-models-settings-and-managed-discovery-ui",
       "required": true,
+      "activation": "optional-footer-and-existing-settings-fallback",
       "sourceMarkers": [
         {"file": "src/client.ts", "marker": "GitHubCopilotSettingsSection"},
+        {"file": "src/client.ts", "marker": "settings.models.footer"},
         {"file": "src/client.ts", "marker": "settingsSectionActive && !providerCardActive"}
       ],
       "tests": [
-        {"file": "tests/client.spec.ts", "name": "registers a GitHub Copilot settings section on the rc.2 Models surface"}
+        {"file": "tests/client.spec.ts", "name": "registers a GitHub Copilot settings section on the rc.2 Models surface"},
+        {"file": "tests/client.spec.ts", "name": "registers a removable Models footer without replacing provider-card authorization"},
+        {"file": "tests/client.spec.ts", "name": "leaves authorization active when the optional footer contract is incompatible or registration fails"},
+        {"file": "tests/client.spec.ts", "name": "explains two routes and keeps shared authorization collapsed without reading status"},
+        {"file": "tests/client.spec.ts", "name": "makes explicit account discovery available in the old-Core settings fallback"}
       ]
     }
   ],

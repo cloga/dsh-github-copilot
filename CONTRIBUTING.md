@@ -6,6 +6,12 @@ Read [AGENTS.md](./AGENTS.md) before changing code. This repository is a narrow 
 
 Use a tracking issue to describe the problem and owning seam. Security-sensitive reports belong in [private vulnerability reporting](./SECURITY.md), not a public issue. Use native DSH tools, local Git and the GitHub REST API; no external orchestrator or special VCS tool is required.
 
+## Plugin-only delivery
+
+Follow the **plugin-only** boundary in [AGENTS.md](./AGENTS.md#plugin-only-implementation-boundary). Fixes must live in this plugin and use existing published public APIs. Do not modify Core source, patch installed Core or `node_modules`, monkey-patch Core internals/shared catalogs, or prepare Core PRs/releases as part of this work. A new Core export or patch being merged is not an acceptable plugin delivery prerequisite.
+
+Core inspection is read-only. Isolated tests may use unchanged pinned Core artifacts and owned temporary fixtures, never edits to tracked Core implementation or a live deployment. If an API is insufficient, document the limitation and a plugin-local alternative; do not silently move the task into Core. A separate, explicit human Core task is required for any future Core work—generic compatibility or optimization requests do not authorize it.
+
 ## Change workflow
 
 1. Determine `pwd`, Git status, remote and actual default branch. Preserve other people's changes. Start a feature branch such as `feature/issue-73-agent-readiness`; branch names need not contain an owner name.

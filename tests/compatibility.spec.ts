@@ -34,7 +34,7 @@ describe('assertDshCompatibility', () => {
   it('declares alpha.1, rc.2, and rc.1 compatibility', () => {
     expect(DSH_COMPATIBILITY).toMatchObject({
       release: '0.1.3-alpha.1',
-      developmentRelease: '0.1.1-rc.2',
+      developmentRelease: '0.1.2-rc.1',
       peerRange: '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1',
       supportedReleases: ['0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1'],
     })

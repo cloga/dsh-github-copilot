@@ -4,6 +4,18 @@
   "boundaries": {
     "credentialOwner": "DSH credentials and pi-ai OAuth; never request, log or export grants",
     "transportOwner": "DSH llm-pi-ai; no second general Copilot adapter",
+    "implementationScope": {
+      "mode": "plugin-only",
+      "coreInspection": "read-only",
+      "allowedIntegration": "published-public-apis",
+      "coreSourceChanges": false,
+      "coreArtifactPatching": false,
+      "coreRuntimeMonkeyPatching": false,
+      "corePatchDependency": false,
+      "coreCommitPrRelease": false,
+      "unsupportedCapability": "report-limitation-and-plugin-local-alternative",
+      "scopeException": "separate-explicit-human-request-only"
+    },
     "diagnostics": "Repository checks only; no live profile, credential, network or model calls",
     "approvalRequired": ["merge", "install into a user profile", "sign-out", "worktree checkout"],
     "releaseDelivery": {
@@ -25,16 +37,16 @@
       "risk": "status and describeGitHubCopilotProviderProfile are read-only; reconcile is an explicit stored-snapshot settings write, not OAuth refresh or capability proof. Configured credentials do not prove transport readiness."
     },
     "models": {
-      "purpose": "Catalog lag, GPT-6 temporary route and ownership restoration",
-      "read": ["src/temporary-models.ts", "src/current-provider.ts", "src/authorization-controller.ts", "src/route-ownership.ts"],
-      "tests": ["tests/temporary-models.spec.ts", "tests/temporary-model-runtime.spec.ts", "tests/temporary-model-retirement.spec.ts", "tests/authorization-controller.spec.ts", "tests/route-ownership.spec.ts"],
-      "risk": "Raw preimage/postimage and revision/epoch guards protect owned writes. Legacy or changed ownership conflicts preserve state for review; never force adoption or discard a journal automatically."
+      "purpose": "Account-driven model discovery, native protocol routing and conservative legacy restoration",
+      "read": ["src/account-model-catalog.ts", "src/account-model-source.ts", "src/account-model-auth.ts", "src/preview-route.ts", "src/preview-provider.ts", "src/pi-provider-bridge.ts", "src/current-provider.ts", "src/authorization-controller.ts", "src/route-ownership.ts", "docs/model-compatibility-acceptance.md"],
+      "tests": ["tests/account-model-catalog.spec.ts", "tests/account-model-source.spec.ts", "tests/account-model-auth.spec.ts", "tests/preview-route.spec.ts", "tests/preview-provider.spec.ts", "tests/pi-provider-bridge.spec.ts", "tests/current-provider.spec.ts", "tests/temporary-model-retirement.spec.ts", "tests/authorization-controller.spec.ts", "tests/route-ownership.spec.ts"],
+      "risk": "A same-ID catalog entry can still have the wrong protocol or capabilities. Stay plugin-only: use published APIs or a documented narrow alternative, never a new Core patch/service dependency. Label multiple routes honestly; share the canonical OAuth grant without duplicating general transport. Legacy, interrupted or user-edited ownership journals remain conflicts."
     },
     "search": {
       "purpose": "Inline native search and the optional ctx.web provider",
-      "read": ["src/index.ts", "src/plan.ts", "src/probe.ts", "src/traditional-search.ts", "src/content-file.ts"],
-      "tests": ["tests/plan.spec.ts", "tests/probe.spec.ts", "tests/traditional-search.spec.ts", "tests/inline/apply.spec.ts", "tests/content-file.spec.ts"],
-      "risk": "Registration does not select the global Web provider. Preserve file delegation, protocol/account gates and no implicit fallback."
+      "read": ["src/index.ts", "src/plan.ts", "src/probe.ts", "src/traditional-search.ts", "src/content-file.ts", "src/responses-reasoning.ts", "src/responses-reasoning-text.ts", "src/wire.ts", "src/serialize.ts"],
+      "tests": ["tests/plan.spec.ts", "tests/probe.spec.ts", "tests/traditional-search.spec.ts", "tests/inline/apply.spec.ts", "tests/content-file.spec.ts", "tests/responses-reasoning.spec.ts", "tests/inline/responses-reasoning.spec.ts", "tests/inline/responses-reasoning-text.spec.ts"],
+      "risk": "Registration does not select the global Web provider. Preserve file and reasoning/replay delegation, protocol/account gates and no implicit fallback. Public summaries are not raw reasoning input or decrypted replay. Validate effort against the actual selected model and retain Core default/off semantics."
     },
     "client": {
       "purpose": "Models provider card, device-code copy UX, strict Remote results and replay-safe reasoning presentation",
@@ -46,7 +58,7 @@
       "purpose": "Supported DSH seams, tool schemas and exact upstream fixture checks",
       "read": ["src/compatibility.ts", "src/tool-schema-compat.ts", "scripts/verify-upstream-baseline.mjs", "scripts/verify-controlled-core.mjs", "scripts/verify-reasoning-presentation.mjs"],
       "tests": ["tests/compatibility.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/temporary-model-runtime.spec.ts"],
-      "risk": "A package version alone cannot prove a controlled Core patch; test every declared exact upstream commit."
+      "risk": "Compatibility work is plugin-only. Inspect published Core APIs read-only and verify against unchanged pinned artifacts; historical controlled pins are test evidence, not permission to create another Core patch. Do not modify or publish Core to satisfy this task."
     },
     "tooling": {
       "purpose": "Agent contract, preflight, verification, packaging and attribution",

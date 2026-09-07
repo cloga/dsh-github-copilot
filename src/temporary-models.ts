@@ -1,9 +1,10 @@
 import type { Api } from '@earendil-works/pi-ai'
+import type { CopilotModelFacts } from './model-protocol.ts'
 
 /**
  * Narrow compatibility metadata for account models that GitHub releases before
- * the published pi-ai Copilot catalog catches up. Entries must be removed as
- * soon as the installed catalog owns the same id.
+ * the published pi-ai Copilot catalog catches up. Correct native protocol and
+ * capability metadata retire the correction; a matching ID alone does not.
  */
 export interface TemporaryGitHubCopilotModel {
   readonly id: string
@@ -48,13 +49,23 @@ const TEMPORARY_MODELS = new Map<string, TemporaryGitHubCopilotModel>([
 ])
 
 
-/** Return a temporary model only while the installed pi-ai catalog lacks it. */
+/** Return a narrow correction until the native entry supplies the verified capabilities. */
 export function temporaryGitHubCopilotModel(
   modelId: string,
-  installedModelIds: ReadonlySet<string>,
+  installedModels: ReadonlyMap<string, CopilotModelFacts>,
+  nativeAuthoritative = true,
 ): TemporaryGitHubCopilotModel | undefined {
-  if (installedModelIds.has(modelId)) return undefined
-  return TEMPORARY_MODELS.get(modelId)
+  const correction = TEMPORARY_MODELS.get(modelId)
+  if (correction === undefined) return undefined
+  const native = installedModels.get(modelId)
+  if (!nativeAuthoritative || native === undefined || native.provider !== 'github-copilot'
+    || native.api !== correction.api || !native.reasoning
+    || !Number.isSafeInteger(native.contextWindow) || native.contextWindow <= 0
+    || !Number.isSafeInteger(native.maxTokens) || native.maxTokens <= 0
+    || correction.input.some(modality => !native.input.includes(modality))) return correction
+  const expected = Object.keys(correction.reasoningEfforts).filter(level => level !== 'off')
+  return expected.every(level => typeof native.reasoningEfforts[level] === 'string'
+    && native.reasoningEfforts[level]!.length > 0) ? undefined : correction
 }
 
 /** Minimal llm-pi-ai settings entry for one temporary model. */

@@ -1,7 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 
-const GITHUB_COPILOT_PROVIDER_ID = 'github-copilot'
+import { GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import { isPluginPreviewProvider } from './model-protocol.ts'
 const ESCALATION_FIELDS = new Set(['sandbox_permissions', 'justification'])
 const GOAL_UPDATE_TOOL_NAME = 'update_goal'
 const GOAL_BASE_FIELDS = ['goal_id', 'revision'] as const
@@ -93,8 +94,9 @@ function makeCopilotCompatible(tool: ToolSchema): ToolSchema {
  * multi-action Goal update as a discriminated union, so each action advertises
  * only its legal fields. Other model providers retain the original schemas.
  */
-export function filterCopilotToolAssembly<T extends PromptAssemblyView>(assembly: T): T {
-  if (assembly.variables.provider !== GITHUB_COPILOT_PROVIDER_ID) return assembly
+export function filterCopilotToolAssembly<T extends PromptAssemblyView>(assembly: T, ownedPreview = false): T {
+  if (assembly.variables.provider !== GITHUB_COPILOT_PROVIDER_ID
+    && !(ownedPreview && assembly.variables.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID)) return assembly
   const tools = assembly.tools.map(makeCopilotCompatible)
   if (tools.every((tool, index) => tool === assembly.tools[index])) return assembly
   return { ...assembly, tools } as T
@@ -104,6 +106,6 @@ export function filterCopilotToolAssembly<T extends PromptAssemblyView>(assembly
 export function installCopilotToolSchemaCompatibility(ctx: Context): void {
   ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const assembled = await next()
-    return filterCopilotToolAssembly(assembled)
+    return filterCopilotToolAssembly(assembled, isPluginPreviewProvider(ctx, assembled.variables.provider ?? ''))
   })
 }

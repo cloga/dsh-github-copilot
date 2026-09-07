@@ -60,18 +60,20 @@ describe('Copilot candidate resolution', () => {
     })
   })
 
-  it('uses the temporary GPT-6 Astra Responses metadata for hosted search', () => {
+  it('uses managed account endpoint evidence rather than unsupported canonical model-entry overrides', () => {
     expect(resolveCandidates(copilotContext('gpt-6-astra', {
       models: [{ id: 'gpt-6-astra', api: 'openai-responses' }],
-    }), planConfig)).toEqual([
-      expect.objectContaining({
-        protocol: 'openai-responses',
-        baseURL: 'https://api.individual.githubcopilot.com',
-        model: 'gpt-6-astra',
-        headers: expect.objectContaining({
-          'Copilot-Integration-Id': 'vscode-chat',
-        }),
-      }),
+    }), planConfig)).toEqual([])
+    const managed = fakeContext({
+      agentDefaultModel: { currentSelection: () => ({ provider: 'github-copilot-preview', model: 'future-lab-r17' }) },
+      githubCopilotPreview: {
+        getView: () => ({ provider: 'github-copilot-preview' }),
+        routeFacts: () => ({ api: 'openai-responses', baseURL: 'https://api.individual.githubcopilot.com' }),
+      },
+    })
+    expect(resolveCandidates(managed, planConfig)).toEqual([
+      expect.objectContaining({ protocol: 'openai-responses',
+        baseURL: 'https://api.individual.githubcopilot.com', model: 'future-lab-r17' }),
     ])
   })
 

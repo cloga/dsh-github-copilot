@@ -83,7 +83,7 @@ describe('tsdown client artifact', () => {
     expect(exports.inject).toEqual(['remote', 'slots'])
   })
 
-  it('applies through the rc.2 client API with strict result codecs and rejects malformed views', async () => {
+  it('mounts strict Host result codecs through the published rc.1 client carrier', async () => {
     const gateway = loadGatewayArtifact()
     const client = loadArtifact()
     const contributions: TypertRemoteContribution[] = []
@@ -106,7 +106,12 @@ describe('tsdown client artifact', () => {
       },
       contexts: { getClient: () => undefined },
     })
-    ctx.provide('connection', { rpc: { call: rpcCall } })
+    ctx.provide('connection', {
+      rpc: { call: rpcCall },
+      registerGenerationSource: () => () => undefined,
+      start: () => ({ stop() {} }),
+      generation: { getSnapshot: () => undefined },
+    })
     ctx.provide('slots', {
       inject: () => () => undefined,
       register: () => () => undefined,
@@ -120,7 +125,7 @@ describe('tsdown client artifact', () => {
 
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
-      'status', 'reconcile', 'start', 'cancel', 'signOut',
+      'status', 'reconcile', 'discoverModels', 'start', 'cancel', 'signOut',
     ])
     for (const descriptor of contributions[0]!.descriptors) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
@@ -168,13 +173,18 @@ describe('tsdown client artifact', () => {
       expect(() => resultCodec.schema.parse(malformed)).toThrow()
     }
 
+    // rc.1 carries the Host result without revalidating it in the gateway.
+    // Keep that boundary explicit: the mounted strict Host codec rejects this
+    // fixture, while UI consumers must validate the leaves they display.
     rpcCall.mockResolvedValueOnce({ ok: true, value: malformedViews[0] })
-    await expect(ctx.remote.githubCopilot.status()).resolves.toMatchObject({
-      ok: false,
-      error: {
-        message: expect.stringContaining('githubCopilot/status rejected "result"'),
-      },
-    })
+    const unvalidated = await ctx.remote.githubCopilot.status()
+    expect(unvalidated).toEqual({ ok: true, value: malformedViews[0] })
+    expect(() => resultCodec.schema.parse(unvalidated.ok ? unvalidated.value : undefined)).toThrow()
+    const validateView = client.exports.authorizationViewFrom
+    expect(validateView).toBeTypeOf('function')
+    expect((validateView as (value: unknown) => unknown)(unvalidated.ok ? unvalidated.value : undefined)).toBeUndefined()
+    expect((validateView as (value: unknown) => unknown)(validView)).toEqual(validView)
     await dispose()
+    await ctx.fiber.dispose()
   })
 })

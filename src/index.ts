@@ -33,6 +33,10 @@ import GitHubCopilotAuthorizationController, {
 import { createGitHubCopilotTokenResolver } from './copilot-auth.ts'
 import { installCopilotToolSchemaCompatibility } from './tool-schema-compat.ts'
 import { contentHasFileCompat } from './content-file.ts'
+import { hasResponsesReplayContext } from './serialize.ts'
+import { resolveCopilotResponsesReasoning } from './responses-reasoning.ts'
+import previewPlugin from './preview-route.ts'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
   GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -162,6 +166,7 @@ function ensureAuthorization(ctx: Context): void {
 /** Activate the integration only after the complete DSH service contract is available. */
 function activate(ctx: Context, config: InlineConfig): void {
   assertDshCompatibility(ctx)
+  ctx.plugin(previewPlugin)
   ctx.plugin(GitHubCopilotAuthorizationController)
   const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx, async () => {
     await ensureGitHubCopilotProviderProfile(ctx)
@@ -176,6 +181,7 @@ function activate(ctx: Context, config: InlineConfig): void {
   let generation = 0
   let proofCancellation = new AbortController()
   const candidateGenerations = new WeakMap<SearchPlanCandidate, number>()
+  const candidateProviders = new WeakMap<SearchPlanCandidate, string>()
   let currentPlan: SearchPlan | undefined
   // The route snapshot the current plan was built for: model/provider
   // switches in the web UI must rebuild the plan (and re-probe) instead of
@@ -221,12 +227,21 @@ function activate(ctx: Context, config: InlineConfig): void {
   }
 
   const hooks: InlineHooks = {
+    resolveResponsesReasoning: (request, candidate) => resolveCopilotResponsesReasoning(ctx, request, candidate),
     resolveApiKey: async (candidate) => {
       assertCurrentCandidate(candidate)
-      if (!isDirectGitHubCopilot(candidate)) {
+      if (candidateProviders.get(candidate) !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID && !isDirectGitHubCopilot(candidate)) {
         throw new Error('github-copilot: hosted search refuses non-Copilot endpoints')
       }
-      const auth = await resolveGitHubCopilotToken(candidate.model)
+      const provider = candidateProviders.get(candidate)
+      const auth = provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+        ? await ctx.get('githubCopilotPreview')?.resolveRequestAuth(candidate.model, proofCancellation.signal)
+        : await resolveGitHubCopilotToken(candidate.model)
+      if (provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
+        const facts = ctx.get('githubCopilotPreview')?.routeFacts(candidate.model)
+        if (auth === undefined || facts === undefined || facts.api !== candidate.protocol || facts.baseURL !== candidate.baseURL
+          || auth.baseURL !== candidate.baseURL) throw new Error('COPILOT_MANAGED_SEARCH_METADATA_CHANGED')
+      }
       // A credential lookup started before unload must not launch a late probe
       // or search request after the integration has been disposed.
       assertCurrentCandidate(candidate)
@@ -245,7 +260,11 @@ function activate(ctx: Context, config: InlineConfig): void {
   function createPlan(candidates: readonly SearchPlanCandidate[], cfg: InlineConfig): SearchPlan {
     const startedAt = generation
     const signal = proofCancellation.signal
-    for (const candidate of candidates) candidateGenerations.set(candidate, startedAt)
+    const provider = currentChatRoute(ctx)?.provider
+    for (const candidate of candidates) {
+      candidateGenerations.set(candidate, startedAt)
+      if (provider !== undefined) candidateProviders.set(candidate, provider)
+    }
     const nextPlan = new SearchPlan(
       candidates,
       candidate => probeCandidate(candidate, hooks.resolveApiKey, cfg.probeTimeoutMs, signal),
@@ -255,7 +274,10 @@ function activate(ctx: Context, config: InlineConfig): void {
     // that exact chosen object before any caller awaits settle() to use it.
     void nextPlan.settled.then(() => {
       const chosen = nextPlan.chosenCandidate()
-      if (chosen !== undefined) candidateGenerations.set(chosen, startedAt)
+      if (chosen !== undefined) {
+        candidateGenerations.set(chosen, startedAt)
+        if (provider !== undefined) candidateProviders.set(chosen, provider)
+      }
     })
     return nextPlan
   }
@@ -465,11 +487,24 @@ function sameRoute(left: CurrentChatRoute | undefined, right: CurrentChatRoute |
  */
 function preflight(request: GenerateOptions, cfg: InlineConfig, ctx: Context): boolean {
   if (!isAgentLoopRequest(request)) return false
+  // The registered preview keeps native adapter metadata, replay and file projection.
+  if (request.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) return false
   if (request.purpose !== undefined) return false
   if (!cfg.enabled) return false
   if (!providerAllowed(request, cfg, ctx)) return false
   if (request.messages.some(message => contentHasFileCompat(message.content))) return false
   if (contentHasImageAttachments(request)) return false
+  // Public summaries are not raw reasoning. Core alone owns encrypted/signed replay.
+  if (hasResponsesReplayContext(request.messages)) return false
+  const route = currentChatRoute(ctx)
+  if (route?.api === 'openai-responses') {
+    try {
+      resolveCopilotResponsesReasoning(ctx, request, { protocol: 'openai-responses', model: route.model })
+    } catch {
+      // Core enforces the original request when native facts are unavailable or disagree.
+      return false
+    }
+  }
   return true
 }
 

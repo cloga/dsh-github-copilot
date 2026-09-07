@@ -10,7 +10,9 @@
  * @module dsh-github-copilot/wire-anthropic
  */
 
-import type { CallId, GenerateOptions, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, GenerateOptions, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
+
+type CallId = Extract<ContentBlock, { type: 'tool-call' }>['id']
 import { attributionHeaders } from '@deepseek-ai/dsh-llm'
 import type { SearchPlanCandidate } from './plan.ts'
 import { abortedFinish, classifyHttpStatus, classifyWireError, errorFinish, parseRetryAfterMs } from './failure.ts'

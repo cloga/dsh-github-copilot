@@ -19,7 +19,9 @@ test('describes actual package metadata without claiming a release exists', asyn
 test('plans only known task IDs with unexecuted argument arrays', async () => {
   const plan = await planTask('models')
   assert.ok(plan.commands.every(command => command.executed === false && Array.isArray(command.argv)))
-  assert.ok(plan.commands.some(command => command.argv.includes('tests/temporary-model-runtime.spec.ts')))
+  for (const testFile of ['tests/account-model-catalog.spec.ts', 'tests/account-model-source.spec.ts', 'tests/preview-route.spec.ts', 'tests/pi-provider-bridge.spec.ts']) {
+    assert.ok(plan.commands.some(command => command.argv.includes(testFile)), `Missing general model gate: ${testFile}`)
+  }
   await assert.rejects(planTask('__proto__'), /Unknown task/)
   assert.ok((await planTask('tooling')).commands.some(command => command.argv[1] === 'test:scripts'))
 })
@@ -57,6 +59,47 @@ test('contract validation rejects a redundant release prompt or weakened release
       mutate(contract)
       await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
       await assert.rejects(verifyAgentContract(root), /release delivery/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('every task plan carries the plugin-only implementation boundary', async () => {
+  const description = await describeRepository()
+  const policy = description.boundaries.implementationScope
+  assert.equal(policy.mode, 'plugin-only')
+  assert.equal(policy.coreInspection, 'read-only')
+  assert.equal(policy.allowedIntegration, 'published-public-apis')
+  assert.equal(policy.unsupportedCapability, 'report-limitation-and-plugin-local-alternative')
+  assert.equal(policy.scopeException, 'separate-explicit-human-request-only')
+  for (const field of ['coreSourceChanges', 'coreArtifactPatching', 'coreRuntimeMonkeyPatching', 'corePatchDependency', 'coreCommitPrRelease']) {
+    assert.equal(policy[field], false, field)
+  }
+  for (const task of Object.keys(description.tasks)) {
+    assert.deepEqual((await planTask(task)).boundaries.implementationScope, policy)
+  }
+})
+
+test('contract validation rejects removal or weakening of the plugin-only boundary', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-plugin-only-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    const mutations = [
+      contract => { delete contract.boundaries.implementationScope },
+      ...['coreSourceChanges', 'coreArtifactPatching', 'coreRuntimeMonkeyPatching', 'corePatchDependency', 'coreCommitPrRelease']
+        .map(field => contract => { contract.boundaries.implementationScope[field] = true }),
+      contract => { contract.boundaries.implementationScope.mode = 'core-first' },
+      contract => { contract.boundaries.implementationScope.allowCorePatchWhenConvenient = true },
+      contract => { contract.boundaries.implementationScope.coreInspection = 'read-write' },
+      contract => { contract.boundaries.implementationScope.allowedIntegration = 'private-internals' },
+      contract => { contract.boundaries.implementationScope.unsupportedCapability = 'patch-core' },
+      contract => { contract.boundaries.implementationScope.scopeException = 'infer-from-compatibility-task' },
+    ]
+    for (const mutate of mutations) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), { message: /^Agent contract: plugin-only/ })
     }
   } finally { await rm(root, { recursive: true, force: true }) }
 })

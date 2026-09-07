@@ -18,6 +18,8 @@
 
 ## Contract checklist
 
+- [ ] **plugin-only**: no Core source/artifact changes, `node_modules` patches, private-registry/prototype/shared-catalog mutation, or Core commit/PR/release work.
+- [ ] Uses existing published public APIs; delivery does not depend on a new Core export or Core patch. Missing capabilities have an explicit limitation or plugin-local alternative.
 - [ ] No second general adapter/catalog, credential store, gateway or sandbox owner.
 - [ ] Credential payloads stay Host-only; no real grant, device code or sensitive response appears in fixtures, logs, screenshots or this PR.
 - [ ] Both READMEs, Agent contract, baseline and tests match changed behavior.
