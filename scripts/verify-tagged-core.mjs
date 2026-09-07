@@ -8,7 +8,7 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
   '0.1.2-rc.1': 'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
   '0.1.3-alpha.1': 'd347e703908d0406b7a7ef80e3a0e594d86b2215',
 })
-const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts']
+const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts']
 const slash = value => value.replaceAll('\\', '/')
 const same = (left, right) => process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right
 function inside(root, path) {

@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, ReactElement, SyntheticEvent } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
@@ -117,7 +117,7 @@ export function catalogWarningOf(status: GitHubCopilotAuthorizationView | undefi
 export function previewAssignmentMessage(status: GitHubCopilotAuthorizationView | undefined): string | undefined {
   const ids = status?.catalog?.previewModelIds
   if (status?.configured !== true || ids === undefined || ids.length === 0) return undefined
-  return `Stored account snapshot assigns ${ids.length} model(s) to ${GITHUB_COPILOT_PREVIEW_PROVIDER_ID}; this is not a live availability check.`
+  return `Stored account snapshot assigns ${ids.length} model(s) to GitHub Copilot account discovery; this is not a live availability check.`
 }
 
 export function routeStatusMessage(status: GitHubCopilotAuthorizationView | undefined): string | undefined {
@@ -128,7 +128,9 @@ export function routeStatusMessage(status: GitHubCopilotAuthorizationView | unde
       : 'Model configuration needs reconciliation. Repair uses the stored account snapshot; it does not refresh GitHub access.'
     case 'conflict': return 'Model configuration conflicts with manual edits or a legacy ownership backup. Automatic repair stopped without rolling back user edits. Review settings before repairing; do not reconnect to force ownership.'
     case 'error': return 'Model configuration could not be inspected. Your sign-in is retained; check the settings service.'
-    case 'not-configured': return 'No usable account model configuration is available. Check account availability and the installed catalog.'
+    // An absent legacy profile is the intended managed-only configuration.
+    // Account discovery has its own status and must not be inferred from this field.
+    case 'not-configured': return undefined
     default: return undefined
   }
 }
@@ -231,7 +233,7 @@ export function GitHubCopilotAuthorizationNotice(props: AuthorizationNoticeProps
   }, feedback))
 }
 
-/** Models-card sign-in/status/sign-out controls for the catalog Copilot row. */
+/** Shared account authorization controls, mounted by the account footer or its fallback only. */
 export function GitHubCopilotProviderCard(
   props: GitHubCopilotProviderCardProps,
 ): ReturnType<typeof createElement> | null {
@@ -414,7 +416,7 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
   const messages: Record<AccountModelsSnapshot['state'], string> = {
     idle: 'Account models have not been refreshed.',
     loading: 'Account model discovery is still in progress. This panel does not poll automatically.',
-    ready: `Account metadata is ready. Select discovered models under ${GITHUB_COPILOT_PREVIEW_PROVIDER_ID} (GitHub Copilot account models).`,
+    ready: 'Account metadata is ready. Select models under GitHub Copilot in the model picker.',
     stale: 'This account model snapshot is stale. Refresh before relying on its metadata.',
     error: 'Account model discovery failed. Use Refresh account models to retry.',
     disposed: 'Account model discovery is no longer active in this profile.',
@@ -492,6 +494,9 @@ export function GitHubCopilotAccountModelsPanel(props: { readonly remote: Client
     }
   }
   return createElement('section', { 'data-dsh-github-copilot-account-models-panel': true, 'aria-busy': busy },
+    snapshot === undefined && !busy && error === undefined ? createElement('p', {
+      role: 'status', 'data-dsh-github-copilot-discovery-idle': true,
+    }, 'Refresh to load the models available to this account. Signing in alone does not refresh this list.') : null,
     createElement('p', null, 'Refresh account models explicitly requests provider metadata and may refresh the stored OAuth grant. It does not start another sign-in or change your selected model.'),
     createElement('button', { type: 'button', disabled: busy, onClick: refreshAccountModels, 'data-dsh-github-copilot-refresh-models': true },
       busy ? 'Refreshing account models…' : 'Refresh account models'),
@@ -503,34 +508,50 @@ interface GitHubCopilotPreviewFooterProps {
   readonly remote: ClientContext['remote']['githubCopilot']
 }
 
-/** Static route guidance; shared account controls mount only while the user expands them. */
+/** The sole account owner on modern Models pages, independent of a legacy provider profile. */
 export function GitHubCopilotPreviewFooter(props: GitHubCopilotPreviewFooterProps): ReactElement {
-  const [showSharedAuthorization, setShowSharedAuthorization] = useState(false)
   return createElement('section', {
     'data-dsh-github-copilot-preview-footer': true,
     style: noticePanelStyle,
   },
-  createElement('h3', { style: { margin: 0 } }, 'GitHub Copilot account models'),
-  createElement('p', { style: { margin: 0 } },
-    `Discovered account models are selected under ${GITHUB_COPILOT_PREVIEW_PROVIDER_ID} in the model picker; the historical route ID is retained. Ordinary Copilot models remain under ${GITHUB_COPILOT_PROVIDER_ID}. These are two routes sharing one GitHub sign-in.`),
-  createElement('p', { style: { margin: 0 } },
-    'Availability depends on your account and plugin configuration. This notice does not verify a live model or search request and does not change your selected model.'),
+  createElement('h3', { style: { margin: 0 } }, 'GitHub Copilot'),
+  createElement(GitHubCopilotProviderCard, {
+    provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
+    configured: false,
+    keyConfigured: false,
+    remote: props.remote,
+  }),
   createElement(GitHubCopilotAccountModelsPanel, { remote: props.remote }),
-  createElement('details', {
-    onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => setShowSharedAuthorization(event.currentTarget.open),
-  },
-  createElement('summary', null, 'Manage the shared GitHub sign-in'),
-  showSharedAuthorization ? createElement('div', { 'data-dsh-github-copilot-shared-controls': true },
-    createElement('p', null, 'These are the same account controls as the GitHub Copilot card. Signing out disconnects both routes.'),
-    createElement(GitHubCopilotProviderCard, {
-      provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
-      configured: false,
-      keyConfigured: false,
-      remote: props.remote,
-    })) : null))
+  compatibilityDetails())
 }
 
-/** rc.2 fallback for Models pages that predate the provider-card extension slot. */
+function compatibilityDetails(): ReactElement {
+  return createElement('details', { 'data-dsh-github-copilot-compatibility': true },
+    createElement('summary', null, 'Compatibility and existing configurations'),
+    createElement('p', null,
+      `GitHub Copilot uses account-discovered models. The internal route ID ${GITHUB_COPILOT_PREVIEW_PROVIDER_ID} is retained for existing sessions and explicit /model selections.`),
+    createElement('p', null,
+      `An existing ${GITHUB_COPILOT_PROVIDER_ID} profile is a legacy configuration, not a second account. It is kept until explicit migration. Sign out disconnects the shared GitHub authorization; it does not remove saved profiles.`),
+    migrationLink())
+}
+
+function migrationLink(): ReactElement {
+  return createElement('a', {
+    href: 'https://github.com/cloga/dsh-github-copilot/blob/main/docs/single-route-migration.md',
+    target: '_blank',
+    rel: 'noreferrer',
+  }, 'Review the single-route migration guide')
+}
+
+/** Core owns this retained row. Never start a second authorization or discovery widget here. */
+export function GitHubCopilotLegacyProviderNotice(props: ProviderCardExtrasOwnerProps): ReactElement | null {
+  if (props.provider.provider !== GITHUB_COPILOT_PROVIDER_ID || !props.configured) return null
+  return createElement('div', { 'data-dsh-github-copilot-legacy-profile': true },
+    createElement('p', null, 'This legacy provider profile is kept until explicit migration; it is not a second GitHub account. Manage sign-in and account models in the GitHub Copilot account panel.'),
+    migrationLink())
+}
+
+/** Unified fallback when the Models footer extension is absent or incompatible. */
 export function GitHubCopilotSettingsSection(
   props: GitHubCopilotSettingsSectionProps,
 ): ReturnType<typeof createElement> {
@@ -546,16 +567,18 @@ export function GitHubCopilotSettingsSection(
       keyConfigured: false,
       remote: props.remote,
     }),
-    createElement(GitHubCopilotAccountModelsPanel, { remote: props.remote }))
+    createElement(GitHubCopilotAccountModelsPanel, { remote: props.remote }),
+    compatibilityDetails())
 }
 
 function registerUi(ctx: ClientContext): () => void {
-  let providerCardActive = false
+  let active = true
+  let footerActive = false
   let settingsSectionActive = false
   let disposeFallback: (() => void) | undefined
 
   const syncFallback = (): void => {
-    if (settingsSectionActive && !providerCardActive) {
+    if (active && settingsSectionActive && !footerActive) {
       disposeFallback ??= ctx.slots.register({
         name: 'settings.section',
         id: 'github-copilot',
@@ -571,23 +594,49 @@ function registerUi(ctx: ClientContext): () => void {
     disposeFallback = undefined
   }
 
-  const disposeProviderCardInjection = ctx.slots.inject('settings.models.provider-card', () => {
-    providerCardActive = true
-    syncFallback()
-    const dispose = ctx.slots.register({
+  const disposeProviderCardInjection = ctx.slots.inject('settings.models.provider-card', () =>
+    ctx.slots.register({
       name: 'settings.models.provider-card',
       key: 'llm-pi-ai',
-    }, (props: ProviderCardExtrasOwnerProps) => createElement(GitHubCopilotProviderCard, {
-      ...props,
-      remote: ctx.remote.githubCopilot,
-    }))
-    return () => {
-      dispose()
-      providerCardActive = false
-      syncFallback()
-    }
-  })
+    }, (props: ProviderCardExtrasOwnerProps) => createElement(GitHubCopilotLegacyProviderNotice, props)))
 
+  let disposeFooterInjection: () => void = () => {}
+  const reportFooterUnavailable = () => ctx.logger.warn('[github-copilot] COPILOT_PREVIEW_FOOTER_UNAVAILABLE')
+  try {
+    disposeFooterInjection = ctx.slots.inject('settings.models.footer', () => {
+      let dispose: () => void
+      try {
+        const spec = ctx.slots.spec?.('settings.models.footer')
+        if (spec?.kind !== 'list' || spec.scope !== 'root') {
+          reportFooterUnavailable()
+          return () => {}
+        }
+        dispose = ctx.slots.register({
+          name: 'settings.models.footer',
+          id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
+          order: 10,
+        }, () => createElement(GitHubCopilotPreviewFooter, { remote: ctx.remote.githubCopilot }))
+      } catch {
+        // Do not withdraw working fallback authorization until footer registration succeeds.
+        reportFooterUnavailable()
+        return () => {}
+      }
+      footerActive = true
+      syncFallback()
+      let removed = false
+      return () => {
+        if (removed) return
+        removed = true
+        dispose()
+        footerActive = false
+        syncFallback()
+      }
+    })
+  } catch {
+    reportFooterUnavailable()
+  }
+
+  // Register after the optional footer so a supported surface has only one owner.
   const disposeSettingsSectionInjection = ctx.slots.inject('settings.section', () => {
     settingsSectionActive = true
     syncFallback()
@@ -597,32 +646,8 @@ function registerUi(ctx: ClientContext): () => void {
     }
   })
 
-  let disposeFooterInjection: () => void = () => {}
-  const reportFooterUnavailable = () => ctx.logger.warn('[github-copilot] COPILOT_PREVIEW_FOOTER_UNAVAILABLE')
-  try {
-    disposeFooterInjection = ctx.slots.inject('settings.models.footer', () => {
-      try {
-        const spec = ctx.slots.spec?.('settings.models.footer')
-        if (spec?.kind !== 'list' || spec.scope !== 'root') {
-          reportFooterUnavailable()
-          return () => {}
-        }
-        return ctx.slots.register({
-          name: 'settings.models.footer',
-          id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
-          order: 10,
-        }, () => createElement(GitHubCopilotPreviewFooter, { remote: ctx.remote.githubCopilot }))
-      } catch {
-        // Unsupported optional UI must not turn off the canonical sign-in controls.
-        reportFooterUnavailable()
-        return () => {}
-      }
-    })
-  } catch {
-    reportFooterUnavailable()
-  }
-
   return () => {
+    active = false
     disposeFooterInjection()
     disposeProviderCardInjection()
     disposeSettingsSectionInjection()

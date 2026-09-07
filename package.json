@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "DSH companion for GitHub Copilot sign-in, account-aware model profiles, tool compatibility, and provider-hosted search.",
-  "version": "0.4.0-alpha.1",
+  "version": "0.4.0-alpha.2",
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "repository": {
@@ -38,6 +38,7 @@
     "AGENTS.md",
     "docs/agent-readiness.md",
     "docs/model-compatibility-acceptance.md",
+    "docs/single-route-migration.md",
     "docs/images/"
   ],
   "keywords": [

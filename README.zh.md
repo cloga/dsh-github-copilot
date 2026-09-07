@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文的通用发现与 pi-ai `0.85.1` 适配描述当前开发改动，不表示这些改动已随安装示例中的 `0.4.0-alpha.1` 发布或已在本机加载。完整交付须经过 PR、必要验证、合并、版本发布、制品校验及用户指定 profile 的本地升级；以实际 Release 和运行时验收结果为准。
+> 下文单路由与统一账号界面描述目标版本 `0.4.0-alpha.2`。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 ## 已测试基线
 
@@ -26,24 +26,24 @@
 将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.1/dsh-github-copilot-0.4.0-alpha.1.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.2/dsh-github-copilot-0.4.0-alpha.2.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
 ### 用户授权流程
 
-1. 打开 **设置 → 模型**，找到 `github-copilot` provider 卡片。
+1. 打开 **设置 → 模型**，找到统一的 **GitHub Copilot** 账号卡片。不需要先添加原生 provider 配置。
 2. 点击 **Sign in with GitHub**。卡片会显示 **Waiting for GitHub authorization…**，将一次性 device code 作为醒目的独立代码块展示，并提供 **Open GitHub verification page** 链接和 **Copy code** 按钮。
 3. 一键复制代码，打开链接，登录拥有 Copilot 权益的 GitHub 账号，粘贴代码并批准授权。复制成功时卡片会给出确认；剪贴板不可用时会提示手工复制。不要把 GitHub token 粘贴到 DSH。
 4. 返回 DSH。卡片会自动轮询；成功后只显示 **Signed in to GitHub Copilot.** 和 **Sign out** 按钮，一次性 URL 与代码会消失。
-5. 原生 Core 模型仍在 `github-copilot` 下选择。使用通用账号发现时，在 **GitHub Copilot account models** 区域点击 **Refresh account models**，再从 `github-copilot-preview` 下选择发现的模型；这是保留的历史 route ID，并不只表示 GPT-6。两条路由共用一次登录，刷新不会更改当前模型选择。列表为空或出现诊断时先查看[迁移与排障](#迁移与排障)，不要靠反复登录或重启猜测权限。
+5. 在同一卡片点击 **Refresh account models**，查看接受的模型及拒绝诊断，再在模型选择器的 **GitHub Copilot** 分组中选模型。实际路由 ID 保持为 `github-copilot-preview`，GPT-6 与其它新发现模型都走此入口。刷新不会替你切换模型；失败时查看[迁移与排障](#迁移与排障)，不要反复登录。
 
-如果没有看到卡片，先选择 **添加提供方 → github-copilot**。动图从已有卡片开始，展示 **Sign in with GitHub → Copy code → Copied → Signed in**。最后两个状态之间需要用户在 GitHub 完成授权，这一步未录制。
+统一账号卡片独立于原生 provider 行存在；不要为了登录而先使用 **添加提供方**。卡片缺失时核对活动 profile 与实际加载的 Host/Client 版本。下方旧动图展示 **Sign in with GitHub → Copy code → Copied → Signed in**，不代表新版统一布局的验证。最后两个状态之间需要用户在 GitHub 完成授权，这一步未录制。
 
 ![GitHub Copilot 登录、验证码复制反馈与授权成功动图](./docs/images/github-copilot-auth-flow.gif)
 
-这些文档预览使用当前 Models 页面外观和仓库当前的卡片组件，授权状态为模拟数据。`ABCD-EFGH` 是不可用于登录的合成示例；未发起真实授权请求、记录 credential 或变更账号。预览不代表真实登录或模型可用性验证。
+这些旧文档预览使用模拟授权状态和先前的卡片布局，并非新版统一账号卡片。`ABCD-EFGH` 是不可用于登录的合成示例；未发起真实授权请求、记录 credential 或变更账号。预览不代表当前 UI 激活、真实登录或模型可用性验证。
 
 授权中的卡片突出显示一次性验证码，并提供 **Copy code** 按钮：
 
@@ -61,7 +61,7 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 2. 引导用户进入 **设置 → 模型 → GitHub Copilot → Sign in with GitHub**。
 3. 请用户打开界面显示的验证链接并输入一次性代码；不得索取、读取、复制、记录或持久化用户的 GitHub token。
 4. 等待用户在浏览器完成授权；已有授权正在进行时，不要重复创建新的登录尝试。
-5. 确认卡片显示 **Signed in to GitHub Copilot.**、device-code 提示已消失，并且 Copilot 模型可用。
+5. 确认卡片显示 **Signed in to GitHub Copilot.** 且 device-code 提示已消失；再显式刷新账号模型、检查元数据，并由用户选择模型。登录、模型发现与真实调用成功是不同层次的证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
 GitHub Releases 是唯一权威分发渠道；本仓库不会发布到 npm。部署自动化应 pin 带版本号的 tarball，并使用同一 Release 的 `SHA256SUMS` 校验。
@@ -71,11 +71,11 @@ GitHub Releases 是唯一权威分发渠道；本仓库不会发布到 npm。部
 ## 本包负责什么
 
 - 为 rc.2 等未挂载 Core authorization service 的 profile 提供条件式 fallback。
-- Models provider-card UI、Client-safe Remote descriptor 与 Host authorization controller。
+- 独立于原生 provider 行的统一 Models 账号卡片、Client-safe Remote descriptor 与 Host authorization controller。
 - 对 pi-ai 所有的 Copilot OAuth grant 做严格规范化。
-- 对 canonical `github-copilot` profile 做最小的 `compat.supportsStrictMode: false` 叶节点修复，并仅按已核实的历史所有权记录恢复旧 override。
+- 保留 canonical `github-copilot` profile 的有意缺失；仅对已有旧配置修复 `compat.supportsStrictMode: false`，并按已核实的历史所有权记录恢复旧 override，不自动删除用户配置。
 - 有界拉取账号 `/models` 元数据，校验端点、权限、工具／流式能力和限额，为 `github-copilot-preview` 提供账号绑定的不可变模型快照；新 ID 不要求新的代码表。
-- 为两条 Copilot 路由保留同一个 Host OAuth 生命周期，取消失效账号的发现和请求，绝不复制 credential 到 Client。
+- 托管路由与尚未迁移的旧 canonical 路由共用唯一 Host OAuth 生命周期；取消失效账号的发现和请求，绝不复制 credential 到 Client。
 - 保留公开 Thinking 摘要和合法的思考强度选择，原生回放及文件投影仍交给既有 adapter。
 - 通过受限的 inline agent-loop interception 与 Responses-only `ctx.web` provider 直连供应方 hosted search。
 
@@ -91,9 +91,13 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 
 **只改插件，不改 Core（plugin-only）：**本项目的修复必须留在插件内，使用已发布的公开 API。禁止修改 Core 源码、已安装二进制、`node_modules`、私有运行时注册表或共享上游模型目录；也不能把新增 Core export 或等待上游 Core PR 合并作为交付前提。允许只读查阅 Core，以及针对未改动的固定版本进行隔离验证。现有 API 无法满足需求时，应说明限制并采用经过测试的插件内替代方案，而不是转去改 Core。权威规则及机器检查见 [AGENTS.md](./AGENTS.md#plugin-only-implementation-boundary)。
 
-这是**一次登录、两条路由**：`github-copilot` 保留 Core 原生模型与配置，`github-copilot-preview` 提供按当前账号元数据发现的模型。路由 ID 是为兼容历史选择保留的名称，不是 GPT-6 allowlist。两者共享唯一的 `llm-pi-ai/github-copilot` OAuth record；任一共享登录控件的 **Sign out** 都会断开该账号，而不是只断开某一条路由。发现不会自动切换用户选择的模型。
+新安装采用**一个账号发现路由**，显示为 **GitHub Copilot**，实际 ID 仍为 `github-copilot-preview`。统一账号卡片／页脚独立于原生 provider 行，提供登录与 **Refresh account models**。刷新后再选择模型；发现不会自动更改当前会话、默认模型或历史。
 
-新实现不再创建全局 Responses override，也不再为了 GPT-6 隐藏 Gemini／Claude。正常 canonical reconciliation 只设置 `providers.github-copilot.compat.supportsStrictMode` 为 `false`；这也可创建不带 endpoint、key 或模型表的最小缺失 profile。已有的 `api`、`models`、headers 和用户扩展保持原样，不根据插件的 pi 副本或新发现列表增加、删除或替换 canonical 模型。
+升级不会偷偷删除已有的 Core `github-copilot` profile，因此旧安装可能继续显示两条真实路由，直到用户完成[显式单路由迁移](./docs/single-route-migration.md#中文操作说明)。这不是界面过滤或伪装合并：真正移除经过审核的旧 profile 后，composer 选择器和 `/model` 才都会只列出托管 Copilot 分组。旧对话记录保持原样，但仍选择已移除 canonical 路由的暂停会话，在恢复时需要显式选择托管模型。
+
+始终保留唯一的 `llm-pi-ai/github-copilot` OAuth record 与原生授权插件；**Sign out** 会断开账号，不是隐藏旧路由的操作。
+
+新实现不创建全局 Responses override，也不会在登录、Host 启动或 token 刷新时重建缺失的 canonical profile。对已有旧 profile，正常 reconciliation 仍只设置 `providers.github-copilot.compat.supportsStrictMode` 为 `false`；已有 `api`、`models`、headers 和用户扩展保持原样。删除旧 profile 必须经过显式迁移，不能成为升级的静默副作用。托管路由根据账号元数据选择协议；发现失败会显示诊断，不回退到静态模型目录。即使没有 canonical 模型配置，也必须保留 `llm-pi-ai` 插件挂载以提供原生 OAuth method。
 
 历史 override 是单独的迁移路径：只有持久化 journal 与当前原始字段吻合时，才恢复 journal 记录的**准确 preimage**，并仅移除可证明由旧插件写入且用户未改动的 headers。不会把 preimage 重新投影成当前账号模型列表，不会用空列表冒充禁用 route，也不会开启新一轮全局协议 override。用户修改、旧格式 journal、未提交的准备写入或旧的不精确恢复目标仍报告冲突。
 
@@ -103,9 +107,9 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 
 ### 只读状态与显式修复
 
-`githubCopilot.status()` 与 Host `describeGitHubCopilotProviderProfile()` 只读取已存状态并计算准确的 route 变更计划，不写 settings、不刷新 OAuth、不测试网络。状态区分凭据是否已配置，以及 route 的 `ready`、`needs-repair`、`not-configured`、`conflict`、`error`；route 读取或修复失败不会抹掉有效登录。route 的 `ready` 只说明受检查的 canonical 配置无需修复；账号发现有独立状态。两者都不代表模型或搜索请求已经成功。
+`githubCopilot.status()` 与 Host `describeGitHubCopilotProviderProfile()` 只读取已存状态并规划旧 canonical 配置变更，不写 settings、不刷新 OAuth、不测试网络。状态区分凭据是否已配置，以及旧 route 的 `ready`、`needs-repair`、`not-configured`、`conflict`、`error`。已登录时，`route: not-configured` 通常表示可选的 canonical profile 不存在，是正常单托管路由状态，不是登录错误或修复要求，也不证明托管模型发现已就绪。`ready` 只说明受检查的 canonical 配置无需修复；账号发现与真实模型／搜索调用是独立证据。
 
-点击 **Repair model configuration**（Remote `githubCopilot.reconcile()`）可显式执行有 revision 检查的配置修复，不拉取新的 GitHub 模型列表，也不会强行覆盖冲突。登录成功和 Host 启动时仍保留最小配置 reconciliation；浏览器状态轮询本身为只读。部署新增 Remote 方法时需一起更新 Host 与 Client bundle。
+点击 **Repair model configuration**（Remote `githubCopilot.reconcile()`）只对已有旧 profile 或经过验证的 journal 执行 revision 检查后的修复，不拉取模型列表、不创建缺失 profile，也不强行覆盖冲突。登录、启动及认证刷新时的 reconciliation 同样保留 profile 缺失。浏览器轮询为只读；部署时需一起更新 Host 与 Client bundle。
 
 ### 主动刷新账号模型
 
@@ -119,7 +123,7 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
 
 ## Hosted search
 
-- **Canonical inline agent-loop 路径：**符合条件的 `github-copilot` 请求支持 OpenAI Responses 与 Anthropic Messages 的原生搜索候选。
+- **旧 canonical inline agent-loop 路径：**仅在旧路由仍配置时，符合条件的 `github-copilot` 请求支持 OpenAI Responses 与 Anthropic Messages 原生搜索候选。
 - **托管账号路由的普通对话：**`github-copilot-preview` 请求直接交给已注册的原生 adapter，不经过自定义 inline wire，以保留该路由的账号证据、回放和附件处理。
 - **通过 `ctx.web.search()` 使用 `github-copilot-hosted`：**只支持账号可用且协议经过核实的 OpenAI Responses 候选，包括符合条件的托管账号模型。
 - **Chat Completions 模型：**可走普通原生 SDK transport，但不会因此宣称 hosted search 可用。
@@ -199,13 +203,16 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 
 ## 迁移与排障
 
-依赖托管 route 前，请删除旧 gateway route、`COPILOT_GITHUB_TOKEN` 类 reference、`copilot2api` 与 `dsh-web-search-provider`。
+旧安装删除原生 profile 前请遵循[单路由迁移指南](./docs/single-route-migration.md#中文操作说明)。插件不会替用户迁移默认模型、preset、活动会话或历史。旧 gateway route 与 `COPILOT_GITHUB_TOKEN` 类 reference 并非必需，应单独审核，不要连带删除无关配置。
 
-- **看不到登录控件：**确认 package 安装在当前活动 profile，并使用上表对应的 Models UI。
-- **已登录但新模型缺失：**点击 **Refresh account models**，查看 `github-copilot-preview` 的发现结果，而不是等待静态 catalog 收录每个新 ID。若只有原生 route 的模型，确认当前实际加载的插件版本包含发现 UI／Host Remote；安装旧 Release 不会自动拥有工作树中的新代码。对缺失接口、禁用 policy、无工具／流式支持或不完整限额，查看逐模型拒绝代码，不通过名字猜测。元数据过期可再次主动刷新，不要反复登录或关闭校验。
-- **没有 Think 文字：**供应方可能不返回公开摘要，但非空摘要应由 Responses 解析器完整保留。检查所选思考强度与命名明确的能力错误。UI 只在完成后隐藏空条目，不显示加密回放数据。包含 reasoning／replay 历史的请求走 Core 原生 transport，不走受限的自定义序列化器。
-- **Hosted search 不可用：**先区分 canonical inline 与独立 `ctx.web` 表面。托管账号路由的普通对话不经自定义 inline；独立 `ctx.web` 只接受当前账号有效的 Responses 模型。检查发现状态和命名明确的 probe error，不能把普通聊天成功当作搜索能力证明。
-- **仍有旧 endpoint/key：**reconciliation 会有意保留不归本包所有的字段，需要手工删除旧连接字段。
+- **看不到登录控件：**确认新版 package 实际加载在活动 profile，并使用上表对应的 UI；不要为了显示登录卡片而添加原生 provider。
+- **升级后仍有两个 Copilot 分组：**已有 canonical profile 被有意保留。显式迁移并真正移除后，composer 与 `/model` 才都会只列出托管分组；不是靠显示别名隐藏第二条路由。
+- **已登录但新模型缺失：**点击 **Refresh account models**，查看显示为 **GitHub Copilot**、实际 ID 为 `github-copilot-preview` 的接受／拒绝结果。接口不支持或元数据不完整时显示诊断，不退回静态目录，也不要反复登录或关闭校验。
+- **Canonical 状态为 `not-configured`：**已登录时属于正常单托管路由模式；账号发现就绪与否另行检查，不需要创建原生 profile。
+- **删除对话框一直显示 “Deleting…”：**本次改动不证明该卡住问题已修复。不要重复删除；取得许可停止 Host 后检查持久化设置，按迁移指南判断是否仍需移除。
+- **没有 Think 文字：**供应方可能不返回公开摘要，但非空摘要应被完整保留。检查思考强度与命名错误。UI 只在完成后隐藏空条目，不显示加密回放；包含 reasoning／replay 的历史走 Core 原生 transport。
+- **Hosted search 不可用：**单托管路由选择已接受的 Responses 模型，再检查独立 `ctx.web` 的发现与 probe 诊断。自定义 inline 仅适用于仍配置的旧 canonical 路由；普通聊天成功不能证明搜索可用。
+- **仍有旧 endpoint/key：**reconciliation 有意保留非本包所有的字段；按显式迁移审核，不要强删所有权 marker。
 
 ## Package 入口与源码映射
 
@@ -267,8 +274,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。新版本使用标准 SemVer 预发布标识（`alpha`、`beta` 或 `rc`）；历史上的 `cloga` 后缀用于标识下游 fork 构建，新版本不再使用。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，按版本标记 prerelease，并且只在前序步骤全部成功后创建 GitHub Release。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.1/dsh-github-copilot-0.4.0-alpha.1.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.1/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.2/dsh-github-copilot-0.4.0-alpha.2.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.2/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -276,7 +283,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.1.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.2.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

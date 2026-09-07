@@ -25,6 +25,7 @@ import {
   GitHubCopilotAuthorizationNotice,
   GitHubCopilotPreviewFooter,
   GitHubCopilotProviderCard,
+  GitHubCopilotLegacyProviderNotice,
   GitHubCopilotSettingsSection,
   previewAssignmentMessage,
   GitHubCopilotAccountModelsPanel,
@@ -165,7 +166,7 @@ describe('GitHub Copilot Models client', () => {
     expect(routeStatusMessage({ ...base, route: { state: 'needs-repair', diagnosticCode: 'RECONCILIATION_FAILED' } })).toContain('sign-in is retained')
     expect(routeStatusMessage({ ...base, route: { state: 'conflict' } })).toContain('without rolling back user edits')
     expect(routeStatusMessage({ ...base, route: { state: 'error' } })).toContain('sign-in is retained')
-    expect(routeStatusMessage({ ...base, route: { state: 'not-configured' } })).toContain('No usable account model')
+    expect(routeStatusMessage({ ...base, route: { state: 'not-configured' } })).toBeUndefined()
     expect(routeStatusMessage({ ...base, route: { state: 'ready' } })).toBeUndefined()
     expect(routeStatusMessage(undefined)).toBeUndefined()
   })
@@ -317,50 +318,39 @@ describe('GitHub Copilot Models client', () => {
     })).toBeUndefined()
   })
 
-  it('explains two routes and keeps shared authorization collapsed without reading status', () => {
-    const remote = { status: vi.fn(), discoverModels: vi.fn(), start: vi.fn(), signOut: vi.fn() }
-    const setOpen = vi.fn()
-    vi.mocked(React.useState).mockReturnValueOnce([false, setOpen])
+  it('keeps one account surface with sign-in and explicit discovery outside compatibility details', () => {
+    const remote = modelRemote()
     const elements = descendants(GitHubCopilotPreviewFooter({ remote: remote as never }))
-    const text = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
-    expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
-    expect(text).toContain(`Ordinary Copilot models remain under ${GITHUB_COPILOT_PROVIDER_ID}.`)
-    expect(text).toContain('account models')
-    expect(text).not.toContain('gpt-6-astra')
+    expect(elements.find(element => element.type === 'h3')?.props.children).toBe('GitHub Copilot')
+    expect(elements.filter(element => element.type === GitHubCopilotProviderCard)).toHaveLength(1)
     expect(elements.filter(element => element.type === GitHubCopilotAccountModelsPanel)).toHaveLength(1)
-    expect(text).toContain('two routes')
-    expect(text).toContain('one GitHub sign-in')
-    expect(text).toContain('does not verify')
     const details = elements.find(element => element.type === 'details')
     expect(details?.props.open).not.toBe(true)
-    expect(elements.some(element => element.type === GitHubCopilotProviderCard)).toBe(false)
-    expect(elements.some(element => element.type === 'input' || element.type === 'form')).toBe(false)
+    expect(descendants(details).some(element => element.type === GitHubCopilotProviderCard || element.type === GitHubCopilotAccountModelsPanel)).toBe(false)
+    const text = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
+    expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    expect(text).toContain('/model')
+    expect(text).toContain('legacy')
+    expect(text).not.toContain('two routes sharing')
+    expect(text).not.toContain('gpt-6-astra')
     expect(remote.status).not.toHaveBeenCalled()
     expect(remote.discoverModels).not.toHaveBeenCalled()
     expect(remote.start).not.toHaveBeenCalled()
     expect(remote.signOut).not.toHaveBeenCalled()
-    details?.props.onToggle({ currentTarget: { open: true } })
-    expect(setOpen).toHaveBeenCalledWith(true)
   })
 
-  it('mounts the canonical shared controls only after explicit expansion and unmounts on collapse', () => {
-    const remote = { status: vi.fn(), discoverModels: vi.fn(), start: vi.fn(), signOut: vi.fn() }
-    const setOpen = vi.fn()
-    vi.mocked(React.useState).mockReturnValueOnce([true, setOpen])
-    const elements = descendants(GitHubCopilotPreviewFooter({ remote: remote as never }))
-    const controls = elements.filter(element => element.type === GitHubCopilotProviderCard)
-    expect(controls).toHaveLength(1)
-    expect(controls[0]?.props.provider.provider).toBe(GITHUB_COPILOT_PROVIDER_ID)
-    expect(controls[0]?.props.remote).toBe(remote)
-    const details = elements.find(element => element.type === 'details')
-    details?.props.onToggle({ currentTarget: { open: false } })
-    expect(setOpen).toHaveBeenCalledWith(false)
-    vi.mocked(React.useState).mockReturnValueOnce([false, setOpen])
-    const collapsed = descendants(GitHubCopilotPreviewFooter({ remote: remote as never }))
-    expect(collapsed.some(element => element.type === GitHubCopilotProviderCard)).toBe(false)
-    expect(remote.status).not.toHaveBeenCalled()
-    expect(remote.discoverModels).not.toHaveBeenCalled()
-    expect(remote.start).not.toHaveBeenCalled()
+  it('renders only a migration notice on a legacy Core provider row without duplicate polling or login', () => {
+    const props = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: true, keyConfigured: false }
+    const elements = descendants(GitHubCopilotLegacyProviderNotice(props))
+    const text = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
+    expect(text).toContain('legacy')
+    expect(text).toContain('not a second GitHub account')
+    expect(text).toContain('explicit migration')
+    expect(elements.some(element => element.type === 'button' || element.type === GitHubCopilotProviderCard || element.type === GitHubCopilotAccountModelsPanel)).toBe(false)
+    expect(React.useEffect).not.toHaveBeenCalled()
+    expect(React.useState).not.toHaveBeenCalled()
+    expect(GitHubCopilotLegacyProviderNotice({ ...props, provider: { ...props.provider, provider: 'other' } })).toBeNull()
+    expect(GitHubCopilotLegacyProviderNotice({ ...props, configured: false })).toBeNull()
   })
 
   it('does not poll shared status after a signed-in render', async () => {
@@ -427,6 +417,18 @@ describe('GitHub Copilot Models client', () => {
     expect(previewAssignmentMessage(base)).toBeUndefined()
     expect(previewAssignmentMessage({ ...assigned, configured: false })).toBeUndefined()
     expect(previewAssignmentMessage({ ...base, catalog: { ...base.catalog, previewModelIds: [] } })).toBeUndefined()
+  })
+
+  it('explains the initial model list without inferring a completed discovery from sign-in', () => {
+    const remote = modelRemote()
+    const panel = panelHarness(remote)
+    const elements = descendants(panel.render())
+    const hint = elements.find(element => element.props['data-dsh-github-copilot-discovery-idle'] === true)
+    expect(hint?.props.children).toContain('Refresh to load the models available to this account')
+    expect(hint?.props.children).toContain('Signing in alone does not refresh this list')
+    expect(elements.some(element => element.type === GitHubCopilotAccountModelsSummary)).toBe(false)
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
   })
 
   it('discovers account models only on a click and deduplicates clicks while busy', async () => {
@@ -588,7 +590,8 @@ describe('GitHub Copilot Models client', () => {
     expect(text).toContain('UNSUPPORTED_ENDPOINT')
     expect(text).toContain('COPILOT_MODEL_METADATA_REJECTED')
     expect(text).not.toContain('secret=value')
-    expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    expect(text).toContain('Select models under GitHub Copilot')
+    expect(text).not.toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
     expect(text).toContain('does not prove')
     expect(elements.some(element => element.type === 'script' || element.props.dangerouslySetInnerHTML !== undefined)).toBe(false)
   })
@@ -694,7 +697,7 @@ describe('GitHub Copilot Models client', () => {
     return { ctx, disposeRemote, disposeUi, disposePresentation, register, registrations, injections }
   }
 
-  it('registers a removable Models footer without replacing provider-card authorization', async () => {
+  it('registers one account footer and a non-interactive legacy provider-card notice', async () => {
     const { ctx, register, registrations, injections } = clientContext([
       'settings.models.provider-card', 'settings.models.footer', 'settings.section',
     ])
@@ -705,6 +708,10 @@ describe('GitHub Copilot Models client', () => {
     expect(element?.type).toBe(GitHubCopilotPreviewFooter)
     expect(element?.props.remote).toBe(ctx.remote.githubCopilot)
     expect(register).toHaveBeenCalledWith({ name: 'settings.models.provider-card', key: 'llm-pi-ai' }, expect.any(Function))
+    const renderLegacy = register.mock.calls.find(([options]) => options.name === 'settings.models.provider-card')?.[1] as ((props: object) => ReactElement) | undefined
+    const legacy = renderLegacy?.({})
+    expect(legacy?.type).toBe(GitHubCopilotLegacyProviderNotice)
+    expect(legacy?.props).not.toHaveProperty('remote')
     expect(registrations.has('settings.section')).toBe(false)
     const removeFooter = registrations.get('settings.models.footer')
     await dispose()
@@ -733,7 +740,7 @@ describe('GitHub Copilot Models client', () => {
 
   it('leaves authorization active when the optional footer contract is incompatible or registration fails', async () => {
     for (const failure of ['contract', 'missing-spec', 'registration', 'injection'] as const) {
-      const fixture = clientContext(['settings.models.footer', 'settings.section'])
+      const fixture = clientContext(['settings.models.provider-card', 'settings.models.footer', 'settings.section'])
       if (failure === 'contract') fixture.ctx.slots.spec.mockReturnValue({ kind: 'keyed', scope: 'session' })
       if (failure === 'missing-spec') Reflect.deleteProperty(fixture.ctx.slots, 'spec')
       if (failure === 'registration') {
@@ -757,6 +764,38 @@ describe('GitHub Copilot Models client', () => {
       expect(fixture.ctx.logger.warn.mock.calls.flat().join(' ')).not.toContain('PRIVATE_FOOTER_ERROR')
       await dispose()
     }
+  })
+
+  it('restores exactly one account fallback when a footer declaration is withdrawn', async () => {
+    const fixture = clientContext(['settings.section'])
+    const dispose = await apply(fixture.ctx as never)
+    const firstFallback = fixture.registrations.get('settings.section')
+    const removeFooter = fixture.injections.get('settings.models.footer')?.() as (() => void)
+    expect(firstFallback).toHaveBeenCalledOnce()
+    const count = fixture.register.mock.calls.filter(([options]) => options.name === 'settings.section').length
+    removeFooter()
+    expect(fixture.register.mock.calls.filter(([options]) => options.name === 'settings.section')).toHaveLength(count + 1)
+    const restored = fixture.registrations.get('settings.section')
+    expect(restored).not.toBe(firstFallback)
+    await dispose()
+    expect(restored).toHaveBeenCalledOnce()
+    expect(fixture.register.mock.calls.filter(([options]) => options.name === 'settings.section')).toHaveLength(count + 1)
+  })
+
+  it('retains a working account fallback when later footer registration fails', async () => {
+    const fixture = clientContext(['settings.section'])
+    const dispose = await apply(fixture.ctx as never)
+    const fallback = fixture.registrations.get('settings.section')
+    const original = fixture.register.getMockImplementation()!
+    fixture.register.mockImplementation((options, component) => {
+      if (options.name === 'settings.models.footer') throw new Error('PRIVATE_REGISTRATION_FAILURE')
+      return original(options, component)
+    })
+    fixture.injections.get('settings.models.footer')?.()
+    expect(fallback).not.toHaveBeenCalled()
+    expect(fixture.ctx.logger.warn.mock.calls.flat().join(' ')).not.toContain('PRIVATE_REGISTRATION_FAILURE')
+    await dispose()
+    expect(fallback).toHaveBeenCalledOnce()
   })
 
   it('does not delay authorization while the optional reasoning presentation waits for Core services', async () => {
@@ -785,7 +824,7 @@ describe('GitHub Copilot Models client', () => {
       { name: 'settings.models.provider-card', key: 'llm-pi-ai' },
       expect.any(Function),
     )
-    expect(register).not.toHaveBeenCalledWith(
+    expect(register).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'settings.section' }),
       expect.any(Function),
     )
@@ -817,14 +856,14 @@ describe('GitHub Copilot Models client', () => {
     await dispose()
   })
 
-  it('replaces the rc.2 fallback when the rc.1 provider-card slot appears', async () => {
+  it('keeps fallback authorization when only the legacy provider-card slot appears', async () => {
     const { ctx, register, registrations, injections } = clientContext(['settings.section'])
     await apply(ctx as never)
     const disposeFallback = registrations.get('settings.section')
 
     injections.get('settings.models.provider-card')?.()
 
-    expect(disposeFallback).toHaveBeenCalledOnce()
+    expect(disposeFallback).not.toHaveBeenCalled()
     expect(register).toHaveBeenCalledWith(
       { name: 'settings.models.provider-card', key: 'llm-pi-ai' },
       expect.any(Function),
