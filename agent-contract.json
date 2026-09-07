@@ -33,12 +33,12 @@
     "authorization": {
       "purpose": "OAuth lifecycle, grant normalization, route projection and account availability",
       "read": ["src/authorization-controller.ts", "src/copilot-auth.ts", "src/copilot-grant.ts"],
-      "tests": ["tests/authorization-controller.spec.ts", "tests/copilot-auth.spec.ts", "tests/loader-composition.spec.ts"],
+      "tests": ["tests/authorization-controller.spec.ts", "tests/copilot-auth.spec.ts", "tests/loader-composition.spec.ts", "tests/single-route.spec.ts"],
       "risk": "status and describeGitHubCopilotProviderProfile are read-only; reconcile is an explicit stored-snapshot settings write, not OAuth refresh or capability proof. Configured credentials do not prove transport readiness."
     },
     "models": {
       "purpose": "Account-driven model discovery, native protocol routing and conservative legacy restoration",
-      "read": ["src/account-model-catalog.ts", "src/account-model-source.ts", "src/account-model-auth.ts", "src/preview-route.ts", "src/preview-provider.ts", "src/pi-provider-bridge.ts", "src/current-provider.ts", "src/authorization-controller.ts", "src/route-ownership.ts", "docs/model-compatibility-acceptance.md"],
+      "read": ["src/account-model-catalog.ts", "src/account-model-source.ts", "src/account-model-auth.ts", "src/preview-route.ts", "src/preview-provider.ts", "src/pi-provider-bridge.ts", "src/current-provider.ts", "src/authorization-controller.ts", "src/route-ownership.ts", "docs/model-compatibility-acceptance.md", "docs/single-route-migration.md"],
       "tests": ["tests/account-model-catalog.spec.ts", "tests/account-model-source.spec.ts", "tests/account-model-auth.spec.ts", "tests/preview-route.spec.ts", "tests/preview-provider.spec.ts", "tests/pi-provider-bridge.spec.ts", "tests/current-provider.spec.ts", "tests/temporary-model-retirement.spec.ts", "tests/authorization-controller.spec.ts", "tests/route-ownership.spec.ts"],
       "risk": "A same-ID catalog entry can still have the wrong protocol or capabilities. Stay plugin-only: use published APIs or a documented narrow alternative, never a new Core patch/service dependency. Label multiple routes honestly; share the canonical OAuth grant without duplicating general transport. Legacy, interrupted or user-edited ownership journals remain conflicts."
     },

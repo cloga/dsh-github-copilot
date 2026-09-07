@@ -17,6 +17,7 @@ async function fixture() {
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'dsh-github-copilot', dependencies: { '@earendil-works/pi-ai': '0.85.1' } }))
   await writeFile(join(root, 'tests/preview-route.spec.ts'), 'export {}')
   await writeFile(join(root, 'tests/published-core.spec.ts'), 'export {}')
+  await writeFile(join(root, 'tests/single-route.spec.ts'), 'export {}')
   const runner = join(root, 'fake-vitest.mjs')
   await writeFile(runner, 'throw new Error("must not execute during prepare")')
   const tracked = []
@@ -81,7 +82,7 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   assert.equal(config.root, value.root)
   assert.equal(config.envDir, value.target)
   assert.ok(config.cacheDir.startsWith(value.target))
-  assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts'])
+  assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts'])
   assert.equal(config.test.env.DSH_CORE_EVIDENCE, 'tagged-source-runtime')
   assert.equal(config.test.env.DSH_TAGGED_CORE_MANIFEST, report.manifestPath)
   assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)

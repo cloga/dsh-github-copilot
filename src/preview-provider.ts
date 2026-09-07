@@ -136,7 +136,7 @@ export function createAccountProvider(
     },
   }
   const provider: SimpleNativeProvider = {
-    id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, name: 'GitHub Copilot (account models)', baseUrl: accountBaseURL(baseURL),
+    id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, name: 'GitHub Copilot', baseUrl: accountBaseURL(baseURL),
     auth: Object.freeze({ oauth: Object.freeze(guardedOAuth) }),
     getModels: () => models,
     filterModels: (candidates, credential) => {

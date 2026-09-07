@@ -5,6 +5,7 @@ import {
   GitHubCopilotAuthorizationController,
   ensureGitHubCopilotProviderProfile,
   inspectGitHubCopilotProviderProfile,
+  describeGitHubCopilotProviderProfile,
 } from '../src/authorization-controller.ts'
 import { encodeBackup, leavesOf, ROUTE_OWNERSHIP_EPOCH } from '../src/route-ownership.ts'
 
@@ -247,7 +248,9 @@ describe('GitHubCopilotAuthorizationController', () => {
     const harness = runtime({ configured: true })
     const discover = vi.fn(async () => undefined)
     harness.services.set('githubCopilotPreview', { discover, getView: () => ({ state: 'ready', models: [], rejected: [] }) })
-    await expect(harness.controller.discoverModels()).resolves.toMatchObject({ accountModels: { state: 'ready' } })
+    await expect(harness.controller.discoverModels()).resolves.toMatchObject({
+      configured: true, phase: 'signed-in', route: { state: 'not-configured' }, accountModels: { state: 'ready' },
+    })
     expect(discover).toHaveBeenCalledExactlyOnceWith({ force: true })
     expect(harness.begin).not.toHaveBeenCalled()
     expect(harness.mutate).not.toHaveBeenCalled()
@@ -358,7 +361,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.mutate).not.toHaveBeenCalled()
     await harness.controller.cancel()
   })
-  it('signs in through the built-in flow and adds only the reference-free Copilot profile', async () => {
+  it('signs in through the built-in flow without recreating a canonical profile', async () => {
     const harness = runtime()
     const started = await harness.controller.start()
 
@@ -376,18 +379,13 @@ describe('GitHubCopilotAuthorizationController', () => {
         notices: [],
       })
     })
-    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
-      value: false,
-    }], expect.any(Number))
+    // Exercise the same coalesced repair helper directly: the controller's
+    // reconcile method may return early while the sign-in attempt is settling.
+    await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
+    await expect(harness.controller.status()).resolves.toMatchObject({ route: { state: 'not-configured' } })
+    expect(harness.mutate).not.toHaveBeenCalled()
     expect(harness.settingsDocument['llm-pi-ai']).toEqual({
-      providers: {
-        openai: { apiKeyEnv: 'OPENAI_API_KEY' },
-        'github-copilot': {
-          compat: { supportsStrictMode: false },
-        },
-      },
+      providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } },
     })
   })
 
@@ -528,15 +526,61 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
   })
 
-  it('creates only a minimal canonical profile without assigning model protocols or connections', async () => {
+  it('keeps a missing canonical profile intentionally absent for new account models', async () => {
     const harness = runtime({ configured: true, availableModelIds: ['gemini-3.8-flash', 'future-responses-model'] })
-    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
-    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', [{
-      op: 'set', path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'], value: false,
-    }], 0)
+    await expect(harness.controller.start()).resolves.toMatchObject({
+      configured: true, phase: 'signed-in', route: { state: 'not-configured' },
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.begin).not.toHaveBeenCalled()
     expect(harness.settingsDocument['llm-pi-ai']).toEqual({ providers: {
-      openai: { apiKeyEnv: 'OPENAI_API_KEY' }, 'github-copilot': { compat: { supportsStrictMode: false } },
+      openai: { apiKeyEnv: 'OPENAI_API_KEY' },
     } })
+  })
+
+  it('does not recreate an absent canonical profile during status or startup and auth reconciliation helpers', async () => {
+    const harness = runtime({ configured: true })
+    const before = structuredClone(harness.settingsDocument)
+    const fetchMock = vi.fn(() => { throw new Error('configuration planning must not perform network I/O') })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(describeGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ state: 'not-configured' })
+    await expect(harness.controller.status()).resolves.toMatchObject({
+      configured: true, phase: 'signed-in', route: { state: 'not-configured' },
+    })
+    // Host startup and token-refresh callbacks share this exported helper.
+    await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
+    await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ changed: false })
+    await expect(harness.controller.reconcile()).resolves.toMatchObject({ route: { state: 'not-configured' } })
+    expect(harness.settingsDocument).toEqual(before)
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.begin).not.toHaveBeenCalled()
+    expect(harness.deleteRecord).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not restore a canonical profile after its explicit removal from synthetic settings', async () => {
+    const harness = runtime({ configured: true, providerProfile: { compat: { supportsStrictMode: false } } })
+    const section = harness.settingsDocument['llm-pi-ai'] as { providers: Record<string, unknown> }
+    delete section.providers['github-copilot']
+    await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
+    await expect(harness.controller.start()).resolves.toMatchObject({
+      configured: true, phase: 'signed-in', route: { state: 'not-configured' },
+    })
+    expect(section.providers).not.toHaveProperty('github-copilot')
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
+  it('keeps absent-profile legacy journal conflicts visible instead of bypassing ownership review', async () => {
+    const harness = runtime({ configured: true })
+    const marker = activeTemporaryRouteBackup()
+    harness.settingsDocument['github-copilot'] = { temporaryRouteBackup: marker }
+    await expect(harness.controller.status()).resolves.toMatchObject({
+      configured: true, phase: 'signed-in', route: { state: 'conflict', diagnosticCode: 'ROUTE_CONFLICT' },
+    })
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).rejects.toThrow(/TEMPORARY_ROUTE_OWNERSHIP_CONFLICT/)
+    expect(harness.settingsDocument['github-copilot']).toEqual({ temporaryRouteBackup: marker })
+    expect(harness.mutate).not.toHaveBeenCalled()
   })
 
   it('preserves configured Anthropic and OpenAI models while repairing only strict mode', async () => {

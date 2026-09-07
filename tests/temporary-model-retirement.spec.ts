@@ -147,9 +147,10 @@ describe('temporary GitHub Copilot model retirement', () => {
 
   it('does not synthesize a canonical model list from locally supported GPT-6', async () => {
     const harness = runtime(false, ['gpt-6-astra'])
-    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ changed: true })
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ changed: false })
     expect((harness.settingsDocuments['llm-pi-ai']!.providers as Record<string, unknown>)['github-copilot'])
-      .toEqual({ compat: { supportsStrictMode: false } })
+      .toBeUndefined()
+    expect(harness.mutate).not.toHaveBeenCalled()
     expect(harness.settingsDocuments['github-copilot']).toEqual({})
     expect(harness.fetch).not.toHaveBeenCalled()
     expect(harness.get.mock.calls.some(([name]) => name === 'llmPiAiModelProtocol')).toBe(false)

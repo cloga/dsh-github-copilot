@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.1"
+    "version": "0.4.0-alpha.2"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -287,7 +287,7 @@
         {"file": "tests/client.spec.ts", "name": "announces successful and failed copy outcomes accessibly"},
         {"file": "tests/client.spec.ts", "name": "copies the exact one-time code through the supplied clipboard writer"},
         {"file": "tests/client.spec.ts", "name": "mounts its Remote contribution and registers the rc.1 provider-card seat"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "signs in through the built-in flow and adds only the reference-free Copilot profile"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "signs in through the built-in flow without recreating a canonical profile"},
         {"file": "tests/authorization-controller.spec.ts", "name": "clears the one-time device code immediately when sign-in is cancelled"},
         {"file": "tests/authorization-controller.spec.ts", "name": "clears the one-time device code when authorization fails"}
       ]
@@ -296,12 +296,12 @@
       "id": "canonical-owner-preservation",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/authorization-controller.ts", "marker": "Canonical models, APIs and headers belong to Core/user settings"},
+        {"file": "src/authorization-controller.ts", "marker": "Existing Core/user profiles keep"},
         {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode']"}
       ],
       "tests": [
         {"file": "tests/authorization-controller.spec.ts", "name": "preserves canonical models and all unrelated profile fields instead of projecting the companion catalog"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "creates only a minimal canonical profile without assigning model protocols or connections"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "keeps a missing canonical profile intentionally absent for new account models"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not reorder or replace canonical models when account IDs are duplicated or reordered"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not add or remove canonical models based on a conflicting local GPT-6 entry"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not judge a user route protocol using another catalog copy"},
@@ -342,7 +342,7 @@
       ]
     },
     {
-      "id": "existing-grant-minimal-profile-repair",
+      "id": "existing-grant-legacy-profile-repair",
       "required": true,
       "sourceMarkers": [
         {"file": "src/index.ts", "marker": "ensureGitHubCopilotProviderProfile(ctx)"},
@@ -529,18 +529,36 @@
     {
       "id": "dsh-models-settings-and-managed-discovery-ui",
       "required": true,
-      "activation": "optional-footer-and-existing-settings-fallback",
+      "activation": "single-account-footer-with-exclusive-settings-fallback",
       "sourceMarkers": [
         {"file": "src/client.ts", "marker": "GitHubCopilotSettingsSection"},
         {"file": "src/client.ts", "marker": "settings.models.footer"},
-        {"file": "src/client.ts", "marker": "settingsSectionActive && !providerCardActive"}
+        {"file": "src/client.ts", "marker": "settingsSectionActive && !footerActive"}
       ],
       "tests": [
         {"file": "tests/client.spec.ts", "name": "registers a GitHub Copilot settings section on the rc.2 Models surface"},
-        {"file": "tests/client.spec.ts", "name": "registers a removable Models footer without replacing provider-card authorization"},
+        {"file": "tests/client.spec.ts", "name": "registers one account footer and a non-interactive legacy provider-card notice"},
         {"file": "tests/client.spec.ts", "name": "leaves authorization active when the optional footer contract is incompatible or registration fails"},
-        {"file": "tests/client.spec.ts", "name": "explains two routes and keeps shared authorization collapsed without reading status"},
-        {"file": "tests/client.spec.ts", "name": "makes explicit account discovery available in the old-Core settings fallback"}
+        {"file": "tests/client.spec.ts", "name": "keeps one account surface with sign-in and explicit discovery outside compatibility details"},
+        {"file": "tests/client.spec.ts", "name": "makes explicit account discovery available in the old-Core settings fallback"},
+        {"file": "tests/client.spec.ts", "name": "explains the initial model list without inferring a completed discovery from sign-in"},
+        {"file": "tests/client.spec.ts", "name": "restores exactly one account fallback when a footer declaration is withdrawn"}
+      ]
+    },
+    {
+      "id": "single-managed-route-native-oauth",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/authorization-controller.ts", "marker": "current !== undefined && providerSupportsStrictMode(current) !== false"},
+        {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot'"},
+        {"file": "src/client.ts", "marker": "GitHubCopilotLegacyProviderNotice"}
+      ],
+      "tests": [
+        {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow while exposing only the account-driven provider"},
+        {"file": "tests/single-route.spec.ts", "name": "discovers new IDs and reasoning metadata without a canonical model profile"},
+        {"file": "tests/single-route.spec.ts", "name": "honors an explicit legacy-profile removal without deleting OAuth or rebuilding the route"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not recreate an absent canonical profile during status or startup and auth reconciliation helpers"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "keeps absent-profile legacy journal conflicts visible instead of bypassing ownership review"}
       ]
     }
   ],

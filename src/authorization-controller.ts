@@ -53,6 +53,7 @@ export type GitHubCopilotAuthorizationPhase =
   | 'error'
 
 export interface GitHubCopilotRouteView {
+  /** Legacy canonical configuration only; intentional absence is not an OAuth or managed-route failure. */
   readonly state: 'ready' | 'needs-repair' | 'not-configured' | 'conflict' | 'error'
   readonly diagnosticCode?: 'ROUTE_READ_FAILED' | 'RECONCILIATION_FAILED' | 'ROUTE_CONFLICT'
 }
@@ -261,17 +262,18 @@ function planRoute(
   else if (currentHasOverlay) {
     throw new TemporaryRouteConflictError('TEMPORARY_ROUTE_LEGACY_CONFLICT')
   }
-  // Canonical models, APIs and headers belong to Core/user settings. A local
-  // pi catalog or managed discovery snapshot cannot rewrite them. This leaf
-  // also creates a missing minimal profile without guessing connection/model data.
+  // The managed account route does not require a canonical profile. Preserve
+  // its intentional absence after migration or first sign-in; startup and auth
+  // refresh must not resurrect a second route. Existing Core/user profiles keep
+  // their models, APIs and headers, with only the legacy compatibility leaf repaired.
   const operations: RouteMutation[] = []
-  if (providerSupportsStrictMode(current) !== false) {
+  if (current !== undefined && providerSupportsStrictMode(current) !== false) {
     operations.push({ op: 'set', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'compat', 'supportsStrictMode'], value: false })
   }
   return { operations }
 }
 
-/** Read-only catalog and exact repair planning; never mutates, authorizes, or probes. */
+/** Read-only legacy configuration planning; not-configured permits managed-only use and never requests creation. */
 export async function describeGitHubCopilotProviderProfile(ctx: Context): Promise<{
   state: 'ready' | 'needs-repair' | 'not-configured' | 'conflict'
   catalog?: GitHubCopilotModelCatalogView

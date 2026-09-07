@@ -21,27 +21,27 @@ The table retains historical source pins; it does not imply the new account-mode
 
 ## Install and sign in
 
-Install the current release into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.2`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.1/dsh-github-copilot-0.4.0-alpha.1.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.2/dsh-github-copilot-0.4.0-alpha.2.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
 ### User authorization flow
 
-1. Open **Settings → Models** and find the `github-copilot` provider card.
+1. Open **Settings → Models** and find the **GitHub Copilot** account card. It does not require adding a native provider profile.
 2. Select **Sign in with GitHub**. The card changes to **Waiting for GitHub authorization…**, shows a prominent standalone one-time code, an **Open GitHub verification page** link, and a **Copy code** button.
 3. Copy the code with one click, open the link, sign in to the GitHub account that owns the Copilot entitlement, paste the code, and approve the request. The card confirms when copying succeeds and provides a manual-copy fallback if clipboard access fails. Never paste a GitHub token into DSH.
 4. Return to DSH. The card polls automatically; success is shown as **Signed in to GitHub Copilot.** with a **Sign out** button. The one-time URL and code disappear after success.
-5. Select a model under the `github-copilot` provider. If no model appears, restart the profile once and see [Migration and troubleshooting](#migration-and-troubleshooting).
+5. Click **Refresh account models** on the same card, inspect accepted models or rejection diagnostics, then choose a model under **GitHub Copilot** in the model picker. Its stable actual route ID is `github-copilot-preview`, including for GPT-6 and other newly discovered IDs. Refreshing does not select a model for you. See [Migration and troubleshooting](#migration-and-troubleshooting) if discovery fails.
 
-If the card is missing, choose **Add provider → github-copilot** first. The animation starts at the existing card and shows **Sign in with GitHub → Copy code → Copied → Signed in**. Completing authorization on GitHub happens between the last two states and is not recorded.
+The unified account card lives independently of a native provider row; do not use **Add provider** merely to sign in. If it is missing, verify the active profile and loaded Host/Client version. The older animation below shows **Sign in with GitHub → Copy code → Copied → Signed in**; it does not demonstrate the new unified layout. Completing authorization on GitHub happens between the last two states and is not recorded.
 
 ![GitHub Copilot sign-in, device-code copy feedback, and successful authorization](./docs/images/github-copilot-auth-flow.gif)
 
-These documentation previews use the current Models page shell and the repository's current card component with simulated authorization states. `ABCD-EFGH` is a synthetic example, not a usable code. No real authorization request, credential, or account change was involved; the previews do not prove live sign-in or model availability.
+These older documentation previews use simulated authorization states and a previous card layout, not the current unified account-card layout. `ABCD-EFGH` is a synthetic example, not a usable code. No real authorization request, credential, or account change was involved; the previews do not prove current UI activation, live sign-in or model availability.
 
 The in-flight card keeps the one-time code prominent and provides a **Copy code** button:
 
@@ -59,7 +59,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 2. Direct the user to **Settings → Models → GitHub Copilot → Sign in with GitHub**.
 3. Tell the user to open the displayed verification URL and enter the displayed one-time code. Do not ask for, read, copy, log, or persist the user's GitHub token.
 4. Wait for the user to complete the browser step. Do not repeatedly start new authorization attempts while one is in flight.
-5. Confirm that the card says **Signed in to GitHub Copilot.**, that the device-code notice is gone, and that Copilot models are available.
+5. Confirm **Signed in to GitHub Copilot.** and that the device-code notice is gone; then explicitly refresh account models and inspect metadata before asking the user to choose one. Login, discovery and successful model calls are separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
 GitHub Releases are the authoritative distribution channel. This repository intentionally does not publish to npm. Deployment automation should pin the versioned tarball and verify `SHA256SUMS` from the same Release.
@@ -69,9 +69,9 @@ No `copilot2api` process, external gateway, placeholder API key, pasted GitHub t
 ## What this package owns
 
 - A conditional authorization-service fallback for profiles such as rc.2 that omit Core's service.
-- The Models provider-card UI, Client-safe Remote descriptors, and Host authorization controller.
+- One unified Models account card, independent of native provider rows, Client-safe Remote descriptors, and Host authorization controller.
 - Strict normalization of pi-ai's provider-owned Copilot OAuth grant.
-- Conservative canonical-route setup and restoration of verified legacy overrides, without replacing Core's model list from another pi catalog.
+- Preservation of intentional canonical-route absence, compatibility repair of existing legacy profiles, and restoration of verified old overrides. It never automatically removes user profiles or replaces Core's model list from another pi catalog.
 - A data-driven account-model route using pi `0.85.1`, authenticated Copilot metadata, and the published native DSH adapter. New model IDs do not require a model-specific code patch when their advertised protocol and capabilities are supported.
 - Direct provider-hosted search through inline agent-loop interception and a Responses-only `ctx.web` provider.
 
@@ -81,7 +81,9 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 `llm-pi-ai` registers the OAuth method; the authorization service orchestrates the interaction; this package contributes the UI/Remote controller and route reconciliation. Core supplies authorization on rc.1. On rc.2 profiles that omit it, this package mounts its runtime dependency and reuses any provider already present.
 
-Use **Refresh account models** in Models settings to fetch the signed-in account's current Copilot `/models` metadata. Select the resulting models under **GitHub Copilot (account models)**, whose stable route ID is `github-copilot-preview`. The original `github-copilot` route remains owned by Core. Both routes share one GitHub sign-in; discovery never changes the selected model automatically.
+New installations use one account-discovered route displayed as **GitHub Copilot**, with the unchanged actual ID `github-copilot-preview`. The unified account card/footer supplies login and **Refresh account models** independently of native provider rows. Refresh explicitly fetches the signed-in account's Copilot `/models` metadata before you select a model; it does not change a session, default or history automatically.
+
+An existing Core-owned `github-copilot` profile is preserved, so upgrades can still show two real routes until the user completes [explicit single-route migration](./docs/single-route-migration.md). This is not a UI filter or facade. After actual removal of the reviewed legacy profile, both the composer picker and `/model` receive only the managed Copilot group. Old conversations remain stored unchanged, but a paused conversation still selecting the removed canonical route needs an explicit managed model selection when resumed.
 
 The managed route selects Responses, Chat Completions or Anthropic Messages from advertised `supported_endpoints`, not model names or a per-model allowlist. An existing pi protocol is retained only if the server also advertises it. New IDs with complete supported metadata can therefore work without another plugin release. Missing endpoints, disabled policy, unsupported protocols or malformed limits produce explicit diagnostics rather than guesses. Updating pi or seeing a model ID in its catalog does not itself prove the protocol is correct.
 
@@ -89,9 +91,9 @@ Discovery is bounded and cached for five minutes. Attach, status reads and crede
 
 **Plugin-only development boundary:** fixes in this project must use existing published public APIs and remain in the plugin. Do not patch Core source, installed binaries, `node_modules`, private runtime registries or shared upstream catalogs; do not make a new Core export or upstream Core PR a delivery prerequisite. Read-only inspection and isolated verification against unchanged pinned Core artifacts are allowed. If a stock API cannot support a requested feature, state the limitation and use a tested plugin-local alternative rather than changing Core. The authoritative policy and its machine checks are documented in [AGENTS.md](./AGENTS.md#plugin-only-implementation-boundary).
 
-A single Copilot login does not necessarily mean one model route. Protocol alternatives must be labelled honestly, preserve the shared Host-only OAuth lifecycle, and reuse existing adapter implementations instead of introducing a second general Copilot adapter. Model metadata from another dependency copy is not proof that the actual Core supports a model or protocol.
+Keep `llm-pi-ai` mounted: its OAuth method and the unique Host-only `llm-pi-ai/github-copilot` credential remain the authentication owner even without a canonical model profile. Do not sign out, remove the authorization plugin or copy credentials to hide a route. Model metadata from another dependency copy is not proof that actual Core supports that model or protocol.
 
-The plugin no longer installs a global Responses override that hides Gemini or Claude models. Ordinary canonical profiles keep their existing model lists, protocol, headers and custom fields. A missing canonical profile is created with only `compat.supportsStrictMode: false`; normal reconciliation changes that compatibility leaf only. Core continues to use its own catalog, which may differ from the plugin's account-discovered directory.
+The plugin does not install a global Responses override or recreate a missing canonical profile on login, startup or token refresh. Existing canonical profiles retain their models, protocol, headers and custom fields; normal legacy reconciliation changes only `compat.supportsStrictMode: false`. Removing such a profile requires explicit migration, not an automatic upgrade side effect. The managed route obtains supported protocols from account metadata and does not fall back to a static catalog when discovery fails.
 
 Previously installed plugin overrides are restored only through a verified ownership journal, to the recorded original `api`/`models` values. Owned public headers are removed only if their values still match. User edits, ambiguous legacy markers and interrupted uncommitted writes remain conflicts rather than being forcibly adopted. Restoring an absent or empty model list returns Core to its default catalog; it does not mean an empty set of models.
 
@@ -101,17 +103,18 @@ Temporary ownership uses a bounded version-2 journal: raw `api`/`models` preimag
 
 ### Read-only status and explicit repair
 
-`githubCopilot.status()` and Host `describeGitHubCopilotProviderProfile()` only read stored state and plan the exact route changes. They do not write settings, refresh OAuth or test the network. Status separates configured authentication from route states `ready`, `needs-repair`, `not-configured`, `conflict` and `error`; route read/repair failures do not erase a valid sign-in. A ready route means configuration is consistent with the stored account snapshot, not that a model or search request has succeeded.
+`githubCopilot.status()` and Host `describeGitHubCopilotProviderProfile()` only read stored state and plan legacy canonical changes. They do not write settings, refresh OAuth or test the network. Status separates configured authentication from legacy route states `ready`, `needs-repair`, `not-configured`, `conflict` and `error`. With valid login, `route: not-configured` normally means the optional canonical profile is absent: it is not a login error or a repair request, and it does not prove managed discovery is ready. `ready` only means the inspected canonical configuration needs no repair. Discovery and successful model/search calls remain separate evidence.
 
-Use **Repair model configuration** (Remote `githubCopilot.reconcile()`) for an explicit, revision-checked repair of that snapshot. It does not fetch a new GitHub model list, and it does not force conflicts. Successful login and Host startup retain their automatic reconciliation paths. Browser status polling itself is read-only. Update Host and Client bundles together when deploying this new Remote method.
+Use **Repair model configuration** (Remote `githubCopilot.reconcile()`) for an explicit, revision-checked repair of an existing legacy profile or verified journal. It does not fetch a model list, create an absent profile, or force conflicts. Successful login, startup and auth-refresh reconciliation also preserve absence. Browser status polling is read-only; deploy matching Host and Client bundles.
 
 Before a grant is persisted or reused, the Host normalizer rebuilds only pi-ai's documented `type`, `refresh`, `access`, finite `expires`, optional `enterpriseUrl`, and optional deduplicated `availableModelIds` fields into a fresh plain JSON object.
 
 ## Hosted search
 
-- **Inline agent-loop path:** supports native-search candidates using OpenAI Responses or Anthropic Messages.
-- **`github-copilot-hosted` through `ctx.web.search()`:** supports OpenAI Responses candidates only.
-- **Chat Completions models:** remain usable through normal `llm-pi-ai` transport but do not advertise hosted search.
+- **Managed-route conversations:** `github-copilot-preview` uses the native adapter, not the custom inline wire; this preserves account evidence, replay and attachment handling.
+- **`github-copilot-hosted` through `ctx.web.search()`:** supports account-authorized OpenAI Responses candidates, including the single managed route. Ordinary chat success is not search capability proof.
+- **Legacy canonical inline agent-loop path:** eligible `github-copilot` requests support Responses or Anthropic Messages native-search candidates only while that legacy route remains configured.
+- **Chat Completions models:** remain usable through normal native transport but do not advertise hosted search.
 
 Installing this package registers `github-copilot-hosted` but deliberately does not replace the profile-wide `web.searchProvider`. This keeps mixed-provider profiles unchanged. A Copilot-focused profile can opt in by adding the following row to `$DSH_HOME/profiles/<profile>/cordis.patch.yml` (merge it into the existing top-level patch list):
 
@@ -185,13 +188,16 @@ There are no token, API-key, model-catalog, or endpoint settings in this package
 
 ## Migration and troubleshooting
 
-Remove old gateway routes, `COPILOT_GITHUB_TOKEN`-style references, `copilot2api`, and `dsh-web-search-provider` before relying on the managed route.
+Existing installations must follow the [single-route migration guide](./docs/single-route-migration.md) before removing a native profile. The plugin does not migrate defaults, presets, active sessions or history for you. Old gateway routes and `COPILOT_GITHUB_TOKEN`-style references are not required; review them separately rather than deleting unrelated user configuration.
 
-- **No sign-in control:** confirm the package is installed in the active profile and use the baseline-specific Models UI above.
-- **Signed in but a new model is missing:** click **Refresh account models**, then choose the account-model route. Read the per-model rejection or warning rather than assuming the SDK needs another model-ID patch. Unsupported endpoints or incomplete provider metadata are not guessed. The canonical route may have a different, Core-owned catalog; a valid legacy restoration removes the old global Responses override without rewriting it from the plugin's pi copy.
-- **No Think text:** the provider may omit public summaries, but nonempty summaries must survive the Responses parser. Check the selected reasoning effort and named capability errors. Empty UI disclosures are hidden only after completion; encrypted replay data is never displayed. Reasoning/replay-bearing histories use Core's native transport rather than the limited custom serializer.
-- **Hosted search unavailable:** select the `github-copilot` route, choose an account-available Responses or Anthropic model, and inspect the named probe error. The explicit `ctx.web` provider is Responses-only.
-- **Legacy endpoint/key still present:** reconciliation preserves unowned fields by design; remove legacy connection fields manually.
+- **No sign-in control:** confirm the package is loaded in the active profile and use the baseline-specific UI above. Do not add a native provider just to reveal login.
+- **Two Copilot groups after upgrade:** a legacy canonical profile is still configured; it is preserved deliberately. After explicit migration/removal, both composer and `/model` list only the managed group. There is no display-only alias masking a second route.
+- **Signed in but a new model is missing:** click **Refresh account models**, then inspect accepted/rejected models for the `github-copilot-preview` route displayed as **GitHub Copilot**. Unsupported endpoints or incomplete metadata produce diagnostics, not static-catalog fallback. Do not repeat login or disable validation.
+- **Canonical route says `not-configured`:** with configured login this is normal managed-only mode; inspect account discovery separately rather than creating a native profile.
+- **Delete dialog stays on “Deleting…”:** this update does not prove that hang fixed. Do not repeatedly delete; after an authorized Host stop, inspect persisted settings and follow the migration guide before deciding whether any removal is still needed.
+- **No Think text:** the provider may omit public summaries, but nonempty summaries must survive the Responses parser. Check selected effort and named errors. Empty disclosures are hidden only after completion; encrypted replay is never displayed. Reasoning/replay-bearing histories use native Core transport.
+- **Hosted search unavailable:** for managed-only use, select an accepted Responses model under **GitHub Copilot** and inspect discovery/probe errors for `ctx.web` search. The custom inline path is legacy-canonical only; normal managed chat success does not prove search support.
+- **Legacy endpoint/key still present:** reconciliation preserves unowned fields by design. Review explicit migration; never force-remove an ownership marker.
 
 ## Package entries and source map
 
@@ -253,8 +259,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`); the historical `cloga` suffix identified downstream fork builds and is no longer used for new versions. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, marks prerelease versions accordingly, and creates the GitHub Release only after every preceding step succeeds.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.1/dsh-github-copilot-0.4.0-alpha.1.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.1/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.2/dsh-github-copilot-0.4.0-alpha.2.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.2/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -262,7 +268,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.1.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.2.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

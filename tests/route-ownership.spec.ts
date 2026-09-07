@@ -146,13 +146,11 @@ describe('temporary route ownership', () => {
     expect(harness.marker()).toBeUndefined()
   })
 
-  it('creates only minimal strict-mode configuration without a new canonical override', async () => {
+  it('preserves an absent canonical profile without acquiring ownership or creating settings', async () => {
     const harness = runtime()
-    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ changed: true })
-    expect(harness.profile()).toEqual({ compat: { supportsStrictMode: false } })
-    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', [{
-      op: 'set', path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'], value: false,
-    }], 0)
+    await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ changed: false })
+    expect(harness.profile()).toBeUndefined()
+    expect(harness.mutate).not.toHaveBeenCalled()
     expect(harness.marker()).toBeUndefined()
   })
 

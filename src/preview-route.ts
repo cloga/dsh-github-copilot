@@ -189,7 +189,7 @@ function resolvedProfile(provider: ReturnType<typeof createAccountProvider>['pro
   }
   return Object.freeze({
     ...config,
-    provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, displayName: 'GitHub Copilot (account models)', piProvider: provider,
+    provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, displayName: 'GitHub Copilot', piProvider: provider,
     streamIdleTimeoutMs: positive(parsed.streamIdleTimeoutMs), maxRequestImageBytes: positive(parsed.maxRequestImageBytes),
     requestImagePixelBudget: positive(parsed.requestImagePixelBudget), requestImageMaxBytes: positive(parsed.requestImageMaxBytes),
     retryPolicy: resolveRetryPolicy(parsed.retryPolicy, 'github-copilot-preview'), configuredMaxTokens: new Map<string, number>(),
