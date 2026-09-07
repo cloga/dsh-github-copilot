@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
 
 const release = '0.1.3-alpha.1'
 async function sourceFixture() {
-  const base = await mkdtemp(join(tmpdir(), 'copilot-published-core-'))
+  // Windows runners may expose TEMP through an 8.3 alias or redirected parent.
+  // Give the subject a real physical source; explicit link rejection tests below
+  // still pass deliberate aliases and must continue to fail closed.
+  const base = await realpath(await mkdtemp(join(await realpath(tmpdir()), 'copilot-published-core-')))
   const root = join(base, 'source')
   await mkdir(join(root, 'src'), { recursive: true })
   await mkdir(join(root, 'tests'), { recursive: true })

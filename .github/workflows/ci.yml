@@ -56,6 +56,16 @@ jobs:
         run: pnpm verify:reasoning-ui -- dsh-upstream
       - name: Verify real Core config integration
         run: pnpm verify:controlled-core -- dsh-upstream
+      - name: Prepare unchanged alpha tagged-source runtime verification
+        if: matrix.dsh.release == '0.1.3-alpha.1'
+        shell: bash
+        run: |
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.dsh.release }}"
+      - name: Exercise actual alpha runtime without building or patching Core
+        if: matrix.dsh.release == '0.1.3-alpha.1'
+        shell: bash
+        run: |
+          node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts"
       - run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts
@@ -71,7 +81,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        release: [0.1.2-rc.1, 0.1.3-alpha.1]
+        # alpha.1 has a source release but no standalone npm artifacts.
+        # Its actual runtime is exercised in the unchanged tagged-source job above.
+        release: [0.1.2-rc.1]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:

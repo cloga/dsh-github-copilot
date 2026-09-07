@@ -1,5 +1,7 @@
 import { readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { resolve, dirname } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
@@ -19,18 +21,66 @@ function packageInfo(name: string): { version: string; path: string } {
   }
   return { version: value.version, path }
 }
-const runtimeInfo = packageInfo('@deepseek-ai/dsh-llm')
+const taggedEvidence = process.env.DSH_CORE_EVIDENCE === 'tagged-source-runtime'
+const packageLocations = new Map([
+  ['@deepseek-ai/dsh-llm', 'packages/llm/llm'],
+  ['@deepseek-ai/dsh-llm-pi-ai', 'packages/llm/llm-pi-ai'],
+  ['@deepseek-ai/dsh-attachment', 'packages/attachment/attachment'],
+])
+function object(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Invalid tagged Core evidence object')
+  return value as Record<string, unknown>
+}
+function text(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0) throw new Error('Invalid tagged Core evidence path or version')
+  return value
+}
+const taggedManifestPath = taggedEvidence ? text(process.env.DSH_TAGGED_CORE_MANIFEST) : undefined
+const taggedManifest = taggedManifestPath === undefined ? undefined : object(JSON.parse(readFileSync(taggedManifestPath, 'utf8')))
+function selectedPackageInfo(name: string): { version: string; path: string } {
+  if (taggedManifest === undefined) return packageInfo(name)
+  if (!Array.isArray(taggedManifest.packages)) throw new Error('Tagged Core evidence has no package table')
+  const entry = taggedManifest.packages.map(object).find(item => item.name === name)
+  if (entry === undefined) throw new Error(`Tagged Core evidence is missing ${name}`)
+  const relative = packageLocations.get(name)
+  if (relative === undefined) throw new Error('Unexpected tagged Core evidence package')
+  const root = realpathSync(text(taggedManifest.coreRoot))
+  const path = realpathSync(text(entry.manifestPath))
+  expect(path).toBe(realpathSync(resolve(root, relative, 'package.json')))
+  expect(realpathSync(text(entry.entry))).toBe(realpathSync(resolve(root, relative, 'src/index.ts')))
+  const metadata = object(JSON.parse(readFileSync(path, 'utf8')))
+  expect(metadata.name).toBe(name)
+  expect(entry.version).toBe(metadata.version)
+  return { version: text(metadata.version), path }
+}
+const runtimeInfo = selectedPackageInfo('@deepseek-ai/dsh-llm')
 const expectedRelease = process.env.DSH_PUBLISHED_CORE_RELEASE ?? runtimeInfo.version
-// An explicitly requested alpha run MUST execute its tests, even if the actual
-// installed package is wrong. The version assertion then fails rather than skips.
-const runAlpha = expectedRelease === ALPHA || runtimeInfo.version === ALPHA
+// An explicitly requested alpha or tagged-source run MUST execute the file
+// tests. Wrong installed packages/aliases fail identity checks rather than skip.
+const runAlpha = taggedEvidence || expectedRelease === ALPHA || runtimeInfo.version === ALPHA
+const evidenceLabel = taggedEvidence ? 'unchanged tagged-source Core fixture' : 'published unmodified Core fixture'
 const MODEL = 'published-fixture-model'
 const contexts: Context[] = []
 
-function assertRelease(): void {
+async function assertRelease(): Promise<void> {
   expect([RC, ALPHA]).toContain(expectedRelease)
-  for (const name of ['@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-llm-pi-ai', '@deepseek-ai/dsh-attachment']) {
-    expect(packageInfo(name).version, `${name} must match the requested published fixture`).toBe(expectedRelease)
+  for (const name of packageLocations.keys()) {
+    expect(selectedPackageInfo(name).version, `${name} must match the requested ${evidenceLabel}`).toBe(expectedRelease)
+  }
+  if (taggedManifest !== undefined) {
+    expect(expectedRelease).toBe(ALPHA)
+    expect(taggedManifest.release).toBe(expectedRelease)
+    expect(taggedManifest.commit).toBe('d347e703908d0406b7a7ef80e3a0e594d86b2215')
+    const identityModule = realpathSync(text(taggedManifest.identityModule))
+    // The runner generates this module in its own scratch directory using
+    // absolute imports, independent of the bare-import aliases under test.
+    expect(dirname(identityModule)).toBe(dirname(realpathSync(taggedManifestPath!)))
+    const identity: unknown = await import(/* @vite-ignore */ pathToFileURL(identityModule).href)
+    const classes = object(identity)
+    expect(LlmRuntime).toBe(classes.LlmRuntime)
+    expect(PiAiAdapter).toBe(classes.PiAiAdapter)
+    expect(Context).toBe(classes.Context)
+    return
   }
   const fromAdapter = createRequire(require.resolve('@deepseek-ai/dsh-llm-pi-ai'))
   expect(realpathSync(fromAdapter.resolve('@deepseek-ai/dsh-llm'))).toBe(realpathSync(require.resolve('@deepseek-ai/dsh-llm')))
@@ -93,9 +143,9 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-describe('published unmodified Core fixture', () => {
-  it('uses the exact requested published runtime and the plugin-owned public adapter subclass', async () => {
-    assertRelease()
+describe(evidenceLabel, () => {
+  it(`uses the exact requested ${taggedEvidence ? 'tagged-source' : 'published'} runtime and the plugin-owned public adapter subclass`, async () => {
+    await assertRelease()
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('Identity check must not perform network requests') }))
     await runtime()
     expect(globalThis.fetch).not.toHaveBeenCalled()
@@ -103,7 +153,7 @@ describe('published unmodified Core fixture', () => {
 
   it.skipIf(!runAlpha).each(['top-level', 'nested-tool-result'] as const)(
     'alpha.1 projects %s files before native dispatch while preserving encrypted replay', async placement => {
-      assertRelease()
+      await assertRelease()
       expect(runtimeInfo.version).toBe(ALPHA)
       const requests: Record<string, unknown>[] = []
       vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {

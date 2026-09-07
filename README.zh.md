@@ -19,7 +19,7 @@
 | DSH `0.1.2-rc.1` | Tag commit [`a66e470`](https://github.com/deepseek-ai/deepseek-harness/commit/a66e4702047846cdaa10c66c9d3df3951f5ea70d) | **Settings → Models** provider card |
 | DSH `0.1.3-alpha.1` | Tag commit [`d347e70`](https://github.com/deepseek-ai/deepseek-harness/commit/d347e703908d0406b7a7ef80e3a0e594d86b2215) | **Settings → Models** provider card |
 
-上表是仓库记录的兼容性基线，不等于本次通用发现改动已经完成全部基线验收。原始 rc.2 tag 不能解析逐模型 `api`，不能用它的版本号证明混合协议可用。通用账号路由通过已发布的 adapter 接口传入经过校验的模型数据，不以新增 Core 服务或修改 Core 为前提。当前开发适配目标是 pi-ai `0.85.1`；升级 SDK 后仍须检查 Copilot 端点、能力及公开接口兼容，不能只凭 Release 中“已加入某模型”认定 transport 正确。
+上表是仓库记录的兼容性基线，不等于本次通用发现改动已经完成全部基线验收。原始 rc.2 tag 不能解析逐模型 `api`，不能用它的版本号证明混合协议可用。通用账号路由通过已发布的 adapter 接口传入经过校验的模型数据，不以新增 Core 服务或修改 Core 为前提。当前开发适配目标是 pi-ai `0.85.1`；升级 SDK 后仍须检查 Copilot 端点、能力及公开接口兼容，不能只凭 Release 中“已加入某模型”认定 transport 正确。alpha.1 有源码 Release，但没有独立 npm 包；CI 因此使用隔离的测试解析器执行未修改的标签源码，不构建或打补丁到 Core。实际运行检查通过前，不宣称 alpha.1 兼容性已验收。
 
 ## 安装与登录
 

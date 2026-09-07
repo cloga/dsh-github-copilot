@@ -57,7 +57,8 @@
           "providerHeaders": "fetch-validated-discovery",
           "strictModeCompat": "route-switch",
           "fileContentHelper": "contentHasFile",
-          "evidenceScope": "published-api-target",
+          "evidenceScope": "unchanged-tagged-source-target",
+          "standaloneNpmArtifacts": "not-published",
           "managedProviderValidation": "not-verified"
         }
       ],

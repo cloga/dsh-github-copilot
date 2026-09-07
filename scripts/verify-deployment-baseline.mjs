@@ -197,7 +197,9 @@ const devCore = dshBaselines.find(entry => entry.release === '0.1.2-rc.1')
 assert(devCore.evidenceScope === 'published-api-target' && devCore.managedProviderValidation === 'synthetic-published-adapter', 'rc.1 evidence must stay scoped to synthetic published-adapter tests')
 assert(JSON.stringify(devCore.managedProviderTests) === JSON.stringify(['tests/preview-provider.spec.ts', 'tests/preview-route.spec.ts', 'tests/pi-provider-bridge.spec.ts']), 'published adapter evidence inventory differs')
 const alphaCore = dshBaselines.find(entry => entry.release === '0.1.3-alpha.1')
-assert(alphaCore.evidenceScope === 'published-api-target' && alphaCore.managedProviderValidation === 'not-verified', 'alpha.1 managed-provider validation must not be invented')
+assert(alphaCore.evidenceScope === 'unchanged-tagged-source-target'
+  && alphaCore.standaloneNpmArtifacts === 'not-published'
+  && alphaCore.managedProviderValidation === 'not-verified', 'alpha.1 source evidence must not pretend unavailable npm artifacts were tested')
 const metadata = manifest.capabilities?.find(capability => capability.id === 'account-driven-provider-metadata')
 assert(metadata?.activation === 'validated-account-endpoints-and-capabilities', 'managed models must follow account endpoint and capability evidence')
 const publicAdapter = manifest.capabilities?.find(capability => capability.id === 'public-adapter-account-model-route')
