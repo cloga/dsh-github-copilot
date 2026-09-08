@@ -166,12 +166,12 @@ function ensureAuthorization(ctx: Context): void {
 /** Activate the integration only after the complete DSH service contract is available. */
 function activate(ctx: Context, config: InlineConfig): void {
   assertDshCompatibility(ctx)
-  ctx.plugin(previewPlugin)
+  let current: () => InlineConfig = () => config
+  ctx.plugin(previewPlugin, { accountModelSettings: () => current() })
   ctx.plugin(GitHubCopilotAuthorizationController)
   const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx, async () => {
     await ensureGitHubCopilotProviderProfile(ctx)
   })
-  let current: () => InlineConfig = () => config
   // Only an actual eligible request creates a plan. Attach, settings, and
   // credential notifications must never start authenticated capability work.
   // A record notification cannot distinguish token refresh from account

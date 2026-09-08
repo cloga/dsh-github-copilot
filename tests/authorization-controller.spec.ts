@@ -259,6 +259,31 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.deleteRecord).not.toHaveBeenCalled()
   })
 
+  it('ensures account metadata without forcing past the shared cache or cooldown', async () => {
+    const harness = runtime({ configured: true })
+    const discover = vi.fn(async () => undefined)
+    harness.services.set('githubCopilotPreview', { discover, getView: () => ({ state: 'ready', models: [], rejected: [] }) })
+    await harness.controller.ensureModels()
+    expect(discover).toHaveBeenCalledExactlyOnceWith({ force: false })
+    expect(harness.begin).not.toHaveBeenCalled()
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.deleteRecord).not.toHaveBeenCalled()
+  })
+
+  it('does not automatically ensure models while signed out or authorization is pending', async () => {
+    const signedOut = runtime({ configured: false })
+    const discover = vi.fn()
+    signedOut.services.set('githubCopilotPreview', { discover })
+    await signedOut.controller.ensureModels()
+    expect(discover).not.toHaveBeenCalled()
+    const pending = runtime()
+    pending.services.set('githubCopilotPreview', { discover })
+    await pending.controller.start()
+    await expect(pending.controller.ensureModels()).resolves.toMatchObject({ inFlight: true })
+    expect(discover).not.toHaveBeenCalled()
+    await pending.controller.cancel()
+  })
+
   it('keeps discovery unavailable or failed separate from sign-in and sanitizes failures', async () => {
     const harness = runtime({ configured: true })
     await expect(harness.controller.discoverModels()).resolves.toMatchObject({ phase: 'signed-in', accountModels: {
@@ -379,6 +404,7 @@ describe('GitHubCopilotAuthorizationController', () => {
       cancel: async () => ({ ok: true, value: await harness.controller.cancel() }),
       signOut: async () => ({ ok: true, value: await harness.controller.signOut() }),
       discoverModels: vi.fn(async () => ({ ok: true, value: await harness.controller.discoverModels() })),
+      ensureModels: vi.fn(async () => ({ ok: true, value: await harness.controller.ensureModels() })),
       reconcile: async () => ({ ok: true, value: await harness.controller.reconcile() }),
     }
     const account = createCompactAccount(remote, value => value as GitHubCopilotAuthorizationView, async () => {})

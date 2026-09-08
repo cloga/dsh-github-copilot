@@ -118,10 +118,16 @@ describe('tsdown client artifact', () => {
     const injections = new Map<string, () => void>()
     const slotDisposals = new Map<string, ReturnType<typeof vi.fn>>()
     const result = { ok: true, value: { phase: 'signed-out', configured: false, writable: true, inFlight: false, notices: [] } }
-    const remote = { status: vi.fn(async () => result), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(), discoverModels: vi.fn(), reconcile: vi.fn() }
+    const remote = { status: vi.fn(async () => result), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(), discoverModels: vi.fn(), ensureModels: vi.fn(), reconcile: vi.fn() }
     const cleanups: Array<() => void> = []
+    const events = new Map<string, () => void>()
+    const on = vi.fn((event: string, listener: () => void) => {
+      events.set(event, listener)
+      return () => { events.delete(event) }
+    })
     const ctx = {
-      remote: { $mount: vi.fn(async () => async () => {}), githubCopilot: remote },
+      remote: { $mount: vi.fn(async () => async () => {}), $on: on, githubCopilot: remote },
+      on,
       logger: { warn: vi.fn() },
       slots: {
         spec: () => ({ kind: 'list', scope: 'root' }),
@@ -156,7 +162,7 @@ describe('tsdown client artifact', () => {
       cleanups.push(unmount)
       return { render, unmount }
     }
-    return { client, ctx, remote, registrations, injections, slotDisposals, instance,
+    return { client, ctx, remote, registrations, injections, slotDisposals, instance, events,
       dispose: async () => { await dispose(); for (const cleanup of cleanups) cleanup() } }
   }
 
@@ -234,6 +240,34 @@ describe('tsdown client artifact', () => {
     } finally { await fixture.dispose() }
   })
 
+  it.each(['credentials/reference-updated', 'connection/reset'])('clears built presentation on %s without background discovery and removes listeners on disposal', async event => {
+    const fixture = await surfaceFixture()
+    try {
+      const signed = { phase: 'signed-in', configured: true, writable: true, inFlight: false, notices: [],
+        accountModels: { state: 'ready', models: [{ id: 'example', name: 'Example', api: 'openai-responses' }], rejected: [] } }
+      fixture.remote.status.mockResolvedValue({ ok: true, value: signed })
+      const footer = fixture.instance(), element = fixture.registrations.get('settings.models.footer')!({})
+      footer.render(element)
+      for (let index=0;index<8;index++) await Promise.resolve()
+      const account = footer.render(element)?.props.children.props.account
+      expect(account.getSnapshot().view.accountModels.models).toHaveLength(1)
+      expect(fixture.remote.ensureModels).not.toHaveBeenCalled()
+      const staleListener = fixture.events.get(event)!
+      fixture.remote.status.mockResolvedValue({ ok: true, value: { phase: 'signed-in', configured: true, writable: true, inFlight: false, notices: [] } })
+      staleListener()
+      expect(account.getSnapshot().view).toBeUndefined()
+      for (let index=0;index<8;index++) await Promise.resolve()
+      expect(account.getSnapshot().view.accountModels).toBeUndefined()
+      expect(fixture.remote.status).toHaveBeenCalledTimes(2)
+      expect(fixture.remote.ensureModels).not.toHaveBeenCalled()
+      expect(fixture.remote.discoverModels).not.toHaveBeenCalled()
+      await fixture.dispose()
+      expect(fixture.events.size).toBe(0)
+      staleListener()
+      expect(fixture.remote.status).toHaveBeenCalledTimes(2)
+    } finally { await fixture.dispose() }
+  })
+
   it('mounts strict Host result codecs through the published rc.1 client carrier', async () => {
     const gateway = loadGatewayArtifact()
     const client = loadArtifact()
@@ -276,7 +310,7 @@ describe('tsdown client artifact', () => {
 
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
-      'status', 'reconcile', 'discoverModels', 'start', 'cancel', 'signOut',
+      'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
     ])
     for (const descriptor of contributions[0]!.descriptors) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })

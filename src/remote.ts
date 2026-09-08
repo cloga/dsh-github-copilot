@@ -15,6 +15,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       status(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       reconcile(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       discoverModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      ensureModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       cancel(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       signOut(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -67,7 +68,7 @@ const result = {
 
 const contribution: TypertRemoteContribution = {
   package: 'dsh-github-copilot',
-  descriptors: ['status', 'reconcile', 'discoverModels', 'start', 'cancel', 'signOut'].map(method => ({
+  descriptors: ['status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut'].map(method => ({
     id: `dsh-github-copilot:githubCopilot.${method}`,
     service: 'githubCopilotAuthorization',
     namespace: 'githubCopilot',

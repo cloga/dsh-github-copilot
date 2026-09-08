@@ -63,7 +63,7 @@ if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
 
 const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)).default
 const methods = remote.descriptors.map(descriptor => descriptor.method).sort()
-if (JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'reconcile', 'signOut', 'start', 'status'])) {
+if (JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'reconcile', 'signOut', 'start', 'status'])) {
   throw new Error('built Remote entry must expose status, explicit model discovery, reconciliation and authorization controls')
 }
 for (const descriptor of remote.descriptors) {

@@ -420,7 +420,7 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
     idle: 'Account models have not been refreshed.',
     loading: 'Account model discovery is still in progress. This panel does not poll automatically.',
     ready: 'Account metadata is ready. Select models under GitHub Copilot in the model picker.',
-    stale: 'This account model snapshot is stale. Refresh before relying on its metadata.',
+    stale: 'Showing the last checked model list. Freshness is checked when opening Models or preparing a model request.',
     error: 'Account model discovery failed. Use Refresh account models to retry.',
     disposed: 'Account model discovery is no longer active in this profile.',
     unconfigured: 'Sign in with GitHub before refreshing account models.',
@@ -546,12 +546,14 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     || state.error === 'COPILOT_AUTHORIZATION_CANCEL_FAILED' || state.error === 'COPILOT_SIGN_OUT_FAILED'
   const notice = activeAuthorizationNotice(view)
   const models = view?.accountModels
-  const modelStatus = state.operation === 'discoverModels' ? 'Refreshing models…'
-    : models?.state === 'ready' ? `${models.models.length} model${models.models.length === 1 ? '' : 's'}`
-      : models?.state === 'stale' ? 'Models need refresh'
-        : models?.state === 'error' ? 'Model discovery failed'
-          : models?.state === 'loading' ? 'Discovering models…'
-            : models?.state === 'unavailable' || models?.state === 'disposed' ? 'Models unavailable' : undefined
+  const refreshing = state.operation === 'discoverModels' || models?.state === 'loading'
+  // The Host alone retains same-account TTL-stale presentation. This count is
+  // not readiness, entitlement, or a reason to skip the freshness check.
+  const count = models !== undefined && (models.state === 'ready' || models.models.length > 0)
+    ? `${models.models.length} model${models.models.length === 1 ? '' : 's'}` : undefined
+  const modelStatus = refreshing ? count === undefined ? 'Refreshing models…' : `${count} · Refreshing…`
+    : models?.state === 'error' ? count === undefined ? 'Model discovery failed' : `${count} · Refresh failed`
+      : count ?? (models?.state === 'unavailable' || models?.state === 'disposed' ? 'Models unavailable' : undefined)
   const status = state.checking ? 'Checking status…'
     : state.operation === 'signOut' ? 'Signing out…'
       : state.operation === 'cancel' ? 'Cancelling sign-in…'
@@ -576,10 +578,10 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     createElement('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginInlineStart: 'auto', minWidth: 0 } },
       (view === undefined && !state.checking) || state.error === 'COPILOT_AUTHORIZATION_STATUS_FAILED' || uncertain
         ? actionButton('Retry status', account.retryStatus, state.checking || state.operation !== undefined) : null,
-      signedIn ? actionButton(state.operation === 'discoverModels' ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
-        { 'data-dsh-github-copilot-refresh-models': true })
-        : !authorizing && view !== undefined ? actionButton('Sign in with GitHub', account.start, pendingAction || view.writable === false,
-          { title: view.writable === false ? 'Credentials are read-only' : undefined }) : null,
+      signedIn && state.error === 'COPILOT_MODEL_DISCOVERY_FAILED'
+        ? actionButton('Retry', account.refreshModels, pendingAction, { 'data-dsh-github-copilot-retry-models': true }) : null,
+      !signedIn && !authorizing && view !== undefined ? actionButton('Sign in with GitHub', account.start, pendingAction || view.writable === false,
+        { title: view.writable === false ? 'Credentials are read-only' : undefined }) : null,
       actionButton('Manage', () => setManageOpen(open => !open), false, { 'aria-expanded': manageOpen, 'aria-controls': managementId }))),
   state.error === undefined ? null : createElement('p', { role: 'alert', 'data-dsh-github-copilot-account-error': state.error,
     style: { margin: '8px 0 0', fontSize: '13px', overflowWrap: 'anywhere' } }, compactErrorMessage(state.error)),
@@ -590,8 +592,10 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     actionButton(state.operation === 'cancel' ? 'Cancelling…' : 'Cancel sign-in', account.cancel, state.operation === 'cancel')) : null,
   manageOpen ? createElement('div', { id: managementId, role: 'region', 'aria-label': 'GitHub Copilot account management',
     style: { marginTop: '12px', paddingTop: '12px', borderTop: '1px solid color-mix(in srgb, currentColor 18%, transparent)', overflowWrap: 'anywhere' } },
-    createElement('p', { style: { margin: '0 0 10px', fontSize: '13px' } }, 'Signing in here automatically fetches your account models once. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
-    models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Already signed in? Refresh models to load the models available to this account.')
+    createElement('p', { style: { margin: '0 0 10px', fontSize: '13px' } }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
+    signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
+      { 'data-dsh-github-copilot-refresh-models': true }) : null,
+    models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Account model metadata is not available yet.')
       : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models }),
     routeStatusMessage(view) === undefined ? null : createElement('p', { role: 'status' }, routeStatusMessage(view)),
     view?.route?.state === 'needs-repair' && signedIn ? actionButton('Repair model configuration', account.reconcile, pendingAction) : null,
@@ -672,6 +676,7 @@ export function createAccountSurfaces() {
   }
   return {
     getSnapshot: () => snapshot,
+    invalidate() { account?.invalidate() },
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
     mount(seat: AccountSurfaceSeat, token: symbol, remote: GitHubCopilotPreviewFooterProps['remote']) {
       if (!active || !seat.active) return () => {}
@@ -725,6 +730,8 @@ export function GitHubCopilotSettingsSection(
 
 function registerUi(ctx: ClientContext): () => void {
   const surfaces = createAccountSurfaces()
+  const disposeCredentials = ctx.remote.$on('credentials/reference-updated', () => surfaces.invalidate())
+  const disposeReset = ctx.on('connection/reset', () => surfaces.invalidate())
   let active = true
   let footerActive = false
   let settingsSectionActive = false
@@ -810,6 +817,8 @@ function registerUi(ctx: ClientContext): () => void {
   return () => {
     active = false
     surfaces.dispose()
+    disposeCredentials()
+    disposeReset()
     disposeFooterInjection()
     disposeProviderCardInjection()
     disposeSettingsSectionInjection()

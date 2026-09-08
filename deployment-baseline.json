@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.5"
+    "version": "0.4.0-alpha.6"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -115,7 +115,7 @@
     {
       "id": "account-scoped-discovery-snapshot",
       "required": true,
-      "activation": "lazy-account-bound-discovery-no-stale-fallback",
+      "activation": "bounded-account-freshness-with-display-only-stale-metadata",
       "sourceMarkers": [
         {"file": "src/account-model-source.ts", "marker": "createAccountModelSource"},
         {"file": "src/account-model-source.ts", "marker": "redirect: 'error'"},
@@ -132,7 +132,10 @@
         {"file": "tests/account-model-source.spec.ts", "name": "bounds timeout during %s even if the dependency ignores cancellation"},
         {"file": "tests/account-model-source.spec.ts", "name": "enforces cumulative UTF-8 byte limits rather than trusting content length"},
         {"file": "tests/account-model-source.spec.ts", "name": "rejects malformed UTF-8 and clears the reader without preserving response contents"},
-        {"file": "tests/account-model-source.spec.ts", "name": "refuses sensitive header override %s"}
+        {"file": "tests/account-model-source.spec.ts", "name": "refuses sensitive header override %s"},
+        {"file": "tests/account-model-source.spec.ts", "name": "defaults to a day-long metadata cache and a five-minute passive failure cooldown"},
+        {"file": "tests/account-model-source.spec.ts", "name": "force bypasses the cooldown, concurrent callers coalesce, and invalidation resets it"},
+        {"file": "tests/account-model-source.spec.ts", "name": "retains same-generation display metadata across TTL expiry, loading, and fetch failure without fresh reuse"}
       ]
     },
     {
@@ -254,7 +257,7 @@
       ],
       "tests": [
         {"file": "tests/client-bundle.spec.ts", "name": "mounts strict Host result codecs through the published rc.1 client carrier"},
-        {"file": "tests/account-model-remote.spec.ts", "name": "registers explicit discovery with the same strict safe authorization view codec"},
+        {"file": "tests/account-model-remote.spec.ts", "name": "registers %s with the same strict safe authorization view codec"},
         {"file": "tests/account-model-remote.spec.ts", "name": "rejects private or unrequested discovery field %s"},
         {"file": "tests/account-model-remote.spec.ts", "name": "rejects secret-bearing model entries and oversized model lists"}
       ]
@@ -362,7 +365,7 @@
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "accountModelsView"},
         {"file": "src/authorization-controller.ts", "marker": "async discoverModels()"},
-        {"file": "src/remote.ts", "marker": "'status', 'reconcile', 'discoverModels', 'start', 'cancel', 'signOut'"}
+        {"file": "src/remote.ts", "marker": "'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut'"}
       ],
       "tests": [
         {"file": "tests/authorization-controller.spec.ts", "name": "reads status repeatedly without repairing, authorizing or making network calls"},
@@ -575,14 +578,16 @@
         {"file": "tests/compact-account.spec.ts", "name": "renders a neutral checking state then only a compact signed-in row"},
         {"file": "tests/compact-account.spec.ts", "name": "shows signed-out CTA and automatically reveals authorization without opening Manage"},
         {"file": "tests/compact-account.spec.ts", "name": "retains manual management and live actions when toggled during authorization"},
-        {"file": "tests/compact-account.spec.ts", "name": "refreshes from the header without opening Manage and shows collapsed errors"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps normal refresh inside Manage and visible Retry outside for actual failures"},
         {"file": "tests/compact-account.spec.ts", "name": "cleans timers and ignores late requests after detach or Remote replacement"},
         {"file": "tests/compact-account.spec.ts", "name": "keeps cancellation failures visible without reviving a stale code"},
         {"file": "tests/compact-account.spec.ts", "name": "orders cancellation after pending start so a late Host preflight cannot create an abandoned flow"},
         {"file": "tests/compact-account.spec.ts", "name": "discovers exactly once after immediate confirmed completion and permits later manual refresh"},
         {"file": "tests/compact-account.spec.ts", "name": "waits through repeated authorization polls and discovers only on confirmed completion"},
         {"file": "tests/compact-account.spec.ts", "name": "keeps automatic post-login discovery owned across Manage toggles and shows a retryable error"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "keeps completion pending through post-login repair so the Client discovers exactly once afterwards"}
+        {"file": "tests/authorization-controller.spec.ts", "name": "keeps completion pending through post-login repair so the Client discovers exactly once afterwards"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps stale count visible during initial metadata refresh without a warning or header refresh button"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "ensures account metadata without forcing past the shared cache or cooldown"}
       ]
     }
   ],

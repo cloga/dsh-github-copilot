@@ -6,6 +6,7 @@ export interface CompactAccountRemote {
   cancel(): Promise<unknown>
   signOut(): Promise<unknown>
   discoverModels(): Promise<unknown>
+  ensureModels(): Promise<unknown>
   reconcile(): Promise<unknown>
 }
 type Operation = 'start' | 'cancel' | 'signOut' | 'discoverModels' | 'reconcile'
@@ -23,8 +24,10 @@ const failures = {
   discoverModels: 'COPILOT_MODEL_DISCOVERY_FAILED', reconcile: 'COPILOT_CONFIGURATION_REPAIR_FAILED',
 } as const
 
-/** One mounted account's read-only snapshot, authorization poll and explicit actions.
- * A confirmed user Start earns one bounded discovery after sign-in completes.
+/** One mounted account's snapshot, bounded freshness check and explicit actions.
+ * Initial signed-in status ensures missing/idle/stale/error metadata once or
+ * joins loading metadata; the Host owns single flight and failure cooldown.
+ * A confirmed user Start earns one forced discovery after sign-in completes.
  * No Remote call occurs during construction. Every await is fenced by lifetime
  * and request generation; UI disclosure changes never reconstruct this owner.
  */
@@ -37,6 +40,8 @@ export function createCompactAccount(
   let active = false, lifetime = 0, generation = 0, copyGeneration = 0
   let suppressNotice = false
   let awaitingSignIn = false
+  let initialStatus = true, invalidation = 0
+  let statusTicket: number | undefined
   let pendingStart: Promise<boolean> | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   const listeners = new Set<() => void>()
@@ -72,9 +77,9 @@ export function createCompactAccount(
       ...failure === undefined ? {} : { error: failure },
     }
     let actionError = failure
-    if (operation === 'discoverModels') {
-      if (view.accountModels === undefined) actionError = failures.discoverModels
-      else if (['error', 'unavailable', 'disposed'].includes(view.accountModels.state)) actionError = failures.discoverModels
+    if (view.accountModels?.state === 'error' || (operation === 'discoverModels'
+      && (view.accountModels === undefined || ['unavailable', 'disposed'].includes(view.accountModels.state)))) {
+      actionError = failures.discoverModels
     }
     publish({ view, error: actionError })
     if (previousCode !== noticeCode() || !decoded.inFlight) {
@@ -101,30 +106,39 @@ export function createCompactAccount(
   }
   const readStatus = async (checking: boolean): Promise<void> => {
     if (!active || state.operation !== undefined) return
-    const ticket = ++generation
+    const ticket = ++generation, revision = invalidation
+    statusTicket = ticket
     stopTimer()
     if (checking) publish({ checking: true, error: undefined })
-    let success = false, discover = false
+    let success = false, discover = false, ensure = false
     try {
       const result = await remote.status()
-      if (!current(ticket)) return
+      if (!current(ticket) || revision !== invalidation) return
       const decoded = resultView(result)
       discover = completedSignIn(decoded)
+      // Consume before publishing; retries, event-driven reads and surface
+      // transfers cannot turn this into an automatic discovery loop.
+      ensure = initialStatus && decoded.phase === 'signed-in' && decoded.configured
+        && !decoded.inFlight && decoded.error === undefined
+        && (decoded.accountModels === undefined || ['idle', 'stale', 'error', 'loading'].includes(decoded.accountModels.state))
+      initialStatus = false
       accept(decoded, 'status')
       success = true
     } catch {
-      if (current(ticket)) publish({ error: failures.status })
+      if (current(ticket) && revision === invalidation) publish({ error: failures.status })
     } finally {
       if (current(ticket)) {
+        statusTicket = undefined
+        if (revision !== invalidation) { await readStatus(true); return }
         publish({ checking: false })
         if (success && current(ticket)) {
-          if (discover) await run('discoverModels')
+          if (discover || ensure) await run('discoverModels', !discover)
           else schedulePoll()
         }
       }
     }
   }
-  const run = async (operation: Operation): Promise<void> => {
+  const run = async (operation: Operation, ensure = false): Promise<void> => {
     if (!active) return
     const view = state.view
     if (operation === 'cancel') {
@@ -135,7 +149,9 @@ export function createCompactAccount(
       if (operation === 'signOut' && !view.writable) return
       if (operation === 'reconcile' && view.route?.state !== 'needs-repair') return
     }
-    const ticket = ++generation
+    const ticket = ++generation, revision = invalidation
+    statusTicket = undefined
+    initialStatus = false
     const owner = lifetime
     const waitForStart = operation === 'cancel' ? pendingStart : undefined
     let settleStart: ((confirmed: boolean) => void) | undefined
@@ -159,11 +175,11 @@ export function createCompactAccount(
         if (!confirmed) throw new Error('Start outcome is unconfirmed')
       }
       if (!active || lifetime !== owner) return
-      const result = await remote[operation]()
+      const result = await remote[ensure ? 'ensureModels' : operation]()
       if (!active || lifetime !== owner || (operation !== 'start' && !current(ticket))) return
       const decoded = resultView(result)
       settleStart?.(true)
-      if (!current(ticket)) return
+      if (!current(ticket) || revision !== invalidation) return
       if (operation === 'start') discover = completedSignIn(decoded)
       accept(decoded, operation)
       success = true
@@ -178,6 +194,7 @@ export function createCompactAccount(
       if (thisStart !== undefined && pendingStart === thisStart) pendingStart = undefined
       if (current(ticket)) {
         publish({ operation: undefined })
+        if (current(ticket) && revision !== invalidation) { await readStatus(true); return }
         // Release the Start barrier before discovery, then fence again because
         // completion subscribers can supersede this generation synchronously.
         if (success && current(ticket)) {
@@ -193,12 +210,21 @@ export function createCompactAccount(
     attach() {
       const owner = ++lifetime
       active = true; generation++; copyGeneration++; suppressNotice = false; pendingStart = undefined; awaitingSignIn = false
+      initialStatus = true; invalidation++; statusTicket = undefined
       stopTimer(); state = initial()
       void readStatus(true)
       return () => {
         if (lifetime !== owner) return
         active = false; generation++; copyGeneration++; awaitingSignIn = false; stopTimer()
       }
+    },
+    // Public credential/reset notifications carry no account identity. Clear
+    // all presentation immediately; never infer entitlement or force discovery.
+    invalidate() {
+      if (!active) return
+      invalidation++; copyGeneration++; initialStatus = false; stopTimer()
+      publish({ view: undefined, checking: true, error: undefined, copyState: 'idle' })
+      if (state.operation === undefined && statusTicket === undefined) void readStatus(true)
     },
     retryStatus: () => state.checking ? Promise.resolve() : readStatus(true),
     start: () => run('start'), cancel: () => run('cancel'), signOut: () => run('signOut'),
