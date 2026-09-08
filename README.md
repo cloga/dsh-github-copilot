@@ -21,10 +21,10 @@ The table retains historical source pins; it does not imply the new account-mode
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.7`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.8`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.7/dsh-github-copilot-0.4.0-alpha.7.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/dsh-github-copilot-0.4.0-alpha.8.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
@@ -41,7 +41,7 @@ One shared account-state owner survives transfer while another eligible surface 
 
 The public provider-card slot is additive: it cannot replace Core's **Edit/Delete** controls. The native editor remains available, but normal plugin discovery needs no manual model definitions. Embedding the controls does not merge `github-copilot` with `github-copilot-preview`, remove configuration, rewrite history or change model selection. If controls are missing from both eligible card and fallback, verify the active profile and loaded Host/Client version.
 
-**Current preview (`0.4.0-alpha.7`):** actual built Client in isolated Edge with synthetic Remote replies and a provider-shell fixture. The normal header shows sign-in status, model count, last successful update time and **Manage**; manual **Refresh models** appears only inside **Manage**. The browser fixture covered retained stale counts during refresh, status-only fresh reopen, manual refresh, Retry, credential clearing, forced login discovery and a 375 px viewport, with no external network requests or browser errors. This is not live Core/production authorization evidence; Host 24-hour TTL and cooldown timing are covered separately by unit tests, not these screenshots.
+**Timestamp illustration (`0.4.0-alpha.7`):** the retained images show that built Client in isolated Edge with synthetic Remote replies and a provider-shell fixture. They do not prove alpha.8 session/search isolation, the Add warning, or a completed route migration; no visual redesign is claimed beyond the new draft warning. The normal header shows sign-in status, model count, last successful update time and **Manage**; manual **Refresh models** appears only inside **Manage**. The browser fixture covered retained stale counts during refresh, status-only fresh reopen, manual refresh, Retry, credential clearing, forced login discovery and a 375 px viewport, with no external network requests or browser errors. This is not live Core/production authorization evidence; Host 24-hour TTL and cooldown timing are covered separately by unit tests, not these screenshots.
 
 The subdued **Updated … ago** timestamp uses the last successful model snapshot, not the time the page opened. Its tooltip and accessible label provide the complete local date/time and time zone. Display text updates locally as time passes without fetching status or models. Refresh/failure retains the previous successful time while that account's display evidence remains valid; sign-out/account invalidation clears it. Missing or invalid timestamps are hidden; future clock values use an absolute date instead of a misleading age. Manage does not repeat the timestamp.
 
@@ -100,6 +100,16 @@ No `copilot2api` process, external gateway, placeholder API key, pasted GitHub t
 
 DSH Core continues to own model selection, sandboxing, tools, attachments, and other providers. `@deepseek-ai/dsh-llm-pi-ai` owns the Copilot adapter, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport. Credentials remain Host-only.
 
+## Shared account, independent sessions (V3)
+
+One Host-owned Copilot account supplies many account-discovered models. Each explicitly selected or history-backed Session keeps its own model context: search for Session A uses the captured effective request-header/config of initiating Session A (or explicit request `GenerateOptions`), not Session B's choice or a future global default C. Search plans are cached per owner so different-model A/B requests do not reuse or cancel each other's plans. Account metadata remains shared; capability/probe and credential checks still apply.
+
+Cold Chat picker and `/model` `listModels()` calls ensure the shared managed source without opening Settings first. An actual managed search also performs a non-forcing shared ensure before deriving route/model facts. These paths use the same 24-hour maximum TTL and failure cooldown below; no new global current-model or search-status card is added.
+
+**Native selection limit:** public Core `session.selectModel` also saves the future global default. This plugin does not replace that behavior: selecting one Session does not rewrite other selected/history-backed Sessions, but empty Sessions without a selection may still inherit the changed default. Do not promise every unselected Session is immutable.
+
+**Native Add is warning-only:** the new Copilot provider draft warns that saving a native profile adds another real model group, not a second account. Published additive APIs cannot veto native Add or disable **Save**. The native editor remains; this warning is not absolute prevention or enforcement of a single route. Actual one-managed-route deployment requires the separately approved [Ops migration](./docs/single-route-migration.md) after release, not hidden groups or automatic configuration removal.
+
 ## Authorization and route behavior
 
 `llm-pi-ai` registers the OAuth method; the authorization service orchestrates the interaction; this package contributes the UI/Remote controller and route reconciliation. Core supplies authorization on rc.1. On rc.2 profiles that omit it, this package mounts its runtime dependency and reuses any provider already present.
@@ -140,6 +150,10 @@ Before a grant is persisted or reused, the Host normalizer rebuilds only pi-ai's
 
 ## Hosted search
 
+Search identity comes from the captured initiating Session's effective request-header/config or explicit `GenerateOptions`, never the future global default. Core `Agent.options` remains the activation seed: model selection overrides request/assembly, with effective config recorded in `Session.requestHeader().config` before tools. Without proven request context, traditional search is unavailable. After a new model is selected but before its next request, the previous header must not be treated as current prompt guidance. Per-owner plan caches keep different-model Sessions independent. An actual cold managed search first ensures the shared account metadata without force, then derives model facts and applies the existing account/protocol/allowlist/probe gates. Traditional `ctx.web` search requires usable `agents.currentInitiator`; without it, search reports a named unavailable diagnostic rather than borrowing a default. Explicit marked `GenerateOptions` can still bind eligible inline requests, uncached when no owner is available, under all existing guards.
+
+**Credential-change limit:** an OAuth notification during initial lazy metadata discovery cannot distinguish the discovery's own token rotation from an external account change through current public status. That first search deliberately fails closed with `WEB_PROVIDER_UNAVAILABLE`, before probe/wire work. A later user/driver request may retry with refreshed credentials; there is no automatic retry or promise of seamless first-attempt refresh.
+
 - **Managed-route conversations:** `github-copilot-preview` uses the native adapter, not the custom inline wire; this preserves account evidence, replay and attachment handling.
 - **`github-copilot-hosted` through `ctx.web.search()`:** supports account-authorized OpenAI Responses candidates, including the single managed route. Ordinary chat success is not search capability proof.
 - **Legacy canonical inline agent-loop path:** eligible `github-copilot` requests support Responses or Anthropic Messages native-search candidates only while that legacy route remains configured.
@@ -155,7 +169,7 @@ Installing this package registers `github-copilot-hosted` but deliberately does 
     fetchProvider: http
 ```
 
-A patch row replaces the target row's complete `config`, so keep `fetchProvider: http` for the default HTTP fetcher (or retain your explicitly configured fetch provider). If a `web` override already exists, update that row rather than replacing the whole patch file; keep unrelated configuration. Restart that profile after editing. This is a global profile choice, not model-aware routing: on a non-Copilot or non-Responses route, `web_search` reports the configured Copilot provider unavailable and does not fall back to DeepSeek. To undo it, remove only the row added for this opt-in or restore your previous `web` configuration.
+A patch row replaces the target row's complete `config`, so keep `fetchProvider: http` for the default HTTP fetcher (or retain your explicitly configured fetch provider). If a `web` override already exists, update that row rather than replacing the whole patch file; keep unrelated configuration. Restart that profile after editing. The choice of Web provider is profile-wide, but Copilot search resolves the initiating Session/request model rather than the global model default. An ineligible non-Copilot or non-Responses initiating route reports unavailable and does not fall back to DeepSeek. To undo it, remove only the row added for this opt-in or restore your previous `web` configuration.
 
 An explicit `web.searchProvider` takes precedence over `DSH_WEB_SEARCH_PROVIDER`. Setting that environment variable alone will not override a bundle that already selects `deepseek-official`. A `DEEPSEEK_API_KEY` search error therefore means the direct search Tool still selected DeepSeek; Copilot sign-in does not configure DeepSeek credentials. The Copilot search path uses its own OAuth grant and does not require that key.
 
@@ -208,7 +222,7 @@ The plugin's `github-copilot` settings section controls account-metadata freshne
 | `accountModelTtlMs` | `86400000` | Maximum account-metadata reuse window in milliseconds (24h); does not extend credentials or proof validity. |
 | `accountModelFailureCooldownMs` | `300000` | Failure cooldown in milliseconds (5min) for non-forcing discovery; no periodic retries. |
 | `enabled` | `true` | Enable both hosted-search surfaces. |
-| `providers` | `[]` | Optional route allowlist for both surfaces; empty follows the selected route. |
+| `providers` | `[]` | Optional route allowlist for both surfaces; empty follows the initiating route. Existing nonempty lists are preserved; Ops must explicitly review any legacy-ID change to `github-copilot-preview`. |
 | `includeSources` | `true` | Request provider citations on the inline path. The `ctx.web` bridge always requests and returns sources. |
 | `stripServerTools` | `true` | On the inline path, remove local function variants of provider-hosted search tools. |
 | `idleTimeoutMs` | `300000` | Inline stream idle timeout and `ctx.web` request deadline, in milliseconds. |
@@ -275,7 +289,7 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 
 Attribution follows the actual tool: `Assisted-by: DeepSeek Harness (DSH)` for DSH-assisted changes, not a Copilot App co-author inferred from the model provider. Keep the human Git author and reserve `Co-authored-by` for verified collaborators. Merge, profile install, sign-out and worktree checkout require explicit approval. Important updates include post-merge release follow-through under the policy below; they do not require another release prompt.
 
-Evidence is layered: package presence/import and passing synthetic tests do not prove live DSH activation, account entitlement, model transport or hosted search. Authorization `status()` is read-only; explicit reconciliation/startup may persist configuration, while capability probes run only on actual eligible requests. None of these reports implies live transport success without a real request. Session model overrides that differ from the default plan now keep Core transport instead of using the default model. See the [readiness audit](./docs/agent-readiness.md) for evidence and remaining limitations.
+Evidence is layered: package presence/import and passing synthetic tests do not prove live DSH activation, account entitlement, model transport or hosted search. Authorization `status()` is read-only; explicit reconciliation/startup may persist configuration, while capability probes run only on actual eligible requests. None of these reports implies live transport success without a real request. Search resolves captured effective initiating Session request config or explicit request options and keeps per-owner plans instead of deriving them from the future global default; unsupported context still fails closed. Release, Ops migration and registry readback remain separate evidence. See the [readiness audit](./docs/agent-readiness.md) for evidence and remaining limitations.
 
 ## Important-update release delivery
 
@@ -290,8 +304,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`); the historical `cloga` suffix identified downstream fork builds and is no longer used for new versions. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, marks prerelease versions accordingly, and creates the GitHub Release only after every preceding step succeeds.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.7/dsh-github-copilot-0.4.0-alpha.7.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.7/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/dsh-github-copilot-0.4.0-alpha.8.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -299,7 +313,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.7.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.8.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

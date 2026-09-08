@@ -1012,6 +1012,21 @@ describe('GitHub Copilot Models client', () => {
     return { ctx, disposeRemote, disposeUi, disposePresentation, register, registrations, injections }
   }
 
+  it('warns before native Copilot re-add without pretending to disable Core Save or creating another account owner', async () => {
+    const { ctx, register } = clientContext(['settings.models.provider-card', 'settings.models.footer'])
+    const dispose = await apply(ctx as never)
+    const render = register.mock.calls.find(([options]) => options.name === 'settings.models.provider-card')?.[1] as (props: object) => ReactElement
+    const draft = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: false, keyConfigured: false }
+    const warning = render(draft)
+    expect(warning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
+    expect(warning.props.children).toContain('another model group')
+    expect(warning.props.children).toContain('cannot disable the native Save action')
+    expect(warning.type).not.toBe(GitHubCopilotAccountSurface)
+    expect(render({ ...draft, provider: { ...draft.provider, provider: 'openai' } }).props['data-dsh-github-copilot-native-add-warning']).toBeUndefined()
+    expect(render({ ...draft, configured: true }).type).toBe(GitHubCopilotAccountSurface)
+    await dispose()
+  })
+
   it('registers coordinated provider and fallback seats without starting either controller during registration', async () => {
     const { ctx, register, registrations, injections } = clientContext([
       'settings.models.provider-card', 'settings.models.footer', 'settings.section',

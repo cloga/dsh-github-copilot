@@ -32,7 +32,7 @@ export const COPILOT_HOSTED_SEARCH_PROVIDER_ID = GITHUB_COPILOT_HOSTED_SEARCH_PR
 /** Build the search-only provider registered with `ctx.web`. */
 export function createTraditionalSearchProvider(
   available: () => boolean,
-  plan: () => SearchPlan,
+  plan: (signal?: AbortSignal) => SearchPlan | Promise<SearchPlan>,
   hooks: InlineHooks,
   config: () => InlineConfig,
 ): WebSearchProvider {
@@ -42,9 +42,9 @@ export function createTraditionalSearchProvider(
     search: (request, signal) => {
       if (signal?.aborted === true) return Promise.reject(aborted())
       if (!available()) {
-        return Promise.reject(new WebError('the github-copilot-hosted search provider is unavailable for the current route', 'WEB_PROVIDER_UNAVAILABLE'))
+        return Promise.reject(new WebError('the github-copilot-hosted search provider requires an initiating Agent via agents.currentInitiator() and an eligible Session.requestHeader().config route', 'WEB_PROVIDER_UNAVAILABLE'))
       }
-      return searchResponses(request, signal, plan(), hooks, config())
+      return searchResponses(request, signal, plan, hooks, config())
     },
   }
 }
@@ -53,18 +53,25 @@ export function createTraditionalSearchProvider(
 async function searchResponses(
   request: WebSearchRequest,
   signal: AbortSignal | undefined,
-  plan: SearchPlan,
+  plan: (signal?: AbortSignal) => SearchPlan | Promise<SearchPlan>,
   hooks: InlineHooks,
   config: InlineConfig,
 ): Promise<WebSearchResult> {
   if (isAborted(signal)) throw aborted()
   const timeout = AbortSignal.timeout(config.idleTimeoutMs)
-  const combined = signal === undefined ? timeout : AbortSignal.any([signal, timeout])
+  let combined = signal === undefined ? timeout : AbortSignal.any([signal, timeout])
+  let ownership: AbortSignal | undefined
   let candidate: SearchPlanCandidate
   try {
-    candidate = await abortable(plan.settle(), combined)
+    // Invoke before the first await: the resolver captures its initiator and
+    // selection now, even when refreshing account metadata asynchronously.
+    const resolved = await abortable(Promise.resolve(plan(combined)), combined)
+    ownership = resolved.signal
+    if (ownership !== undefined) combined = AbortSignal.any([combined, ownership])
+    candidate = await abortable(resolved.settle(), combined)
   } catch (error) {
     if (signal?.aborted === true) throw aborted()
+    if (isAborted(ownership)) throw invalidated()
     if (timeout.aborted || isAbortError(error)) {
       throw new WebError('web search timed out', 'WEB_PROVIDER_ERROR')
     }
@@ -81,7 +88,7 @@ async function searchResponses(
   try {
     auth = normalizeRequestAuth(await abortable(hooks.resolveApiKey(candidate), combined))
   } catch (error) {
-    throw translateError(error, signal, timeout)
+    throw translateError(error, signal, timeout, ownership)
   }
   if (auth === undefined || auth.apiKey.length === 0) {
     throw new WebError(`no API key for "${candidate.apiKeyEnv}"`, 'WEB_PROVIDER_UNAVAILABLE')
@@ -92,6 +99,7 @@ async function searchResponses(
   const endpoint = `${candidate.baseURL.replace(/\/+$/, '')}/responses`
   let response: Response
   try {
+    combined.throwIfAborted()
     response = await fetch(endpoint, {
       method: 'POST',
       redirect: 'error',
@@ -116,7 +124,7 @@ async function searchResponses(
       }),
     })
   } catch (error) {
-    throw translateError(error, signal, timeout)
+    throw translateError(error, signal, timeout, ownership)
   }
 
 
@@ -129,10 +137,11 @@ async function searchResponses(
 
   let body: ResponsesResponse
   try {
-    body = JSON.parse(await readBounded(response, endpoint)) as ResponsesResponse
+    body = JSON.parse(await abortable(readBounded(response, endpoint), combined)) as ResponsesResponse
+    combined.throwIfAborted()
   } catch (error) {
-    if (isAborted(signal) || timeout.aborted || isAbortError(error)) {
-      throw translateError(error, signal, timeout)
+    if (combined.aborted || isAbortError(error)) {
+      throw translateError(error, signal, timeout, ownership)
     }
     throw new WebError('Responses API returned an invalid search result', 'WEB_PROVIDER_ERROR')
   }
@@ -176,13 +185,18 @@ function addSource(
 }
 
 /** Translate cancellation/timeout/transport failures into the web seam taxonomy. */
-function translateError(error: unknown, caller: AbortSignal | undefined, timeout: AbortSignal): WebError {
+function translateError(error: unknown, caller: AbortSignal | undefined, timeout: AbortSignal, ownership?: AbortSignal): WebError {
   if (isAborted(caller)) return aborted()
+  if (isAborted(ownership)) return invalidated()
   if (timeout.aborted || isAbortError(error)) {
     return new WebError('web search timed out', 'WEB_PROVIDER_ERROR', { cause: error })
   }
   if (error instanceof WebError) return error
   return new WebError('web search provider request failed', 'WEB_PROVIDER_ERROR', { cause: error })
+}
+
+function invalidated(): WebError {
+  return new WebError('web search owner or credential proof was invalidated', 'WEB_PROVIDER_UNAVAILABLE')
 }
 
 function aborted(): WebError {

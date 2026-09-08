@@ -117,10 +117,12 @@ describe('plugin-owned account Copilot route', () => {
     const fetch = vi.fn(async () => catalogResponse(items))
     stubFetch(fetch, true)
     const harness = await runtime()
-    await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
-    expect(fetch).not.toHaveBeenCalled()
     const service = harness.ctx.get('githubCopilotPreview')!
-    const discovered = await service.discover()
+    expect(service.getView().state).toBe('idle')
+    expect(fetch).not.toHaveBeenCalled()
+    const models = await harness.ctx.llm.listModels(PREVIEW)
+    expect(models.map(model => [model.provider, model.id])).toEqual(items.slice(0, 4).map(item => [PREVIEW, item.id]))
+    const discovered = service.getView()
     expect(discovered.models.map(model => [model.id, model.api])).toEqual([
       [MODEL, 'openai-responses'], ['gemini-3.8-flash', 'openai-completions'],
       ['gpt-5.6-sol-fast', 'openai-responses'], ['future-lab-r17', 'anthropic-messages'],
@@ -130,6 +132,88 @@ describe('plugin-owned account Copilot route', () => {
     await service.refresh()
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(service.getView())).not.toMatch(/synthetic-current-access|synthetic-account-a|accountKey/)
+  })
+
+  it('does not refresh OAuth or discover for a signed-out catalog', async () => {
+    const fetch = vi.fn(async () => { throw new Error('Unexpected OAuth or metadata request') })
+    stubFetch(fetch, true)
+    const harness = await runtime()
+    harness.replace(undefined)
+    await harness.ctx.get('githubCopilotPreview')!.refresh()
+    vi.stubEnv('COPILOT_GITHUB_TOKEN', 'ambient-must-not-be-used')
+    await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
+    await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
+    expect(fetch).not.toHaveBeenCalled()
+    expect(harness.modify).not.toHaveBeenCalled()
+  })
+
+  it('shares catalog TTL and sanitized failure cooldown without returning stale models', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    try {
+      const fetch = vi.fn(async () => catalogResponse())
+      stubFetch(fetch, true)
+      const harness = await runtime(grant(), { accountModelTtlMs: 1000, accountModelFailureCooldownMs: 2000 })
+      const service = harness.ctx.get('githubCopilotPreview')!
+      expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(1)
+      clock.mockReturnValue(start + 999)
+      expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(1)
+      expect(fetch).toHaveBeenCalledTimes(1)
+      clock.mockReturnValue(start + 1000)
+      fetch.mockRejectedValue(new Error('synthetic-current-access private provider body'))
+      await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
+      expect(service.getView()).toMatchObject({ state: 'error', error: 'COPILOT_MODEL_SOURCE_FETCH_FAILED', models: [{ id: MODEL }] })
+      expect(service.routeFacts(MODEL)).toBeUndefined()
+      await expect(harness.adapter.prepareCall(PREVIEW, MODEL)).rejects.toThrow('COPILOT_MODEL_SOURCE_FETCH_FAILED')
+      clock.mockReturnValue(start + 2999)
+      await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
+      await service.discover()
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(JSON.stringify(service.getView())).not.toMatch(/synthetic-current-access|private provider body/)
+      clock.mockReturnValue(start + 3000)
+      fetch.mockImplementation(async () => catalogResponse([]))
+      await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
+      await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
+      expect(service.getView().state).toBe('unavailable')
+      expect(fetch).toHaveBeenCalledTimes(3)
+    } finally { clock.mockRestore() }
+  })
+
+  it('rediscovers the changed account directory and revokes a previously prepared call', async () => {
+    const fetch = vi.fn(async () => catalogResponse())
+    stubFetch(fetch, true)
+    const harness = await runtime()
+    expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(1)
+    const prepared = await harness.adapter.prepareCall(PREVIEW, MODEL)
+    harness.replace(grant({ refresh: 'synthetic-account-b', access: 'synthetic-access-b', availableModelIds: ['future-account-b'] }))
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.refresh()
+    expect(service.getView().models).toEqual([])
+    expect(fetch).toHaveBeenCalledTimes(1)
+    fetch.mockImplementation(async () => catalogResponse([catalogItem('future-account-b')]))
+    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => [model.provider, model.id])).toEqual([[PREVIEW, 'future-account-b']])
+    const staleCall = async () => {
+      for await (const _chunk of prepared.stream({ provider: PREVIEW, model: MODEL, messages: [] })) { /* Consume the old lease. */ }
+    }
+    await expect(staleCall()).rejects.toThrow(/INVALIDATED/)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects directory proof invalidated synchronously by a registration callback', async () => {
+    const fetch = vi.fn(async () => catalogResponse())
+    stubFetch(fetch, true)
+    const harness = await runtime()
+    const service = harness.ctx.get('githubCopilotPreview')!
+    const remove = harness.ctx.on('llm/adapters-updated', () => {
+      if (service.getView().available) harness.replace(undefined)
+    })
+    try {
+      await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
+      await service.refresh()
+      expect(service.getView().models).toEqual([])
+      expect(service.routeFacts(MODEL)).toBeUndefined()
+      expect(fetch).toHaveBeenCalledTimes(1)
+    } finally { remove() }
   })
 
   it.each([
@@ -260,17 +344,17 @@ describe('plugin-owned account Copilot route', () => {
     expect(discoveryRequests).toHaveLength(2)
   })
 
-  it.each(['refresh', 'list', 'search'] as const)('invalidates silent entitlement changes through read-only or search checks: %s', async check => {
+  it.each(['refresh', 'list', 'search'] as const)('invalidates silent entitlement changes before status or failed rediscovery: %s', async check => {
     const harness = await runtime()
     const service = harness.ctx.get('githubCopilotPreview')!
     await service.discover()
     harness.current()!.payload.availableModelIds = []
+    const fetch = vi.fn(async () => new Response('not reachable', { status: 503 }))
+    stubFetch(fetch, true)
     if (check === 'refresh') await service.refresh()
     else if (check === 'list') await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
-    else {
-      stubFetch(async () => new Response('not reachable', { status: 503 }), true)
-      await expect(service.resolveRequestAuth(MODEL)).rejects.toThrow(/MODEL_SOURCE|METADATA_STALE/)
-    }
+    else await expect(service.resolveRequestAuth(MODEL)).rejects.toThrow(/MODEL_SOURCE|METADATA_STALE/)
+    expect(fetch).toHaveBeenCalledTimes(check === 'refresh' ? 0 : 1)
     expect(service.routeFacts(MODEL)).toBeUndefined()
     expect(service.getView().available).toBe(false)
   })
@@ -318,7 +402,6 @@ describe('plugin-owned account Copilot route', () => {
       clock.mockReturnValue(start + 300_000)
       expect(service.getView()).toMatchObject({ state: 'stale', available: false, models: fresh.models, discoveredAt: fresh.discoveredAt })
       expect(service.routeFacts(MODEL)).toBeUndefined()
-      await expect(harness.adapter.listModels(PREVIEW)).resolves.toEqual([])
       let release!: (response: Response) => void
       let entered!: () => void
       const started = new Promise<void>(resolve => { entered = resolve })
@@ -329,6 +412,7 @@ describe('plugin-owned account Copilot route', () => {
         return gate
       })
       stubFetch(fetch, true)
+      const listing = harness.adapter.listModels(PREVIEW)
       const discovering = service.discover()
       await started
       expect(service.getView()).toMatchObject({ state: 'loading', available: false, models: fresh.models })
@@ -338,6 +422,7 @@ describe('plugin-owned account Copilot route', () => {
       expect(assembler.finish.kind).toBe('error')
       expect(fetch).toHaveBeenCalledTimes(1)
       release(new Response('', { status: 503 }))
+      await expect(listing).resolves.toEqual([])
       expect(await discovering).toMatchObject({ state: 'error', available: false, models: fresh.models })
       await expect(service.resolveRequestAuth(MODEL)).rejects.toThrow(/MODEL_SOURCE/)
       await expect(harness.adapter.resolveModel(PREVIEW, MODEL)).rejects.toThrow(/MODEL_SOURCE/)
@@ -687,15 +772,19 @@ describe('plugin-owned account Copilot route', () => {
     const harness = await runtime(grant({ availableModelIds: [] }))
     expect(harness.ctx.llm.listProviders().some(item => item.id === PREVIEW)).toBe(true)
     await expect(harness.ctx.llm.listModels(PREVIEW)).resolves.toEqual([])
-    await expect(harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })).rejects.toThrow(/ENTITLED/)
     expect(fetch).toHaveBeenCalledTimes(1)
+    // Catalog discovery now precedes prepare: the cached miss gets one bounded
+    // UNKNOWN_MODEL recovery, but no model wire and no repeated recovery loop.
+    await expect(harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })).rejects.toThrow(/ENTITLED/)
+    await expect(harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })).rejects.toThrow(/ENTITLED/)
+    expect(fetch).toHaveBeenCalledTimes(2)
     harness.replace(undefined)
     vi.stubEnv('COPILOT_GITHUB_TOKEN', 'ambient-must-not-be-used')
     await expect(harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })).rejects.toThrow(/OAUTH|CREDENTIAL/)
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
 
-  it('refreshes the shared grant without aborting its own first model request', async () => {
+  it.each(['request', 'catalog'] as const)('refreshes the shared grant from a cold %s without aborting its own discovery', async entry => {
     const fresh = 'tid=synthetic;proxy-ep=proxy.individual.githubcopilot.com;'
     const urls: string[] = []
     stubFetch(vi.fn(async (input: unknown) => {
@@ -707,11 +796,15 @@ describe('plugin-owned account Copilot route', () => {
       throw new Error('unexpected synthetic URL')
     }), true)
     const harness = await runtime(grant({ expires: 0 }))
+    if (entry === 'catalog') expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(1)
     const result = await call(harness.ctx)
     expect(result.assembler.finish).toEqual({ kind: 'stop' })
     expect(harness.modify).toHaveBeenCalledTimes(1)
     expect(harness.current()?.payload.access).toBe(fresh)
     expect(urls.filter(url => url.endsWith('/copilot_internal/v2/token'))).toHaveLength(1)
+    // Native pi OAuth refresh fetches availableModelIds itself; the shared
+    // AccountModelSource then fetches endpoint/capability metadata once.
+    expect(urls.filter(url => url.endsWith('/models'))).toHaveLength(2)
     expect(urls.filter(url => url.endsWith('/responses'))).toHaveLength(1)
   })
 

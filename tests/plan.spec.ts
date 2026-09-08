@@ -8,13 +8,20 @@ import {
   siblingCandidates,
 } from '../src/plan.ts'
 import type { ProbeOutcome } from '../src/probe.ts'
-import { deepseekRoute, fakeContext, makeCandidate } from './helpers.ts'
+import { deepseekRoute, makeCandidate } from './helpers.ts'
+import { Context } from '@deepseek-ai/cordis'
+
+function fakeContext(services: Record<string, unknown>): Context {
+  const ctx = new Context()
+  ctx.get = ((name: string) => services[name]) as typeof ctx.get
+  return ctx
+}
 
 const planConfig = { probe: true, probeTimeoutMs: 1_000 }
 
 function copilotContext(model = 'gpt-5.4', profile: Record<string, unknown> = {}) {
   return fakeContext({
-    agentDefaultModel: { currentSelection: () => ({ provider: 'github-copilot', model }) },
+    agents: { currentInitiator: () => ({ session: { requestHeader: () => ({ config: { provider: 'github-copilot', model } }) } }) },
     settings: { get: () => ({ providers: { 'github-copilot': profile } }) },
   })
 }
@@ -41,7 +48,7 @@ describe('Copilot candidate resolution', () => {
   it('refuses non-Copilot routes', () => {
     expect(siblingCandidates(deepseekRoute({ provider: 'openai' }))).toEqual([])
     expect(resolveCandidates(fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'openai', model: 'gpt-5.4' }) },
+      agents: { currentInitiator: () => ({ session: { requestHeader: () => ({ config: { provider: 'openai', model: 'gpt-5.4' } }) } }) },
       settings: { get: () => ({ providers: { openai: {} } }) },
     }), planConfig)).toEqual([])
   })
@@ -65,7 +72,7 @@ describe('Copilot candidate resolution', () => {
       models: [{ id: 'gpt-6-astra', api: 'openai-responses' }],
     }), planConfig)).toEqual([])
     const managed = fakeContext({
-      agentDefaultModel: { currentSelection: () => ({ provider: 'github-copilot-preview', model: 'future-lab-r17' }) },
+      agents: { currentInitiator: () => ({ session: { requestHeader: () => ({ config: { provider: 'github-copilot-preview', model: 'future-lab-r17' } }) } }) },
       githubCopilotPreview: {
         getView: () => ({ provider: 'github-copilot-preview' }),
         routeFacts: () => ({ api: 'openai-responses', baseURL: 'https://api.individual.githubcopilot.com' }),

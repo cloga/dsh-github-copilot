@@ -807,9 +807,16 @@ function registerUi(ctx: ClientContext): () => void {
     const dispose = ctx.slots.register({
       name: 'settings.models.provider-card',
       key: 'llm-pi-ai',
-    }, (props: ProviderCardExtrasOwnerProps) => createElement(GitHubCopilotAccountSurface, {
-      surfaces, seat, remote: ctx.remote.githubCopilot, eligible: isGitHubCopilotAccountRow(props),
-    }))
+    }, (props: ProviderCardExtrasOwnerProps) => {
+      if (!props.configured && props.provider.provider === GITHUB_COPILOT_PROVIDER_ID && props.provider.settingsNs === 'llm-pi-ai') {
+        return createElement('p', { role: 'note', 'data-dsh-github-copilot-native-add-warning': true,
+          style: { fontSize: '13px', lineHeight: 1.6 } },
+        'GitHub Copilot account models are already managed by the account panel. Saving this additional provider profile enables another model group; it does not connect a second account. Use the account panel instead. This plugin cannot disable the native Save action.')
+      }
+      return createElement(GitHubCopilotAccountSurface, {
+        surfaces, seat, remote: ctx.remote.githubCopilot, eligible: isGitHubCopilotAccountRow(props),
+      })
+    })
     return () => { surfaces.revoke(seat); dispose() }
   })
 
