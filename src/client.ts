@@ -413,6 +413,55 @@ function capabilityWarningMessage(code: string): string {
   return 'Review this model capability warning before relying on the affected feature.'
 }
 
+export interface AccountModelsUpdatedAt {
+  readonly text: string
+  readonly dateTime: string
+  readonly title: string
+  readonly ariaLabel: string
+}
+
+/** Pure presentation of the Host's last successful cache update; never invent freshness evidence. */
+export function formatAccountModelsUpdatedAt(discoveredAt: number | undefined, now: number, locales?: Intl.LocalesArgument): AccountModelsUpdatedAt | undefined {
+  if (typeof discoveredAt !== 'number' || !Number.isFinite(discoveredAt) || discoveredAt < 0) return undefined
+  const date = new Date(discoveredAt)
+  if (!Number.isFinite(date.getTime())) return undefined
+  // Omit timeZone deliberately: both hover and accessible text use the viewer's local timezone.
+  const title = new Intl.DateTimeFormat(locales, {
+    year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'long',
+  }).format(date)
+  const elapsed = now - discoveredAt
+  let text = `Updated ${title}`
+  // A future timestamp is clock skew, not a negative age or a claim that it just happened.
+  if (Number.isFinite(elapsed) && elapsed >= 0) {
+    if (elapsed < 60_000) text = 'Updated just now'
+    else {
+      const [unit, duration] = elapsed < 3_600_000 ? ['minute', 60_000] as const
+        : elapsed < 86_400_000 ? ['hour', 3_600_000] as const : ['day', 86_400_000] as const
+      const count = Math.floor(elapsed / duration)
+      text = `Updated ${count} ${unit}${count === 1 ? '' : 's'} ago`
+    }
+  }
+  return { text, dateTime: date.toISOString(), title, ariaLabel: `Last successful account-model cache update: ${title}` }
+}
+
+/** Display-only clock: no Remote, status, discovery, or controller lifecycle ownership. */
+export function GitHubCopilotAccountModelsUpdatedAt(props: { readonly discoveredAt: number | undefined }): ReactElement | null {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const current = Date.now()
+    setNow(current)
+    if (formatAccountModelsUpdatedAt(props.discoveredAt, current) === undefined) return
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [props.discoveredAt])
+  const timestamp = formatAccountModelsUpdatedAt(props.discoveredAt, now)
+  return timestamp === undefined ? null : createElement('time', {
+    'data-dsh-github-copilot-models-updated-at': true,
+    dateTime: timestamp.dateTime, title: timestamp.title, 'aria-label': timestamp.ariaLabel,
+    style: { fontSize: '12px', opacity: 0.65, minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' },
+  }, timestamp.text)
+}
+
 /** A discovery snapshot is metadata evidence, not proof of a successful model call. */
 export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: AccountModelsSnapshot }): ReactElement {
   const { snapshot } = props
@@ -426,12 +475,9 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
     unconfigured: 'Sign in with GitHub before refreshing account models.',
     unavailable: 'Account model discovery is unavailable in this profile.',
   }
-  const timestamp = snapshot.discoveredAt === undefined ? undefined : new Date(snapshot.discoveredAt)
-  const iso = timestamp !== undefined && Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : undefined
   return createElement('section', { 'data-dsh-github-copilot-account-models': true },
     createElement('p', { role: 'status', 'aria-live': 'polite', 'data-dsh-github-copilot-account-models-state': snapshot.state }, messages[snapshot.state]),
     createElement('p', null, 'Discovery does not prove a successful model call or hosted search. No default model or account policy is changed.'),
-    iso === undefined ? null : createElement('p', null, 'Snapshot time: ', createElement('time', { dateTime: iso }, iso)),
     snapshot.error === undefined ? null : createElement('p', { role: 'alert' }, discoveryCode(snapshot.error, 'COPILOT_MODEL_DISCOVERY_FAILED')),
     createElement('details', null,
       createElement('summary', null, `${snapshot.models.length} accepted model(s)`),
@@ -574,7 +620,8 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     createElement('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', minWidth: 0 } },
       props.embedded === true ? null : createElement('h3', { style: { margin: 0, fontSize: '16px', lineHeight: '24px' } }, 'GitHub Copilot'),
       createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '13px', opacity: 0.75 } }, status),
-      modelStatus === undefined ? null : createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', opacity: 0.7 } }, modelStatus)),
+      modelStatus === undefined ? null : createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', opacity: 0.7 } }, modelStatus),
+      signedIn ? createElement(GitHubCopilotAccountModelsUpdatedAt, { discoveredAt: models?.discoveredAt }) : null),
     createElement('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginInlineStart: 'auto', minWidth: 0 } },
       (view === undefined && !state.checking) || state.error === 'COPILOT_AUTHORIZATION_STATUS_FAILED' || uncertain
         ? actionButton('Retry status', account.retryStatus, state.checking || state.operation !== undefined) : null,

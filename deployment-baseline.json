@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.6"
+    "version": "0.4.0-alpha.7"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -587,7 +587,10 @@
         {"file": "tests/compact-account.spec.ts", "name": "keeps automatic post-login discovery owned across Manage toggles and shows a retryable error"},
         {"file": "tests/authorization-controller.spec.ts", "name": "keeps completion pending through post-login repair so the Client discovers exactly once afterwards"},
         {"file": "tests/compact-account.spec.ts", "name": "keeps stale count visible during initial metadata refresh without a warning or header refresh button"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "ensures account metadata without forcing past the shared cache or cooldown"}
+        {"file": "tests/authorization-controller.spec.ts", "name": "ensures account metadata without forcing past the shared cache or cooldown"},
+        {"file": "tests/client.spec.ts", "name": "owns a minute-only UI timer through committed mount, timestamp change and unmount"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps the Host cache timestamp outside Manage and live regions through refresh and failure"},
+        {"file": "tests/client-bundle.spec.ts", "name": "exports the cache timestamp formatter and isolated clock component in the built Client"}
       ]
     }
   ],

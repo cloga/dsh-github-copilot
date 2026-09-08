@@ -83,6 +83,17 @@ describe('tsdown client artifact', () => {
     expect(exports.inject).toEqual(['remote', 'slots'])
   })
 
+  it('exports the cache timestamp formatter and isolated clock component in the built Client', () => {
+    const { exports } = loadArtifact()
+    expect(exports.GitHubCopilotAccountModelsUpdatedAt).toBeTypeOf('function')
+    const format = exports.formatAccountModelsUpdatedAt as typeof import('../src/client.ts').formatAccountModelsUpdatedAt
+    expect(format).toBeTypeOf('function')
+    const now = Date.parse('2026-09-08T12:00:00.000Z')
+    expect(format(now - 8 * 60_000, now, 'en-US')).toMatchObject({
+      text: 'Updated 8 minutes ago', dateTime: '2026-09-08T11:52:00.000Z',
+    })
+  })
+
   // Deterministic committed-hook fixture for the built registration callbacks.
   // This verifies plugin lifecycle/element ownership, not Core DOM or browser paint.
   async function surfaceFixture() {
