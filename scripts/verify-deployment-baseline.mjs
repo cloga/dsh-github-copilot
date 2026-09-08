@@ -323,22 +323,25 @@ for (const command of [
   assert(workflow.includes(command), `CI is missing ${command}`)
 }
 for (const marker of [
-  "tags:\n      - 'v*'",
-  'permissions:\n  contents: write',
-  'runs-on: ubuntu-latest',
-  'if [[ "$GITHUB_REF_NAME" != "v$version" ]]',
-  'git cat-file -t "refs/tags/$GITHUB_REF_NAME"',
-  'if [[ "$tag_type" != "tag" ]]',
-  'if [[ "$version" =~ -(alpha|beta|rc)\\. ]]',
-  'release_flags+=(--prerelease)',
+  'workflow_call:',
+  'group: dsh-github-copilot-release',
+  "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+  'fetch-depth: 0',
+  'scripts/release-policy.mjs --plan',
   'd347e703908d0406b7a7ef80e3a0e594d86b2215',
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify:controlled-core -- dsh-upstream',
+  'scripts/publish-release.mjs',
 ]) {
   assert(releaseWorkflow.includes(marker), `Release workflow is missing ${marker}`)
 }
+for (const marker of [
+  'release-ready:',
+  'Require all compatibility and package checks',
+  'scripts/release-policy.mjs --base',
+  'uses: ./.github/workflows/release.yml',
+]) assert(workflow.includes(marker), `CI release gate is missing ${marker}`)
 const orderedReleaseSteps = [
-  '- name: Verify tag matches package version',
   '- run: pnpm install --frozen-lockfile',
   '- name: Install alpha.1 Core pi-ai closure',
   '- run: pnpm verify:upstream -- dsh-upstream',
@@ -347,11 +350,11 @@ const orderedReleaseSteps = [
   '- run: pnpm pack --pack-destination artifacts',
   '- name: Verify packed archive',
   'pnpm verify:tarball --',
-  '- name: Write SHA-256 manifest',
+  '- name: Write and verify SHA-256 manifest',
   'sha256sum -- *.tgz > SHA256SUMS',
   'sha256sum --check SHA256SUMS',
-  '- name: Create GitHub Release',
-  'gh release create "$GITHUB_REF_NAME" artifacts/*.tgz artifacts/SHA256SUMS',
+  '- name: Publish exact annotated tag and immutable GitHub Release',
+  'scripts/publish-release.mjs',
 ]
 let priorReleaseStep = -1
 for (const step of orderedReleaseSteps) {
