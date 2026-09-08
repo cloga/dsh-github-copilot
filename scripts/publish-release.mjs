@@ -224,7 +224,8 @@ export async function loadReleaseInputs({
     'package.json must identify dsh-github-copilot at the exact expected stable version')
   let head
   try { head = await readHead() } catch { throw new Error('Cannot read git HEAD') }
-  check(isSha(env.GITHUB_SHA) && head === env.GITHUB_SHA, 'git HEAD must equal the exact GITHUB_SHA')
+  const expectedSha = env.RELEASE_SHA ?? env.GITHUB_SHA
+  check(isSha(expectedSha) && head === expectedSha, 'git HEAD must equal the exact planned release SHA')
   const files = []
   for (const name of [`dsh-github-copilot-${manifest.version}.tgz`, 'SHA256SUMS']) {
     let data

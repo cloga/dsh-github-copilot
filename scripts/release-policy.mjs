@@ -131,7 +131,11 @@ export function assessPlan({ manifest, head, tagInfo = null, files = [], githubR
     throw new Error(`merged important changes lack a new version: ${tag} does not point to HEAD; bump package.json, both READMEs, and deployment-baseline.json`)
   }
   if (tagInfo.isAncestor !== true) throw new Error(`${tag} is not an ancestor of HEAD; fetch complete history and investigate the release tag`)
-  return { release: false, tag, sha: head, prerelease: isPrereleaseVersion(version) }
+  // Re-run publication against the exact tagged commit even when only docs/tests
+  // followed it. This reconciles a missing release, stranded draft, incomplete
+  // assets, or an uncertain prior write instead of silently treating a tag as
+  // proof that publication completed. An already immutable release is read-only.
+  return { release: true, tag, sha: tagInfo.sha, prerelease: isPrereleaseVersion(version) }
 }
 
 export function parseChangedFiles(output) {

@@ -10,7 +10,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: dsh-github-copilot-release-${{ github.sha }}
+  # Serialize all repository releases. Two main runs may carry the same prepared
+  # version, so SHA-scoped concurrency would still race on one tag and draft.
+  group: dsh-github-copilot-release
   cancel-in-progress: false
 
 jobs:
@@ -85,5 +87,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          RELEASE_SHA: ${{ needs.plan.outputs.sha }}
         shell: bash
         run: node scripts/publish-release.mjs "${RELEASE_TAG#v}"

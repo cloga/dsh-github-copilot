@@ -91,11 +91,10 @@ test('plan releases a missing tag or exact annotated tag at HEAD with prerelease
   assert.deepEqual(plan({ tagInfo: tagInfo({ sha: head }) }), expected)
 })
 
-test('plan skips docs-only commits after an already-released ancestor tag', () => {
-  assert.deepEqual(plan({ tagInfo: tagInfo(), files: ['README.md', 'tests/a.spec.ts'] }), {
-    release: false, tag: `v${version}`, sha: head, prerelease: true,
-  })
-  assert.deepEqual(plan({ tagInfo: tagInfo(), files: [] }).release, false)
+test('plan reconciles the exact tagged commit after docs-only commits', () => {
+  const expected = { release: true, tag: `v${version}`, sha: previous, prerelease: true }
+  assert.deepEqual(plan({ tagInfo: tagInfo(), files: ['README.md', 'tests/a.spec.ts'] }), expected)
+  assert.deepEqual(plan({ tagInfo: tagInfo(), files: [] }), expected)
 })
 
 test('plan fails on unreleased important changes and divergent or invalid tags', () => {
@@ -176,18 +175,18 @@ test('CLI base assesses committed metadata and changed paths with argv-only git 
   assert.deepEqual(fixture.logs, [{ important: true, bumped: true, version }])
 })
 
-test('CLI plan writes release, tag, SHA and prerelease outputs', () => {
+test('CLI plan writes release, tag, exact SHA and prerelease outputs', () => {
   for (const options of [{}, { exists: true, sha: head }, { exists: true }]) {
     const fixture = cliFixture({ steps: planSteps(options), env: { GITHUB_OUTPUT: 'out' } })
     const decision = fixture.run(['--plan'])
     fixture.done()
-    assert.deepEqual(fixture.outputs, [{ path: 'out', text: `release=${decision.release}\ntag=v${version}\nsha=${head}\nprerelease=true\n` }])
+    assert.deepEqual(fixture.outputs, [{ path: 'out', text: `release=${decision.release}\ntag=v${version}\nsha=${decision.sha}\nprerelease=true\n` }])
   }
 })
 
-test('CLI plan skips docs-only post-tag commits and rejects important post-tag commits', () => {
+test('CLI plan reconciles docs-only post-tag commits and rejects important post-tag commits', () => {
   const docs = cliFixture({ steps: planSteps({ exists: true }) })
-  assert.equal(docs.run(['--plan']).release, false)
+  assert.deepEqual(docs.run(['--plan']), { release: true, tag: `v${version}`, sha: previous, prerelease: true })
   docs.done()
   const important = cliFixture({ steps: planSteps({ exists: true, files: 'src/index.ts\0' }) })
   assert.throws(() => important.run(['--plan']), /lack a new version/)

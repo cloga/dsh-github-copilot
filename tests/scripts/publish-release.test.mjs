@@ -494,6 +494,15 @@ test('CLI preflight checks manifest, exact HEAD, expected version, and fixed art
   assert.deepEqual(readPaths, [join('/fixture', 'package.json'), join('/fixture', 'artifacts', tarName), join('/fixture', 'artifacts', 'SHA256SUMS')])
 })
 
+test('CLI preflight accepts the exact planned tagged SHA over the caller main SHA', async () => {
+  const otherMainSha = '4'.repeat(40)
+  const { options } = localOptions({
+    env: { GITHUB_REPOSITORY: repository, GITHUB_TOKEN: token, GITHUB_SHA: otherMainSha, RELEASE_SHA: sha },
+  })
+  const result = await loadReleaseInputs(options)
+  assert.equal(result.sha, sha)
+})
+
 test('CLI preflight rejects wrong HEAD, expected version, unstable manifest, and missing artifacts', async () => {
   for (const [overrides, pattern] of [
     [{ readHead: () => '3'.repeat(40) }, /git HEAD/],

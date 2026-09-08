@@ -324,7 +324,7 @@ for (const command of [
 }
 for (const marker of [
   'workflow_call:',
-  'group: dsh-github-copilot-release-${{ github.sha }}',
+  'group: dsh-github-copilot-release',
   "github.event_name == 'push' && github.ref == 'refs/heads/main'",
   'fetch-depth: 0',
   'scripts/release-policy.mjs --plan',
