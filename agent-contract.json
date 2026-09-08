@@ -49,9 +49,9 @@
       "risk": "Registration does not select the global Web provider. Preserve file and reasoning/replay delegation, protocol/account gates and no implicit fallback. Public summaries are not raw reasoning input or decrypted replay. Validate effort against the actual selected model and retain Core default/off semantics."
     },
     "client": {
-      "purpose": "Models provider card, device-code copy UX, strict Remote results and replay-safe reasoning presentation",
-      "read": ["src/client.ts", "src/remote.ts", "src/dsh-supported-types.d.ts", "src/reasoning-presentation.ts"],
-      "tests": ["tests/client.spec.ts", "tests/client-bundle.spec.ts", "tests/reasoning-presentation.spec.ts", "tests/authorization-controller.spec.ts"],
+      "purpose": "Compact account row, automatic device-code disclosure, explicit discovery, strict Remote results and replay-safe reasoning presentation",
+      "read": ["src/client.ts", "src/compact-account.ts", "src/remote.ts", "src/dsh-supported-types.d.ts", "src/reasoning-presentation.ts"],
+      "tests": ["tests/client.spec.ts", "tests/compact-account.spec.ts", "tests/client-bundle.spec.ts", "tests/reasoning-presentation.spec.ts", "tests/authorization-controller.spec.ts"],
       "risk": "Use synthetic device codes and message fixtures. Empty reasoning filtering is render-only: never change durable content, encrypted signatures, replay indexes or other providers. Unsupported or conflicting UI registrations retain native rendering. Element-tree tests are not live browser activation evidence."
     },
     "compatibility": {

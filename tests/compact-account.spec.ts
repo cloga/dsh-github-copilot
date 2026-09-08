@@ -1,0 +1,422 @@
+import * as React from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createCompactAccount } from '../src/compact-account.ts'
+import { authorizationViewFrom, GitHubCopilotCompactAccount, GitHubCopilotAuthorizationNotice, GitHubCopilotAccountModelsSummary } from '../src/client.ts'
+import type { GitHubCopilotAuthorizationView as View } from '../src/authorization-controller.ts'
+
+vi.mock('react', async original => {
+  const actual = await original<typeof import('react')>()
+  return { ...actual, useState: vi.fn(actual.useState), useMemo: vi.fn(actual.useMemo), useEffect: vi.fn(actual.useEffect),
+    useSyncExternalStore: vi.fn(actual.useSyncExternalStore), useId: vi.fn(actual.useId) }
+})
+const cleanups: Array<() => void> = []
+afterEach(() => { cleanups.splice(0).forEach(clean => clean()); vi.resetAllMocks(); vi.useRealTimers() })
+const signedIn: View = { phase: 'signed-in', configured: true, writable: true, inFlight: false, notices: [] }
+const signedOut: View = { ...signedIn, phase: 'signed-out', configured: false }
+const pending: View = { ...signedOut, phase: 'authorizing', inFlight: true, notices: [{ message: 'Enter the example code.', code: 'ABCD-EFGH', url: 'https://github.com/login/device' }] }
+const discovered: View = { ...signedIn, accountModels: { state: 'ready', models: [{ id: 'example-model', name: 'Example', api: 'openai-responses' }], rejected: [] } }
+const ok = (value: View) => ({ ok: true, value })
+function deferred<T>() { let resolve!: (value: T) => void, reject!: (error: Error) => void; const promise = new Promise<T>((r,j) => { resolve=r; reject=j }); return {promise,resolve,reject} }
+function remote(initial = signedIn) {
+  return { status: vi.fn(async () => ok(initial)), start: vi.fn(async () => ok(pending)), cancel: vi.fn(async () => ok(signedOut)),
+    signOut: vi.fn(async () => ok(signedOut)), discoverModels: vi.fn(async () => ok(discovered)), reconcile: vi.fn(async () => ok(signedIn)) }
+}
+async function flush() { for(let index=0;index<8;index++) await Promise.resolve() }
+async function harness(initial = signedIn) {
+  const api=remote(initial), copy=vi.fn(async (_code: string) => {})
+  const account=createCompactAccount(api, authorizationViewFrom, copy)
+  cleanups.push(account.attach())
+  await flush()
+  return {api,account,copy}
+}
+
+describe('compact account lifecycle', () => {
+  it('checks status once without starting discovery or polling a signed-in account', async () => {
+    vi.useFakeTimers()
+    const h=await harness()
+    expect(h.account.getSnapshot().view).toEqual(signedIn)
+    expect(h.account.getSnapshot().checking).toBe(false)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(h.api.status).toHaveBeenCalledOnce()
+    expect(h.api.discoverModels).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('discovers an already-pending authorization and polls only until success', async () => {
+    vi.useFakeTimers()
+    const h=await harness(pending)
+    expect(h.account.getSnapshot().view?.notices[0]?.code).toBe('ABCD-EFGH')
+    expect(vi.getTimerCount()).toBe(1)
+    h.api.status.mockResolvedValue(ok(signedIn))
+    await vi.advanceTimersByTimeAsync(500)
+    expect(h.account.getSnapshot().view?.notices).toEqual([])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('serializes start double clicks and exposes the returned code without extra status ownership', async () => {
+    const h=await harness(signedOut), wait=deferred<ReturnType<typeof ok>>()
+    h.api.start.mockReturnValue(wait.promise)
+    const one=h.account.start(), two=h.account.start()
+    expect(h.api.start).toHaveBeenCalledOnce()
+    wait.resolve(ok(pending)); await Promise.all([one,two])
+    expect(h.account.getSnapshot().view?.inFlight).toBe(true)
+    expect(h.api.status).toHaveBeenCalledOnce()
+  })
+  it('reports a thrown start safely and allows explicit retry', async () => {
+    const h=await harness(signedOut)
+    h.api.start.mockRejectedValueOnce(new Error('PRIVATE_TOKEN_AND_BODY'))
+    await h.account.start()
+    expect(h.account.getSnapshot().error).toBe('COPILOT_AUTHORIZATION_START_FAILED')
+    expect(h.account.getSnapshot().operation).toBeUndefined()
+    await h.account.start()
+    expect(h.account.getSnapshot().view?.inFlight).toBe(true)
+    expect(h.account.getSnapshot().error).toBeUndefined()
+  })
+  it('classifies failure views without displaying their sensitive error text', async () => {
+    const h=await harness(signedOut)
+    h.api.start.mockResolvedValue(ok({ ...signedOut, phase:'error',error:'SECRET_FAILURE_BODY' }))
+    await h.account.start()
+    expect(h.account.getSnapshot().error).toBe('COPILOT_AUTHORIZATION_FAILED')
+    expect(h.account.getSnapshot().view?.error).not.toContain('SECRET')
+  })
+  it('orders cancellation after pending start so a late Host preflight cannot create an abandoned flow', async () => {
+    const h=await harness(signedOut), wait=deferred<void>()
+    let hostInFlight=false
+    h.api.start.mockImplementation(async()=>{await wait.promise;hostInFlight=true;return ok(pending)})
+    h.api.cancel.mockImplementation(async()=>{hostInFlight=false;return ok(signedOut)})
+    const starting=h.account.start()
+    const cancelling=h.account.cancel();await h.account.cancel()
+    expect(h.api.cancel).not.toHaveBeenCalled()
+    expect(h.account.getSnapshot().operation).toBe('cancel')
+    expect(h.account.getSnapshot().view?.notices).toEqual([])
+    wait.resolve();await Promise.all([starting,cancelling])
+    expect(hostInFlight).toBe(false)
+    expect(h.account.getSnapshot().view?.inFlight).toBe(false)
+    expect(h.account.getSnapshot().view?.notices).toEqual([])
+    expect(h.api.cancel).toHaveBeenCalledOnce()
+  })
+  it('does not claim cancellation when a pending start transport rejects', async () => {
+    const h=await harness(signedOut),wait=deferred<ReturnType<typeof ok>>()
+    h.api.start.mockReturnValueOnce(wait.promise)
+    const starting=h.account.start(),cancelling=h.account.cancel()
+    wait.reject(new Error('PRIVATE_START_OUTCOME_UNKNOWN'))
+    await Promise.all([starting,cancelling])
+    expect(h.api.cancel).not.toHaveBeenCalled()
+    expect(h.account.getSnapshot().error).toBe('COPILOT_AUTHORIZATION_CANCEL_FAILED')
+    expect(h.account.getSnapshot().operation).toBeUndefined()
+    expect(h.account.getSnapshot().view?.notices).toEqual([])
+    h.api.status.mockResolvedValueOnce(ok(pending));await h.account.retryStatus()
+    expect(h.account.getSnapshot().view?.inFlight).toBe(true)
+    expect(h.account.getSnapshot().view?.notices).toEqual([])
+    await h.account.cancel();expect(h.api.cancel).toHaveBeenCalledOnce()
+  })
+  it('treats an invalid pending start reply as unconfirmed cancellation', async () => {
+    const h=await harness(signedOut),wait=deferred<ReturnType<typeof ok>>()
+    h.api.start.mockReturnValueOnce(wait.promise)
+    const starting=h.account.start(),cancelling=h.account.cancel()
+    wait.resolve({ok:true,value:{phase:'invalid'}} as never)
+    await Promise.all([starting,cancelling])
+    expect(h.account.getSnapshot().error).toBe('COPILOT_AUTHORIZATION_CANCEL_FAILED')
+    expect(h.api.cancel).not.toHaveBeenCalled()
+  })
+  it('never sends queued cancellation after detach or Remote replacement', async () => {
+    const h=await harness(signedOut),wait=deferred<ReturnType<typeof ok>>()
+    h.api.start.mockReturnValueOnce(wait.promise)
+    const starting=h.account.start(),cancelling=h.account.cancel()
+    cleanups.splice(0).forEach(clean=>clean())
+    const next=await harness(signedIn)
+    wait.resolve(ok(pending));await Promise.all([starting,cancelling])
+    expect(h.api.cancel).not.toHaveBeenCalled()
+    expect(next.api.cancel).not.toHaveBeenCalled()
+    expect(next.account.getSnapshot().view).toEqual(signedIn)
+  })
+  it('cancellation invalidates a pending poll and clears code immediately', async () => {
+    vi.useFakeTimers()
+    const h=await harness(pending), wait=deferred<ReturnType<typeof ok>>()
+    h.api.status.mockReturnValue(wait.promise)
+    await vi.advanceTimersByTimeAsync(500)
+    const cancelling=h.account.cancel()
+    expect(h.account.getSnapshot().view?.notices).toEqual([])
+    await cancelling
+    wait.resolve(ok(pending)); await flush()
+    expect(h.account.getSnapshot().view?.inFlight).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('keeps cancellation failures visible without reviving a stale code', async () => {
+    const h=await harness(pending)
+    h.api.cancel.mockRejectedValue(new Error('PRIVATE'))
+    await h.account.cancel()
+    expect(h.account.getSnapshot().error).toBe('COPILOT_AUTHORIZATION_CANCEL_FAILED')
+    expect(h.account.getSnapshot().view?.notices).toEqual([])
+  })
+  it('does not clear a cancellation error when an older poll settles late', async () => {
+    vi.useFakeTimers();const h=await harness(pending),wait=deferred<ReturnType<typeof ok>>()
+    h.api.status.mockReturnValueOnce(wait.promise);await vi.advanceTimersByTimeAsync(500)
+    h.api.cancel.mockRejectedValueOnce(new Error('PRIVATE_CANCEL'))
+    await h.account.cancel();wait.resolve(ok(pending));await flush()
+    expect(h.account.getSnapshot().error).toBe('COPILOT_AUTHORIZATION_CANCEL_FAILED')
+    expect(h.account.getSnapshot().view?.notices).toEqual([])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('disallows creating an authorization flow with read-only unconfigured credentials', async () => {
+    const h=await harness({...signedOut,writable:false})
+    await h.account.start();expect(h.api.start).not.toHaveBeenCalled()
+  })
+  it('does not start a duplicate clipboard write and ignores its result after detach', async () => {
+    const h=await harness(pending),wait=deferred<void>()
+    h.copy.mockReturnValueOnce(wait.promise)
+    const copying=h.account.copyCode();await h.account.copyCode()
+    expect(h.copy).toHaveBeenCalledOnce()
+    cleanups.splice(0).forEach(clean=>clean());const before=h.account.getSnapshot()
+    wait.resolve();await copying;expect(h.account.getSnapshot()).toBe(before)
+  })
+  it('keeps copy feedback on unchanged polling and clears it after authorization succeeds', async () => {
+    vi.useFakeTimers()
+    const h=await harness(pending)
+    await h.account.copyCode()
+    expect(h.copy).toHaveBeenCalledWith('ABCD-EFGH')
+    expect(h.account.getSnapshot().copyState).toBe('copied')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(h.account.getSnapshot().copyState).toBe('copied')
+    h.api.status.mockResolvedValue(ok(signedIn))
+    await vi.advanceTimersByTimeAsync(500)
+    expect(h.account.getSnapshot().copyState).toBe('idle')
+    expect(h.account.getSnapshot().view?.notices).toEqual([])
+  })
+  it('handles copy failure and suppresses late copy feedback after cancel', async () => {
+    const h=await harness(pending)
+    h.copy.mockRejectedValueOnce(new Error('clipboard PRIVATE'))
+    await h.account.copyCode()
+    expect(h.account.getSnapshot().copyState).toBe('failed')
+    const wait=deferred<void>(); h.copy.mockReturnValueOnce(wait.promise)
+    const copying=h.account.copyCode(); await h.account.cancel(); wait.resolve(); await copying
+    expect(h.account.getSnapshot().copyState).toBe('idle')
+  })
+  it('refreshes explicitly and serializes discovery against sign-out and other refresh clicks', async () => {
+    const h=await harness(),wait=deferred<ReturnType<typeof ok>>()
+    h.api.discoverModels.mockReturnValueOnce(wait.promise)
+    const loading=h.account.refreshModels()
+    await h.account.refreshModels(); await h.account.signOut(); await h.account.start()
+    expect(h.api.discoverModels).toHaveBeenCalledOnce()
+    expect(h.api.signOut).not.toHaveBeenCalled(); expect(h.api.start).not.toHaveBeenCalled()
+    wait.resolve(ok(discovered)); await loading
+    expect(h.account.getSnapshot().view?.accountModels?.models).toHaveLength(1)
+  })
+  it('reports discovery errors safely and permits retry without changing login', async () => {
+    const h=await harness()
+    h.api.discoverModels.mockRejectedValueOnce(new Error('SECRET'))
+    await h.account.refreshModels()
+    expect(h.account.getSnapshot().error).toBe('COPILOT_MODEL_DISCOVERY_FAILED')
+    expect(h.account.getSnapshot().view?.configured).toBe(true)
+    await h.account.refreshModels()
+    expect(h.account.getSnapshot().error).toBeUndefined()
+    expect(h.api.start).not.toHaveBeenCalled()
+  })
+  it('disallows sign-out for read-only credentials and clears discovery after permitted sign-out', async () => {
+    const readOnly=await harness({ ...signedIn,writable:false })
+    await readOnly.account.signOut(); expect(readOnly.api.signOut).not.toHaveBeenCalled()
+    const h=await harness(discovered)
+    await h.account.signOut()
+    expect(h.account.getSnapshot().view?.configured).toBe(false)
+    expect(h.account.getSnapshot().view?.accountModels).toBeUndefined()
+  })
+  it('exposes status errors instead of misreporting signed-out and retries only explicitly', async () => {
+    vi.useFakeTimers()
+    const api=remote();api.status.mockRejectedValueOnce(new Error('SECRET'))
+    const account=createCompactAccount(api,authorizationViewFrom,async()=>{})
+    cleanups.push(account.attach());await flush()
+    expect(account.getSnapshot().view).toBeUndefined()
+    expect(account.getSnapshot().error).toBe('COPILOT_AUTHORIZATION_STATUS_FAILED')
+    await vi.advanceTimersByTimeAsync(5000);expect(api.status).toHaveBeenCalledOnce()
+    await account.retryStatus();expect(account.getSnapshot().view?.configured).toBe(true)
+  })
+  it('cleans timers and ignores late requests after detach or Remote replacement', async () => {
+    vi.useFakeTimers()
+    const h=await harness(pending),wait=deferred<ReturnType<typeof ok>>()
+    h.api.status.mockReturnValueOnce(wait.promise)
+    await vi.advanceTimersByTimeAsync(500)
+    cleanups.splice(0).forEach(clean=>clean())
+    const before=h.account.getSnapshot()
+    const other=await harness(signedOut)
+    wait.resolve(ok(discovered));await flush()
+    expect(h.account.getSnapshot()).toBe(before)
+    expect(other.account.getSnapshot().view?.configured).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('has stable snapshots and removable subscriptions', async () => {
+    const h=await harness(),listener=vi.fn(), stop=h.account.subscribe(listener)
+    expect(h.account.getSnapshot()).toBe(h.account.getSnapshot())
+    await h.account.refreshModels();expect(listener).toHaveBeenCalled()
+    stop();listener.mockClear();await h.account.signOut();expect(listener).not.toHaveBeenCalled()
+  })
+})
+
+function elements(root: unknown): React.ReactElement[] {
+  if(Array.isArray(root))return root.flatMap(elements)
+  if(!React.isValidElement(root))return []
+  const el=root as React.ReactElement<{children?:unknown}>
+  return [el,...elements(el.props.children)]
+}
+function text(root: unknown): string {
+  return elements(root).flatMap(el=>typeof el.props.children==='string'?[el.props.children]:[]).join(' ')
+}
+function button(root: unknown, label: string) {
+  const item=elements(root).find(el=>el.type==='button' && el.props.children===label)
+  expect(item, label).toBeDefined();return item!
+}
+function uiHarness(api=remote()) {
+  const states: unknown[]=[],memos: Array<{deps:React.DependencyList;value:unknown}>=[], effects: Array<{deps:React.DependencyList|undefined;cleanup?:()=>void}>=[]
+  let pendingEffects: Array<()=>void>=[], liveApi=api
+  vi.mocked(React.useId).mockReturnValue('compact-test-id')
+  vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe,getSnapshot)=>getSnapshot())
+  const renderOnce=()=>{
+    let s=0,m=0,e=0
+    vi.mocked(React.useState).mockImplementation((initial?:unknown)=>{const index=s++;if(!(index in states))states[index]=typeof initial==='function'?initial():initial;return [states[index],(value:unknown)=>{states[index]=typeof value==='function'?value(states[index]):value}] as ReturnType<typeof React.useState>})
+    vi.mocked(React.useMemo).mockImplementation((create,deps)=>{const index=m++,old=memos[index];if(!old || !deps || deps.some((v,i)=>!Object.is(v,old.deps[i])))memos[index]={deps:deps??[],value:create()};return memos[index]!.value})
+    vi.mocked(React.useEffect).mockImplementation((setup,deps)=>{const index=e++,old=effects[index];if(!old || !deps || deps.some((v,i)=>!Object.is(v,old.deps?.[i])))pendingEffects.push(()=>{old?.cleanup?.();const cleanup=setup();effects[index]={deps,...typeof cleanup==='function'?{cleanup}:{}}})})
+    return GitHubCopilotCompactAccount({remote:liveApi as never})
+  }
+  const render=(next=liveApi)=>{liveApi=next;const tree=renderOnce();const queued=pendingEffects;pendingEffects=[];queued.forEach(effect=>effect());return tree}
+  const unmount=()=>effects.forEach(effect=>effect.cleanup?.())
+  cleanups.push(unmount)
+  return {render,unmount,api}
+}
+
+describe('compact account rendering',()=>{
+  it('renders a neutral checking state then only a compact signed-in row',async()=>{
+    const ui=uiHarness()
+    expect(text(ui.render())).toContain('Checking status')
+    await flush();const tree=ui.render()
+    expect(text(tree)).toContain('Signed in')
+    button(tree,'Refresh models');const manage=button(tree,'Manage')
+    expect(manage.props['aria-expanded']).toBe(false)
+    expect(manage.props['aria-controls']).toBeTruthy()
+    expect(text(tree)).not.toContain('Sign out')
+    expect(elements(tree).some(el=>el.type===GitHubCopilotAccountModelsSummary)).toBe(false)
+    expect(text(tree)).not.toContain('Compatibility and existing configurations')
+  })
+  it('shows signed-out CTA and automatically reveals authorization without opening Manage',async()=>{
+    vi.useFakeTimers()
+    const ui=uiHarness(remote(signedOut));ui.render();await flush()
+    await button(ui.render(),'Sign in with GitHub').props.onClick();await flush()
+    let tree=ui.render()
+    expect(elements(tree).find(el=>el.type===GitHubCopilotAuthorizationNotice)?.props.code).toBe('ABCD-EFGH')
+    button(tree,'Cancel sign-in')
+    expect(button(tree,'Manage').props['aria-expanded']).toBe(false)
+    ui.api.status.mockResolvedValue(ok(signedIn))
+    await button(tree,'Cancel sign-in').props.onClick();await flush();tree=ui.render()
+    expect(elements(tree).some(el=>el.type===GitHubCopilotAuthorizationNotice)).toBe(false)
+  })
+  it('retains manual management and live actions when toggled during authorization',async()=>{
+    vi.useFakeTimers();const ui=uiHarness(remote(pending));ui.render();await flush()
+    button(ui.render(),'Manage').props.onClick();let tree=ui.render()
+    expect(button(tree,'Manage').props['aria-expanded']).toBe(true)
+    ui.api.status.mockResolvedValue(ok(signedIn));await vi.advanceTimersByTimeAsync(500)
+    tree=ui.render();expect(elements(tree).some(el=>el.type===GitHubCopilotAuthorizationNotice)).toBe(false)
+    expect(button(tree,'Manage').props['aria-expanded']).toBe(true)
+    button(tree,'Sign out')
+    expect(ui.api.status).toHaveBeenCalledTimes(2)
+    expect(ui.api.discoverModels).not.toHaveBeenCalled()
+  })
+  it('refreshes from the header without opening Manage and shows collapsed errors',async()=>{
+    const ui=uiHarness();ui.render();await flush()
+    ui.api.discoverModels.mockRejectedValueOnce(new Error('PRIVATE'))
+    await button(ui.render(),'Refresh models').props.onClick();await flush();const tree=ui.render()
+    expect(button(tree,'Manage').props['aria-expanded']).toBe(false)
+    expect(elements(tree).some(el=>el.props.role==='alert')).toBe(true)
+    expect(text(tree)).not.toContain('PRIVATE')
+    expect(ui.api.discoverModels).toHaveBeenCalledOnce()
+  })
+  it('retries a failed authorization poll while the automatic notice remains open',async()=>{
+    vi.useFakeTimers();const ui=uiHarness(remote(pending));ui.render();await flush()
+    ui.api.status.mockRejectedValueOnce(new Error('PRIVATE_STATUS_BODY'))
+    await vi.advanceTimersByTimeAsync(500)
+    let tree=ui.render()
+    expect(text(tree)).toContain('Could not check account status')
+    expect(text(tree)).not.toContain('PRIVATE_STATUS_BODY')
+    expect(elements(tree).some(el=>el.type===GitHubCopilotAuthorizationNotice)).toBe(true)
+    await button(tree,'Retry status').props.onClick();await flush()
+    expect(vi.getTimerCount()).toBe(1)
+    ui.api.status.mockResolvedValue(ok(signedIn));await vi.advanceTimersByTimeAsync(500)
+    tree=ui.render()
+    expect(text(tree)).toContain('Signed in')
+    expect(elements(tree).some(el=>el.type===GitHubCopilotAuthorizationNotice)).toBe(false)
+    expect(button(tree,'Manage').props['aria-expanded']).toBe(false)
+  })
+  it('keeps failed login visible and retryable with Manage closed',async()=>{
+    const ui=uiHarness(remote(signedOut));ui.render();await flush()
+    ui.api.start.mockRejectedValueOnce(new Error('PRIVATE_LOGIN_BODY'))
+    await button(ui.render(),'Sign in with GitHub').props.onClick();await flush()
+    const tree=ui.render()
+    expect(text(tree)).toContain('Could not confirm sign-in')
+    expect(text(tree)).toContain('Status unconfirmed')
+    button(tree,'Retry status')
+    expect(button(tree,'Sign in with GitHub').props.disabled).toBe(false)
+    expect(button(tree,'Manage').props['aria-expanded']).toBe(false)
+  })
+  it('shows cancellation uncertainty and checks status without secretly repeating a mutation',async()=>{
+    const ui=uiHarness(remote(signedOut));ui.render();await flush()
+    const wait=deferred<ReturnType<typeof ok>>();ui.api.start.mockReturnValueOnce(wait.promise)
+    const starting=button(ui.render(),'Sign in with GitHub').props.onClick()
+    const cancelling=button(ui.render(),'Cancel sign-in').props.onClick()
+    expect(text(ui.render())).toContain('Cancelling sign-in')
+    expect(ui.api.cancel).not.toHaveBeenCalled()
+    wait.reject(new Error('PRIVATE_START_UNCONFIRMED'));await Promise.all([starting,cancelling]);await flush()
+    let tree=ui.render()
+    expect(text(tree)).toContain('Status unconfirmed')
+    expect(text(tree)).toContain('Could not confirm cancellation')
+    expect(elements(tree).some(el=>el.type===GitHubCopilotAuthorizationNotice)).toBe(false)
+    ui.api.status.mockResolvedValueOnce(ok(pending))
+    await button(tree,'Retry status').props.onClick();await flush();tree=ui.render()
+    expect(text(tree)).toContain('Authorizing')
+    expect(elements(tree).some(el=>el.type===GitHubCopilotAuthorizationNotice)).toBe(false)
+    expect(ui.api.start).toHaveBeenCalledOnce();expect(ui.api.cancel).not.toHaveBeenCalled()
+    await button(tree,'Cancel sign-in').props.onClick();await flush()
+    expect(ui.api.cancel).toHaveBeenCalledOnce()
+    expect(text(ui.render())).toContain('Signed out')
+  })
+  it('retains a pending discovery across Manage toggles without new requests',async()=>{
+    const ui=uiHarness();ui.render();await flush();const wait=deferred<ReturnType<typeof ok>>()
+    ui.api.discoverModels.mockReturnValueOnce(wait.promise)
+    const loading=button(ui.render(),'Refresh models').props.onClick()
+    button(ui.render(),'Manage').props.onClick();button(ui.render(),'Manage').props.onClick()
+    expect(button(ui.render(),'Refreshing models…').props.disabled).toBe(true)
+    expect(ui.api.status).toHaveBeenCalledOnce()
+    wait.resolve(ok(discovered));await loading;await flush()
+    expect(text(ui.render())).toContain('1 model')
+    expect(button(ui.render(),'Manage').props['aria-expanded']).toBe(false)
+    expect(ui.api.discoverModels).toHaveBeenCalledOnce()
+  })
+  it('replaces Remote ownership without retaining an old notice or late discovery',async()=>{
+    const ui=uiHarness();ui.render();await flush();const wait=deferred<ReturnType<typeof ok>>()
+    ui.api.discoverModels.mockReturnValueOnce(wait.promise)
+    const loading=button(ui.render(),'Refresh models').props.onClick()
+    const next=remote(signedOut);ui.render(next);await flush()
+    wait.resolve(ok(discovered));await loading
+    const tree=ui.render(next)
+    expect(text(tree)).toContain('Signed out')
+    expect(text(tree)).not.toContain('1 model')
+    expect(next.status).toHaveBeenCalledOnce()
+  })
+  it('reconciles an uncertain sign-out through status instead of claiming credentials survived',async()=>{
+    const ui=uiHarness();ui.render();await flush()
+    button(ui.render(),'Manage').props.onClick()
+    ui.api.signOut.mockRejectedValueOnce(new Error('PRIVATE_AFTER_HOST_DELETE'))
+    await button(ui.render(),'Sign out').props.onClick();await flush()
+    button(ui.render(),'Manage').props.onClick()
+    let tree=ui.render()
+    expect(text(tree)).toContain('Could not confirm sign-out. Retry status to check.')
+    expect(text(tree)).not.toContain('Your sign-in status is retained')
+    expect(text(tree)).not.toContain('PRIVATE_AFTER_HOST_DELETE')
+    expect(button(tree,'Manage').props['aria-expanded']).toBe(false)
+    expect(ui.api.signOut).toHaveBeenCalledOnce()
+    ui.api.status.mockResolvedValueOnce(ok(signedOut))
+    await button(tree,'Retry status').props.onClick();await flush();tree=ui.render()
+    expect(text(tree)).toContain('Signed out')
+    expect(elements(tree).some(el=>el.props.role==='alert')).toBe(false)
+    expect(ui.api.signOut).toHaveBeenCalledOnce()
+  })
+  it('shows sign-out only in Manage and disables it for read-only credentials',async()=>{
+    const ui=uiHarness(remote({...signedIn,writable:false}));ui.render();await flush()
+    button(ui.render(),'Manage').props.onClick();expect(button(ui.render(),'Sign out').props.disabled).toBe(true)
+    expect(ui.api.signOut).not.toHaveBeenCalled()
+  })
+})

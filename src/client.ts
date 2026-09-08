@@ -6,7 +6,8 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { createElement, useCallback, useEffect, useRef, useState } from 'react'
+import { createElement, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createCompactAccount } from './compact-account.ts'
 import type { CSSProperties, ReactElement } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
@@ -190,6 +191,7 @@ interface AuthorizationNoticeProps {
   readonly code?: string
   readonly copyState: CopyState
   readonly onCopy: () => void
+  readonly buttonStyle?: CSSProperties
 }
 
 /** Pure presentation for the in-flight GitHub device-code handoff. */
@@ -223,6 +225,7 @@ export function GitHubCopilotAuthorizationNotice(props: AuthorizationNoticeProps
         type: 'button',
         disabled: props.copyState === 'copying',
         onClick: props.onCopy,
+        style: props.buttonStyle,
       }, props.copyState === 'copying'
         ? 'Copying…'
         : props.copyState === 'copied' ? 'Copied' : 'Copy code'))),
@@ -508,21 +511,93 @@ interface GitHubCopilotPreviewFooterProps {
   readonly remote: ClientContext['remote']['githubCopilot']
 }
 
+const compactButtonStyle: CSSProperties = {
+  appearance: 'none', border: '1px solid color-mix(in srgb, currentColor 24%, transparent)',
+  borderRadius: '999px', background: 'transparent', color: 'inherit', fontFamily: 'inherit',
+  fontSize: '13px', lineHeight: '18px', padding: '6px 12px', minHeight: '32px',
+  maxWidth: '100%', cursor: 'pointer',
+}
+
+function compactErrorMessage(code: string): string {
+  if (code === 'COPILOT_MODEL_DISCOVERY_FAILED') return 'Could not refresh models. Try again.'
+  if (code === 'COPILOT_AUTHORIZATION_START_FAILED') return 'Could not confirm sign-in. Retry status to check.'
+  if (code === 'COPILOT_AUTHORIZATION_CANCEL_FAILED') return 'Could not confirm cancellation. Retry status to check.'
+  if (code === 'COPILOT_SIGN_OUT_FAILED') return 'Could not confirm sign-out. Retry status to check.'
+  if (code === 'COPILOT_AUTHORIZATION_STATUS_FAILED') return 'Could not check account status. Retry to check again.'
+  if (code === 'COPILOT_CONFIGURATION_REPAIR_FAILED') return 'Could not repair the legacy configuration. Review it before retrying.'
+  return 'GitHub sign-in failed. Try again.'
+}
+
+/** One lifecycle owner; disclosure toggles never mount another status or discovery controller. */
+export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterProps): ReactElement {
+  const account = useMemo(() => createCompactAccount(props.remote, authorizationViewFrom, copyAuthorizationCode), [props.remote])
+  const state = useSyncExternalStore(account.subscribe, account.getSnapshot, account.getSnapshot)
+  useEffect(() => account.attach(), [account])
+  const [manageOpen, setManageOpen] = useState(false)
+  const managementId = `github-copilot-management-${useId()}`
+  const view = state.view
+  const signedIn = view?.configured === true
+  const authorizing = view?.inFlight === true || state.operation === 'start' || state.operation === 'cancel'
+  const pendingAction = state.checking || state.operation !== undefined || authorizing
+  const uncertain = state.error === 'COPILOT_AUTHORIZATION_START_FAILED'
+    || state.error === 'COPILOT_AUTHORIZATION_CANCEL_FAILED' || state.error === 'COPILOT_SIGN_OUT_FAILED'
+  const notice = activeAuthorizationNotice(view)
+  const models = view?.accountModels
+  const modelStatus = state.operation === 'discoverModels' ? 'Refreshing models…'
+    : models?.state === 'ready' ? `${models.models.length} model${models.models.length === 1 ? '' : 's'}`
+      : models?.state === 'stale' ? 'Models need refresh'
+        : models?.state === 'error' ? 'Model discovery failed'
+          : models?.state === 'loading' ? 'Discovering models…'
+            : models?.state === 'unavailable' || models?.state === 'disposed' ? 'Models unavailable' : undefined
+  const status = state.checking ? 'Checking status…'
+    : state.operation === 'signOut' ? 'Signing out…'
+      : state.operation === 'cancel' ? 'Cancelling sign-in…'
+      : uncertain ? 'Status unconfirmed' : authorizing ? 'Authorizing…'
+        : signedIn ? 'Signed in' : view === undefined ? 'Status unavailable' : 'Signed out'
+  const actionButton = (label: string, onClick: () => unknown, disabled = false, extras: Record<string, unknown> = {}) =>
+    createElement('button', { type: 'button', onClick, disabled,
+      style: { ...compactButtonStyle, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'default' : 'pointer' }, ...extras }, label)
+  return createElement('section', {
+    'data-dsh-github-copilot-compact-account': true,
+    style: { minWidth: 0, padding: '12px 14px', margin: '12px 0', borderRadius: '16px',
+      border: '1px solid color-mix(in srgb, currentColor 24%, transparent)', background: 'transparent' },
+  },
+  createElement('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', minHeight: '42px' } },
+    createElement('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', minWidth: 0 } },
+      createElement('h3', { style: { margin: 0, fontSize: '16px', lineHeight: '24px' } }, 'GitHub Copilot'),
+      createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '13px', opacity: 0.75 } }, status),
+      modelStatus === undefined ? null : createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', opacity: 0.7 } }, modelStatus)),
+    createElement('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginInlineStart: 'auto', minWidth: 0 } },
+      (view === undefined && !state.checking) || state.error === 'COPILOT_AUTHORIZATION_STATUS_FAILED' || uncertain
+        ? actionButton('Retry status', account.retryStatus, state.checking || state.operation !== undefined) : null,
+      signedIn ? actionButton(state.operation === 'discoverModels' ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
+        { 'data-dsh-github-copilot-refresh-models': true })
+        : !authorizing && view !== undefined ? actionButton('Sign in with GitHub', account.start, pendingAction || view.writable === false,
+          { title: view.writable === false ? 'Credentials are read-only' : undefined }) : null,
+      actionButton('Manage', () => setManageOpen(open => !open), false, { 'aria-expanded': manageOpen, 'aria-controls': managementId }))),
+  state.error === undefined ? null : createElement('p', { role: 'alert', 'data-dsh-github-copilot-account-error': state.error,
+    style: { margin: '8px 0 0', fontSize: '13px', overflowWrap: 'anywhere' } }, compactErrorMessage(state.error)),
+  authorizing ? createElement('div', { 'data-dsh-github-copilot-auto-authorization': true, style: { marginTop: '8px', overflowWrap: 'anywhere' } },
+    notice === undefined ? createElement('p', { role: 'status', 'aria-live': 'polite' }, state.operation === 'cancel' ? 'Cancelling sign-in…' : 'Waiting for GitHub authorization…')
+      : createElement(GitHubCopilotAuthorizationNotice, { message: notice.message, url: notice.url, code: notice.code,
+        copyState: state.copyState, onCopy: () => void account.copyCode(), buttonStyle: compactButtonStyle }),
+    actionButton(state.operation === 'cancel' ? 'Cancelling…' : 'Cancel sign-in', account.cancel, state.operation === 'cancel')) : null,
+  manageOpen ? createElement('div', { id: managementId, role: 'region', 'aria-label': 'GitHub Copilot account management',
+    style: { marginTop: '12px', paddingTop: '12px', borderTop: '1px solid color-mix(in srgb, currentColor 18%, transparent)', overflowWrap: 'anywhere' } },
+    createElement('p', { style: { margin: '0 0 10px', fontSize: '13px' } }, 'Refresh models reads account metadata; it does not verify a model call or change your selected model.'),
+    models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Refresh models to load the models available to this account.')
+      : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models }),
+    routeStatusMessage(view) === undefined ? null : createElement('p', { role: 'status' }, routeStatusMessage(view)),
+    view?.route?.state === 'needs-repair' && signedIn ? actionButton('Repair model configuration', account.reconcile, pendingAction) : null,
+    signedIn ? actionButton(state.operation === 'signOut' ? 'Signing out…' : 'Sign out', account.signOut, pendingAction || view?.writable === false) : null,
+    view?.writable === false ? createElement('p', { style: { fontSize: '13px' } }, 'Credentials are read-only in this profile.') : null,
+    compatibilityDetails()) : null)
+}
+
 /** The sole account owner on modern Models pages, independent of a legacy provider profile. */
 export function GitHubCopilotPreviewFooter(props: GitHubCopilotPreviewFooterProps): ReactElement {
-  return createElement('section', {
-    'data-dsh-github-copilot-preview-footer': true,
-    style: noticePanelStyle,
-  },
-  createElement('h3', { style: { margin: 0 } }, 'GitHub Copilot'),
-  createElement(GitHubCopilotProviderCard, {
-    provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
-    configured: false,
-    keyConfigured: false,
-    remote: props.remote,
-  }),
-  createElement(GitHubCopilotAccountModelsPanel, { remote: props.remote }),
-  compatibilityDetails())
+  return createElement('div', { 'data-dsh-github-copilot-preview-footer': true },
+    createElement(GitHubCopilotCompactAccount, { remote: props.remote }))
 }
 
 function compatibilityDetails(): ReactElement {
@@ -556,19 +631,7 @@ export function GitHubCopilotSettingsSection(
   props: GitHubCopilotSettingsSectionProps,
 ): ReturnType<typeof createElement> {
   return createElement('section', { 'data-dsh-github-copilot-settings': true },
-    createElement('h2', null, 'GitHub Copilot'),
-    createElement(GitHubCopilotProviderCard, {
-      provider: {
-        provider: 'github-copilot',
-        displayName: 'GitHub Copilot',
-        settingsNs: 'llm-pi-ai',
-      },
-      configured: false,
-      keyConfigured: false,
-      remote: props.remote,
-    }),
-    createElement(GitHubCopilotAccountModelsPanel, { remote: props.remote }),
-    compatibilityDetails())
+    createElement(GitHubCopilotCompactAccount, { remote: props.remote }))
 }
 
 function registerUi(ctx: ClientContext): () => void {
