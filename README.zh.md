@@ -39,19 +39,19 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 4. 返回 DSH。卡片会自动轮询；成功后只显示 **Signed in to GitHub Copilot.** 和 **Sign out** 按钮，一次性 URL 与代码会消失。
 5. 在同一卡片点击 **Refresh account models**，查看接受的模型及拒绝诊断，再在模型选择器的 **GitHub Copilot** 分组中选模型。实际路由 ID 保持为 `github-copilot-preview`，GPT-6 与其它新发现模型都走此入口。刷新不会替你切换模型；失败时查看[迁移与排障](#迁移与排障)，不要反复登录。
 
-统一账号卡片独立于原生 provider 行存在；不要为了登录而先使用 **添加提供方**。卡片缺失时核对活动 profile 与实际加载的 Host/Client 版本。下方旧动图展示 **Sign in with GitHub → Copy code → Copied → Signed in**，不代表新版统一布局的验证。最后两个状态之间需要用户在 GitHub 完成授权，这一步未录制。
+统一账号卡片独立于原生 provider 行存在；不要为了登录而先使用 **添加提供方**。卡片缺失时核对活动 profile 与实际加载的 Host/Client 版本。新版动图展示同一卡片中的 **登录 → 复制验证码 → 已复制 → 已登录 → 刷新账号模型 → 元数据就绪**。用户在 GitHub 完成真实授权是独立步骤，不在录制范围内。
 
-![GitHub Copilot 登录、验证码复制反馈与授权成功动图](./docs/images/github-copilot-auth-flow.gif)
+![统一 GitHub Copilot 账号卡片：登录、验证码复制反馈与主动刷新模型](./docs/images/github-copilot-auth-flow.gif)
 
-这些旧文档预览使用模拟授权状态和先前的卡片布局，并非新版统一账号卡片。`ABCD-EFGH` 是不可用于登录的合成示例；未发起真实授权请求、记录 credential 或变更账号。预览不代表当前 UI 激活、真实登录或模型可用性验证。
+这些预览在隔离且禁用网络的浏览器 fixture 中渲染已发布的 `0.4.0-alpha.2` 实际账号卡片组件，授权和模型发现响应均为合成数据；`ABCD-EFGH` 不可用于登录。录制没有执行真实登录、退出、模型刷新、凭据变更或路由迁移，也没有复用生产浏览器的 cookie 或存储状态。画面展示交互流程，不证明真实授权或模型可用性。
 
-授权中的卡片突出显示一次性验证码，并提供 **Copy code** 按钮：
+授权过程中，统一卡片突出显示一次性验证码：
 
-![GitHub Copilot 授权中卡片，包含合成验证码与 Copy code 按钮](./docs/images/copilot-device-code-copy.png)
+![统一 Copilot 账号卡片等待授权，展示合成验证码与 Copy code 按钮](./docs/images/copilot-device-code-copy.png)
 
-授权成功后，验证码、验证链接和复制反馈都会消失。成功卡片保留 **Signed in to GitHub Copilot.** 与 **Sign out**；如存在模型配置警告，会单独显示。
+授权成功后，验证码和验证链接消失；**已登录状态、Sign out 和 Refresh account models** 保留在同一卡片中。登录本身不会填充发现的模型列表。
 
-![GitHub Copilot 登录成功卡片，不再残留验证码或授权提示](./docs/images/copilot-auth-card-signed-in.png)
+![统一 Copilot 账号卡片已登录，保留主动刷新模型入口且无验证码](./docs/images/copilot-auth-card-signed-in.png)
 
 ### Agent 与自动化流程
 

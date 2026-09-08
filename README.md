@@ -37,19 +37,19 @@ Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in*
 4. Return to DSH. The card polls automatically; success is shown as **Signed in to GitHub Copilot.** with a **Sign out** button. The one-time URL and code disappear after success.
 5. Click **Refresh account models** on the same card, inspect accepted models or rejection diagnostics, then choose a model under **GitHub Copilot** in the model picker. Its stable actual route ID is `github-copilot-preview`, including for GPT-6 and other newly discovered IDs. Refreshing does not select a model for you. See [Migration and troubleshooting](#migration-and-troubleshooting) if discovery fails.
 
-The unified account card lives independently of a native provider row; do not use **Add provider** merely to sign in. If it is missing, verify the active profile and loaded Host/Client version. The older animation below shows **Sign in with GitHub → Copy code → Copied → Signed in**; it does not demonstrate the new unified layout. Completing authorization on GitHub happens between the last two states and is not recorded.
+The unified account card lives independently of a native provider row; do not use **Add provider** merely to sign in. If it is missing, verify the active profile and loaded Host/Client version. The animation shows the unified **Sign in → Copy code → Copied → Signed in → Refresh account models → Metadata ready** flow. Actual authorization on GitHub is a separate user step and is not recorded.
 
-![GitHub Copilot sign-in, device-code copy feedback, and successful authorization](./docs/images/github-copilot-auth-flow.gif)
+![Unified GitHub Copilot account card: sign-in, copy feedback, and explicit model refresh](./docs/images/github-copilot-auth-flow.gif)
 
-These older documentation previews use simulated authorization states and a previous card layout, not the current unified account-card layout. `ABCD-EFGH` is a synthetic example, not a usable code. No real authorization request, credential, or account change was involved; the previews do not prove current UI activation, live sign-in or model availability.
+These previews render the actual released `0.4.0-alpha.2` account-card component in an isolated, network-disabled browser fixture. Authorization and discovery responses are synthetic; `ABCD-EFGH` is not a usable code. No real sign-in, sign-out, model refresh, credential change, or route migration was performed for recording, and no production cookies or browser storage were reused. The UI states demonstrate the interaction, not live authorization or model availability.
 
-The in-flight card keeps the one-time code prominent and provides a **Copy code** button:
+The unified card keeps the one-time code prominent during authorization:
 
-![GitHub Copilot authorization in progress with a synthetic code and Copy code button](./docs/images/copilot-device-code-copy.png)
+![Unified Copilot account card awaiting authorization with a synthetic code and Copy code button](./docs/images/copilot-device-code-copy.png)
 
-After authorization completes, the code, verification link, and copy feedback disappear. The success card retains **Signed in to GitHub Copilot.** and **Sign out**; any model-configuration warning is shown separately when applicable.
+After authorization completes, the code and verification link disappear. **Signed in**, **Sign out**, and **Refresh account models** remain together in the same card; login alone does not populate the discovered model list.
 
-![GitHub Copilot signed-in card with no device code or stale authorization notice](./docs/images/copilot-auth-card-signed-in.png)
+![Unified Copilot account card after sign-in, with explicit model refresh and no device code](./docs/images/copilot-auth-card-signed-in.png)
 
 ### Agent and automation flow
 
