@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.8`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.9`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 ## 已测试基线
 
@@ -26,7 +26,7 @@
 将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/dsh-github-copilot-0.4.0-alpha.8.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.9/dsh-github-copilot-0.4.0-alpha.9.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
@@ -113,6 +113,16 @@ Chat 选择器和 `/model` 的冷启动 `listModels()` 会确保共享托管 sou
 **原生选择限制：**Core 公开的 `session.selectModel` 同时保存未来全局默认值。插件不替换该行为：选择一个 Session 不会改写其它已选／历史会话，但未选择模型的空会话仍可能继承改变后的默认值，不能承诺所有未选会话完全不变。
 
 **原生 Add 仅警告：**新建 Copilot provider draft 提示，保存原生 profile 会增加另一真实模型分组，而非第二账号。公开追加式 API 无法否决 Add 或禁用 **Save**；原生编辑器仍保留。这不是绝对阻止，也不强制唯一路由。实际只保留托管路由需发布后另行批准的 [Ops 迁移](./docs/single-route-migration.md#中文操作说明)，不能靠隐藏分组或自动删除配置实现。
+
+### 只读 Ops 迁移就绪检查（alpha.9）
+
+无参数 Remote `githubCopilot.migrationStatus()` 为另行授权的维护操作提供新的 live 证据。通用 `session/list` 可能过时，插件 inventory 也不能单独证明实际加载版本。独立严格结果包含加载插件构建的 `plugin.name`／`plugin.version`、`protocolVersion: 1`、`observedAt`、能力标记（`agentsList`、`sessionProjections`、`settingsCas`、`providerRegistry`、`defaultSelection`）及 sessions／default／routes 完整性标记。缺失能力或必要选择／路由证据不完整表示未知，不是迁移许可；idle Agent 的 `activeRequestSelection: null` 是正常值。
+
+每个 live Agent Session 返回 `effectiveSelection` 和 `selectionSource`：优先 pending 模型 projection，其次已记录的 request-header config；只有 projection 已知、确实没有 pending／header 的空会话才使用当前默认值。running Agent 另报 `activeRequestSelection`，它只是最近记录的请求 header，**不证明正在执行 LLM 调用**。路由标记区分有效原生配置 `nativeConfigured` 与实际 native／managed 注册；不返回凭据内容或完整配置／历史。
+
+该调用不执行授权 status 或模型发现，不访问凭据／网络，也不修改 settings／Session；不新增常规 UI 或全局当前模型／搜索状态卡片。原有七个授权 Remote 及其 codec 不变，第八个 Remote 使用独立 `GitHubCopilotMigrationStatus` codec。
+
+**边界：**`historyScope: live-agents-only` 不检查未加载的存储历史，操作者必须确认知悉旧对话以后可能需要显式重选模型。构建身份及结构能力的自报告不等于完整 Desktop／Core 字节核验；这也不是跨 namespace 原子快照，CAS 前必须立即复查。`cloga/dsh-windows-ops` 中计划的 `tools/migrate-copilot-managed-route.ps1` 是发布后独立的**仅配置**维护命令：v1 不写 Session／默认模型选择、不读冷历史、不安装插件、不重启 DSH，也不验收完整 Desktop 基线。该命令发布／安装及真实迁移是否完成须另外证明，本文不作已完成声明。
 
 ## 授权与 route 行为
 
@@ -315,8 +325,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。新版本使用标准 SemVer 预发布标识（`alpha`、`beta` 或 `rc`）；历史上的 `cloga` 后缀用于标识下游 fork 构建，新版本不再使用。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，按版本标记 prerelease，并且只在前序步骤全部成功后创建 GitHub Release。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/dsh-github-copilot-0.4.0-alpha.8.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.9/dsh-github-copilot-0.4.0-alpha.9.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.9/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -324,7 +334,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.8.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.9.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

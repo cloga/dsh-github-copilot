@@ -324,14 +324,20 @@ describe('tsdown client artifact', () => {
 
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
-      'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
+      'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut', 'migrationStatus',
     ])
     for (const descriptor of contributions[0]!.descriptors) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       expect(descriptor.parameters).toEqual([])
+      expect(descriptor).toMatchObject({
+        id: `dsh-github-copilot:githubCopilot.${descriptor.method}`,
+        service: 'githubCopilotAuthorization', namespace: 'githubCopilot',
+      })
       expect(descriptor.result).toMatchObject({
         mode: 'strict',
-        typeSymbol: 'dsh-github-copilot#GitHubCopilotAuthorizationView',
+        typeSymbol: descriptor.method === 'migrationStatus'
+          ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
+          : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })
     }
 
@@ -351,6 +357,24 @@ describe('tsdown client artifact', () => {
       { args: {} },
       expect.any(AbortSignal),
     )
+
+    const migration = {
+      plugin: { name: PLUGIN_ID, version: '0.4.0-alpha.9' }, protocolVersion: 1,
+      historyScope: 'live-agents-only', observedAt: 0,
+      capabilities: { agentsList: false, sessionProjections: false, settingsCas: false, providerRegistry: false, defaultSelection: false },
+      complete: { sessions: false, defaultSelection: false, routes: false }, defaultSelection: null, sessions: [],
+      routes: { nativeConfigured: null, nativeRegistered: null, managedRegistered: null },
+    }
+    const migrationDescriptor = contributions[0]!.descriptors.find(descriptor => descriptor.method === 'migrationStatus')!
+    if (migrationDescriptor.result.mode !== 'strict') throw new Error('expected independent strict migration codec')
+    const migrationCodec = migrationDescriptor.result.schema
+    expect(migrationCodec.parse(migration)).toEqual(migration)
+    expect(() => migrationCodec.parse(validView)).toThrow()
+    expect(() => migrationCodec.parse({ ...migration, credentials: 'private' })).toThrow()
+    expect(() => migrationCodec.parse({ ...migration, plugin: { ...migration.plugin, path: 'private' } })).toThrow()
+    rpcCall.mockResolvedValueOnce({ ok: true, value: migration })
+    await expect(ctx.remote.githubCopilot.migrationStatus()).resolves.toEqual({ ok: true, value: migration })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilot/migrationStatus', { args: {} }, expect.any(AbortSignal))
 
     const statusDescriptor = contributions[0]!.descriptors.find(
       descriptor => descriptor.method === 'status',

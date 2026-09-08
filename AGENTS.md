@@ -92,6 +92,14 @@ This repository owns eight narrow surfaces:
 - Public `session.selectModel` also saves the future global default. Choose only approved Sessions/default; preserve other selected/history-backed Sessions, but do not promise unselected empty Sessions cannot inherit that default.
 - Code does not auto-migrate settings, credentials or history. After plugin release, approved Ops migration may compare-and-swap only the reviewed user-native `llm-pi-ai.providers.github-copilot` path after ruling out base/journal conflicts, then read back settings and registry. No hidden groups, bulk rewrites or credential copying. Search allowlist updates to the managed ID require a separate reviewed Ops edit; never silently broaden old lists.
 
+## Live migration readiness (alpha.9, #101)
+
+- Use no-argument `githubCopilot.migrationStatus()` for fresh live-Agent evidence; generic `session/list` may be stale and plugin inventory alone has no loaded-version evidence. `src/migration-status.ts` reads public leaves synchronously and reports loaded build `plugin.name/version`, `protocolVersion: 1`, `observedAt`, capability flags and completeness flags. Missing/unknown/incomplete is not safe absence.
+- Capabilities are `agentsList`, `sessionProjections`, `settingsCas`, `providerRegistry`, `defaultSelection`; `complete.sessions/defaultSelection/routes` describes evidence completeness, not migration approval. Effective selection uses pending projection, request-header config, then default only for genuinely empty Sessions with known projection state. Running `activeRequestSelection` is the latest recorded header, not proven in-flight LLM work. Native effective configuration and native/managed registration are separate flags.
+- This read invokes no auth status/model discovery, credentials or network and mutates no settings/Sessions. No normal UI/global current-model/search card is added. Seven ordinary authorization Remotes retain their codec; the eighth migration Remote uses a separate strict `GitHubCopilotMigrationStatus` codec.
+- `historyScope: live-agents-only` excludes cold stored histories. Require operator acknowledgement that older conversations may need a new explicit selection later. Loaded version/structural capability self-reports are not full Desktop/Core byte attestation or an atomic cross-namespace guarantee; recheck immediately before CAS.
+- The planned `cloga/dsh-windows-ops` command `tools/migrate-copilot-managed-route.ps1` is separate config-only maintenance after release. V1 performs no automated Session/default writes, cold-history scan, plugin install, restart or full Desktop-baseline acceptance. Resolve selection blockers separately with explicit approval; never report this planned command or live migration as published/installed/completed without evidence.
+
 ## Supported DSH seams
 
 The supported upstream baselines are:
@@ -113,7 +121,7 @@ These pins document compatibility evidence. They do not authorize creating anoth
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.
 - Provider headers: rc.1 validates configured headers through Fetch and reuses Host-owned headers during model discovery.
-- Remote results: all authorization methods share the Zod v4 `GitHubCopilotAuthorizationView` strict codec required by rc.2 and accepted by rc.1.
+- Remote results: the seven ordinary authorization methods retain the Zod v4 `GitHubCopilotAuthorizationView` strict codec required by rc.2 and accepted by rc.1. The eighth no-argument `migrationStatus()` method has a separate strict `GitHubCopilotMigrationStatus` codec; it does not change the ordinary auth contract.
 
 When upgrading DSH or pi-ai, inspect the exact tagged public exports and update the baseline, compatibility guard, tests, and docs together.
 
