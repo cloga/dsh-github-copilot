@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.7`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.8`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 ## 已测试基线
 
@@ -26,7 +26,7 @@
 将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.7/dsh-github-copilot-0.4.0-alpha.7.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/dsh-github-copilot-0.4.0-alpha.8.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
@@ -43,7 +43,7 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 公开的 provider-card slot 只能追加内容，不能替换 Core 的 **Edit/Delete**。原生编辑器仍保留，但正常插件发现流程无需手工定义模型。控件嵌入不等于合并 `github-copilot` 与 `github-copilot-preview`，不会删除配置、改写历史或切换模型选择。若已有卡片与 fallback 都缺少控件，请核对活动 profile 与实际加载的 Host/Client 版本。
 
-**当前预览（`0.4.0-alpha.7`）：**实际构建的 Client 运行于隔离 Edge，使用合成 Remote 响应与 provider-shell fixture。默认行显示登录状态、模型数量、上次成功更新时间与 **Manage**，手动 **Refresh models** 只在 **Manage** 内。浏览器 fixture 覆盖刷新时保留旧数量、新鲜缓存重开仅读状态、手动刷新、Retry、凭据清理、登录强制发现及 375 px 窄屏，无外部网络请求或浏览器错误。这不是真实 Core／生产授权证据；Host 24 小时 TTL 与冷却时序由单元测试另行覆盖，不能靠截图证明。
+**时间戳示意（`0.4.0-alpha.7`）：**保留的图片展示该版本实际构建 Client 的隔离 Edge 与合成 Remote／provider-shell fixture，不证明 alpha.8 会话／搜索隔离、新建警告或路由迁移已经完成。除新增 draft 警告外，不声称进行了视觉重设计。默认行显示登录状态、模型数量、上次成功更新时间与 **Manage**，手动 **Refresh models** 只在 **Manage** 内。浏览器 fixture 覆盖刷新时保留旧数量、新鲜缓存重开仅读状态、手动刷新、Retry、凭据清理、登录强制发现及 375 px 窄屏，无外部网络请求或浏览器错误。这不是真实 Core／生产授权证据；Host 24 小时 TTL 与冷却时序由单元测试另行覆盖，不能靠截图证明。
 
 低强调度的 **Updated … ago** 使用上次成功获取模型列表的时间，而不是打开页面的时间。悬停提示和无障碍标签提供本地完整日期、时间及时区；相对时间只在浏览器内更新，不请求状态或模型。读取缓存、刷新中或失败均保留上次成功时间（仅限仍有效的同账号展示证据）；退出／账号失效后清除。没有有效时间戳则不显示；未来时间使用绝对日期，避免错误地显示“几分钟前”。Manage 内不再重复显示时间戳。
 
@@ -104,6 +104,16 @@ GitHub Releases 是唯一权威分发渠道；本仓库不会发布到 npm。部
 
 DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider。原生 `github-copilot` 的模型目录和 profile 仍属于 Core／用户；插件不拿自己的 pi 依赖副本改写它们。托管账号路由复用公开 adapter 类、SDK 序列化、OAuth method/grant format、token exchange 和 refresh。普通模型请求使用 SDK `streamSimple`，支持供应方明确公布的 Responses、Chat Completions 和 Anthropic Messages 三种协议。跨 SDK 的高级协议专用 `stream` 接口会明确报 `COPILOT_MANAGED_ADVANCED_STREAM_UNSUPPORTED`，不假装不兼容的底层客户端可互换；这不等于普通流式聊天被禁用。
 
+## 全局账号，多模型与独立会话（V3）
+
+一个 Host 所有的 Copilot 账号提供多个账号发现模型。已显式选择或有历史选择的 Session 保持自己的模型上下文：Session A 的搜索使用捕获的发起 Session A 的有效 request-header／config（或请求显式 `GenerateOptions`），不采用 Session B 的选择或未来全局默认 C。搜索 plan 按 owner 缓存，A／B 使用不同模型时不会互相复用或取消 plan；账号元数据仍共享，能力／probe 与凭据检查继续生效。
+
+Chat 选择器和 `/model` 的冷启动 `listModels()` 会确保共享托管 source 就绪，不必先打开 Settings。真实托管搜索也先执行非强制共享 ensure，再派生 route／model 事实。沿用下文 24 小时最大 TTL 与失败冷却，不新增全局“当前模型／搜索状态”卡片。
+
+**原生选择限制：**Core 公开的 `session.selectModel` 同时保存未来全局默认值。插件不替换该行为：选择一个 Session 不会改写其它已选／历史会话，但未选择模型的空会话仍可能继承改变后的默认值，不能承诺所有未选会话完全不变。
+
+**原生 Add 仅警告：**新建 Copilot provider draft 提示，保存原生 profile 会增加另一真实模型分组，而非第二账号。公开追加式 API 无法否决 Add 或禁用 **Save**；原生编辑器仍保留。这不是绝对阻止，也不强制唯一路由。实际只保留托管路由需发布后另行批准的 [Ops 迁移](./docs/single-route-migration.md#中文操作说明)，不能靠隐藏分组或自动删除配置实现。
+
 ## 授权与 route 行为
 
 `llm-pi-ai` 注册 OAuth method，authorization service 组织交互，本包只提供 UI/Remote controller 与 route reconciliation。rc.1 由 Core 提供 authorization；rc.2 profile 缺失该服务时，本包挂载运行时依赖，并复用任何已经存在的 provider。
@@ -148,6 +158,10 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
 
 ## Hosted search
 
+搜索身份来自捕获的发起 Session 有效 request-header／config 或显式 `GenerateOptions`，绝不使用未来全局默认值。Core `Agent.options` 仍是激活时的 seed；模型选择覆盖 request／assembly，有效配置在工具调用前记录到 `Session.requestHeader().config`。没有可证明的请求上下文时，传统搜索不可用。新模型已选择但下一次请求尚未开始时，不能把旧 header 当作当前 prompt 指引。按 owner 隔离的 plan 缓存保留不同模型 Session 的独立性；真实托管搜索冷启动时先非强制确保共享账号元数据，再派生模型事实并检查既有账号／协议／allowlist／probe。传统 `ctx.web` 搜索需要可用的 `agents.currentInitiator`；缺失时报告命名明确的 unavailable 诊断，不借用默认值。显式带标记的 `GenerateOptions` 仍可绑定符合条件的 inline 请求，没有 owner 时可不缓存，但保留所有既有检查。
+
+**凭据变化限制：**初次惰性元数据发现期间出现 OAuth 通知时，现有公开状态无法区分发现自身的 token 轮换与外部换号。该次搜索会在 probe／wire 前以 `WEB_PROVIDER_UNAVAILABLE` 保守失败；之后用户／driver 可重新请求并使用已刷新的凭据，不自动重试，也不承诺首次刷新无缝成功。
+
 - **旧 canonical inline agent-loop 路径：**仅在旧路由仍配置时，符合条件的 `github-copilot` 请求支持 OpenAI Responses 与 Anthropic Messages 原生搜索候选。
 - **托管账号路由的普通对话：**`github-copilot-preview` 请求直接交给已注册的原生 adapter，不经过自定义 inline wire，以保留该路由的账号证据、回放和附件处理。
 - **通过 `ctx.web.search()` 使用 `github-copilot-hosted`：**只支持账号可用且协议经过核实的 OpenAI Responses 候选，包括符合条件的托管账号模型。
@@ -163,7 +177,7 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
     fetchProvider: http
 ```
 
-Patch row 会整体替换目标 row 的 `config`，所以使用默认 HTTP 抓取器时保留 `fetchProvider: http`；若已配置其它 fetch provider，则保留原选择。如果已有 `web` override，应修改原 row，而不是覆盖整个 patch 文件，并保留无关配置。修改后重启对应 profile。这是 profile 全局选择，不会按模型动态路由：当前 route 不是 Copilot Responses 时，`web_search` 会报告已配置的 Copilot provider 不可用，也不会回退 DeepSeek。撤销时只删除为本次可选配置新增的 row，或恢复之前的 `web` 配置。
+Patch row 会整体替换目标 row 的 `config`，所以使用默认 HTTP 抓取器时保留 `fetchProvider: http`；若已配置其它 fetch provider，则保留原选择。如果已有 `web` override，应修改原 row，而不是覆盖整个 patch 文件，并保留无关配置。修改后重启对应 profile。Web provider 的选择是 profile 全局设置，但 Copilot 搜索解析的是发起 Session／请求的模型，不是全局模型默认值。发起 route 不符合 Copilot Responses 条件时，`web_search` 报告不可用，不回退 DeepSeek。撤销时只删除为本次可选配置新增的 row，或恢复之前的 `web` 配置。
 
 显式 `web.searchProvider` 优先于 `DSH_WEB_SEARCH_PROVIDER`。如果 bundle 已选择 `deepseek-official`，仅设置该环境变量不能覆盖它。因此搜索提示缺少 `DEEPSEEK_API_KEY`，说明直接搜索 Tool 仍选择了 DeepSeek；Copilot 登录不会配置 DeepSeek 凭据。Copilot 搜索路径使用自己的 OAuth grant，不需要该 key。
 
@@ -211,7 +225,7 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 | `accountModelTtlMs` | `86400000` | 最大账号元数据复用窗口，毫秒（24 小时）；不延长凭据或 proof 有效期。 |
 | `accountModelFailureCooldownMs` | `300000` | 非强制发现的失败冷却，毫秒（5 分钟）；不设周期重试。 |
 | `enabled` | `true` | 启用两种 hosted-search 表面。 |
-| `providers` | `[]` | 两种表面的可选 route allowlist；空值跟随当前选择。 |
+| `providers` | `[]` | 两种表面的可选 route allowlist；空值跟随发起 route。保留已有非空列表；旧 ID 改为 `github-copilot-preview` 须由 Ops 显式审核。 |
 | `includeSources` | `true` | Inline 路径请求供应方引用；`ctx.web` bridge 始终请求并返回 sources。 |
 | `stripServerTools` | `true` | Inline 路径删除 hosted-search tool 的本地 function 变体。 |
 | `idleTimeoutMs` | `300000` | Inline stream 空闲超时以及 `ctx.web` 请求 deadline，单位毫秒。 |
@@ -286,7 +300,7 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 
 署名依据实际工具：DSH 协助的改动使用 `Assisted-by: DeepSeek Harness (DSH)`，不能因为模型来自 Copilot 就添加 Copilot App co-author。保留人类 Git author；`Co-authored-by` 只用于身份经过确认的真实协作者。合并、安装到 profile、登出和 worktree checkout 仍需要明确批准。重要更新默认包含合并后的发版交付，按下文规则继续推进，不再重复询问是否发版。
 
-验证证据必须分层：包存在、模块导入和合成测试通过，不证明真实 DSH 已激活、账号权限有效、模型请求或搜索成功。Authorization `status()` 现在为只读；显式 reconciliation 或启动仍可能持久化配置，能力 probe 只在真实且符合条件的请求中运行。没有真实请求时，这些状态均不能证明 transport 已成功。会话模型与默认 plan 不一致时，现在保留 Core transport，避免误用默认模型。完整发现、证据与剩余限制见[readiness 审计](./docs/agent-readiness.md)。
+验证证据必须分层：包存在、模块导入和合成测试通过，不证明真实 DSH 已激活、账号权限有效、模型请求或搜索成功。Authorization `status()` 现在为只读；显式 reconciliation 或启动仍可能持久化配置，能力 probe 只在真实且符合条件的请求中运行。没有真实请求时，这些状态均不能证明 transport 已成功。搜索解析捕获的发起 Session 有效请求配置或显式请求 options并按 owner 保存 plan，不再从未来全局默认值派生；不支持的上下文仍保守失败。发布、Ops 迁移及 registry 回读仍是独立证据。完整发现、证据与剩余限制见[readiness 审计](./docs/agent-readiness.md)。
 
 ## 重要更新的发版交付
 
@@ -301,8 +315,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。新版本使用标准 SemVer 预发布标识（`alpha`、`beta` 或 `rc`）；历史上的 `cloga` 后缀用于标识下游 fork 构建，新版本不再使用。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，按版本标记 prerelease，并且只在前序步骤全部成功后创建 GitHub Release。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.7/dsh-github-copilot-0.4.0-alpha.7.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.7/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/dsh-github-copilot-0.4.0-alpha.8.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -310,7 +324,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.7.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.8.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

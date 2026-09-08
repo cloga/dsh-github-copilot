@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.7"
+    "version": "0.4.0-alpha.8"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -477,7 +477,10 @@
         {"file": "src/probe.ts", "marker": "RESPONSES_PROBE_ROUNDS = 2"}
       ],
       "tests": [
-        {"file": "tests/inline/apply.spec.ts", "name": "preserves session model overrides on the same provider without custom wire calls"},
+        {"file": "tests/inline/apply.spec.ts", "name": "captures an explicit request model instead of substituting a changed Session selection"},
+        {"file": "tests/inline/apply.spec.ts", "name": "routes concurrent hosted tools from real model-selection request headers rather than activation seeds"},
+        {"file": "tests/inline/apply.spec.ts", "name": "disposes only A during final %s HTTP %s while B completes without cross-cancellation"},
+        {"file": "tests/inline/apply.spec.ts", "name": "ensures cold metadata only on actual search and captures selection before discovery awaits"},
         {"file": "tests/preview-route.spec.ts", "name": "resolves Host-only search auth from the live generic snapshot without exposing it in status"},
         {"file": "tests/copilot-request.spec.ts", "name": "combines installed catalog headers with provider-required request metadata"},
         {"file": "tests/copilot-request.spec.ts", "name": "applies a credential-specific Copilot endpoint before request construction"},

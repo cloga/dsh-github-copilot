@@ -220,9 +220,13 @@ class PreviewAdapter extends PiAiAdapter {
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     owned(provider)
     try {
+      // Catalog consumers share Settings/request discovery, including its signed-out
+      // guard, single flight, TTL and failure cooldown. No separate catalog owner.
+      const snapshot = await this.discoverSnapshot()
+      // Publishing a new directory notifies Core synchronously; a listener may
+      // invalidate credentials/proof before discovery returns. Recheck, never retry.
       const grant = await this.lifetime.read()
-      const snapshot = this.lifetime.source.readSnapshot()
-      if (grant === undefined || snapshot === undefined || snapshot.accountKey !== copilotAccountKey(grant)) return []
+      if (grant === undefined || snapshot.accountKey !== copilotAccountKey(grant)) return []
       const proof = this.lifetime.proofFor(snapshot)
       if (proof === undefined || tokenFingerprint(grant.access) !== proof.tokenFingerprint || grant.expires <= Date.now()) return []
       return snapshot.models.map(model => ({ provider, id: model.id, name: model.name, inputModalities: [...model.input] }))

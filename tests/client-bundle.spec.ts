@@ -208,8 +208,11 @@ describe('tsdown client artifact', () => {
       const owner = { provider: { provider: 'github-copilot', displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: false, keyConfigured: false }
       const renderProvider = () => fixture.registrations.get('settings.models.provider-card')!(owner)
       const footerElement = fixture.registrations.get('settings.models.footer')!({})
-      provider.render(renderProvider()); footer.render(footerElement)
-      expect(provider.render(renderProvider())).toBeNull()
+      const draftWarning = renderProvider()
+      expect(draftWarning.type).toBe('p')
+      expect(draftWarning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
+      expect(draftWarning.props.children).toContain('another model group')
+      footer.render(footerElement)
       const fallback = footer.render(footerElement)
       const account = fallback?.props.children.props.account
       expect(fallback?.props['data-dsh-github-copilot-account-surface']).toBe('footer')

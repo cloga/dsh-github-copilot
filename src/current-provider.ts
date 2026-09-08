@@ -1,6 +1,6 @@
 /**
- * Detection of the provider route the harness currently chats with: the
- * default-model selection names a route and model, the `llm-pi-ai` settings
+ * Detection of an operation's provider route: the initiating Agent or explicit
+ * request names a route and model, the `llm-pi-ai` settings
  * section carries the route's profile, and the pi-ai catalog supplies the
  * defaults (wire protocol, base URL) a profile that overrides nothing inherits.
  * The probe and plan modules read this to decide which search-capable
@@ -9,6 +9,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { builtinProviders, getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import type { BuiltinProvider } from '@earendil-works/pi-ai/providers/all'
@@ -145,16 +146,43 @@ function profileFacts(
 }
 
 /**
- * Read the route the harness currently chats with. Absent any of the inputs
- * (no default-model service, no settings service, no selection) the answer is
- * `undefined` and the caller must fall back to explicit configuration.
- * @param ctx - plugin context; the `agentDefaultModel` and `settings`
- *   services are read optionally through `ctx.get`.
- * @returns the current chat route, or `undefined` when undetectable.
+ * Read the public asynchronous initiator seam when supported by Core.
+ * Older Core and agentless callers have no session selection; never substitute
+ * the default-model service or an arbitrary registered Agent.
+ * @param ctx - Host context with the optional Agent registry.
+ * @returns the initiating Agent, or undefined when the capability/caller is absent.
  */
-export function currentChatRoute(ctx: Context): CurrentChatRoute | undefined {
-  const selection = ctx.get('agentDefaultModel')?.currentSelection()
-  if (selection === undefined) return undefined
+export function currentSearchInitiator(ctx: Context): Agent | undefined {
+  const agents = ctx.get('agents') as { currentInitiator?: () => Agent | undefined } | undefined
+  return typeof agents?.currentInitiator === 'function' ? agents.currentInitiator() : undefined
+}
+
+/**
+ * Capture the initiating Session's effective request route. Agent.options is
+ * only an activation seed; Core model-selection waterfalls need not update it.
+ * @param agent - initiating Agent recovered at the operation entry.
+ * @returns provider/model leaves from the last committed request header, or none.
+ */
+export function currentSearchSelection(agent: Agent | undefined): { provider: string; model: string } | undefined {
+  const session = agent?.session as { requestHeader?: () => { config?: { provider?: string; model?: string } } | undefined } | undefined
+  const config = typeof session?.requestHeader === 'function' ? session.requestHeader()?.config : undefined
+  return config?.provider && config.model ? { provider: config.provider, model: config.model } : undefined
+}
+
+/**
+ * Resolve one operation's route. Explicit GenerateOptions fields are already
+ * resolved by Core and take precedence; otherwise use the initiating Session's
+ * effective request header. Missing request evidence fails closed.
+ * @param ctx - context used for public initiator, settings and catalog reads.
+ * @param explicit - explicit request selection, captured at operation entry.
+ * @returns owned route facts, or undefined without a usable selection.
+ */
+export function currentChatRoute(
+  ctx: Context,
+  explicit?: { readonly provider?: string; readonly model?: string },
+): CurrentChatRoute | undefined {
+  const selection = explicit ?? currentSearchSelection(currentSearchInitiator(ctx))
+  if (!selection?.provider || !selection.model) return undefined
   if (selection.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
     && !isPluginPreviewProvider(ctx, selection.provider)) return undefined
   const profile = selection.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
