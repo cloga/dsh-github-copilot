@@ -6,11 +6,11 @@ const catalog = { state: 'ready', models: [{ id: 'future-lab-r17', name: 'Future
   rejected: [{ id: 'unsupported', code: 'UNSUPPORTED_ENDPOINTS' }], discoveredAt: 123 }
 
 describe('account model discovery Remote contract', () => {
-  it('registers explicit discovery with the same strict safe authorization view codec', () => {
-    const discovery = contribution.descriptors.find(item => item.method === 'discoverModels')
+  it.each(['discoverModels', 'ensureModels'])('registers %s with the same strict safe authorization view codec', method => {
+    const discovery = contribution.descriptors.find(item => item.method === method)
     expect(discovery).toMatchObject({ service: 'githubCopilotAuthorization', namespace: 'githubCopilot',
       invocation: { kind: 'direct' }, parameters: [], result: { mode: 'strict' } })
-    expect(contribution.descriptors.filter(item => item.method === 'discoverModels')).toHaveLength(1)
+    expect(contribution.descriptors.filter(item => item.method === method)).toHaveLength(1)
     expect(GitHubCopilotAuthorizationViewSchema.parse({ ...base, accountModels: catalog })).toEqual({ ...base, accountModels: catalog })
   })
   it.each(['accountKey', 'apiKey', 'baseURL', 'snapshot', 'credential'])('rejects private or unrequested discovery field %s', field => {

@@ -18,11 +18,14 @@ import { copilotAccountKey, copilotEntitlementKey, createAccountModelAuth } from
 import { createAccountModelSource } from './account-model-source.ts'
 import type { AccountModelLoadOptions, AccountModelSnapshot, AccountModelSource } from './account-model-source.ts'
 import type { AccountModelDescriptor, AccountModelRejection } from './account-model-catalog.ts'
+import type { InlineConfig } from './config.ts'
 
 /** Safe request knobs; identities, model tables, endpoints and credentials are not configurable. */
 export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   'reasoning' | 'cacheRetention' | 'transport' | 'timeoutMs' | 'websocketConnectTimeoutMs'
   | 'streamIdleTimeoutMs' | 'maxRequestImageBytes' | 'requestImagePixelBudget' | 'requestImageMaxBytes' | 'retryPolicy'>
+  & Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
+  & { readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'> }
 
 export interface GitHubCopilotPreviewView {
   readonly provider: typeof GITHUB_COPILOT_PREVIEW_PROVIDER_ID
@@ -58,6 +61,8 @@ function owned(provider: string): void {
   if (provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) throw failure('COPILOT_PREVIEW_MODEL_MISMATCH', 'UNKNOWN_MODEL')
 }
 interface Proof { readonly accountKey: string; readonly entitlementKey: string; readonly tokenFingerprint: string; readonly baseURL: string; readonly expires: number }
+/** A read may advance only its own revision when it observes a real invalidation. */
+interface CredentialReadTicket { revision: number }
 interface Lease {
   readonly snapshot: AccountModelSnapshot
   readonly descriptor: AccountModelDescriptor
@@ -72,7 +77,9 @@ class PreviewLifetime {
   private readonly wires = new Set<AbortController>()
   revision = 0
   private active = true
-  constructor(readonly credentials: CredentialStore, readonly source: AccountModelSource, readonly proofFor: (snapshot: AccountModelSnapshot) => Proof | undefined) {}
+  constructor(readonly credentials: CredentialStore, readonly source: AccountModelSource,
+    readonly proofFor: (snapshot: AccountModelSnapshot) => Proof | undefined,
+    private readonly displayProofFor: (snapshot: AccountModelSnapshot) => Proof | undefined) {}
   assertActive(): void { if (!this.active) throw failure('COPILOT_PREVIEW_DISPOSED', 'ABORTED') }
   change(): void {
     this.assertActive()
@@ -88,31 +95,38 @@ class PreviewLifetime {
     for (const wire of this.wires) wire.abort()
     this.wires.clear()
   }
-  async read(signal = this.controller.signal): Promise<GitHubCopilotOAuthCredential | undefined> {
+  async read(signal = this.controller.signal, ticket?: CredentialReadTicket): Promise<GitHubCopilotOAuthCredential | undefined> {
     this.assertActive()
     const revision = this.revision
+    const invalidateRead = (): void => {
+      const ownRevision = this.revision + 1
+      this.change()
+      if (ticket !== undefined) ticket.revision = ownRevision
+    }
     let credential: Awaited<ReturnType<CredentialStore['read']>>
     try { credential = await abortable(this.credentials.read(GITHUB_COPILOT_PREVIEW_PROVIDER_ID), signal) }
     catch {
       this.assertActive()
       if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
+      if (revision === this.revision) invalidateRead()
       throw failure('COPILOT_PREVIEW_CREDENTIAL_READ_FAILED')
     }
     this.assertActive()
     if (signal.aborted || revision !== this.revision) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED', 'ABORTED')
-    if (credential === undefined) return undefined
-    if (credential.type !== 'oauth') throw failure('COPILOT_PREVIEW_OAUTH_REQUIRED')
+    if (credential === undefined) { invalidateRead(); return undefined }
+    if (credential.type !== 'oauth') { invalidateRead(); throw failure('COPILOT_PREVIEW_OAUTH_REQUIRED') }
     let grant: GitHubCopilotOAuthCredential
     try { grant = normalizeGitHubCopilotOAuthCredential(credential) }
-    catch { throw failure('COPILOT_PREVIEW_CREDENTIAL_INVALID') }
-    const snapshot = this.source.readSnapshot()
-    const proof = snapshot === undefined ? undefined : this.proofFor(snapshot)
+    catch { invalidateRead(); throw failure('COPILOT_PREVIEW_CREDENTIAL_INVALID') }
+    // Stored-record checks must still revoke metadata after its display TTL expires.
+    const snapshot = this.source.readDisplaySnapshot()
+    const proof = snapshot === undefined ? undefined : this.displayProofFor(snapshot)
     if (proof !== undefined && (proof.accountKey !== copilotAccountKey(grant)
       || proof.entitlementKey !== copilotEntitlementKey(grant)
-      || proof.tokenFingerprint !== tokenFingerprint(grant.access) || grant.expires <= Date.now())) {
+      || proof.tokenFingerprint !== tokenFingerprint(grant.access) || proof.expires <= Date.now() || grant.expires <= Date.now())) {
       // Treat an observed silent record change exactly like a notification:
       // revoke the old metadata proof and every active wire, without discovery.
-      this.change()
+      invalidateRead()
     }
     return grant
   }
@@ -201,6 +215,7 @@ class PreviewAdapter extends PiAiAdapter {
   constructor(private readonly lifetime: PreviewLifetime,
     private readonly optionsFor: (lease?: Lease) => PiAiAdapterOptions,
     private readonly discoverSnapshot: (options?: AccountModelLoadOptions) => Promise<AccountModelSnapshot>,
+    private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
   ) { super(optionsFor()) }
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     owned(provider)
@@ -215,26 +230,45 @@ class PreviewAdapter extends PiAiAdapter {
   }
   override async resolveModel(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo> {
     owned(provider)
+    const cached = this.lifetime.source.readSnapshot()
     const snapshot = await this.discoverSnapshot({ signal })
-    const lease = await this.lifetime.lease(snapshot, model, signal)
-    return new PiAiAdapter(this.optionsFor(lease)).resolveModel(provider, model, signal)
+    const lease = await this.lease(snapshot, model, signal, cached === snapshot)
+    return this.withRecovery(snapshot, signal, () => new PiAiAdapter(this.optionsFor(lease)).resolveModel(provider, model, signal))
   }
   override async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
     owned(provider)
+    const cached = this.lifetime.source.readSnapshot()
     const snapshot = await this.discoverSnapshot({ signal })
-    const lease = await this.lifetime.lease(snapshot, model, signal)
-    const prepared = await new PiAiAdapter(this.optionsFor(lease)).prepareCall(provider, model, signal)
+    const lease = await this.lease(snapshot, model, signal, cached === snapshot)
+    const prepared = await this.withRecovery(snapshot, signal, () => new PiAiAdapter(this.optionsFor(lease)).prepareCall(provider, model, signal))
     return { model: prepared.model, stream: options => this.guardedStream(lease, prepared.stream, options) }
   }
   override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const owner = this
     return (async function* () {
       owned(options.provider)
+      const cached = owner.lifetime.source.readSnapshot()
       const snapshot = await owner.discoverSnapshot({ signal: options.signal })
-      const lease = await owner.lifetime.lease(snapshot, options.model, options.signal)
+      const lease = await owner.lease(snapshot, options.model, options.signal, cached === snapshot)
       const native = new PiAiAdapter(owner.optionsFor(lease))
       yield* owner.guardedStream(lease, request => native.stream(request), options)
     })()
+  }
+  private async lease(snapshot: AccountModelSnapshot, model: string, signal: AbortSignal | undefined, reused: boolean): Promise<Lease> {
+    try { return await this.lifetime.lease(snapshot, model, signal) }
+    catch (cause) {
+      // A miss from the catalog fetched by this very request is already current;
+      // only a cached miss warrants one out-of-TTL metadata recovery.
+      if (reused && cause instanceof LlmError && cause.code === 'UNKNOWN_MODEL') await this.refreshRejected(snapshot, signal, true)
+      throw cause
+    }
+  }
+  private async withRecovery<T>(snapshot: AccountModelSnapshot, signal: AbortSignal | undefined, operation: () => Promise<T>): Promise<T> {
+    try { return await operation() }
+    catch (cause) {
+      if (cause instanceof LlmError && cause.code === 'UNKNOWN_MODEL') await this.refreshRejected(snapshot, signal)
+      throw cause
+    }
   }
   private guardedStream(lease: Lease, dispatch: PreparedAdapterCall['stream'], options: GenerateOptions): AsyncIterable<StreamChunk> {
     const owner = this
@@ -248,13 +282,25 @@ class PreviewAdapter extends PiAiAdapter {
         if (typeof mapping !== 'string' || mapping.length === 0) throw failure('COPILOT_PREVIEW_REASONING_UNSUPPORTED', 'INVALID_REQUEST')
       }
       const signal = AbortSignal.any([lease.signal, ...options.signal === undefined ? [] : [options.signal]])
-      yield* dispatch({ ...options, signal })
+      try {
+        for await (const chunk of dispatch({ ...options, signal })) {
+          if (chunk.type === 'finish' && chunk.reason.kind === 'error' && chunk.reason.failure.code === 'UNKNOWN_MODEL') {
+            await owner.refreshRejected(lease.snapshot, signal)
+          }
+          yield chunk
+        }
+      } catch (cause) {
+        if (cause instanceof LlmError && cause.code === 'UNKNOWN_MODEL') await owner.refreshRejected(lease.snapshot, signal)
+        throw cause
+      }
     })()
   }
 }
 
 /** Register one stable account route; attach/status remain network-free. */
 export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
+  const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings, ...requestConfig } = config
+  const cacheSettings = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs }))
   const store = createGitHubCopilotCredentialStore(ctx, GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
   const nativeAuth = createAccountModelAuth(createGitHubCopilotCredentialStore(ctx))
   const nativeModels = getBuiltinModels('github-copilot')
@@ -262,8 +308,10 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   let lastValidatedProof: Proof | undefined
   let provenSnapshot: AccountModelSnapshot | undefined
   let snapshotProof: Proof | undefined
-  const source = createAccountModelSource({
+  const source: AccountModelSource = createAccountModelSource({
     ...nativeAuth, nativeApis, headers: copilotPublicHeaders(),
+    ttlMs: () => cacheSettings().accountModelTtlMs ?? 86_400_000,
+    failureCooldownMs: () => cacheSettings().accountModelFailureCooldownMs ?? 300_000,
     async assertAuthCurrent(auth, signal) {
       await nativeAuth.assertAuthCurrent(auth, signal)
       const stored = await store.read(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
@@ -272,20 +320,29 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
       if (copilotAccountKey(grant) !== auth.accountKey || grant.access !== auth.apiKey || grant.expires <= Date.now()) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
       const entitlementKey = copilotEntitlementKey({ ...auth.availableModelIds === undefined ? {} : { availableModelIds: [...auth.availableModelIds] } })
       if (copilotEntitlementKey(grant) !== entitlementKey) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
+      if (source.readDisplaySnapshot() !== undefined && snapshotProof !== undefined && (snapshotProof.accountKey !== auth.accountKey
+        || snapshotProof.entitlementKey !== entitlementKey || snapshotProof.tokenFingerprint !== tokenFingerprint(auth.apiKey))) {
+        lifetime.change()
+        throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
+      }
       lastValidatedProof = Object.freeze({ accountKey: auth.accountKey, entitlementKey, tokenFingerprint: tokenFingerprint(auth.apiKey), baseURL: auth.baseURL, expires: grant.expires })
     },
   })
-  const proofFor = (snapshot: AccountModelSnapshot): Proof | undefined => source.readSnapshot() === snapshot && provenSnapshot === snapshot ? snapshotProof : undefined
-  const lifetime = new PreviewLifetime(store, source, proofFor)
+  const displayProofFor = (snapshot: AccountModelSnapshot): Proof | undefined => source.readDisplaySnapshot() === snapshot
+    && provenSnapshot === snapshot && snapshotProof?.accountKey === snapshot.accountKey ? snapshotProof : undefined
+  const proofFor = (snapshot: AccountModelSnapshot): Proof | undefined => source.readSnapshot() === snapshot
+    && snapshotProof !== undefined && snapshotProof.expires > Date.now() ? displayProofFor(snapshot) : undefined
+  const lifetime = new PreviewLifetime(store, source, proofFor, displayProofFor)
   // Empty provider is used only for registry metadata/config validation, never requests.
-  const template = resolvedProfile(createAccountProvider([], lifetime.guard(), 'https://api.individual.githubcopilot.com').provider, config)
+  const template = resolvedProfile(createAccountProvider([], lifetime.guard(), 'https://api.individual.githubcopilot.com').provider, requestConfig)
   let configured = false
   let readError: string | undefined
   let publishedDirectory = ''
   const getView = (): GitHubCopilotPreviewView => {
     const status = source.getView()
-    const cachedSnapshot = source.readSnapshot()
-    const snapshot = snapshotProof !== undefined && snapshotProof.expires > Date.now() ? cachedSnapshot : undefined
+    const cachedSnapshot = source.readDisplaySnapshot()
+    const proof = cachedSnapshot === undefined ? undefined : displayProofFor(cachedSnapshot)
+    const snapshot = readError === undefined && proof !== undefined && proof.expires > Date.now() ? cachedSnapshot : undefined
     const models = snapshot?.models.map(({ id, name, api }) => Object.freeze({ id, name, api })) ?? []
     const rejected = snapshot?.rejected.map(({ id, code }) => Object.freeze({ ...id === undefined ? {} : { id }, code })) ?? []
     const warnings = snapshot?.models.flatMap(model => {
@@ -306,7 +363,8 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
         || expectedEfforts.some(level => !nativeEfforts.includes(level) || (native.thinkingLevelMap?.[level] ?? level) !== (actual.thinkingLevelMap?.[level] ?? level))
     }) ?? false
     const state = status.state === 'disposed' ? 'disposed' : readError !== undefined ? 'error' : !configured ? 'unconfigured'
-      : status.state === 'ready' && models.length === 0 ? 'unavailable' : status.state
+      : status.state === 'ready' && cachedSnapshot !== undefined && snapshot === undefined ? 'stale'
+        : status.state === 'ready' && models.length === 0 ? 'unavailable' : status.state
     return Object.freeze({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured, available: configured && state === 'ready' && models.length > 0,
       correctionActive: changed, state, models: Object.freeze(models), rejected: Object.freeze(rejected), warnings: Object.freeze(warnings),
       ...status.fetchedAt === undefined ? {} : { discoveredAt: status.fetchedAt },
@@ -316,32 +374,38 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   let notify = (): void => undefined
   const refresh = async (): Promise<GitHubCopilotPreviewView> => {
     lifetime.assertActive()
-    const revision = lifetime.revision
+    const ticket: CredentialReadTicket = { revision: lifetime.revision }
     try {
-      const grant = await lifetime.read()
-      if (revision === lifetime.revision) { configured = grant !== undefined; readError = undefined }
-      const snapshot = source.readSnapshot()
+      const grant = await lifetime.read(undefined, ticket)
+      if (ticket.revision !== lifetime.revision) return getView()
+      configured = grant !== undefined; readError = undefined
+      const snapshot = source.readDisplaySnapshot()
       if (snapshot !== undefined && (grant === undefined || snapshot.accountKey !== copilotAccountKey(grant)
         || snapshotProof?.tokenFingerprint !== tokenFingerprint(grant.access) || grant.expires <= Date.now())) {
         source.invalidate(); provenSnapshot = undefined; snapshotProof = undefined
       }
     } catch {
       lifetime.assertActive()
-      if (revision === lifetime.revision) { configured = false; readError = 'COPILOT_PREVIEW_CREDENTIAL_READ_FAILED' }
+      if (ticket.revision !== lifetime.revision) return getView()
+      configured = false; readError = 'COPILOT_PREVIEW_CREDENTIAL_READ_FAILED'
     }
     notify()
     return getView()
   }
   const discoverSnapshot = async (options: AccountModelLoadOptions = {}): Promise<AccountModelSnapshot> => {
     lifetime.assertActive()
+    const ticket: CredentialReadTicket = { revision: lifetime.revision }
     let grant: GitHubCopilotOAuthCredential | undefined
-    try { grant = await lifetime.read(options.signal) }
+    try { grant = await lifetime.read(options.signal, ticket) }
     catch {
       lifetime.assertActive()
-      readError = 'COPILOT_PREVIEW_CREDENTIAL_READ_FAILED'
-      notify()
+      if (ticket.revision === lifetime.revision) {
+        readError = 'COPILOT_PREVIEW_CREDENTIAL_READ_FAILED'
+        notify()
+      }
       throw failure('COPILOT_PREVIEW_CREDENTIAL_READ_FAILED')
     }
+    if (ticket.revision !== lifetime.revision) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED', 'ABORTED')
     if (grant === undefined) {
       configured = false; readError = undefined; source.invalidate(); provenSnapshot = undefined; snapshotProof = undefined
       notify()
@@ -349,7 +413,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     }
     configured = true
     readError = undefined
-    const cached = source.readSnapshot()
+    const cached = source.readDisplaySnapshot()
     if (cached !== undefined && (cached.accountKey !== copilotAccountKey(grant) || snapshotProof?.tokenFingerprint !== tokenFingerprint(grant.access) || grant.expires <= Date.now())) {
       source.invalidate(); provenSnapshot = undefined; snapshotProof = undefined
     }
@@ -361,6 +425,29 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
       return snapshot
     } finally { notify() }
   }
+  let rejectedRecovery: { readonly accountKey: string; readonly tokenFingerprint: string; readonly at: number } | undefined
+  const refreshRejected = async (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly = false): Promise<void> => {
+    const proof = displayProofFor(snapshot)
+    if (proof === undefined) return
+    const now = Date.now()
+    const age = rejectedRecovery === undefined ? undefined : now - rejectedRecovery.at
+    // Even when passive failure cooldown is disabled, repeated model rejection
+    // cannot produce an unbounded immediate metadata retry loop.
+    const cooldown = Math.max(1000, cacheSettings().accountModelFailureCooldownMs ?? 300_000)
+    const cooling = !Number.isFinite(now) || rejectedRecovery?.accountKey === proof.accountKey
+      && rejectedRecovery.tokenFingerprint === proof.tokenFingerprint && (age === undefined || !Number.isFinite(age) || age < cooldown)
+    // A local typo/absent ID does not revoke the other models in a catalog that
+    // recovery just validated. A native rejection of a listed ID does revoke it.
+    if (missingOnly && (cooling || signal?.aborted)) return
+    if (!source.rejectSnapshot(snapshot)) return
+    provenSnapshot = undefined; snapshotProof = undefined
+    notify()
+    if (cooling || signal?.aborted) return
+    rejectedRecovery = { accountKey: proof.accountKey, tokenFingerprint: proof.tokenFingerprint, at: now }
+    // Metadata recovery only: preserve the original request failure, model ID and
+    // stream. Never replay a model wire request or retry generic provider errors.
+    try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
+  }
   const optionsFor = (lease?: Lease): PiAiAdapterOptions => {
     const { provider } = createAccountProvider(lease?.snapshot.models ?? [], lifetime.guard(lease), lease?.proof.baseURL ?? 'https://api.individual.githubcopilot.com')
     const profile = Object.freeze({ ...template, piProvider: provider })
@@ -371,7 +458,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
       resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(attachments, hostPath => ctx.get('fs')?.processPathFromHostPath(hostPath), ref),
     }
   }
-  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID], new PreviewAdapter(lifetime, optionsFor, discoverSnapshot))
+  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID], new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected))
   notify = () => {
     const view = getView()
     // These are small owned DTOs, not live Cordis objects or credential records.

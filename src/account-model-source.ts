@@ -19,7 +19,9 @@ export interface AccountModelSourceDependencies {
   headers?: Readonly<Record<string, string>>
   nativeApis?: ReadonlyMap<string, string>
   now?: () => number
-  ttlMs?: number
+  ttlMs?: number | (() => number)
+  /** Failure backoff for non-force discovery only; never a background retry timer. */
+  failureCooldownMs?: number | (() => number)
   timeoutMs?: number
 }
 
@@ -157,7 +159,6 @@ async function readBoundedText(response: Response, signal: AbortSignal, assertCu
  * Cache reads do not refresh OAuth or claim authority over a separate Core catalog.
  */
 export class AccountModelSource {
-  private readonly ttlMs: number
   private readonly timeoutMs: number
   private readonly now: () => number
   private readonly fetch: typeof globalThis.fetch
@@ -168,13 +169,14 @@ export class AccountModelSource {
   private cache: AccountModelSnapshot | undefined
   private flight: Flight | undefined
   private failure: AccountModelSourceErrorCode | undefined
+  private failedAt = 0
   private readonly operations = new Set<Flight>()
 
   constructor(private readonly dependencies: AccountModelSourceDependencies) {
-    this.ttlMs = dependencies.ttlMs ?? 300_000
+    this.cacheDuration('ttlMs')
+    this.cacheDuration('failureCooldownMs')
     this.timeoutMs = dependencies.timeoutMs ?? 10_000
-    if (!Number.isSafeInteger(this.ttlMs) || this.ttlMs < 0 || this.ttlMs > MAX_TIMER
-      || !Number.isSafeInteger(this.timeoutMs) || this.timeoutMs < 1 || this.timeoutMs > MAX_TIMER
+    if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs < 1 || this.timeoutMs > MAX_TIMER
       || typeof dependencies.resolveAuth !== 'function' || typeof dependencies.assertAuthCurrent !== 'function') {
       throw error('COPILOT_MODEL_SOURCE_INVALID_CONFIG')
     }
@@ -196,19 +198,35 @@ export class AccountModelSource {
     } catch { throw error('COPILOT_MODEL_SOURCE_INVALID_CONFIG') }
   }
 
-  readSnapshot(): AccountModelSnapshot | undefined {
+  private cacheDuration(kind: 'ttlMs' | 'failureCooldownMs'): number {
+    const configured = this.dependencies[kind]
+    const value = (typeof configured === 'function' ? configured() : configured) ?? (kind === 'ttlMs' ? 86_400_000 : 300_000)
+    if (!Number.isSafeInteger(value) || value < 0 || value > MAX_TIMER) throw error('COPILOT_MODEL_SOURCE_INVALID_CONFIG')
+    return value
+  }
+
+  /** Display only: TTL expiry is allowed, but invalidation and clock guards still apply.
+   * The owner must additionally validate its account/token/entitlement proof before display. */
+  readDisplaySnapshot(): AccountModelSnapshot | undefined {
     if (this.disposed || this.cache === undefined || this.cache.generation !== this.generation) return undefined
     const age = this.now() - this.cache.fetchedAt
-    return Number.isFinite(age) && age >= 0 && age < this.ttlMs ? this.cache : undefined
+    return Number.isFinite(age) && age >= 0 ? this.cache : undefined
+  }
+
+  readSnapshot(): AccountModelSnapshot | undefined {
+    const snapshot = this.readDisplaySnapshot()
+    if (snapshot === undefined || this.flight !== undefined || this.failure !== undefined) return undefined
+    const age = this.now() - snapshot.fetchedAt
+    return Number.isFinite(age) && age >= 0 && age < this.cacheDuration('ttlMs') ? snapshot : undefined
   }
 
   getView(): AccountModelSourceView {
-    const snapshot = this.readSnapshot()
+    const snapshot = this.readDisplaySnapshot()
     const state = this.disposed ? 'disposed' : this.flight !== undefined ? 'loading'
-      : this.failure !== undefined ? 'error' : snapshot !== undefined ? 'ready' : this.cache !== undefined ? 'stale' : 'idle'
+      : this.failure !== undefined ? 'error' : this.readSnapshot() !== undefined ? 'ready' : snapshot !== undefined ? 'stale' : 'idle'
     return Object.freeze({ state, generation: this.generation,
       modelCount: snapshot?.models.length ?? 0, rejectedCount: snapshot?.rejected.length ?? 0,
-      ...this.cache === undefined ? {} : { fetchedAt: this.cache.fetchedAt },
+      ...snapshot === undefined ? {} : { fetchedAt: snapshot.fetchedAt },
       ...this.failure === undefined || this.disposed ? {} : { error: this.failure } })
   }
 
@@ -219,6 +237,12 @@ export class AccountModelSource {
     if (this.flight === undefined && !options.force && cached !== undefined) {
       return options.signal === undefined ? Promise.resolve(cached)
         : abortable(Promise.resolve(cached), options.signal, () => error('COPILOT_MODEL_SOURCE_ABORTED'))
+    }
+    if (this.flight === undefined && !options.force && this.failure !== undefined) {
+      const age = this.now() - this.failedAt
+      const configured = this.cacheDuration('failureCooldownMs')
+      const cooldown = this.failure === 'COPILOT_MODEL_SOURCE_INVALIDATED' ? Math.max(1000, configured) : configured
+      if (!Number.isFinite(age) || age < 0 || age < cooldown) return Promise.reject(error(this.failure))
     }
     const flight = this.flight ?? this.start()
     flight.waiters++
@@ -238,6 +262,15 @@ export class AccountModelSource {
     options.signal?.addEventListener('abort', release, { once: true })
     if (options.signal?.aborted) release()
     return waiting.then(value => { release(); return value }, cause => { release(); throw cause })
+  }
+
+  /** Revoke definitively rejected metadata and back off passive reuse/recovery. */
+  rejectSnapshot(snapshot: AccountModelSnapshot): boolean {
+    if (this.readDisplaySnapshot() !== snapshot) return false
+    this.invalidate()
+    this.failure = 'COPILOT_MODEL_SOURCE_INVALIDATED'
+    this.failedAt = this.now()
+    return true
   }
 
   invalidate(): void {
@@ -265,8 +298,8 @@ export class AccountModelSource {
   }
 
   private start(): Flight {
-    this.generation++
-    this.cache = undefined
+    // Keep the current generation for display until replacement succeeds. Fresh
+    // reads are blocked throughout this attempt, including after a failed force load.
     this.failure = undefined
     const flight: Flight = { controller: new AbortController(), phase: 'auth', epoch: this.generation,
       waiters: 0, settled: false, promise: undefined!, deadline: performance.now() + this.timeoutMs }
@@ -279,7 +312,11 @@ export class AccountModelSource {
           : flight.phase === 'auth' ? 'COPILOT_MODEL_SOURCE_AUTH_FAILED'
             : flight.phase === 'checking' ? 'COPILOT_MODEL_SOURCE_AUTH_CHANGED'
               : flight.phase === 'body' ? 'COPILOT_MODEL_SOURCE_BODY_FAILED' : 'COPILOT_MODEL_SOURCE_FETCH_FAILED'
-      if (this.flight === flight && !this.disposed) this.failure = code
+      if (this.flight === flight && !this.disposed) {
+        this.failure = code
+        this.failedAt = this.now()
+        if (flight.phase === 'auth' || flight.phase === 'checking') this.cache = undefined
+      }
       throw error(code)
     }).finally(() => {
       clearTimeout(timer)
@@ -318,6 +355,7 @@ export class AccountModelSource {
     }), signal, () => abortReason(signal)))
     checkSignal(signal)
     flight.epoch = this.generation
+    if (this.cache?.accountKey !== auth.accountKey) this.cache = undefined
     await this.validateCurrent(auth, flight)
     const headers = new Headers(this.headers)
     headers.set('Authorization', `Bearer ${auth.apiKey}`)
@@ -331,7 +369,10 @@ export class AccountModelSource {
     try {
       this.current(flight)
       if (response.redirected) throw error('COPILOT_MODEL_SOURCE_REDIRECTED_RESPONSE')
-      if (!response.ok) throw error('COPILOT_MODEL_SOURCE_HTTP_ERROR')
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) this.cache = undefined
+        throw error('COPILOT_MODEL_SOURCE_HTTP_ERROR')
+      }
       await this.validateCurrent(auth, flight)
       flight.phase = 'body'
       bodyHandled = true
@@ -346,6 +387,7 @@ export class AccountModelSource {
       const fetchedAt = this.now()
       if (!Number.isSafeInteger(fetchedAt) || fetchedAt < 0) throw error('COPILOT_MODEL_SOURCE_INVALID_CONFIG')
       this.current(flight)
+      flight.epoch = ++this.generation
       const snapshot: AccountModelSnapshot = Object.freeze({ ...catalog, accountKey: auth.accountKey, fetchedAt, generation: flight.epoch })
       this.cache = snapshot
       return snapshot

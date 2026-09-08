@@ -17,12 +17,13 @@ const pending: View = { ...signedOut, phase: 'authorizing', inFlight: true, noti
 const discovered: View = { ...signedIn, accountModels: { state: 'ready', models: [{ id: 'example-model', name: 'Example', api: 'openai-responses' }], rejected: [] } }
 const ok = (value: View) => ({ ok: true, value })
 function deferred<T>() { let resolve!: (value: T) => void, reject!: (error: Error) => void; const promise = new Promise<T>((r,j) => { resolve=r; reject=j }); return {promise,resolve,reject} }
-function remote(initial = signedIn) {
+function remote(initial = discovered) {
   return { status: vi.fn(async () => ok(initial)), start: vi.fn(async () => ok(pending)), cancel: vi.fn(async () => ok(signedOut)),
-    signOut: vi.fn(async () => ok(signedOut)), discoverModels: vi.fn(async () => ok(discovered)), reconcile: vi.fn(async () => ok(signedIn)) }
+    signOut: vi.fn(async () => ok(signedOut)), ensureModels: vi.fn(async () => ok({ ...discovered, writable: initial.writable })),
+    discoverModels: vi.fn(async () => ok(discovered)), reconcile: vi.fn(async () => ok(signedIn)) }
 }
 async function flush() { for(let index=0;index<8;index++) await Promise.resolve() }
-async function harness(initial = signedIn) {
+async function harness(initial = discovered) {
   const api=remote(initial), copy=vi.fn(async (_code: string) => {})
   const account=createCompactAccount(api, authorizationViewFrom, copy)
   cleanups.push(account.attach())
@@ -31,10 +32,11 @@ async function harness(initial = signedIn) {
 }
 
 describe('compact account lifecycle', () => {
-  it('checks status once without starting discovery or polling a signed-in account', async () => {
+  it('checks fresh cached status once without starting discovery or polling a signed-in account', async () => {
     vi.useFakeTimers()
     const h=await harness()
-    expect(h.account.getSnapshot().view).toEqual(signedIn)
+    expect(h.api.ensureModels).not.toHaveBeenCalled()
+    expect(h.account.getSnapshot().view).toEqual(discovered)
     expect(h.account.getSnapshot().checking).toBe(false)
     await vi.advanceTimersByTimeAsync(3000)
     expect(h.api.status).toHaveBeenCalledOnce()
@@ -126,7 +128,7 @@ describe('compact account lifecycle', () => {
     wait.resolve(ok(pending));await Promise.all([starting,cancelling])
     expect(h.api.cancel).not.toHaveBeenCalled()
     expect(next.api.cancel).not.toHaveBeenCalled()
-    expect(next.account.getSnapshot().view).toEqual(signedIn)
+    expect(next.account.getSnapshot().view).toEqual(discovered)
   })
   it('cancellation invalidates a pending poll and clears code immediately', async () => {
     vi.useFakeTimers()
@@ -249,6 +251,151 @@ describe('compact account lifecycle', () => {
   })
 })
 
+describe('bounded initial model freshness', () => {
+  it.each(['missing', 'idle', 'stale', 'error'] as const)('ensures %s metadata once after validated initial sign-in without forced discovery or timers', async state => {
+    vi.useFakeTimers()
+    const initial: View = state === 'missing' ? signedIn : { ...discovered, accountModels: { ...discovered.accountModels!, state } }
+    const h = await harness(initial)
+    expect(h.api.ensureModels).toHaveBeenCalledOnce()
+    expect(h.api.discoverModels).not.toHaveBeenCalled()
+    expect(h.account.getSnapshot().view).toEqual(discovered)
+    await h.account.retryStatus(); await h.account.retryStatus()
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000)
+    expect(h.api.ensureModels).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it.each(['ready', 'unavailable', 'disposed', 'unconfigured'] as const)('does not automatically retry or replace %s metadata', async state => {
+    const h = await harness({ ...discovered, accountModels: { ...discovered.accountModels!, state } })
+    expect(h.api.ensureModels).not.toHaveBeenCalled()
+    expect(h.api.discoverModels).not.toHaveBeenCalled()
+  })
+  it.each(['throw', 'error-view', 'missing-method'] as const)('reports initial %s safely with no retry loop and supports forced manual retry', async failure => {
+    vi.useFakeTimers()
+    const api = remote(signedIn)
+    if (failure === 'throw') api.ensureModels.mockRejectedValueOnce(new Error('PRIVATE'))
+    else if (failure === 'error-view') api.ensureModels.mockResolvedValueOnce(ok({ ...signedIn, accountModels: { state: 'error', models: [], rejected: [] } }))
+    else Reflect.deleteProperty(api, 'ensureModels')
+    const account = createCompactAccount(api, authorizationViewFrom, async () => {})
+    cleanups.push(account.attach()); await flush()
+    expect(account.getSnapshot().error).toBe('COPILOT_MODEL_DISCOVERY_FAILED')
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(vi.getTimerCount()).toBe(0)
+    await account.retryStatus()
+    if (failure !== 'missing-method') expect(api.ensureModels).toHaveBeenCalledOnce()
+    await account.refreshModels()
+    expect(api.discoverModels).toHaveBeenCalledOnce()
+    expect(account.getSnapshot().view).toEqual(discovered)
+  })
+  it('joins initial loading metadata once and observes completion without polling or forced discovery', async () => {
+    vi.useFakeTimers()
+    const api = remote({ ...signedIn, accountModels: { state: 'loading', models: [], rejected: [] } })
+    const wait = deferred<ReturnType<typeof ok>>()
+    api.ensureModels.mockReturnValueOnce(wait.promise)
+    const account = createCompactAccount(api, authorizationViewFrom, async () => {})
+    cleanups.push(account.attach()); await flush()
+    expect(api.ensureModels).toHaveBeenCalledOnce()
+    expect(account.getSnapshot().operation).toBe('discoverModels')
+    expect(account.getSnapshot().view?.accountModels?.state).toBe('loading')
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(api.status).toHaveBeenCalledOnce()
+    expect(api.ensureModels).toHaveBeenCalledOnce()
+    expect(api.discoverModels).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+    wait.resolve(ok(discovered)); await flush()
+    expect(account.getSnapshot().operation).toBeUndefined()
+    expect(account.getSnapshot().view?.accountModels?.state).toBe('ready')
+    expect(account.getSnapshot().view?.accountModels?.models).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(api.ensureModels).toHaveBeenCalledOnce()
+  })
+  it('permits one non-forcing ensure on a later error-state lifecycle without bypassing Host cooldown', async () => {
+    vi.useFakeTimers()
+    const error: View = { ...signedIn, accountModels: { state: 'error', models: [], rejected: [], error: 'COPILOT_MODEL_DISCOVERY_FAILED' } }
+    const api = remote(error)
+    api.ensureModels.mockResolvedValue(ok(error))
+    const account = createCompactAccount(api, authorizationViewFrom, async () => {})
+    const detach = account.attach(); await flush()
+    expect(account.getSnapshot().error).toBe('COPILOT_MODEL_DISCOVERY_FAILED')
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(api.ensureModels).toHaveBeenCalledOnce()
+    detach(); cleanups.push(account.attach()); await flush()
+    expect(api.ensureModels).toHaveBeenCalledTimes(2)
+    expect(api.discoverModels).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('preserves Host-approved stale presentation during refresh and ignores the reply after disposal', async () => {
+    const stale: View = { ...discovered, accountModels: { ...discovered.accountModels!, state: 'stale' } }
+    const api = remote(stale), wait = deferred<ReturnType<typeof ok>>()
+    api.ensureModels.mockReturnValueOnce(wait.promise)
+    const account = createCompactAccount(api, authorizationViewFrom, async () => {})
+    const detach = account.attach(); await flush()
+    expect(account.getSnapshot().view?.accountModels).toEqual(stale.accountModels)
+    expect(account.getSnapshot().view?.accountModels?.state).toBe('stale')
+    detach(); const before = account.getSnapshot()
+    wait.resolve(ok(discovered)); await flush()
+    expect(account.getSnapshot()).toBe(before)
+  })
+  it('clears presentation on invalidation and fences pending discovery without background rediscovery', async () => {
+    const h = await harness(), wait = deferred<ReturnType<typeof ok>>()
+    h.api.discoverModels.mockReturnValueOnce(wait.promise)
+    const loading = h.account.refreshModels()
+    h.api.status.mockResolvedValue(ok(signedIn))
+    h.account.invalidate()
+    expect(h.account.getSnapshot().view).toBeUndefined()
+    wait.resolve(ok(discovered)); await loading; await flush()
+    expect(h.account.getSnapshot().view).toEqual(signedIn)
+    expect(h.api.status).toHaveBeenCalledTimes(2)
+    expect(h.api.ensureModels).not.toHaveBeenCalled()
+    expect(h.api.discoverModels).toHaveBeenCalledOnce()
+  })
+  it('coalesces pushed invalidations during status and never accepts the pre-invalidation account', async () => {
+    const api = remote(), wait = deferred<ReturnType<typeof ok>>()
+    api.status.mockReturnValueOnce(wait.promise)
+    const account = createCompactAccount(api, authorizationViewFrom, async () => {})
+    cleanups.push(account.attach())
+    account.invalidate(); account.invalidate()
+    expect(api.status).toHaveBeenCalledOnce()
+    api.status.mockResolvedValue(ok(signedOut))
+    wait.resolve(ok(discovered)); await flush()
+    expect(api.status).toHaveBeenCalledTimes(2)
+    expect(account.getSnapshot().view).toEqual(signedOut)
+    expect(api.ensureModels).not.toHaveBeenCalled()
+  })
+  it('preserves forced sign-in completion across its own pushed credential invalidation', async () => {
+    const h = await harness(signedOut), wait = deferred<ReturnType<typeof ok>>()
+    h.api.start.mockReturnValueOnce(wait.promise)
+    const starting = h.account.start()
+    h.account.invalidate()
+    h.api.status.mockResolvedValue(ok(signedIn))
+    wait.resolve(ok(signedIn)); await starting; await flush()
+    expect(h.api.status).toHaveBeenCalledTimes(2)
+    expect(h.api.discoverModels).toHaveBeenCalledOnce()
+    expect(h.api.ensureModels).not.toHaveBeenCalled()
+    expect(h.account.getSnapshot().view).toEqual(discovered)
+  })
+  it('stops after an invalidation status failure and ignores further invalidations after detach', async () => {
+    vi.useFakeTimers()
+    const h = await harness()
+    h.api.status.mockRejectedValueOnce(new Error('PRIVATE'))
+    h.account.invalidate(); await flush()
+    expect(h.account.getSnapshot().view).toBeUndefined()
+    expect(h.account.getSnapshot().error).toBe('COPILOT_AUTHORIZATION_STATUS_FAILED')
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(h.api.status).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+    cleanups.splice(0).forEach(clean=>clean())
+    h.account.invalidate()
+    expect(h.api.status).toHaveBeenCalledTimes(2)
+  })
+  it('does not restore a count when a subsequent Host status clears models', async () => {
+    const h = await harness()
+    h.api.status.mockResolvedValueOnce(ok(signedIn))
+    await h.account.retryStatus()
+    expect(h.account.getSnapshot().view?.accountModels).toBeUndefined()
+    expect(h.api.ensureModels).not.toHaveBeenCalled()
+  })
+})
+
 describe('bounded discovery after this account starts sign-in', () => {
   it('discovers exactly once after immediate confirmed completion and permits later manual refresh', async () => {
     vi.useFakeTimers()
@@ -280,13 +427,15 @@ describe('bounded discovery after this account starts sign-in', () => {
     expect(h.api.discoverModels).toHaveBeenCalledOnce()
     expect(vi.getTimerCount()).toBe(0)
   })
-  it('does not discover on external initial sign-in, external authorization completion or status retry', async () => {
+  it('ensures only initial signed-in metadata and does not force discovery on external authorization completion or status retry', async () => {
     vi.useFakeTimers()
     const signed=await harness(signedIn),external=await harness(pending),retry=await harness(signedOut)
     external.api.status.mockResolvedValue(ok(signedIn))
     retry.api.status.mockResolvedValue(ok(signedIn))
     await signed.account.retryStatus();await retry.account.retryStatus()
     await vi.advanceTimersByTimeAsync(2000)
+    expect(signed.api.ensureModels).toHaveBeenCalledOnce()
+    for (const h of [external,retry]) expect(h.api.ensureModels).not.toHaveBeenCalled()
     for (const h of [signed,external,retry]) expect(h.api.discoverModels).not.toHaveBeenCalled()
   })
   it.each(['throw', 'invalid', 'error', 'signed-out'] as const)('disarms discovery after %s Start instead of treating a later external sign-in as completion', async failure => {
@@ -347,7 +496,7 @@ describe('bounded discovery after this account starts sign-in', () => {
     h.api.status.mockResolvedValue(ok(signedIn));await h.account.retryStatus()
     expect(h.api.discoverModels).not.toHaveBeenCalled()
   })
-  it.each(['start','poll'] as const)('ignores successful %s completion after detach and reattach', async source => {
+  it.each(['start','poll'] as const)('ignores old %s completion while reattached lifecycle ensures missing metadata once', async source => {
     vi.useFakeTimers()
     const h=await harness(signedOut),wait=deferred<ReturnType<typeof ok>>()
     let starting: Promise<void> | undefined
@@ -357,7 +506,8 @@ describe('bounded discovery after this account starts sign-in', () => {
     h.api.status.mockResolvedValue(ok(signedIn));cleanups.push(h.account.attach());await flush()
     wait.resolve(ok(signedIn));await starting;await flush()
     expect(h.api.discoverModels).not.toHaveBeenCalled()
-    expect(h.account.getSnapshot().view).toEqual(signedIn)
+    expect(h.api.ensureModels).toHaveBeenCalledOnce()
+    expect(h.account.getSnapshot().view).toEqual(discovered)
   })
   it('fences the automatic follow-up when a subscriber detaches on completed Start', async () => {
     const h=await harness(signedOut)
@@ -455,12 +605,29 @@ function uiHarness(api=remote()) {
 }
 
 describe('compact account rendering',()=>{
+  it('keeps stale count visible during initial metadata refresh without a warning or header refresh button', async () => {
+    const api = remote({ ...discovered, accountModels: { ...discovered.accountModels!, state: 'stale' } })
+    const wait = deferred<ReturnType<typeof ok>>()
+    api.ensureModels.mockReturnValueOnce(wait.promise)
+    const ui = uiHarness(api); ui.render(); await flush()
+    const tree = ui.render()
+    expect(text(tree)).toContain('1 model · Refreshing')
+    expect(text(tree)).not.toContain('Models need refresh')
+    expect(elements(tree).some(el=>el.type==='button' && el.props['data-dsh-github-copilot-refresh-models'])).toBe(false)
+    button(tree,'Manage').props.onClick();button(ui.render(),'Manage').props.onClick()
+    expect(api.ensureModels).toHaveBeenCalledOnce()
+    wait.resolve(ok(discovered)); await flush()
+    expect(text(ui.render())).toContain('1 model')
+    expect(text(ui.render())).not.toContain('Refreshing')
+  })
   it('renders a neutral checking state then only a compact signed-in row',async()=>{
     const ui=uiHarness()
     expect(text(ui.render())).toContain('Checking status')
     await flush();const tree=ui.render()
     expect(text(tree)).toContain('Signed in')
-    button(tree,'Refresh models');const manage=button(tree,'Manage')
+    expect(text(tree)).toContain('1 model')
+    expect(elements(tree).some(el=>el.type==='button' && el.props.children==='Refresh models')).toBe(false)
+    const manage=button(tree,'Manage')
     expect(manage.props['aria-expanded']).toBe(false)
     expect(manage.props['aria-controls']).toBeTruthy()
     expect(text(tree)).not.toContain('Sign out')
@@ -490,14 +657,20 @@ describe('compact account rendering',()=>{
     expect(ui.api.status).toHaveBeenCalledTimes(2)
     expect(ui.api.discoverModels).not.toHaveBeenCalled()
   })
-  it('refreshes from the header without opening Manage and shows collapsed errors',async()=>{
+  it('keeps normal refresh inside Manage and visible Retry outside for actual failures',async()=>{
     const ui=uiHarness();ui.render();await flush()
+    expect(elements(ui.render()).some(el=>el.props['data-dsh-github-copilot-refresh-models'])).toBe(false)
+    button(ui.render(),'Manage').props.onClick()
     ui.api.discoverModels.mockRejectedValueOnce(new Error('PRIVATE'))
-    await button(ui.render(),'Refresh models').props.onClick();await flush();const tree=ui.render()
+    await button(ui.render(),'Refresh models').props.onClick();await flush()
+    button(ui.render(),'Manage').props.onClick();const tree=ui.render()
     expect(button(tree,'Manage').props['aria-expanded']).toBe(false)
     expect(elements(tree).some(el=>el.props.role==='alert')).toBe(true)
     expect(text(tree)).not.toContain('PRIVATE')
     expect(ui.api.discoverModels).toHaveBeenCalledOnce()
+    await button(tree,'Retry').props.onClick();await flush()
+    expect(ui.api.discoverModels).toHaveBeenCalledTimes(2)
+    expect(elements(ui.render()).some(el=>el.props['data-dsh-github-copilot-retry-models'])).toBe(false)
   })
   it('retries a failed authorization poll while the automatic notice remains open',async()=>{
     vi.useFakeTimers();const ui=uiHarness(remote(pending));ui.render();await flush()
@@ -556,7 +729,7 @@ describe('compact account rendering',()=>{
     ui.api.status.mockResolvedValue(ok(signedIn));await vi.advanceTimersByTimeAsync(500)
     expect(ui.api.discoverModels).toHaveBeenCalledOnce()
     button(ui.render(),'Manage').props.onClick();button(ui.render(),'Manage').props.onClick()
-    expect(button(ui.render(),'Refreshing models…').props.disabled).toBe(true)
+    expect(text(ui.render())).toContain('Refreshing')
     expect(ui.api.status).toHaveBeenCalledTimes(2)
     wait.reject(new Error('PRIVATE_AUTOMATIC_DISCOVERY'));await flush()
     const tree=ui.render()
@@ -565,16 +738,18 @@ describe('compact account rendering',()=>{
     expect(text(tree)).not.toContain('PRIVATE_AUTOMATIC_DISCOVERY')
     await vi.advanceTimersByTimeAsync(2000)
     expect(ui.api.discoverModels).toHaveBeenCalledOnce()
-    await button(ui.render(),'Refresh models').props.onClick();await flush()
+    await button(ui.render(),'Retry').props.onClick();await flush()
     expect(ui.api.discoverModels).toHaveBeenCalledTimes(2)
     expect(text(ui.render())).toContain('1 model')
   })
   it('retains a pending discovery across Manage toggles without new requests',async()=>{
     const ui=uiHarness();ui.render();await flush();const wait=deferred<ReturnType<typeof ok>>()
     ui.api.discoverModels.mockReturnValueOnce(wait.promise)
+    button(ui.render(),'Manage').props.onClick()
     const loading=button(ui.render(),'Refresh models').props.onClick()
-    button(ui.render(),'Manage').props.onClick();button(ui.render(),'Manage').props.onClick()
     expect(button(ui.render(),'Refreshing models…').props.disabled).toBe(true)
+    button(ui.render(),'Manage').props.onClick();button(ui.render(),'Manage').props.onClick();button(ui.render(),'Manage').props.onClick()
+    expect(text(ui.render())).toContain('1 model · Refreshing')
     expect(ui.api.status).toHaveBeenCalledOnce()
     wait.resolve(ok(discovered));await loading;await flush()
     expect(text(ui.render())).toContain('1 model')
@@ -584,6 +759,7 @@ describe('compact account rendering',()=>{
   it('replaces Remote ownership without retaining an old notice or late discovery',async()=>{
     const ui=uiHarness();ui.render();await flush();const wait=deferred<ReturnType<typeof ok>>()
     ui.api.discoverModels.mockReturnValueOnce(wait.promise)
+    button(ui.render(),'Manage').props.onClick()
     const loading=button(ui.render(),'Refresh models').props.onClick()
     const next=remote(signedOut);ui.render(next);await flush()
     wait.resolve(ok(discovered));await loading

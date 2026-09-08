@@ -1,6 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { BlockAssembler, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../src/preview-route.ts'
@@ -13,7 +13,7 @@ function grant(overrides: Record<string, unknown> = {}): RecordValue {
   return { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-account-a', access: 'synthetic-current-access',
     expires: Date.now() + 3_600_000, availableModelIds: [MODEL, 'gemini-3.5-flash', 'claude-sonnet-4.5'], ...overrides } }
 }
-async function runtime(initial: RecordValue | undefined = grant(), config: PreviewRouteConfig = {}) {
+async function runtime(initial: RecordValue | undefined = grant(), config: PreviewRouteConfig = { accountModelTtlMs: 300_000, accountModelFailureCooldownMs: 0 }) {
   const ctx = new Context()
   contexts.push(ctx)
   let current: RecordValue | undefined = initial
@@ -307,6 +307,307 @@ describe('plugin-owned account Copilot route', () => {
     } finally { clock.mockRestore() }
   })
 
+  it('retains TTL-expired display models through loading and error but never grants stale request permission', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    try {
+      const harness = await runtime()
+      const service = harness.ctx.get('githubCopilotPreview')!
+      const fresh = await service.discover()
+      const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+      clock.mockReturnValue(start + 300_000)
+      expect(service.getView()).toMatchObject({ state: 'stale', available: false, models: fresh.models, discoveredAt: fresh.discoveredAt })
+      expect(service.routeFacts(MODEL)).toBeUndefined()
+      await expect(harness.adapter.listModels(PREVIEW)).resolves.toEqual([])
+      let release!: (response: Response) => void
+      let entered!: () => void
+      const started = new Promise<void>(resolve => { entered = resolve })
+      const gate = new Promise<Response>(resolve => { release = resolve })
+      const fetch = vi.fn(async (input: unknown) => {
+        expect(String(input)).toMatch(/\/models$/)
+        entered()
+        return gate
+      })
+      stubFetch(fetch, true)
+      const discovering = service.discover()
+      await started
+      expect(service.getView()).toMatchObject({ state: 'loading', available: false, models: fresh.models })
+      expect(service.routeFacts(MODEL)).toBeUndefined()
+      const assembler = new BlockAssembler()
+      for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) assembler.push(chunk)
+      expect(assembler.finish.kind).toBe('error')
+      expect(fetch).toHaveBeenCalledTimes(1)
+      release(new Response('', { status: 503 }))
+      expect(await discovering).toMatchObject({ state: 'error', available: false, models: fresh.models })
+      await expect(service.resolveRequestAuth(MODEL)).rejects.toThrow(/MODEL_SOURCE/)
+      await expect(harness.adapter.resolveModel(PREVIEW, MODEL)).rejects.toThrow(/MODEL_SOURCE/)
+      expect(service.getView()).toMatchObject({ available: false, models: fresh.models })
+      expect(fetch).toHaveBeenCalledTimes(3)
+    } finally { clock.mockRestore() }
+  })
+
+  it.each(['account', 'token', 'permissions', 'signout', 'read', 'invalid', 'expiry', 'notification'] as const)(
+    'revokes stale display metadata after stored credential %s changes without discovery', async change => {
+      const start = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+      try {
+        const harness = await runtime()
+        const service = harness.ctx.get('githubCopilotPreview')!
+        await service.discover()
+        clock.mockReturnValue(start + 300_000)
+        expect(service.getView().models).toHaveLength(1)
+        if (change === 'account') harness.current()!.payload.refresh = 'synthetic-account-b'
+        if (change === 'token') harness.current()!.payload.access = 'synthetic-token-b'
+        if (change === 'permissions') harness.current()!.payload.availableModelIds = []
+        if (change === 'signout') harness.reads.mockResolvedValue(undefined)
+        if (change === 'read') harness.reads.mockRejectedValue(new Error('synthetic permission denied'))
+        if (change === 'invalid') harness.current()!.payload.access = ''
+        if (change === 'expiry') harness.current()!.payload.expires = start
+        if (change === 'notification') harness.replace(grant())
+        await service.refresh()
+        expect(service.getView()).toMatchObject({ available: false, models: [] })
+        expect(service.routeFacts(MODEL)).toBeUndefined()
+        expect(discoveryRequests).toHaveLength(1)
+        // Restoring read access cannot resurrect a proof revoked by a failed read.
+        harness.reads.mockImplementation(async () => harness.current())
+        await service.refresh()
+        expect(service.getView().models).toEqual([])
+      } finally { clock.mockRestore() }
+    },
+  )
+
+  it.each(['refresh', 'discover'] as const)('does not let obsolete %s credential reads clobber a newer account view', async operation => {
+    const harness = await runtime()
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    const old = harness.current()
+    let finishRead!: (value: RecordValue | undefined) => void
+    let entered!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    harness.reads.mockImplementationOnce(async () => {
+      entered()
+      return new Promise<RecordValue | undefined>(resolve => { finishRead = resolve })
+    })
+    const obsolete = operation === 'refresh' ? service.refresh() : service.discover({ force: true })
+    await started
+    harness.replace(grant({ refresh: 'synthetic-new-account', access: 'synthetic-new-access' }))
+    await service.refresh()
+    const current = await service.discover()
+    expect(current).toMatchObject({ configured: true, available: true, state: 'ready' })
+    finishRead(old)
+    expect(await obsolete).toEqual(current)
+    expect(service.getView()).toEqual(current)
+    expect(service.routeFacts(MODEL)).toBeDefined()
+    expect(discoveryRequests).toHaveLength(2)
+  })
+
+  it.each(['refresh', 'discover'] as const)('ignores rejected obsolete %s reads but still reports a current credential-read failure', async operation => {
+    const harness = await runtime()
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    let rejectRead!: (cause: Error) => void
+    let entered!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    harness.reads.mockImplementationOnce(async () => {
+      entered()
+      return new Promise<RecordValue | undefined>((_resolve, reject) => { rejectRead = reject })
+    })
+    const obsolete = operation === 'refresh' ? service.refresh() : service.discover({ force: true })
+    await started
+    harness.replace(grant({ refresh: 'synthetic-new-account', access: 'synthetic-new-access' }))
+    await service.refresh()
+    const current = await service.discover()
+    rejectRead(new Error('synthetic obsolete read failure'))
+    expect(await obsolete).toEqual(current)
+    expect(service.getView()).toEqual(current)
+    harness.reads.mockRejectedValueOnce(new Error('synthetic current read failure'))
+    const failed = operation === 'refresh' ? await service.refresh() : await service.discover()
+    expect(failed).toMatchObject({ state: 'error', available: false, models: [], error: 'COPILOT_PREVIEW_CREDENTIAL_READ_FAILED' })
+    expect(discoveryRequests).toHaveLength(2)
+  })
+
+  it('reports expired proof as stale without displaying it or confusing a fresh empty catalog', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000 }), {})
+      const service = harness.ctx.get('githubCopilotPreview')!
+      await service.discover()
+      const reads = harness.reads.mock.calls.length
+      clock.mockReturnValue(start + 400_000)
+      expect(service.getView()).toMatchObject({ state: 'stale', configured: true, available: false, models: [] })
+      expect(harness.reads).toHaveBeenCalledTimes(reads)
+      expect(discoveryRequests).toHaveLength(1)
+      // A fresh, genuinely empty result is authoritative unavailability, not a
+      // reason for the Client to repeatedly ensure the same empty catalog.
+      harness.replace(grant({ expires: start + 3_600_000 }))
+      stubFetch(async () => catalogResponse([]), true)
+      expect(await service.discover()).toMatchObject({ state: 'unavailable', available: false, models: [] })
+    } finally { clock.mockRestore() }
+  })
+
+  it('uses day-long defaults, live settings, and passive failure cooldown without polling', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    try {
+      const settings: PreviewRouteConfig = {}
+      const harness = await runtime(grant({ expires: start + 172_800_000 }), { accountModelSettings: () => settings })
+      const service = harness.ctx.get('githubCopilotPreview')!
+      await service.discover()
+      clock.mockReturnValue(start + 86_400_000 - 1)
+      expect((await service.discover()).available).toBe(true)
+      expect(discoveryRequests).toHaveLength(1)
+      clock.mockReturnValue(start + 86_400_000)
+      expect(service.getView()).toMatchObject({ state: 'stale', available: false, models: [{ id: MODEL }] })
+      const fetch = vi.fn(async () => new Response('', { status: 503 }))
+      stubFetch(fetch, true)
+      await service.discover()
+      clock.mockReturnValue(start + 86_400_000 + 299_999)
+      await service.discover()
+      expect(fetch).toHaveBeenCalledTimes(1)
+      await service.discover({ force: true })
+      expect(fetch).toHaveBeenCalledTimes(2)
+      settings.accountModelFailureCooldownMs = 0
+      settings.accountModelTtlMs = 100
+      fetch.mockImplementation(async () => catalogResponse())
+      expect((await service.discover()).available).toBe(true)
+      expect(fetch).toHaveBeenCalledTimes(3)
+      clock.mockReturnValue(start + 86_400_000 + 300_099)
+      expect(service.getView().state).toBe('stale')
+      await service.refresh()
+      expect(fetch).toHaveBeenCalledTimes(3)
+    } finally { clock.mockRestore() }
+  })
+
+  it('hides display models after proof expiry and disposal', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000 }))
+      const service = harness.ctx.get('githubCopilotPreview')!
+      await service.discover()
+      clock.mockReturnValue(start + 400_000)
+      expect(service.getView()).toMatchObject({ available: false, models: [] })
+      expect(service.routeFacts(MODEL)).toBeUndefined()
+      await harness.fiber.dispose()
+      expect(service.getView()).toMatchObject({ state: 'disposed', available: false, models: [] })
+    } finally { clock.mockRestore() }
+  })
+
+  it('does not extend an old proof when the stored expiry silently increases inside the day-long metadata TTL', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000 }), {})
+      const service = harness.ctx.get('githubCopilotPreview')!
+      const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+      harness.current()!.payload.expires = start + 86_400_000
+      clock.mockReturnValue(start + 400_000)
+      expect(service.getView()).toMatchObject({ available: false, models: [] })
+      expect(service.routeFacts(MODEL)).toBeUndefined()
+      const fetch = vi.fn(async () => response())
+      stubFetch(fetch)
+      const assembler = new BlockAssembler()
+      for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) assembler.push(chunk)
+      expect(assembler.finish.kind).toBe('error')
+      expect(fetch).not.toHaveBeenCalled()
+      expect((await service.discover()).available).toBe(true)
+      expect(discoveryRequests).toHaveLength(2)
+    } finally { clock.mockRestore() }
+  })
+
+  it.each(['UNKNOWN_MODEL', 'AUTH', 'NETWORK', 'RATE_LIMIT'])('recovers metadata only for definitive %s without replaying the model stream', async code => {
+    const harness = await runtime(grant(), { accountModelFailureCooldownMs: 300_000 })
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    const original: StreamChunk = { type: 'finish', reason: { kind: 'error', failure: { code, message: 'synthetic model not found', status: code === 'RATE_LIMIT' ? 429 : 400 } } }
+    const stream = vi.spyOn(CorePiAi.PiAiAdapter.prototype, 'stream').mockImplementation(async function* () { yield original })
+    try {
+      const chunks: StreamChunk[] = []
+      for await (const chunk of harness.adapter.stream({ provider: PREVIEW, model: MODEL, messages: [] })) chunks.push(chunk)
+      expect(chunks).toEqual([original])
+      expect(stream).toHaveBeenCalledTimes(1)
+      expect(discoveryRequests).toHaveLength(code === 'UNKNOWN_MODEL' ? 2 : 1)
+      expect(stream.mock.calls[0]![0].model).toBe(MODEL)
+      if (code === 'UNKNOWN_MODEL') {
+        for await (const _chunk of harness.adapter.stream({ provider: PREVIEW, model: MODEL, messages: [] })) { /* no automatic model replay */ }
+        expect(stream).toHaveBeenCalledTimes(2)
+        expect(discoveryRequests).toHaveLength(2)
+        expect(service.getView()).toMatchObject({ available: false, models: [] })
+        await service.discover()
+        expect(discoveryRequests).toHaveLength(2)
+        await service.discover({ force: true })
+        expect(discoveryRequests).toHaveLength(3)
+      }
+    } finally { stream.mockRestore() }
+  })
+
+  it('bounds repeated cached model misses even when recovery succeeds without the selected model', async () => {
+    const harness = await runtime(grant(), { accountModelFailureCooldownMs: 300_000 })
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await expect(harness.adapter.prepareCall(PREVIEW, 'synthetic-missing-model')).rejects.toThrow(/ENTITLED/)
+      expect(discoveryRequests).toHaveLength(2)
+      await expect(harness.adapter.resolveModel(PREVIEW, MODEL)).resolves.toMatchObject({ id: MODEL })
+      expect(discoveryRequests).toHaveLength(2)
+    }
+    expect(service.getView()).toMatchObject({ available: true, models: [{ id: MODEL }] })
+    await service.discover({ force: true })
+    expect(discoveryRequests).toHaveLength(3)
+  })
+
+  it.each(['resolveModel', 'prepareCall'] as const)('recovers exact native %s UNKNOWN_MODEL errors while preserving the original failure', async method => {
+    const harness = await runtime()
+    await harness.ctx.get('githubCopilotPreview')!.discover()
+    const original = new LlmError('synthetic missing model', 'UNKNOWN_MODEL')
+    const native = vi.spyOn(CorePiAi.PiAiAdapter.prototype, method).mockRejectedValue(original)
+    try {
+      await expect(harness.adapter[method](PREVIEW, MODEL)).rejects.toBe(original)
+      expect(native).toHaveBeenCalledTimes(1)
+      expect(discoveryRequests).toHaveLength(2)
+    } finally { native.mockRestore() }
+  })
+
+  it('does not start metadata recovery for a rejected stream after caller cancellation', async () => {
+    const harness = await runtime()
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    const controller = new AbortController()
+    const original: StreamChunk = { type: 'finish', reason: { kind: 'error', failure: { code: 'UNKNOWN_MODEL', message: 'synthetic rejection' } } }
+    const stream = vi.spyOn(CorePiAi.PiAiAdapter.prototype, 'stream').mockImplementation(async function* () {
+      controller.abort()
+      yield original
+    })
+    try {
+      const chunks: StreamChunk[] = []
+      for await (const chunk of harness.adapter.stream({ provider: PREVIEW, model: MODEL, messages: [], signal: controller.signal })) chunks.push(chunk)
+      expect(chunks).toEqual([original])
+      expect(stream).toHaveBeenCalledTimes(1)
+      expect(discoveryRequests).toHaveLength(1)
+      expect(service.getView()).toMatchObject({ available: false, models: [] })
+    } finally { stream.mockRestore() }
+  })
+
+  it('revokes definitively rejected model metadata even when its bounded recovery fails', async () => {
+    const harness = await runtime()
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    const fetch = vi.fn(async () => new Response('', { status: 503 }))
+    stubFetch(fetch, true)
+    const original: StreamChunk = { type: 'finish', reason: { kind: 'error', failure: { code: 'UNKNOWN_MODEL', message: 'synthetic rejection' } } }
+    const stream = vi.spyOn(CorePiAi.PiAiAdapter.prototype, 'stream').mockImplementation(async function* () { yield original })
+    try {
+      const chunks: StreamChunk[] = []
+      for await (const chunk of harness.adapter.stream({ provider: PREVIEW, model: MODEL, messages: [] })) chunks.push(chunk)
+      expect(chunks).toEqual([original])
+      expect(stream).toHaveBeenCalledTimes(1)
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(service.getView()).toMatchObject({ state: 'error', available: false, models: [] })
+      expect(service.routeFacts(MODEL)).toBeUndefined()
+    } finally { stream.mockRestore() }
+  })
+
   it('uses unmodified stock LlmRuntime preparation and leaves canonical model registration alone', async () => {
     const harness = await runtime()
     await harness.ctx.plugin(CorePiAi, { providers: { 'github-copilot': { models: [
@@ -494,7 +795,7 @@ describe('plugin-owned account Copilot route', () => {
     expect((await service.discover()).available).toBe(true)
     stubFetch(async () => new Response('PRIVATE_ERROR_BODY', { status: 503 }), true)
     const failed = await service.discover({ force: true })
-    expect(failed).toMatchObject({ state: 'error', available: false, error: 'COPILOT_MODEL_SOURCE_HTTP_ERROR', models: [] })
+    expect(failed).toMatchObject({ state: 'error', available: false, error: 'COPILOT_MODEL_SOURCE_HTTP_ERROR', models: [{ id: MODEL }] })
     expect(service.routeFacts(MODEL)).toBeUndefined()
     expect(JSON.stringify(failed)).not.toContain('PRIVATE_ERROR_BODY')
   })

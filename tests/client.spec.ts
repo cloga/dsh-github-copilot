@@ -57,7 +57,8 @@ describe('GitHub Copilot Models client', () => {
     return { promise, resolve, reject }
   }
   function modelRemote(discoverModels: ReturnType<typeof vi.fn> = vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] }))) {
-    return { discoverModels, status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn() }
+    return { discoverModels, ensureModels: vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] })),
+      status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn() }
   }
   // Tiny deterministic hook host: component state/ref identity and effect cleanup,
   // without mounting a browser or invoking any real Remote implementation.
@@ -625,6 +626,10 @@ describe('GitHub Copilot Models client', () => {
     const elements = descendants(GitHubCopilotAccountModelsSummary({ snapshot: { state, models: [], rejected: [], error: state === 'error' ? 'COPILOT_MODEL_DISCOVERY_FAILED' : undefined } }))
     const status = elements.find(element => element.props['data-dsh-github-copilot-account-models-state'] === state)
     expect(status).toBeDefined()
+    if (state === 'stale') {
+      expect(status?.props.children).toContain('Showing the last checked model list')
+      expect(status?.props.children).not.toContain('Refresh before')
+    }
     expect(elements.some(element => String(element.props.children).includes('does not prove'))).toBe(true)
   })
 
@@ -676,6 +681,36 @@ describe('GitHub Copilot Models client', () => {
     expect(surfaces.getSnapshot()).toEqual({ token: p, account })
     expect(remote.status).toHaveBeenCalledOnce()
     expect(remote.start).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+  })
+
+  it('shares one initial stale refresh across surfaces and checks again only after the last surface leaves', async () => {
+    vi.useFakeTimers()
+    const stale = accountResult({ state: 'stale', models: [{ id: 'example', name: 'Example', api: 'openai-responses' }], rejected: [] }).value
+    const { remote, surfaces, provider, footer } = surfaceFixture(stale)
+    const wait = deferred<ReturnType<typeof accountResult>>()
+    remote.ensureModels.mockReturnValueOnce(wait.promise)
+    const removeFooter = surfaces.mount(footer, Symbol('footer'), remote as never)
+    for (let index=0;index<8;index++) await Promise.resolve()
+    const account = surfaces.getSnapshot()!.account
+    expect(remote.ensureModels).toHaveBeenCalledOnce()
+    const removeProvider = surfaces.mount(provider, Symbol('provider'), remote as never)
+    expect(surfaces.getSnapshot()!.account).toBe(account)
+    removeProvider()
+    expect(surfaces.getSnapshot()!.account).toBe(account)
+    expect(account.getSnapshot().view?.accountModels?.models).toHaveLength(1)
+    wait.resolve(accountResult({ state: 'ready', models: [], rejected: [] }))
+    for (let index=0;index<8;index++) await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(remote.ensureModels).toHaveBeenCalledOnce()
+    expect(remote.status).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(0)
+    removeFooter()
+    surfaces.mount(footer, Symbol('reopened'), remote as never)
+    for (let index=0;index<8;index++) await Promise.resolve()
+    expect(surfaces.getSnapshot()!.account).not.toBe(account)
+    expect(remote.status).toHaveBeenCalledTimes(2)
+    expect(remote.ensureModels).toHaveBeenCalledTimes(2)
     expect(remote.discoverModels).not.toHaveBeenCalled()
   })
 
@@ -827,6 +862,7 @@ describe('GitHub Copilot Models client', () => {
     let ctx: {
       remote: {
         $mount: ReturnType<typeof vi.fn>
+        $on: ReturnType<typeof vi.fn>
         githubCopilot: object
       }
       slots: {
@@ -835,6 +871,7 @@ describe('GitHub Copilot Models client', () => {
         spec: ReturnType<typeof vi.fn>
       }
       logger: { warn: ReturnType<typeof vi.fn> }
+      on: ReturnType<typeof vi.fn>
       inject: ReturnType<typeof vi.fn>
     }
     const inject = vi.fn((services: string[], callback: (value: unknown) => unknown) => {
@@ -848,6 +885,7 @@ describe('GitHub Copilot Models client', () => {
     ctx = {
       remote: {
         $mount: vi.fn(async () => disposeRemote),
+        $on: vi.fn(() => vi.fn()),
         githubCopilot: {},
       },
       slots: {
@@ -869,6 +907,7 @@ describe('GitHub Copilot Models client', () => {
         spec: vi.fn((name: string) => ({ kind: name === 'settings.models.provider-card' ? 'keyed' : 'list', scope: 'root' })),
       },
       logger: { warn: vi.fn() },
+      on: vi.fn(() => vi.fn()),
       inject,
     }
     return { ctx, disposeRemote, disposeUi, disposePresentation, register, registrations, injections }

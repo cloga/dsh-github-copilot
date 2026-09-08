@@ -428,6 +428,16 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   /** Explicit model discovery: may refresh OAuth and GET the account catalog, never changes selection. */
   @Remote
   async discoverModels(): Promise<GitHubCopilotAuthorizationView> {
+    return this.loadAccountModels(true)
+  }
+
+  /** Ensure metadata for a visible account view, honoring shared cache and failure cooldown. */
+  @Remote
+  async ensureModels(): Promise<GitHubCopilotAuthorizationView> {
+    return this.loadAccountModels(false)
+  }
+
+  private async loadAccountModels(force: boolean): Promise<GitHubCopilotAuthorizationView> {
     const current = await this.status()
     if (!current.configured || current.inFlight || this.attempt !== undefined) return current
     const source: unknown = this.ctx.get('githubCopilotPreview')
@@ -435,7 +445,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     if (typeof discover !== 'function') return { ...current, accountModels: {
       state: 'error', models: [], rejected: [], error: 'COPILOT_MODEL_DISCOVERY_UNAVAILABLE',
     } }
-    try { await discover.call(source, { force: true }) }
+    try { await discover.call(source, { force }) }
     catch { return { ...await this.status(), accountModels: {
       state: 'error', models: [], rejected: [], error: 'COPILOT_MODEL_DISCOVERY_FAILED',
     } } }
