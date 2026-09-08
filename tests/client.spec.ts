@@ -34,6 +34,8 @@ import {
   previewAssignmentMessage,
   GitHubCopilotAccountModelsPanel,
   GitHubCopilotAccountModelsSummary,
+  formatAccountModelsUpdatedAt,
+  GitHubCopilotAccountModelsUpdatedAt,
 } from '../src/client.ts'
 
 describe('GitHub Copilot Models client', () => {
@@ -569,6 +571,101 @@ describe('GitHub Copilot Models client', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  describe('account-model cache timestamp', () => {
+    const now = Date.parse('2026-09-08T12:00:00.000Z')
+    it.each([
+      [0, 'Updated just now'], [59_999, 'Updated just now'], [60_000, 'Updated 1 minute ago'],
+      [8 * 60_000, 'Updated 8 minutes ago'], [3_600_000, 'Updated 1 hour ago'],
+      [23 * 3_600_000, 'Updated 23 hours ago'], [86_400_000, 'Updated 1 day ago'],
+      [8 * 86_400_000, 'Updated 8 days ago'],
+    ])('formats elapsed cache age %i in English', (elapsed, expected) => {
+      expect(formatAccountModelsUpdatedAt(now - elapsed, now, 'en-US')?.text).toBe(expected)
+    })
+    it.each([undefined, -1, NaN, Infinity, -Infinity, 8.64e15 + 1])('hides missing or invalid timestamp %s', timestamp => {
+      expect(formatAccountModelsUpdatedAt(timestamp, now, 'en-US')).toBeUndefined()
+    })
+    it('accepts epoch zero and the Date upper boundary without throwing', () => {
+      expect(formatAccountModelsUpdatedAt(0, now, 'en-US')?.dateTime).toBe('1970-01-01T00:00:00.000Z')
+      expect(formatAccountModelsUpdatedAt(8.64e15, now, 'en-US')?.dateTime).toBe('+275760-09-13T00:00:00.000Z')
+    })
+    it('provides ISO semantics and the full local timestamp including its timezone', () => {
+      const timestamp = now - 8 * 60_000
+      const value = formatAccountModelsUpdatedAt(timestamp, now, 'en-US')!
+      const local = new Intl.DateTimeFormat('en-US', {
+        year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'long',
+      }).format(timestamp)
+      expect(value.dateTime).toBe(new Date(timestamp).toISOString())
+      expect(value.title).toBe(local)
+      expect(value.ariaLabel).toBe(`Last successful account-model cache update: ${local}`)
+    })
+    it('uses an honest absolute label for future clocks rather than negative ago', () => {
+      const value = formatAccountModelsUpdatedAt(now + 60_000, now, 'en-US')!
+      expect(value.text).toBe(`Updated ${value.title}`)
+      expect(value.text).not.toContain('ago')
+    })
+    it.each([NaN, Infinity, -Infinity])('falls back to absolute time for an invalid clock %s', clock => {
+      const value = formatAccountModelsUpdatedAt(now, clock, 'en-US')!
+      expect(value.text).toBe(`Updated ${value.title}`)
+    })
+    it('owns a minute-only UI timer through committed mount, timestamp change and unmount', async () => {
+      vi.useFakeTimers(); vi.setSystemTime(now)
+      let clock: number | undefined
+      let effect: { deps: React.DependencyList | undefined; cleanup: ReturnType<React.EffectCallback> } | undefined
+      let pending: (() => void) | undefined
+      const setClock = vi.fn((value: unknown) => { clock = value as number })
+      vi.mocked(React.useState).mockImplementation((initial?: unknown) => {
+        clock ??= (typeof initial === 'function' ? initial() : initial) as number
+        return [clock, setClock]
+      })
+      vi.mocked(React.useEffect).mockImplementation((setup, deps) => {
+        if (!effect || deps?.some((value, index) => !Object.is(value, effect?.deps?.[index]))) {
+          pending = () => { effect?.cleanup?.(); effect = { deps, cleanup: setup() } }
+        }
+      })
+      const unmount = () => { effect?.cleanup?.(); effect = undefined }
+      panelCleanups.push(unmount)
+      const mount = (discoveredAt?: number) => {
+        let tree = GitHubCopilotAccountModelsUpdatedAt({ discoveredAt })
+        if (pending) { const commit = pending; pending = undefined; commit(); tree = GitHubCopilotAccountModelsUpdatedAt({ discoveredAt }) }
+        return tree
+      }
+      const discoveredAt = now - 8 * 60_000
+      const tree = mount(discoveredAt)!
+      expect(tree.type).toBe('time')
+      expect(tree.props['data-dsh-github-copilot-models-updated-at']).toBe(true)
+      expect(tree.props.children).toBe('Updated 8 minutes ago')
+      expect(tree.props.dateTime).toBe(new Date(discoveredAt).toISOString())
+      expect(tree.props['aria-label']).toContain(tree.props.title)
+      expect(tree.props.role).toBeUndefined()
+      expect(tree.props['aria-live']).toBeUndefined()
+      expect(tree.props.style).toMatchObject({ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' })
+      expect(vi.getTimerCount()).toBe(1)
+      const interval = vi.spyOn(globalThis, 'setInterval')
+      mount(discoveredAt)
+      expect(interval).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(mount(discoveredAt)?.props.children).toBe('Updated 9 minutes ago')
+      const clear = vi.spyOn(globalThis, 'clearInterval')
+      expect(mount(now)?.props.children).toBe('Updated 1 minute ago')
+      expect(clear).toHaveBeenCalledOnce()
+      expect(vi.getTimerCount()).toBe(1)
+      expect(mount(undefined)).toBeNull()
+      expect(vi.getTimerCount()).toBe(0)
+      expect(mount(NaN)).toBeNull()
+      expect(vi.getTimerCount()).toBe(0)
+      mount(now + 120_000)
+      expect(vi.getTimerCount()).toBe(1)
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(mount(now + 120_000)?.props.children).toBe('Updated just now')
+      unmount()
+      expect(vi.getTimerCount()).toBe(0)
+      setClock.mockClear()
+      await vi.advanceTimersByTimeAsync(120_000)
+      expect(setClock).not.toHaveBeenCalled()
+      interval.mockRestore(); clear.mockRestore()
+    })
+  })
+
   it('renders metadata lists, counts and safe diagnostics without exposing unknown fields', () => {
     const model = Object.defineProperty({ id: 'arbitrary-new-id', name: '<Untrusted name>', api: 'openai-responses' }, 'token', { get() { throw new Error('token read') } })
     const snapshot = Object.defineProperty({ state: 'ready' as const, models: [model],
@@ -587,6 +684,8 @@ describe('GitHub Copilot Models client', () => {
     expect(text).toContain('Select models under GitHub Copilot')
     expect(text).not.toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
     expect(text).toContain('does not prove')
+    expect(text).not.toContain('Snapshot time')
+    expect(elements.some(element => element.type === 'time' || element.type === GitHubCopilotAccountModelsUpdatedAt)).toBe(false)
     expect(elements.some(element => element.type === 'script' || element.props.dangerouslySetInnerHTML !== undefined)).toBe(false)
   })
 

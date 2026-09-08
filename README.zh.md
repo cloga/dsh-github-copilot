@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.6`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.7`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 ## 已测试基线
 
@@ -26,7 +26,7 @@
 将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.6/dsh-github-copilot-0.4.0-alpha.6.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.7/dsh-github-copilot-0.4.0-alpha.7.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
@@ -43,11 +43,13 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 公开的 provider-card slot 只能追加内容，不能替换 Core 的 **Edit/Delete**。原生编辑器仍保留，但正常插件发现流程无需手工定义模型。控件嵌入不等于合并 `github-copilot` 与 `github-copilot-preview`，不会删除配置、改写历史或切换模型选择。若已有卡片与 fallback 都缺少控件，请核对活动 profile 与实际加载的 Host/Client 版本。
 
-**当前预览（`0.4.0-alpha.6`）：**实际构建的 Client 运行于隔离 Edge，使用合成 Remote 响应与 provider-shell fixture。默认行显示登录状态、模型数量与 **Manage**，手动 **Refresh models** 只在 **Manage** 内。浏览器 fixture 覆盖刷新时保留旧数量、新鲜缓存重开仅读状态、手动刷新、Retry、凭据清理、登录强制发现及 375 px 窄屏，无外部网络请求或浏览器错误。这不是真实 Core／生产授权证据；Host 24 小时 TTL 与冷却时序由单元测试另行覆盖，不能靠截图证明。
+**当前预览（`0.4.0-alpha.7`）：**实际构建的 Client 运行于隔离 Edge，使用合成 Remote 响应与 provider-shell fixture。默认行显示登录状态、模型数量、上次成功更新时间与 **Manage**，手动 **Refresh models** 只在 **Manage** 内。浏览器 fixture 覆盖刷新时保留旧数量、新鲜缓存重开仅读状态、手动刷新、Retry、凭据清理、登录强制发现及 375 px 窄屏，无外部网络请求或浏览器错误。这不是真实 Core／生产授权证据；Host 24 小时 TTL 与冷却时序由单元测试另行覆盖，不能靠截图证明。
 
-![Alpha.6 已登录 provider 显示三个模型与 Manage，默认行无 Refresh 按钮](./docs/images/copilot-model-freshness.png)
+低强调度的 **Updated … ago** 使用上次成功获取模型列表的时间，而不是打开页面的时间。悬停提示和无障碍标签提供本地完整日期、时间及时区；相对时间只在浏览器内更新，不请求状态或模型。读取缓存、刷新中或失败均保留上次成功时间（仅限仍有效的同账号展示证据）；退出／账号失效后清除。没有有效时间戳则不显示；未来时间使用绝对日期，避免错误地显示“几分钟前”。Manage 内不再重复显示时间戳。
 
-![Alpha.6 刷新过程中保留之前的两个模型数量](./docs/images/copilot-model-refreshing.png)
+![Alpha.7 已登录 provider 显示模型数量、上次成功更新时间与 Manage](./docs/images/copilot-model-freshness.png)
+
+![Alpha.7 刷新过程中保留之前的模型数量和更新时间](./docs/images/copilot-model-refreshing.png)
 
 <details>
 <summary>alpha.5 与 alpha.3 历史示意</summary>
@@ -299,8 +301,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。新版本使用标准 SemVer 预发布标识（`alpha`、`beta` 或 `rc`）；历史上的 `cloga` 后缀用于标识下游 fork 构建，新版本不再使用。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，按版本标记 prerelease，并且只在前序步骤全部成功后创建 GitHub Release。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.6/dsh-github-copilot-0.4.0-alpha.6.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.6/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.7/dsh-github-copilot-0.4.0-alpha.7.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.7/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -308,7 +310,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.6.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.7.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

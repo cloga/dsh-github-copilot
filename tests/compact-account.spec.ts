@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createCompactAccount } from '../src/compact-account.ts'
-import { authorizationViewFrom, GitHubCopilotCompactAccount, GitHubCopilotAuthorizationNotice, GitHubCopilotAccountModelsSummary } from '../src/client.ts'
+import { authorizationViewFrom, GitHubCopilotCompactAccount, GitHubCopilotAuthorizationNotice, GitHubCopilotAccountModelsSummary, GitHubCopilotAccountModelsUpdatedAt } from '../src/client.ts'
 import type { GitHubCopilotAuthorizationView as View } from '../src/authorization-controller.ts'
 
 vi.mock('react', async original => {
@@ -605,6 +605,46 @@ function uiHarness(api=remote()) {
 }
 
 describe('compact account rendering',()=>{
+  it('keeps the Host cache timestamp outside Manage and live regions through refresh and failure', async () => {
+    const discoveredAt = 1_700_000_000_000
+    const cached = { ...discovered, accountModels: { ...discovered.accountModels!, discoveredAt } }
+    const api = remote(cached), ui = uiHarness(api)
+    ui.render(); await flush()
+    const timestamp = (tree: unknown) => elements(tree).filter(el => el.type === GitHubCopilotAccountModelsUpdatedAt)
+    let tree = ui.render()
+    expect(timestamp(tree)).toHaveLength(1)
+    expect(timestamp(tree)[0]?.props.discoveredAt).toBe(discoveredAt)
+    expect(button(tree, 'Manage').props['aria-expanded']).toBe(false)
+    expect(elements(tree).filter(el => el.props.role === 'status' || el.props['aria-live']).flatMap(elements)
+      .some(el => el.type === GitHubCopilotAccountModelsUpdatedAt)).toBe(false)
+    button(tree, 'Manage').props.onClick()
+    const wait = deferred<ReturnType<typeof ok>>()
+    api.discoverModels.mockReturnValueOnce(wait.promise)
+    const loading = button(ui.render(), 'Refresh models').props.onClick()
+    button(ui.render(), 'Manage').props.onClick()
+    expect(timestamp(ui.render())[0]?.props.discoveredAt).toBe(discoveredAt)
+    wait.resolve(ok({ ...cached, accountModels: { ...cached.accountModels, state: 'error', error: 'COPILOT_MODEL_DISCOVERY_FAILED' } }))
+    await loading; await flush()
+    tree = ui.render()
+    expect(timestamp(tree)[0]?.props.discoveredAt).toBe(discoveredAt)
+    expect(text(tree)).toContain('Refresh failed')
+    const updatedAt = discoveredAt + 60_000
+    api.discoverModels.mockResolvedValueOnce(ok({ ...cached, accountModels: { ...cached.accountModels, discoveredAt: updatedAt } }))
+    await button(tree, 'Retry').props.onClick(); await flush()
+    expect(timestamp(ui.render())[0]?.props.discoveredAt).toBe(updatedAt)
+    button(ui.render(), 'Manage').props.onClick()
+    expect(timestamp(ui.render())).toHaveLength(1)
+    await button(ui.render(), 'Sign out').props.onClick(); await flush()
+    expect(timestamp(ui.render())).toHaveLength(0)
+    expect(api.status).toHaveBeenCalledOnce()
+    expect(api.ensureModels).not.toHaveBeenCalled()
+    expect(api.discoverModels).toHaveBeenCalledTimes(2)
+  })
+  it('hides a stale timestamp when no account is currently configured', async () => {
+    const api = remote({ ...signedOut, accountModels: { ...discovered.accountModels!, discoveredAt: 1_700_000_000_000 } })
+    const ui = uiHarness(api); ui.render(); await flush()
+    expect(elements(ui.render()).some(el => el.type === GitHubCopilotAccountModelsUpdatedAt)).toBe(false)
+  })
   it('keeps stale count visible during initial metadata refresh without a warning or header refresh button', async () => {
     const api = remote({ ...discovered, accountModels: { ...discovered.accountModels!, state: 'stale' } })
     const wait = deferred<ReturnType<typeof ok>>()
