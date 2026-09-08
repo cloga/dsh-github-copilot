@@ -10,7 +10,8 @@ import type { GitHubCopilotAuthorizationView } from '../src/authorization-contro
 vi.mock('react', async importOriginal => {
   const actual = await importOriginal<typeof import('react')>()
   return { ...actual, useState: vi.fn(actual.useState), useEffect: vi.fn(actual.useEffect),
-    useCallback: vi.fn(actual.useCallback), useRef: vi.fn(actual.useRef) }
+    useCallback: vi.fn(actual.useCallback), useRef: vi.fn(actual.useRef), useMemo: vi.fn(actual.useMemo),
+    useSyncExternalStore: vi.fn(actual.useSyncExternalStore), useLayoutEffect: vi.fn(actual.useLayoutEffect), useId: vi.fn(actual.useId) }
 })
 
 const panelCleanups: Array<() => void> = []
@@ -26,7 +27,9 @@ import {
   GitHubCopilotPreviewFooter,
   GitHubCopilotCompactAccount,
   GitHubCopilotProviderCard,
-  GitHubCopilotLegacyProviderNotice,
+  GitHubCopilotAccountSurface,
+  createAccountSurfaces,
+  isGitHubCopilotAccountRow,
   GitHubCopilotSettingsSection,
   previewAssignmentMessage,
   GitHubCopilotAccountModelsPanel,
@@ -332,18 +335,14 @@ describe('GitHub Copilot Models client', () => {
     expect(remote.signOut).not.toHaveBeenCalled()
   })
 
-  it('renders only a migration notice on a legacy Core provider row without duplicate polling or login', () => {
+  it('selects only a configured canonical Copilot provider row, regardless of key configuration', () => {
     const props = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: true, keyConfigured: false }
-    const elements = descendants(GitHubCopilotLegacyProviderNotice(props))
-    const text = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
-    expect(text).toContain('legacy')
-    expect(text).toContain('not a second GitHub account')
-    expect(text).toContain('explicit migration')
-    expect(elements.some(element => element.type === 'button' || element.type === GitHubCopilotProviderCard || element.type === GitHubCopilotAccountModelsPanel)).toBe(false)
-    expect(React.useEffect).not.toHaveBeenCalled()
-    expect(React.useState).not.toHaveBeenCalled()
-    expect(GitHubCopilotLegacyProviderNotice({ ...props, provider: { ...props.provider, provider: 'other' } })).toBeNull()
-    expect(GitHubCopilotLegacyProviderNotice({ ...props, configured: false })).toBeNull()
+    expect(isGitHubCopilotAccountRow(props)).toBe(true)
+    expect(isGitHubCopilotAccountRow({ ...props, keyConfigured: true })).toBe(true)
+    expect(isGitHubCopilotAccountRow({ ...props, configured: false })).toBe(false)
+    expect(isGitHubCopilotAccountRow({ ...props, provider: { ...props.provider, provider: 'other' } })).toBe(false)
+    expect(isGitHubCopilotAccountRow({ ...props, provider: { ...props.provider, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID } })).toBe(false)
+    expect(isGitHubCopilotAccountRow({ ...props, provider: { ...props.provider, settingsNs: 'another-plugin' } })).toBe(false)
   })
 
   it('does not poll shared status after a signed-in render', async () => {
@@ -629,6 +628,190 @@ describe('GitHub Copilot Models client', () => {
     expect(elements.some(element => String(element.props.children).includes('does not prove'))).toBe(true)
   })
 
+  function surfaceFixture(view: GitHubCopilotAuthorizationView = { phase: 'signed-out', configured: false, writable: true, inFlight: false, notices: [] }) {
+    const remote = modelRemote()
+    remote.status.mockResolvedValue({ ok: true, value: view })
+    const surfaces = createAccountSurfaces()
+    panelCleanups.push(() => surfaces.dispose())
+    return { remote, surfaces, provider: { kind: 'provider' as const, active: true }, footer: { kind: 'footer' as const, active: true }, settings: { kind: 'settings' as const, active: true } }
+  }
+
+  it('uses borderless untitled embedded presentation without attaching another controller or exposing compatibility by default', async () => {
+    const { remote, surfaces, provider } = surfaceFixture()
+    surfaces.mount(provider, Symbol('provider'), remote as never)
+    await Promise.resolve()
+    const account = surfaces.getSnapshot()!.account
+    const effects: React.EffectCallback[] = []
+    vi.mocked(React.useMemo).mockImplementation(factory => factory())
+    vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe, snapshot) => snapshot())
+    vi.mocked(React.useEffect).mockImplementation(setup => { effects.push(setup) })
+    vi.mocked(React.useId).mockReturnValue('fixture-management')
+    vi.mocked(React.useState).mockReturnValue([false, vi.fn()])
+    const embedded = GitHubCopilotCompactAccount({ remote: remote as never, account, embedded: true })
+    const elements = descendants(embedded)
+    expect(embedded.props['aria-label']).toBe('GitHub Copilot account')
+    expect(embedded.props['data-dsh-github-copilot-embedded']).toBe(true)
+    expect(embedded.props.style).not.toHaveProperty('border')
+    expect(elements.some(element => element.type === 'h3')).toBe(false)
+    expect(elements.some(element => element.props['data-dsh-github-copilot-compatibility'] === true)).toBe(false)
+    expect(elements.find(element => element.type === 'button' && element.props.children === 'Sign in with GitHub')).toBeDefined()
+    const fallback = GitHubCopilotCompactAccount({ remote: remote as never, account })
+    expect(descendants(fallback).filter(element => element.type === 'h3')).toHaveLength(1)
+    expect(fallback.props.style.border).toBeDefined()
+    for (const effect of effects) expect(effect()).toBeUndefined()
+    expect(remote.status).toHaveBeenCalledOnce()
+    expect(remote.start).not.toHaveBeenCalled()
+    expect(remote.reconcile).not.toHaveBeenCalled()
+    expect(remote.signOut).not.toHaveBeenCalled()
+  })
+
+  it.each(['provider-first', 'footer-first'] as const)('owns one controller with both mounted seats: %s', order => {
+    const { remote, surfaces, provider, footer } = surfaceFixture()
+    const p = Symbol('provider'), f = Symbol('footer')
+    const first = order === 'provider-first' ? provider : footer
+    const second = order === 'provider-first' ? footer : provider
+    surfaces.mount(first, first === provider ? p : f, remote as never)
+    const account = surfaces.getSnapshot()?.account
+    surfaces.mount(second, second === provider ? p : f, remote as never)
+    expect(surfaces.getSnapshot()).toEqual({ token: p, account })
+    expect(remote.status).toHaveBeenCalledOnce()
+    expect(remote.start).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+  })
+
+  it('transfers a pending sign-in to an arriving row and back without stale actions or a second poll owner', async () => {
+    vi.useFakeTimers()
+    const { remote, surfaces, provider, footer } = surfaceFixture()
+    const f = Symbol('footer'), p = Symbol('provider')
+    const unmountFooter = surfaces.mount(footer, f, remote as never)
+    await Promise.resolve()
+    const account = surfaces.getSnapshot()!.account
+    const start = deferred<{ ok: true; value: GitHubCopilotAuthorizationView }>()
+    remote.start.mockReturnValue(start.promise)
+    const starting = account.start()
+    const unmountProvider = surfaces.mount(provider, p, remote as never)
+    expect(surfaces.getSnapshot()?.account).toBe(account)
+    expect(account.getSnapshot().operation).toBe('start')
+    await surfaces.getSnapshot()!.account.start()
+    expect(remote.start).toHaveBeenCalledOnce()
+    const pending: GitHubCopilotAuthorizationView = { phase: 'authorizing', configured: false, writable: true, inFlight: true,
+      notices: [{ message: 'Enter this code', code: 'TEST-1234' }] }
+    remote.status.mockResolvedValue({ ok: true, value: pending })
+    start.resolve({ ok: true, value: pending })
+    await starting
+    expect(vi.getTimerCount()).toBe(1)
+    unmountProvider()
+    expect(surfaces.getSnapshot()).toEqual({ token: f, account })
+    expect(account.getSnapshot().view?.notices[0]?.code).toBe('TEST-1234')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(remote.status).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(1)
+    unmountFooter()
+    expect(surfaces.getSnapshot()).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(0)
+    await account.start()
+    expect(remote.start).toHaveBeenCalledOnce()
+    expect(remote.cancel).not.toHaveBeenCalled()
+  })
+
+  it('retains the footer when an unrelated or unconfigured row is not eligible and restores it on eligibility loss', () => {
+    const { remote, surfaces, provider, footer } = surfaceFixture()
+    const token = Symbol('footer')
+    surfaces.mount(footer, token, remote as never)
+    const props = { provider: { provider: 'another-provider', displayName: 'Other', settingsNs: 'llm-pi-ai' }, configured: true, keyConfigured: true }
+    if (isGitHubCopilotAccountRow(props)) surfaces.mount(provider, Symbol('unrelated'), remote as never)
+    expect(surfaces.getSnapshot()?.token).toBe(token)
+    const removeProvider = surfaces.mount(provider, Symbol('canonical'), remote as never)
+    const account = surfaces.getSnapshot()?.account
+    removeProvider()
+    expect(surfaces.getSnapshot()).toEqual({ token, account })
+    expect(remote.status).toHaveBeenCalledOnce()
+  })
+
+  it('revokes a provider declaration before React cleanup and ignores stale leases on redeclaration', () => {
+    const { remote, surfaces, provider, footer } = surfaceFixture()
+    const f = Symbol('footer'), p = Symbol('provider')
+    surfaces.mount(footer, f, remote as never)
+    const oldCleanup = surfaces.mount(provider, p, remote as never)
+    surfaces.revoke(provider)
+    expect(surfaces.getSnapshot()?.token).toBe(f)
+    surfaces.mount(provider, Symbol('revoked'), remote as never)
+    expect(surfaces.getSnapshot()?.token).toBe(f)
+    const newSeat = { kind: 'provider' as const, active: true }
+    surfaces.mount(newSeat, p, remote as never)
+    oldCleanup()
+    expect(surfaces.getSnapshot()?.token).toBe(p)
+    expect(remote.status).toHaveBeenCalledOnce()
+  })
+
+  it('keeps one owner across duplicate row instances and footer/settings competition', () => {
+    const { remote, surfaces, provider, footer, settings } = surfaceFixture()
+    const s = Symbol('settings'), f = Symbol('footer'), a = Symbol('row-a'), b = Symbol('row-b')
+    surfaces.mount(settings, s, remote as never)
+    const removeFooter = surfaces.mount(footer, f, remote as never)
+    const removeA = surfaces.mount(provider, a, remote as never)
+    const removeB = surfaces.mount(provider, b, remote as never)
+    expect(surfaces.getSnapshot()?.token).toBe(a)
+    removeA()
+    expect(surfaces.getSnapshot()?.token).toBe(b)
+    removeB()
+    expect(surfaces.getSnapshot()?.token).toBe(f)
+    removeFooter()
+    expect(surfaces.getSnapshot()?.token).toBe(s)
+    expect(remote.status).toHaveBeenCalledOnce()
+  })
+
+  it('fences old Remote responses on replacement and never reuses the previous private view', async () => {
+    vi.useFakeTimers()
+    const { remote, surfaces, provider, footer } = surfaceFixture()
+    const oldStatus = deferred<{ ok: true; value: GitHubCopilotAuthorizationView }>()
+    remote.status.mockReturnValue(oldStatus.promise)
+    const p = Symbol('provider'), f = Symbol('footer')
+    surfaces.mount(footer, f, remote as never)
+    surfaces.mount(provider, p, remote as never)
+    const oldAccount = surfaces.getSnapshot()!.account
+    const replacement = modelRemote()
+    replacement.status.mockResolvedValue({ ok: true, value: { phase: 'signed-out', configured: false, writable: true, inFlight: false, notices: [] } })
+    surfaces.mount(provider, p, replacement as never)
+    surfaces.mount(footer, f, replacement as never)
+    const newAccount = surfaces.getSnapshot()!.account
+    expect(newAccount).not.toBe(oldAccount)
+    expect(newAccount.getSnapshot().view).toBeUndefined()
+    oldStatus.resolve({ ok: true, value: { phase: 'authorizing', configured: false, writable: true, inFlight: true,
+      notices: [{ message: 'Old account', code: 'OLD-CODE' }] } })
+    await Promise.resolve()
+    expect(newAccount.getSnapshot().view?.phase).toBe('signed-out')
+    expect(newAccount.getSnapshot().view?.notices).toEqual([])
+    expect(vi.getTimerCount()).toBe(0)
+    await oldAccount.start()
+    expect(remote.start).not.toHaveBeenCalled()
+    expect(replacement.status).toHaveBeenCalledOnce()
+  })
+
+  it('disposes all leases without activating another owner and starts fresh after a whole-page remount', async () => {
+    const { remote, surfaces, provider, footer } = surfaceFixture()
+    const notify = vi.fn()
+    const unsubscribe = surfaces.subscribe(notify)
+    const unmountFooter = surfaces.mount(footer, Symbol('footer'), remote as never)
+    const unmountProvider = surfaces.mount(provider, Symbol('provider'), remote as never)
+    const oldAccount = surfaces.getSnapshot()!.account
+    surfaces.dispose()
+    const calls = notify.mock.calls.length
+    surfaces.dispose()
+    unmountProvider(); unmountFooter(); unsubscribe()
+    surfaces.mount({ kind: 'provider', active: true }, Symbol('after-disposal'), remote as never)
+    expect(surfaces.getSnapshot()).toBeUndefined()
+    expect(remote.status).toHaveBeenCalledOnce()
+    expect(notify).toHaveBeenCalledTimes(calls)
+    await oldAccount.start()
+    expect(remote.start).not.toHaveBeenCalled()
+    const fresh = createAccountSurfaces()
+    panelCleanups.push(() => fresh.dispose())
+    fresh.mount({ kind: 'footer', active: true }, Symbol('fresh'), remote as never)
+    expect(fresh.getSnapshot()?.account).not.toBe(oldAccount)
+    expect(remote.status).toHaveBeenCalledTimes(2)
+  })
+
   function clientContext(declaredSlots: readonly string[]) {
     const disposeRemote = vi.fn(async () => undefined)
     let cleanupUi: (() => void) | undefined
@@ -691,7 +874,7 @@ describe('GitHub Copilot Models client', () => {
     return { ctx, disposeRemote, disposeUi, disposePresentation, register, registrations, injections }
   }
 
-  it('registers one account footer and a non-interactive legacy provider-card notice', async () => {
+  it('registers coordinated provider and fallback seats without starting either controller during registration', async () => {
     const { ctx, register, registrations, injections } = clientContext([
       'settings.models.provider-card', 'settings.models.footer', 'settings.section',
     ])
@@ -699,13 +882,18 @@ describe('GitHub Copilot Models client', () => {
     expect(register).toHaveBeenCalledWith({ name: 'settings.models.footer', id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, order: 10 }, expect.any(Function))
     const render = register.mock.calls.find(([options]) => options.name === 'settings.models.footer')?.[1] as (() => ReactElement) | undefined
     const element = render?.()
-    expect(element?.type).toBe(GitHubCopilotPreviewFooter)
+    expect(element?.type).toBe(GitHubCopilotAccountSurface)
     expect(element?.props.remote).toBe(ctx.remote.githubCopilot)
+    expect(element?.props.seat.kind).toBe('footer')
     expect(register).toHaveBeenCalledWith({ name: 'settings.models.provider-card', key: 'llm-pi-ai' }, expect.any(Function))
-    const renderLegacy = register.mock.calls.find(([options]) => options.name === 'settings.models.provider-card')?.[1] as ((props: object) => ReactElement) | undefined
-    const legacy = renderLegacy?.({})
-    expect(legacy?.type).toBe(GitHubCopilotLegacyProviderNotice)
-    expect(legacy?.props).not.toHaveProperty('remote')
+    const renderProvider = register.mock.calls.find(([options]) => options.name === 'settings.models.provider-card')?.[1] as ((props: object) => ReactElement) | undefined
+    const provider = renderProvider?.({ provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: true, keyConfigured: false })
+    expect(provider?.type).toBe(GitHubCopilotAccountSurface)
+    expect(provider?.props.remote).toBe(ctx.remote.githubCopilot)
+    expect(provider?.props.eligible).toBe(true)
+    expect(provider?.props.seat.kind).toBe('provider')
+    expect(provider?.props.surfaces).toBe(element?.props.surfaces)
+    expect(provider?.props.surfaces.getSnapshot()).toBeUndefined()
     expect(registrations.has('settings.section')).toBe(false)
     const removeFooter = registrations.get('settings.models.footer')
     await dispose()

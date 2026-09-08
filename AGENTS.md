@@ -34,7 +34,7 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 This repository owns eight narrow surfaces:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
-2. A Client Models provider-card contribution and Client-safe Remote descriptors.
+2. A Client Models provider-card contribution with one shared account-state owner and Client-safe Remote descriptors; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
 3. Strict JSON normalization of pi-ai's provider-owned Copilot OAuth grant.
 4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. Fresh installations use the single account-discovered route; existing profiles require explicit migration, never silent removal.
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
@@ -94,7 +94,7 @@ The supported upstream baselines are:
 
 These pins document compatibility evidence. They do not authorize creating another controlled Core patch or making one a prerequisite for new plugin fixes.
 
-- Models UI: rc.1 and alpha.1 use `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
+- Models UI: rc.1 and alpha.1 use `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`, to embed login/status/Refresh/Manage in a mounted configured canonical `github-copilot` row and suppress the separate footer controller. With no such row mounted, retain footer fallback; rc.2 uses a dedicated `settings.section`. Preserve the shared account-state owner across transfer only while another eligible surface remains mounted. Unmounting the last surface or replacing declarations without overlapping mounts stops polling; a later controller starts with a read-only status request, does not auto-discover from an externally completed sign-in, and leaves discovery to explicit Refresh. This additive slot cannot replace Core Edit/Delete: retain the native editor, while normal plugin discovery needs no manual model definitions. UI integration must not merge/remove actual canonical and `github-copilot-preview` routes or rewrite credentials, configuration, history or selection.
 - Authorization flow key: `llm-pi-ai/github-copilot`.
 - Authorization service: rc.1 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
@@ -173,6 +173,10 @@ CI runs on Windows/Linux against the three exact Core baselines. `verify:upstrea
 | `pnpm verify:tarball` | Archive structure/export/media and equality to local build; no extraction/execution |
 | Authorization `status()` / `describeGitHubCopilotProviderProfile()` | Read-only grant snapshot and route planning; no settings mutation, OAuth refresh or network proof |
 | Authorization `reconcile()` / `inspectGitHubCopilotProviderProfile()` | Explicit stored-snapshot repair; revision-checked settings writes; NOT token/model discovery refresh |
+| This UI user's successful Start sign-in | Exactly one bounded account discovery after immediate or polled success; shared owner survives transfer only while another eligible surface remains mounted; last-surface unmount/nonoverlapping declaration replacement stops polling, and a later controller reads status without auto-discovery from external completion (use explicit Refresh); metadata is not model-call proof |
+| Initial already-signed-in status / view opening / details toggles | Network-free; do not arm discovery or repeat a completed sign-in action |
+| Explicit Refresh models | Bounded account metadata discovery and native OAuth refresh when needed; no automatic model selection or route migration |
+| README GIF/PNG illustrations | `docs/images/copilot-provider-entry.png` and `copilot-provider-authorization.png` show the actual alpha.5 built Client in network-disabled isolated Edge with synthetic Remote responses and a surrounding provider-shell fixture retaining Edit/Delete; not live Core or production authorization. The older auth-flow GIF, auth-card and device-code-copy PNGs remain historical alpha.3 compact-account illustrations |
 | Host attach/restart | Reconciles the stored profile; search proofs stay lazy and do not start at attach |
 | Credential/settings notifications | Invalidate cached proof only; no eager authenticated/network calls |
 | Eligible model/search request | May resolve/refresh credentials and run bounded capability proof; changes during proof must fail closed rather than reuse another account's proof |
