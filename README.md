@@ -21,10 +21,10 @@ The table retains historical source pins; it does not imply the new account-mode
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.8`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.9`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/dsh-github-copilot-0.4.0-alpha.8.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.9/dsh-github-copilot-0.4.0-alpha.9.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
@@ -109,6 +109,16 @@ Cold Chat picker and `/model` `listModels()` calls ensure the shared managed sou
 **Native selection limit:** public Core `session.selectModel` also saves the future global default. This plugin does not replace that behavior: selecting one Session does not rewrite other selected/history-backed Sessions, but empty Sessions without a selection may still inherit the changed default. Do not promise every unselected Session is immutable.
 
 **Native Add is warning-only:** the new Copilot provider draft warns that saving a native profile adds another real model group, not a second account. Published additive APIs cannot veto native Add or disable **Save**. The native editor remains; this warning is not absolute prevention or enforcement of a single route. Actual one-managed-route deployment requires the separately approved [Ops migration](./docs/single-route-migration.md) after release, not hidden groups or automatic configuration removal.
+
+### Read-only Ops migration readiness (alpha.9)
+
+No-argument Remote `githubCopilot.migrationStatus()` provides fresh live evidence for a separately authorized maintenance operation. Generic `session/list` data can be stale and plugin inventory alone does not identify the loaded version. This separate strict result reports the loaded plugin build's `plugin.name`/`plugin.version`, `protocolVersion: 1`, `observedAt`, capability flags (`agentsList`, `sessionProjections`, `settingsCas`, `providerRegistry`, `defaultSelection`) and completeness flags for sessions/default/routes. Missing capability or incomplete required selection/route evidence is unknown, not permission to migrate. An idle Agent's `activeRequestSelection: null` is expected.
+
+For each live Agent Session it reports `effectiveSelection` and `selectionSource`: pending model projection first, then recorded request-header config, then the current default only for a genuinely empty Session with known projection state. Running Agents also have a separate `activeRequestSelection`: the latest recorded request header, **not proof of an in-flight LLM call**. Route flags distinguish effective native configuration (`nativeConfigured`) from actual native/managed registration. No credential data or full settings/history is returned.
+
+The call does not invoke authorization status or model discovery, access credentials/network, or mutate settings/Sessions. It adds no normal UI or global current-model/search-status card. The seven ordinary authorization Remotes and their codec are unchanged; this eighth Remote has its own `GitHubCopilotMigrationStatus` codec.
+
+**Limits:** `historyScope: live-agents-only` excludes cold stored histories; the operator must acknowledge that those conversations may need explicit model selection later. Build identity and structural capability self-reports do not attest all Desktop/Core bytes. This is not an atomic cross-namespace snapshot; recheck evidence immediately before CAS. The planned `tools/migrate-copilot-managed-route.ps1` in `cloga/dsh-windows-ops` is a separate, post-release **config-only** maintenance command: v1 does not write Session/default selections, inspect cold history, install the plugin, restart DSH, or certify a full Desktop baseline. Its publication/installation and any live migration remain separate evidence, not a claim made by this document.
 
 ## Authorization and route behavior
 
@@ -304,8 +314,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`); the historical `cloga` suffix identified downstream fork builds and is no longer used for new versions. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, marks prerelease versions accordingly, and creates the GitHub Release only after every preceding step succeeds.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/dsh-github-copilot-0.4.0-alpha.8.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.8/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.9/dsh-github-copilot-0.4.0-alpha.9.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.9/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -313,7 +323,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.8.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.9.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

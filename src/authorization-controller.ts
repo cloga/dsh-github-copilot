@@ -12,6 +12,7 @@ import {
   type RouteBackup, type RouteMutation, type RouteSettings,
 } from './route-ownership.ts'
 import { temporaryGitHubCopilotModelFromProfile } from './temporary-models.ts'
+import { migrationStatus, type GitHubCopilotMigrationStatus } from './migration-status.ts'
 
 export { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
@@ -371,6 +372,12 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
   constructor(ctx: Context) {
     super(ctx, 'githubCopilotAuthorization', { namespace: 'githubCopilot' })
+  }
+
+  /** No-argument Ops evidence; deliberately independent of ordinary account status. */
+  @Remote
+  migrationStatus(): GitHubCopilotMigrationStatus {
+    return migrationStatus(this.ctx)
   }
 
   @Remote

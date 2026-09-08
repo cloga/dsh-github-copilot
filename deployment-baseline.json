@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.8"
+    "version": "0.4.0-alpha.9"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -259,7 +259,10 @@
         {"file": "tests/client-bundle.spec.ts", "name": "mounts strict Host result codecs through the published rc.1 client carrier"},
         {"file": "tests/account-model-remote.spec.ts", "name": "registers %s with the same strict safe authorization view codec"},
         {"file": "tests/account-model-remote.spec.ts", "name": "rejects private or unrequested discovery field %s"},
-        {"file": "tests/account-model-remote.spec.ts", "name": "rejects secret-bearing model entries and oversized model lists"}
+        {"file": "tests/account-model-remote.spec.ts", "name": "rejects secret-bearing model entries and oversized model lists"},
+        {"file": "tests/migration-status.spec.ts", "name": "keeps noargs Remote migration evidence separate and ordinary status unchanged"},
+        {"file": "tests/migration-status.spec.ts", "name": "uses the real public Session projection registry for pending versus old request headers"},
+        {"file": "tests/migration-status.spec.ts", "name": "reads only named public leaves, not private titles history credentials or settings"}
       ]
     },
     {
