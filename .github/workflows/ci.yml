@@ -117,3 +117,38 @@ jobs:
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
           node node_modules/typescript/bin/tsc -p tsconfig.tests.json
           node node_modules/vitest/vitest.mjs run tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts
+
+  release-ready:
+    name: release-ready
+    needs: [verify, published-adapter]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require all compatibility and package checks
+        shell: bash
+        env:
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          PUBLISHED_RESULT: ${{ needs.published-adapter.result }}
+        run: |
+          test "$VERIFY_RESULT" = success
+          test "$PUBLISHED_RESULT" = success
+      - uses: actions/checkout@v6
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch pull-request base
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: git fetch --no-tags origin "$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+      - name: Require release metadata for important pull-request changes
+        if: ${{ github.event_name == 'pull_request' }}
+        run: node scripts/release-policy.mjs --base "origin/${{ github.base_ref }}"
+
+  release:
+    needs: [release-ready]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-ready.result == 'success' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml

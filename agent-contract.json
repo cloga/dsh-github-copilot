@@ -68,8 +68,8 @@
     },
     "release": {
       "purpose": "Version alignment and immutable GitHub prerelease/release delivery",
-      "read": ["package.json", "deployment-baseline.json", ".github/workflows/release.yml", "scripts/verify-package.mjs"],
-      "tests": ["tests/client-bundle.spec.ts"],
+      "read": ["package.json", "deployment-baseline.json", ".github/workflows/ci.yml", ".github/workflows/release.yml", "scripts/release-policy.mjs", "scripts/publish-release.mjs", "scripts/verify-package.mjs"],
+      "tests": ["tests/client-bundle.spec.ts", "tests/scripts/release-policy.test.mjs", "tests/scripts/publish-release.test.mjs"],
       "risk": "Important updates continue to publication after authorized merge and green required CI without a second release prompt, unless the user restricts delivery. Other changes need an explicit release request. Preserve fresh annotated tags and verified remote assets/checksums; report a concrete blocker instead of calling a merge complete. Profile installation and interrupting restarts remain separate."
     }
   }

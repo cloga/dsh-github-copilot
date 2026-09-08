@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文单路由与统一账号界面描述目标版本 `0.4.0-alpha.3`。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文单路由与统一账号界面描述目标版本 `0.4.0-alpha.4`。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 ## 已测试基线
 
@@ -26,7 +26,7 @@
 将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.3/dsh-github-copilot-0.4.0-alpha.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.4/dsh-github-copilot-0.4.0-alpha.4.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
@@ -274,8 +274,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。新版本使用标准 SemVer 预发布标识（`alpha`、`beta` 或 `rc`）；历史上的 `cloga` 后缀用于标识下游 fork 构建，新版本不再使用。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，按版本标记 prerelease，并且只在前序步骤全部成功后创建 GitHub Release。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.3/dsh-github-copilot-0.4.0-alpha.3.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.3/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.4/dsh-github-copilot-0.4.0-alpha.4.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.4/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -283,7 +283,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.4.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
