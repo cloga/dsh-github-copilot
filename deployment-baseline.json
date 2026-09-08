@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.2"
+    "version": "0.4.0-alpha.3"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -539,7 +539,7 @@
         {"file": "tests/client.spec.ts", "name": "registers a GitHub Copilot settings section on the rc.2 Models surface"},
         {"file": "tests/client.spec.ts", "name": "registers one account footer and a non-interactive legacy provider-card notice"},
         {"file": "tests/client.spec.ts", "name": "leaves authorization active when the optional footer contract is incompatible or registration fails"},
-        {"file": "tests/client.spec.ts", "name": "keeps one account surface with sign-in and explicit discovery outside compatibility details"},
+        {"file": "tests/client.spec.ts", "name": "mounts one compact account lifecycle instead of separate authorization and discovery owners"},
         {"file": "tests/client.spec.ts", "name": "makes explicit account discovery available in the old-Core settings fallback"},
         {"file": "tests/client.spec.ts", "name": "explains the initial model list without inferring a completed discovery from sign-in"},
         {"file": "tests/client.spec.ts", "name": "restores exactly one account fallback when a footer declaration is withdrawn"}
@@ -559,6 +559,24 @@
         {"file": "tests/single-route.spec.ts", "name": "honors an explicit legacy-profile removal without deleting OAuth or rebuilding the route"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not recreate an absent canonical profile during status or startup and auth reconciliation helpers"},
         {"file": "tests/authorization-controller.spec.ts", "name": "keeps absent-profile legacy journal conflicts visible instead of bypassing ownership review"}
+      ]
+    },
+    {
+      "id": "compact-account-row-and-auth-disclosure",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/client.ts", "marker": "GitHubCopilotCompactAccount"},
+        {"file": "src/client.ts", "marker": "data-dsh-github-copilot-auto-authorization"},
+        {"file": "src/compact-account.ts", "marker": "createCompactAccount"}
+      ],
+      "tests": [
+        {"file": "tests/compact-account.spec.ts", "name": "renders a neutral checking state then only a compact signed-in row"},
+        {"file": "tests/compact-account.spec.ts", "name": "shows signed-out CTA and automatically reveals authorization without opening Manage"},
+        {"file": "tests/compact-account.spec.ts", "name": "retains manual management and live actions when toggled during authorization"},
+        {"file": "tests/compact-account.spec.ts", "name": "refreshes from the header without opening Manage and shows collapsed errors"},
+        {"file": "tests/compact-account.spec.ts", "name": "cleans timers and ignores late requests after detach or Remote replacement"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps cancellation failures visible without reviving a stale code"},
+        {"file": "tests/compact-account.spec.ts", "name": "orders cancellation after pending start so a late Host preflight cannot create an abandoned flow"}
       ]
     }
   ],

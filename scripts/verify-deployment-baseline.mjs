@@ -229,7 +229,7 @@ assert(capabilityIds.size === manifest.capabilities.length, 'capability IDs must
 for (const required of ['account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
   'public-adapter-account-model-route', 'managed-model-generation-and-lifetime', 'account-discovery-native-oauth',
   'canonical-owner-preservation', 'single-managed-route-native-oauth', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
-  'read-only-status-and-explicit-discovery', 'shared-copilot-credential-refresh']) {
+  'read-only-status-and-explicit-discovery', 'shared-copilot-credential-refresh', 'compact-account-row-and-auth-disclosure']) {
   assert(capabilityIds.has(required), `required plugin-only capability is missing: ${required}`)
 }
 for (const capability of manifest.capabilities) {

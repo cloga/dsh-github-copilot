@@ -24,6 +24,7 @@ import {
   copyAuthorizationCode,
   GitHubCopilotAuthorizationNotice,
   GitHubCopilotPreviewFooter,
+  GitHubCopilotCompactAccount,
   GitHubCopilotProviderCard,
   GitHubCopilotLegacyProviderNotice,
   GitHubCopilotSettingsSection,
@@ -318,21 +319,13 @@ describe('GitHub Copilot Models client', () => {
     })).toBeUndefined()
   })
 
-  it('keeps one account surface with sign-in and explicit discovery outside compatibility details', () => {
+  it('mounts one compact account lifecycle instead of separate authorization and discovery owners', () => {
     const remote = modelRemote()
     const elements = descendants(GitHubCopilotPreviewFooter({ remote: remote as never }))
-    expect(elements.find(element => element.type === 'h3')?.props.children).toBe('GitHub Copilot')
-    expect(elements.filter(element => element.type === GitHubCopilotProviderCard)).toHaveLength(1)
-    expect(elements.filter(element => element.type === GitHubCopilotAccountModelsPanel)).toHaveLength(1)
-    const details = elements.find(element => element.type === 'details')
-    expect(details?.props.open).not.toBe(true)
-    expect(descendants(details).some(element => element.type === GitHubCopilotProviderCard || element.type === GitHubCopilotAccountModelsPanel)).toBe(false)
-    const text = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
-    expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
-    expect(text).toContain('/model')
-    expect(text).toContain('legacy')
-    expect(text).not.toContain('two routes sharing')
-    expect(text).not.toContain('gpt-6-astra')
+    const accounts = elements.filter(element => element.type === GitHubCopilotCompactAccount)
+    expect(accounts).toHaveLength(1)
+    expect(accounts[0]?.props.remote).toBe(remote)
+    expect(elements.some(element => element.type === GitHubCopilotProviderCard || element.type === GitHubCopilotAccountModelsPanel)).toBe(false)
     expect(remote.status).not.toHaveBeenCalled()
     expect(remote.discoverModels).not.toHaveBeenCalled()
     expect(remote.start).not.toHaveBeenCalled()
@@ -556,8 +549,9 @@ describe('GitHub Copilot Models client', () => {
   it('makes explicit account discovery available in the old-Core settings fallback', () => {
     const remote = modelRemote()
     const elements = descendants(GitHubCopilotSettingsSection({ remote: remote as never, close: vi.fn() }))
-    expect(elements.filter(element => element.type === GitHubCopilotAccountModelsPanel)).toHaveLength(1)
-    expect(elements.filter(element => element.type === GitHubCopilotProviderCard)).toHaveLength(1)
+    expect(elements.filter(element => element.type === GitHubCopilotCompactAccount)).toHaveLength(1)
+    expect(elements.some(element => element.type === GitHubCopilotProviderCard || element.type === GitHubCopilotAccountModelsPanel)).toBe(false)
+    expect(remote.status).not.toHaveBeenCalled()
     expect(remote.discoverModels).not.toHaveBeenCalled()
   })
 
