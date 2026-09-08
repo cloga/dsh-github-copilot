@@ -24,6 +24,7 @@ const failures = {
 } as const
 
 /** One mounted account's read-only snapshot, authorization poll and explicit actions.
+ * A confirmed user Start earns one bounded discovery after sign-in completes.
  * No Remote call occurs during construction. Every await is fenced by lifetime
  * and request generation; UI disclosure changes never reconstruct this owner.
  */
@@ -35,6 +36,7 @@ export function createCompactAccount(
   let state = initial()
   let active = false, lifetime = 0, generation = 0, copyGeneration = 0
   let suppressNotice = false
+  let awaitingSignIn = false
   let pendingStart: Promise<boolean> | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   const listeners = new Set<() => void>()
@@ -80,6 +82,18 @@ export function createCompactAccount(
       publish({ copyState: 'idle' })
     }
   }
+  const completedSignIn = (view: View): boolean => {
+    if (!awaitingSignIn) return false
+    if (view.error !== undefined || view.phase === 'error') {
+      awaitingSignIn = false
+      return false
+    }
+    if (view.inFlight) return false
+    // Consume before publishing completion: subscribers may cancel, detach or
+    // start another mutation. Neither status repeats nor discovery errors rearm it.
+    awaitingSignIn = false
+    return view.configured
+  }
   const schedulePoll = () => {
     stopTimer()
     if (!active || state.operation !== undefined || !state.view?.inFlight) return
@@ -90,18 +104,23 @@ export function createCompactAccount(
     const ticket = ++generation
     stopTimer()
     if (checking) publish({ checking: true, error: undefined })
-    let success = false
+    let success = false, discover = false
     try {
       const result = await remote.status()
       if (!current(ticket)) return
-      accept(resultView(result), 'status')
+      const decoded = resultView(result)
+      discover = completedSignIn(decoded)
+      accept(decoded, 'status')
       success = true
     } catch {
       if (current(ticket)) publish({ error: failures.status })
     } finally {
       if (current(ticket)) {
         publish({ checking: false })
-        if (success) schedulePoll()
+        if (success && current(ticket)) {
+          if (discover) await run('discoverModels')
+          else schedulePoll()
+        }
       }
     }
   }
@@ -124,12 +143,13 @@ export function createCompactAccount(
     // Cancel intent must wait for the Host to finish start's preflight.
     const thisStart = operation === 'start' ? new Promise<boolean>(resolve => { settleStart = resolve }) : undefined
     if (thisStart !== undefined) pendingStart = thisStart
+    awaitingSignIn = operation === 'start'
     stopTimer()
     if (operation === 'start') suppressNotice = false
     if (operation === 'cancel') suppressNotice = true
     if (['start', 'cancel', 'signOut'].includes(operation)) clearPrivateView()
     publish({ operation, checking: false, error: undefined })
-    let success = false
+    let success = false, discover = false
     try {
       if (waitForStart !== undefined) {
         const confirmed = await waitForStart
@@ -144,17 +164,26 @@ export function createCompactAccount(
       const decoded = resultView(result)
       settleStart?.(true)
       if (!current(ticket)) return
+      if (operation === 'start') discover = completedSignIn(decoded)
       accept(decoded, operation)
       success = true
     } catch {
       settleStart?.(false)
-      if (current(ticket)) publish({ error: failures[operation] })
+      if (current(ticket)) {
+        awaitingSignIn = false
+        publish({ error: failures[operation] })
+      }
     } finally {
       settleStart?.(false)
       if (thisStart !== undefined && pendingStart === thisStart) pendingStart = undefined
       if (current(ticket)) {
         publish({ operation: undefined })
-        if (success) schedulePoll()
+        // Release the Start barrier before discovery, then fence again because
+        // completion subscribers can supersede this generation synchronously.
+        if (success && current(ticket)) {
+          if (discover) await run('discoverModels')
+          else schedulePoll()
+        }
       }
     }
   }
@@ -163,12 +192,12 @@ export function createCompactAccount(
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
     attach() {
       const owner = ++lifetime
-      active = true; generation++; copyGeneration++; suppressNotice = false; pendingStart = undefined
+      active = true; generation++; copyGeneration++; suppressNotice = false; pendingStart = undefined; awaitingSignIn = false
       stopTimer(); state = initial()
       void readStatus(true)
       return () => {
         if (lifetime !== owner) return
-        active = false; generation++; copyGeneration++; stopTimer()
+        active = false; generation++; copyGeneration++; awaitingSignIn = false; stopTimer()
       }
     },
     retryStatus: () => state.checking ? Promise.resolve() : readStatus(true),

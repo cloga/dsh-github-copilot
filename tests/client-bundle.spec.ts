@@ -42,7 +42,7 @@ describe('tsdown client artifact', () => {
     })
   }
 
-  function loadArtifact(): { handoff: Handoff; exports: Record<string, unknown>; requested: string[] } {
+  function loadArtifact(react: typeof React = React): { handoff: Handoff; exports: Record<string, unknown>; requested: string[] } {
     const code = readFileSync(resolve('lib/client.js'), 'utf8')
     let handoff: Handoff | undefined
     ;(window as ModuleLoaderWindow).__ModuleLoader__ = {
@@ -54,7 +54,7 @@ describe('tsdown client artifact', () => {
     expect(handoff).toBeDefined()
 
     const modules = new Map<string, unknown>([
-      ['react', React],
+      ['react', react],
       ['@deepseek-ai/cordis', {}],
       ['@deepseek-ai/dsh-api-remotes/client', {}],
       ['@deepseek-ai/dsh-client-ui-renderer/client', {}],
@@ -81,6 +81,157 @@ describe('tsdown client artifact', () => {
 
     expect(exports.apply).toBeTypeOf('function')
     expect(exports.inject).toEqual(['remote', 'slots'])
+  })
+
+  // Deterministic committed-hook fixture for the built registration callbacks.
+  // This verifies plugin lifecycle/element ownership, not Core DOM or browser paint.
+  async function surfaceFixture() {
+    interface Instance {
+      memos: Array<{ deps: React.DependencyList; value: unknown }>
+      effects: Array<{ deps: React.DependencyList | undefined; cleanup?: (() => void) | undefined }>
+      pending: Array<() => void>
+    }
+    let current: Instance
+    let memoIndex = 0, effectIndex = 0
+    const hooks = {
+      ...React,
+      useMemo<T>(factory: () => T, deps: React.DependencyList): T {
+        const index = memoIndex++, previous = current.memos[index]
+        if (!previous || deps.some((value, at) => !Object.is(value, previous.deps[at]))) current.memos[index] = { deps, value: factory() }
+        return current.memos[index]!.value as T
+      },
+      useSyncExternalStore<T>(_subscribe: unknown, snapshot: () => T): T { return snapshot() },
+      useLayoutEffect(setup: React.EffectCallback, deps?: React.DependencyList) {
+        const instance = current, index = effectIndex++, previous = instance.effects[index]
+        if (!previous || !deps || !previous.deps || deps.some((value, at) => !Object.is(value, previous.deps?.[at]))) {
+          instance.pending.push(() => {
+            previous?.cleanup?.()
+            const cleanup = setup()
+            instance.effects[index] = { deps, cleanup: typeof cleanup === 'function' ? cleanup : undefined }
+          })
+        }
+      },
+    }
+    const client = loadArtifact(hooks as typeof React)
+    type Render = (props: Record<string, unknown>) => React.ReactElement
+    const registrations = new Map<string, Render>()
+    const injections = new Map<string, () => void>()
+    const slotDisposals = new Map<string, ReturnType<typeof vi.fn>>()
+    const result = { ok: true, value: { phase: 'signed-out', configured: false, writable: true, inFlight: false, notices: [] } }
+    const remote = { status: vi.fn(async () => result), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(), discoverModels: vi.fn(), reconcile: vi.fn() }
+    const cleanups: Array<() => void> = []
+    const ctx = {
+      remote: { $mount: vi.fn(async () => async () => {}), githubCopilot: remote },
+      logger: { warn: vi.fn() },
+      slots: {
+        spec: () => ({ kind: 'list', scope: 'root' }),
+        register(options: { name: string }, render: Render) {
+          registrations.set(options.name, render)
+          const dispose = vi.fn(() => { registrations.delete(options.name) })
+          slotDisposals.set(options.name, dispose)
+          return dispose
+        },
+        inject(name: string, setup: () => (() => void)) {
+          const cleanup = setup()
+          injections.set(name, cleanup)
+          return cleanup
+        },
+      },
+      inject(dependencies: string[], setup: (ctx: unknown) => (() => void)) {
+        const cleanup = dependencies.includes('uiConversation') ? () => {} : setup(ctx)
+        return Object.assign(Promise.resolve(), { dispose: async () => { cleanup() } })
+      },
+    }
+    const dispose = await (client.exports.apply as (ctx: unknown) => Promise<() => Promise<void>>)(ctx)
+    const instance = () => {
+      const state: Instance = { memos: [], effects: [], pending: [] }
+      const render = (element: React.ReactElement, commit = true): React.ReactElement | null => {
+        current = state; memoIndex = 0; effectIndex = 0; state.pending = []
+        const component = element.type as (props: unknown) => React.ReactElement | null
+        const tree = component(element.props)
+        if (commit) for (const effect of state.pending.splice(0)) effect()
+        return tree
+      }
+      const unmount = () => { for (const effect of state.effects.splice(0)) effect.cleanup?.() }
+      cleanups.push(unmount)
+      return { render, unmount }
+    }
+    return { client, ctx, remote, registrations, injections, slotDisposals, instance,
+      dispose: async () => { await dispose(); for (const cleanup of cleanups) cleanup() } }
+  }
+
+  it.each(['provider-first', 'footer-first'] as const)('embeds exactly one built account when configured, regardless of mount order: %s', async order => {
+    const fixture = await surfaceFixture()
+    try {
+      const provider = fixture.instance(), footer = fixture.instance()
+      const owner = { provider: { provider: 'github-copilot', displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: true, keyConfigured: false }
+      const providerElement = fixture.registrations.get('settings.models.provider-card')!(owner)
+      const footerElement = fixture.registrations.get('settings.models.footer')!({})
+      // A render that has not committed must not claim the surface or call Remote.
+      provider.render(providerElement, false)
+      footer.render(footerElement, false)
+      expect(fixture.remote.status).not.toHaveBeenCalled()
+      if (order === 'provider-first') { provider.render(providerElement); footer.render(footerElement) }
+      else { footer.render(footerElement); provider.render(providerElement) }
+      const tree = provider.render(providerElement)
+      expect(tree?.props['data-dsh-github-copilot-account-surface']).toBe('provider')
+      expect(tree?.props.children.type).toBe(fixture.client.exports.GitHubCopilotCompactAccount)
+      expect(tree?.props.children.props.embedded).toBe(true)
+      expect(footer.render(footerElement)).toBeNull()
+      expect(fixture.remote.status).toHaveBeenCalledOnce()
+      expect(fixture.remote.start).not.toHaveBeenCalled()
+      expect(fixture.remote.discoverModels).not.toHaveBeenCalled()
+    } finally { await fixture.dispose() }
+  })
+
+  it('keeps fresh setup discoverable and follows configured-row arrival, eligibility changes and removal in the built client', async () => {
+    const fixture = await surfaceFixture()
+    try {
+      const provider = fixture.instance(), footer = fixture.instance()
+      const owner = { provider: { provider: 'github-copilot', displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: false, keyConfigured: false }
+      const renderProvider = () => fixture.registrations.get('settings.models.provider-card')!(owner)
+      const footerElement = fixture.registrations.get('settings.models.footer')!({})
+      provider.render(renderProvider()); footer.render(footerElement)
+      expect(provider.render(renderProvider())).toBeNull()
+      const fallback = footer.render(footerElement)
+      const account = fallback?.props.children.props.account
+      expect(fallback?.props['data-dsh-github-copilot-account-surface']).toBe('footer')
+      expect(fallback?.props.children.props.embedded).toBe(false)
+      owner.configured = true
+      provider.render(renderProvider())
+      expect(provider.render(renderProvider())?.props.children.props.account).toBe(account)
+      expect(footer.render(footerElement)).toBeNull()
+      owner.provider.provider = 'unrelated'
+      provider.render(renderProvider())
+      expect(provider.render(renderProvider())).toBeNull()
+      expect(footer.render(footerElement)?.props.children.props.account).toBe(account)
+      owner.provider.provider = 'github-copilot'
+      provider.render(renderProvider())
+      provider.unmount()
+      expect(footer.render(footerElement)?.props.children.props.account).toBe(account)
+      expect(fixture.remote.status).toHaveBeenCalledOnce()
+    } finally { await fixture.dispose() }
+  })
+
+  it('revokes built provider seats on slot withdrawal and stops the shared controller on plugin disposal', async () => {
+    const fixture = await surfaceFixture()
+    try {
+      const provider = fixture.instance(), footer = fixture.instance()
+      const owner = { provider: { provider: 'github-copilot', displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: true, keyConfigured: true }
+      const providerElement = fixture.registrations.get('settings.models.provider-card')!(owner)
+      const footerElement = fixture.registrations.get('settings.models.footer')!({})
+      provider.render(providerElement); footer.render(footerElement)
+      const account = provider.render(providerElement)?.props.children.props.account
+      fixture.injections.get('settings.models.provider-card')!()
+      expect(provider.render(providerElement)).toBeNull()
+      expect(footer.render(footerElement)?.props.children.props.account).toBe(account)
+      expect(fixture.remote.status).toHaveBeenCalledOnce()
+      await fixture.dispose()
+      expect(footer.render(footerElement)).toBeNull()
+      await account.start()
+      expect(fixture.remote.start).not.toHaveBeenCalled()
+      expect(fixture.remote.status).toHaveBeenCalledOnce()
+    } finally { await fixture.dispose() }
   })
 
   it('mounts strict Host result codecs through the published rc.1 client carrier', async () => {

@@ -403,7 +403,10 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
         route = { state: 'needs-repair', diagnosticCode: 'RECONCILIATION_FAILED' }
       }
     }
+    // Completion must use the same barrier as discoverModels(): native OAuth
+    // can finish before this attempt's post-grant profile repair has settled.
     const inFlight = authorization.describe(GITHUB_COPILOT_CREDENTIAL_KEY)?.inFlight === true
+      || this.attempt !== undefined
     const discovered = accountModelsView(this.ctx)
     return {
       phase: inFlight

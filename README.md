@@ -21,35 +21,45 @@ The table retains historical source pins; it does not imply the new account-mode
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.4`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.5`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.4/dsh-github-copilot-0.4.0-alpha.4.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.5/dsh-github-copilot-0.4.0-alpha.5.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
 ### User authorization flow
 
-1. Open **Settings → Models** and find the compact **GitHub Copilot** account row. It does not require adding a native provider profile.
+1. Open **Settings → Models** and find **GitHub Copilot**. When a configured canonical `github-copilot` provider card is mounted, sign-in, status, **Refresh models**, and **Manage** appear inside that existing card, with no separate footer account controller. If no such row is mounted, the footer fallback remains usable; older Core uses **Settings → GitHub Copilot**. Do not add a native provider merely to sign in.
 2. Select **Sign in with GitHub**. The authorization area expands automatically with a prominent one-time code, **Open GitHub verification page**, **Copy code**, and **Cancel sign-in**. No extra **Manage** click is needed.
 3. Copy the code, open the verification link, and complete authorization in your own GitHub browser session. Copy success/failure is announced accessibly; manual copying remains available. Never paste a GitHub token into DSH.
-4. DSH polls only while authorization is in flight. On success, the code, verification link and copy feedback disappear; the automatic authorization area closes and the compact row shows **Signed in**, **Refresh models**, and **Manage**. Manually opened management details stay open. Cancelling clears the old code; failures remain visible rather than disappearing into a collapsed area.
+4. DSH polls only while authorization is in flight. After this UI user's successful **Start sign-in** action (the **Sign in with GitHub** button), exactly one bounded account-model discovery runs, whether success is returned immediately or observed by polling. The code, verification link and copy feedback disappear; the automatic authorization area closes and the account controls show **Signed in**, **Refresh models**, and **Manage**. Manually opened management details stay open. Cancelling clears the old code; failures remain visible rather than disappearing into a collapsed area.
 5. **Refresh models** explicitly updates account metadata without changing your current/default model. **Manage** reveals model details, sign-out and compatibility guidance; simply opening it does not discover models. Select an accepted model under **GitHub Copilot** in the model picker (stable route ID `github-copilot-preview`). See [Migration and troubleshooting](#migration-and-troubleshooting) for rejected models or refresh errors.
 
-The unified account card lives independently of a native provider row; do not use **Add provider** merely to sign in. If it is missing, verify the active profile and loaded Host/Client version. The animation shows the unified **Sign in → Copy code → Copied → Signed in → Refresh models → Metadata ready** flow. Actual authorization on GitHub is a separate user step and is not recorded.
+One shared account-state owner survives transfer between an embedded provider card and an already-mounted fallback, preserving an in-flight sign-in and avoiding duplicate polling/discovery. If all account surfaces unmount, including during a slot-declaration replacement without an overlapping surface, polling stops and a later mount starts a fresh read-only status check; use Refresh models after an externally completed sign-in. Simply opening the view with an already-signed-in account, reading initial status, or toggling **Manage** stays network-free. **Refresh models** remains an explicit action, including after automatic discovery fails; failures are visible even with management collapsed.
 
-![Unified GitHub Copilot account card: sign-in, copy feedback, and explicit model refresh](./docs/images/github-copilot-auth-flow.gif)
+The public provider-card slot is additive: it cannot replace Core's **Edit/Delete** controls. The native editor remains available, but normal plugin discovery needs no manual model definitions. Embedding the controls does not merge `github-copilot` with `github-copilot-preview`, remove configuration, rewrite history or change model selection. If controls are missing from both eligible card and fallback, verify the active profile and loaded Host/Client version.
 
-These previews render this revision's compact account component in an isolated, network-disabled browser fixture. They are not proof that the planned package version is already published or installed. Authorization and discovery responses are synthetic; `ABCD-EFGH` is not a usable code. No real sign-in, sign-out, model refresh, credential change, or route migration was performed for recording, and no production cookies or browser storage were reused. The UI states demonstrate the interaction, not live authorization or model availability.
+**Provider-entry preview (`0.4.0-alpha.5`):** these screenshots render the actual built Client with ReactDOM in an isolated Edge browser. The surrounding provider row, retained Core-style Edit/Delete controls, and Remote replies are synthetic; no live account, settings, or Core service is used. Browser checks cover one embedded account owner, provider/footer handoff during sign-in, one post-login discovery, explicit refresh, keyboard management toggle, cleanup, and a 375 px viewport without overflow.
 
-The unified card keeps the one-time code prominent during authorization:
+![Alpha.5 account controls embedded in one GitHub Copilot provider row; synthetic fixture](./docs/images/copilot-provider-entry.png)
 
-![Unified Copilot account card awaiting authorization with a synthetic code and Copy code button](./docs/images/copilot-device-code-copy.png)
+![Alpha.5 embedded authorization controls with a nonfunctional example device code](./docs/images/copilot-provider-authorization.png)
 
-After authorization completes, the automatic code area disappears. The default row keeps only **GitHub Copilot**, status, **Refresh models**, and **Manage**. **Sign out**, model lists and compatibility guidance live inside **Manage**; login alone does not discover models, and refresh failures remain visible even when management is collapsed.
+**Historical illustrations (`0.4.0-alpha.3`):** the animation and older screenshots below show the earlier standalone fixture, not the provider-integrated layout. The old animation shows **Sign in → Copy code → Copied → Signed in → Refresh models → Metadata ready**. Actual GitHub authorization is a separate user step and was not recorded.
 
-![Unified Copilot account card after sign-in, with explicit model refresh and no device code](./docs/images/copilot-auth-card-signed-in.png)
+![Previous alpha.3 isolated account fixture: sign-in, copy feedback, and explicit model refresh](./docs/images/github-copilot-auth-flow.gif)
+
+The previous-version previews were recorded in an isolated, network-disabled browser fixture. They are not proof that the planned package version is published, installed or loaded. Authorization and discovery responses are synthetic; `ABCD-EFGH` is not a usable code. No real sign-in, sign-out, model refresh, credential change, or route migration was performed for recording, and no production cookies or browser storage were reused.
+
+Previous-version device-code illustration:
+
+![Previous alpha.3 isolated account fixture awaiting authorization with a synthetic code and Copy code button](./docs/images/copilot-device-code-copy.png)
+
+Previous-version signed-in illustration (the current UI additionally performs the one bounded discovery after this user's successful Start sign-in):
+
+![Previous alpha.3 isolated account fixture after sign-in, with explicit model refresh and no device code](./docs/images/copilot-auth-card-signed-in.png)
 
 ### Agent and automation flow
 
@@ -59,7 +69,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 2. Direct the user to **Settings → Models → GitHub Copilot → Sign in with GitHub**.
 3. Tell the user to open the displayed verification URL and enter the displayed one-time code. Do not ask for, read, copy, log, or persist the user's GitHub token.
 4. Wait for the user to complete the browser step. Do not repeatedly start new authorization attempts while one is in flight.
-5. Confirm **Signed in** and that the device-code notice is gone; then explicitly refresh account models and inspect metadata before asking the user to choose one. Login, discovery and successful model calls are separate evidence.
+5. Confirm **Signed in** and that the device-code notice is gone; inspect the single automatic discovery result after this user's successful Start sign-in before asking them to choose a model. If the account was already signed in when the view opened, use **Refresh models** explicitly when fresh metadata is needed. Do not start another login or assume a repeated status read will discover models. Login, discovery and successful model calls are separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
 GitHub Releases are the authoritative distribution channel. This repository intentionally does not publish to npm. Deployment automation should pin the versioned tarball and verify `SHA256SUMS` from the same Release.
@@ -69,7 +79,7 @@ No `copilot2api` process, external gateway, placeholder API key, pasted GitHub t
 ## What this package owns
 
 - A conditional authorization-service fallback for profiles such as rc.2 that omit Core's service.
-- One unified Models account card, independent of native provider rows, Client-safe Remote descriptors, and Host authorization controller.
+- Account controls embedded in an existing canonical Models provider card, with a shared-state footer/old-Core section fallback, Client-safe Remote descriptors, and Host authorization controller.
 - Strict normalization of pi-ai's provider-owned Copilot OAuth grant.
 - Preservation of intentional canonical-route absence, compatibility repair of existing legacy profiles, and restoration of verified old overrides. It never automatically removes user profiles or replaces Core's model list from another pi catalog.
 - A data-driven account-model route using pi `0.85.1`, authenticated Copilot metadata, and the published native DSH adapter. New model IDs do not require a model-specific code patch when their advertised protocol and capabilities are supported.
@@ -81,13 +91,13 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 `llm-pi-ai` registers the OAuth method; the authorization service orchestrates the interaction; this package contributes the UI/Remote controller and route reconciliation. Core supplies authorization on rc.1. On rc.2 profiles that omit it, this package mounts its runtime dependency and reuses any provider already present.
 
-New installations use one account-discovered route displayed as **GitHub Copilot**, with the unchanged actual ID `github-copilot-preview`. The unified account card/footer supplies login and **Refresh models** independently of native provider rows. Refresh explicitly fetches the signed-in account's Copilot `/models` metadata before you select a model; it does not change a session, default or history automatically.
+New installations without a canonical profile use the account-discovered route displayed as **GitHub Copilot**, with the unchanged actual ID `github-copilot-preview`. Account controls use an existing configured canonical provider card when mounted; otherwise the footer/old-Core section provides the same flow. Exactly one bounded `/models` discovery follows this UI user's successful Start sign-in, and **Refresh models** remains available for explicit updates. Neither UI placement nor discovery changes a session, default, history, credential ownership or route configuration automatically.
 
 An existing Core-owned `github-copilot` profile is preserved, so upgrades can still show two real routes until the user completes [explicit single-route migration](./docs/single-route-migration.md). This is not a UI filter or facade. After actual removal of the reviewed legacy profile, both the composer picker and `/model` receive only the managed Copilot group. Old conversations remain stored unchanged, but a paused conversation still selecting the removed canonical route needs an explicit managed model selection when resumed.
 
 The managed route selects Responses, Chat Completions or Anthropic Messages from advertised `supported_endpoints`, not model names or a per-model allowlist. An existing pi protocol is retained only if the server also advertises it. New IDs with complete supported metadata can therefore work without another plugin release. Missing endpoints, disabled policy, unsupported protocols or malformed limits produce explicit diagnostics rather than guesses. Updating pi or seeing a model ID in its catalog does not itself prove the protocol is correct.
 
-Discovery is bounded and cached for five minutes. Attach, status reads and credential notifications do not start it automatically; an explicit refresh or an actual model preparation can perform discovery and native OAuth refresh. Each request is tied to the account, token, permission snapshot and catalog generation. Account changes, revoked permissions, expired metadata and disposal invalidate old requests. A newly advertised, server-enabled model may work even before an older grant's cached ID list includes it; this does not rewrite the grant.
+Discovery is bounded and cached for five minutes. This UI user's successful Start sign-in triggers exactly one discovery, whether the result is immediate or polled; status reads themselves do not discover. Attach, initial already-signed-in status, view opening, details toggles and credential notifications remain network-free. An explicit refresh or an actual model preparation can also perform discovery and native OAuth refresh. Each request is tied to the account, token, permission snapshot and catalog generation. Account changes, revoked permissions, expired metadata and disposal invalidate old requests. A newly advertised, server-enabled model may work even before an older grant's cached ID list includes it; this does not rewrite the grant.
 
 **Plugin-only development boundary:** fixes in this project must use existing published public APIs and remain in the plugin. Do not patch Core source, installed binaries, `node_modules`, private runtime registries or shared upstream catalogs; do not make a new Core export or upstream Core PR a delivery prerequisite. Read-only inspection and isolated verification against unchanged pinned Core artifacts are allowed. If a stock API cannot support a requested feature, state the limitation and use a tested plugin-local alternative rather than changing Core. The authoritative policy and its machine checks are documented in [AGENTS.md](./AGENTS.md#plugin-only-implementation-boundary).
 
@@ -105,7 +115,7 @@ Temporary ownership uses a bounded version-2 journal: raw `api`/`models` preimag
 
 `githubCopilot.status()` and Host `describeGitHubCopilotProviderProfile()` only read stored state and plan legacy canonical changes. They do not write settings, refresh OAuth or test the network. Status separates configured authentication from legacy route states `ready`, `needs-repair`, `not-configured`, `conflict` and `error`. With valid login, `route: not-configured` normally means the optional canonical profile is absent: it is not a login error or a repair request, and it does not prove managed discovery is ready. `ready` only means the inspected canonical configuration needs no repair. Discovery and successful model/search calls remain separate evidence.
 
-Use **Repair model configuration** (Remote `githubCopilot.reconcile()`) for an explicit, revision-checked repair of an existing legacy profile or verified journal. It does not fetch a model list, create an absent profile, or force conflicts. Successful login, startup and auth-refresh reconciliation also preserve absence. Browser status polling is read-only; deploy matching Host and Client bundles.
+Use **Repair model configuration** (Remote `githubCopilot.reconcile()`) for an explicit, revision-checked repair of an existing legacy profile or verified journal. It does not fetch a model list, create an absent profile, or force conflicts. Successful login, startup and auth-refresh reconciliation also preserve absence. Browser status polling is read-only; the UI separately initiates its one discovery when this user's Start sign-in succeeds. Deploy matching Host and Client bundles.
 
 Before a grant is persisted or reused, the Host normalizer rebuilds only pi-ai's documented `type`, `refresh`, `access`, finite `expires`, optional `enterpriseUrl`, and optional deduplicated `availableModelIds` fields into a fresh plain JSON object.
 
@@ -259,8 +269,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`); the historical `cloga` suffix identified downstream fork builds and is no longer used for new versions. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, marks prerelease versions accordingly, and creates the GitHub Release only after every preceding step succeeds.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.4/dsh-github-copilot-0.4.0-alpha.4.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.4/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.5/dsh-github-copilot-0.4.0-alpha.5.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.5/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -268,7 +278,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.4.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.5.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

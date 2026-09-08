@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.4"
+    "version": "0.4.0-alpha.5"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -529,7 +529,7 @@
     {
       "id": "dsh-models-settings-and-managed-discovery-ui",
       "required": true,
-      "activation": "single-account-footer-with-exclusive-settings-fallback",
+      "activation": "provider-row-first-shared-account-with-exclusive-fallback",
       "sourceMarkers": [
         {"file": "src/client.ts", "marker": "GitHubCopilotSettingsSection"},
         {"file": "src/client.ts", "marker": "settings.models.footer"},
@@ -537,12 +537,14 @@
       ],
       "tests": [
         {"file": "tests/client.spec.ts", "name": "registers a GitHub Copilot settings section on the rc.2 Models surface"},
-        {"file": "tests/client.spec.ts", "name": "registers one account footer and a non-interactive legacy provider-card notice"},
+        {"file": "tests/client.spec.ts", "name": "registers coordinated provider and fallback seats without starting either controller during registration"},
         {"file": "tests/client.spec.ts", "name": "leaves authorization active when the optional footer contract is incompatible or registration fails"},
         {"file": "tests/client.spec.ts", "name": "mounts one compact account lifecycle instead of separate authorization and discovery owners"},
         {"file": "tests/client.spec.ts", "name": "makes explicit account discovery available in the old-Core settings fallback"},
         {"file": "tests/client.spec.ts", "name": "explains the initial model list without inferring a completed discovery from sign-in"},
-        {"file": "tests/client.spec.ts", "name": "restores exactly one account fallback when a footer declaration is withdrawn"}
+        {"file": "tests/client.spec.ts", "name": "restores exactly one account fallback when a footer declaration is withdrawn"},
+        {"file": "tests/client.spec.ts", "name": "transfers a pending sign-in to an arriving row and back without stale actions or a second poll owner"},
+        {"file": "tests/client.spec.ts", "name": "keeps one owner across duplicate row instances and footer/settings competition"}
       ]
     },
     {
@@ -551,7 +553,7 @@
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "current !== undefined && providerSupportsStrictMode(current) !== false"},
         {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot'"},
-        {"file": "src/client.ts", "marker": "GitHubCopilotLegacyProviderNotice"}
+        {"file": "src/client.ts", "marker": "GitHubCopilotAccountSurface"}
       ],
       "tests": [
         {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow while exposing only the account-driven provider"},
@@ -576,7 +578,11 @@
         {"file": "tests/compact-account.spec.ts", "name": "refreshes from the header without opening Manage and shows collapsed errors"},
         {"file": "tests/compact-account.spec.ts", "name": "cleans timers and ignores late requests after detach or Remote replacement"},
         {"file": "tests/compact-account.spec.ts", "name": "keeps cancellation failures visible without reviving a stale code"},
-        {"file": "tests/compact-account.spec.ts", "name": "orders cancellation after pending start so a late Host preflight cannot create an abandoned flow"}
+        {"file": "tests/compact-account.spec.ts", "name": "orders cancellation after pending start so a late Host preflight cannot create an abandoned flow"},
+        {"file": "tests/compact-account.spec.ts", "name": "discovers exactly once after immediate confirmed completion and permits later manual refresh"},
+        {"file": "tests/compact-account.spec.ts", "name": "waits through repeated authorization polls and discovers only on confirmed completion"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps automatic post-login discovery owned across Manage toggles and shows a retryable error"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "keeps completion pending through post-login repair so the Client discovers exactly once afterwards"}
       ]
     }
   ],
