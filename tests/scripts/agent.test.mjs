@@ -13,7 +13,7 @@ test('describes actual package metadata without claiming a release exists', asyn
   assert.equal(result.package.version, pkg.version)
   assert.equal(result.release.tag, `v${pkg.version}`)
   assert.equal(result.release.publicationVerified, false)
-  assert.equal(result.baselines.length, 3)
+  assert.equal(result.baselines.length, 4)
 })
 
 test('plans only known task IDs with unexecuted argument arrays', async () => {

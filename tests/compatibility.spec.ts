@@ -31,13 +31,23 @@ function context(overrides: Record<string, unknown> = {}): Context {
 }
 
 describe('assertDshCompatibility', () => {
-  it('declares alpha.1, rc.2, and rc.1 compatibility', () => {
-    expect(DSH_COMPATIBILITY).toMatchObject({
-      release: '0.1.3-alpha.1',
-      developmentRelease: '0.1.2-rc.1',
-      peerRange: '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1',
-      supportedReleases: ['0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1'],
-    })
+  it('retains the original three compatibility baselines', () => {
+    expect(DSH_COMPATIBILITY.supportedReleases.slice(0, 3)).toEqual([
+      '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1',
+    ])
+  })
+
+  it('adds official 0.1.5-alpha.1 without dropping earlier baselines or advancing development dependencies', () => {
+    expect(DSH_COMPATIBILITY.release).toBe('0.1.5-alpha.1')
+    expect(DSH_COMPATIBILITY.developmentRelease).toBe('0.1.2-rc.1')
+    expect(DSH_COMPATIBILITY.supportedReleases).toEqual([
+      '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1',
+    ])
+    expect(DSH_COMPATIBILITY.peerRange).toBe('0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1')
+    expect(() => assertDshCompatibility(context({ authorization: {} })))
+      .toThrow('authorization.describe')
+    expect(() => assertDshCompatibility(context({ authorization: {} })))
+      .toThrow('0.1.5-alpha.1')
   })
 
   it('accepts the supported DSH service contract', () => {

@@ -116,4 +116,20 @@ await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',
 ])
 
+if (baseline.release === '0.1.5-alpha.1') {
+  for (const path of ['package.json', 'packages/core/session/package.json', 'packages/llm/llm-pi-ai/package.json']) {
+    const metadata = JSON.parse(await readFile(resolve(upstream, path), 'utf8'))
+    if (metadata.version !== baseline.release) throw new Error(`DSH target package version differs in ${path}`)
+  }
+  await assertMarkers('packages/core/session/src/index.ts', ['requestHeader(): EpochHeader | undefined'])
+  await assertMarkers('packages/core/session/src/types.ts', ['SESSION_FORMAT_VERSION = 3'])
+  await assertMarkers('packages/core/agent/src/index.ts', ['currentInitiator(): Agent | undefined'])
+  await assertMarkers('packages/session/session-projection/src/index.ts', ['stateOf<K extends keyof SessionProjectionStateMap>'])
+  await assertMarkers('packages/api/session-controller/src/model-selection-projection.ts', [
+    'pending: modelSelectionSchema.nullable()',
+    "event.type === 'model/selection'",
+    "event.type !== 'request/header'",
+  ])
+}
+
 console.log(`Verified DSH ${baseline.release} public seams at ${commit}.`)
