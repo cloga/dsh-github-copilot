@@ -143,11 +143,15 @@ assert(
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(
-  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1',
-  'DSH peer range must target alpha.1, rc.2, and rc.1',
+  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1',
+  'DSH peer range must retain the previous three baselines and append 0.1.5-alpha.1',
 )
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
-assert(dshBaselines.length === 3, 'exactly three DSH baselines must be declared')
+assert(dshBaselines.length === 4, 'exactly four DSH baselines must be declared')
+const currentDsh = manifest.supportedBaselines.dsh
+assert(currentDsh.release === '0.1.5-alpha.1'
+  && currentDsh.tag === 'dsh-v0.1.5-alpha.1'
+  && currentDsh.commit === '5dda764ed3aa172535a7967b06ff95d9cbfe536a', 'current Core target must be the exact official 0.1.5-alpha.1 tag')
 assert(
   dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
     && entry.commit === 'a772dbbde82780bff2b9394427e9f0a24cafa1d5'
@@ -174,6 +178,22 @@ assert(
     && entry.fileContentHelper === 'contentHasFile'),
   'DSH alpha.1 baseline is missing',
 )
+const officialCore = dshBaselines.find(entry => entry.release === '0.1.5-alpha.1')
+assert(officialCore?.tag === 'dsh-v0.1.5-alpha.1'
+  && officialCore.commit === '5dda764ed3aa172535a7967b06ff95d9cbfe536a'
+  && officialCore.source === 'https://github.com/deepseek-ai/deepseek-harness'
+  && officialCore.modelsUi === 'provider-card'
+  && officialCore.providerHeaders === 'fetch-validated-discovery'
+  && officialCore.strictModeCompat === 'route-switch'
+  && officialCore.fileContentHelper === 'contentHasFile', 'official DSH 0.1.5-alpha.1 baseline is missing')
+assert(officialCore.evidenceScope === 'unchanged-tagged-source-target'
+  && officialCore.standaloneNpmArtifacts === 'not-tested'
+  && officialCore.managedProviderValidation === 'synthetic-tagged-source-runtime', '0.1.5-alpha.1 must retain bounded tagged-source evidence, not artifact or live proof')
+assert(JSON.stringify(officialCore.runtimeTests) === JSON.stringify([
+  'tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
+  'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts',
+]), 'target tagged-runtime evidence inventory differs')
+for (const path of officialCore.runtimeTests) await access(resolve(root, path))
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
   assert(
@@ -218,6 +238,8 @@ assert((await read('src/client.ts')).includes("export const inject = ['remote', 
 
 const compatibility = await read('src/compatibility.ts')
 assert(compatibility.includes(`peerRange: '${peerRange}'`), 'runtime compatibility range differs')
+assert(compatibility.includes(`release: '${currentDsh.release}'`), 'runtime current Core target differs')
+assert(compatibility.includes(`supportedReleases: [${dshBaselines.map(entry => `'${entry.release}'`).join(', ')}]`), 'runtime supported Core release inventory differs')
 assert(
   compatibility.includes(`developmentRelease: '${manifest.supportedBaselines.dsh.developmentRelease}'`),
   'runtime development release differs',
@@ -313,8 +335,12 @@ for (const command of [
   'repository: cloga/deepseek-harness',
   'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
   'd347e703908d0406b7a7ef80e3a0e594d86b2215',
+  '5dda764ed3aa172535a7967b06ff95d9cbfe536a',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
+  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1'",
+  'node scripts/verify-tagged-core.mjs prepare',
+  'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify:controlled-core -- dsh-upstream',
   'pnpm verify',

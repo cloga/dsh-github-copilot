@@ -6,6 +6,14 @@ import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { prepareTaggedCoreFixture, TAGGED_CORE_RELEASES } from '../../scripts/verify-tagged-core.mjs'
 
+test('admits the exact 0.1.5-alpha.1 source pin while retaining prior tagged baselines', () => {
+  assert.deepEqual(TAGGED_CORE_RELEASES, {
+    '0.1.2-rc.1': 'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
+    '0.1.3-alpha.1': 'd347e703908d0406b7a7ef80e3a0e594d86b2215',
+    '0.1.5-alpha.1': '5dda764ed3aa172535a7967b06ff95d9cbfe536a',
+  })
+})
+
 const release = '0.1.3-alpha.1'
 async function fixture() {
   const base = await realpath(await mkdtemp(join(await realpath(tmpdir()), 'copilot-tagged-test-')))

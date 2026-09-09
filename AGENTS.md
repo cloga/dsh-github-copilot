@@ -29,7 +29,7 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 ## Product and architecture
 
-`dsh-github-copilot` is a companion to DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
+`dsh-github-copilot` is a companion to official DSH `0.1.5-alpha.1`, DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
 
 This repository owns eight narrow surfaces:
 
@@ -108,10 +108,13 @@ The supported upstream baselines are:
   on `cloga-pi-ai-model-api`, based on tag commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
 - Tag `dsh-v0.1.2-rc.1`, commit `a66e4702047846cdaa10c66c9d3df3951f5ea70d`.
 - Tag `dsh-v0.1.3-alpha.1`, commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`.
+- Official tag `dsh-v0.1.5-alpha.1`, commit `5dda764ed3aa172535a7967b06ff95d9cbfe536a`.
+
+The current target is official `0.1.5-alpha.1`; retain all three earlier pins and exact `0.1.2-rc.1` development dependencies. Both alpha targets use unchanged tagged-source runtime fixtures, not standalone npm-artifact certification. Compatibility metadata and synthetic tests do not prove live endpoints, installed Desktop bytes, release publication or loaded runtime state. Public Host, Client and Remote seams remain available; this baseline update does not authorize implementation rewrites.
 
 These pins document compatibility evidence. They do not authorize creating another controlled Core patch or making one a prerequisite for new plugin fixes.
 
-- Models UI: rc.1 and alpha.1 use `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`, to embed login/status/Refresh/Manage in a mounted configured canonical `github-copilot` row and suppress the separate footer controller. With no such row mounted, retain footer fallback; rc.2 uses a dedicated `settings.section`. Preserve the shared account-state owner across transfer only while another eligible surface remains mounted. Unmounting the last surface or replacing declarations without overlapping mounts stops polling; a later controller reads status and separately non-forcing ensures missing/idle/stale/error/loading signed-in metadata, without replaying the old forced-login action. Manual Refresh models lives inside Manage; errors expose Retry. Opening Models is no longer guaranteed network-free, but status/details themselves remain pure. This additive slot cannot replace Core Edit/Delete: retain the native editor, while normal plugin discovery needs no manual model definitions. UI integration must not merge/remove actual canonical and `github-copilot-preview` routes or rewrite credentials, configuration, history or selection.
+- Models UI: `0.1.2-rc.1`, `0.1.3-alpha.1` and `0.1.5-alpha.1` use `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`, to embed login/status/Refresh/Manage in a mounted configured canonical `github-copilot` row and suppress the separate footer controller. With no such row mounted, retain footer fallback; rc.2 uses a dedicated `settings.section`. Preserve the shared account-state owner across transfer only while another eligible surface remains mounted. Unmounting the last surface or replacing declarations without overlapping mounts stops polling; a later controller reads status and separately non-forcing ensures missing/idle/stale/error/loading signed-in metadata, without replaying the old forced-login action. Manual Refresh models lives inside Manage; errors expose Retry. Opening Models is no longer guaranteed network-free, but status/details themselves remain pure. This additive slot cannot replace Core Edit/Delete: retain the native editor, while normal plugin discovery needs no manual model definitions. UI integration must not merge/remove actual canonical and `github-copilot-preview` routes or rewrite credentials, configuration, history or selection.
 - Authorization flow key: `llm-pi-ai/github-copilot`.
 - Authorization service: rc.1 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
@@ -178,7 +181,7 @@ Then run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.
 
 `pnpm verify` checks the Agent contract, source and local test types, baseline markers, a clean build, Vitest tests, Node tooling tests, and real built Host import/Client-loader/Remote smoke. `tests/fixtures` are intentionally excluded from local test typecheck because they import source from a separate pinned Core checkout. The checked-in code must pass; never suppress compiler errors or weaken a test to get a green report.
 
-CI runs on Windows/Linux against the three exact Core baselines. `verify:upstream` is static seam-marker evidence. `verify:controlled-core` exclusively installs a temporary config fixture, refuses an existing target, and removes only its own file; it is not full plugin activation. The published rc.2 adapter test covers model materialization, not live provider transport. The release job must wait for the complete reusable CI matrix on the tagged revision, then verify its own packed bytes before publishing.
+CI runs on Windows/Linux against all four exact Core baselines, with unchanged tagged-source runtime checks for `0.1.3-alpha.1` and `0.1.5-alpha.1`. Optional native Chat fixtures also cover both alpha targets and `0.1.2-rc.1`. `verify:upstream` is static seam-marker evidence. `verify:controlled-core` exclusively installs a temporary config fixture, refuses an existing target, and removes only its own file; it is not full plugin activation. The published rc.2 adapter test covers model materialization, not live provider transport. The release job must wait for the complete reusable CI matrix on the tagged revision, then verify its own packed bytes before publishing.
 
 ### Evidence and side effects
 

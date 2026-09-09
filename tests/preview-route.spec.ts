@@ -695,9 +695,13 @@ describe('plugin-owned account Copilot route', () => {
 
   it('uses unmodified stock LlmRuntime preparation and leaves canonical model registration alone', async () => {
     const harness = await runtime()
-    await harness.ctx.plugin(CorePiAi, { providers: { 'github-copilot': { models: [
-      { id: 'gemini-3.5-flash' }, { id: 'claude-sonnet-4.5' },
-    ] } } })
+    // Explicit synthetic route metadata avoids depending on retiring upstream catalog IDs.
+    // This test proves coexistence/preparation, not these models' live protocols.
+    await harness.ctx.plugin(CorePiAi, { providers: { 'github-copilot': {
+      api: 'openai-completions', models: [
+        { id: 'gemini-3.5-flash' }, { id: 'claude-sonnet-4.5' },
+      ],
+    } } })
     expect(harness.ctx.llm.listProviders().map(item => item.id)).toEqual([PREVIEW, 'github-copilot'])
     const info = await harness.ctx.llm.resolveModelInfo(PREVIEW, MODEL)
     expect(info).toMatchObject({ id: MODEL, provider: PREVIEW, context: { contextWindow: 1_050_000 } })
