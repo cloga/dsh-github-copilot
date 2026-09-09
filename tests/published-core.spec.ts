@@ -17,6 +17,7 @@ const ALPHA_015 = '0.1.5-alpha.1'
 const alphaPins = new Map([
   [ALPHA, 'd347e703908d0406b7a7ef80e3a0e594d86b2215'],
   [ALPHA_015, '5dda764ed3aa172535a7967b06ff95d9cbfe536a'],
+  ['0.1.5-alpha.2', 'b2e3b2a0125854567a4a5fcba75782e42fe84901'],
 ])
 function packageInfo(name: string): { version: string; path: string } {
   const path = realpathSync(require.resolve(`${name}/package.json`))
@@ -68,7 +69,7 @@ const MODEL = 'published-fixture-model'
 const contexts: Context[] = []
 
 async function assertRelease(): Promise<void> {
-  expect([RC, ALPHA, ALPHA_015]).toContain(expectedRelease)
+  expect([RC, ...alphaPins.keys()]).toContain(expectedRelease)
   for (const name of packageLocations.keys()) {
     expect(selectedPackageInfo(name).version, `${name} must match the requested ${evidenceLabel}`).toBe(expectedRelease)
   }

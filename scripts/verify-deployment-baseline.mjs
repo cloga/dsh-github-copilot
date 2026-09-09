@@ -143,15 +143,15 @@ assert(
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(
-  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1',
-  'DSH peer range must retain the previous three baselines and append 0.1.5-alpha.1',
+  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2',
+  'DSH peer range must retain the previous four baselines and append 0.1.5-alpha.2',
 )
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
-assert(dshBaselines.length === 4, 'exactly four DSH baselines must be declared')
+assert(dshBaselines.length === 5, 'exactly five DSH baselines must be declared')
 const currentDsh = manifest.supportedBaselines.dsh
-assert(currentDsh.release === '0.1.5-alpha.1'
-  && currentDsh.tag === 'dsh-v0.1.5-alpha.1'
-  && currentDsh.commit === '5dda764ed3aa172535a7967b06ff95d9cbfe536a', 'current Core target must be the exact official 0.1.5-alpha.1 tag')
+assert(currentDsh.release === '0.1.5-alpha.2'
+  && currentDsh.tag === 'dsh-v0.1.5-alpha.2'
+  && currentDsh.commit === 'b2e3b2a0125854567a4a5fcba75782e42fe84901', 'current Core target must be the exact official 0.1.5-alpha.2 tag')
 assert(
   dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
     && entry.commit === 'a772dbbde82780bff2b9394427e9f0a24cafa1d5'
@@ -194,6 +194,15 @@ assert(JSON.stringify(officialCore.runtimeTests) === JSON.stringify([
   'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts',
 ]), 'target tagged-runtime evidence inventory differs')
 for (const path of officialCore.runtimeTests) await access(resolve(root, path))
+const alpha2Core = dshBaselines.find(entry => entry.release === '0.1.5-alpha.2')
+assert(alpha2Core?.tag === currentDsh.tag && alpha2Core.commit === currentDsh.commit
+  && alpha2Core.source === officialCore.source && alpha2Core.modelsUi === officialCore.modelsUi
+  && alpha2Core.providerHeaders === officialCore.providerHeaders && alpha2Core.strictModeCompat === officialCore.strictModeCompat
+  && alpha2Core.fileContentHelper === officialCore.fileContentHelper
+  && alpha2Core.evidenceScope === officialCore.evidenceScope && alpha2Core.standaloneNpmArtifacts === 'not-tested'
+  && alpha2Core.managedProviderValidation === 'synthetic-tagged-source-runtime'
+  && alpha2Core.resolvedProfileDiagnostics === 'plugin-owned-empty-modelErrors'
+  && JSON.stringify(alpha2Core.runtimeTests) === JSON.stringify(officialCore.runtimeTests), 'alpha2 must retain exact bounded source-runtime evidence and profile diagnostics')
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
   assert(
@@ -336,9 +345,10 @@ for (const command of [
   'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
   'd347e703908d0406b7a7ef80e3a0e594d86b2215',
   '5dda764ed3aa172535a7967b06ff95d9cbfe536a',
+  'b2e3b2a0125854567a4a5fcba75782e42fe84901',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
-  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1'",
+  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2'",
   'node scripts/verify-tagged-core.mjs prepare',
   'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
@@ -354,7 +364,10 @@ for (const marker of [
   "github.event_name == 'push' && github.ref == 'refs/heads/main'",
   'fetch-depth: 0',
   'scripts/release-policy.mjs --plan',
-  'd347e703908d0406b7a7ef80e3a0e594d86b2215',
+  'b2e3b2a0125854567a4a5fcba75782e42fe84901',
+  '--release 0.1.5-alpha.2',
+  'node scripts/verify-tagged-core.mjs prepare',
+  'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify:controlled-core -- dsh-upstream',
   'scripts/publish-release.mjs',
@@ -369,7 +382,7 @@ for (const marker of [
 ]) assert(workflow.includes(marker), `CI release gate is missing ${marker}`)
 const orderedReleaseSteps = [
   '- run: pnpm install --frozen-lockfile',
-  '- name: Install alpha.1 Core pi-ai closure',
+  '- name: Install alpha2 Core pi-ai closure',
   '- run: pnpm verify:upstream -- dsh-upstream',
   '- run: pnpm verify:controlled-core -- dsh-upstream',
   '- name: Verify plugin package',

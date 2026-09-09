@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.10`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.11`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 ## 已测试基线
 
@@ -19,15 +19,22 @@
 | DSH `0.1.2-rc.1` | Tag commit [`a66e470`](https://github.com/deepseek-ai/deepseek-harness/commit/a66e4702047846cdaa10c66c9d3df3951f5ea70d) | **Settings → Models** provider card |
 | DSH `0.1.3-alpha.1` | Tag commit [`d347e70`](https://github.com/deepseek-ai/deepseek-harness/commit/d347e703908d0406b7a7ef80e3a0e594d86b2215) | **Settings → Models** provider card |
 | 官方 DSH `0.1.5-alpha.1` | Tag commit [`5dda764`](https://github.com/deepseek-ai/deepseek-harness/commit/5dda764ed3aa172535a7967b06ff95d9cbfe536a) | **Settings → Models** provider card |
+| 官方 DSH `0.1.5-alpha.2`（当前目标） | Tag commit [`b2e3b2a`](https://github.com/deepseek-ai/deepseek-harness/commit/b2e3b2a0125854567a4a5fcba75782e42fe84901) | **Settings → Models** provider card |
 
-上表保留历史源码 pin，不表示账号模型路由在所有基线上都已验收。已发布制品的合成 transport 测试使用 **rc.1 adapter 与 pi `0.85.1`**，开发依赖继续精确固定为 `0.1.2-rc.1`；受控 rc.2 仅为历史回归证据。原始 rc.2 tag 不能解析逐模型 `api`，不能用版本号证明混合协议可用；插件通过已发布的 adapter 接口传入经校验的模型数据，不以新增 Core 服务或修改 Core 为前提。`0.1.3-alpha.1` 与官方 `0.1.5-alpha.1` 均作为未修改的标签源码目标，由 CI 使用隔离测试解析器运行，不构建或给 Core 打补丁。对应源码运行检查通过前不宣称兼容性已验收；这些检查不是独立 npm 制品、真实端点、已安装 Desktop 或已加载运行时的证明。`0.1.3-alpha.1` 没有发布独立 npm 制品；新目标不作独立制品验收声明。已有公开 Host、Client 与 Remote 接口保留，因此本次认证不重写这些实现。Peer range 只约束包准入，不是真实兼容性证明；插件不安装 Core 补丁。
+上表保留历史源码 pin，不表示账号模型路由在所有基线上都已验收。已发布制品的合成 transport 测试使用 **rc.1 adapter 与 pi `0.85.1`**，开发依赖继续精确固定为 `0.1.2-rc.1`；受控 rc.2 仅为历史回归证据。原始 rc.2 tag 不能解析逐模型 `api`，不能用版本号证明混合协议可用；插件通过已发布的 adapter 接口传入经校验的模型数据，不以新增 Core 服务或修改 Core 为前提。`0.1.3-alpha.1`、官方 `0.1.5-alpha.1` 与 `0.1.5-alpha.2` 均作为未修改的标签源码目标，由 CI 使用隔离测试解析器运行，不构建或给 Core 打补丁。对应源码运行检查通过前不宣称兼容性已验收；这些检查不是独立 npm 制品、真实端点、已安装 Desktop 或已加载运行时的证明。`0.1.3-alpha.1` 没有发布独立 npm 制品；新目标不作独立制品验收声明。已有公开 Host、Client 与 Remote 接口保留，因此本次认证不重写这些实现。Peer range 只约束包准入，不是真实兼容性证明；插件不安装 Core 补丁。
+
+### Alpha.11 兼容修复（#105）
+
+Core `0.1.5-alpha.2` 新增必需的 `ResolvedPiAiProviderProfile.modelErrors`，并在 `PiAiAdapter.modelOf` 无条件读取。插件为自身已校验的账号描述符提供独立的空诊断 Map；被拒绝的模型不会进入 provider。不会修改上游 profile、catalog、prototype 或依赖制品。固定源码的真实 adapter 测试覆盖 resolve、prepare 和合成 stream，旧基线使用同一份插件代码回归。
+
+旧 canonical Anthropic inline 请求若含有带内 `system` 消息，会在 probe 之前原样交还 Core，避免把系统权限降为 user turn；此类请求的 inline search 因而有意受限。旧 Responses inline wire 保持既有的显式 system 内容映射为 user 输入文本的行为，并非过滤 system 消息；托管路由始终使用 Core 原生传输。详细边界见 [兼容审计](./docs/agent-readiness.md#core-alpha2-compatibility-follow-up-105-planned-alpha11)。
 
 ## 安装与登录
 
 将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.10/dsh-github-copilot-0.4.0-alpha.10.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.11/dsh-github-copilot-0.4.0-alpha.11.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
@@ -292,9 +299,9 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-开发建议使用 Node 24 LTS 和固定的 pnpm 版本；运行时依赖要求 Node >=22.19.0。`pnpm verify` 检查 Agent contract、源码与本地测试类型、baseline marker、干净构建、Vitest 与 Node 工具测试，以及真实构建 Host 导入和 Client/Remote smoke。打包后执行 `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`，检查归档 export、图片、允许的文件以及与本次构建的一致性。CI 在 Windows/Linux 上验证四个精确 Core 源码与配置 fixture：受控 `0.1.1-rc.2`、`0.1.2-rc.1`、`0.1.3-alpha.1` 和官方 `0.1.5-alpha.1`；两个 alpha 目标还运行未修改的标签源码运行时 fixture。发布必须等待完整矩阵通过。
+开发建议使用 Node 24 LTS 和固定的 pnpm 版本；运行时依赖要求 Node >=22.19.0。`pnpm verify` 检查 Agent contract、源码与本地测试类型、baseline marker、干净构建、Vitest 与 Node 工具测试，以及真实构建 Host 导入和 Client/Remote smoke。打包后执行 `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`，检查归档 export、图片、允许的文件以及与本次构建的一致性。CI 在 Windows/Linux 上验证五个精确 Core 源码与配置 fixture：受控 `0.1.1-rc.2`、`0.1.2-rc.1`、`0.1.3-alpha.1`、官方 `0.1.5-alpha.1` 与 `0.1.5-alpha.2`；三个 alpha 目标还运行未修改的标签源码运行时 fixture。发布必须等待完整矩阵通过。
 
-对于可选的思考显示集成，`pnpm verify:reasoning-ui -- <Core checkout>` 会在已安装 Chat 依赖的干净、精确 pin 的 `0.1.2-rc.1`、`0.1.3-alpha.1` 或 `0.1.5-alpha.1` checkout 中，执行合成的原生渲染器、Slot 注册器与历史组装 fixture。它只会独占创建一个临时测试文件，并仅在文件未被修改时清理。这是本地集成／静态渲染证据，不是真实浏览器或 Copilot API 测试；CI 在三个支持该 Chat 接口的基线上运行此项。
+对于可选的思考显示集成，`pnpm verify:reasoning-ui -- <Core checkout>` 会在已安装 Chat 依赖的干净、精确 pin 的 `0.1.2-rc.1`、`0.1.3-alpha.1`、`0.1.5-alpha.1` 或 `0.1.5-alpha.2` checkout 中，执行合成的原生渲染器、Slot 注册器与历史组装 fixture。它只会独占创建一个临时测试文件，并仅在文件未被修改时清理。这是本地集成／静态渲染证据，不是真实浏览器或 Copilot API 测试；CI 在四个支持该 Chat 接口的基线上运行此项。
 
 ### Agent 驱动开发
 
@@ -326,8 +333,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。新版本使用标准 SemVer 预发布标识（`alpha`、`beta` 或 `rc`）；历史上的 `cloga` 后缀用于标识下游 fork 构建，新版本不再使用。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，按版本标记 prerelease，并且只在前序步骤全部成功后创建 GitHub Release。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.10/dsh-github-copilot-0.4.0-alpha.10.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.10/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.11/dsh-github-copilot-0.4.0-alpha.11.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.11/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -335,7 +342,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.10.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.11.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

@@ -134,6 +134,24 @@ describe('plugin-owned account Copilot route', () => {
     expect(JSON.stringify(service.getView())).not.toMatch(/synthetic-current-access|synthetic-account-a|accountKey/)
   })
 
+  it('resolves and prepares a validated account model with the actual Core profile diagnostics contract', async () => {
+    const fetch = vi.fn(async () => response())
+    stubFetch(fetch)
+    const harness = await runtime()
+    // On alpha2 both operations reach PiAiAdapter.modelOf, which unconditionally
+    // reads profile.modelErrors. Keep the actual adapter, not a lookalike mock.
+    await expect(harness.adapter.resolveModel(PREVIEW, MODEL)).resolves.toMatchObject({ id: MODEL })
+    await expect(harness.adapter.prepareCall(PREVIEW, MODEL)).resolves.toHaveProperty('model')
+    expect(fetch).not.toHaveBeenCalled()
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    expect(result.message.content).toContainEqual({ type: 'text', text: 'hello' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(discoveryRequests).toHaveLength(1)
+    await expect(harness.adapter.resolveModel(PREVIEW, 'unadvertised-model')).rejects.toThrow(/ENTITLED/)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('does not refresh OAuth or discover for a signed-out catalog', async () => {
     const fetch = vi.fn(async () => { throw new Error('Unexpected OAuth or metadata request') })
     stubFetch(fetch, true)

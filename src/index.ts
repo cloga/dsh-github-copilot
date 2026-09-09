@@ -547,6 +547,9 @@ function preflight(
   if (!providerAllowed(request, cfg, route)) return false
   if (request.messages.some(message => contentHasFileCompat(message.content))) return false
   if (contentHasImageAttachments(request)) return false
+  // New Core messages may carry system authority in-band. The legacy Anthropic
+  // serializer only models user/assistant turns; let Core preserve that authority.
+  if (route?.api === 'anthropic-messages' && request.messages.some(message => String(message.role) === 'system')) return false
   // Public summaries are not raw reasoning. Core alone owns encrypted/signed replay.
   if (hasResponsesReplayContext(request.messages)) return false
   if (route?.api === 'openai-responses') {
