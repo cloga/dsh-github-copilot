@@ -27,12 +27,16 @@ Core `0.1.5-alpha.2` requires `ResolvedPiAiProviderProfile.modelErrors` and read
 
 Legacy Anthropic inline requests containing an in-band `system` message delegate unchanged to Core **before probing** rather than demoting system authority to a user turn. This intentionally limits inline search on those requests. The legacy Responses inline wire retains its existing mapping of explicit system content to user input text; this is not system-message filtering. The managed route always uses native Core transport. See the [seam audit and evidence limits](./docs/agent-readiness.md#core-alpha2-compatibility-follow-up-105-planned-alpha11).
 
+### Alpha.12 release prerequisite correction (#107)
+
+The first alpha.11 publication attempt stopped before packing: the tagged Session/Remote fixture required Core's `mime-types` dependency, but the release job installed only the pi-ai closure. CI and release now explicitly install the unchanged pinned Session Controller dependency closure before that fixture runs. The tests remain enabled; no Core source or live dependency is patched. Alpha.12 carries the same runtime compatibility fixes with a fresh release version.
+
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.11`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.12`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.11/dsh-github-copilot-0.4.0-alpha.11.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.12/dsh-github-copilot-0.4.0-alpha.12.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
@@ -322,8 +326,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`); the historical `cloga` suffix identified downstream fork builds and is no longer used for new versions. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, marks prerelease versions accordingly, and creates the GitHub Release only after every preceding step succeeds.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.11/dsh-github-copilot-0.4.0-alpha.11.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.11/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.12/dsh-github-copilot-0.4.0-alpha.12.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.12/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -331,7 +335,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.11.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.12.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

@@ -2,6 +2,7 @@ import { access, readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
+import { assertTaggedRuntimeClosure } from './tagged-runtime-closure.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -339,6 +340,8 @@ for (const path of [
 }
 
 const workflow = await read('.github/workflows/ci.yml')
+assertTaggedRuntimeClosure(workflow)
+assertTaggedRuntimeClosure(releaseWorkflow)
 for (const command of [
   'a772dbbde82780bff2b9394427e9f0a24cafa1d5',
   'repository: cloga/deepseek-harness',

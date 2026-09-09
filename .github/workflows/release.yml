@@ -68,6 +68,9 @@ jobs:
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
       - run: pnpm verify:upstream -- dsh-upstream
       - run: pnpm verify:controlled-core -- dsh-upstream
+      - name: Install tagged Session and Remote verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-api-session-controller...'
       - name: Verify current unchanged tagged runtime before packing
         shell: bash
         run: |
