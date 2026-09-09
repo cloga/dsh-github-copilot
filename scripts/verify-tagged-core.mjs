@@ -8,10 +8,11 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
   '0.1.2-rc.1': 'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
   '0.1.3-alpha.1': 'd347e703908d0406b7a7ef80e3a0e594d86b2215',
   '0.1.5-alpha.1': '5dda764ed3aa172535a7967b06ff95d9cbfe536a',
+  '0.1.5-alpha.2': 'b2e3b2a0125854567a4a5fcba75782e42fe84901',
 })
 const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts']
 function runtimeTests(release) {
-  return release === '0.1.5-alpha.1'
+  return ['0.1.5-alpha.1', '0.1.5-alpha.2'].includes(release)
     ? [...tests, 'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts']
     : tests
 }

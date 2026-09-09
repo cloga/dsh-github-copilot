@@ -1211,6 +1211,28 @@ describe('github-copilot apply', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it.each([0, 1])('delegates Anthropic in-band system authority before probing at position %s', position => {
+    const model = 'claude-sonnet-4.5'
+    const runtime = buildRuntime({}, { current: { provider: 'github-copilot', model } })
+    apply(runtime.ctx, { ...config, probe: true })
+    const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
+    vi.stubGlobal('fetch', fetchMock)
+    // rc1 development types predate the in-band system role; preserve its newer
+    // shape without importing an unpublished Core type or changing old peers.
+    const system = { id: 'system-fixture', role: 'system', content: [{ type: 'text', text: 'System authority.' }],
+      source: { kind: 'system' } } as unknown as Message
+    const messages = [...request().messages]
+    messages.splice(position, 0, system)
+    const input = request({ model, messages })
+    const next = vi.fn(() => 'core-system')
+    expect(runtime.listener?.(input, next)).toBe('core-system')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(input.messages).toBe(messages)
+    expect(input.messages[position]).toBe(system)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+  })
+
   it('preserves a top-level user file when bypassing the custom wire', () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, config)

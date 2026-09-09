@@ -1,5 +1,5 @@
 /**
- * Tagged-source runtime regression, included only by the Core 0.1.5-alpha.1 runner.
+ * Tagged-source runtime regression, included only by the Core 0.1.5 alpha runner.
  * Real public Session (V3), AgentRegistry, SessionProjectionRegistry and the public
  * SessionController constructor install/drive Core's actual modelSelection fold.
  * Sessions are detached: stateOf drives lazy replay, not a live SessionStore
@@ -37,7 +37,7 @@ const contexts: Context[] = []
 beforeAll(() => {
   // Fail rather than silently substitute the installed peer or another baseline.
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.1.5-alpha.1')
+  expect(['0.1.5-alpha.1', '0.1.5-alpha.2']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(3)
 })
 
@@ -149,7 +149,7 @@ function requestConfig(selection: MigrationSelection): RequestConfig {
     ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(selection.reasoningEffort) }) }
 }
 
-describe('Core 0.1.5-alpha.1 public Session context (actual controller projection)', () => {
+describe('Core 0.1.5 alpha public Session context (actual controller projection)', () => {
   it('installs the actual controller fold and applies pending > header > genuinely-empty default', () => {
     const f = fixture()
     expect(f.controller).toBeInstanceOf(SessionController)

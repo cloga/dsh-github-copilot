@@ -207,6 +207,9 @@ function resolvedProfile(provider: ReturnType<typeof createAccountProvider>['pro
     streamIdleTimeoutMs: positive(parsed.streamIdleTimeoutMs), maxRequestImageBytes: positive(parsed.maxRequestImageBytes),
     requestImagePixelBudget: positive(parsed.requestImagePixelBudget), requestImageMaxBytes: positive(parsed.requestImageMaxBytes),
     retryPolicy: resolveRetryPolicy(parsed.retryPolicy, 'github-copilot-preview'), configuredMaxTokens: new Map<string, number>(),
+    // Core alpha2 reads this map for every model. Account descriptors are already
+    // validated and rejected entries never enter this provider; older Core ignores it.
+    modelErrors: new Map<string, string>(),
   })
 }
 

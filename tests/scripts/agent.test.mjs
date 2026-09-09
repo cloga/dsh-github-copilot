@@ -13,7 +13,9 @@ test('describes actual package metadata without claiming a release exists', asyn
   assert.equal(result.package.version, pkg.version)
   assert.equal(result.release.tag, `v${pkg.version}`)
   assert.equal(result.release.publicationVerified, false)
-  assert.equal(result.baselines.length, 4)
+  assert.deepEqual(result.baselines.map(baseline => baseline.release), [
+    '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2',
+  ])
 })
 
 test('plans only known task IDs with unexecuted argument arrays', async () => {

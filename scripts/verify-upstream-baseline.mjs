@@ -116,7 +116,7 @@ await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',
 ])
 
-if (baseline.release === '0.1.5-alpha.1') {
+if (['0.1.5-alpha.1', '0.1.5-alpha.2'].includes(baseline.release)) {
   for (const path of ['package.json', 'packages/core/session/package.json', 'packages/llm/llm-pi-ai/package.json']) {
     const metadata = JSON.parse(await readFile(resolve(upstream, path), 'utf8'))
     if (metadata.version !== baseline.release) throw new Error(`DSH target package version differs in ${path}`)
@@ -130,6 +130,11 @@ if (baseline.release === '0.1.5-alpha.1') {
     "event.type === 'model/selection'",
     "event.type !== 'request/header'",
   ])
+}
+
+if (baseline.release === '0.1.5-alpha.2') {
+  await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', ['modelErrors: ReadonlyMap<string, string>', 'piProvider?: Provider', 'catalogError?: string'])
+  await assertMarkers('packages/llm/llm-pi-ai/src/adapter.ts', ['profile.modelErrors.get(model)', "throw new LlmError(failure, 'INVALID_CONFIG')"])
 }
 
 console.log(`Verified DSH ${baseline.release} public seams at ${commit}.`)
