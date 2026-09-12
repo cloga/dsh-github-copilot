@@ -11,8 +11,8 @@ import * as dshSettings from '@deepseek-ai/dsh-settings'
 export const DSH_COMPATIBILITY = {
   release: '0.1.5-alpha.2',
   developmentRelease: '0.1.2-rc.1',
-  peerRange: '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2',
-  supportedReleases: ['0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2'],
+  peerRange: '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2',
+  supportedReleases: ['0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2'],
   requiredApis: [
     'agentDefaultModel.currentSelection',
     'authorization.describe',
