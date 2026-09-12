@@ -2,35 +2,43 @@
 
 ## Requested behavior
 
-The initiating Session chooses the route, not the global default model. Canonical Copilot and verified plugin-owned `github-copilot-preview` selections prefer Copilot hosted search. DeepSeek and all other providers continue through the existing official web service unchanged. The user permits automatic DeepSeek fallback without per-query confirmation; each fallback must identify the actual backend, reason and possible DeepSeek API charges. A configuration switch must allow fallback to be disabled. Cancellation, owner disposal and invalidated account proof never authorize a fallback request.
+The initiating Session chooses the route, not the global default model. Canonical Copilot and verified plugin-owned `github-copilot-preview` selections prefer Copilot hosted search. DeepSeek and all other providers continue through the existing official web service unchanged. The user permits automatic DeepSeek fallback without per-query confirmation; each fallback identifies the backend, reason and possible DeepSeek API charges. `searchFallback: none` disables fallback. Cancellation, owner disposal and invalidated account proof never authorize a fallback request.
 
-All implementation belongs to this plugin. No Core source, deployed Core artifact, prototype, private registry, credential copy, global model choice or existing search provider selection is modified.
+All implementation belongs to this plugin. No Core source, deployed Core artifact, prototype, private registry, credential copy or global model choice is modified. The original official WebRuntime configuration, including its selected search/fetch providers, is preserved.
 
-## Implemented foundation
+## Composition
 
-`src/search-routing.ts` routes one already-validated search using captured provider/model leaves, a verified managed-route ownership flag and operation-local dependencies. It delegates non-Copilot requests without touching Copilot availability, discovery or fallback. The fallback accepts only an explicitly supplied `deepseek-official` provider instance. It never guesses the backend of `next()` or another global dispatcher. It retains cancellation and account-generation checks across asynchronous work. Successful empty results do not trigger fallback.
+Modern Core may mount `tool-web` in agent presets while disabling its historical Host row. Modifying that disabled row is insufficient. The bundle therefore changes the service composition, not the consumer or preset:
 
-Fallback notices are part of `WebSearchResult.content`, not only a Tool result's outer `content` or `meta`: Core's successful-result normalization can regenerate those outer fields from the canonical value. The notice must survive the official consumer's formatter and web result card. This still needs a real-consumer integration test.
+1. An id-and-name-guarded patch moves the existing `web` / `@deepseek-ai/dsh-web` row into the named `github-copilot-original-web` service realm without replacing its config.
+2. The plugin's `web-delegate` entry exposes that same official service through a public, Fiber-owned bridge. It does not read any provider registry internals.
+3. The plugin-owned `routed-web` service occupies the ordinary Host `web` scope. It forwards provider registration and fetch directly to the original service. Non-Copilot searches use that service's normal selection and execution.
+4. Copilot searches use the main plugin's captured initiating-session route, existing hosted-search provider and account-proof lifecycle. A separate private official WebRuntime supplies native request validation and source capping on this branch.
+5. Native `tool-web` consumers, including those in agent presets, retain their original schemas, configured query/source limits, batching, execution policies, timeout metadata, formatting and presentation.
 
-`tests/search-routing.spec.ts` covers route preservation, owned preview selection, explicit fallback policy, cause/cost disclosure, cancellation, proof invalidation, unknown fallback providers and simultaneous operations. These are synthetic unit tests; they do not prove live search, loaded plugin behavior or the ordinary `web_search` integration.
+This is a plugin-owned subclass and explicit public service composition, not a replacement of Core prototypes or a mutation of a live registered service. It affects all `ctx.web.search` consumers with eligible Copilot context, not only one tool name. The bundle expects the standard official Host `web` row. A differently named custom web service does not match the patch; custom or already-isolated/multiple-Web service compositions require review rather than an assumption of compatibility.
 
-## Public API findings
+## Routing and fallback
 
-- Inspected Core rc.1/rc.2 WebRuntime exposes registration, search and fetch. Selected provider identity and provider maps are private; there is no public per-request provider override.
-- A `tools/execute` short circuit is possible but skips body argument checks and downstream middleware. Name or schema equality does not prove a tool is official; `defineTool` wraps public presentation callbacks, so callback identity is not a reliable substitute.
-- The official `@deepseek-ai/dsh-tool-web` exports `applyWebSearchTool`. Its consumer owns validation, query deduplication, parallel cancellation/drain, source caps, formatting and presentation. These should remain in the actual executed tool body.
-- The public `DeepSeekSearchProvider` class exists in published `@deepseek-ai/dsh-web-search-deepseek` releases, including the retained development baseline. A plugin-owned instance can be a known fallback without copying the provider transport or reading Core private provider maps. Reuse the public credential resolution and configured provider options; no copied secret store.
+`src/search-routing.ts` routes one already-validated search using captured provider/model leaves, a verified managed-route ownership flag and operation-local dependencies. It delegates non-Copilot requests without checking Copilot availability, discovery or fallback. Only an explicitly supplied `deepseek-official` provider instance can serve fallback. It never guesses the backend of another dispatcher or substitutes the future default model. Successful empty results do not trigger fallback.
 
-## Integration to verify next
+`src/deepseek-search-fallback.ts` lazily constructs the public official `DeepSeekSearchProvider`; the upstream class owns its wire protocol, redirect policy and result parsing. The helper reads the existing `web-search-deepseek` settings, public launch-environment snapshot and credential service at operation time, and records the secret-free auxiliary request on the captured Session. The adapter id identifies the implementation; a custom configured endpoint need not be the default DeepSeek host. No credentials are logged or retained as a new store.
 
-Prefer an explicit bundle-owned `web` isolate for the existing official `tool-web` consumer, preserving the row's existing config and other service dependencies. A plugin-owned WebRuntime adapter in that realm forwards non-Copilot search and fetch to the captured original Host web service. A root plugin service captures the original service before the isolated adapter is created and supplies the existing Copilot plan plus a known official DeepSeek fallback instance. This is a proposed composition, not yet implemented or validated.
+Fallback notices are part of `WebSearchResult.content`, not merely an outer Tool result `content` or `meta`: Core may regenerate those outer fields from the canonical value. The notice names DeepSeek fallback, a bounded error reason and possible DeepSeek API charges, and explicitly says that the result is not from Copilot. Per-query notices remain available when the official consumer merges multiple queries. No search-time approval dialog is introduced.
 
-Required checks before shipping:
+`routeWebSearch` defaults to true; disabling it delegates through the original official service. `searchFallback` defaults to `deepseek` for the requested automatic fallback behavior; select `none` to prohibit cross-provider fallback spending. The existing master enable switch, provider allowlist, lazy account metadata and native capability proof remain in effect. These changes are not installed in the user's live profile yet.
 
-1. Overlay isolation preserves the existing official consumer's id/config and all permissions, timeout and query/source caps. No duplicate tool registration or blanket scoped shadow.
-2. The isolated adapter and root routing service have reversible registrations; unloading and reloading leave no stale service or late request.
-3. The root service captures the actual initiating Agent and provider/model before awaiting discovery, then carries that owner/proof through all queries and fallback. No global-default substitution.
-4. The fallback uses the supplied official DeepSeek instance, respects credentials/settings, does not loop through the router, and emits a clear result notice without per-query approval.
-5. Real official consumer tests cover successful Copilot results, explicit fallback and failure, card/replay normalization, cancellation, strict caps, multiple queries and unchanged other-provider errors/results.
-6. Retained Core source/artifact baselines are tested at their exact pins. Update package metadata/exports, baseline evidence and release metadata only after the integration exists.
-7. Run bounded live hosted-search acceptance separately; a successful LLM chat test does not prove hosted search. No live profile installation or restart has occurred for this work.
+## Verification to date
+
+- `tests/search-routing.spec.ts`: 19 synthetic policy regressions covering route preservation, captured selections, fallback disclosures, cancellation, proof invalidation, unknown fallback provider refusal and simultaneous operations.
+- `tests/routed-web.spec.ts`: 12 tests using actual official AgentRegistry, ToolRuntime, SystemPrompt, scoped official search consumers and WebRuntime instances. They cover native validation/caps, duplicate-query collapse, surrounding execution middleware, pre-execute denial, simultaneous Copilot/DeepSeek calls, unchanged fetch, provider Fiber disposal and fallback notices surviving canonical rendering/web-card metadata.
+- `tests/routed-web-loader.spec.ts`: public patch composition checks plus an actual Loader boot of the built facade/delegate and official consumers. Since Vitest lacks Node's exposed internal module loader, this test resolves this plugin's public export names to file URLs before Loader import; the realm/config patches and built implementations are unchanged. Main authorization/chat activation is disabled in this isolated test and replaced only by a synthetic routing service. This is not live account acceptance.
+- Existing inline-search tests use their pre-existing synthetic context; its fixture now models public `ctx.provide` registration and disposal required by the new router service.
+
+## Remaining before shipping
+
+1. Complete the full verification gate and update deployment/agent evidence inventories, public export smoke and both READMEs.
+2. Add end-to-end coverage of the main router's managed metadata, fallback credentials/options, cancellations during discovery/fallback, mixed multi-query provenance, and complete unload/reload behavior.
+3. Run retained exact Core-baseline fixtures, not only the development artifact. Do not infer seven-pin runtime compatibility from type checks.
+4. Align the new package version, release metadata and package/archive tests.
+5. Run bounded live Copilot hosted-search and permitted-fallback acceptance separately. A successful chat request does not prove hosted search. No live profile installation, global search selection change or restart has occurred for this work.

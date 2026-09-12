@@ -294,7 +294,7 @@ const index = await read('src/index.ts')
 for (const symbol of manifest.requiredExports?.['.'] ?? []) {
   assert(index.includes(symbol), `root export ${symbol} is missing`)
 }
-const expectedExportSubpaths = ['.', './client', './remote', './deployment-baseline.json', './package.json']
+const expectedExportSubpaths = ['.', './client', './remote', './routed-web', './web-delegate', './deployment-baseline.json', './package.json']
 const declaredExportSubpaths = Object.keys(manifest.requiredExports ?? {}).sort()
 const packageExportSubpaths = Object.keys(packageJson.exports ?? {}).sort()
 assert(JSON.stringify(declaredExportSubpaths) === JSON.stringify([...expectedExportSubpaths].sort()), 'required export inventory differs')
@@ -308,6 +308,10 @@ const guardedSources = [
   'src/plan.ts',
   'src/copilot-auth.ts',
   'src/copilot-grant.ts',
+  'src/search-routing.ts',
+  'src/routed-web.ts',
+  'src/web-delegate.ts',
+  'src/deepseek-search-fallback.ts',
   'package.json',
   'cordis.patch.yml',
 ]

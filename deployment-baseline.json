@@ -130,11 +130,13 @@
         "@deepseek-ai/dsh-client-ui-settings-models",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-credentials",
+        "@deepseek-ai/dsh-launch-environment",
         "@deepseek-ai/dsh-llm",
         "@deepseek-ai/dsh-llm-pi-ai",
         "@deepseek-ai/dsh-settings",
         "@deepseek-ai/dsh-typert-protocol",
-        "@deepseek-ai/dsh-web"
+        "@deepseek-ai/dsh-web",
+        "@deepseek-ai/dsh-web-search-deepseek"
       ]
     },
     "piAi": "0.85.1",
@@ -146,6 +148,36 @@
     }
   },
   "capabilities": [
+    {
+      "id": "session-model-search-routing",
+      "required": true,
+      "evidenceScope": "development-real-consumer-and-loader-synthetic",
+      "sourceMarkers": [
+        {"file": "src/routed-web.ts", "marker": "extends WebRuntime"},
+        {"file": "src/index.ts", "marker": "ctx.provide('githubCopilotSearchRouter'"},
+        {"file": "cordis.patch.yml", "marker": "web: github-copilot-original-web"}
+      ],
+      "tests": [
+        {"file": "tests/routed-web.spec.ts", "name": "keeps the configured provider for DeepSeek and all other model routes"},
+        {"file": "tests/routed-web.spec.ts", "name": "retains pre-execute denial and the surrounding execution middleware"},
+        {"file": "tests/routed-web-loader.spec.ts", "name": "loads the built facade and delegate entries without changing official tools"}
+      ]
+    },
+    {
+      "id": "explicit-deepseek-search-fallback",
+      "required": true,
+      "evidenceScope": "development-synthetic-no-live-search-claim",
+      "sourceMarkers": [
+        {"file": "src/config.ts", "marker": "searchFallback: z.union(['none', 'deepseek']).default('deepseek')"},
+        {"file": "src/deepseek-search-fallback.ts", "marker": "new native.DeepSeekSearchProvider"},
+        {"file": "src/search-routing.ts", "marker": "These are not Copilot search results."}
+      ],
+      "tests": [
+        {"file": "tests/search-routing.spec.ts", "name": "does not spend fallback credits unless explicitly enabled"},
+        {"file": "tests/search-routing.spec.ts", "name": "does not fallback when the primary reports cancellation"},
+        {"file": "tests/routed-web.spec.ts", "name": "preserves fallback provenance in canonical value, rendered content and web-card metadata"}
+      ]
+    },
     {
       "id": "account-driven-provider-metadata",
       "required": true,
@@ -574,10 +606,10 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/traditional-search.ts", "marker": "github-copilot-hosted"},
-        {"file": "README.md", "marker": "searchProvider: github-copilot-hosted"},
-        {"file": "README.md", "marker": "fetchProvider: http"},
-        {"file": "README.zh.md", "marker": "searchProvider: github-copilot-hosted"},
-        {"file": "README.zh.md", "marker": "fetchProvider: http"}
+        {"file": "README.md", "marker": "github-copilot.searchFallback"},
+        {"file": "README.md", "marker": "Fetch is unchanged."},
+        {"file": "README.zh.md", "marker": "github-copilot.searchFallback"},
+        {"file": "README.zh.md", "marker": "网页抓取不变"}
       ],
       "tests": [
         {"file": "tests/traditional-search.spec.ts", "name": "normalizes generated content and deduplicated sources"},
@@ -676,6 +708,8 @@
     ],
     "./client": [],
     "./remote": [],
+    "./routed-web": ["default"],
+    "./web-delegate": ["name", "inject", "apply"],
     "./deployment-baseline.json": [],
     "./package.json": []
   }

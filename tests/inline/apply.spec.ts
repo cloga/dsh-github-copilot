@@ -199,6 +199,13 @@ function buildRuntime(
   ])
   const ctx = {
     get: (name: string) => store.get(name),
+    provide: (name: string, value: unknown) => {
+      if (store.has(name)) throw new Error(`duplicate synthetic service: ${name}`)
+      store.set(name, value)
+      const dispose = () => { store.delete(name) }
+      disposers.push(dispose)
+      return dispose
+    },
     // The settings seam reads `ctx.fiber.state` to skip change callbacks
     // while a fiber is unloading; a live fiber is what this fake is.
     fiber: { state: 1 },

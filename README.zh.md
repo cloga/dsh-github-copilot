@@ -191,23 +191,21 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
 - **通过 `ctx.web.search()` 使用 `github-copilot-hosted`：**只支持账号可用且协议经过核实的 OpenAI Responses 候选，包括符合条件的托管账号模型。
 - **Chat Completions 模型：**可走普通原生 SDK transport，但不会因此宣称 hosted search 可用。
 
-安装本包只会注册 `github-copilot-hosted`，不会默认替换整个 profile 的 `web.searchProvider`，因此混合 provider profile 的原行为保持不变。以 Copilot 为主的 profile 可以选择加入下面的配置：把它合并到 `$DSH_HOME/profiles/<profile>/cordis.patch.yml` 的顶层 patch 列表中。
+### 按会话模型分流搜索（实现待发布）
 
-```yaml
-# 可选：让 Core web_search Tool 使用 GitHub Copilot。
-- id: web
-  config:
-    searchProvider: github-copilot-hosted
-    fetchProvider: http
-```
+新版 bundle 通过插件自有的 web 服务外观层分流，将原官方服务及完整配置保留在命名作用域中，不修改 Core 或会话预设。原生 `web_search` 保留参数校验、查询／来源数量限制、执行中间件、超时和结果展示；有可靠发起会话上下文的直接 `ctx.web.search` 调用也使用相同分流规则。
 
-Patch row 会整体替换目标 row 的 `config`，所以使用默认 HTTP 抓取器时保留 `fetchProvider: http`；若已配置其它 fetch provider，则保留原选择。如果已有 `web` override，应修改原 row，而不是覆盖整个 patch 文件，并保留无关配置。修改后重启对应 profile。Web provider 的选择是 profile 全局设置，但 Copilot 搜索解析的是发起 Session／请求的模型，不是全局模型默认值。发起 route 不符合 Copilot Responses 条件时，`web_search` 报告不可用，不回退 DeepSeek。撤销时只删除为本次可选配置新增的 row，或恢复之前的 `web` 配置。
+- Copilot 会话优先使用 `github-copilot-hosted`，保留原有模型／账号／协议／probe 检查。
+- DeepSeek 和其他模型提供者继续使用原配置的官方搜索路径；网页抓取不变。
+- Copilot 搜索失败时允许自动回退到官方 `deepseek-official` 实现。每次回退结果明确显示原因、实际提供者及可能产生的 **DeepSeek API 费用**，不逐次弹确认。取消、会话结束或凭据证明失效不触发回退。
 
-显式 `web.searchProvider` 优先于 `DSH_WEB_SEARCH_PROVIDER`。如果 bundle 已选择 `deepseek-official`，仅设置该环境变量不能覆盖它。因此搜索提示缺少 `DEEPSEEK_API_KEY`，说明直接搜索 Tool 仍选择了 DeepSeek；Copilot 登录不会配置 DeepSeek 凭据。Copilot 搜索路径使用自己的 OAuth grant，不需要该 key。
+在插件设置命名空间中配置 `github-copilot.routeWebSearch`（默认 `true`）与 `github-copilot.searchFallback`（默认 `deepseek`；设为 `none` 可禁止回退费用）。`routeWebSearch: false` 恢复原配置搜索行为。Copilot 登录不会提供 DeepSeek Key：Copilot 主路径不需要它，但允许的 DeepSeek 回退需要独立配置有效的 DeepSeek 凭据。
+
+无需把全局 `web.searchProvider` 改成 Copilot。旧的全局 `github-copilot-hosted` 手工 override 仍影响非 Copilot 会话的原路径；若希望通常的混合提供者行为，请明确恢复之前的官方提供者选择。显式 `web.searchProvider` 仍优先于 `DSH_WEB_SEARCH_PROVIDER`。bundle 预期标准官方 `web` 行，自定义或非标准 web 服务组合需要单独审查。详见[实现与验收范围](docs/session-search-routing.md)。已安装的 alpha.13 不包含这项新分流实现。
 
 请求经过严格 Host 校验后，直接发往 credential 解析出的 HTTPS Copilot endpoint：GitHub-hosted `api.*.githubcopilot.com`，或已接受 GitHub Enterprise credential 对应的 `copilot-api.<signed-in-enterprise-domain>`。Credential 不会经过外部 gateway。
 
-默认 `probe: true` 时，搜索 fail closed：当前 route 必须是 canonical Copilot 或本插件拥有的托管账号路由，账号必须允许该模型，所选协议必须支持对应搜索表面，且 bounded capability probe 必须成功。托管模型还必须有当前账号的有效发现证据，不能拿另一个 pi 副本的静态条目代替。显式设置 `probe: false` 只会跳过 capability proof，并信任所选原生协议；route、account、protocol、endpoint 与 authentication 检查仍然生效。Authentication、HTTP、响应体格式、abort 或网络 probe 失败都不会回退到外部搜索路径。请求只要包含任意 Core file block（包括嵌套在 tool-result content 内的文件），也会 fail closed 到 `next()`，由 Core 保留文件投影，避免 hosted-search serializer 静默丢弃文件上下文。
+默认 `probe: true` 时，搜索 fail closed：当前 route 必须是 canonical Copilot 或本插件拥有的托管账号路由，账号必须允许该模型，所选协议必须支持对应搜索表面，且 bounded capability probe 必须成功。托管模型还必须有当前账号的有效发现证据，不能拿另一个 pi 副本的静态条目代替。显式设置 `probe: false` 只会跳过 capability proof，并信任所选原生协议；route、account、protocol、endpoint 与 authentication 检查仍然生效。底层 hosted-search provider 自身不执行回退；新的会话分流层可按明确披露的策略对符合条件的失败执行 DeepSeek 回退，但取消和 owner／账号证明失效仍立即终止。请求只要包含任意 Core file block（包括嵌套在 tool-result content 内的文件），也会 fail closed 到 `next()`，由 Core 保留文件投影，避免 hosted-search serializer 静默丢弃文件上下文。
 
 搜索 proof 采用惰性验证：attach、settings 更新以及 `llm-pi-ai/github-copilot` 的 `credentials/record-updated` 事件只使缓存计划失效，不启动网络工作。下一次真实且符合条件的请求才重新验证；忽略无关凭据更新，连续事件不会引发重复的提前 probe。失效或卸载会取消正在执行的 proof。如果凭据在 proof 或最终认证解析期间改变，当前请求会 fail closed，避免把账号 A 的 proof 用于账号 B。更新后可重新提交请求；不会自动循环重试，也不会隐式使用 `probe: false`。
 

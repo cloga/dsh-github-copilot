@@ -26,6 +26,10 @@ import type { InlineConfig } from './config.ts'
 import { contentHasImageAttachments, inlineWireStream } from './wire.ts'
 import type { InlineHooks } from './wire.ts'
 import { createTraditionalSearchProvider } from './traditional-search.ts'
+import { isCopilotSearchSelection, routeSessionSearch } from './search-routing.ts'
+import { createDeepSeekSearchFallback } from './deepseek-search-fallback.ts'
+import { isPluginPreviewProvider } from './model-protocol.ts'
+import type {} from './routed-web.ts'
 import { assertDshCompatibility } from './compatibility.ts'
 import GitHubCopilotAuthorizationController, {
   ensureGitHubCopilotProviderProfile,
@@ -398,12 +402,43 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     return !matches(cached, route, candidates, cfg) || cached.plan.available()
   }
 
-  ctx.web.registerSearchProvider(createTraditionalSearchProvider(
+  const traditionalProvider = createTraditionalSearchProvider(
     traditionalAvailable,
     webPlan,
     hooks,
     current,
-  ))
+  )
+  ctx.web.registerSearchProvider(traditionalProvider)
+  ctx.provide('githubCopilotSearchRouter', {
+    search: async (request, signal, delegate) => {
+      const cfg = current()
+      const owner = currentSearchInitiator(ctx)
+      const selection = currentSearchSelection(owner)
+      const managedOwned = selection?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+        && isPluginPreviewProvider(ctx, selection.provider)
+      if (!cfg.enabled || cfg.routeWebSearch === false || owner === undefined
+        || !isCopilotSearchSelection(selection, managedOwned)) {
+        return delegate(request, signal)
+      }
+      const startedGeneration = generation
+      const ownerSignal = plansFor(owner).cancellation.signal
+      const boundSignal = AbortSignal.any([
+        ...signal === undefined ? [] : [signal],
+        proofCancellation.signal,
+        ownerSignal,
+      ])
+      const outcome = await routeSessionSearch(request, boundSignal, {
+        selection,
+        managedOwned,
+        fallback: cfg.searchFallback ?? 'deepseek',
+        copilot: traditionalProvider,
+        delegate,
+        resolveDeepSeek: () => createDeepSeekSearchFallback(ctx, owner),
+        canContinue: () => active && generation === startedGeneration && !disposedOwners.has(owner),
+      })
+      return outcome.result
+    },
+  })
 
   installWebSearchSettings(ctx, config, {
     setSource: (source) => {
