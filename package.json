@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "DSH companion for GitHub Copilot sign-in, account-aware model profiles, tool compatibility, and provider-hosted search.",
-  "version": "0.4.0-alpha.13",
+  "version": "0.4.0-alpha.14",
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "repository": {
@@ -48,6 +48,7 @@
     "docs/model-compatibility-acceptance.md",
     "docs/single-route-migration.md",
     "docs/session-search-routing.md",
+    "scripts/check-search-composition.mjs",
     "docs/images/"
   ],
   "keywords": [
@@ -80,6 +81,7 @@
     "agent:describe": "node scripts/agent.mjs describe --json",
     "agent:doctor": "node scripts/agent.mjs doctor --json",
     "agent:plan": "node scripts/agent.mjs plan",
+    "preflight:search": "node scripts/check-search-composition.mjs",
     "verify:agent": "node scripts/verify-agent-contract.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs",
     "verify:baseline": "node scripts/verify-deployment-baseline.mjs",

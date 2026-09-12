@@ -417,7 +417,8 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
       const managedOwned = selection?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
         && isPluginPreviewProvider(ctx, selection.provider)
       if (!cfg.enabled || cfg.routeWebSearch === false || owner === undefined
-        || !isCopilotSearchSelection(selection, managedOwned)) {
+        || !isCopilotSearchSelection(selection, managedOwned)
+        || (cfg.providers.length > 0 && !cfg.providers.includes(selection?.provider ?? ''))) {
         return delegate(request, signal)
       }
       const startedGeneration = generation
@@ -478,9 +479,9 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
   ctx.systemPrompt.section({
     name: 'tool:github-copilot',
     order: 115,
-    // The guidance is only true while the plugin actually serves: with the
-    // plugin disabled or the plan failed, an empty section keeps the model
-    // from being steered toward a web_search tool that does not exist.
+    // Native-search availability is advertised only after proof. The routed
+    // bundle may separately explain how to disclose a reported fallback, without
+    // claiming that a search endpoint is ready.
     text: () => '',
   })
   return (owner, selection) => {
@@ -489,7 +490,14 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     const cfg = current()
     if (route === undefined || (cfg.providers.length > 0 && !cfg.providers.includes(route.provider))) return ''
     const cached = ownerPlans.get(owner)?.inline
-    return servingPrompt(current, matches(cached, route, candidatesForRoute(route), cfg) ? cached.plan : undefined)
+    const nativeGuidance = servingPrompt(current, matches(cached, route, candidatesForRoute(route), cfg) ? cached.plan : undefined)
+    const owned = route.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && isPluginPreviewProvider(ctx, route.provider)
+    if (!cfg.enabled || cfg.routeWebSearch === false || ctx.get('githubCopilotOriginalWeb') === undefined
+      || !isCopilotSearchSelection(route, owned)) return nativeGuidance
+    const disclosure = cfg.searchFallback === 'none'
+      ? 'Copilot search fallback is disabled. Do not silently substitute another paid search backend after a search failure.'
+      : 'When web_search reports a fallback, explicitly tell the user the actual search backend (and custom endpoint/model when provided) and possible API charges in your answer. Never describe fallback results as Copilot search. Automatic fallback does not need per-search confirmation.'
+    return [nativeGuidance, disclosure].filter(Boolean).join('\n\n')
   }
 }
 

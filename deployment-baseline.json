@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.13"
+    "version": "0.4.0-alpha.14"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -148,6 +148,21 @@
     }
   },
   "capabilities": [
+    {
+      "id": "readonly-search-composition-preflight",
+      "required": true,
+      "evidenceScope": "pre-install-structural-only-not-automatic-cli-enforcement",
+      "sourceMarkers": [
+        {"file": "scripts/check-search-composition.mjs", "marker": "checkSearchComposition"},
+        {"file": "scripts/check-search-composition.mjs", "marker": "PREEXISTING_WEB_ISOLATION"},
+        {"file": "README.md", "marker": "does not automatically run this preflight"}
+      ],
+      "tests": [
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "admits a stock top-level official service without mutating or exposing its config"},
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "includes home and launcher layers instead of ignoring a late web override"},
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "CLI uses real public parsers without profile initialization, normalization or secret output"}
+      ]
+    },
     {
       "id": "session-model-search-routing",
       "required": true,

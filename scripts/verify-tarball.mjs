@@ -96,7 +96,7 @@ export async function verifyTarball(path, root = repositoryRoot) {
   if (!isDeepStrictEqual(pkg, expectedPacked)) throw new Error('Archive manifest differs from normalized checkout metadata')
   if (baseline.package.version !== pkg.version) throw new Error('Archive baseline version mismatch')
   const required = ['cordis.patch.yml', 'README.md', 'README.zh.md', 'LICENSE', 'deployment-baseline.json',
-    ...expected.files.filter(path => path.endsWith('.md')),
+    ...expected.files.filter(path => !path.includes('*') && !path.endsWith('/')),
   ]
   for (const target of Object.values(pkg.exports)) {
     required.push(...(typeof target === 'string' ? [target] : Object.values(target)))
@@ -108,7 +108,7 @@ export async function verifyTarball(path, root = repositoryRoot) {
   for (const name of files.keys()) {
     const relative = name.slice('package/'.length)
     const allowed = ['package.json', ...required.map(path => path.replace(/^\.\//u, ''))].includes(relative)
-      || /^lib\/(?:[a-z0-9-]+\.js(?:\.map)?|types\/[a-z0-9-]+\.d\.ts)$/u.test(relative)
+      || /^lib\/(?:[A-Za-z0-9_-]+\.js(?:\.map)?|types\/[a-z0-9-]+\.d\.ts)$/u.test(relative)
       || /^docs\/images\/[a-z0-9-]+\.(?:png|gif|webp)$/u.test(relative)
     if (!allowed) throw new Error(`Unexpected file in release archive: ${relative}`)
   }

@@ -312,6 +312,8 @@ const guardedSources = [
   'src/routed-web.ts',
   'src/web-delegate.ts',
   'src/deepseek-search-fallback.ts',
+  'src/search-backend.ts',
+  'scripts/check-search-composition.mjs',
   'package.json',
   'cordis.patch.yml',
 ]

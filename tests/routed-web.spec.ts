@@ -184,6 +184,46 @@ describe('plugin-owned web facade with the real official consumer', () => {
     expect(h.search).not.toHaveBeenCalled()
   })
 
+  it('does not change the official WebRuntime prototype', async () => {
+    const search = WebRuntime.prototype.search
+    const fetch = WebRuntime.prototype.fetch
+    await harness()
+    expect(WebRuntime.prototype.search).toBe(search)
+    expect(WebRuntime.prototype.fetch).toBe(fetch)
+  })
+
+  it('rejects retained search, fetch and registration handles after facade disposal', async () => {
+    const h = await harness()
+    const retained = h.ctx.get('web')!
+    await h.routedFiber.dispose()
+    await expect(retained.search({ query: 'late' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    await expect(retained.fetch({ url: 'https://example.com/late' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(() => retained.registerSearchProvider(h.deepseek)).toThrow('disposed')
+    expect(h.search).not.toHaveBeenCalled()
+    expect(h.fetch).not.toHaveBeenCalled()
+    expect(h.copilot.search).not.toHaveBeenCalled()
+  })
+
+  it('aborts and drains an in-flight Copilot search on facade disposal without fallback', async () => {
+    const h = await harness('deepseek')
+    let started!: () => void
+    const entered = new Promise<void>(resolve => { started = resolve })
+    let drained = false
+    vi.mocked(h.copilot.search).mockImplementation((_request, signal) => new Promise<WebSearchResult>((_resolve, reject) => {
+      started()
+      signal!.addEventListener('abort', () => {
+        queueMicrotask(() => { drained = true; reject(new WebError('cancelled', 'WEB_ABORTED')) })
+      }, { once: true })
+    }))
+    const pending = h.run(h.a, { queries: ['pending'] })
+    await entered
+    await h.routedFiber.dispose()
+    expect(drained).toBe(true)
+    expect((await pending).isError).toBe(true)
+    expect(h.deepseek.search).not.toHaveBeenCalled()
+    expect(h.search).not.toHaveBeenCalled()
+  })
+
   it('fails closed for Copilot while the router is absent, without breaking other routes', async () => {
     const h = await harness()
     await h.router.dispose()

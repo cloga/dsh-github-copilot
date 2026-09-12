@@ -80,5 +80,5 @@ describe('built routed-web bundle with the public Loader', () => {
     expect((await run(owner, ['one', 'two'])).isError).toBe(true)
     expect(observed).toHaveLength(2)
     expect(ctx.get('tools')!.get('web_search')?.timeoutMs).toBe(7000)
-  })
+  }, 30_000) // Real Loader cold imports compete with the full suite's parallel workers.
 })

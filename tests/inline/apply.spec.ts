@@ -151,7 +151,7 @@ function buildRuntime(
     ...extraSettings,
   }
   const fake = fakeSettings(settingsDocument)
-  const initiatingAgent = { session: { requestHeader: () => selectionRef.current === null ? undefined : { config: selectionRef.current } } }
+  const initiatingAgent = { session: { requestHeader: () => selectionRef.current === null ? undefined : { config: selectionRef.current }, append: vi.fn() } }
   const store = new Map<string, unknown>([
     ['agents', registry ?? { currentInitiator: () => selectionRef.current === null ? undefined : initiatingAgent }],
     ['settings', fake.settings],
@@ -968,6 +968,145 @@ describe.each(['inline', 'web'] as const)('%s credential proof cache lifecycle',
     await failedSearch(runtime, surface)
     expect(fetchMock).toHaveBeenCalledTimes(priorCalls)
     expect(runtime.promptSection?.text()).toBe('')
+  })
+})
+
+describe('session search router Host integration', () => {
+  it('requires user-facing fallback disclosure only for routed Copilot prompt assemblies', async () => {
+    const runtime = buildRuntime()
+    runtime.ctx.provide('githubCopilotOriginalWeb', {})
+    apply(runtime.ctx, config)
+    const text = await runtime.promptText({ provider: 'github-copilot', model: 'gpt-5.4' })
+    expect(text).toContain('explicitly tell the user the actual search backend')
+    expect(text).toContain('does not need per-search confirmation')
+    expect(text).not.toContain('runs natively on the model provider')
+    expect(await runtime.promptText({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })).toBe('')
+    expect(await runtime.promptText({ provider: 'another-provider', model: 'any' })).toBe('')
+  })
+
+  it('does not advertise paid fallback when the user disabled it', async () => {
+    const runtime = buildRuntime()
+    runtime.ctx.provide('githubCopilotOriginalWeb', {})
+    apply(runtime.ctx, { ...config, searchFallback: 'none' })
+    const text = await runtime.promptText({ provider: 'github-copilot', model: 'gpt-5.4' })
+    expect(text).toContain('fallback is disabled')
+    expect(text).not.toContain('does not need per-search confirmation')
+  })
+
+  it.each(['deepseek-official', 'another-provider'])('delegates %s without any hosted-search request', async provider => {
+    const runtime = buildRuntime({}, { current: { provider, model: 'selected' } })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const expected = { sources: [], truncated: false }
+    const delegate = vi.fn(async () => expected)
+    const query = { query: 'native', maxResults: 2 }
+    const signal = new AbortController().signal
+    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search(query, signal, delegate)
+    expect(result).toBe(expected)
+    expect(delegate).toHaveBeenCalledExactlyOnceWith(query, signal)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+  })
+
+  it('keeps allowlist-excluded Copilot sessions on the existing path without fallback spending', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, providers: ['another-provider'], searchFallback: 'deepseek' })
+    const expected = { sources: [], truncated: false }
+    const delegate = vi.fn(async () => expected)
+    expect(await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'excluded route' }, undefined, delegate)).toBe(expected)
+    expect(delegate).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+  })
+
+  it('uses the managed model primary path without spending DeepSeek fallback tokens', async () => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const resolveRequestAuth = vi.fn(async () => ({ apiKey: 'synthetic-managed', baseURL }))
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }), resolveRequestAuth,
+      discover: vi.fn(async () => undefined),
+    })
+    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) => new Response(JSON.stringify({ output: [
+      { type: 'web_search_call' },
+      { type: 'message', content: [{ type: 'output_text', text: 'Copilot search response' }] },
+    ] })))
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const delegate = vi.fn()
+    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'primary' }, undefined, delegate)
+    expect(result.content).toContain('Copilot search response')
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${baseURL}/responses`)
+    expect(resolveRequestAuth).toHaveBeenCalledWith('account-model', expect.any(AbortSignal))
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+    expect(delegate).not.toHaveBeenCalled()
+  })
+
+  it('automatically discloses native DeepSeek fallback for an unsupported managed search protocol', async () => {
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'chat-only' } }, {
+      'web-search-deepseek': { baseURL: 'https://deepseek-search.test/v1', model: 'synthetic-search-model', apiKeyEnv: 'SYNTHETIC_KEY' },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
+      routeFacts: () => ({ api: 'openai-completions', baseURL: 'https://api.business.githubcopilot.com' }),
+    })
+    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) => new Response(JSON.stringify({ content: [{
+      type: 'web_search_tool_result', tool_use_id: 'search', content: [{ type: 'web_search_result', url: 'https://example.com/fallback', title: 'Fallback' }],
+    }] })))
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const delegate = vi.fn()
+    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'fallback' }, undefined, delegate)
+    expect(result.content).toContain('deepseek-official')
+    expect(result.content).toContain('DeepSeek API charges')
+    expect(result.content).toContain('origin=https://deepseek-search.test')
+    expect(result.content).toContain('model="synthetic-search-model"')
+    expect(result.content).toContain('endpoint=custom')
+    expect(result.sources).toMatchObject([{ url: 'https://example.com/fallback' }])
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://deepseek-search.test/v1/messages')
+    expect(runtime.credentialResolve).toHaveBeenCalledWith('SYNTHETIC_KEY')
+    expect(delegate).not.toHaveBeenCalled()
+  })
+
+  it('honors the explicit no-fallback and routing-disable settings', async () => {
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'chat-only' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
+      routeFacts: () => ({ api: 'openai-completions', baseURL: 'https://api.business.githubcopilot.com' }),
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, searchFallback: 'none' })
+    const delegate = vi.fn(async () => ({ sources: [], truncated: false }))
+    const router = runtime.ctx.get('githubCopilotSearchRouter')!
+    await expect(router.search({ query: 'no fallback' }, undefined, delegate)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = { routeWebSearch: false }
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
+    await router.search({ query: 'routing disabled' }, undefined, delegate)
+    expect(delegate).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not fallback after credential invalidation during primary auth', async () => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    let notify!: () => void
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }),
+      resolveRequestAuth: async () => { notify(); return { apiKey: 'synthetic-managed', baseURL } },
+      discover: vi.fn(async () => undefined),
+    })
+    notify = () => runtime.emitCredentialUpdate(credentialKey)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, searchFallback: 'deepseek' })
+    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'cancelled account' }, undefined, vi.fn())).rejects.toMatchObject({ code: 'WEB_ABORTED' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
   })
 })
 

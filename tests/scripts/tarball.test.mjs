@@ -39,13 +39,14 @@ test('tar inspector refuses traversal, duplicate entries, links, corruption and 
 test('archive validation catches missing exports, stale builds and absent README media', async () => {
   const root = await mkdtemp(join(tmpdir(), 'copilot-tarball-'))
   try {
-    const pkg = { name: 'test', version: '1.0.0', private: true, files: [], exports: { '.': { default: './lib/index.js', types: './lib/types/index.d.ts' } }, dependencies: {}, peerDependencies: {}, dsh: {} }
+    const pkg = { name: 'test', version: '1.0.0', private: true, files: ['scripts/check-search-composition.mjs'], exports: { '.': { default: './lib/index.js', types: './lib/types/index.d.ts' } }, dependencies: {}, peerDependencies: {}, dsh: {} }
     const data = new Map([
       ['package.json', JSON.stringify(pkg)],
       ['deployment-baseline.json', JSON.stringify({ package: { version: '1.0.0' } })],
       ['README.md', '![preview](./docs/images/example.png)'],
       ['README.zh.md', 'guide'], ['LICENSE', 'license'], ['cordis.patch.yml', '[]'],
       ['lib/index.js', 'host'], ['lib/client.js', 'client'], ['lib/remote.js', 'remote'],
+      ['lib/search-routing-QwEr_123.js', 'shared chunk'], ['scripts/check-search-composition.mjs', 'readonly preflight'],
       ['lib/types/index.d.ts', 'types'], ['docs/images/example.png', 'synthetic'],
     ])
     for (const [path, content] of data) {
@@ -69,6 +70,18 @@ test('archive validation catches missing exports, stale builds and absent README
       await assert.rejects(verifyTarball(archive, root), /manifest differs/)
     }
     data.set('package.json', JSON.stringify(pkg))
+    data.delete('scripts/check-search-composition.mjs')
+    await save()
+    await assert.rejects(verifyTarball(archive, root), /Missing archive export or document/)
+    data.set('scripts/check-search-composition.mjs', 'readonly preflight')
+    data.set('lib/search-routing-QwEr_123.js', 'changed chunk')
+    await save()
+    await assert.rejects(verifyTarball(archive, root), /differs from verified build/)
+    data.set('lib/search-routing-QwEr_123.js', 'shared chunk')
+    data.set('scripts/unexpected.mjs', 'not declared')
+    await save()
+    await assert.rejects(verifyTarball(archive, root), /Unexpected file/)
+    data.delete('scripts/unexpected.mjs')
     data.delete('lib/types/index.d.ts')
     await save()
     await assert.rejects(verifyTarball(archive, root), /Missing archive export/)

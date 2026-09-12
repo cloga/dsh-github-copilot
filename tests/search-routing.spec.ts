@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebSearchProvider, WebSearchResult } from '@deepseek-ai/dsh-web'
 import { routeSessionSearch } from '../src/search-routing.ts'
+import { DescribedSearchFallbackError } from '../src/search-backend.ts'
 
 const answer: WebSearchResult = { content: 'answer', sources: [{ url: 'https://example.com' }], truncated: false }
 const request = { query: 'current release', maxResults: 3 }
@@ -87,6 +88,19 @@ describe('session search routing', () => {
     await expect(routeSessionSearch(request, signal, deps)).rejects.toThrow('DeepSeek fallback also failed')
     expect(deps.deepseek.search).toHaveBeenCalledOnce()
     expect(deps.delegate).not.toHaveBeenCalled()
+  })
+
+  it('retains safe configured backend details when fallback fails', async () => {
+    const deps = harness('github-copilot-preview', 'deepseek')
+    vi.mocked(deps.copilot.search).mockRejectedValue(new WebError('private primary error', 'WEB_PROVIDER_ERROR'))
+    vi.mocked(deps.deepseek.search).mockRejectedValue(new DescribedSearchFallbackError({
+      provider: 'deepseek-official', origin: 'https://custom-search.example', model: 'actual-search-model', customEndpoint: true,
+    }))
+    const error = await routeSessionSearch(request, signal, deps).catch(error => error)
+    expect(String(error)).toContain('origin=https://custom-search.example')
+    expect(String(error)).toContain('model="actual-search-model"')
+    expect(String(error)).toContain('endpoint=custom')
+    expect(String(error)).not.toContain('private primary error')
   })
 
   it('never falls back merely because a successful search has no sources', async () => {

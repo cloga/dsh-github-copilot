@@ -2,6 +2,7 @@ import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebSearchProvider, WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
 import { GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID } from './traditional-search.ts'
+import { describeSearchBackend, DescribedSearchFallbackError } from './search-backend.ts'
 
 /** Explicit cross-provider spending policy; disabled unless the operator selects DeepSeek. */
 export type SearchFallback = 'none' | 'deepseek'
@@ -109,10 +110,12 @@ export async function routeSessionSearch(
   } catch (error) {
     assertContinuable(signal, deps.canContinue)
     if (error instanceof WebError && error.code === 'WEB_ABORTED') throw error
-    throw new WebError(`Copilot search failed (${reason}); DeepSeek fallback also failed and may have incurred DeepSeek API charges`, 'WEB_PROVIDER_ERROR')
+    const backend = error instanceof DescribedSearchFallbackError && error.backend !== undefined
+      ? ` ${describeSearchBackend(error.backend)}` : ''
+    throw new WebError(`Copilot search failed (${reason}); DeepSeek fallback also failed and may have incurred DeepSeek API charges (or configured backend charges).${backend}`, 'WEB_PROVIDER_ERROR')
   }
   assertContinuable(signal, deps.canContinue)
-  const notice = `Search provider: deepseek-official (explicit fallback from github-copilot-hosted; reason: ${reason}). This fallback may incur DeepSeek API charges. These are not Copilot search results.`
+  const notice = `Search provider: deepseek-official (explicit fallback from github-copilot-hosted; reason: ${reason}). This fallback may incur DeepSeek API charges (or charges from a configured custom backend). These are not Copilot search results.`
   return {
     result: { ...result, content: `${notice}\n\n${result.content ?? ''}`.trimEnd() },
     routing: { requestedProvider: GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID, actualProvider: 'deepseek-official', model, fallback: true, reason },
