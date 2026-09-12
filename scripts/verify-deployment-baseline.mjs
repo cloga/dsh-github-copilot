@@ -144,11 +144,11 @@ assert(
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(
-  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2',
-  'DSH peer range must retain the previous four baselines and append 0.1.5-alpha.2',
+  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2',
+  'DSH peer range must retain the previous five baselines and append 0.1.5-rc.1 and 0.1.5-rc.2',
 )
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
-assert(dshBaselines.length === 5, 'exactly five DSH baselines must be declared')
+assert(dshBaselines.length === 7, 'exactly seven DSH baselines must be declared')
 const currentDsh = manifest.supportedBaselines.dsh
 assert(currentDsh.release === '0.1.5-alpha.2'
   && currentDsh.tag === 'dsh-v0.1.5-alpha.2'
@@ -204,6 +204,20 @@ assert(alpha2Core?.tag === currentDsh.tag && alpha2Core.commit === currentDsh.co
   && alpha2Core.managedProviderValidation === 'synthetic-tagged-source-runtime'
   && alpha2Core.resolvedProfileDiagnostics === 'plugin-owned-empty-modelErrors'
   && JSON.stringify(alpha2Core.runtimeTests) === JSON.stringify(officialCore.runtimeTests), 'alpha2 must retain exact bounded source-runtime evidence and profile diagnostics')
+for (const [release, tag, commit] of [
+  ['0.1.5-rc.1', 'dsh-v0.1.5-rc.1', '183f08e9c6dde7e36cd2318eaee70b0da08fb35e'],
+  ['0.1.5-rc.2', 'dsh-v0.1.5-rc.2', 'fb2c4b9e698e30edb738bca4cf0618587db7d203'],
+]) {
+  const rcCore = dshBaselines.find(entry => entry.release === release)
+  assert(rcCore?.tag === tag && rcCore.commit === commit
+    && rcCore.source === officialCore.source && rcCore.modelsUi === officialCore.modelsUi
+    && rcCore.providerHeaders === officialCore.providerHeaders && rcCore.strictModeCompat === officialCore.strictModeCompat
+    && rcCore.fileContentHelper === officialCore.fileContentHelper
+    && rcCore.evidenceScope === officialCore.evidenceScope && rcCore.standaloneNpmArtifacts === 'not-tested'
+    && rcCore.managedProviderValidation === 'synthetic-tagged-source-runtime'
+    && rcCore.resolvedProfileDiagnostics === 'plugin-owned-empty-modelErrors'
+    && JSON.stringify(rcCore.runtimeTests) === JSON.stringify(officialCore.runtimeTests), `${release} must retain exact bounded source-runtime evidence and profile diagnostics`)
+}
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
   assert(
@@ -349,9 +363,12 @@ for (const command of [
   'd347e703908d0406b7a7ef80e3a0e594d86b2215',
   '5dda764ed3aa172535a7967b06ff95d9cbfe536a',
   'b2e3b2a0125854567a4a5fcba75782e42fe84901',
+  '183f08e9c6dde7e36cd2318eaee70b0da08fb35e',
+  'fb2c4b9e698e30edb738bca4cf0618587db7d203',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
-  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2'",
+  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2'",
+  "if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2'",
   'node scripts/verify-tagged-core.mjs prepare',
   'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',

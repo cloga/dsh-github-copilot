@@ -37,13 +37,13 @@ describe('assertDshCompatibility', () => {
     ])
   })
 
-  it('adds official 0.1.5-alpha.2 without dropping earlier baselines or advancing development dependencies', () => {
+  it('adds 0.1.5-rc.1 and 0.1.5-rc.2 without dropping earlier baselines or advancing development dependencies', () => {
     expect(DSH_COMPATIBILITY.release).toBe('0.1.5-alpha.2')
     expect(DSH_COMPATIBILITY.developmentRelease).toBe('0.1.2-rc.1')
     expect(DSH_COMPATIBILITY.supportedReleases).toEqual([
-      '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2',
+      '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2',
     ])
-    expect(DSH_COMPATIBILITY.peerRange).toBe('0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2')
+    expect(DSH_COMPATIBILITY.peerRange).toBe('0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2')
     expect(() => assertDshCompatibility(context({ authorization: {} })))
       .toThrow('authorization.describe')
     expect(() => assertDshCompatibility(context({ authorization: {} })))

@@ -9,10 +9,12 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
   '0.1.3-alpha.1': 'd347e703908d0406b7a7ef80e3a0e594d86b2215',
   '0.1.5-alpha.1': '5dda764ed3aa172535a7967b06ff95d9cbfe536a',
   '0.1.5-alpha.2': 'b2e3b2a0125854567a4a5fcba75782e42fe84901',
+  '0.1.5-rc.1': '183f08e9c6dde7e36cd2318eaee70b0da08fb35e',
+  '0.1.5-rc.2': 'fb2c4b9e698e30edb738bca4cf0618587db7d203',
 })
 const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts']
 function runtimeTests(release) {
-  return ['0.1.5-alpha.1', '0.1.5-alpha.2'].includes(release)
+  return ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2'].includes(release)
     ? [...tests, 'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts']
     : tests
 }

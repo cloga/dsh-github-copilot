@@ -37,7 +37,7 @@ const contexts: Context[] = []
 beforeAll(() => {
   // Fail rather than silently substitute the installed peer or another baseline.
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.1.5-alpha.1', '0.1.5-alpha.2']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(3)
 })
 
