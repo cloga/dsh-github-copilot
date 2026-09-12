@@ -29,6 +29,9 @@ async function fixture(release = '0.1.3-alpha.1') {
   await writeFile(join(root, 'tests/preview-route.spec.ts'), 'export {}')
   await writeFile(join(root, 'tests/published-core.spec.ts'), 'export {}')
   await writeFile(join(root, 'tests/single-route.spec.ts'), 'export {}')
+  for (const name of ['search-routing.spec.ts', 'routed-web.spec.ts', 'deepseek-search-fallback.spec.ts']) {
+    await writeFile(join(root, 'tests', name), 'export {}')
+  }
   const runner = join(root, 'fake-vitest.mjs')
   await writeFile(runner, 'throw new Error("must not execute during prepare")')
   const tracked = []
@@ -93,7 +96,8 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   assert.equal(config.root, value.root)
   assert.equal(config.envDir, value.target)
   assert.ok(config.cacheDir.startsWith(value.target))
-  assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts'])
+  assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
+    'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts'])
   assert.equal(config.test.env.DSH_CORE_EVIDENCE, 'tagged-source-runtime')
   assert.equal(config.test.env.DSH_TAGGED_CORE_MANIFEST, report.manifestPath)
   assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
@@ -140,6 +144,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       assert.equal(report.commit, TAGGED_CORE_RELEASES[release])
       assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
       assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
+        'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts',
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts'])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })

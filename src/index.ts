@@ -26,6 +26,10 @@ import type { InlineConfig } from './config.ts'
 import { contentHasImageAttachments, inlineWireStream } from './wire.ts'
 import type { InlineHooks } from './wire.ts'
 import { createTraditionalSearchProvider } from './traditional-search.ts'
+import { isCopilotSearchSelection, routeSessionSearch } from './search-routing.ts'
+import { createDeepSeekSearchFallback } from './deepseek-search-fallback.ts'
+import { isPluginPreviewProvider } from './model-protocol.ts'
+import type {} from './routed-web.ts'
 import { assertDshCompatibility } from './compatibility.ts'
 import GitHubCopilotAuthorizationController, {
   ensureGitHubCopilotProviderProfile,
@@ -263,18 +267,27 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
         throw new Error('github-copilot: hosted search refuses non-Copilot endpoints')
       }
       const provider = candidateProviders.get(candidate)
-      const auth = provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
-        ? await ctx.get('githubCopilotPreview')?.resolveRequestAuth(candidate.model, candidateSignals.get(candidate))
-        : await resolveGitHubCopilotToken(candidate.model)
-      if (provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
-        const facts = ctx.get('githubCopilotPreview')?.routeFacts(candidate.model)
-        if (auth === undefined || facts === undefined || facts.api !== candidate.protocol || facts.baseURL !== candidate.baseURL
-          || auth.baseURL !== candidate.baseURL) throw new Error('COPILOT_MANAGED_SEARCH_METADATA_CHANGED')
+      try {
+        const auth = provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+          ? await ctx.get('githubCopilotPreview')?.resolveRequestAuth(candidate.model, candidateSignals.get(candidate))
+          : await resolveGitHubCopilotToken(candidate.model)
+        if (provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
+          const facts = ctx.get('githubCopilotPreview')?.routeFacts(candidate.model)
+          if (auth === undefined || facts === undefined || facts.api !== candidate.protocol || facts.baseURL !== candidate.baseURL
+            || auth.baseURL !== candidate.baseURL) throw new Error('COPILOT_MANAGED_SEARCH_METADATA_CHANGED')
+        }
+        // A credential lookup started before unload must not launch a late probe
+        // or search request after the integration has been disposed.
+        assertCurrentCandidate(candidate)
+        return auth
+      } catch (error) {
+        // Auth/proof failures are terminal, not paid-fallback eligibility. Revoke
+        // before probe/plan/web error translation can erase their distinction.
+        // A late failure from an older generation must not cancel a newer proof.
+        if (active && candidateGenerations.get(candidate) === generation
+          && candidateSignals.get(candidate)?.aborted !== true) invalidatePlans()
+        throw error
       }
-      // A credential lookup started before unload must not launch a late probe
-      // or search request after the integration has been disposed.
-      assertCurrentCandidate(candidate)
-      return auth
     },
   }
 
@@ -398,12 +411,48 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     return !matches(cached, route, candidates, cfg) || cached.plan.available()
   }
 
-  ctx.web.registerSearchProvider(createTraditionalSearchProvider(
+  const traditionalProvider = createTraditionalSearchProvider(
     traditionalAvailable,
     webPlan,
     hooks,
     current,
-  ))
+  )
+  ctx.web.registerSearchProvider(traditionalProvider)
+  ctx.provide('githubCopilotSearchRouter', {
+    search: async (request, signal, delegate) => {
+      const cfg = current()
+      const owner = currentSearchInitiator(ctx)
+      const selection = currentSearchSelection(owner)
+      const managedOwned = selection?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+        && isPluginPreviewProvider(ctx, selection.provider)
+      if (!cfg.enabled || cfg.routeWebSearch === false || owner === undefined
+        || !isCopilotSearchSelection(selection, managedOwned)
+        || (cfg.providers.length > 0 && !cfg.providers.includes(selection?.provider ?? ''))) {
+        return delegate(request, signal)
+      }
+      const startedGeneration = generation
+      const managedPreview = managedOwned ? ctx.get('githubCopilotPreview') : undefined
+      const managedProof = managedPreview?.captureSearchProof()
+      const ownerSignal = plansFor(owner).cancellation.signal
+      const boundSignal = AbortSignal.any([
+        ...signal === undefined ? [] : [signal],
+        proofCancellation.signal,
+        ownerSignal,
+      ])
+      const canContinue = (): boolean => active && generation === startedGeneration && !disposedOwners.has(owner)
+        && (!managedOwned || ctx.get('githubCopilotPreview') === managedPreview && managedProof?.() === true)
+      const outcome = await routeSessionSearch(request, boundSignal, {
+        selection,
+        managedOwned,
+        fallback: cfg.searchFallback ?? 'deepseek',
+        copilot: traditionalProvider,
+        delegate,
+        resolveDeepSeek: () => createDeepSeekSearchFallback(ctx, owner, canContinue),
+        canContinue,
+      })
+      return outcome.result
+    },
+  })
 
   installWebSearchSettings(ctx, config, {
     setSource: (source) => {
@@ -443,9 +492,9 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
   ctx.systemPrompt.section({
     name: 'tool:github-copilot',
     order: 115,
-    // The guidance is only true while the plugin actually serves: with the
-    // plugin disabled or the plan failed, an empty section keeps the model
-    // from being steered toward a web_search tool that does not exist.
+    // Native-search availability is advertised only after proof. The routed
+    // bundle may separately explain how to disclose a reported fallback, without
+    // claiming that a search endpoint is ready.
     text: () => '',
   })
   return (owner, selection) => {
@@ -454,7 +503,14 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     const cfg = current()
     if (route === undefined || (cfg.providers.length > 0 && !cfg.providers.includes(route.provider))) return ''
     const cached = ownerPlans.get(owner)?.inline
-    return servingPrompt(current, matches(cached, route, candidatesForRoute(route), cfg) ? cached.plan : undefined)
+    const nativeGuidance = servingPrompt(current, matches(cached, route, candidatesForRoute(route), cfg) ? cached.plan : undefined)
+    const owned = route.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && isPluginPreviewProvider(ctx, route.provider)
+    if (!cfg.enabled || cfg.routeWebSearch === false || ctx.get('githubCopilotOriginalWeb') === undefined
+      || !isCopilotSearchSelection(route, owned)) return nativeGuidance
+    const disclosure = cfg.searchFallback === 'none'
+      ? 'Copilot search fallback is disabled. Do not silently substitute another paid search backend after a search failure.'
+      : 'When web_search reports a fallback, explicitly tell the user the actual search backend (and custom endpoint/model when provided) and possible API charges in your answer. Never describe fallback results as Copilot search. Automatic fallback does not need per-search confirmation.'
+    return [nativeGuidance, disclosure].filter(Boolean).join('\n\n')
   }
 }
 

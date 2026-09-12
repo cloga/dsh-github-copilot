@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.13`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.14`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 ## 已测试基线
 
@@ -35,12 +35,24 @@ Core `0.1.5-alpha.2` 新增必需的 `ResolvedPiAiProviderProfile.modelErrors`�
 
 首次 alpha.11 发布在打包前停止：真实 Session/Remote fixture 需要 Core 的 `mime-types`，但发布任务只安装了 pi-ai 依赖闭包。CI 与发布流程现在都在运行该 fixture 前显式安装未修改的固定版本 Session Controller 依赖闭包。保留全部测试，不修改 Core 源码或运行中的依赖；alpha.12 以新版本交付相同的运行时兼容修复。
 
+### Alpha.14 按会话模型分流搜索（#112）
+
+bundle 根据发起会话选择搜索：优先 Copilot，允许自动且明确披露的 DeepSeek 回退；其他模型提供者保持原官方搜索配置。全部通过插件自有的公开 web 服务组合实现，不改 Core 或预设。将 `github-copilot.searchFallback` 设为 `none` 可禁止回退费用。源码和合成测试不代表真实 Copilot 搜索、已发布或本机已生效；详见[分流验收范围](docs/session-search-routing.md)。
+
 ## 安装与登录
 
 将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
 
+安装／升级前，先将**已核对校验和**的发布包解压到临时目录，运行包内只读组合预检（参数均替换为目标 profile 的绝对路径）：
+
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.13/dsh-github-copilot-0.4.0-alpha.13.tgz
+node package/scripts/check-search-composition.mjs --profile-dir /absolute/profile --home /absolute/DSH_HOME --install-anchor /absolute/dsh/package.json
+```
+
+若启动时还有额外 patch，用重复的 `--patch /absolute/file` 参数一并提供。必须得到 `supported: true` 才继续安装；自定义、已禁用、嵌套、已有隔离映射的 web 服务或路由保留名称冲突会在修改前拒绝。预检只用 Core 公开解析接口，不启动插件、不读取认证凭据、不改配置。**`dsh plugin add` 不会自动执行这项预检**；这是安装者必做步骤，不是对任意第三方组合的兼容保证。
+
+```sh
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.14/dsh-github-copilot-0.4.0-alpha.14.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
@@ -191,23 +203,21 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
 - **通过 `ctx.web.search()` 使用 `github-copilot-hosted`：**只支持账号可用且协议经过核实的 OpenAI Responses 候选，包括符合条件的托管账号模型。
 - **Chat Completions 模型：**可走普通原生 SDK transport，但不会因此宣称 hosted search 可用。
 
-安装本包只会注册 `github-copilot-hosted`，不会默认替换整个 profile 的 `web.searchProvider`，因此混合 provider profile 的原行为保持不变。以 Copilot 为主的 profile 可以选择加入下面的配置：把它合并到 `$DSH_HOME/profiles/<profile>/cordis.patch.yml` 的顶层 patch 列表中。
+### 按会话模型分流搜索（实现待发布）
 
-```yaml
-# 可选：让 Core web_search Tool 使用 GitHub Copilot。
-- id: web
-  config:
-    searchProvider: github-copilot-hosted
-    fetchProvider: http
-```
+新版 bundle 通过插件自有的 web 服务外观层分流，将原官方服务及完整配置保留在命名作用域中，不修改 Core 或会话预设。原生 `web_search` 保留参数校验、查询／来源数量限制、执行中间件、超时和结果展示；有可靠发起会话上下文的直接 `ctx.web.search` 调用也使用相同分流规则。
 
-Patch row 会整体替换目标 row 的 `config`，所以使用默认 HTTP 抓取器时保留 `fetchProvider: http`；若已配置其它 fetch provider，则保留原选择。如果已有 `web` override，应修改原 row，而不是覆盖整个 patch 文件，并保留无关配置。修改后重启对应 profile。Web provider 的选择是 profile 全局设置，但 Copilot 搜索解析的是发起 Session／请求的模型，不是全局模型默认值。发起 route 不符合 Copilot Responses 条件时，`web_search` 报告不可用，不回退 DeepSeek。撤销时只删除为本次可选配置新增的 row，或恢复之前的 `web` 配置。
+- Copilot 会话优先使用 `github-copilot-hosted`，保留原有模型／账号／协议／probe 检查。
+- DeepSeek 和其他模型提供者继续使用原配置的官方搜索路径；网页抓取不变。
+- Copilot 搜索失败时允许自动回退到官方 `deepseek-official` 实现。每次回退结果明确显示原因、实际提供者及可能产生的 **DeepSeek API 费用**，不逐次弹确认。取消、会话结束或凭据证明失效不触发回退。
 
-显式 `web.searchProvider` 优先于 `DSH_WEB_SEARCH_PROVIDER`。如果 bundle 已选择 `deepseek-official`，仅设置该环境变量不能覆盖它。因此搜索提示缺少 `DEEPSEEK_API_KEY`，说明直接搜索 Tool 仍选择了 DeepSeek；Copilot 登录不会配置 DeepSeek 凭据。Copilot 搜索路径使用自己的 OAuth grant，不需要该 key。
+在插件设置命名空间中配置 `github-copilot.routeWebSearch`（默认 `true`）与 `github-copilot.searchFallback`（默认 `deepseek`；设为 `none` 可禁止回退费用）。`routeWebSearch: false` 恢复原配置搜索行为。Copilot 登录不会提供 DeepSeek Key：Copilot 主路径不需要它，但允许的 DeepSeek 回退需要独立配置有效的 DeepSeek 凭据。
+
+无需把全局 `web.searchProvider` 改成 Copilot。旧的全局 `github-copilot-hosted` 手工 override 仍影响非 Copilot 会话的原路径；若希望通常的混合提供者行为，请明确恢复之前的官方提供者选择。显式 `web.searchProvider` 仍优先于 `DSH_WEB_SEARCH_PROVIDER`。bundle 预期标准官方 `web` 行，自定义或非标准 web 服务组合需要单独审查。详见[实现与验收范围](docs/session-search-routing.md)。已安装的 alpha.13 不包含这项新分流实现。
 
 请求经过严格 Host 校验后，直接发往 credential 解析出的 HTTPS Copilot endpoint：GitHub-hosted `api.*.githubcopilot.com`，或已接受 GitHub Enterprise credential 对应的 `copilot-api.<signed-in-enterprise-domain>`。Credential 不会经过外部 gateway。
 
-默认 `probe: true` 时，搜索 fail closed：当前 route 必须是 canonical Copilot 或本插件拥有的托管账号路由，账号必须允许该模型，所选协议必须支持对应搜索表面，且 bounded capability probe 必须成功。托管模型还必须有当前账号的有效发现证据，不能拿另一个 pi 副本的静态条目代替。显式设置 `probe: false` 只会跳过 capability proof，并信任所选原生协议；route、account、protocol、endpoint 与 authentication 检查仍然生效。Authentication、HTTP、响应体格式、abort 或网络 probe 失败都不会回退到外部搜索路径。请求只要包含任意 Core file block（包括嵌套在 tool-result content 内的文件），也会 fail closed 到 `next()`，由 Core 保留文件投影，避免 hosted-search serializer 静默丢弃文件上下文。
+默认 `probe: true` 时，搜索 fail closed：当前 route 必须是 canonical Copilot 或本插件拥有的托管账号路由，账号必须允许该模型，所选协议必须支持对应搜索表面，且 bounded capability probe 必须成功。托管模型还必须有当前账号的有效发现证据，不能拿另一个 pi 副本的静态条目代替。显式设置 `probe: false` 只会跳过 capability proof，并信任所选原生协议；route、account、protocol、endpoint 与 authentication 检查仍然生效。底层 hosted-search provider 自身不执行回退；新的会话分流层可按明确披露的策略对符合条件的失败执行 DeepSeek 回退，但取消和 owner／账号证明失效仍立即终止。请求只要包含任意 Core file block（包括嵌套在 tool-result content 内的文件），也会 fail closed 到 `next()`，由 Core 保留文件投影，避免 hosted-search serializer 静默丢弃文件上下文。
 
 搜索 proof 采用惰性验证：attach、settings 更新以及 `llm-pi-ai/github-copilot` 的 `credentials/record-updated` 事件只使缓存计划失效，不启动网络工作。下一次真实且符合条件的请求才重新验证；忽略无关凭据更新，连续事件不会引发重复的提前 probe。失效或卸载会取消正在执行的 proof。如果凭据在 proof 或最终认证解析期间改变，当前请求会 fail closed，避免把账号 A 的 proof 用于账号 B。更新后可重新提交请求；不会自动循环重试，也不会隐式使用 `probe: false`。
 
@@ -339,8 +349,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。新版本使用标准 SemVer 预发布标识（`alpha`、`beta` 或 `rc`）；历史上的 `cloga` 后缀用于标识下游 fork 构建，新版本不再使用。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，按版本标记 prerelease，并且只在前序步骤全部成功后创建 GitHub Release。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.13/dsh-github-copilot-0.4.0-alpha.13.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.13/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.14/dsh-github-copilot-0.4.0-alpha.14.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.14/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -348,7 +358,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.13.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.14.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

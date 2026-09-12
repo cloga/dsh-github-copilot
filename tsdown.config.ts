@@ -35,7 +35,7 @@ function clientBundle(id: string, entry: string): UserConfig {
 
 export default defineConfig([
   {
-    entry: ['lib/types/index.js'],
+    entry: ['lib/types/index.js', 'lib/types/routed-web.js', 'lib/types/web-delegate.js'],
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',

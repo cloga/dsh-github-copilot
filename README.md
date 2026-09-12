@@ -33,12 +33,24 @@ Legacy Anthropic inline requests containing an in-band `system` message delegate
 
 The first alpha.11 publication attempt stopped before packing: the tagged Session/Remote fixture required Core's `mime-types` dependency, but the release job installed only the pi-ai closure. CI and release now explicitly install the unchanged pinned Session Controller dependency closure before that fixture runs. The tests remain enabled; no Core source or live dependency is patched. Alpha.12 carries the same runtime compatibility fixes with a fresh release version.
 
+### Alpha.14 session-based web search (#112)
+
+The bundle routes search by the initiating Session: Copilot first, with automatic, clearly disclosed DeepSeek fallback; other model providers retain the original official search configuration. This is implemented entirely through plugin-owned public web-service composition, without Core or preset edits. Set `github-copilot.searchFallback` to `none` to prohibit fallback spending. Source and synthetic tests are not proof of live Copilot search, release publication or local activation; see [routing evidence](docs/session-search-routing.md).
+
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.13`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.14`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+
+Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.13/dsh-github-copilot-0.4.0-alpha.13.tgz
+node package/scripts/check-search-composition.mjs --profile-dir /absolute/profile --home /absolute/DSH_HOME --install-anchor /absolute/dsh/package.json
+```
+
+Include any launcher patch files with repeated `--patch /absolute/file` arguments. Require `supported: true`; otherwise do not install the routing bundle. The preflight rejects custom, disabled, nested or already-isolated web-service layouts and reserved routing collisions before any mutation. It parses through public Core APIs and never boots plugins, resolves credentials or rewrites configuration. **`dsh plugin add` does not automatically run this preflight.** It is a required installer/operator step, not a universal compatibility guarantee.
+
+```sh
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.14/dsh-github-copilot-0.4.0-alpha.14.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
@@ -183,23 +195,21 @@ Search identity comes from the captured initiating Session's effective request-h
 - **Legacy canonical inline agent-loop path:** eligible `github-copilot` requests support Responses or Anthropic Messages native-search candidates only while that legacy route remains configured.
 - **Chat Completions models:** remain usable through normal native transport but do not advertise hosted search.
 
-Installing this package registers `github-copilot-hosted` but deliberately does not replace the profile-wide `web.searchProvider`. This keeps mixed-provider profiles unchanged. A Copilot-focused profile can opt in by adding the following row to `$DSH_HOME/profiles/<profile>/cordis.patch.yml` (merge it into the existing top-level patch list):
+### Session-based search routing (implementation awaiting release)
 
-```yaml
-# Optional: route the Core web_search Tool through GitHub Copilot.
-- id: web
-  config:
-    searchProvider: github-copilot-hosted
-    fetchProvider: http
-```
+The new bundle composes a plugin-owned web-service facade while preserving the original official service and its exact configuration in a named realm. It does not edit Core or agent presets. Native `web_search` consumers keep their argument validation, query/source limits, middleware, timeout and presentation; the same routing also covers direct `ctx.web.search` consumers with proven initiating context.
 
-A patch row replaces the target row's complete `config`, so keep `fetchProvider: http` for the default HTTP fetcher (or retain your explicitly configured fetch provider). If a `web` override already exists, update that row rather than replacing the whole patch file; keep unrelated configuration. Restart that profile after editing. The choice of Web provider is profile-wide, but Copilot search resolves the initiating Session/request model rather than the global model default. An ineligible non-Copilot or non-Responses initiating route reports unavailable and does not fall back to DeepSeek. To undo it, remove only the row added for this opt-in or restore your previous `web` configuration.
+- Copilot Sessions prefer `github-copilot-hosted` under the existing model/account/protocol/probe gates.
+- DeepSeek and other model providers keep the original configured official search path. Fetch is unchanged.
+- Copilot failure may automatically fall back to the official `deepseek-official` implementation. Every fallback result states the cause, actual provider and possible **DeepSeek API charges**. No per-query confirmation dialog is added. Cancellation, owner disposal or credential-proof invalidation never trigger fallback.
 
-An explicit `web.searchProvider` takes precedence over `DSH_WEB_SEARCH_PROVIDER`. Setting that environment variable alone will not override a bundle that already selects `deepseek-official`. A `DEEPSEEK_API_KEY` search error therefore means the direct search Tool still selected DeepSeek; Copilot sign-in does not configure DeepSeek credentials. The Copilot search path uses its own OAuth grant and does not require that key.
+Configure `github-copilot.routeWebSearch` (default `true`) and `github-copilot.searchFallback` (`deepseek` by default, or `none` to prohibit fallback spending) in the plugin's settings namespace. Setting `routeWebSearch` to `false` restores the original configured search behavior. Copilot sign-in does not supply a DeepSeek key: primary Copilot search needs no such key, but a permitted DeepSeek fallback requires separately configured DeepSeek credentials. The fallback reuses the official DeepSeek implementation and existing search settings; its API base must be HTTP(S) without userinfo, query or fragment so URL-embedded credentials cannot enter request records.
+
+There is no need to change the profile-wide `web.searchProvider` to Copilot. An old manual global `github-copilot-hosted` override still affects the original path for non-Copilot Sessions; restore your previous official provider explicitly if you want the usual mixed-provider behavior. Explicit `web.searchProvider` still outranks `DSH_WEB_SEARCH_PROVIDER`. Custom/nonstandard web-service compositions need review because the bundle expects the stock official `web` row. See [implementation and evidence limits](docs/session-search-routing.md). Alpha.13 installations do not contain this new routing implementation.
 
 Requests go directly to the credential-resolved HTTPS Copilot endpoint after strict host validation: GitHub-hosted `api.*.githubcopilot.com`, or `copilot-api.<signed-in-enterprise-domain>` for an accepted GitHub Enterprise credential. No external gateway receives the credential.
 
-By default (`probe: true`), search fails closed unless the selected route is canonical `github-copilot` or the plugin-owned `github-copilot-preview`, the account authorizes the model, its verified protocol supports native search, and a bounded capability probe succeeds. Managed-model conversations always use their native adapter; independent Responses `ctx.web` search uses account-bound authorization without the old static-catalog ID restriction. Setting `probe: false` bypasses only capability proof and trusts the selected native protocol; route, account, protocol, endpoint, and authentication checks remain active. Authentication, HTTP, malformed-body, abort, and network probe failures do not fall back to an external search path. Requests containing any Core file block—including files nested in tool-result content—also fail closed to `next()`, preserving Core's file projection instead of letting the hosted-search serializer drop that context.
+By default (`probe: true`), search fails closed unless the selected route is canonical `github-copilot` or the plugin-owned `github-copilot-preview`, the account authorizes the model, its verified protocol supports native search, and a bounded capability probe succeeds. Managed-model conversations always use their native adapter; independent Responses `ctx.web` search uses account-bound authorization without the old static-catalog ID restriction. Setting `probe: false` bypasses only capability proof and trusts the selected native protocol; route, account, protocol, endpoint, and authentication checks remain active. The underlying hosted-search provider does not itself fall back. The new session router may apply the explicitly disclosed DeepSeek fallback policy for eligible failures; aborts and invalidated owner/account proofs remain terminal. Requests containing any Core file block—including files nested in tool-result content—also fail closed to `next()`, preserving Core's file projection instead of letting the hosted-search serializer drop that context.
 
 Search proof is lazy: attach, settings updates and `credentials/record-updated` for `llm-pi-ai/github-copilot` only invalidate cached plans, without starting network work. The next actual eligible request proves capability again; unrelated credentials are ignored and event bursts do not trigger repeated eager probes. In-flight proofs are cancelled on invalidation/disposal. If credentials change during proof or final auth resolution, the current request fails closed rather than applying account A's proof to account B. Submit a new request after the update; there is no automatic retry loop or implicit `probe: false` fallback.
 
@@ -328,8 +338,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` is private to prevent registry publication. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`); the historical `cloga` suffix identified downstream fork builds and is no longer used for new versions. The Release workflow performs the frozen install and complete verification gate, packs the tarball, writes `SHA256SUMS`, marks prerelease versions accordingly, and creates the GitHub Release only after every preceding step succeeds.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.13/dsh-github-copilot-0.4.0-alpha.13.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.13/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.14/dsh-github-copilot-0.4.0-alpha.14.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.14/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -337,7 +347,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.13.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.14.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

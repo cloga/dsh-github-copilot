@@ -12,7 +12,8 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
   '0.1.5-rc.1': '183f08e9c6dde7e36cd2318eaee70b0da08fb35e',
   '0.1.5-rc.2': 'fb2c4b9e698e30edb738bca4cf0618587db7d203',
 })
-const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts']
+const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
+  'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts']
 function runtimeTests(release) {
   return ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2'].includes(release)
     ? [...tests, 'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts']

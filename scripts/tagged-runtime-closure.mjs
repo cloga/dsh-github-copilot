@@ -11,5 +11,12 @@ export function assertTaggedRuntimeClosure(workflow) {
   if (!/^        working-directory: dsh-upstream\s*$/m.test(blocks[closure])) {
     throw new Error('tagged runtime closure must be installed in the pinned Core checkout')
   }
+  const search = blocks.findIndex(block => /^        run: pnpm install --frozen-lockfile --filter '@deepseek-ai\/dsh-tool-web\.\.\.' --filter '@deepseek-ai\/dsh-web-search-deepseek\.\.\.'\s*$/m.test(block))
+  if (search < 0 || search >= prepare) {
+    throw new Error('tagged runtime requires the search dependency closure before preparation')
+  }
+  if (!/^        working-directory: dsh-upstream\s*$/m.test(blocks[search])) {
+    throw new Error('tagged search closure must be installed in the pinned Core checkout')
+  }
   return true
 }
