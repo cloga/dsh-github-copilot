@@ -267,18 +267,27 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
         throw new Error('github-copilot: hosted search refuses non-Copilot endpoints')
       }
       const provider = candidateProviders.get(candidate)
-      const auth = provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
-        ? await ctx.get('githubCopilotPreview')?.resolveRequestAuth(candidate.model, candidateSignals.get(candidate))
-        : await resolveGitHubCopilotToken(candidate.model)
-      if (provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
-        const facts = ctx.get('githubCopilotPreview')?.routeFacts(candidate.model)
-        if (auth === undefined || facts === undefined || facts.api !== candidate.protocol || facts.baseURL !== candidate.baseURL
-          || auth.baseURL !== candidate.baseURL) throw new Error('COPILOT_MANAGED_SEARCH_METADATA_CHANGED')
+      try {
+        const auth = provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+          ? await ctx.get('githubCopilotPreview')?.resolveRequestAuth(candidate.model, candidateSignals.get(candidate))
+          : await resolveGitHubCopilotToken(candidate.model)
+        if (provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
+          const facts = ctx.get('githubCopilotPreview')?.routeFacts(candidate.model)
+          if (auth === undefined || facts === undefined || facts.api !== candidate.protocol || facts.baseURL !== candidate.baseURL
+            || auth.baseURL !== candidate.baseURL) throw new Error('COPILOT_MANAGED_SEARCH_METADATA_CHANGED')
+        }
+        // A credential lookup started before unload must not launch a late probe
+        // or search request after the integration has been disposed.
+        assertCurrentCandidate(candidate)
+        return auth
+      } catch (error) {
+        // Auth/proof failures are terminal, not paid-fallback eligibility. Revoke
+        // before probe/plan/web error translation can erase their distinction.
+        // A late failure from an older generation must not cancel a newer proof.
+        if (active && candidateGenerations.get(candidate) === generation
+          && candidateSignals.get(candidate)?.aborted !== true) invalidatePlans()
+        throw error
       }
-      // A credential lookup started before unload must not launch a late probe
-      // or search request after the integration has been disposed.
-      assertCurrentCandidate(candidate)
-      return auth
     },
   }
 
@@ -422,20 +431,24 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
         return delegate(request, signal)
       }
       const startedGeneration = generation
+      const managedPreview = managedOwned ? ctx.get('githubCopilotPreview') : undefined
+      const managedProof = managedPreview?.captureSearchProof()
       const ownerSignal = plansFor(owner).cancellation.signal
       const boundSignal = AbortSignal.any([
         ...signal === undefined ? [] : [signal],
         proofCancellation.signal,
         ownerSignal,
       ])
+      const canContinue = (): boolean => active && generation === startedGeneration && !disposedOwners.has(owner)
+        && (!managedOwned || ctx.get('githubCopilotPreview') === managedPreview && managedProof?.() === true)
       const outcome = await routeSessionSearch(request, boundSignal, {
         selection,
         managedOwned,
         fallback: cfg.searchFallback ?? 'deepseek',
         copilot: traditionalProvider,
         delegate,
-        resolveDeepSeek: () => createDeepSeekSearchFallback(ctx, owner),
-        canContinue: () => active && generation === startedGeneration && !disposedOwners.has(owner),
+        resolveDeepSeek: () => createDeepSeekSearchFallback(ctx, owner, canContinue),
+        canContinue,
       })
       return outcome.result
     },

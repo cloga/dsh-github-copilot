@@ -14,19 +14,28 @@ class InvalidFallbackBase extends WebError {
   }
 }
 
+class InvalidFallbackProof extends WebError {
+  constructor() {
+    super('web search owner or account proof invalidated before fallback dispatch', 'WEB_PROVIDER_UNAVAILABLE')
+  }
+}
+
 /**
  * Compose a known official fallback only when permitted. The public native class
  * owns transport, redirects and parsing. A per-operation instance keeps backend
  * disclosure aligned with that operation's options even during concurrent calls.
+ * canContinue must be the initiating router's captured operation-local guard.
  */
-export async function createDeepSeekSearchFallback(ctx: Context, owner: Agent | undefined): Promise<WebSearchProvider> {
+export async function createDeepSeekSearchFallback(
+  ctx: Context, owner: Agent | undefined, canContinue: () => boolean,
+): Promise<WebSearchProvider> {
   const native = await import('@deepseek-ai/dsh-web-search-deepseek').catch(() => {
     throw new WebError('the installed Core does not expose the official DeepSeek fallback provider', 'WEB_PROVIDER_UNAVAILABLE')
   })
   const { launchEnvironmentOf } = await import('@deepseek-ai/dsh-launch-environment').catch(() => {
     throw new WebError('the official launch-environment API required by DeepSeek fallback is unavailable', 'WEB_PROVIDER_UNAVAILABLE')
   })
-  const resolveOptions = (): DeepSeekSearchProviderOptions => {
+  const resolveOptions = (signal?: AbortSignal): DeepSeekSearchProviderOptions => {
     const config = (ctx.get('settings')?.get(native.WEB_SEARCH_DEEPSEEK_SETTINGS_NAMESPACE as SettingsNamespace) ?? {}) as DeepSeekConfig
     const environment = launchEnvironmentOf(ctx)
     const baseURL = config.baseURL ?? environment.get('DEEPSEEK_SEARCH_BASE_URL')?.value ?? native.DEEPSEEK_DEFAULT_BASE_URL
@@ -51,7 +60,14 @@ export async function createDeepSeekSearchFallback(ctx: Context, owner: Agent | 
       apiVersion: config.apiVersion ?? native.DEEPSEEK_DEFAULT_API_VERSION,
       maxTokens: config.maxTokens ?? native.DEEPSEEK_DEFAULT_MAX_TOKENS,
       maxUses: config.maxUses ?? native.DEEPSEEK_DEFAULT_MAX_USES,
-      recordRequest: request => { owner?.session.append('web/deepseek-search-llm-request', request) },
+      recordRequest: request => {
+        // The public native provider calls this after awaited auth (including
+        // literal keys), synchronously before fetch. Check before recording too:
+        // rejecting only after native.search returns would already incur charges.
+        if (signal?.aborted === true) throw new WebError('web search aborted', 'WEB_ABORTED')
+        if (!canContinue()) throw new InvalidFallbackProof()
+        owner?.session.append('web/deepseek-search-llm-request', request)
+      },
     }
   }
   const availability = new native.DeepSeekSearchProvider(resolveOptions)
@@ -67,7 +83,7 @@ export async function createDeepSeekSearchFallback(ctx: Context, owner: Agent | 
     search: async (request, signal) => {
       let backend: SearchBackend | undefined
       const operation = new native.DeepSeekSearchProvider(() => {
-        const options = resolveOptions()
+        const options = resolveOptions(signal)
         const parsed = new URL(options.baseURL)
         backend = {
           provider: native.DEEPSEEK_PROVIDER_ID,
@@ -82,7 +98,8 @@ export async function createDeepSeekSearchFallback(ctx: Context, owner: Agent | 
         if (backend === undefined) throw new DescribedSearchFallbackError(undefined)
         return { ...result, content: `${describeSearchBackend(backend)}\n\n${result.content ?? ''}`.trimEnd() }
       } catch (error) {
-        if (error instanceof InvalidFallbackBase || error instanceof WebError && error.code === 'WEB_ABORTED') throw error
+        if (error instanceof InvalidFallbackBase || error instanceof InvalidFallbackProof
+          || error instanceof WebError && error.code === 'WEB_ABORTED') throw error
         throw new DescribedSearchFallbackError(backend, error instanceof WebError ? error.code : 'WEB_PROVIDER_ERROR')
       }
     },

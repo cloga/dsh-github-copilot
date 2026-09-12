@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import { isDeepStrictEqual } from 'node:util'
 import { readFile } from 'node:fs/promises'
 import { resolve, join, isAbsolute } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -33,6 +34,7 @@ export function checkSearchComposition(entries) {
   for (const { entry, depth } of matches) {
     if (depth !== 0) reasons.add('WEB_NOT_TOP_LEVEL')
     if (entry.name !== '@deepseek-ai/dsh-web') reasons.add('CUSTOM_WEB_SERVICE')
+    if (entry.group === true || Object.keys(entry).some(key => !['id', 'name', 'config', 'disabled', 'group', 'isolate'].includes(key))) reasons.add('WEB_ENTRY_REQUIRES_REVIEW')
     if (entry.disabled !== undefined && entry.disabled !== false) reasons.add('WEB_DISABLED_OR_DYNAMIC')
     if (entry.config !== undefined && (!entry.config || typeof entry.config !== 'object' || Array.isArray(entry.config)
       || Object.entries(entry.config).some(([key, value]) => !['searchProvider', 'fetchProvider'].includes(key) || typeof value !== 'string'))) reasons.add('WEB_CONFIG_REQUIRES_REVIEW')
@@ -41,39 +43,121 @@ export function checkSearchComposition(entries) {
   return { schemaVersion: 1, supported: reasons.size === 0, reasons: [...reasons].sort(), scope: 'pre-install-structural-only; no boot, credentials, network or writes' }
 }
 
-/** Read the normal profile layers using public parse/resolve APIs, without loadProfile's initialization/normalization writes. */
+function reportCandidate(reasons) {
+  return { schemaVersion: 1, supported: reasons.size === 0, reasons: [...reasons].sort(), scope: 'candidate-structural-only; no boot, credentials, network or writes' }
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasExpression(value) {
+  if (!value || typeof value !== 'object') return false
+  return Object.entries(value).some(([key, child]) => key === '__jsExpr' || key === '__js' || hasExpression(child))
+}
+
+function accountRows(entries) {
+  const matches = []
+  for (const entry of entries) {
+    if (!isRecord(entry)) continue
+    if (entry.id === 'github-copilot' || entry.name === 'dsh-github-copilot') matches.push(entry)
+    if (entry.group === true && Array.isArray(entry.config)) matches.push(...accountRows(entry.config))
+  }
+  return matches
+}
+
+/** Only the bundle's reviewed, static service wiring is automatically supported. */
+function routingRowValid(entry, name, isolated, account = false) {
+  if (!entry || entry.name !== name) return false
+  const keys = ['id', 'name', 'disabled', 'group', 'isolate', ...(account ? ['config'] : [])]
+  if (Object.keys(entry).some(key => !keys.includes(key))) return false
+  if (entry.disabled !== undefined && entry.disabled !== false) return false
+  if (entry.group !== undefined && entry.group !== false) return false
+  if (isolated) {
+    if (!isDeepStrictEqual(entry.isolate, { web: realm })) return false
+  } else if (entry.isolate !== undefined && (!isRecord(entry.isolate) || Object.keys(entry.isolate).length !== 0)) return false
+  return entry.config === undefined || (account && isRecord(entry.config) && !hasExpression(entry.config))
+}
+
+function candidateViable(entries, baseline) {
+  const original = baseline.find(entry => entry.id === 'web')
+  const web = entries.find(entry => entry.id === 'web')
+  if (!original || !web || !isDeepStrictEqual(web.isolate, { web: realm })) return false
+  for (const [id, name, isolated, account] of [
+    ['github-copilot-web-delegate', 'dsh-github-copilot/web-delegate', true, false],
+    ['github-copilot-routed-web', 'dsh-github-copilot/routed-web', false, false],
+    ['github-copilot', 'dsh-github-copilot', false, true],
+  ]) {
+    const matches = entries.filter(entry => entry.id === id)
+    if (matches.length !== 1 || !routingRowValid(matches[0], name, isolated, account)) return false
+  }
+  // Apart from the two new service rows and the original web's realm, the
+  // candidate must preserve the entire routing-free tree, including user config.
+  // These are parsed, owned config objects, never live Loader/Service objects.
+  const restored = entries.filter(entry => !reserved.has(entry.id)).map(entry => {
+    if (entry.id !== 'web') return entry
+    const copy = { ...entry }
+    if (Object.hasOwn(original, 'isolate')) copy.isolate = original.isolate
+    else delete copy.isolate
+    return copy
+  })
+  return isDeepStrictEqual(restored, baseline)
+}
+
+/** Read and compose the proposed normal launch without loadProfile's initialization/normalization writes. */
 export async function inspectProfileSearchComposition({ profileDir, home, installAnchor, patches = [] }, suppliedBoot) {
   const native = suppliedBoot ?? await import(pathToFileURL(createRequire(installAnchor).resolve('@deepseek-ai/dsh-app-boot')).href)
   const { readProfileManifest, resolveBundleDir, loadOverlayPatches, loadOptionalPatches, composeEntries } = native
-  const manifest = readProfileManifest('copilot-search-preflight', profileDir)
+  const bin = 'copilot-search-preflight'
+  const manifest = readProfileManifest(bin, profileDir)
+  const reasons = new Set()
+  // Public CLI prepareProfile rewrites cordis.yml to [] before normal launch.
+  // Never certify rows that only exist in that disposable file, or rewrite it.
+  const root = loadOptionalPatches(bin, join(profileDir, 'cordis.yml'))
+  if (root?.length) return reportCandidate(new Set(['NONEMPTY_DISPOSABLE_PROFILE_ROOT']))
+  const candidate = loadOverlayPatches(bin, fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)))
   const layers = []
-  const root = loadOptionalPatches('copilot-search-preflight', join(profileDir, 'cordis.yml'))
-  if (root?.length) layers.push([{ insert: root }])
+  const baselineLayers = []
   let copilotLayers = 0
+  let candidateIndex
+  function addCandidate() {
+    candidateIndex ??= layers.length
+    layers.push(candidate)
+    // The routing-free comparison retains the account row and its user config.
+    baselineLayers.push([{ insert: [{ id: 'github-copilot', name: 'dsh-github-copilot' }] }])
+  }
   for (const name of manifest.dsh?.profile?.bundles ?? []) {
-    const directory = resolveBundleDir('copilot-search-preflight', name, installAnchor, profileDir)
-    const bundle = readProfileManifest('copilot-search-preflight', directory)
+    const directory = resolveBundleDir(bin, name, installAnchor, profileDir)
+    const bundle = readProfileManifest(bin, directory)
     if (bundle.name === 'dsh-github-copilot') {
       copilotLayers++
-      // Retain the account row so existing user overrides still resolve. Remove
-      // this package's own routing layer when validating an update's pre-state.
-      layers.push([{ insert: [{ id: 'github-copilot', name: 'dsh-github-copilot' }] }])
+      // Updating replaces our existing slot, not its position in bundle order.
+      addCandidate()
       continue
     }
     if (typeof bundle.dsh?.bundle?.patch !== 'string') throw new Error('INVALID_BUNDLE_MANIFEST')
-    layers.push(loadOverlayPatches('copilot-search-preflight', resolve(directory, bundle.dsh.bundle.patch)))
+    const layer = loadOverlayPatches(bin, resolve(directory, bundle.dsh.bundle.patch))
+    layers.push(layer)
+    baselineLayers.push(layer)
   }
-  if (copilotLayers === 0) layers.push([{ insert: [{ id: 'github-copilot', name: 'dsh-github-copilot' }] }])
-  layers.push(loadOptionalPatches('copilot-search-preflight', join(profileDir, 'cordis.patch.yml')) ?? [])
-  layers.push(loadOptionalPatches('copilot-search-preflight', join(home, 'cordis.patch.yml')) ?? [])
-  for (const file of patches) layers.push(loadOverlayPatches('copilot-search-preflight', file))
-  let warned = false
-  const entries = composeEntries(layers, () => { warned = true })
-  const result = checkSearchComposition(entries)
-  if (warned) result.reasons.push('UNAPPLIED_PATCH_REQUIRES_REVIEW')
-  if (copilotLayers > 1 || entries.filter(entry => entry.id === 'github-copilot').length > 1) result.reasons.push('DUPLICATE_COPILOT_ACCOUNT_ENTRY')
-  result.supported = result.reasons.length === 0
-  return result
+  if (copilotLayers === 0) addCandidate()
+  const late = [
+    loadOptionalPatches(bin, join(profileDir, 'cordis.patch.yml')) ?? [],
+    loadOptionalPatches(bin, join(home, 'cordis.patch.yml')) ?? [],
+    ...patches.map(file => loadOverlayPatches(bin, file)),
+  ]
+  const warn = () => reasons.add('UNAPPLIED_PATCH_REQUIRES_REVIEW')
+  // Public composeEntries flattens each complete stack in one pass. Repeatedly
+  // patching a previously composed tree would change the include's id index.
+  const beforeGuard = composeEntries(layers.slice(0, candidateIndex), warn)
+  const baseline = composeEntries([...baselineLayers, ...late], warn)
+  for (const entries of [beforeGuard, baseline]) {
+    for (const reason of checkSearchComposition(entries).reasons) reasons.add(reason)
+  }
+  const entries = composeEntries([...layers, ...late], warn)
+  if (copilotLayers > 1 || accountRows(entries).length !== 1) reasons.add('DUPLICATE_COPILOT_ACCOUNT_ENTRY')
+  if (!candidateViable(entries, baseline)) reasons.add('CANDIDATE_ROUTING_NOT_VIABLE')
+  return reportCandidate(reasons)
 }
 
 function parse(args) {

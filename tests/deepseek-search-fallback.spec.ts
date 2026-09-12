@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
+import previewPlugin from '../src/preview-route.ts'
+import { GITHUB_COPILOT_CREDENTIAL_KEY } from '../src/copilot-identity.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import {
@@ -51,8 +54,9 @@ function harness(config: Config | undefined = {}, values: Record<string, string>
   })
   const append = vi.fn<(event: string, request: DeepSeekSearchLlmRequest) => void>()
   const owner = { session: { append } } as unknown as Agent
+  const canContinue = vi.fn(() => true)
   return {
-    ctx: { get } as unknown as Context, owner, append, get, resolve, settingsGet, environmentGet,
+    ctx: { get } as unknown as Context, owner, append, get, resolve, settingsGet, environmentGet, canContinue,
     setConfig: (value: Config | undefined) => { currentConfig = value },
     removeCredentials: () => { credentials = undefined },
   }
@@ -71,9 +75,94 @@ function sent(index = 0) {
 }
 
 describe('official DeepSeek fallback factory (keyless public-provider integration)', () => {
+  it.each(['expiry', 'silent revocation', 'unchanged', 'caller cancellation'] as const)(
+    'checks the actual managed proof after native fallback auth: %s', async change => {
+      const start = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+      const expires = start + 3_600_000
+      const initial = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-copilot-account',
+        access: 'synthetic-copilot-access', expires, availableModelIds: ['account-model'] } }
+      let current: typeof initial | undefined = initial
+      const previewOwner = new Context()
+      fetchMock.mockImplementation(async input => {
+        if (String(input).endsWith('/models')) return Response.json({ data: [{
+          id: 'account-model', name: 'Account model', model_picker_enabled: true, policy: { state: 'enabled' },
+          supported_endpoints: ['/responses'], capabilities: { supports: { streaming: true, tool_calls: true },
+            limits: { max_context_window_tokens: 128000, max_output_tokens: 8192 } },
+        }] })
+        return success()
+      })
+      try {
+        await previewOwner.plugin({ apply(ctx: Context) {
+          ctx.provide('credentials', {
+            readRecord: async () => current,
+            listRecords: async () => [{ key: GITHUB_COPILOT_CREDENTIAL_KEY, kind: 'grant' }],
+            deleteRecord: async () => { throw new Error('Synthetic fixture must not delete credentials') },
+            modifyRecord: async () => { throw new Error('No synthetic grant refresh permitted') },
+          } as unknown as Context['credentials'])
+        } })
+        await previewOwner.plugin(LlmRuntime)
+        await previewOwner.plugin(previewPlugin)
+        const preview = previewOwner.get('githubCopilotPreview')!
+        await preview.discover()
+        expect(preview.getView().error).toBeUndefined()
+        expect(preview.getView()).toMatchObject({ state: 'ready', available: true })
+        expect(preview.routeFacts('account-model')).toMatchObject({ api: 'openai-responses' })
+        const heldProof = preview.captureSearchProof()
+        const h = harness()
+        const pending = deferred<CredentialValue>()
+        const started = deferred<void>()
+        h.resolve.mockImplementationOnce(() => { started.resolve(); return pending.promise })
+        const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, heldProof)
+        fetchMock.mockClear()
+        const controller = new AbortController()
+        const search = provider.search({ query: 'pending fallback key' }, controller.signal)
+          .then(value => ({ value }), error => ({ error }))
+        await started.promise
+        expect(h.append).not.toHaveBeenCalled()
+        expect(fetchMock).not.toHaveBeenCalled()
+        if (change === 'expiry') clock.mockReturnValue(expires)
+        else if (change === 'silent revocation') {
+          current = undefined
+          // The actual private PreviewLifetime.change runs through a stored read;
+          // no record-updated notification and no router generation is simulated.
+          await preview.refresh()
+        } else if (change === 'caller cancellation') controller.abort()
+        pending.resolve({ value: 'synthetic-late-deepseek-key' })
+        const outcome = await search
+        const permitted = change === 'unchanged'
+        expect(h.append).toHaveBeenCalledTimes(permitted ? 1 : 0)
+        expect(fetchMock).toHaveBeenCalledTimes(permitted ? 1 : 0)
+        if (permitted) expect(outcome).toHaveProperty('value')
+        else expect(outcome).toMatchObject({ error: { code: change === 'caller cancellation' ? 'WEB_ABORTED' : 'WEB_PROVIDER_UNAVAILABLE' } })
+        if (change === 'expiry' || change === 'silent revocation') expect(heldProof()).toBe(false)
+      } finally {
+        await previewOwner.fiber.dispose()
+        clock.mockRestore()
+      }
+    },
+  )
+
+  it.each([false, true])('checks continuity after native literal-key auth (permitted=%s)', async permitted => {
+    const h = harness({ apiKey: 'synthetic-literal-key' })
+    fetchMock.mockResolvedValueOnce(success())
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
+    const search = provider.search({ query: 'literal key' })
+      .then(value => ({ value }), error => ({ error }))
+    // Native apiKey is async even for literal settings: change continuity before
+    // its continuation, without substituting the actual native provider class.
+    h.canContinue.mockReturnValue(permitted)
+    const outcome = await search
+    expect(h.resolve).not.toHaveBeenCalled()
+    expect(h.append).toHaveBeenCalledTimes(permitted ? 1 : 0)
+    expect(fetchMock).toHaveBeenCalledTimes(permitted ? 1 : 0)
+    if (permitted) expect(outcome).toHaveProperty('value')
+    else expect(outcome).toMatchObject({ error: { code: 'WEB_PROVIDER_UNAVAILABLE' } })
+  })
+
   it('composes the native provider lazily with no service reads, credential resolution or network', async () => {
     const h = harness()
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     expect(provider.id).toBe('deepseek-official')
     expect(h.get).not.toHaveBeenCalled()
     expect(h.resolve).not.toHaveBeenCalled()
@@ -94,7 +183,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
       DEEPSEEK_BASE_URL: 'https://chat-only.invalid/v1', DEEPSEEK_MODEL: 'chat-only-model',
     })
     fetchMock.mockResolvedValueOnce(success())
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await provider.search({ query: 'a query' })
     const request = sent()
     expect(request.endpoint).toBe(`${DEEPSEEK_DEFAULT_BASE_URL}/messages`)
@@ -115,7 +204,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
     const started = deferred<void>()
     h.resolve.mockImplementationOnce(() => { started.resolve(); return pending.promise })
     fetchMock.mockImplementation(async () => success())
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     const first = provider.search({ query: 'first query' })
     await started.promise
     // Even an in-place settings object update must not mix an old key with a new endpoint.
@@ -146,7 +235,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
     const startedA = deferred<void>()
     h.resolve.mockImplementationOnce(() => { startedA.resolve(); return keyA.promise })
     fetchMock.mockImplementation(async () => success())
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     const a = provider.search({ query: 'A' })
     await startedA.promise
     h.setConfig({ baseURL: 'https://b.invalid/v1', model: 'model-b' })
@@ -164,7 +253,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
     const h = harness({ apiKeyEnv: 'SEARCH_KEY' }, { SEARCH_KEY: 'synthetic-env-key' })
     h.resolve.mockResolvedValueOnce({ value: 'synthetic-service-one' }).mockResolvedValueOnce({ value: 'synthetic-service-two' })
     fetchMock.mockImplementation(async () => success())
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await provider.search({ query: 'one' })
     await provider.search({ query: 'two' })
     expect(h.resolve.mock.calls).toEqual([['SEARCH_KEY'], ['SEARCH_KEY']])
@@ -176,7 +265,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   it.each([undefined, { value: '' }])('does not fall through an empty credentials service result to environment: %j', async value => {
     const h = harness({}, { DEEPSEEK_API_KEY: 'synthetic-env-key' })
     h.resolve.mockResolvedValue(value)
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     expect(provider.available()).toBe(true) // Synchronous capability, not auth readiness.
     await expect(provider.search({ query: 'test' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CREDENTIAL_MISSING' })
     expect(h.environmentGet).not.toHaveBeenCalledWith('DEEPSEEK_API_KEY')
@@ -187,7 +276,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   it('does not retry failed credential resolution or fall through to environment', async () => {
     const h = harness({}, { DEEPSEEK_API_KEY: 'synthetic-env-key' })
     h.resolve.mockRejectedValueOnce(new Error('synthetic credential service failure'))
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await expect(provider.search({ query: 'test' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     expect(h.resolve).toHaveBeenCalledOnce()
     expect(h.environmentGet).not.toHaveBeenCalledWith('DEEPSEEK_API_KEY')
@@ -199,7 +288,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
     const h = harness({ apiKeyEnv: 'SEARCH_KEY' }, { SEARCH_KEY: 'synthetic-env-key', DEEPSEEK_SEARCH_BASE_URL: 'https://environment.invalid/anthropic/v1' })
     h.removeCredentials()
     fetchMock.mockResolvedValueOnce(success())
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await provider.search({ query: 'test' })
     expect(sent().endpoint).toBe('https://environment.invalid/anthropic/v1/messages')
     expect(sent().headers.get('x-api-key')).toBe('synthetic-env-key')
@@ -210,7 +299,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   it.each([undefined, ''])('rejects missing/empty launch credentials without dispatch: %j', async value => {
     const h = harness({}, value === undefined ? {} : { DEEPSEEK_API_KEY: value })
     h.removeCredentials()
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await expect(provider.search({ query: 'test' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CREDENTIAL_MISSING' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -220,7 +309,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
       DEEPSEEK_API_KEY: 'synthetic-env-key', DEEPSEEK_SEARCH_BASE_URL: 'https://environment.invalid/anthropic/v1',
     })
     fetchMock.mockResolvedValueOnce(success())
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await provider.search({ query: 'test' })
     expect(sent().endpoint).toBe('https://configured.invalid/anthropic/v1/messages')
     expect(sent().headers.get('x-api-key')).toBe('synthetic-literal-key')
@@ -232,7 +321,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   it('treats an empty literal key as absent and sees replacement settings on reuse', async () => {
     const h = harness({ apiKey: '' })
     fetchMock.mockImplementation(async () => success())
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await provider.search({ query: 'one' })
     h.setConfig({ apiKey: 'synthetic-new-literal', model: 'new-model' })
     await provider.search({ query: 'two' })
@@ -253,7 +342,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
       return success()
     })
     let currentOwner = h.owner
-    const provider = await createDeepSeekSearchFallback(h.ctx, currentOwner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, currentOwner, h.canContinue)
     const search = provider.search({ query: 'query supplied to the auxiliary model' })
     await started.promise
     currentOwner = other.owner
@@ -273,7 +362,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   it('does not look up a substitute owner when none was captured', async () => {
     const h = harness()
     fetchMock.mockResolvedValueOnce(success())
-    const provider = await createDeepSeekSearchFallback(h.ctx, undefined)
+    const provider = await createDeepSeekSearchFallback(h.ctx, undefined, h.canContinue)
     await provider.search({ query: 'test' })
     expect(h.append).not.toHaveBeenCalled()
     expect(h.get).not.toHaveBeenCalledWith('agents')
@@ -283,7 +372,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
     const h = harness()
     const failure = new Error('synthetic append failure')
     h.append.mockImplementation(() => { throw failure })
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await expect(provider.search({ query: 'test' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -292,7 +381,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
     const h = harness()
     const controller = new AbortController()
     controller.abort(new Error('caller cancelled'))
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await expect(provider.search({ query: 'test' }, controller.signal)).rejects.toMatchObject({ code: 'WEB_ABORTED' })
     expect(h.resolve).not.toHaveBeenCalled()
     expect(h.environmentGet).not.toHaveBeenCalledWith('DEEPSEEK_API_KEY')
@@ -305,7 +394,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
     const pending = deferred<CredentialValue>()
     const started = deferred<void>()
     h.resolve.mockImplementationOnce(() => { started.resolve(); return pending.promise })
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     const controller = new AbortController()
     const search = provider.search({ query: 'test' }, controller.signal)
     const rejected = expect(search).rejects.toMatchObject({ code: 'WEB_ABORTED' })
@@ -331,7 +420,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
       started.resolve()
       return new Promise((_resolve, reject) => { init!.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true }) })
     })
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     const search = provider.search({ query: 'test' }, controller.signal)
     const rejected = expect(search).rejects.toMatchObject({ code: 'WEB_ABORTED' })
     await started.promise
@@ -343,7 +432,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   it('does not retry a refused redirect or invent another transport', async () => {
     const h = harness()
     fetchMock.mockRejectedValueOnce(new TypeError('fetch failed: unexpected redirect'))
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     await expect(provider.search({ query: 'test' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     expect(sent().init.redirect).toBe('error')
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -361,7 +450,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   ])('rejects unsafe or malformed API bases before auth/recording/fetch: %s', async baseURL => {
     for (const source of ['settings', 'environment'] as const) {
       const h = harness(source === 'settings' ? { baseURL } : {}, source === 'environment' ? { DEEPSEEK_SEARCH_BASE_URL: baseURL } : {})
-      const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+      const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
       expect(h.get).not.toHaveBeenCalled() // Validation stays lazy too.
       const error = await provider.search({ query: 'test' }).catch((reason: unknown) => reason)
       expect(error).toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
@@ -377,7 +466,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   it.each(['https://example.test/custom%3Fpath/v1', 'http://localhost:1234/custom/v1'])('preserves allowed HTTP(S) base paths without rewriting or a host allowlist: %s', async baseURL => {
     const h = harness({ baseURL })
     fetchMock.mockResolvedValueOnce(success())
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     expect(provider.available()).toBe(true)
     await provider.search({ query: 'test' })
     expect(sent().endpoint).toBe(`${baseURL}/messages`)
@@ -385,7 +474,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
 
   it.each([{ maxTokens: 0 }, { maxUses: -1 }, { maxUses: 1.5 }])('retains official availability validation without auth/network: %j', async config => {
     const h = harness(config)
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     expect(provider.available()).toBe(false)
     expect(h.resolve).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
@@ -404,7 +493,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
         { type: 'web_search_result', url: 'https://example.test/b', title: 'B' },
       ] },
     ] }))
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     // The official web seam owns maxResults truncation, not this provider factory.
     await expect(provider.search({ query: 'test', maxResults: 1 })).resolves.toMatchObject({ content: expect.stringContaining('origin=https://api.deepseek.com'), sources: [
       { url: 'https://example.test/a', title: 'A', publishedAt: '2026-01-01', snippet: 'first excerpt' },
@@ -416,7 +505,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   it('sanitizes native HTTP error detail while retaining safe backend metadata without retry', async () => {
     const h = harness()
     fetchMock.mockResolvedValueOnce(Response.json({ error: { message: 'synthetic upstream failure detail' } }, { status: 503 }))
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     const error = await provider.search({ query: 'test' }).catch((reason: unknown) => reason)
     expect(error).toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     expect(String(error)).not.toContain('synthetic upstream failure detail')
@@ -431,7 +520,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
   it('rejects prose-only responses without leaking their text or retrying', async () => {
     const h = harness()
     fetchMock.mockResolvedValueOnce(Response.json({ content: [{ type: 'text', text: 'synthetic-private-response-body' }] }))
-    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner)
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
     const error = await provider.search({ query: 'test' }).catch((reason: unknown) => reason)
     expect(error).toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     expect(String(error)).not.toContain('synthetic-private-response-body')

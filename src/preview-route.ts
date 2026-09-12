@@ -43,6 +43,8 @@ export interface GitHubCopilotPreview {
   getView(): GitHubCopilotPreviewView
   /** Host-only current endpoint facts; no discovery and no credential material. */
   routeFacts(modelId: string): { readonly api: string; readonly baseURL: string } | undefined
+  /** Capture credential-proof continuity, independent of ordinary metadata cache TTL. */
+  captureSearchProof(): () => boolean
   /** Host-only credential resolution for an independent, account-scoped search request. */
   resolveRequestAuth(modelId: string, signal?: AbortSignal): Promise<{ readonly apiKey: string; readonly baseURL: string; readonly headers: Readonly<Record<string, string>> }>
   /** Read stored credentials/status only; never starts native refresh or discovery. */
@@ -81,6 +83,7 @@ class PreviewLifetime {
     readonly proofFor: (snapshot: AccountModelSnapshot) => Proof | undefined,
     private readonly displayProofFor: (snapshot: AccountModelSnapshot) => Proof | undefined) {}
   assertActive(): void { if (!this.active) throw failure('COPILOT_PREVIEW_DISPOSED', 'ABORTED') }
+  isCurrent(revision: number): boolean { return this.active && revision === this.revision }
   change(): void {
     this.assertActive()
     this.revision++
@@ -316,23 +319,36 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   let provenSnapshot: AccountModelSnapshot | undefined
   let snapshotProof: Proof | undefined
   const source: AccountModelSource = createAccountModelSource({
-    ...nativeAuth, nativeApis, headers: copilotPublicHeaders(),
+    nativeApis, headers: copilotPublicHeaders(),
     ttlMs: () => cacheSettings().accountModelTtlMs ?? 86_400_000,
     failureCooldownMs: () => cacheSettings().accountModelFailureCooldownMs ?? 300_000,
-    async assertAuthCurrent(auth, signal) {
-      await nativeAuth.assertAuthCurrent(auth, signal)
-      const stored = await store.read(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
-      if (signal.aborted || stored?.type !== 'oauth') throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
-      const grant = normalizeGitHubCopilotOAuthCredential(stored)
-      if (copilotAccountKey(grant) !== auth.accountKey || grant.access !== auth.apiKey || grant.expires <= Date.now()) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
-      const entitlementKey = copilotEntitlementKey({ ...auth.availableModelIds === undefined ? {} : { availableModelIds: [...auth.availableModelIds] } })
-      if (copilotEntitlementKey(grant) !== entitlementKey) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
-      if (source.readDisplaySnapshot() !== undefined && snapshotProof !== undefined && (snapshotProof.accountKey !== auth.accountKey
-        || snapshotProof.entitlementKey !== entitlementKey || snapshotProof.tokenFingerprint !== tokenFingerprint(auth.apiKey))) {
-        lifetime.change()
-        throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
+    async resolveAuth(signal) {
+      try { return await nativeAuth.resolveAuth(signal) }
+      catch (error) {
+        if (!signal.aborted) lifetime.change()
+        throw error
       }
-      lastValidatedProof = Object.freeze({ accountKey: auth.accountKey, entitlementKey, tokenFingerprint: tokenFingerprint(auth.apiKey), baseURL: auth.baseURL, expires: grant.expires })
+    },
+    async assertAuthCurrent(auth, signal) {
+      try {
+        await nativeAuth.assertAuthCurrent(auth, signal)
+        const stored = await store.read(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+        if (signal.aborted || stored?.type !== 'oauth') throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
+        const grant = normalizeGitHubCopilotOAuthCredential(stored)
+        if (copilotAccountKey(grant) !== auth.accountKey || grant.access !== auth.apiKey || grant.expires <= Date.now()) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
+        const entitlementKey = copilotEntitlementKey({ ...auth.availableModelIds === undefined ? {} : { availableModelIds: [...auth.availableModelIds] } })
+        if (copilotEntitlementKey(grant) !== entitlementKey) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
+        if (source.readDisplaySnapshot() !== undefined && snapshotProof !== undefined && (snapshotProof.accountKey !== auth.accountKey
+          || snapshotProof.entitlementKey !== entitlementKey || snapshotProof.tokenFingerprint !== tokenFingerprint(auth.apiKey))) {
+          throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
+        }
+        lastValidatedProof = Object.freeze({ accountKey: auth.accountKey, entitlementKey, tokenFingerprint: tokenFingerprint(auth.apiKey), baseURL: auth.baseURL, expires: grant.expires })
+      } catch (error) {
+        // Discovery sanitizes errors into a view. Revoke continuity first so a
+        // caller cannot mistake failed auth validation for ordinary unavailability.
+        if (!signal.aborted) lifetime.change()
+        throw error
+      }
     },
   })
   const displayProofFor = (snapshot: AccountModelSnapshot): Proof | undefined => source.readDisplaySnapshot() === snapshot
@@ -475,6 +491,17 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
   }
   ctx.provide('githubCopilotPreview', { getView, refresh,
+    captureSearchProof() {
+      const revision = lifetime.revision
+      const captured = snapshotProof
+      const expires = captured !== undefined && captured.expires > Date.now() ? captured.expires : undefined
+      // Metadata TTL/refresh is not credential revocation. Retain a live grant's
+      // deadline even if discovery replaces its metadata. Already-expired/cold
+      // facts may enter discovery, whose stored read still revokes this revision.
+      return () => lifetime.isCurrent(revision)
+        && (expires === undefined || expires > Date.now())
+        && (snapshotProof === captured || snapshotProof === undefined || snapshotProof.expires > Date.now())
+    },
     routeFacts(modelId) {
       const snapshot = source.readSnapshot()
       const proof = snapshot === undefined ? undefined : proofFor(snapshot)

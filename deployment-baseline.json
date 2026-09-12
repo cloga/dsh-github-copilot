@@ -160,7 +160,9 @@
       "tests": [
         {"file": "tests/scripts/search-composition.test.mjs", "name": "admits a stock top-level official service without mutating or exposing its config"},
         {"file": "tests/scripts/search-composition.test.mjs", "name": "includes home and launcher layers instead of ignoring a late web override"},
-        {"file": "tests/scripts/search-composition.test.mjs", "name": "CLI uses real public parsers without profile initialization, normalization or secret output"}
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "CLI rejects disposable root-only web without initialization, normalization or secret output"},
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "real public parsers validate candidate layers and preserve every input file"},
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "rejects a web bundle ordered after the Copilot guard"}
       ]
     },
     {
@@ -190,7 +192,9 @@
       "tests": [
         {"file": "tests/search-routing.spec.ts", "name": "does not spend fallback credits unless explicitly enabled"},
         {"file": "tests/search-routing.spec.ts", "name": "does not fallback when the primary reports cancellation"},
-        {"file": "tests/routed-web.spec.ts", "name": "preserves fallback provenance in canonical value, rendered content and web-card metadata"}
+        {"file": "tests/routed-web.spec.ts", "name": "preserves fallback provenance in canonical value, rendered content and web-card metadata"},
+        {"file": "tests/deepseek-search-fallback.spec.ts", "name": "checks the actual managed proof after native fallback auth: %s"},
+        {"file": "tests/deepseek-search-fallback.spec.ts", "name": "checks continuity after native literal-key auth (permitted=%s)"}
       ]
     },
     {

@@ -9,7 +9,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, GITHUB_COPILOT_SETTINGS_NAMESPACE } from '../../src/index.ts'
 import type { InlineConfig } from '../../src/config.ts'
 import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { markAgentLoopRequest, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { markAgentLoopRequest, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import previewPlugin from '../../src/preview-route.ts'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { agentEvents, installModelSelection } from '@deepseek-ai/dsh-agent'
 import { createRequire } from 'node:module'
@@ -155,7 +156,11 @@ function buildRuntime(
   const store = new Map<string, unknown>([
     ['agents', registry ?? { currentInitiator: () => selectionRef.current === null ? undefined : initiatingAgent }],
     ['settings', fake.settings],
-    ['githubCopilotPreview', mountedPreview],
+    // Older synthetic fixtures have no credential lifetime. Real preview services
+    // retain their identity and actual captureSearchProof implementation.
+    ['githubCopilotPreview', typeof mountedPreview === 'object' && mountedPreview !== null
+      && !('captureSearchProof' in mountedPreview)
+      ? { ...mountedPreview, captureSearchProof: () => () => true } : mountedPreview],
     // Keep the legacy global service present, but search must not consult it.
     // Tests supplying a real registry give this default an unrelated C route.
     ['agentDefaultModel', {
@@ -972,6 +977,195 @@ describe.each(['inline', 'web'] as const)('%s credential proof cache lifecycle',
 })
 
 describe('session search router Host integration', () => {
+  it.each(['trust override', 'cached success', 'fresh probe'].flatMap(mode => [
+    ...['expiry', 'missing', 'access', 'entitlement', 'account'].map(change => ({ mode, change, stage: 'lease' })),
+    { mode, change: 'access', stage: 'native final assertion' },
+    { mode, change: 'metadata TTL', stage: 'final entitlement assertion' },
+    { mode, change: 'access', stage: 'discovery native assertion' },
+    { mode, change: 'missing', stage: 'discovery read' },
+    { mode, change: 'missing', stage: 'discovery native resolution' },
+  ]))(
+    'rejects silent managed proof $change during $stage with $mode before any paid fallback', async ({ mode, change, stage }) => {
+      const start = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+      const expires = start + 3_600_000
+      const record = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-account',
+        access: 'synthetic-access', expires, availableModelIds: ['account-model'] } }
+      let current: typeof record | undefined = record
+      const owner = new Context()
+      let readsUntilChange = 0
+      const credentialRead = vi.fn(async () => {
+        if (readsUntilChange > 0 && --readsUntilChange === 0) {
+          // A stored-record read really crosses an await. No credentials event is
+          // emitted: only PreviewLifetime can observe and revoke this proof.
+          await Promise.resolve()
+          if (change === 'expiry') clock.mockReturnValue(expires)
+          else if (change === 'metadata TTL') clock.mockReturnValue(start + 1000)
+          else if (change === 'missing') current = undefined
+          else current = { ...record, payload: { ...record.payload,
+            ...change === 'access' ? { access: 'synthetic-rotated' }
+              : change === 'account' ? { refresh: 'synthetic-other-account' } : { availableModelIds: [] },
+          } }
+        }
+        return current
+      })
+      const fetchMock = vi.fn(async (input: unknown, _init?: RequestInit) => {
+        if (String(input).endsWith('/models')) return new Response(JSON.stringify({ data: [{
+          id: 'account-model', name: 'Account model', model_picker_enabled: true,
+          policy: { state: 'enabled' }, supported_endpoints: ['/responses'],
+          capabilities: { supports: { streaming: true, tool_calls: true },
+            limits: { max_context_window_tokens: 128000, max_output_tokens: 8192 } },
+        }] }))
+        if (String(input).includes('deepseek-search.test')) return new Response(JSON.stringify({ content: [{
+          type: 'web_search_tool_result', tool_use_id: 'search',
+          content: [{ type: 'web_search_result', url: 'https://example.com/fallback', title: 'Fallback' }],
+        }] }))
+        if (String(input).endsWith('/responses')) return new Response(JSON.stringify({ output: [
+          { type: 'web_search_call' }, { type: 'message', content: [{ type: 'output_text', text: 'Copilot result' }] },
+        ] }))
+        throw new Error('Unexpected synthetic endpoint')
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      let runtime: FakeRuntime | undefined
+      try {
+        await owner.plugin({ apply(ctx: Context) {
+          ctx.provide('credentials', { readRecord: credentialRead,
+            listRecords: async () => [{ key: credentialKey, kind: 'grant' }],
+            deleteRecord: async () => { throw new Error('Synthetic fixture must not delete credentials') },
+            modifyRecord: vi.fn(async () => { throw new Error('No synthetic grant refresh permitted') }),
+          } as unknown as Context['credentials'])
+        } })
+        await owner.plugin(LlmRuntime)
+        await owner.plugin(previewPlugin, { accountModelTtlMs: 1000 })
+        const preview = owner.get('githubCopilotPreview')!
+        await preview.discover()
+        expect(preview.routeFacts('account-model')).toMatchObject({ api: 'openai-responses' })
+        // Measure the installed native implementation's read boundaries, instead
+        // of assuming a particular Core/pi-ai internal getAuth read count.
+        credentialRead.mockClear()
+        await preview.resolveRequestAuth('account-model')
+        const authReads = credentialRead.mock.calls.length
+        credentialRead.mockClear()
+        await preview.discover({ force: true })
+        const discoveryReads = credentialRead.mock.calls.length
+        const heldProof = preview.captureSearchProof()
+        runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }, {
+          'web-search-deepseek': { baseURL: 'https://deepseek-search.test/v1', apiKeyEnv: 'SYNTHETIC_KEY' },
+        }, preview)
+        apply(runtime.ctx, { ...config, probe: mode !== 'trust override', searchFallback: 'deepseek' })
+        const router = runtime.ctx.get('githubCopilotSearchRouter')!
+        if (mode === 'cached success') await router.search({ query: 'warm probe' }, undefined, vi.fn())
+        fetchMock.mockClear()
+        runtime.credentialResolve.mockClear()
+        // webPlan contributes one initial read before resolveRequestAuth. The
+        // last native auth read is followed by its check and final assertEntitled.
+        readsUntilChange = stage === 'discovery read' ? 1 : stage === 'lease' ? 3 : authReads + 1
+        if (stage === 'discovery native assertion') {
+          clock.mockReturnValue(start + 1000)
+          // Source's native assertion precedes its final extra stored-grant read.
+          readsUntilChange = discoveryReads - 1
+        } else if (stage === 'discovery native resolution') {
+          clock.mockReturnValue(start + 1000)
+          readsUntilChange = 2
+        }
+        const outcome = await router.search({ query: 'invalid account proof' }, undefined, vi.fn())
+          .then(value => ({ value }), error => ({ error }))
+        expect(readsUntilChange).toBe(0)
+        expect(runtime.credentialResolve).not.toHaveBeenCalled()
+        // A TTL-triggered metadata GET is not a Copilot search/probe or paid wire.
+        expect(fetchMock.mock.calls.filter(([url]) => !String(url).endsWith('/models'))).toHaveLength(0)
+        expect(outcome).toHaveProperty('error')
+        if (change === 'metadata TTL') expect(heldProof()).toBe(true)
+        if (stage !== 'native final assertion') expect(preview.routeFacts('account-model')).toBeUndefined()
+      } finally {
+        runtime?.dispose()
+        await owner.fiber.dispose()
+        clock.mockRestore()
+      }
+    },
+  )
+
+  it.each(['metadata TTL refresh', 'unsupported protocol', 'hosted transport failure', 'expiry during transport'] as const)(
+    'distinguishes managed credential revocation from %s', async control => {
+      const start = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+      const expires = start + 3_600_000
+      const owner = new Context()
+      const grant = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-account',
+        access: 'synthetic-access', expires, availableModelIds: ['account-model'] } }
+      const fetchMock = vi.fn(async (input: unknown, _init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/models')) return new Response(JSON.stringify({ data: [{
+          id: 'account-model', name: 'Account model', model_picker_enabled: true, policy: { state: 'enabled' },
+          supported_endpoints: [control === 'unsupported protocol' ? '/chat/completions' : '/responses'],
+          capabilities: { supports: { streaming: true, tool_calls: true },
+            limits: { max_context_window_tokens: 128000, max_output_tokens: 8192 } },
+        }] }))
+        if (url === 'https://deepseek-search.test/v1/messages') return new Response(JSON.stringify({ content: [{
+          type: 'web_search_tool_result', tool_use_id: 'search',
+          content: [{ type: 'web_search_result', url: 'https://example.com/fallback', title: 'Fallback' }],
+        }] }))
+        if (url.endsWith('/responses')) {
+          if (control === 'expiry during transport') clock.mockReturnValue(expires)
+          if (control === 'hosted transport failure' || control === 'expiry during transport') {
+            throw new Error('Synthetic hosted search transport failure')
+          }
+          return new Response(JSON.stringify({ output: [
+            { type: 'web_search_call' }, { type: 'message', content: [{ type: 'output_text', text: 'Copilot result' }] },
+          ] }))
+        }
+        throw new Error('Unexpected synthetic endpoint')
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      let runtime: FakeRuntime | undefined
+      try {
+        await owner.plugin({ apply(ctx: Context) {
+          ctx.provide('credentials', { readRecord: async () => grant,
+            listRecords: async () => [{ key: credentialKey, kind: 'grant' }],
+            deleteRecord: async () => { throw new Error('Synthetic fixture must not delete credentials') },
+            modifyRecord: vi.fn(async () => { throw new Error('No synthetic grant refresh permitted') }),
+          } as unknown as Context['credentials'])
+        } })
+        await owner.plugin(LlmRuntime)
+        await owner.plugin(previewPlugin, { accountModelTtlMs: 1000 })
+        const preview = owner.get('githubCopilotPreview')!
+        await preview.discover()
+        expect(preview.getView().available).toBe(true)
+        const heldProof = preview.captureSearchProof()
+        runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }, {
+          'web-search-deepseek': { baseURL: 'https://deepseek-search.test/v1', apiKeyEnv: 'SYNTHETIC_KEY' },
+        }, preview)
+        apply(runtime.ctx, { ...config, searchFallback: 'deepseek' })
+        if (control === 'metadata TTL refresh') {
+          clock.mockReturnValue(start + 1000)
+          expect(heldProof()).toBe(true)
+        }
+        const search = runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'control' }, undefined, vi.fn())
+        if (control === 'expiry during transport') {
+          await expect(search).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+          expect(heldProof()).toBe(false)
+        } else {
+          const result = await search
+          if (control === 'metadata TTL refresh') {
+            expect(result.content).toBe('Copilot result')
+            expect(heldProof()).toBe(true)
+            expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/models'))).toHaveLength(2)
+          } else {
+            expect(result.content).toContain('deepseek-official')
+            expect(result.content).toContain('DeepSeek API charges')
+          }
+        }
+        const permitted = control === 'unsupported protocol' || control === 'hosted transport failure'
+        expect(runtime.credentialResolve).toHaveBeenCalledTimes(permitted ? 1 : 0)
+        expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('deepseek-search.test'))).toHaveLength(permitted ? 1 : 0)
+      } finally {
+        runtime?.dispose()
+        await owner.fiber.dispose()
+        clock.mockRestore()
+      }
+    },
+  )
+
   it('requires user-facing fallback disclosure only for routed Copilot prompt assemblies', async () => {
     const runtime = buildRuntime()
     runtime.ctx.provide('githubCopilotOriginalWeb', {})

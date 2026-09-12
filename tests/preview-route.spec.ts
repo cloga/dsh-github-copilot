@@ -110,6 +110,38 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
 
 describe('plugin-owned account Copilot route', () => {
+  it('captures credential continuity without treating metadata TTL as revocation or blocking cold discovery', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    try {
+      const harness = await runtime(grant({ expires: start + 3_600_000 }), { accountModelTtlMs: 1000 })
+      const service = harness.ctx.get('githubCopilotPreview')!
+      const cold = service.captureSearchProof()
+      expect(cold()).toBe(true)
+      await service.discover()
+      expect(service.routeFacts(MODEL)).toBeDefined()
+      const warm = service.captureSearchProof()
+      clock.mockReturnValue(start + 1000)
+      expect(warm()).toBe(true)
+      expect(service.routeFacts(MODEL)).toBeUndefined()
+      await service.discover()
+      expect(service.routeFacts(MODEL)).toBeDefined()
+      expect(warm()).toBe(true)
+      expect(cold()).toBe(true)
+      clock.mockReturnValue(start + 3_600_000)
+      expect(warm()).toBe(false)
+      expect(cold()).toBe(false)
+      // This is admission to discovery, not permission to use expired auth.
+      // The next stored read revokes the revision, without a credential event.
+      const expired = service.captureSearchProof()
+      expect(expired()).toBe(true)
+      await service.refresh()
+      expect(expired()).toBe(false)
+      expect(service.routeFacts(MODEL)).toBeUndefined()
+      expect(discoveryRequests).toHaveLength(2)
+    } finally { clock.mockRestore() }
+  })
+
   it('discovers mixed and unseen account models without model-name routing rules', async () => {
     const items = [catalogItem(MODEL), catalogItem('gemini-3.8-flash', '/chat/completions'),
       catalogItem('gpt-5.6-sol-fast'), catalogItem('future-lab-r17', '/v1/messages'),
