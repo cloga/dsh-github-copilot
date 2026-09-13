@@ -10,6 +10,8 @@ export interface CompactAccountRemote {
   reconcile(): Promise<unknown>
 }
 type Operation = 'start' | 'cancel' | 'signOut' | 'discoverModels' | 'reconcile'
+export const AUTHORIZATION_POLL_INITIAL_MS = 500
+export const AUTHORIZATION_POLL_MAX_MS = 2_000
 export interface CompactAccountSnapshot {
   readonly view: View | undefined
   readonly checking: boolean
@@ -43,6 +45,8 @@ export function createCompactAccount(
   let initialStatus = true, invalidation = 0
   let statusTicket: number | undefined
   let pendingStart: Promise<boolean> | undefined
+  let pendingStatus: { readonly ticket: number; readonly promise: Promise<void> } | undefined
+  let pollDelayMs = AUTHORIZATION_POLL_INITIAL_MS
   let timer: ReturnType<typeof setTimeout> | undefined
   const listeners = new Set<() => void>()
   const publish = (patch: Partial<CompactAccountSnapshot>) => {
@@ -102,41 +106,67 @@ export function createCompactAccount(
   const schedulePoll = () => {
     stopTimer()
     if (!active || state.operation !== undefined || !state.view?.inFlight) return
-    timer = setTimeout(() => { timer = undefined; void readStatus(false) }, 500)
+    timer = setTimeout(() => { timer = undefined; void readStatus(false) }, pollDelayMs)
+    pollDelayMs = Math.min(pollDelayMs * 2, AUTHORIZATION_POLL_MAX_MS)
   }
-  const readStatus = async (checking: boolean): Promise<void> => {
-    if (!active || state.operation !== undefined) return
+  const readStatus = (checking: boolean): Promise<void> => {
+    if (!active || state.operation !== undefined) return Promise.resolve()
+    if (pendingStatus !== undefined) {
+      if (current(pendingStatus.ticket)) {
+        if (checking && !state.checking) publish({ checking: true })
+        return pendingStatus.promise
+      }
+      // Remote has no cancellation contract. Drain obsolete reads without
+      // accepting their data or multiplying requests across lifetimes.
+      const owner = lifetime
+      return pendingStatus.promise.then(() => {
+        if (active && lifetime === owner) return readStatus(checking)
+      })
+    }
     const ticket = ++generation, revision = invalidation
     statusTicket = ticket
     stopTimer()
-    if (checking) publish({ checking: true, error: undefined })
-    let success = false, discover = false, ensure = false
-    try {
-      const result = await remote.status()
-      if (!current(ticket) || revision !== invalidation) return
-      const decoded = resultView(result)
-      discover = completedSignIn(decoded)
-      // Consume before publishing; retries, event-driven reads and surface
-      // transfers cannot turn this into an automatic discovery loop.
-      ensure = initialStatus && decoded.phase === 'signed-in' && decoded.configured
-        && !decoded.inFlight && decoded.error === undefined
-        && (decoded.accountModels === undefined || ['idle', 'stale', 'error', 'loading'].includes(decoded.accountModels.state))
-      initialStatus = false
-      accept(decoded, 'status')
-      success = true
-    } catch {
-      if (current(ticket) && revision === invalidation) publish({ error: failures.status })
-    } finally {
-      if (current(ticket)) {
-        statusTicket = undefined
-        if (revision !== invalidation) { await readStatus(true); return }
-        publish({ checking: false })
-        if (success && current(ticket)) {
-          if (discover || ensure) await run('discoverModels', !discover)
-          else schedulePoll()
+    let resolve!: () => void, reject!: (error: unknown) => void
+    const promise = new Promise<void>((done, fail) => { resolve = done; reject = fail })
+    const request = { ticket, promise }
+    pendingStatus = request
+    if (checking) {
+      pollDelayMs = AUTHORIZATION_POLL_INITIAL_MS
+      publish({ checking: true, error: undefined })
+    }
+    const execute = async () => {
+      let success = false, discover = false, ensure = false
+      try {
+        if (!current(ticket)) return
+        const result = await remote.status()
+        if (!current(ticket) || revision !== invalidation) return
+        const decoded = resultView(result)
+        discover = completedSignIn(decoded)
+        // Consume before publishing; retries, event-driven reads and surface
+        // transfers cannot turn this into an automatic discovery loop.
+        ensure = initialStatus && decoded.phase === 'signed-in' && decoded.configured
+          && !decoded.inFlight && decoded.error === undefined
+          && (decoded.accountModels === undefined || ['idle', 'stale', 'error', 'loading'].includes(decoded.accountModels.state))
+        initialStatus = false
+        accept(decoded, 'status')
+        success = true
+      } catch {
+        if (current(ticket) && revision === invalidation) publish({ error: failures.status })
+      } finally {
+        if (pendingStatus === request) pendingStatus = undefined
+        if (current(ticket)) {
+          statusTicket = undefined
+          if (revision !== invalidation) { await readStatus(true); return }
+          publish({ checking: false })
+          if (success && current(ticket)) {
+            if (discover || ensure) await run('discoverModels', !discover)
+            else schedulePoll()
+          }
         }
       }
     }
+    void execute().then(resolve, reject)
+    return promise
   }
   const run = async (operation: Operation, ensure = false): Promise<void> => {
     if (!active) return
@@ -161,6 +191,7 @@ export function createCompactAccount(
     if (thisStart !== undefined) pendingStart = thisStart
     awaitingSignIn = operation === 'start'
     stopTimer()
+    pollDelayMs = AUTHORIZATION_POLL_INITIAL_MS
     if (operation === 'start') suppressNotice = false
     if (operation === 'cancel') suppressNotice = true
     if (['start', 'cancel', 'signOut'].includes(operation)) clearPrivateView()
@@ -211,6 +242,7 @@ export function createCompactAccount(
       const owner = ++lifetime
       active = true; generation++; copyGeneration++; suppressNotice = false; pendingStart = undefined; awaitingSignIn = false
       initialStatus = true; invalidation++; statusTicket = undefined
+      pollDelayMs = AUTHORIZATION_POLL_INITIAL_MS
       stopTimer(); state = initial()
       void readStatus(true)
       return () => {
@@ -226,7 +258,7 @@ export function createCompactAccount(
       publish({ view: undefined, checking: true, error: undefined, copyState: 'idle' })
       if (state.operation === undefined && statusTicket === undefined) void readStatus(true)
     },
-    retryStatus: () => state.checking ? Promise.resolve() : readStatus(true),
+    retryStatus: () => readStatus(true),
     start: () => run('start'), cancel: () => run('cancel'), signOut: () => run('signOut'),
     refreshModels: () => run('discoverModels'), reconcile: () => run('reconcile'),
     async copyCode(): Promise<void> {
