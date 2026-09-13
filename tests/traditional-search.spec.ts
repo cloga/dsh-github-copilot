@@ -32,6 +32,34 @@ afterEach(() => {
 })
 
 describe('traditional search bridge', () => {
+  it('invokes an async plan resolver at entry and bounds metadata preparation by caller cancellation', async () => {
+    let release!: (plan: SearchPlan) => void
+    let activeModel = 'model-A'
+    let capturedModel: string | undefined
+    let capturedSignal: AbortSignal | undefined
+    const resolvePlan = vi.fn((signal?: AbortSignal) => {
+      capturedModel = activeModel
+      capturedSignal = signal
+      return new Promise<SearchPlan>(resolve => { release = resolve })
+    })
+    const resolveApiKey = vi.fn(async () => 'synthetic')
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const searchProvider = createTraditionalSearchProvider(() => true, resolvePlan, { resolveApiKey }, () => config)
+    const controller = new AbortController()
+    const pending = searchProvider.search({ query: 'news' }, controller.signal)
+    expect(resolvePlan).toHaveBeenCalledTimes(1)
+    expect(capturedModel).toBe('model-A')
+    activeModel = 'model-B'
+    controller.abort()
+    expect(capturedSignal?.aborted).toBe(true)
+    await expect(pending).rejects.toMatchObject({ code: 'WEB_ABORTED' })
+    release(new SearchPlan([makeCandidate('openai-responses')], async () => ({ supported: true, detail: 'unused' }), false))
+    await Promise.resolve()
+    expect(resolveApiKey).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('normalizes generated content and deduplicated sources', async () => {
     const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.3"
+    "version": "0.4.0-alpha.16"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -19,11 +19,11 @@
     "platforms": ["windows", "linux"],
     "node": ">=22.19.0",
     "dsh": {
-      "release": "0.1.3-alpha.1",
-      "tag": "dsh-v0.1.3-alpha.1",
-      "commit": "d347e703908d0406b7a7ef80e3a0e594d86b2215",
+      "release": "0.1.5-alpha.2",
+      "tag": "dsh-v0.1.5-alpha.2",
+      "commit": "b2e3b2a0125854567a4a5fcba75782e42fe84901",
       "developmentRelease": "0.1.2-rc.1",
-      "peerRange": "0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1",
+      "peerRange": "0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2",
       "baselines": [
         {
           "release": "0.1.1-rc.2",
@@ -60,6 +60,65 @@
           "evidenceScope": "unchanged-tagged-source-target",
           "standaloneNpmArtifacts": "not-published",
           "managedProviderValidation": "not-verified"
+        },
+        {
+          "release": "0.1.5-alpha.1",
+          "tag": "dsh-v0.1.5-alpha.1",
+          "commit": "5dda764ed3aa172535a7967b06ff95d9cbfe536a",
+          "source": "https://github.com/deepseek-ai/deepseek-harness",
+          "modelsUi": "provider-card",
+          "providerHeaders": "fetch-validated-discovery",
+          "strictModeCompat": "route-switch",
+          "fileContentHelper": "contentHasFile",
+          "evidenceScope": "unchanged-tagged-source-target",
+          "standaloneNpmArtifacts": "not-tested",
+          "managedProviderValidation": "synthetic-tagged-source-runtime",
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
+        },
+        {
+          "release": "0.1.5-alpha.2",
+          "tag": "dsh-v0.1.5-alpha.2",
+          "commit": "b2e3b2a0125854567a4a5fcba75782e42fe84901",
+          "source": "https://github.com/deepseek-ai/deepseek-harness",
+          "modelsUi": "provider-card",
+          "providerHeaders": "fetch-validated-discovery",
+          "strictModeCompat": "route-switch",
+          "fileContentHelper": "contentHasFile",
+          "evidenceScope": "unchanged-tagged-source-target",
+          "standaloneNpmArtifacts": "not-tested",
+          "managedProviderValidation": "synthetic-tagged-source-runtime",
+          "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
+        },
+        {
+          "release": "0.1.5-rc.1",
+          "tag": "dsh-v0.1.5-rc.1",
+          "commit": "183f08e9c6dde7e36cd2318eaee70b0da08fb35e",
+          "source": "https://github.com/deepseek-ai/deepseek-harness",
+          "modelsUi": "provider-card",
+          "providerHeaders": "fetch-validated-discovery",
+          "strictModeCompat": "route-switch",
+          "fileContentHelper": "contentHasFile",
+          "evidenceScope": "unchanged-tagged-source-target",
+          "standaloneNpmArtifacts": "not-tested",
+          "managedProviderValidation": "synthetic-tagged-source-runtime",
+          "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
+        },
+        {
+          "release": "0.1.5-rc.2",
+          "tag": "dsh-v0.1.5-rc.2",
+          "commit": "fb2c4b9e698e30edb738bca4cf0618587db7d203",
+          "source": "https://github.com/deepseek-ai/deepseek-harness",
+          "modelsUi": "provider-card",
+          "providerHeaders": "fetch-validated-discovery",
+          "strictModeCompat": "route-switch",
+          "fileContentHelper": "contentHasFile",
+          "evidenceScope": "unchanged-tagged-source-target",
+          "standaloneNpmArtifacts": "not-tested",
+          "managedProviderValidation": "synthetic-tagged-source-runtime",
+          "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
         }
       ],
       "packages": [
@@ -71,11 +130,13 @@
         "@deepseek-ai/dsh-client-ui-settings-models",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-credentials",
+        "@deepseek-ai/dsh-launch-environment",
         "@deepseek-ai/dsh-llm",
         "@deepseek-ai/dsh-llm-pi-ai",
         "@deepseek-ai/dsh-settings",
         "@deepseek-ai/dsh-typert-protocol",
-        "@deepseek-ai/dsh-web"
+        "@deepseek-ai/dsh-web",
+        "@deepseek-ai/dsh-web-search-deepseek"
       ]
     },
     "piAi": "0.85.1",
@@ -87,6 +148,55 @@
     }
   },
   "capabilities": [
+    {
+      "id": "readonly-search-composition-preflight",
+      "required": true,
+      "evidenceScope": "pre-install-structural-only-not-automatic-cli-enforcement",
+      "sourceMarkers": [
+        {"file": "scripts/check-search-composition.mjs", "marker": "checkSearchComposition"},
+        {"file": "scripts/check-search-composition.mjs", "marker": "PREEXISTING_WEB_ISOLATION"},
+        {"file": "README.md", "marker": "does not automatically run this preflight"}
+      ],
+      "tests": [
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "admits a stock top-level official service without mutating or exposing its config"},
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "includes home and launcher layers instead of ignoring a late web override"},
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "CLI rejects disposable root-only web without initialization, normalization or secret output"},
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "real public parsers validate candidate layers and preserve every input file"},
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "rejects a web bundle ordered after the Copilot guard"}
+      ]
+    },
+    {
+      "id": "session-model-search-routing",
+      "required": true,
+      "evidenceScope": "development-real-consumer-and-loader-synthetic",
+      "sourceMarkers": [
+        {"file": "src/routed-web.ts", "marker": "extends WebRuntime"},
+        {"file": "src/index.ts", "marker": "ctx.provide('githubCopilotSearchRouter'"},
+        {"file": "cordis.patch.yml", "marker": "web: github-copilot-original-web"}
+      ],
+      "tests": [
+        {"file": "tests/routed-web.spec.ts", "name": "keeps the configured provider for DeepSeek and all other model routes"},
+        {"file": "tests/routed-web.spec.ts", "name": "retains pre-execute denial and the surrounding execution middleware"},
+        {"file": "tests/routed-web-loader.spec.ts", "name": "loads the built facade and delegate entries without changing official tools"}
+      ]
+    },
+    {
+      "id": "explicit-deepseek-search-fallback",
+      "required": true,
+      "evidenceScope": "development-synthetic-no-live-search-claim",
+      "sourceMarkers": [
+        {"file": "src/config.ts", "marker": "searchFallback: z.union(['none', 'deepseek']).default('deepseek')"},
+        {"file": "src/deepseek-search-fallback.ts", "marker": "new native.DeepSeekSearchProvider"},
+        {"file": "src/search-routing.ts", "marker": "These are not Copilot search results."}
+      ],
+      "tests": [
+        {"file": "tests/search-routing.spec.ts", "name": "does not spend fallback credits unless explicitly enabled"},
+        {"file": "tests/search-routing.spec.ts", "name": "does not fallback when the primary reports cancellation"},
+        {"file": "tests/routed-web.spec.ts", "name": "preserves fallback provenance in canonical value, rendered content and web-card metadata"},
+        {"file": "tests/deepseek-search-fallback.spec.ts", "name": "checks the actual managed proof after native fallback auth: %s"},
+        {"file": "tests/deepseek-search-fallback.spec.ts", "name": "checks continuity after native literal-key auth (permitted=%s)"}
+      ]
+    },
     {
       "id": "account-driven-provider-metadata",
       "required": true,
@@ -115,7 +225,7 @@
     {
       "id": "account-scoped-discovery-snapshot",
       "required": true,
-      "activation": "lazy-account-bound-discovery-no-stale-fallback",
+      "activation": "bounded-account-freshness-with-display-only-stale-metadata",
       "sourceMarkers": [
         {"file": "src/account-model-source.ts", "marker": "createAccountModelSource"},
         {"file": "src/account-model-source.ts", "marker": "redirect: 'error'"},
@@ -132,7 +242,10 @@
         {"file": "tests/account-model-source.spec.ts", "name": "bounds timeout during %s even if the dependency ignores cancellation"},
         {"file": "tests/account-model-source.spec.ts", "name": "enforces cumulative UTF-8 byte limits rather than trusting content length"},
         {"file": "tests/account-model-source.spec.ts", "name": "rejects malformed UTF-8 and clears the reader without preserving response contents"},
-        {"file": "tests/account-model-source.spec.ts", "name": "refuses sensitive header override %s"}
+        {"file": "tests/account-model-source.spec.ts", "name": "refuses sensitive header override %s"},
+        {"file": "tests/account-model-source.spec.ts", "name": "defaults to a day-long metadata cache and a five-minute passive failure cooldown"},
+        {"file": "tests/account-model-source.spec.ts", "name": "force bypasses the cooldown, concurrent callers coalesce, and invalidation resets it"},
+        {"file": "tests/account-model-source.spec.ts", "name": "retains same-generation display metadata across TTL expiry, loading, and fetch failure without fresh reuse"}
       ]
     },
     {
@@ -141,6 +254,7 @@
       "activation": "published-adapter-and-native-sdk",
       "sourceMarkers": [
         {"file": "src/preview-route.ts", "marker": "extends PiAiAdapter"},
+        {"file": "src/preview-route.ts", "marker": "modelErrors: new Map<string, string>()"},
         {"file": "src/preview-route.ts", "marker": "ctx.llm.registerAdapter"},
         {"file": "src/preview-route.ts", "marker": "createAccountModelSource"},
         {"file": "src/preview-provider.ts", "marker": "native.streamSimple"},
@@ -150,6 +264,8 @@
         {"file": "tests/preview-provider.spec.ts", "name": "routes an unseen ID through published Core and native %s with Bearer auth"},
         {"file": "tests/preview-provider.spec.ts", "name": "takes protocol and independent input limits from descriptor evidence rather than the local GPT-6 catalog"},
         {"file": "tests/preview-provider.spec.ts", "name": "does not infer controls from a name or unfamiliar advertised effort labels"},
+        {"file": "tests/preview-route.spec.ts", "name": "resolves and prepares a validated account model with the actual Core profile diagnostics contract"},
+        {"file": "tests/inline/apply.spec.ts", "name": "delegates Anthropic in-band system authority before probing at position %s"},
         {"file": "tests/preview-route.spec.ts", "name": "discovers mixed and unseen account models without model-name routing rules"},
         {"file": "tests/preview-route.spec.ts", "name": "uses unmodified stock LlmRuntime preparation and leaves canonical model registration alone"},
         {"file": "tests/preview-route.spec.ts", "name": "replays opaque reasoning and tool-call identities through the native adapter on a second turn"},
@@ -163,9 +279,18 @@
       "sourceMarkers": [
         {"file": "src/preview-route.ts", "marker": "COPILOT_PREVIEW_METADATA_STALE"},
         {"file": "src/preview-route.ts", "marker": "copilotEntitlementKey"},
-        {"file": "src/preview-route.ts", "marker": "credentials/record-updated"}
+        {"file": "src/preview-route.ts", "marker": "credentials/record-updated"},
+        {"file": "src/preview-route.ts", "marker": "renewBeforeLease"},
+        {"file": "src/account-model-auth.ts", "marker": "minOAuthValidityMs: ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS"}
       ],
       "tests": [
+        {"file": "tests/preview-route.spec.ts", "name": "renews warm metadata before native OAuth refresh invalidates a new %s lease"},
+        {"file": "tests/preview-route.spec.ts", "name": "applies the warm renewal boundary with %i milliseconds remaining"},
+        {"file": "tests/preview-route.spec.ts", "name": "joins a warm renewal flight across catalog and model callers"},
+        {"file": "tests/preview-route.spec.ts", "name": "joins an existing metadata HTTP flight when token validity crosses the renewal threshold"},
+        {"file": "tests/preview-route.spec.ts", "name": "bounds a warm renewal %s without model wire or cooldown bypass"},
+        {"file": "tests/preview-route.spec.ts", "name": "persists warm-refresh entitlement removal without dispatching the formerly allowed model"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not rebind or replay an old prepared lease after it crosses the native refresh window"},
         {"file": "tests/preview-route.spec.ts", "name": "requires rediscovery when an already prepared token rotates without a credential notification"},
         {"file": "tests/preview-route.spec.ts", "name": "rejects silent same-token entitlement removal before dispatch and requires rediscovery"},
         {"file": "tests/preview-route.spec.ts", "name": "does not serve expired catalog facts or prepared model snapshots"},
@@ -254,9 +379,12 @@
       ],
       "tests": [
         {"file": "tests/client-bundle.spec.ts", "name": "mounts strict Host result codecs through the published rc.1 client carrier"},
-        {"file": "tests/account-model-remote.spec.ts", "name": "registers explicit discovery with the same strict safe authorization view codec"},
+        {"file": "tests/account-model-remote.spec.ts", "name": "registers %s with the same strict safe authorization view codec"},
         {"file": "tests/account-model-remote.spec.ts", "name": "rejects private or unrequested discovery field %s"},
-        {"file": "tests/account-model-remote.spec.ts", "name": "rejects secret-bearing model entries and oversized model lists"}
+        {"file": "tests/account-model-remote.spec.ts", "name": "rejects secret-bearing model entries and oversized model lists"},
+        {"file": "tests/migration-status.spec.ts", "name": "keeps noargs Remote migration evidence separate and ordinary status unchanged"},
+        {"file": "tests/migration-status.spec.ts", "name": "uses the real public Session projection registry for pending versus old request headers"},
+        {"file": "tests/migration-status.spec.ts", "name": "reads only named public leaves, not private titles history credentials or settings"}
       ]
     },
     {
@@ -362,7 +490,7 @@
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "accountModelsView"},
         {"file": "src/authorization-controller.ts", "marker": "async discoverModels()"},
-        {"file": "src/remote.ts", "marker": "'status', 'reconcile', 'discoverModels', 'start', 'cancel', 'signOut'"}
+        {"file": "src/remote.ts", "marker": "'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut'"}
       ],
       "tests": [
         {"file": "tests/authorization-controller.spec.ts", "name": "reads status repeatedly without repairing, authorizing or making network calls"},
@@ -474,7 +602,10 @@
         {"file": "src/probe.ts", "marker": "RESPONSES_PROBE_ROUNDS = 2"}
       ],
       "tests": [
-        {"file": "tests/inline/apply.spec.ts", "name": "preserves session model overrides on the same provider without custom wire calls"},
+        {"file": "tests/inline/apply.spec.ts", "name": "captures an explicit request model instead of substituting a changed Session selection"},
+        {"file": "tests/inline/apply.spec.ts", "name": "routes concurrent hosted tools from real model-selection request headers rather than activation seeds"},
+        {"file": "tests/inline/apply.spec.ts", "name": "disposes only A during final %s HTTP %s while B completes without cross-cancellation"},
+        {"file": "tests/inline/apply.spec.ts", "name": "ensures cold metadata only on actual search and captures selection before discovery awaits"},
         {"file": "tests/preview-route.spec.ts", "name": "resolves Host-only search auth from the live generic snapshot without exposing it in status"},
         {"file": "tests/copilot-request.spec.ts", "name": "combines installed catalog headers with provider-required request metadata"},
         {"file": "tests/copilot-request.spec.ts", "name": "applies a credential-specific Copilot endpoint before request construction"},
@@ -503,10 +634,10 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/traditional-search.ts", "marker": "github-copilot-hosted"},
-        {"file": "README.md", "marker": "searchProvider: github-copilot-hosted"},
-        {"file": "README.md", "marker": "fetchProvider: http"},
-        {"file": "README.zh.md", "marker": "searchProvider: github-copilot-hosted"},
-        {"file": "README.zh.md", "marker": "fetchProvider: http"}
+        {"file": "README.md", "marker": "github-copilot.searchFallback"},
+        {"file": "README.md", "marker": "Fetch is unchanged."},
+        {"file": "README.zh.md", "marker": "github-copilot.searchFallback"},
+        {"file": "README.zh.md", "marker": "网页抓取不变"}
       ],
       "tests": [
         {"file": "tests/traditional-search.spec.ts", "name": "normalizes generated content and deduplicated sources"},
@@ -518,10 +649,11 @@
       "id": "dsh-supported-baselines-fail-loud-guard",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/compatibility.ts", "marker": "peerRange: '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1'"}
+        {"file": "src/compatibility.ts", "marker": "peerRange: '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2'"}
       ],
       "tests": [
-        {"file": "tests/compatibility.spec.ts", "name": "declares alpha.1, rc.2, and rc.1 compatibility"},
+        {"file": "tests/compatibility.spec.ts", "name": "retains the original three compatibility baselines"},
+        {"file": "tests/compatibility.spec.ts", "name": "adds 0.1.5-rc.1 and 0.1.5-rc.2 without dropping earlier baselines or advancing development dependencies"},
         {"file": "tests/compatibility.spec.ts", "name": "accepts the supported DSH service contract"},
         {"file": "tests/compatibility.spec.ts", "name": "fails before startup when a required API is absent"}
       ]
@@ -529,7 +661,7 @@
     {
       "id": "dsh-models-settings-and-managed-discovery-ui",
       "required": true,
-      "activation": "single-account-footer-with-exclusive-settings-fallback",
+      "activation": "provider-row-first-shared-account-with-exclusive-fallback",
       "sourceMarkers": [
         {"file": "src/client.ts", "marker": "GitHubCopilotSettingsSection"},
         {"file": "src/client.ts", "marker": "settings.models.footer"},
@@ -537,12 +669,14 @@
       ],
       "tests": [
         {"file": "tests/client.spec.ts", "name": "registers a GitHub Copilot settings section on the rc.2 Models surface"},
-        {"file": "tests/client.spec.ts", "name": "registers one account footer and a non-interactive legacy provider-card notice"},
+        {"file": "tests/client.spec.ts", "name": "registers coordinated provider and fallback seats without starting either controller during registration"},
         {"file": "tests/client.spec.ts", "name": "leaves authorization active when the optional footer contract is incompatible or registration fails"},
         {"file": "tests/client.spec.ts", "name": "mounts one compact account lifecycle instead of separate authorization and discovery owners"},
         {"file": "tests/client.spec.ts", "name": "makes explicit account discovery available in the old-Core settings fallback"},
         {"file": "tests/client.spec.ts", "name": "explains the initial model list without inferring a completed discovery from sign-in"},
-        {"file": "tests/client.spec.ts", "name": "restores exactly one account fallback when a footer declaration is withdrawn"}
+        {"file": "tests/client.spec.ts", "name": "restores exactly one account fallback when a footer declaration is withdrawn"},
+        {"file": "tests/client.spec.ts", "name": "transfers a pending sign-in to an arriving row and back without stale actions or a second poll owner"},
+        {"file": "tests/client.spec.ts", "name": "keeps one owner across duplicate row instances and footer/settings competition"}
       ]
     },
     {
@@ -551,7 +685,7 @@
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "current !== undefined && providerSupportsStrictMode(current) !== false"},
         {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot'"},
-        {"file": "src/client.ts", "marker": "GitHubCopilotLegacyProviderNotice"}
+        {"file": "src/client.ts", "marker": "GitHubCopilotAccountSurface"}
       ],
       "tests": [
         {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow while exposing only the account-driven provider"},
@@ -573,10 +707,19 @@
         {"file": "tests/compact-account.spec.ts", "name": "renders a neutral checking state then only a compact signed-in row"},
         {"file": "tests/compact-account.spec.ts", "name": "shows signed-out CTA and automatically reveals authorization without opening Manage"},
         {"file": "tests/compact-account.spec.ts", "name": "retains manual management and live actions when toggled during authorization"},
-        {"file": "tests/compact-account.spec.ts", "name": "refreshes from the header without opening Manage and shows collapsed errors"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps normal refresh inside Manage and visible Retry outside for actual failures"},
         {"file": "tests/compact-account.spec.ts", "name": "cleans timers and ignores late requests after detach or Remote replacement"},
         {"file": "tests/compact-account.spec.ts", "name": "keeps cancellation failures visible without reviving a stale code"},
-        {"file": "tests/compact-account.spec.ts", "name": "orders cancellation after pending start so a late Host preflight cannot create an abandoned flow"}
+        {"file": "tests/compact-account.spec.ts", "name": "orders cancellation after pending start so a late Host preflight cannot create an abandoned flow"},
+        {"file": "tests/compact-account.spec.ts", "name": "discovers exactly once after immediate confirmed completion and permits later manual refresh"},
+        {"file": "tests/compact-account.spec.ts", "name": "waits through repeated authorization polls and discovers only on confirmed completion"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps automatic post-login discovery owned across Manage toggles and shows a retryable error"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "keeps completion pending through post-login repair so the Client discovers exactly once afterwards"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps stale count visible during initial metadata refresh without a warning or header refresh button"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "ensures account metadata without forcing past the shared cache or cooldown"},
+        {"file": "tests/client.spec.ts", "name": "owns a minute-only UI timer through committed mount, timestamp change and unmount"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps the Host cache timestamp outside Manage and live regions through refresh and failure"},
+        {"file": "tests/client-bundle.spec.ts", "name": "exports the cache timestamp formatter and isolated clock component in the built Client"}
       ]
     }
   ],
@@ -593,6 +736,8 @@
     ],
     "./client": [],
     "./remote": [],
+    "./routed-web": ["default"],
+    "./web-delegate": ["name", "inject", "apply"],
     "./deployment-baseline.json": [],
     "./package.json": []
   }

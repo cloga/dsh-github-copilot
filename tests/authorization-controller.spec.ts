@@ -8,6 +8,8 @@ import {
   describeGitHubCopilotProviderProfile,
 } from '../src/authorization-controller.ts'
 import { encodeBackup, leavesOf, ROUTE_OWNERSHIP_EPOCH } from '../src/route-ownership.ts'
+import { createCompactAccount } from '../src/compact-account.ts'
+import type { GitHubCopilotAuthorizationView } from '../src/authorization-controller.ts'
 
 const catalogDrift = vi.hoisted(() => ({ wrongGpt6Api: false }))
 vi.mock('@earendil-works/pi-ai/providers/all', async (importOriginal) => {
@@ -257,6 +259,31 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.deleteRecord).not.toHaveBeenCalled()
   })
 
+  it('ensures account metadata without forcing past the shared cache or cooldown', async () => {
+    const harness = runtime({ configured: true })
+    const discover = vi.fn(async () => undefined)
+    harness.services.set('githubCopilotPreview', { discover, getView: () => ({ state: 'ready', models: [], rejected: [] }) })
+    await harness.controller.ensureModels()
+    expect(discover).toHaveBeenCalledExactlyOnceWith({ force: false })
+    expect(harness.begin).not.toHaveBeenCalled()
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.deleteRecord).not.toHaveBeenCalled()
+  })
+
+  it('does not automatically ensure models while signed out or authorization is pending', async () => {
+    const signedOut = runtime({ configured: false })
+    const discover = vi.fn()
+    signedOut.services.set('githubCopilotPreview', { discover })
+    await signedOut.controller.ensureModels()
+    expect(discover).not.toHaveBeenCalled()
+    const pending = runtime()
+    pending.services.set('githubCopilotPreview', { discover })
+    await pending.controller.start()
+    await expect(pending.controller.ensureModels()).resolves.toMatchObject({ inFlight: true })
+    expect(discover).not.toHaveBeenCalled()
+    await pending.controller.cancel()
+  })
+
   it('keeps discovery unavailable or failed separate from sign-in and sanitizes failures', async () => {
     const harness = runtime({ configured: true })
     await expect(harness.controller.discoverModels()).resolves.toMatchObject({ phase: 'signed-in', accountModels: {
@@ -361,6 +388,57 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.mutate).not.toHaveBeenCalled()
     await harness.controller.cancel()
   })
+  it('keeps completion pending through post-login repair so the Client discovers exactly once afterwards', async () => {
+    const harness = runtime({ providerProfile: {} })
+    let releaseRepair!: () => void
+    const repair = new Promise<void>(resolve => { releaseRepair = resolve })
+    const mutate = harness.mutate.getMockImplementation()!
+    harness.mutate.mockImplementationOnce(async (...args) => { await repair; return mutate(...args) })
+    const discover = vi.fn(async () => undefined)
+    harness.services.set('githubCopilotPreview', {
+      getView: () => ({ state: 'ready', models: [], rejected: [] }), discover,
+    })
+    const remote = {
+      status: async () => ({ ok: true, value: await harness.controller.status() }),
+      start: async () => ({ ok: true, value: await harness.controller.start() }),
+      cancel: async () => ({ ok: true, value: await harness.controller.cancel() }),
+      signOut: async () => ({ ok: true, value: await harness.controller.signOut() }),
+      discoverModels: vi.fn(async () => ({ ok: true, value: await harness.controller.discoverModels() })),
+      ensureModels: vi.fn(async () => ({ ok: true, value: await harness.controller.ensureModels() })),
+      reconcile: async () => ({ ok: true, value: await harness.controller.reconcile() }),
+    }
+    const account = createCompactAccount(remote, value => value as GitHubCopilotAuthorizationView, async () => {})
+    const detach = account.attach()
+    try {
+      await vi.waitFor(() => expect(account.getSnapshot().checking).toBe(false))
+      await account.start()
+      harness.authorize()
+      await vi.waitFor(() => expect(harness.mutate).toHaveBeenCalledOnce())
+      // Core authorization has ended, but the plugin still refuses discovery
+      // until its existing configuration-repair barrier has settled.
+      await account.retryStatus()
+      expect(account.getSnapshot().view).toMatchObject({
+        phase: 'authorizing', configured: true, inFlight: true, notices: [],
+      })
+      expect(remote.discoverModels).not.toHaveBeenCalled()
+      expect(discover).not.toHaveBeenCalled()
+      expect(harness.mutate).toHaveBeenCalledOnce()
+      releaseRepair()
+      await vi.waitFor(async () => expect(await harness.controller.status()).toMatchObject({
+        phase: 'signed-in', configured: true, inFlight: false, notices: [],
+      }))
+      await account.retryStatus()
+      expect(remote.discoverModels).toHaveBeenCalledOnce()
+      expect(discover).toHaveBeenCalledExactlyOnceWith({ force: true })
+      await account.retryStatus()
+      expect(remote.discoverModels).toHaveBeenCalledOnce()
+      expect(discover).toHaveBeenCalledOnce()
+    } finally {
+      releaseRepair()
+      detach()
+    }
+  })
+
   it('signs in through the built-in flow without recreating a canonical profile', async () => {
     const harness = runtime()
     const started = await harness.controller.start()

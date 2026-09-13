@@ -2,6 +2,7 @@ import { access, readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
+import { assertTaggedRuntimeClosure } from './tagged-runtime-closure.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -143,11 +144,15 @@ assert(
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(
-  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1',
-  'DSH peer range must target alpha.1, rc.2, and rc.1',
+  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2',
+  'DSH peer range must retain the previous five baselines and append 0.1.5-rc.1 and 0.1.5-rc.2',
 )
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
-assert(dshBaselines.length === 3, 'exactly three DSH baselines must be declared')
+assert(dshBaselines.length === 7, 'exactly seven DSH baselines must be declared')
+const currentDsh = manifest.supportedBaselines.dsh
+assert(currentDsh.release === '0.1.5-alpha.2'
+  && currentDsh.tag === 'dsh-v0.1.5-alpha.2'
+  && currentDsh.commit === 'b2e3b2a0125854567a4a5fcba75782e42fe84901', 'current Core target must be the exact official 0.1.5-alpha.2 tag')
 assert(
   dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
     && entry.commit === 'a772dbbde82780bff2b9394427e9f0a24cafa1d5'
@@ -174,6 +179,45 @@ assert(
     && entry.fileContentHelper === 'contentHasFile'),
   'DSH alpha.1 baseline is missing',
 )
+const officialCore = dshBaselines.find(entry => entry.release === '0.1.5-alpha.1')
+assert(officialCore?.tag === 'dsh-v0.1.5-alpha.1'
+  && officialCore.commit === '5dda764ed3aa172535a7967b06ff95d9cbfe536a'
+  && officialCore.source === 'https://github.com/deepseek-ai/deepseek-harness'
+  && officialCore.modelsUi === 'provider-card'
+  && officialCore.providerHeaders === 'fetch-validated-discovery'
+  && officialCore.strictModeCompat === 'route-switch'
+  && officialCore.fileContentHelper === 'contentHasFile', 'official DSH 0.1.5-alpha.1 baseline is missing')
+assert(officialCore.evidenceScope === 'unchanged-tagged-source-target'
+  && officialCore.standaloneNpmArtifacts === 'not-tested'
+  && officialCore.managedProviderValidation === 'synthetic-tagged-source-runtime', '0.1.5-alpha.1 must retain bounded tagged-source evidence, not artifact or live proof')
+assert(JSON.stringify(officialCore.runtimeTests) === JSON.stringify([
+  'tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
+  'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts',
+]), 'target tagged-runtime evidence inventory differs')
+for (const path of officialCore.runtimeTests) await access(resolve(root, path))
+const alpha2Core = dshBaselines.find(entry => entry.release === '0.1.5-alpha.2')
+assert(alpha2Core?.tag === currentDsh.tag && alpha2Core.commit === currentDsh.commit
+  && alpha2Core.source === officialCore.source && alpha2Core.modelsUi === officialCore.modelsUi
+  && alpha2Core.providerHeaders === officialCore.providerHeaders && alpha2Core.strictModeCompat === officialCore.strictModeCompat
+  && alpha2Core.fileContentHelper === officialCore.fileContentHelper
+  && alpha2Core.evidenceScope === officialCore.evidenceScope && alpha2Core.standaloneNpmArtifacts === 'not-tested'
+  && alpha2Core.managedProviderValidation === 'synthetic-tagged-source-runtime'
+  && alpha2Core.resolvedProfileDiagnostics === 'plugin-owned-empty-modelErrors'
+  && JSON.stringify(alpha2Core.runtimeTests) === JSON.stringify(officialCore.runtimeTests), 'alpha2 must retain exact bounded source-runtime evidence and profile diagnostics')
+for (const [release, tag, commit] of [
+  ['0.1.5-rc.1', 'dsh-v0.1.5-rc.1', '183f08e9c6dde7e36cd2318eaee70b0da08fb35e'],
+  ['0.1.5-rc.2', 'dsh-v0.1.5-rc.2', 'fb2c4b9e698e30edb738bca4cf0618587db7d203'],
+]) {
+  const rcCore = dshBaselines.find(entry => entry.release === release)
+  assert(rcCore?.tag === tag && rcCore.commit === commit
+    && rcCore.source === officialCore.source && rcCore.modelsUi === officialCore.modelsUi
+    && rcCore.providerHeaders === officialCore.providerHeaders && rcCore.strictModeCompat === officialCore.strictModeCompat
+    && rcCore.fileContentHelper === officialCore.fileContentHelper
+    && rcCore.evidenceScope === officialCore.evidenceScope && rcCore.standaloneNpmArtifacts === 'not-tested'
+    && rcCore.managedProviderValidation === 'synthetic-tagged-source-runtime'
+    && rcCore.resolvedProfileDiagnostics === 'plugin-owned-empty-modelErrors'
+    && JSON.stringify(rcCore.runtimeTests) === JSON.stringify(officialCore.runtimeTests), `${release} must retain exact bounded source-runtime evidence and profile diagnostics`)
+}
 for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   assert(packageJson.peerDependencies?.[dependency] === peerRange, `${dependency} peer range differs`)
   assert(
@@ -218,6 +262,8 @@ assert((await read('src/client.ts')).includes("export const inject = ['remote', 
 
 const compatibility = await read('src/compatibility.ts')
 assert(compatibility.includes(`peerRange: '${peerRange}'`), 'runtime compatibility range differs')
+assert(compatibility.includes(`release: '${currentDsh.release}'`), 'runtime current Core target differs')
+assert(compatibility.includes(`supportedReleases: [${dshBaselines.map(entry => `'${entry.release}'`).join(', ')}]`), 'runtime supported Core release inventory differs')
 assert(
   compatibility.includes(`developmentRelease: '${manifest.supportedBaselines.dsh.developmentRelease}'`),
   'runtime development release differs',
@@ -248,7 +294,7 @@ const index = await read('src/index.ts')
 for (const symbol of manifest.requiredExports?.['.'] ?? []) {
   assert(index.includes(symbol), `root export ${symbol} is missing`)
 }
-const expectedExportSubpaths = ['.', './client', './remote', './deployment-baseline.json', './package.json']
+const expectedExportSubpaths = ['.', './client', './remote', './routed-web', './web-delegate', './deployment-baseline.json', './package.json']
 const declaredExportSubpaths = Object.keys(manifest.requiredExports ?? {}).sort()
 const packageExportSubpaths = Object.keys(packageJson.exports ?? {}).sort()
 assert(JSON.stringify(declaredExportSubpaths) === JSON.stringify([...expectedExportSubpaths].sort()), 'required export inventory differs')
@@ -262,6 +308,12 @@ const guardedSources = [
   'src/plan.ts',
   'src/copilot-auth.ts',
   'src/copilot-grant.ts',
+  'src/search-routing.ts',
+  'src/routed-web.ts',
+  'src/web-delegate.ts',
+  'src/deepseek-search-fallback.ts',
+  'src/search-backend.ts',
+  'scripts/check-search-composition.mjs',
   'package.json',
   'cordis.patch.yml',
 ]
@@ -308,13 +360,23 @@ for (const path of [
 }
 
 const workflow = await read('.github/workflows/ci.yml')
+assertTaggedRuntimeClosure(workflow)
+assertTaggedRuntimeClosure(releaseWorkflow)
 for (const command of [
   'a772dbbde82780bff2b9394427e9f0a24cafa1d5',
   'repository: cloga/deepseek-harness',
   'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
   'd347e703908d0406b7a7ef80e3a0e594d86b2215',
+  '5dda764ed3aa172535a7967b06ff95d9cbfe536a',
+  'b2e3b2a0125854567a4a5fcba75782e42fe84901',
+  '183f08e9c6dde7e36cd2318eaee70b0da08fb35e',
+  'fb2c4b9e698e30edb738bca4cf0618587db7d203',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
+  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2'",
+  "if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2'",
+  'node scripts/verify-tagged-core.mjs prepare',
+  'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify:controlled-core -- dsh-upstream',
   'pnpm verify',
@@ -323,35 +385,41 @@ for (const command of [
   assert(workflow.includes(command), `CI is missing ${command}`)
 }
 for (const marker of [
-  "tags:\n      - 'v*'",
-  'permissions:\n  contents: write',
-  'runs-on: ubuntu-latest',
-  'if [[ "$GITHUB_REF_NAME" != "v$version" ]]',
-  'git cat-file -t "refs/tags/$GITHUB_REF_NAME"',
-  'if [[ "$tag_type" != "tag" ]]',
-  'if [[ "$version" =~ -(alpha|beta|rc)\\. ]]',
-  'release_flags+=(--prerelease)',
-  'd347e703908d0406b7a7ef80e3a0e594d86b2215',
+  'workflow_call:',
+  'group: dsh-github-copilot-release',
+  "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+  'fetch-depth: 0',
+  'scripts/release-policy.mjs --plan',
+  'b2e3b2a0125854567a4a5fcba75782e42fe84901',
+  '--release 0.1.5-alpha.2',
+  'node scripts/verify-tagged-core.mjs prepare',
+  'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify:controlled-core -- dsh-upstream',
+  'scripts/publish-release.mjs',
 ]) {
   assert(releaseWorkflow.includes(marker), `Release workflow is missing ${marker}`)
 }
+for (const marker of [
+  'release-ready:',
+  'Require all compatibility and package checks',
+  'scripts/release-policy.mjs --base',
+  'uses: ./.github/workflows/release.yml',
+]) assert(workflow.includes(marker), `CI release gate is missing ${marker}`)
 const orderedReleaseSteps = [
-  '- name: Verify tag matches package version',
   '- run: pnpm install --frozen-lockfile',
-  '- name: Install alpha.1 Core pi-ai closure',
+  '- name: Install alpha2 Core pi-ai closure',
   '- run: pnpm verify:upstream -- dsh-upstream',
   '- run: pnpm verify:controlled-core -- dsh-upstream',
   '- name: Verify plugin package',
   '- run: pnpm pack --pack-destination artifacts',
   '- name: Verify packed archive',
   'pnpm verify:tarball --',
-  '- name: Write SHA-256 manifest',
+  '- name: Write and verify SHA-256 manifest',
   'sha256sum -- *.tgz > SHA256SUMS',
   'sha256sum --check SHA256SUMS',
-  '- name: Create GitHub Release',
-  'gh release create "$GITHUB_REF_NAME" artifacts/*.tgz artifacts/SHA256SUMS',
+  '- name: Publish exact annotated tag and immutable GitHub Release',
+  'scripts/publish-release.mjs',
 ]
 let priorReleaseStep = -1
 for (const step of orderedReleaseSteps) {

@@ -63,20 +63,44 @@ if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
 
 const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)).default
 const methods = remote.descriptors.map(descriptor => descriptor.method).sort()
-if (JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'reconcile', 'signOut', 'start', 'status'])) {
-  throw new Error('built Remote entry must expose status, explicit model discovery, reconciliation and authorization controls')
+if (JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'migrationStatus', 'reconcile', 'signOut', 'start', 'status'])) {
+  throw new Error('built Remote entry must expose exactly seven authorization controls and independent migrationStatus')
 }
 for (const descriptor of remote.descriptors) {
+  if (descriptor.id !== `dsh-github-copilot:githubCopilot.${descriptor.method}`
+    || descriptor.service !== 'githubCopilotAuthorization' || descriptor.namespace !== 'githubCopilot') {
+    throw new Error('built Remote descriptor identity must match its exact owned service and namespace')
+  }
   if (descriptor.invocation.kind !== 'direct' || descriptor.parameters.length !== 0) {
     throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must remain a no-parameter direct call`)
   }
+  const typeSymbol = descriptor.method === 'migrationStatus'
+    ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
+    : 'dsh-github-copilot#GitHubCopilotAuthorizationView'
   if (
     descriptor.result.mode !== 'strict'
-    || descriptor.result.typeSymbol !== 'dsh-github-copilot#GitHubCopilotAuthorizationView'
+    || descriptor.result.typeSymbol !== typeSymbol
     || typeof descriptor.result.schema?.parse !== 'function'
   ) {
-    throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must expose the strict authorization view codec`)
+    throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must expose its own exact strict result codec`)
   }
+}
+const migrationCodec = remote.descriptors.find(descriptor => descriptor.method === 'migrationStatus').result.schema
+const migration = {
+  plugin: { name: packageJson.name, version: packageJson.version }, protocolVersion: 1,
+  historyScope: 'live-agents-only', observedAt: 0,
+  capabilities: { agentsList: false, sessionProjections: false, settingsCas: false, providerRegistry: false, defaultSelection: false },
+  complete: { sessions: false, defaultSelection: false, routes: false }, defaultSelection: null, sessions: [],
+  routes: { nativeConfigured: null, nativeRegistered: null, managedRegistered: null },
+}
+migrationCodec.parse(migration)
+for (const invalid of [
+  { ...migration, credentials: 'private' },
+  { ...migration, plugin: { ...migration.plugin, installPath: 'private' } },
+  { ...migration, defaultSelection: { provider: 'p', model: 'm', token: 'private' } },
+  { ...migration, sessions: [{ id: 's', status: 'idle', effectiveSelection: null, selectionSource: 'unknown', activeRequestSelection: null, title: 'private' }] },
+]) {
+  if (migrationCodec.safeParse(invalid).success) throw new Error('built migration codec must reject private fields')
 }
 
 console.log('Verified built Host import/exports, Client loader, Remote codecs, and type/metadata presence. No live DSH activation or model calls performed.')

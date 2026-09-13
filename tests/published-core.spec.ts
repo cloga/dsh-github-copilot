@@ -13,6 +13,16 @@ import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PR
 const require = createRequire(import.meta.url)
 const RC = '0.1.2-rc.1'
 const ALPHA = '0.1.3-alpha.1'
+const ALPHA_015 = '0.1.5-alpha.1'
+const RC_015_1 = '0.1.5-rc.1'
+const RC_015_2 = '0.1.5-rc.2'
+const alphaPins = new Map([
+  [ALPHA, 'd347e703908d0406b7a7ef80e3a0e594d86b2215'],
+  [ALPHA_015, '5dda764ed3aa172535a7967b06ff95d9cbfe536a'],
+  ['0.1.5-alpha.2', 'b2e3b2a0125854567a4a5fcba75782e42fe84901'],
+  [RC_015_1, '183f08e9c6dde7e36cd2318eaee70b0da08fb35e'],
+  [RC_015_2, 'fb2c4b9e698e30edb738bca4cf0618587db7d203'],
+])
 function packageInfo(name: string): { version: string; path: string } {
   const path = realpathSync(require.resolve(`${name}/package.json`))
   const value: unknown = JSON.parse(readFileSync(path, 'utf8'))
@@ -57,20 +67,20 @@ const runtimeInfo = selectedPackageInfo('@deepseek-ai/dsh-llm')
 const expectedRelease = process.env.DSH_PUBLISHED_CORE_RELEASE ?? runtimeInfo.version
 // An explicitly requested alpha or tagged-source run MUST execute the file
 // tests. Wrong installed packages/aliases fail identity checks rather than skip.
-const runAlpha = taggedEvidence || expectedRelease === ALPHA || runtimeInfo.version === ALPHA
+const runAlpha = taggedEvidence || alphaPins.has(expectedRelease) || alphaPins.has(runtimeInfo.version)
 const evidenceLabel = taggedEvidence ? 'unchanged tagged-source Core fixture' : 'published unmodified Core fixture'
 const MODEL = 'published-fixture-model'
 const contexts: Context[] = []
 
 async function assertRelease(): Promise<void> {
-  expect([RC, ALPHA]).toContain(expectedRelease)
+  expect([RC, ...alphaPins.keys()]).toContain(expectedRelease)
   for (const name of packageLocations.keys()) {
     expect(selectedPackageInfo(name).version, `${name} must match the requested ${evidenceLabel}`).toBe(expectedRelease)
   }
   if (taggedManifest !== undefined) {
-    expect(expectedRelease).toBe(ALPHA)
+    expect(alphaPins.has(expectedRelease)).toBe(true)
     expect(taggedManifest.release).toBe(expectedRelease)
-    expect(taggedManifest.commit).toBe('d347e703908d0406b7a7ef80e3a0e594d86b2215')
+    expect(taggedManifest.commit).toBe(alphaPins.get(expectedRelease))
     const identityModule = realpathSync(text(taggedManifest.identityModule))
     // The runner generates this module in its own scratch directory using
     // absolute imports, independent of the bare-import aliases under test.
@@ -154,7 +164,8 @@ describe(evidenceLabel, () => {
   it.skipIf(!runAlpha).each(['top-level', 'nested-tool-result'] as const)(
     'alpha.1 projects %s files before native dispatch while preserving encrypted replay', async placement => {
       await assertRelease()
-      expect(runtimeInfo.version).toBe(ALPHA)
+      expect(alphaPins.has(runtimeInfo.version)).toBe(true)
+      expect(runtimeInfo.version).toBe(expectedRelease)
       const requests: Record<string, unknown>[] = []
       vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
         const url = String(input)

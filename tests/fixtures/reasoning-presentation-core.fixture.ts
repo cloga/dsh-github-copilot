@@ -1,4 +1,6 @@
+// @vitest-environment jsdom
 // Executed inside an exact Core checkout by verify-reasoning-presentation.mjs.
+// Native Markdown resolves local media against window.location on Core 0.1.5.
 import { Context } from '@deepseek-ai/cordis'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'

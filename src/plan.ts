@@ -1,6 +1,6 @@
 /**
  * Search-plan resolution: which protocol and endpoint native search runs
- * through. The current chat route (default-model selection plus the
+ * through. The initiating Agent's captured chat route (selection plus the
  * `llm-pi-ai` settings section) is detected and probed — its own protocol
  * when that can search. The {@link SearchPlan} class owns the probe lifecycle so
  * `available()` stays synchronous while the verdict lands in the background.
@@ -141,16 +141,19 @@ function buildCandidate(
  * @returns the candidates in probe order.
  */
 export function resolveCandidates(ctx: Context, _config: PlanConfig): readonly SearchPlanCandidate[] {
-  const route = currentChatRoute(ctx)
+  return candidatesForRoute(currentChatRoute(ctx))
+}
+
+/**
+ * Build only from the route captured by the caller, without rereading selection.
+ * @param route - operation-local route facts.
+ * @returns native Copilot candidates, or none without supported facts.
+ */
+export function candidatesForRoute(route: CurrentChatRoute | undefined): readonly SearchPlanCandidate[] {
   if (route === undefined || (route.provider !== 'github-copilot'
     && route.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID)) return []
-  // A route whose protocol could not be resolved (no profile `api`, no
-  // catalog entry — e.g. the legacy `deepseek-official` alias) is treated as
-  // Chat Completions: that is the wire the legacy adapters speak, and it is
-  // the one protocol that definitely cannot search, so the sibling probe is
-  // the only path that can enable search at all. `siblingCandidates` answers
-  // the search-capable route itself when its protocol can search, and the
-  // host's known siblings otherwise.
+  // Only advertised native protocols are candidates; no model-name, sibling
+  // endpoint, or cross-provider protocol inference is permitted.
   if (route.api === undefined || route.api === 'openai-completions'
     || route.api === 'openai-responses' || route.api === 'anthropic-messages') {
     return siblingCandidates(route).map(({ protocol, baseURL }) => buildCandidate(protocol, baseURL, route))
@@ -181,11 +184,14 @@ export class SearchPlan {
    * @param candidates - the candidates in probe order; empty disables the plan.
    * @param probe - verifies one candidate; called sequentially until one passes.
    * @param probeEnabled - when false the first candidate is trusted outright.
+   * @param signal - captured owner/proof cancellation, retained through final HTTP.
    */
   constructor(
     candidates: readonly SearchPlanCandidate[],
     private readonly probe: (candidate: SearchPlanCandidate) => Promise<ProbeOutcome>,
     probeEnabled: boolean,
+    /** Captured owner/proof lifetime, shared by probes and every served operation. */
+    readonly signal?: AbortSignal,
   ) {
     this.candidates = candidates
     if (candidates.length === 0) {

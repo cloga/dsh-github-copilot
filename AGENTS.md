@@ -29,12 +29,12 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 ## Product and architecture
 
-`dsh-github-copilot` is a companion to DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
+`dsh-github-copilot` is a companion to official DSH `0.1.5-rc.2`, DSH `0.1.5-rc.1`, DSH `0.1.5-alpha.2`, DSH `0.1.5-alpha.1`, DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
 
 This repository owns eight narrow surfaces:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
-2. A Client Models provider-card contribution and Client-safe Remote descriptors.
+2. A Client Models provider-card contribution with one shared account-state owner and Client-safe Remote descriptors; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
 3. Strict JSON normalization of pi-ai's provider-owned Copilot OAuth grant.
 4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. Fresh installations use the single account-discovered route; existing profiles require explicit migration, never silent removal.
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
@@ -78,10 +78,27 @@ This repository owns eight narrow surfaces:
 - Copilot OAuth grant writes must rebuild only pi-ai's documented provider fields as a fresh plain JSON object; unrelated extension values never reach DSH credential storage.
 - Settings changes are path-level. Never replace the whole `llm-pi-ai` section or unrelated provider profiles.
 - Sign-out deletes only the Copilot credential record and keeps route settings.
-- Hosted search only serves the selected `github-copilot` route for an account-available model and a native search protocol. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback. Any request containing a file block, including one nested in tool-result content, must bypass the custom wire through `next()` so Core retains file projection ownership.
+- Hosted search serves only an eligible initiating `github-copilot` or managed `github-copilot-preview` route with an account-available model and supported search protocol; custom inline transport remains legacy-canonical only. Never substitute the global default for initiating Agent/request identity. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback. Any request containing a file block, including one nested in tool-result content, must bypass the custom wire through `next()` so Core retains file projection ownership.
 - Misconfiguration and API drift fail loudly with a named missing seam. Do not fall back to process-local secrets or implicit machine state.
 - Host, Client, and Remote package entries must stay independently buildable and exported.
 - The package must self-provide authorization when Core omits it, reuse an existing service without duplicate registration, and never activate the integration body before authorization is available.
+
+## Session and migration ownership (V3, alpha.8, #99)
+
+- One global Host account supplies many models; selected/history-backed Sessions retain independent model context. Derive search from the captured initiating Session's effective request-header/config or explicit `GenerateOptions`, never another Session or future global default C. `Agent.options` is the activation seed, not selected Session-model evidence; `installModelSelection` overrides request/assembly; Core records the effective `Session.requestHeader().config` before tools. Without proven request context, traditional search is unavailable. A newly selected pending model must not reuse the old request header as current prompt guidance. Per-owner plan caches prevent different-model A/B reuse/cancellation; metadata remains shared. Do not add a global current-model/search-status card.
+- Cold Chat picker and `/model` `listModels()` ensure the shared managed source without Settings first. Actual cold managed search non-forcing ensures metadata before deriving facts; existing 24h maximum TTL, cooldown, credential, allowlist and capability/probe gates remain.
+- Without `agents.currentInitiator`, traditional hosted search is unavailable with a named diagnostic; explicit marked `GenerateOptions` can still bind guarded inline requests, uncached if necessary. Credential notification during initial lazy discovery cannot distinguish own rotation from external account change via public status: fail closed with `WEB_PROVIDER_UNAVAILABLE` before probe/wire; a later user/driver request may retry, never automatically.
+- The new native Copilot draft warning says Save adds another real group, not a second account. Public additive APIs cannot veto Add or disable Save; this is warning-only, not enforced single-route registration. Core Edit/Delete remain. Alpha.7 screenshots illustrate timestamps, not alpha.8 migration/search proof.
+- Public `session.selectModel` also saves the future global default. Choose only approved Sessions/default; preserve other selected/history-backed Sessions, but do not promise unselected empty Sessions cannot inherit that default.
+- Code does not auto-migrate settings, credentials or history. After plugin release, approved Ops migration may compare-and-swap only the reviewed user-native `llm-pi-ai.providers.github-copilot` path after ruling out base/journal conflicts, then read back settings and registry. No hidden groups, bulk rewrites or credential copying. Search allowlist updates to the managed ID require a separate reviewed Ops edit; never silently broaden old lists.
+
+## Live migration readiness (alpha.9, #101)
+
+- Use no-argument `githubCopilot.migrationStatus()` for fresh live-Agent evidence; generic `session/list` may be stale and plugin inventory alone has no loaded-version evidence. `src/migration-status.ts` reads public leaves synchronously and reports loaded build `plugin.name/version`, `protocolVersion: 1`, `observedAt`, capability flags and completeness flags. Missing/unknown/incomplete is not safe absence.
+- Capabilities are `agentsList`, `sessionProjections`, `settingsCas`, `providerRegistry`, `defaultSelection`; `complete.sessions/defaultSelection/routes` describes evidence completeness, not migration approval. Effective selection uses pending projection, request-header config, then default only for genuinely empty Sessions with known projection state. Running `activeRequestSelection` is the latest recorded header, not proven in-flight LLM work. Native effective configuration and native/managed registration are separate flags.
+- This read invokes no auth status/model discovery, credentials or network and mutates no settings/Sessions. No normal UI/global current-model/search card is added. Seven ordinary authorization Remotes retain their codec; the eighth migration Remote uses a separate strict `GitHubCopilotMigrationStatus` codec.
+- `historyScope: live-agents-only` excludes cold stored histories. Require operator acknowledgement that older conversations may need a new explicit selection later. Loaded version/structural capability self-reports are not full Desktop/Core byte attestation or an atomic cross-namespace guarantee; recheck immediately before CAS.
+- The planned `cloga/dsh-windows-ops` command `tools/migrate-copilot-managed-route.ps1` is separate config-only maintenance after release. V1 performs no automated Session/default writes, cold-history scan, plugin install, restart or full Desktop-baseline acceptance. Resolve selection blockers separately with explicit approval; never report this planned command or live migration as published/installed/completed without evidence.
 
 ## Supported DSH seams
 
@@ -91,10 +108,16 @@ The supported upstream baselines are:
   on `cloga-pi-ai-model-api`, based on tag commit `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`.
 - Tag `dsh-v0.1.2-rc.1`, commit `a66e4702047846cdaa10c66c9d3df3951f5ea70d`.
 - Tag `dsh-v0.1.3-alpha.1`, commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`.
+- Official tag `dsh-v0.1.5-alpha.1`, commit `5dda764ed3aa172535a7967b06ff95d9cbfe536a`.
+- Official tag `dsh-v0.1.5-alpha.2`, commit `b2e3b2a0125854567a4a5fcba75782e42fe84901`.
+- Official tag `dsh-v0.1.5-rc.1`, commit `183f08e9c6dde7e36cd2318eaee70b0da08fb35e`.
+- Official tag `dsh-v0.1.5-rc.2`, commit `fb2c4b9e698e30edb738bca4cf0618587db7d203`.
+
+The current target is official `0.1.5-alpha.2`; retain all six earlier pins and exact `0.1.2-rc.1` development dependencies. All five tagged-source targets use unchanged tagged-source runtime fixtures, not standalone npm-artifact certification. Compatibility metadata and synthetic tests do not prove live endpoints, installed Desktop bytes, release publication or loaded runtime state. Public Host, Client and Remote seams remain available; this baseline update does not authorize implementation rewrites.
 
 These pins document compatibility evidence. They do not authorize creating another controlled Core patch or making one a prerequisite for new plugin fixes.
 
-- Models UI: rc.1 and alpha.1 use `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`; rc.2 falls back to a dedicated `settings.section`.
+- Models UI: `0.1.2-rc.1`, `0.1.3-alpha.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1` and `0.1.5-rc.2` use `settings.models.provider-card`, keyed by settings namespace `llm-pi-ai`, to embed login/status/Refresh/Manage in a mounted configured canonical `github-copilot` row and suppress the separate footer controller. With no such row mounted, retain footer fallback; rc.2 uses a dedicated `settings.section`. Preserve the shared account-state owner across transfer only while another eligible surface remains mounted. Unmounting the last surface or replacing declarations without overlapping mounts stops polling; a later controller reads status and separately non-forcing ensures missing/idle/stale/error/loading signed-in metadata, without replaying the old forced-login action. Manual Refresh models lives inside Manage; errors expose Retry. Opening Models is no longer guaranteed network-free, but status/details themselves remain pure. This additive slot cannot replace Core Edit/Delete: retain the native editor, while normal plugin discovery needs no manual model definitions. UI integration must not merge/remove actual canonical and `github-copilot-preview` routes or rewrite credentials, configuration, history or selection.
 - Authorization flow key: `llm-pi-ai/github-copilot`.
 - Authorization service: rc.1 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
@@ -104,7 +127,7 @@ These pins document compatibility evidence. They do not authorize creating anoth
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.
 - Provider headers: rc.1 validates configured headers through Fetch and reuses Host-owned headers during model discovery.
-- Remote results: all authorization methods share the Zod v4 `GitHubCopilotAuthorizationView` strict codec required by rc.2 and accepted by rc.1.
+- Remote results: the seven ordinary authorization methods retain the Zod v4 `GitHubCopilotAuthorizationView` strict codec required by rc.2 and accepted by rc.1. The eighth no-argument `migrationStatus()` method has a separate strict `GitHubCopilotMigrationStatus` codec; it does not change the ordinary auth contract.
 
 When upgrading DSH or pi-ai, inspect the exact tagged public exports and update the baseline, compatibility guard, tests, and docs together.
 
@@ -161,7 +184,7 @@ Then run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.
 
 `pnpm verify` checks the Agent contract, source and local test types, baseline markers, a clean build, Vitest tests, Node tooling tests, and real built Host import/Client-loader/Remote smoke. `tests/fixtures` are intentionally excluded from local test typecheck because they import source from a separate pinned Core checkout. The checked-in code must pass; never suppress compiler errors or weaken a test to get a green report.
 
-CI runs on Windows/Linux against the three exact Core baselines. `verify:upstream` is static seam-marker evidence. `verify:controlled-core` exclusively installs a temporary config fixture, refuses an existing target, and removes only its own file; it is not full plugin activation. The published rc.2 adapter test covers model materialization, not live provider transport. The release job must wait for the complete reusable CI matrix on the tagged revision, then verify its own packed bytes before publishing.
+CI runs on Windows/Linux against all seven exact Core baselines, with unchanged tagged-source runtime checks for `0.1.3-alpha.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1` and `0.1.5-rc.2`. Optional native Chat fixtures also cover all five tagged-source targets and `0.1.2-rc.1`. `verify:upstream` is static seam-marker evidence. `verify:controlled-core` exclusively installs a temporary config fixture, refuses an existing target, and removes only its own file; it is not full plugin activation. The published rc.2 adapter test covers model materialization, not live provider transport. The release job must wait for the complete reusable CI matrix on the tagged revision, then verify its own packed bytes before publishing.
 
 ### Evidence and side effects
 
@@ -173,8 +196,16 @@ CI runs on Windows/Linux against the three exact Core baselines. `verify:upstrea
 | `pnpm verify:tarball` | Archive structure/export/media and equality to local build; no extraction/execution |
 | Authorization `status()` / `describeGitHubCopilotProviderProfile()` | Read-only grant snapshot and route planning; no settings mutation, OAuth refresh or network proof |
 | Authorization `reconcile()` / `inspectGitHubCopilotProviderProfile()` | Explicit stored-snapshot repair; revision-checked settings writes; NOT token/model discovery refresh |
+| Explicit UI Start sign-in / account switch | Successful immediate or polled completion forces one bounded discovery; shared owner survives only overlapping eligible mounts; no model switch or message replay |
+| Models opening / `ensureModels()` | Separately ensures missing/idle/stale/error/loading signed-in metadata once without force; error re-entry may retry after shared cooldown with no same-mount loop; loading joins the Host flight without extra network; fresh ready makes no request and true unavailable/empty models do not auto-retry; status/details remain network-free |
+| Manage → Refresh models / visible Retry | Explicit bounded discovery and native OAuth refresh when needed; not a prerequisite for normal opening/use |
+| Metadata freshness | `github-copilot.accountModelTtlMs` defaults to 86400000 (24h maximum reuse); `accountModelFailureCooldownMs` defaults to 300000 (5min non-forcing failure cooldown); shared Host single flight, no periodic metadata polling; a separate mounted 60s timer updates timestamp text only |
+| Last metadata display | Same-account data may display during TTL refresh/loading/error but never authorize requests; credential/account/permission invalidation or proof expiry immediately revokes evidence; TTL does not extend tokens |
+| Last-success timestamp (alpha.7, #97) | Show `snapshot.discoveredAt` once beside count outside Manage: English relative text, full LOCAL date/time/zone tooltip and accessible semantic `time`; missing/invalid/no account hides it, future uses absolute text. Pending/error retains last success, successful refresh replaces it and sign-out clears it. One mounted 60s display-only timer makes no RPC/status/discovery calls and is disposed with timestamp/unmount; cache/discovery lifecycle unchanged |
+| Definitive `UNKNOWN_MODEL` | One bounded metadata refresh, never message replay or automatic model switching; generic HTTP/network errors are not guessed to be unknown models |
+| README GIF/PNG illustrations | Primary alpha.7 model-freshness/model-refreshing PNGs show the built Client in isolated Edge with synthetic Remote/provider shell. Fake-clock checks advance the label from 8 to 10 minutes without additional RPC, retain timestamp during pending/error, replace it on refresh success, clear it and remove the timer on sign-out, and keep the 375px layout safe. Host TTL/cooldown timing needs unit tests, not screenshots; no live Core/production authorization. Provider-entry/authorization PNGs remain historical alpha.5; older compact GIF/PNGs alpha.3 |
 | Host attach/restart | Reconciles the stored profile; search proofs stay lazy and do not start at attach |
-| Credential/settings notifications | Invalidate cached proof only; no eager authenticated/network calls |
+| Background credential/reset notifications | Invalidate evidence and clear Client state with read-only status; no forced discovery on every token event; next Models open/use ensures metadata |
 | Eligible model/search request | May resolve/refresh credentials and run bounded capability proof; changes during proof must fail closed rather than reuse another account's proof |
 | Release install | Writes a named user profile; installed on disk is not loaded in the running Host |
 

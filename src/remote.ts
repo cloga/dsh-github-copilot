@@ -8,13 +8,16 @@ import type {
 } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
+import type { GitHubCopilotMigrationStatus } from './migration-status.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
     githubCopilot: {
+      migrationStatus(): Promise<RemoteResult<GitHubCopilotMigrationStatus>>
       status(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       reconcile(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       discoverModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      ensureModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       cancel(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       signOut(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -65,17 +68,56 @@ const result = {
   schema: GitHubCopilotAuthorizationViewSchema,
 } as const
 
+export const GITHUB_COPILOT_MIGRATION_STATUS_TYPE_SYMBOL
+  = 'dsh-github-copilot#GitHubCopilotMigrationStatus'
+const selectionSchema = z.object({
+  provider: z.string().min(1).max(512),
+  model: z.string().min(1).max(512),
+  reasoningEffort: z.string().min(1).max(512).optional(),
+}).strict()
+
+/** Independent Ops result: strict at every object level; no account or private Session data. */
+export const GitHubCopilotMigrationStatusSchema = z.object({
+  plugin: z.object({ name: z.literal('dsh-github-copilot'), version: z.string().min(1).max(512) }).strict(),
+  protocolVersion: z.literal(1),
+  historyScope: z.literal('live-agents-only'),
+  observedAt: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  capabilities: z.object({
+    agentsList: z.boolean(), sessionProjections: z.boolean(), settingsCas: z.boolean(),
+    providerRegistry: z.boolean(), defaultSelection: z.boolean(),
+  }).strict(),
+  complete: z.object({ sessions: z.boolean(), defaultSelection: z.boolean(), routes: z.boolean() }).strict(),
+  defaultSelection: selectionSchema.nullable(),
+  sessions: z.array(z.object({
+    id: z.string().min(1).max(512), status: z.enum(['idle', 'running']),
+    effectiveSelection: selectionSchema.nullable(),
+    selectionSource: z.enum(['pending', 'request-header', 'default', 'unknown']),
+    activeRequestSelection: selectionSchema.nullable(),
+  }).strict()).max(1024),
+  routes: z.object({
+    nativeConfigured: z.boolean().nullable(), nativeRegistered: z.boolean().nullable(), managedRegistered: z.boolean().nullable(),
+  }).strict(),
+}).strict()
+
 const contribution: TypertRemoteContribution = {
   package: 'dsh-github-copilot',
-  descriptors: ['status', 'reconcile', 'discoverModels', 'start', 'cancel', 'signOut'].map(method => ({
-    id: `dsh-github-copilot:githubCopilot.${method}`,
-    service: 'githubCopilotAuthorization',
-    namespace: 'githubCopilot',
-    method,
-    invocation: direct,
-    parameters: [],
-    result,
-  })),
+  descriptors: [
+    ...['status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut'].map(method => ({
+      id: `dsh-github-copilot:githubCopilot.${method}`,
+      service: 'githubCopilotAuthorization',
+      namespace: 'githubCopilot',
+      method,
+      invocation: direct,
+      parameters: [],
+      result,
+    })),
+    {
+      id: 'dsh-github-copilot:githubCopilot.migrationStatus',
+      service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'migrationStatus',
+      invocation: direct, parameters: [],
+      result: { mode: 'strict', typeSymbol: GITHUB_COPILOT_MIGRATION_STATUS_TYPE_SYMBOL, schema: GitHubCopilotMigrationStatusSchema },
+    },
+  ],
 }
 
 export default contribution

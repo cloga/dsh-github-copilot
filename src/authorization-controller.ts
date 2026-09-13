@@ -12,6 +12,7 @@ import {
   type RouteBackup, type RouteMutation, type RouteSettings,
 } from './route-ownership.ts'
 import { temporaryGitHubCopilotModelFromProfile } from './temporary-models.ts'
+import { migrationStatus, type GitHubCopilotMigrationStatus } from './migration-status.ts'
 
 export { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
@@ -373,6 +374,12 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     super(ctx, 'githubCopilotAuthorization', { namespace: 'githubCopilot' })
   }
 
+  /** No-argument Ops evidence; deliberately independent of ordinary account status. */
+  @Remote
+  migrationStatus(): GitHubCopilotMigrationStatus {
+    return migrationStatus(this.ctx)
+  }
+
   @Remote
   async status(): Promise<GitHubCopilotAuthorizationView> {
     const authorization = service<AuthorizationServiceView>(
@@ -403,7 +410,10 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
         route = { state: 'needs-repair', diagnosticCode: 'RECONCILIATION_FAILED' }
       }
     }
+    // Completion must use the same barrier as discoverModels(): native OAuth
+    // can finish before this attempt's post-grant profile repair has settled.
     const inFlight = authorization.describe(GITHUB_COPILOT_CREDENTIAL_KEY)?.inFlight === true
+      || this.attempt !== undefined
     const discovered = accountModelsView(this.ctx)
     return {
       phase: inFlight
@@ -425,6 +435,16 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   /** Explicit model discovery: may refresh OAuth and GET the account catalog, never changes selection. */
   @Remote
   async discoverModels(): Promise<GitHubCopilotAuthorizationView> {
+    return this.loadAccountModels(true)
+  }
+
+  /** Ensure metadata for a visible account view, honoring shared cache and failure cooldown. */
+  @Remote
+  async ensureModels(): Promise<GitHubCopilotAuthorizationView> {
+    return this.loadAccountModels(false)
+  }
+
+  private async loadAccountModels(force: boolean): Promise<GitHubCopilotAuthorizationView> {
     const current = await this.status()
     if (!current.configured || current.inFlight || this.attempt !== undefined) return current
     const source: unknown = this.ctx.get('githubCopilotPreview')
@@ -432,7 +452,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     if (typeof discover !== 'function') return { ...current, accountModels: {
       state: 'error', models: [], rejected: [], error: 'COPILOT_MODEL_DISCOVERY_UNAVAILABLE',
     } }
-    try { await discover.call(source, { force: true }) }
+    try { await discover.call(source, { force }) }
     catch { return { ...await this.status(), accountModels: {
       state: 'error', models: [], rejected: [], error: 'COPILOT_MODEL_DISCOVERY_FAILED',
     } } }

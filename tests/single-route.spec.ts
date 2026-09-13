@@ -101,7 +101,9 @@ describe('single managed Copilot route with native OAuth', () => {
     })
     vi.stubGlobal('fetch', fetch)
     const h = await runtime()
-    const view = await h.ctx.get('githubCopilotAuthorization')!.discoverModels()
+    expect(fetch).not.toHaveBeenCalled()
+    expect((await h.ctx.llm.listModels(MANAGED)).map(model => [model.provider, model.id])).toEqual([[MANAGED, 'future-account-model']])
+    const view = await h.ctx.get('githubCopilotAuthorization')!.ensureModels()
     expect(view.accountModels).toMatchObject({ state: 'ready', models: [{ id: 'future-account-model', api: 'openai-responses' }] })
     expect(h.ctx.llm.listProviders().map(provider => ({ id: provider.id, name: provider.name }))).toEqual([{ id: MANAGED, name: 'GitHub Copilot' }])
     expect((await h.ctx.llm.listModels(MANAGED)).map(model => model.id)).toEqual(['future-account-model'])
@@ -110,6 +112,47 @@ describe('single managed Copilot route with native OAuth', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(h.mutate).not.toHaveBeenCalled()
     expect(h.deleteRecord).not.toHaveBeenCalled()
+  })
+
+  it('joins Settings ensure and recursive Core catalog refresh to one cold discovery flight', async () => {
+    let release!: (response: Response) => void
+    let entered!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    const pending = new Promise<Response>(resolve => { release = resolve })
+    const fetch = vi.fn(async () => { entered(); return pending })
+    vi.stubGlobal('fetch', fetch)
+    const h = await runtime()
+    const refreshed: Array<ReturnType<Context['llm']['listModels']>> = []
+    const updated = vi.fn(() => {
+      // Match the public host-catalog consumer: re-read after registration.replace.
+      // Cap the fixture only to report a runaway loop rather than hang the runner.
+      if (refreshed.length < 5) refreshed.push(h.ctx.llm.listModels(MANAGED))
+    })
+    const remove = h.ctx.on('llm/adapters-updated', updated)
+    try {
+      const listing = h.ctx.llm.listModels(MANAGED)
+      await started
+      const discover = vi.spyOn(h.ctx.get('githubCopilotPreview')!, 'discover')
+      const ensuring = h.ctx.get('githubCopilotAuthorization')!.ensureModels()
+      const concurrent = h.ctx.llm.listModels(MANAGED)
+      await vi.waitFor(() => expect(discover).toHaveBeenCalledWith({ force: false }))
+      expect(fetch).toHaveBeenCalledTimes(1)
+      release(new Response(JSON.stringify({ data: [{ id: 'future-account-model', name: 'Future model', model_picker_enabled: true,
+        policy: { state: 'enabled' }, supported_endpoints: ['/responses'],
+        capabilities: { supports: { streaming: true, tool_calls: true }, limits: { max_context_window_tokens: 128000, max_output_tokens: 16000 } },
+      }] }), { headers: { 'content-type': 'application/json' } }))
+      const [models, settings, other] = await Promise.all([listing, ensuring, concurrent])
+      expect(models.map(model => [model.provider, model.id])).toEqual([[MANAGED, 'future-account-model']])
+      expect(other).toEqual(models)
+      expect(settings.accountModels).toMatchObject({ state: 'ready', models: models.map(model => ({ id: model.id })) })
+      expect(await Promise.all(refreshed)).toEqual([models])
+      for (let attempt = 0; attempt < 3; attempt++) expect(await h.ctx.llm.listModels(MANAGED)).toEqual(models)
+      await h.ctx.get('githubCopilotAuthorization')!.ensureModels()
+      expect(updated).toHaveBeenCalledTimes(1)
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(h.modifyRecord).not.toHaveBeenCalled()
+      expect(h.mutate).not.toHaveBeenCalled()
+    } finally { remove() }
   })
 
   it('honors an explicit legacy-profile removal without deleting OAuth or rebuilding the route', async () => {

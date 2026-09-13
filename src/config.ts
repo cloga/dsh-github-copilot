@@ -26,6 +26,14 @@ export interface InlineConfig {
   probe: boolean
   /** Bound on one probe request, in milliseconds. */
   probeTimeoutMs: number
+  /** Maximum reuse of account model metadata; credential proof guards still take precedence. */
+  accountModelTtlMs?: number
+  /** Minimum delay after failed passive discovery; explicit Refresh bypasses it. */
+  accountModelFailureCooldownMs?: number
+  /** Route the official web-search consumer by initiating Session when the bundle isolate is mounted. */
+  routeWebSearch?: boolean
+  /** Automatic fallback, disclosed in results; no per-search approval dialog. */
+  searchFallback?: 'none' | 'deepseek'
   /** Internal JSON backup of route leaves temporarily owned by the GPT-6 overlay. */
   temporaryRouteBackup?: string
 }
@@ -42,5 +50,9 @@ export const Config: z<InlineConfig> = z.object({
   idleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(300_000),
   probe: z.boolean().default(true),
   probeTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(30_000),
+  accountModelTtlMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(86_400_000),
+  accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
+  routeWebSearch: z.boolean().default(true),
+  searchFallback: z.union(['none', 'deepseek']).default('deepseek'),
   temporaryRouteBackup: z.string().hidden(),
 })

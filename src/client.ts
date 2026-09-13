@@ -6,7 +6,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { createElement, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AUTHORIZATION_POLL_INITIAL_MS, AUTHORIZATION_POLL_MAX_MS, createCompactAccount } from './compact-account.ts'
 import type { CSSProperties, ReactElement } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
@@ -448,6 +448,55 @@ function capabilityWarningMessage(code: string): string {
   return 'Review this model capability warning before relying on the affected feature.'
 }
 
+export interface AccountModelsUpdatedAt {
+  readonly text: string
+  readonly dateTime: string
+  readonly title: string
+  readonly ariaLabel: string
+}
+
+/** Pure presentation of the Host's last successful cache update; never invent freshness evidence. */
+export function formatAccountModelsUpdatedAt(discoveredAt: number | undefined, now: number, locales?: Intl.LocalesArgument): AccountModelsUpdatedAt | undefined {
+  if (typeof discoveredAt !== 'number' || !Number.isFinite(discoveredAt) || discoveredAt < 0) return undefined
+  const date = new Date(discoveredAt)
+  if (!Number.isFinite(date.getTime())) return undefined
+  // Omit timeZone deliberately: both hover and accessible text use the viewer's local timezone.
+  const title = new Intl.DateTimeFormat(locales, {
+    year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'long',
+  }).format(date)
+  const elapsed = now - discoveredAt
+  let text = `Updated ${title}`
+  // A future timestamp is clock skew, not a negative age or a claim that it just happened.
+  if (Number.isFinite(elapsed) && elapsed >= 0) {
+    if (elapsed < 60_000) text = 'Updated just now'
+    else {
+      const [unit, duration] = elapsed < 3_600_000 ? ['minute', 60_000] as const
+        : elapsed < 86_400_000 ? ['hour', 3_600_000] as const : ['day', 86_400_000] as const
+      const count = Math.floor(elapsed / duration)
+      text = `Updated ${count} ${unit}${count === 1 ? '' : 's'} ago`
+    }
+  }
+  return { text, dateTime: date.toISOString(), title, ariaLabel: `Last successful account-model cache update: ${title}` }
+}
+
+/** Display-only clock: no Remote, status, discovery, or controller lifecycle ownership. */
+export function GitHubCopilotAccountModelsUpdatedAt(props: { readonly discoveredAt: number | undefined }): ReactElement | null {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const current = Date.now()
+    setNow(current)
+    if (formatAccountModelsUpdatedAt(props.discoveredAt, current) === undefined) return
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [props.discoveredAt])
+  const timestamp = formatAccountModelsUpdatedAt(props.discoveredAt, now)
+  return timestamp === undefined ? null : createElement('time', {
+    'data-dsh-github-copilot-models-updated-at': true,
+    dateTime: timestamp.dateTime, title: timestamp.title, 'aria-label': timestamp.ariaLabel,
+    style: { fontSize: '12px', opacity: 0.65, minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' },
+  }, timestamp.text)
+}
+
 /** A discovery snapshot is metadata evidence, not proof of a successful model call. */
 export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: AccountModelsSnapshot }): ReactElement {
   const { snapshot } = props
@@ -455,18 +504,15 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
     idle: 'Account models have not been refreshed.',
     loading: 'Account model discovery is still in progress. This panel does not poll automatically.',
     ready: 'Account metadata is ready. Select models under GitHub Copilot in the model picker.',
-    stale: 'This account model snapshot is stale. Refresh before relying on its metadata.',
+    stale: 'Showing the last checked model list. Freshness is checked when opening Models or preparing a model request.',
     error: 'Account model discovery failed. Use Refresh account models to retry.',
     disposed: 'Account model discovery is no longer active in this profile.',
     unconfigured: 'Sign in with GitHub before refreshing account models.',
     unavailable: 'Account model discovery is unavailable in this profile.',
   }
-  const timestamp = snapshot.discoveredAt === undefined ? undefined : new Date(snapshot.discoveredAt)
-  const iso = timestamp !== undefined && Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : undefined
   return createElement('section', { 'data-dsh-github-copilot-account-models': true },
     createElement('p', { role: 'status', 'aria-live': 'polite', 'data-dsh-github-copilot-account-models-state': snapshot.state }, messages[snapshot.state]),
     createElement('p', null, 'Discovery does not prove a successful model call or hosted search. No default model or account policy is changed.'),
-    iso === undefined ? null : createElement('p', null, 'Snapshot time: ', createElement('time', { dateTime: iso }, iso)),
     snapshot.error === undefined ? null : createElement('p', { role: 'alert' }, discoveryCode(snapshot.error, 'COPILOT_MODEL_DISCOVERY_FAILED')),
     createElement('details', null,
       createElement('summary', null, `${snapshot.models.length} accepted model(s)`),
@@ -544,6 +590,9 @@ export function GitHubCopilotAccountModelsPanel(props: { readonly remote: Client
 
 interface GitHubCopilotPreviewFooterProps {
   readonly remote: ClientContext['remote']['githubCopilot']
+  /** A slot coordinator owns this controller's attachment across surface handoffs. */
+  readonly account?: ReturnType<typeof createCompactAccount>
+  readonly embedded?: boolean
 }
 
 const compactButtonStyle: CSSProperties = {
@@ -565,9 +614,9 @@ function compactErrorMessage(code: string): string {
 
 /** One lifecycle owner; disclosure toggles never mount another status or discovery controller. */
 export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterProps): ReactElement {
-  const account = useMemo(() => createCompactAccount(props.remote, authorizationViewFrom, copyAuthorizationCode), [props.remote])
+  const account = useMemo(() => props.account ?? createCompactAccount(props.remote, authorizationViewFrom, copyAuthorizationCode), [props.remote, props.account])
   const state = useSyncExternalStore(account.subscribe, account.getSnapshot, account.getSnapshot)
-  useEffect(() => account.attach(), [account])
+  useEffect(() => props.account === undefined ? account.attach() : undefined, [account, props.account])
   const [manageOpen, setManageOpen] = useState(false)
   const managementId = `github-copilot-management-${useId()}`
   const view = state.view
@@ -578,12 +627,14 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     || state.error === 'COPILOT_AUTHORIZATION_CANCEL_FAILED' || state.error === 'COPILOT_SIGN_OUT_FAILED'
   const notice = activeAuthorizationNotice(view)
   const models = view?.accountModels
-  const modelStatus = state.operation === 'discoverModels' ? 'Refreshing models…'
-    : models?.state === 'ready' ? `${models.models.length} model${models.models.length === 1 ? '' : 's'}`
-      : models?.state === 'stale' ? 'Models need refresh'
-        : models?.state === 'error' ? 'Model discovery failed'
-          : models?.state === 'loading' ? 'Discovering models…'
-            : models?.state === 'unavailable' || models?.state === 'disposed' ? 'Models unavailable' : undefined
+  const refreshing = state.operation === 'discoverModels' || models?.state === 'loading'
+  // The Host alone retains same-account TTL-stale presentation. This count is
+  // not readiness, entitlement, or a reason to skip the freshness check.
+  const count = models !== undefined && (models.state === 'ready' || models.models.length > 0)
+    ? `${models.models.length} model${models.models.length === 1 ? '' : 's'}` : undefined
+  const modelStatus = refreshing ? count === undefined ? 'Refreshing models…' : `${count} · Refreshing…`
+    : models?.state === 'error' ? count === undefined ? 'Model discovery failed' : `${count} · Refresh failed`
+      : count ?? (models?.state === 'unavailable' || models?.state === 'disposed' ? 'Models unavailable' : undefined)
   const status = state.checking ? 'Checking status…'
     : state.operation === 'signOut' ? 'Signing out…'
       : state.operation === 'cancel' ? 'Cancelling sign-in…'
@@ -594,21 +645,25 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
       style: { ...compactButtonStyle, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'default' : 'pointer' }, ...extras }, label)
   return createElement('section', {
     'data-dsh-github-copilot-compact-account': true,
-    style: { minWidth: 0, padding: '12px 14px', margin: '12px 0', borderRadius: '16px',
-      border: '1px solid color-mix(in srgb, currentColor 24%, transparent)', background: 'transparent' },
+    'data-dsh-github-copilot-embedded': props.embedded === true ? true : undefined,
+    'aria-label': props.embedded === true ? 'GitHub Copilot account' : undefined,
+    style: props.embedded === true ? { minWidth: 0, marginTop: '8px' }
+      : { minWidth: 0, padding: '12px 14px', margin: '12px 0', borderRadius: '16px',
+        border: '1px solid color-mix(in srgb, currentColor 24%, transparent)', background: 'transparent' },
   },
   createElement('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', minHeight: '42px' } },
     createElement('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', minWidth: 0 } },
-      createElement('h3', { style: { margin: 0, fontSize: '16px', lineHeight: '24px' } }, 'GitHub Copilot'),
+      props.embedded === true ? null : createElement('h3', { style: { margin: 0, fontSize: '16px', lineHeight: '24px' } }, 'GitHub Copilot'),
       createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '13px', opacity: 0.75 } }, status),
-      modelStatus === undefined ? null : createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', opacity: 0.7 } }, modelStatus)),
+      modelStatus === undefined ? null : createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', opacity: 0.7 } }, modelStatus),
+      signedIn ? createElement(GitHubCopilotAccountModelsUpdatedAt, { discoveredAt: models?.discoveredAt }) : null),
     createElement('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginInlineStart: 'auto', minWidth: 0 } },
       (view === undefined && !state.checking) || state.error === 'COPILOT_AUTHORIZATION_STATUS_FAILED' || uncertain
         ? actionButton('Retry status', account.retryStatus, state.checking || state.operation !== undefined) : null,
-      signedIn ? actionButton(state.operation === 'discoverModels' ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
-        { 'data-dsh-github-copilot-refresh-models': true })
-        : !authorizing && view !== undefined ? actionButton('Sign in with GitHub', account.start, pendingAction || view.writable === false,
-          { title: view.writable === false ? 'Credentials are read-only' : undefined }) : null,
+      signedIn && state.error === 'COPILOT_MODEL_DISCOVERY_FAILED'
+        ? actionButton('Retry', account.refreshModels, pendingAction, { 'data-dsh-github-copilot-retry-models': true }) : null,
+      !signedIn && !authorizing && view !== undefined ? actionButton('Sign in with GitHub', account.start, pendingAction || view.writable === false,
+        { title: view.writable === false ? 'Credentials are read-only' : undefined }) : null,
       actionButton('Manage', () => setManageOpen(open => !open), false, { 'aria-expanded': manageOpen, 'aria-controls': managementId }))),
   state.error === undefined ? null : createElement('p', { role: 'alert', 'data-dsh-github-copilot-account-error': state.error,
     style: { margin: '8px 0 0', fontSize: '13px', overflowWrap: 'anywhere' } }, compactErrorMessage(state.error)),
@@ -619,8 +674,10 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     actionButton(state.operation === 'cancel' ? 'Cancelling…' : 'Cancel sign-in', account.cancel, state.operation === 'cancel')) : null,
   manageOpen ? createElement('div', { id: managementId, role: 'region', 'aria-label': 'GitHub Copilot account management',
     style: { marginTop: '12px', paddingTop: '12px', borderTop: '1px solid color-mix(in srgb, currentColor 18%, transparent)', overflowWrap: 'anywhere' } },
-    createElement('p', { style: { margin: '0 0 10px', fontSize: '13px' } }, 'Refresh models reads account metadata; it does not verify a model call or change your selected model.'),
-    models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Refresh models to load the models available to this account.')
+    createElement('p', { style: { margin: '0 0 10px', fontSize: '13px' } }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
+    signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
+      { 'data-dsh-github-copilot-refresh-models': true }) : null,
+    models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Account model metadata is not available yet.')
       : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models }),
     routeStatusMessage(view) === undefined ? null : createElement('p', { role: 'status' }, routeStatusMessage(view)),
     view?.route?.state === 'needs-repair' && signedIn ? actionButton('Repair model configuration', account.reconcile, pendingAction) : null,
@@ -629,7 +686,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     compatibilityDetails()) : null)
 }
 
-/** The sole account owner on modern Models pages, independent of a legacy provider profile. */
+/** Standalone footer presentation; registered Models seats use the shared surface coordinator. */
 export function GitHubCopilotPreviewFooter(props: GitHubCopilotPreviewFooterProps): ReactElement {
   return createElement('div', { 'data-dsh-github-copilot-preview-footer': true },
     createElement(GitHubCopilotCompactAccount, { remote: props.remote }))
@@ -653,12 +710,96 @@ function migrationLink(): ReactElement {
   }, 'Review the single-route migration guide')
 }
 
-/** Core owns this retained row. Never start a second authorization or discovery widget here. */
-export function GitHubCopilotLegacyProviderNotice(props: ProviderCardExtrasOwnerProps): ReactElement | null {
-  if (props.provider.provider !== GITHUB_COPILOT_PROVIDER_ID || !props.configured) return null
-  return createElement('div', { 'data-dsh-github-copilot-legacy-profile': true },
-    createElement('p', null, 'This legacy provider profile is kept until explicit migration; it is not a second GitHub account. Manage sign-in and account models in the GitHub Copilot account panel.'),
-    migrationLink())
+type AccountSurfaceKind = 'provider' | 'footer' | 'settings'
+interface AccountSurfaceSeat { readonly kind: AccountSurfaceKind; active: boolean }
+type AccountController = ReturnType<typeof createCompactAccount>
+type AccountSurfaceOwner = { readonly token: symbol; readonly account: AccountController }
+interface AccountSurfaceLease { readonly seat: AccountSurfaceSeat; readonly remote: GitHubCopilotPreviewFooterProps['remote'] }
+
+/** Only the mounted canonical row owns embedded controls. Credential presence is not row presence. */
+export function isGitHubCopilotAccountRow(props: ProviderCardExtrasOwnerProps): boolean {
+  return props.configured && props.provider.provider === GITHUB_COPILOT_PROVIDER_ID
+    && props.provider.settingsNs === 'llm-pi-ai'
+}
+
+/** Plugin-owned mounted-seat leases, not a view into Core's settings or provider store.
+ * One controller follows the winning surface, retaining in-flight work during a
+ * handoff. Slot disposal revokes its leases even before React unmounts the rows.
+ */
+export function createAccountSurfaces() {
+  const surfaces = new Map<symbol, AccountSurfaceLease>()
+  const listeners = new Set<() => void>()
+  const rank: Record<AccountSurfaceKind, number> = { provider: 0, footer: 1, settings: 2 }
+  let active = true
+  let snapshot: AccountSurfaceOwner | undefined
+  let remote: GitHubCopilotPreviewFooterProps['remote'] | undefined
+  let account: AccountController | undefined
+  let detach: (() => void) | undefined
+  const sync = () => {
+    let selected: AccountSurfaceLease | undefined
+    let token: symbol | undefined
+    for (const [candidate, surface] of surfaces) {
+      if (surface.seat.active && (selected === undefined || rank[surface.seat.kind] < rank[selected.seat.kind])) {
+        selected = surface
+        token = candidate
+      }
+    }
+    if (selected?.remote !== remote) {
+      detach?.()
+      detach = undefined
+      remote = selected?.remote
+      account = remote === undefined ? undefined : createCompactAccount(remote, authorizationViewFrom, copyAuthorizationCode)
+    }
+    if (snapshot?.token === token && snapshot?.account === account) return
+    snapshot = token === undefined || account === undefined ? undefined : { token, account }
+    // Attach only once per remote/lifetime, not once per mounted React surface.
+    if (account !== undefined && detach === undefined) detach = account.attach()
+    for (const listener of listeners) listener()
+  }
+  return {
+    getSnapshot: () => snapshot,
+    invalidate() { account?.invalidate() },
+    subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
+    mount(seat: AccountSurfaceSeat, token: symbol, remote: GitHubCopilotPreviewFooterProps['remote']) {
+      if (!active || !seat.active) return () => {}
+      const lease = { seat, remote }
+      surfaces.set(token, lease)
+      sync()
+      return () => {
+        if (surfaces.get(token) !== lease) return
+        surfaces.delete(token)
+        sync()
+      }
+    },
+    revoke(seat: AccountSurfaceSeat) {
+      seat.active = false
+      for (const [token, surface] of surfaces) if (surface.seat === seat) surfaces.delete(token)
+      sync()
+    },
+    dispose() {
+      if (!active) return
+      active = false
+      surfaces.clear()
+      sync()
+      listeners.clear()
+    },
+  }
+}
+
+/** Arbitration happens in committed layout effects, never during speculative render. */
+export function GitHubCopilotAccountSurface(props: GitHubCopilotPreviewFooterProps & {
+  readonly surfaces: ReturnType<typeof createAccountSurfaces>
+  readonly seat: AccountSurfaceSeat
+  readonly eligible?: boolean
+}): ReactElement | null {
+  const token = useMemo(() => Symbol('github-copilot-account-surface'), [])
+  const owner = useSyncExternalStore(props.surfaces.subscribe, props.surfaces.getSnapshot, props.surfaces.getSnapshot)
+  useLayoutEffect(() => props.eligible === false ? undefined : props.surfaces.mount(props.seat, token, props.remote),
+    [props.surfaces, props.seat, props.remote, props.eligible, token])
+  if (props.eligible === false || owner?.token !== token) return null
+  const embedded = props.seat.kind === 'provider'
+  return createElement('div', { 'data-dsh-github-copilot-account-surface': props.seat.kind },
+    createElement(GitHubCopilotCompactAccount, { remote: props.remote, account: owner.account, embedded }))
 }
 
 /** Unified fallback when the Models footer extension is absent or incompatible. */
@@ -670,6 +811,9 @@ export function GitHubCopilotSettingsSection(
 }
 
 function registerUi(ctx: ClientContext): () => void {
+  const surfaces = createAccountSurfaces()
+  const disposeCredentials = ctx.remote.$on('credentials/reference-updated', () => surfaces.invalidate())
+  const disposeReset = ctx.on('connection/reset', () => surfaces.invalidate())
   let active = true
   let footerActive = false
   let settingsSectionActive = false
@@ -677,31 +821,45 @@ function registerUi(ctx: ClientContext): () => void {
 
   const syncFallback = (): void => {
     if (active && settingsSectionActive && !footerActive) {
-      disposeFallback ??= ctx.slots.register({
-        name: 'settings.section',
-        id: 'github-copilot',
-        order: 11,
-        label: 'GitHub Copilot',
-      }, (props: SettingsSectionOwnerProps) => createElement(GitHubCopilotSettingsSection, {
-        ...props,
-        remote: ctx.remote.githubCopilot,
-      }))
+      if (disposeFallback === undefined) {
+        const seat: AccountSurfaceSeat = { kind: 'settings', active: true }
+        const dispose = ctx.slots.register({
+          name: 'settings.section',
+          id: 'github-copilot',
+          order: 11,
+          label: 'GitHub Copilot',
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote: ctx.remote.githubCopilot }))
+        disposeFallback = () => { surfaces.revoke(seat); dispose() }
+      }
       return
     }
     disposeFallback?.()
     disposeFallback = undefined
   }
 
-  const disposeProviderCardInjection = ctx.slots.inject('settings.models.provider-card', () =>
-    ctx.slots.register({
+  const disposeProviderCardInjection = ctx.slots.inject('settings.models.provider-card', () => {
+    const seat: AccountSurfaceSeat = { kind: 'provider', active: true }
+    const dispose = ctx.slots.register({
       name: 'settings.models.provider-card',
       key: 'llm-pi-ai',
-    }, (props: ProviderCardExtrasOwnerProps) => createElement(GitHubCopilotLegacyProviderNotice, props)))
+    }, (props: ProviderCardExtrasOwnerProps) => {
+      if (!props.configured && props.provider.provider === GITHUB_COPILOT_PROVIDER_ID && props.provider.settingsNs === 'llm-pi-ai') {
+        return createElement('p', { role: 'note', 'data-dsh-github-copilot-native-add-warning': true,
+          style: { fontSize: '13px', lineHeight: 1.6 } },
+        'GitHub Copilot account models are already managed by the account panel. Saving this additional provider profile enables another model group; it does not connect a second account. Use the account panel instead. This plugin cannot disable the native Save action.')
+      }
+      return createElement(GitHubCopilotAccountSurface, {
+        surfaces, seat, remote: ctx.remote.githubCopilot, eligible: isGitHubCopilotAccountRow(props),
+      })
+    })
+    return () => { surfaces.revoke(seat); dispose() }
+  })
 
   let disposeFooterInjection: () => void = () => {}
   const reportFooterUnavailable = () => ctx.logger.warn('[github-copilot] COPILOT_PREVIEW_FOOTER_UNAVAILABLE')
   try {
     disposeFooterInjection = ctx.slots.inject('settings.models.footer', () => {
+      const seat: AccountSurfaceSeat = { kind: 'footer', active: true }
       let dispose: () => void
       try {
         const spec = ctx.slots.spec?.('settings.models.footer')
@@ -713,7 +871,7 @@ function registerUi(ctx: ClientContext): () => void {
           name: 'settings.models.footer',
           id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
           order: 10,
-        }, () => createElement(GitHubCopilotPreviewFooter, { remote: ctx.remote.githubCopilot }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote: ctx.remote.githubCopilot }))
       } catch {
         // Do not withdraw working fallback authorization until footer registration succeeds.
         reportFooterUnavailable()
@@ -725,6 +883,7 @@ function registerUi(ctx: ClientContext): () => void {
       return () => {
         if (removed) return
         removed = true
+        surfaces.revoke(seat)
         dispose()
         footerActive = false
         syncFallback()
@@ -746,6 +905,9 @@ function registerUi(ctx: ClientContext): () => void {
 
   return () => {
     active = false
+    surfaces.dispose()
+    disposeCredentials()
+    disposeReset()
     disposeFooterInjection()
     disposeProviderCardInjection()
     disposeSettingsSectionInjection()

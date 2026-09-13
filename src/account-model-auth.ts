@@ -8,6 +8,9 @@ import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import type { AccountModelAuth, AccountModelSourceDependencies } from './account-model-source.ts'
 
+/** Native getAuth renews within five minutes; reserve another thirty seconds for metadata preparation. */
+export const ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS = 5 * 60_000 + 30_000
+
 /** An opaque, process-local account key. Never a substitute for request credentials. */
 export function copilotAccountKey(grant: GitHubCopilotOAuthCredential): string {
   return createHash('sha256').update(`${grant.refresh.length}:`).update(grant.refresh)
@@ -119,7 +122,7 @@ export function createAccountModelAuth(
         }
         const models = createModels({ credentials: scopedStore })
         models.setProvider({ ...native, auth: { oauth: guardedOAuth } })
-        const resolved = await models.getAuth(GITHUB_COPILOT_PROVIDER_ID, { signal })
+        const resolved = await models.getAuth(GITHUB_COPILOT_PROVIDER_ID, { signal, minOAuthValidityMs: ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS })
         active(signal)
         if (resolved?.auth.apiKey === undefined) throw new Error('COPILOT_ACCOUNT_OAUTH_REQUIRED')
         const grant = await readGrant(signal)

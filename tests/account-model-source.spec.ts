@@ -25,7 +25,7 @@ function setup(overrides: Partial<AccountModelSourceDependencies> = {}) {
   const resolveAuth = vi.fn(async () => auth)
   const assertAuthCurrent = vi.fn(async () => undefined)
   const fetch = vi.fn<typeof globalThis.fetch>(async () => response())
-  const source = createAccountModelSource({ resolveAuth, assertAuthCurrent, fetch, now: () => clock, ttlMs: 100, timeoutMs: 1000, ...overrides })
+  const source = createAccountModelSource({ resolveAuth, assertAuthCurrent, fetch, now: () => clock, ttlMs: 100, failureCooldownMs: 0, timeoutMs: 1000, ...overrides })
   sources.push(source)
   return { source, resolveAuth, assertAuthCurrent, fetch, advance: (by: number) => { clock += by } }
 }
@@ -93,6 +93,145 @@ describe('account-bound model source', () => {
     const third = await source.load({ force: true })
     expect(third.generation).toBeGreaterThan(second.generation)
     expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('retains same-generation display metadata across TTL expiry, loading, and fetch failure without fresh reuse', async () => {
+    const { source, fetch, advance } = setup()
+    const snapshot = await source.load()
+    advance(100)
+    expect(source.readDisplaySnapshot()).toBe(snapshot)
+    expect(source.readSnapshot()).toBeUndefined()
+    expect(source.getView()).toMatchObject({ state: 'stale', modelCount: 1, fetchedAt: snapshot.fetchedAt })
+    const entered = deferred<void>()
+    const gate = deferred<Response>()
+    fetch.mockImplementationOnce(async () => { entered.resolve(); return gate.promise })
+    const pending = source.load({ force: true })
+    const failed = expect(pending).rejects.toMatchObject({ code: 'COPILOT_MODEL_SOURCE_FETCH_FAILED' })
+    await entered.promise
+    expect(source.readDisplaySnapshot()).toBe(snapshot)
+    expect(source.getView()).toMatchObject({ state: 'loading', generation: snapshot.generation, modelCount: 1 })
+    expect(source.readSnapshot()).toBeUndefined()
+    gate.reject(new Error('synthetic offline'))
+    await failed
+    expect(source.readSnapshot()).toBeUndefined()
+    expect(source.readDisplaySnapshot()).toBe(snapshot)
+    expect(source.getView()).toMatchObject({ state: 'error', modelCount: 1 })
+    const next = await source.load()
+    expect(next).not.toBe(snapshot)
+    expect(source.readSnapshot()).toBe(next)
+    expect(source.readDisplaySnapshot()).toBe(next)
+  })
+
+  it('never reauthorizes a still-young snapshot after a forced load fails', async () => {
+    const { source, fetch } = setup()
+    const snapshot = await source.load()
+    fetch.mockRejectedValueOnce(new Error('synthetic offline'))
+    await expect(source.load({ force: true })).rejects.toThrow('COPILOT_MODEL_SOURCE_FETCH_FAILED')
+    expect(source.readSnapshot()).toBeUndefined()
+    expect(source.readDisplaySnapshot()).toBe(snapshot)
+    source.invalidate()
+    expect(source.readDisplaySnapshot()).toBeUndefined()
+    await source.load()
+    source.dispose()
+    expect(source.readDisplaySnapshot()).toBeUndefined()
+  })
+
+  it.each([-1, Number.NaN, Infinity])('refuses display metadata for an invalid clock delta %s', async delta => {
+    const { source, advance } = setup()
+    await source.load()
+    advance(delta)
+    expect(source.readSnapshot()).toBeUndefined()
+    expect(source.readDisplaySnapshot()).toBeUndefined()
+    expect(source.getView().modelCount).toBe(0)
+  })
+
+  it.each(['account', 'auth', 'check', '401', '403'] as const)('clears previous display metadata on revoked proof: %s', async kind => {
+    const { source, fetch, resolveAuth, assertAuthCurrent } = setup()
+    await source.load()
+    if (kind === 'account') resolveAuth.mockResolvedValue({ ...auth, accountKey: 'opaque-account-b' })
+    if (kind === 'auth') resolveAuth.mockRejectedValue(new Error('synthetic read failure'))
+    if (kind === 'check') assertAuthCurrent.mockRejectedValue(new Error('synthetic permission change'))
+    fetch.mockImplementation(async () => {
+      expect(source.readDisplaySnapshot()).toBeUndefined()
+      return new Response('', { status: 503 })
+    })
+    if (kind === '401' || kind === '403') fetch.mockResolvedValue(new Response('', { status: Number(kind) }))
+    await expect(source.load({ force: true })).rejects.toBeInstanceOf(AccountModelSourceError)
+    expect(source.readDisplaySnapshot()).toBeUndefined()
+    expect(source.readSnapshot()).toBeUndefined()
+  })
+
+  it('defaults to a day-long metadata cache and a five-minute passive failure cooldown', async () => {
+    const { source, fetch, resolveAuth, advance } = setup({ ttlMs: undefined, failureCooldownMs: undefined })
+    const snapshot = await source.load()
+    advance(86_400_000 - 1)
+    expect(await source.load()).toBe(snapshot)
+    advance(1)
+    fetch.mockRejectedValueOnce(new Error('synthetic offline'))
+    await expect(source.load()).rejects.toThrow('COPILOT_MODEL_SOURCE_FETCH_FAILED')
+    advance(300_000 - 1)
+    await expect(source.load()).rejects.toThrow('COPILOT_MODEL_SOURCE_FETCH_FAILED')
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(resolveAuth).toHaveBeenCalledTimes(2)
+    expect(source.readDisplaySnapshot()).toBe(snapshot)
+    advance(1)
+    expect(await source.load()).not.toBe(snapshot)
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('force bypasses the cooldown, concurrent callers coalesce, and invalidation resets it', async () => {
+    const { source, fetch, resolveAuth } = setup({ failureCooldownMs: 500 })
+    fetch.mockRejectedValueOnce(new Error('synthetic offline'))
+    await expect(source.load()).rejects.toThrow('COPILOT_MODEL_SOURCE_FETCH_FAILED')
+    const entered = deferred<void>()
+    const gate = deferred<Response>()
+    fetch.mockImplementationOnce(async () => { entered.resolve(); return gate.promise })
+    const forced = source.load({ force: true })
+    await entered.promise
+    const passive = source.load()
+    gate.resolve(response())
+    expect(await passive).toBe(await forced)
+    fetch.mockRejectedValueOnce(new Error('synthetic offline'))
+    await expect(source.load({ force: true })).rejects.toThrow('COPILOT_MODEL_SOURCE_FETCH_FAILED')
+    await expect(source.load()).rejects.toThrow('COPILOT_MODEL_SOURCE_FETCH_FAILED')
+    source.invalidate()
+    await source.load()
+    expect(fetch).toHaveBeenCalledTimes(4)
+    expect(resolveAuth).toHaveBeenCalledTimes(4)
+  })
+
+  it('reads bounded live cache settings without scheduling discovery', async () => {
+    let ttlMs = 500
+    let cooldownMs = 500
+    const { source, fetch, advance } = setup({ ttlMs: () => ttlMs, failureCooldownMs: () => cooldownMs })
+    await source.load()
+    advance(100)
+    expect(source.readSnapshot()).toBeDefined()
+    ttlMs = 50
+    expect(source.readSnapshot()).toBeUndefined()
+    expect(fetch).toHaveBeenCalledTimes(1)
+    fetch.mockRejectedValueOnce(new Error('synthetic offline'))
+    await expect(source.load()).rejects.toThrow('COPILOT_MODEL_SOURCE_FETCH_FAILED')
+    advance(100)
+    await expect(source.load()).rejects.toThrow('COPILOT_MODEL_SOURCE_FETCH_FAILED')
+    cooldownMs = 50
+    await source.load()
+    expect(fetch).toHaveBeenCalledTimes(3)
+    ttlMs = Infinity
+    expect(() => source.readSnapshot()).toThrow('COPILOT_MODEL_SOURCE_INVALID_CONFIG')
+  })
+
+  it('revokes an exact rejected snapshot and backs off passive recovery without revoking a newer generation', async () => {
+    const { source, fetch } = setup({ failureCooldownMs: 300_000 })
+    const first = await source.load()
+    expect(source.rejectSnapshot(first)).toBe(true)
+    expect(source.readDisplaySnapshot()).toBeUndefined()
+    expect(source.readSnapshot()).toBeUndefined()
+    await expect(source.load()).rejects.toThrow('COPILOT_MODEL_SOURCE_INVALIDATED')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const next = await source.load({ force: true })
+    expect(source.rejectSnapshot(first)).toBe(false)
+    expect(source.readSnapshot()).toBe(next)
   })
 
   it('does not let a cancelled waiter abort another waiter', async () => {
@@ -446,7 +585,7 @@ describe('account-bound model source', () => {
     expect(() => setup({ headers: { [name]: 'PRIVATE_VALUE' } })).toThrow('COPILOT_MODEL_SOURCE_INVALID_CONFIG')
   })
 
-  it.each([{ timeoutMs: 0 }, { timeoutMs: Infinity }, { ttlMs: -1 }, { ttlMs: Number.NaN }])('rejects invalid timer configuration %j', config => {
+  it.each([{ timeoutMs: 0 }, { timeoutMs: Infinity }, { ttlMs: -1 }, { ttlMs: Number.NaN }, { failureCooldownMs: -1 }, { failureCooldownMs: Infinity }, { failureCooldownMs: 2_147_483_648 }])('rejects invalid timer configuration %j', config => {
     expect(() => setup(config)).toThrow('COPILOT_MODEL_SOURCE_INVALID_CONFIG')
   })
 })

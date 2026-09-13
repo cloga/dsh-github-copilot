@@ -116,4 +116,25 @@ await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',
 ])
 
+if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2'].includes(baseline.release)) {
+  for (const path of ['package.json', 'packages/core/session/package.json', 'packages/llm/llm-pi-ai/package.json']) {
+    const metadata = JSON.parse(await readFile(resolve(upstream, path), 'utf8'))
+    if (metadata.version !== baseline.release) throw new Error(`DSH target package version differs in ${path}`)
+  }
+  await assertMarkers('packages/core/session/src/index.ts', ['requestHeader(): EpochHeader | undefined'])
+  await assertMarkers('packages/core/session/src/types.ts', ['SESSION_FORMAT_VERSION = 3'])
+  await assertMarkers('packages/core/agent/src/index.ts', ['currentInitiator(): Agent | undefined'])
+  await assertMarkers('packages/session/session-projection/src/index.ts', ['stateOf<K extends keyof SessionProjectionStateMap>'])
+  await assertMarkers('packages/api/session-controller/src/model-selection-projection.ts', [
+    'pending: modelSelectionSchema.nullable()',
+    "event.type === 'model/selection'",
+    "event.type !== 'request/header'",
+  ])
+}
+
+if (['0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2'].includes(baseline.release)) {
+  await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', ['modelErrors: ReadonlyMap<string, string>', 'piProvider?: Provider', 'catalogError?: string'])
+  await assertMarkers('packages/llm/llm-pi-ai/src/adapter.ts', ['profile.modelErrors.get(model)', "throw new LlmError(failure, 'INVALID_CONFIG')"])
+}
+
 console.log(`Verified DSH ${baseline.release} public seams at ${commit}.`)

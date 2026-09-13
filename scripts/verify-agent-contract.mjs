@@ -55,8 +55,11 @@ export async function verifyAgentContract(root = repositoryRoot) {
     require(text.includes('Assisted-by'), `${path} needs accurate tool attribution guidance`)
     require(!text.includes('required co-author trailer') && !text.includes('repository-required co-author trailer'), `${path} mandates unverified co-author attribution`)
   }
-  const workflow = await readFile(resolve(root, '.github/workflows/release.yml'), 'utf8')
-  require(/needs:\s*verify/.test(workflow) && workflow.includes('uses: ./.github/workflows/ci.yml'), 'release must wait for the complete CI matrix')
+  const ciWorkflow = await readFile(resolve(root, '.github/workflows/ci.yml'), 'utf8')
+  const releaseWorkflow = await readFile(resolve(root, '.github/workflows/release.yml'), 'utf8')
+  require(ciWorkflow.includes('release-ready:') && ciWorkflow.includes('uses: ./.github/workflows/release.yml'), 'main CI must gate and call reusable release delivery')
+  require(releaseWorkflow.includes('workflow_call:') && releaseWorkflow.includes('scripts/release-policy.mjs --plan')
+    && releaseWorkflow.includes('scripts/publish-release.mjs'), 'release workflow must plan and publish the exact main commit')
   return { schemaVersion: 1, ok: true, taskCount: Object.keys(contract.tasks).length }
 }
 

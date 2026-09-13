@@ -9,8 +9,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, GITHUB_COPILOT_SETTINGS_NAMESPACE } from '../../src/index.ts'
 import type { InlineConfig } from '../../src/config.ts'
 import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { markAgentLoopRequest, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { Context } from '@deepseek-ai/cordis'
+import LlmRuntime, { markAgentLoopRequest, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import previewPlugin from '../../src/preview-route.ts'
+import { Context } from '@deepseek-ai/cordis'
+import AgentRegistry, { agentEvents, installModelSelection } from '@deepseek-ai/dsh-agent'
+import { createRequire } from 'node:module'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { WebFetchProvider, WebSearchProvider } from '@deepseek-ai/dsh-web'
 import { GITHUB_COPILOT_PREVIEW_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../../src/copilot-identity.ts'
 
@@ -23,6 +27,7 @@ interface FakeRuntime {
   settingsDocument: Record<string, unknown>
   /** The registered prompt section object (name + dynamic text provider). */
   promptSection: { name: string; text: () => string } | undefined
+  promptText(variables: Record<string, string | undefined>): Promise<string>
   searchProviders: WebSearchProvider[]
   fetchProviders: WebFetchProvider[]
   credentialResolve: ReturnType<typeof vi.fn>
@@ -30,6 +35,7 @@ interface FakeRuntime {
   settingsGet: ReturnType<typeof vi.fn>
   settingsMutate: ReturnType<typeof vi.fn>
   emitCredentialUpdate(key: string): void
+  emitAgentDisposed(agent: Agent): void
   credentialListenerCount(): number
   dispose(): void
   installedSettingsSections: string[]
@@ -103,8 +109,7 @@ function fakeSettings(document: Record<string, unknown>): FakeSettings {
   return { settings, get: settings.get, mutate: settings.mutate, installedSections, triggerChange: (ns) => watchers.get(ns)?.() }
 }
 
-/** Mutable default-model selection; `current: null` simulates an unsettled
- * boot or a transient route gap. */
+/** Mutable synthetic Agent selection; `current: null` means no initiator. */
 type SelectionRef = { current: { provider: string; model: string } | null }
 
 /** Later Core file blocks are deliberately absent from the rc.2 development types. */
@@ -121,6 +126,8 @@ function buildRuntime(
   selectionRef: SelectionRef = { current: { provider: 'github-copilot', model: 'gpt-5.4' } },
   extraSettings: Record<string, unknown> = {},
   mountedPreview?: unknown,
+  registry?: unknown,
+  assemblyEvents?: Context,
 ): FakeRuntime {
   let listener: FakeRuntime['listener']
   const listeners = new Map<string, (request: GenerateOptions, next: () => unknown) => unknown>()
@@ -145,13 +152,17 @@ function buildRuntime(
     ...extraSettings,
   }
   const fake = fakeSettings(settingsDocument)
+  const initiatingAgent = { session: { requestHeader: () => selectionRef.current === null ? undefined : { config: selectionRef.current }, append: vi.fn() } }
   const store = new Map<string, unknown>([
+    ['agents', registry ?? { currentInitiator: () => selectionRef.current === null ? undefined : initiatingAgent }],
     ['settings', fake.settings],
-    ['githubCopilotPreview', mountedPreview],
-    // Mutable selection so route-switch tests can move between providers; a
-    // null ref simulates a boot where the default-model service has not
-    // settled a selection yet (route facts undetectable), read live so a
-    // test can create and close a route gap mid-run.
+    // Older synthetic fixtures have no credential lifetime. Real preview services
+    // retain their identity and actual captureSearchProof implementation.
+    ['githubCopilotPreview', typeof mountedPreview === 'object' && mountedPreview !== null
+      && !('captureSearchProof' in mountedPreview)
+      ? { ...mountedPreview, captureSearchProof: () => () => true } : mountedPreview],
+    // Keep the legacy global service present, but search must not consult it.
+    // Tests supplying a real registry give this default an unrelated C route.
     ['agentDefaultModel', {
       currentSelection: () => selectionRef.current === null
         ? undefined
@@ -193,12 +204,25 @@ function buildRuntime(
   ])
   const ctx = {
     get: (name: string) => store.get(name),
+    provide: (name: string, value: unknown) => {
+      if (store.has(name)) throw new Error(`duplicate synthetic service: ${name}`)
+      store.set(name, value)
+      const dispose = () => { store.delete(name) }
+      disposers.push(dispose)
+      return dispose
+    },
     // The settings seam reads `ctx.fiber.state` to skip change callbacks
     // while a fiber is unloading; a live fiber is what this fake is.
     fiber: { state: 1 },
     logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
     plugin: () => undefined,
-    on: (event: string, handler: (request: GenerateOptions, next: () => unknown) => unknown) => {
+    on: (event: string, handler: (request: GenerateOptions, next: () => unknown) => unknown, options?: { prepend?: boolean }) => {
+      if (event === 'system-prompt/assemble' && assemblyEvents !== undefined) {
+        return assemblyEvents.on(event, (assembly, context, next) => {
+          const invoke = handler as unknown as (input: typeof assembly, metadata: object, delegate: typeof next) => Promise<typeof assembly>
+          return invoke(assembly, context, next)
+        }, options)
+      }
       if (event === 'credentials/record-updated') {
         const credentialHandler = handler as unknown as (key: string) => void
         credentialListeners.add(credentialHandler)
@@ -249,11 +273,21 @@ function buildRuntime(
     settingsGet: fake.get,
     settingsMutate: fake.mutate,
     emitCredentialUpdate: key => { for (const handler of credentialListeners) handler(key) },
+    emitAgentDisposed: agent => {
+      const handler = listeners.get('agent/disposed') as unknown as ((payload: { agent: Agent }) => void) | undefined
+      handler?.({ agent })
+    },
     credentialListenerCount: () => credentialListeners.size,
     dispose: () => { for (const dispose of disposers.splice(0).reverse()) dispose() },
     installedSettingsSections: fake.installedSections,
     settingsDocument,
     get promptSection() { return promptSection },
+    promptText: async variables => {
+      const assembly = { sections: [{ name: 'tool:github-copilot', text: '' }], contexts: [], tools: [], variables }
+      const handler = listeners.get('system-prompt/assemble') as unknown as
+        (input: typeof assembly, context: object, next: () => Promise<typeof assembly>) => Promise<typeof assembly>
+      return (await handler(assembly, {}, async () => assembly)).sections[0]?.text ?? ''
+    },
     triggerSettingsChange: (ns) => fake.triggerChange(ns),
     ...overrides,
   }
@@ -311,6 +345,400 @@ async function flushStartup(): Promise<void> {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+function testAgent(headerConfig: Agent['options']): Agent {
+  // Synthetic mutable header source for lifecycle tests; the real selection
+  // waterfall and detached Session fold are exercised separately below.
+  return { options: headerConfig, session: { requestHeader: () => ({ config: headerConfig }) } } as Agent
+}
+
+describe.skipIf(typeof AgentRegistry.prototype.withInitiator !== 'function')('real initiating Agent search isolation', () => {
+  it.each([
+    ['inline', 'headers'], ['inline', 'body'], ['web', 'headers'], ['web', 'body'],
+  ] as const)('disposes only A during final %s HTTP %s while B completes without cross-cancellation', async (surface, phase) => {
+    const root = new Context()
+    const fiber = await root.plugin(AgentRegistry)
+    const agents = root.agents
+    const a = testAgent({ provider: 'github-copilot', model: 'gpt-5.4' })
+    const b = testAgent({ provider: 'github-copilot', model: 'gpt-5.6-sol' })
+    const runtime = buildRuntime({}, undefined, {}, undefined, agents)
+    runtime.credentialRead.mockImplementation(async () => ({ kind: 'grant', payload: {
+      type: 'oauth', refresh: 'synthetic-refresh', access: 'synthetic-access',
+      expires: Date.now() + 86_400_000, availableModelIds: ['gpt-5.4', 'gpt-5.6-sol'],
+    } }))
+    const releases = new Map<string, () => void>()
+    const signals = new Map<string, AbortSignal>()
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (String(init?.body).includes('Probe web search capability.')) {
+        return new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] }))
+      }
+      const model = (JSON.parse(String(init?.body)) as { model: string }).model
+      const signal = init?.signal as AbortSignal
+      signals.set(model, signal)
+      const output = surface === 'web'
+        ? JSON.stringify({ output: [{ type: 'message', content: [{ type: 'output_text', text: model }] }] })
+        : [
+          { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'm' } },
+          { type: 'response.output_text.delta', output_index: 0, delta: model },
+          { type: 'response.completed', response: { status: 'completed' } },
+        ].map(event => `data: ${JSON.stringify(event)}\n\n`).join('')
+      if (phase === 'headers') return new Promise<Response>((resolve, reject) => {
+        const onAbort = () => reject(new DOMException('aborted', 'AbortError'))
+        signal.addEventListener('abort', onAbort, { once: true })
+        releases.set(model, () => {
+          signal.removeEventListener('abort', onAbort)
+          resolve(new Response(output))
+        })
+      })
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          const onAbort = () => controller.error(new DOMException('aborted', 'AbortError'))
+          signal.addEventListener('abort', onAbort, { once: true })
+          releases.set(model, () => {
+            signal.removeEventListener('abort', onAbort)
+            controller.enqueue(new TextEncoder().encode(output))
+            controller.close()
+          })
+        },
+      }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await flushStartup()
+    const run = (agent: Agent) => agents.withInitiator(agent, () => surface === 'web'
+      ? runtime.searchProviders[0]!.search({ query: 'news' })
+      : drain(runtime.listener?.(request({ model: agent.options.model }), () => undefined) as AsyncIterable<StreamChunk>))
+    try {
+      const pendingA = run(a)
+      const failureA = surface === 'web' ? expect(pendingA).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' }) : undefined
+      const pendingB = run(b)
+      await vi.waitFor(() => expect(releases.size).toBe(2))
+      // Both capability probes have completed; these are the actual search HTTP calls.
+      expect(fetchMock).toHaveBeenCalledTimes(4)
+      runtime.emitAgentDisposed(a)
+      expect(signals.get('gpt-5.4')?.aborted).toBe(true)
+      expect(signals.get('gpt-5.6-sol')?.aborted).toBe(false)
+      if (failureA !== undefined) await failureA
+      else {
+        const chunks = await pendingA as StreamChunk[]
+        expect(chunks.some(chunk => chunk.type === 'text-delta' || chunk.type === 'reasoning-delta')).toBe(false)
+        expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'aborted' } })
+      }
+      releases.get('gpt-5.6-sol')!()
+      const resultB = await pendingB
+      if (surface === 'web') expect(resultB).toMatchObject({ content: 'gpt-5.6-sol' })
+      else expect(resultB).toContainEqual(expect.objectContaining({ type: 'text-delta', text: 'gpt-5.6-sol' }))
+      expect(fetchMock).toHaveBeenCalledTimes(4)
+    } finally { runtime.dispose(); await fiber.dispose() }
+  })
+
+  it.each(['before', 'after'] as const)('suppresses stale prompt guidance when model-selection mounts %s the plugin', async order => {
+    const root = new Context()
+    const fiber = await root.plugin(AgentRegistry)
+    const agents = root.agents
+    const owner = testAgent({ provider: 'github-copilot', model: 'gpt-5.4' })
+    const events = new Context()
+    const selection = { current: { provider: 'other-provider', model: 'pending-B' }, assembled: undefined }
+    let disposeSelection: () => void = () => undefined
+    if (order === 'before') disposeSelection = installModelSelection(events, selection)
+    const runtime = buildRuntime({}, undefined, {}, undefined, agents, events)
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    if (order === 'after') disposeSelection = installModelSelection(events, selection)
+    const assemble = () => agents.withInitiator(owner, async () => {
+      const input = { sections: [{ name: 'tool:github-copilot', text: '' }], contexts: [], tools: [],
+        variables: { provider: 'github-copilot', model: 'gpt-5.4' } }
+      return events.waterfall('system-prompt/assemble', input, {}, async () => input)
+    })
+    try {
+      await agents.withInitiator(owner, () => search(runtime, 'inline'))
+      const pending = await assemble()
+      expect(pending.variables).toMatchObject({ provider: 'other-provider', model: 'pending-B' })
+      expect(pending.sections[0]?.text).toBe('')
+      selection.current = { provider: 'github-copilot', model: 'gpt-5.4' }
+      expect((await assemble()).sections[0]?.text).toContain('web_search')
+    } finally { runtime.dispose(); disposeSelection(); await events.fiber.dispose(); await fiber.dispose() }
+  })
+
+  it('routes concurrent hosted tools from real model-selection request headers rather than activation seeds', async () => {
+    const root = new Context()
+    const fiber = await root.plugin(AgentRegistry)
+    const agents = root.agents
+    const requireAgent = createRequire(createRequire(import.meta.url).resolve('@deepseek-ai/dsh-agent'))
+    const { Session } = requireAgent('@deepseek-ai/dsh-session') as { Session: { create(id: Agent['id']): Agent['session'] } }
+    const seed = { provider: 'activation-C', model: 'seed-C' }
+    const a = { options: seed, session: Session.create('search-header-A' as Agent['id']) } as Agent
+    const b = { options: seed, session: Session.create('search-header-B' as Agent['id']) } as Agent
+    const aCtx = new Context(), bCtx = new Context()
+    const selectionA = { current: { provider: 'github-copilot', model: 'gpt-5.4' }, assembled: undefined }
+    const selectionB = { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'future-B' }, assembled: undefined }
+    const disposeA = installModelSelection(aCtx, selectionA), disposeB = installModelSelection(bCtx, selectionB)
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const runtime = buildRuntime({}, { current: { provider: 'other-C', model: 'global-C' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }),
+      discover: async () => undefined,
+      resolveRequestAuth: async () => ({ apiKey: 'synthetic-B', baseURL }),
+    }, agents)
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    const run = (owner: Agent, ownerCtx: Context) => agents.withInitiator(owner, async () => {
+      const assembly = { sections: [], contexts: [], tools: [], variables: {} }
+      await ownerCtx.waterfall('system-prompt/assemble', assembly, {}, async () => assembly)
+      const selected = await agentEvents(ownerCtx, owner).waterfall('agent/request',
+        { turn: 1, step: 0, signal: new AbortController().signal }, async () => seed)
+      owner.session.append('request/header', { header: { config: selected }, reason: 'initial' })
+      return search(runtime, 'web')
+    })
+    try {
+      expect(agents.withInitiator(a, () => runtime.searchProviders[0]?.available())).toBe(false)
+      await Promise.all([run(a, aCtx), run(b, bCtx)])
+      expect(a.options).toBe(seed)
+      expect(b.options).toBe(seed)
+      expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).model).sort())
+        .toEqual(['future-B', 'future-B', 'gpt-5.4', 'gpt-5.4'])
+      expect(proofCount(fetchMock)).toBe(2)
+      selectionA.current = { provider: 'github-copilot', model: 'gpt-4.1' }
+      // Pending selection leaves the current tool-request route intact.
+      await agents.withInitiator(a, () => search(runtime, 'web'))
+      expect(proofCount(fetchMock)).toBe(2)
+      await expect(run(a, aCtx)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    } finally {
+      runtime.dispose(); disposeA(); disposeB()
+      await aCtx.fiber.dispose(); await bCtx.fiber.dispose(); await fiber.dispose()
+    }
+  })
+
+  it('keeps concurrent A/B routes and proofs separate from global C and later selections', async () => {
+    const root = new Context()
+    const fiber = await root.plugin(AgentRegistry)
+    const agents = root.agents
+    const a = testAgent({ provider: 'github-copilot', model: 'gpt-5.4' })
+    const b = testAgent({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'future-B' })
+    const global: SelectionRef = { current: { provider: 'other-C', model: 'global-C' } }
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const discover = vi.fn(async (_options?: { force?: boolean; signal?: AbortSignal }) => undefined)
+    const resolveRequestAuth = vi.fn(async (_model: string, _signal?: AbortSignal) => ({ apiKey: 'synthetic-B', baseURL }))
+    const runtime = buildRuntime({}, global, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }), discover, resolveRequestAuth,
+    }, agents)
+    const fetchMock = searchFetch()
+    const release: (() => void)[] = []
+    const normal = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (url, init) => {
+      if (String(init?.body).includes('Probe web search capability.') && release.length < 2) {
+        await new Promise<void>(resolve => { release.push(resolve) })
+      }
+      return normal(url, init)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await flushStartup()
+    const run = (agent: Agent) => agents.withInitiator(agent, () => search(runtime, 'web'))
+    try {
+      expect(runtime.searchProviders[0]?.available()).toBe(false)
+      const pending = [run(a), run(b)]
+      await vi.waitFor(() => expect(release).toHaveLength(2))
+      a.options.model = 'gpt-4.1'
+      global.current = { provider: 'other-D', model: 'global-D' }
+      expect(agents.withInitiator(a, () => runtime.searchProviders[0]?.available())).toBe(false)
+      expect(agents.withInitiator(b, () => runtime.searchProviders[0]?.available())).toBe(true)
+      for (const [, init] of fetchMock.mock.calls) expect(init?.signal?.aborted).toBe(false)
+      release.forEach(resolve => resolve())
+      await Promise.all(pending)
+      expect(proofCount(fetchMock)).toBe(2)
+      expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).model).sort())
+        .toEqual(['future-B', 'future-B', 'gpt-5.4', 'gpt-5.4'])
+      await run(b)
+      expect(proofCount(fetchMock)).toBe(2)
+      // A new owner with B's exact selection cannot reuse B's successful plan.
+      const anotherB = testAgent({ ...b.options })
+      await run(anotherB)
+      expect(proofCount(fetchMock)).toBe(3)
+      b.options.model = 'future-B2'
+      await run(b)
+      expect(proofCount(fetchMock)).toBe(4)
+      b.options.model = 'future-B'
+      await run(b)
+      expect(proofCount(fetchMock)).toBe(5)
+      expect(resolveRequestAuth.mock.calls.every(call => String(call[0]).startsWith('future-B'))).toBe(true)
+      expect(discover.mock.calls.every(call => (call[0] as { force: boolean }).force === false)).toBe(true)
+    } finally {
+      release.forEach(resolve => resolve())
+      runtime.dispose()
+      await fiber.dispose()
+    }
+  })
+
+  it('disposes only A probes, rejects retained A entry points and never revives plans for a replacement Agent', async () => {
+    const root = new Context()
+    const fiber = await root.plugin(AgentRegistry)
+    const agents = root.agents
+    const a = testAgent({ provider: 'github-copilot', model: 'gpt-5.4' })
+    const b = testAgent({ provider: 'github-copilot', model: 'gpt-5.4' })
+    const runtime = buildRuntime({}, undefined, {}, undefined, agents)
+    const fetchMock = searchFetch()
+    const normal = fetchMock.getMockImplementation()!
+    const release: (() => void)[] = []
+    fetchMock.mockImplementation(async (url, init) => {
+      if (String(init?.body).includes('Probe web search capability.') && release.length < 2) {
+        await new Promise<void>(resolve => { release.push(resolve) })
+      }
+      return normal(url, init)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    const run = (agent: Agent) => agents.withInitiator(agent, () => search(runtime, 'web'))
+    try {
+      const pendingA = expect(run(a)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+      const pendingB = run(b)
+      await vi.waitFor(() => expect(release).toHaveLength(2))
+      runtime.emitAgentDisposed(a)
+      expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
+      expect(fetchMock.mock.calls[1]?.[1]?.signal?.aborted).toBe(false)
+      await pendingA
+      release.forEach(resolve => resolve())
+      await pendingB
+      const before = fetchMock.mock.calls.length
+      await expect(run(a)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+      expect(agents.withInitiator(a, () => runtime.promptSection?.text())).toBe('')
+      expect(fetchMock).toHaveBeenCalledTimes(before)
+      await run(b)
+      expect(proofCount(fetchMock)).toBe(2)
+      await run(testAgent({ ...a.options }))
+      expect(proofCount(fetchMock)).toBe(3)
+    } finally {
+      release.forEach(resolve => resolve())
+      runtime.dispose()
+      await fiber.dispose()
+    }
+  })
+
+  it('isolates inline prompts and enforces whitelist per caller rather than global defaults', async () => {
+    const root = new Context()
+    const fiber = await root.plugin(AgentRegistry)
+    const agents = root.agents
+    const a = testAgent({ provider: 'github-copilot', model: 'gpt-5.4' })
+    const b = testAgent({ provider: 'other-provider', model: 'other-model' })
+    const runtime = buildRuntime({}, { current: { provider: 'other-C', model: 'C' } }, {}, undefined, agents)
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true, providers: ['github-copilot'] })
+    try {
+      await agents.withInitiator(a, () => search(runtime, 'inline'))
+      expect(await agents.withInitiator(a, () => runtime.promptText(a.options as Record<string, string>))).toContain('web_search')
+      expect(await agents.withInitiator(b, () => runtime.promptText(b.options as Record<string, string>))).toBe('')
+      // Header A still records Copilot, but a newly assembled pending B route
+      // cannot inherit A's old successful proof or its guidance.
+      expect(await agents.withInitiator(a, () => runtime.promptText(b.options as Record<string, string>))).toBe('')
+      expect(await agents.withInitiator(a, () => runtime.promptText({}))).toBe('')
+      expect(agents.withInitiator(b, () => runtime.searchProviders[0]?.available())).toBe(false)
+      expect(runtime.promptSection?.text()).toBe('')
+      const before = fetchMock.mock.calls.length
+      await expect(agents.withInitiator(b, () => search(runtime, 'web'))).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+      expect(fetchMock).toHaveBeenCalledTimes(before)
+      runtime.emitAgentDisposed(a)
+      expect(agents.withInitiator(a, () => runtime.promptSection?.text())).toBe('')
+    } finally { runtime.dispose(); await fiber.dispose() }
+  })
+})
+
+describe('managed search metadata entry', () => {
+  it('ensures cold metadata only on actual search and captures selection before discovery awaits', async () => {
+    const selection: SelectionRef = { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'cold-A' } }
+    const baseURL = 'https://api.business.githubcopilot.com'
+    let fresh = false
+    let release!: () => void
+    const discover = vi.fn(async () => { await new Promise<void>(resolve => { release = resolve }); fresh = true })
+    const resolveRequestAuth = vi.fn(async () => ({ apiKey: 'synthetic', baseURL }))
+    const runtime = buildRuntime({}, selection, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => fresh ? { api: 'openai-responses', baseURL } : undefined,
+      discover, resolveRequestAuth,
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await flushStartup()
+    expect(runtime.searchProviders[0]?.available()).toBe(true)
+    expect(discover).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    const pending = search(runtime, 'web')
+    expect(discover).toHaveBeenCalledWith({ force: false, signal: expect.any(AbortSignal) })
+    selection.current = { provider: 'other-provider', model: 'later-B' }
+    release()
+    await pending
+    expect(proofCount(fetchMock)).toBe(1)
+    for (const [, init] of fetchMock.mock.calls) expect(JSON.parse(String(init?.body)).model).toBe('cold-A')
+    runtime.dispose()
+  })
+
+  it.each(['openai-completions', 'anthropic-messages'])('never guesses Responses when refreshed model uses %s', async api => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    let fresh = false
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'cold-model' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => fresh ? { api, baseURL } : undefined,
+      discover: async () => { fresh = true },
+      resolveRequestAuth: vi.fn(),
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await expect(search(runtime, 'web')).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.searchProviders[0]?.available()).toBe(false)
+    runtime.dispose()
+  })
+
+  it.each(['dispose', 'credential', 'caller'] as const)('does not start late probes after %s invalidates pending metadata discovery', async action => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    let fresh = false
+    let release!: () => void
+    let discoverySignal: AbortSignal | undefined
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'cold-A' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => fresh ? { api: 'openai-responses', baseURL } : undefined,
+      discover: async (options: { signal?: AbortSignal }) => {
+        discoverySignal = options.signal
+        await new Promise<void>(resolve => { release = resolve })
+        fresh = true
+      },
+      resolveRequestAuth: vi.fn(async () => ({ apiKey: 'synthetic', baseURL })),
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    const controller = new AbortController()
+    const pending = runtime.searchProviders[0]!.search({ query: 'news' }, controller.signal)
+    const failed = expect(pending).rejects.toMatchObject({ code: action === 'caller' ? 'WEB_ABORTED' : 'WEB_PROVIDER_UNAVAILABLE' })
+    if (action === 'dispose') runtime.dispose()
+    else if (action === 'credential') runtime.emitCredentialUpdate(credentialKey)
+    else controller.abort()
+    expect(discoverySignal?.aborted).toBe(true)
+    release()
+    await failed
+    await flushStartup()
+    expect(fetchMock).not.toHaveBeenCalled()
+    runtime.dispose()
+  })
+
+  it('fails safely when older Core lacks the public initiator capability', async () => {
+    const runtime = buildRuntime({}, undefined, {}, undefined, {})
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    expect(runtime.searchProviders[0]?.available()).toBe(false)
+    await expect(search(runtime, 'web')).rejects.toThrow('agents.currentInitiator()')
+    expect(fetchMock).not.toHaveBeenCalled()
+    await search(runtime, 'inline')
+    expect(proofCount(fetchMock)).toBe(1)
+    runtime.dispose()
+  })
 })
 
 describe('Responses reasoning composition', () => {
@@ -548,6 +976,334 @@ describe.each(['inline', 'web'] as const)('%s credential proof cache lifecycle',
   })
 })
 
+describe('session search router Host integration', () => {
+  it.each(['trust override', 'cached success', 'fresh probe'].flatMap(mode => [
+    ...['expiry', 'missing', 'access', 'entitlement', 'account'].map(change => ({ mode, change, stage: 'lease' })),
+    { mode, change: 'access', stage: 'native final assertion' },
+    { mode, change: 'metadata TTL', stage: 'final entitlement assertion' },
+    { mode, change: 'access', stage: 'discovery native assertion' },
+    { mode, change: 'missing', stage: 'discovery read' },
+    { mode, change: 'missing', stage: 'discovery native resolution' },
+  ]))(
+    'rejects silent managed proof $change during $stage with $mode before any paid fallback', async ({ mode, change, stage }) => {
+      const start = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+      const expires = start + 3_600_000
+      const record = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-account',
+        access: 'synthetic-access', expires, availableModelIds: ['account-model'] } }
+      let current: typeof record | undefined = record
+      const owner = new Context()
+      let readsUntilChange = 0
+      const credentialRead = vi.fn(async () => {
+        if (readsUntilChange > 0 && --readsUntilChange === 0) {
+          // A stored-record read really crosses an await. No credentials event is
+          // emitted: only PreviewLifetime can observe and revoke this proof.
+          await Promise.resolve()
+          if (change === 'expiry') clock.mockReturnValue(expires)
+          else if (change === 'metadata TTL') clock.mockReturnValue(start + 1000)
+          else if (change === 'missing') current = undefined
+          else current = { ...record, payload: { ...record.payload,
+            ...change === 'access' ? { access: 'synthetic-rotated' }
+              : change === 'account' ? { refresh: 'synthetic-other-account' } : { availableModelIds: [] },
+          } }
+        }
+        return current
+      })
+      const fetchMock = vi.fn(async (input: unknown, _init?: RequestInit) => {
+        if (String(input).endsWith('/models')) return new Response(JSON.stringify({ data: [{
+          id: 'account-model', name: 'Account model', model_picker_enabled: true,
+          policy: { state: 'enabled' }, supported_endpoints: ['/responses'],
+          capabilities: { supports: { streaming: true, tool_calls: true },
+            limits: { max_context_window_tokens: 128000, max_output_tokens: 8192 } },
+        }] }))
+        if (String(input).includes('deepseek-search.test')) return new Response(JSON.stringify({ content: [{
+          type: 'web_search_tool_result', tool_use_id: 'search',
+          content: [{ type: 'web_search_result', url: 'https://example.com/fallback', title: 'Fallback' }],
+        }] }))
+        if (String(input).endsWith('/responses')) return new Response(JSON.stringify({ output: [
+          { type: 'web_search_call' }, { type: 'message', content: [{ type: 'output_text', text: 'Copilot result' }] },
+        ] }))
+        throw new Error('Unexpected synthetic endpoint')
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      let runtime: FakeRuntime | undefined
+      try {
+        await owner.plugin({ apply(ctx: Context) {
+          ctx.provide('credentials', { readRecord: credentialRead,
+            listRecords: async () => [{ key: credentialKey, kind: 'grant' }],
+            deleteRecord: async () => { throw new Error('Synthetic fixture must not delete credentials') },
+            modifyRecord: vi.fn(async () => { throw new Error('No synthetic grant refresh permitted') }),
+          } as unknown as Context['credentials'])
+        } })
+        await owner.plugin(LlmRuntime)
+        await owner.plugin(previewPlugin, { accountModelTtlMs: 1000 })
+        const preview = owner.get('githubCopilotPreview')!
+        await preview.discover()
+        expect(preview.routeFacts('account-model')).toMatchObject({ api: 'openai-responses' })
+        // Measure the installed native implementation's read boundaries, instead
+        // of assuming a particular Core/pi-ai internal getAuth read count.
+        credentialRead.mockClear()
+        await preview.resolveRequestAuth('account-model')
+        const authReads = credentialRead.mock.calls.length
+        credentialRead.mockClear()
+        await preview.discover({ force: true })
+        const discoveryReads = credentialRead.mock.calls.length
+        const heldProof = preview.captureSearchProof()
+        runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }, {
+          'web-search-deepseek': { baseURL: 'https://deepseek-search.test/v1', apiKeyEnv: 'SYNTHETIC_KEY' },
+        }, preview)
+        apply(runtime.ctx, { ...config, probe: mode !== 'trust override', searchFallback: 'deepseek' })
+        const router = runtime.ctx.get('githubCopilotSearchRouter')!
+        if (mode === 'cached success') await router.search({ query: 'warm probe' }, undefined, vi.fn())
+        fetchMock.mockClear()
+        runtime.credentialResolve.mockClear()
+        // webPlan contributes one initial read before resolveRequestAuth. The
+        // last native auth read is followed by its check and final assertEntitled.
+        readsUntilChange = stage === 'discovery read' ? 1 : stage === 'lease' ? 3 : authReads + 1
+        if (stage === 'discovery native assertion') {
+          clock.mockReturnValue(start + 1000)
+          // Source's native assertion precedes its final extra stored-grant read.
+          readsUntilChange = discoveryReads - 1
+        } else if (stage === 'discovery native resolution') {
+          clock.mockReturnValue(start + 1000)
+          readsUntilChange = 2
+        }
+        const outcome = await router.search({ query: 'invalid account proof' }, undefined, vi.fn())
+          .then(value => ({ value }), error => ({ error }))
+        expect(readsUntilChange).toBe(0)
+        expect(runtime.credentialResolve).not.toHaveBeenCalled()
+        // A TTL-triggered metadata GET is not a Copilot search/probe or paid wire.
+        expect(fetchMock.mock.calls.filter(([url]) => !String(url).endsWith('/models'))).toHaveLength(0)
+        expect(outcome).toHaveProperty('error')
+        if (change === 'metadata TTL') expect(heldProof()).toBe(true)
+        if (stage !== 'native final assertion') expect(preview.routeFacts('account-model')).toBeUndefined()
+      } finally {
+        runtime?.dispose()
+        await owner.fiber.dispose()
+        clock.mockRestore()
+      }
+    },
+  )
+
+  it.each(['metadata TTL refresh', 'unsupported protocol', 'hosted transport failure', 'expiry during transport'] as const)(
+    'distinguishes managed credential revocation from %s', async control => {
+      const start = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+      const expires = start + 3_600_000
+      const owner = new Context()
+      const grant = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-account',
+        access: 'synthetic-access', expires, availableModelIds: ['account-model'] } }
+      const fetchMock = vi.fn(async (input: unknown, _init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/models')) return new Response(JSON.stringify({ data: [{
+          id: 'account-model', name: 'Account model', model_picker_enabled: true, policy: { state: 'enabled' },
+          supported_endpoints: [control === 'unsupported protocol' ? '/chat/completions' : '/responses'],
+          capabilities: { supports: { streaming: true, tool_calls: true },
+            limits: { max_context_window_tokens: 128000, max_output_tokens: 8192 } },
+        }] }))
+        if (url === 'https://deepseek-search.test/v1/messages') return new Response(JSON.stringify({ content: [{
+          type: 'web_search_tool_result', tool_use_id: 'search',
+          content: [{ type: 'web_search_result', url: 'https://example.com/fallback', title: 'Fallback' }],
+        }] }))
+        if (url.endsWith('/responses')) {
+          if (control === 'expiry during transport') clock.mockReturnValue(expires)
+          if (control === 'hosted transport failure' || control === 'expiry during transport') {
+            throw new Error('Synthetic hosted search transport failure')
+          }
+          return new Response(JSON.stringify({ output: [
+            { type: 'web_search_call' }, { type: 'message', content: [{ type: 'output_text', text: 'Copilot result' }] },
+          ] }))
+        }
+        throw new Error('Unexpected synthetic endpoint')
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      let runtime: FakeRuntime | undefined
+      try {
+        await owner.plugin({ apply(ctx: Context) {
+          ctx.provide('credentials', { readRecord: async () => grant,
+            listRecords: async () => [{ key: credentialKey, kind: 'grant' }],
+            deleteRecord: async () => { throw new Error('Synthetic fixture must not delete credentials') },
+            modifyRecord: vi.fn(async () => { throw new Error('No synthetic grant refresh permitted') }),
+          } as unknown as Context['credentials'])
+        } })
+        await owner.plugin(LlmRuntime)
+        await owner.plugin(previewPlugin, { accountModelTtlMs: 1000 })
+        const preview = owner.get('githubCopilotPreview')!
+        await preview.discover()
+        expect(preview.getView().available).toBe(true)
+        const heldProof = preview.captureSearchProof()
+        runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }, {
+          'web-search-deepseek': { baseURL: 'https://deepseek-search.test/v1', apiKeyEnv: 'SYNTHETIC_KEY' },
+        }, preview)
+        apply(runtime.ctx, { ...config, searchFallback: 'deepseek' })
+        if (control === 'metadata TTL refresh') {
+          clock.mockReturnValue(start + 1000)
+          expect(heldProof()).toBe(true)
+        }
+        const search = runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'control' }, undefined, vi.fn())
+        if (control === 'expiry during transport') {
+          await expect(search).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+          expect(heldProof()).toBe(false)
+        } else {
+          const result = await search
+          if (control === 'metadata TTL refresh') {
+            expect(result.content).toBe('Copilot result')
+            expect(heldProof()).toBe(true)
+            expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/models'))).toHaveLength(2)
+          } else {
+            expect(result.content).toContain('deepseek-official')
+            expect(result.content).toContain('DeepSeek API charges')
+          }
+        }
+        const permitted = control === 'unsupported protocol' || control === 'hosted transport failure'
+        expect(runtime.credentialResolve).toHaveBeenCalledTimes(permitted ? 1 : 0)
+        expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('deepseek-search.test'))).toHaveLength(permitted ? 1 : 0)
+      } finally {
+        runtime?.dispose()
+        await owner.fiber.dispose()
+        clock.mockRestore()
+      }
+    },
+  )
+
+  it('requires user-facing fallback disclosure only for routed Copilot prompt assemblies', async () => {
+    const runtime = buildRuntime()
+    runtime.ctx.provide('githubCopilotOriginalWeb', {})
+    apply(runtime.ctx, config)
+    const text = await runtime.promptText({ provider: 'github-copilot', model: 'gpt-5.4' })
+    expect(text).toContain('explicitly tell the user the actual search backend')
+    expect(text).toContain('does not need per-search confirmation')
+    expect(text).not.toContain('runs natively on the model provider')
+    expect(await runtime.promptText({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })).toBe('')
+    expect(await runtime.promptText({ provider: 'another-provider', model: 'any' })).toBe('')
+  })
+
+  it('does not advertise paid fallback when the user disabled it', async () => {
+    const runtime = buildRuntime()
+    runtime.ctx.provide('githubCopilotOriginalWeb', {})
+    apply(runtime.ctx, { ...config, searchFallback: 'none' })
+    const text = await runtime.promptText({ provider: 'github-copilot', model: 'gpt-5.4' })
+    expect(text).toContain('fallback is disabled')
+    expect(text).not.toContain('does not need per-search confirmation')
+  })
+
+  it.each(['deepseek-official', 'another-provider'])('delegates %s without any hosted-search request', async provider => {
+    const runtime = buildRuntime({}, { current: { provider, model: 'selected' } })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const expected = { sources: [], truncated: false }
+    const delegate = vi.fn(async () => expected)
+    const query = { query: 'native', maxResults: 2 }
+    const signal = new AbortController().signal
+    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search(query, signal, delegate)
+    expect(result).toBe(expected)
+    expect(delegate).toHaveBeenCalledExactlyOnceWith(query, signal)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+  })
+
+  it('keeps allowlist-excluded Copilot sessions on the existing path without fallback spending', async () => {
+    const runtime = buildRuntime()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, providers: ['another-provider'], searchFallback: 'deepseek' })
+    const expected = { sources: [], truncated: false }
+    const delegate = vi.fn(async () => expected)
+    expect(await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'excluded route' }, undefined, delegate)).toBe(expected)
+    expect(delegate).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+  })
+
+  it('uses the managed model primary path without spending DeepSeek fallback tokens', async () => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const resolveRequestAuth = vi.fn(async () => ({ apiKey: 'synthetic-managed', baseURL }))
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }), resolveRequestAuth,
+      discover: vi.fn(async () => undefined),
+    })
+    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) => new Response(JSON.stringify({ output: [
+      { type: 'web_search_call' },
+      { type: 'message', content: [{ type: 'output_text', text: 'Copilot search response' }] },
+    ] })))
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const delegate = vi.fn()
+    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'primary' }, undefined, delegate)
+    expect(result.content).toContain('Copilot search response')
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${baseURL}/responses`)
+    expect(resolveRequestAuth).toHaveBeenCalledWith('account-model', expect.any(AbortSignal))
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+    expect(delegate).not.toHaveBeenCalled()
+  })
+
+  it('automatically discloses native DeepSeek fallback for an unsupported managed search protocol', async () => {
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'chat-only' } }, {
+      'web-search-deepseek': { baseURL: 'https://deepseek-search.test/v1', model: 'synthetic-search-model', apiKeyEnv: 'SYNTHETIC_KEY' },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
+      routeFacts: () => ({ api: 'openai-completions', baseURL: 'https://api.business.githubcopilot.com' }),
+    })
+    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) => new Response(JSON.stringify({ content: [{
+      type: 'web_search_tool_result', tool_use_id: 'search', content: [{ type: 'web_search_result', url: 'https://example.com/fallback', title: 'Fallback' }],
+    }] })))
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const delegate = vi.fn()
+    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'fallback' }, undefined, delegate)
+    expect(result.content).toContain('deepseek-official')
+    expect(result.content).toContain('DeepSeek API charges')
+    expect(result.content).toContain('origin=https://deepseek-search.test')
+    expect(result.content).toContain('model="synthetic-search-model"')
+    expect(result.content).toContain('endpoint=custom')
+    expect(result.sources).toMatchObject([{ url: 'https://example.com/fallback' }])
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://deepseek-search.test/v1/messages')
+    expect(runtime.credentialResolve).toHaveBeenCalledWith('SYNTHETIC_KEY')
+    expect(delegate).not.toHaveBeenCalled()
+  })
+
+  it('honors the explicit no-fallback and routing-disable settings', async () => {
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'chat-only' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
+      routeFacts: () => ({ api: 'openai-completions', baseURL: 'https://api.business.githubcopilot.com' }),
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, searchFallback: 'none' })
+    const delegate = vi.fn(async () => ({ sources: [], truncated: false }))
+    const router = runtime.ctx.get('githubCopilotSearchRouter')!
+    await expect(router.search({ query: 'no fallback' }, undefined, delegate)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = { routeWebSearch: false }
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
+    await router.search({ query: 'routing disabled' }, undefined, delegate)
+    expect(delegate).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not fallback after credential invalidation during primary auth', async () => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    let notify!: () => void
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }),
+      resolveRequestAuth: async () => { notify(); return { apiKey: 'synthetic-managed', baseURL } },
+      discover: vi.fn(async () => undefined),
+    })
+    notify = () => runtime.emitCredentialUpdate(credentialKey)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, searchFallback: 'deepseek' })
+    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'cancelled account' }, undefined, vi.fn())).rejects.toMatchObject({ code: 'WEB_ABORTED' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+  })
+})
+
 describe('github-copilot apply', () => {
   it('rejects a trust-override stream consumed after its plan generation was invalidated', async () => {
     const runtime = buildRuntime()
@@ -574,7 +1330,7 @@ describe('github-copilot apply', () => {
     expect(runtime.promptSection?.text()).toBe('')
     const next = vi.fn(() => undefined)
     runtime.listener?.(request({ purpose: 'compaction' }), next)
-    runtime.listener?.(request({ model: 'claude-sonnet-4.5' }), next)
+    runtime.listener?.(request({ model: 'unknown-no-protocol' }), next)
     await flushStartup()
     expect(fetchMock).not.toHaveBeenCalled()
     expect(next).toHaveBeenCalledTimes(2)
@@ -631,6 +1387,7 @@ describe('github-copilot apply', () => {
     const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'future-lab-r17' } }, {}, {
       getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }),
       routeFacts: () => ({ api: 'openai-responses', baseURL }), resolveRequestAuth,
+      discover: vi.fn(async () => undefined),
     })
     const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
       expect(new Headers(init?.headers).get('authorization')).toBe('Bearer managed-synthetic-access')
@@ -651,6 +1408,7 @@ describe('github-copilot apply', () => {
     const baseURL = 'https://api.individual.githubcopilot.com'
     const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'future-lab-r17' } }, {}, {
       getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID }), routeFacts: () => ({ api, baseURL }),
+      discover: vi.fn(async () => undefined),
       resolveRequestAuth: async () => { api = 'openai-completions'; return { apiKey: 'synthetic', baseURL } },
     })
     const fetchMock = vi.fn(async () => { throw new Error('stale protocol must not be sent') })
@@ -793,6 +1551,28 @@ describe('github-copilot apply', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it.each([0, 1])('delegates Anthropic in-band system authority before probing at position %s', position => {
+    const model = 'claude-sonnet-4.5'
+    const runtime = buildRuntime({}, { current: { provider: 'github-copilot', model } })
+    apply(runtime.ctx, { ...config, probe: true })
+    const fetchMock = vi.fn(async () => { throw new Error('custom wire must not run') })
+    vi.stubGlobal('fetch', fetchMock)
+    // rc1 development types predate the in-band system role; preserve its newer
+    // shape without importing an unpublished Core type or changing old peers.
+    const system = { id: 'system-fixture', role: 'system', content: [{ type: 'text', text: 'System authority.' }],
+      source: { kind: 'system' } } as unknown as Message
+    const messages = [...request().messages]
+    messages.splice(position, 0, system)
+    const input = request({ model, messages })
+    const next = vi.fn(() => 'core-system')
+    expect(runtime.listener?.(input, next)).toBe('core-system')
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(input.messages).toBe(messages)
+    expect(input.messages[position]).toBe(system)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+  })
+
   it('preserves a top-level user file when bypassing the custom wire', () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, config)
@@ -885,25 +1665,23 @@ describe('github-copilot apply', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('preserves session model overrides on the same provider without custom wire calls', async () => {
-    const runtime = buildRuntime()
-    apply(runtime.ctx, config)
-    const fetchMock = vi.fn(async () => { throw new Error('must preserve Core transport') })
+  it('captures an explicit request model instead of substituting a changed Session selection', async () => {
+    const selection: SelectionRef = { current: { provider: 'github-copilot', model: 'gpt-4.1' } }
+    const runtime = buildRuntime({}, selection)
+    apply(runtime.ctx, { ...config, probe: true })
+    const fetchMock = searchFetch()
     vi.stubGlobal('fetch', fetchMock)
-    // The default is gpt-5.4. Neither another Responses model nor an Anthropic
-    // model may be substituted with that default, even when requests overlap.
-    const requests = [request({ model: 'gpt-5-mini' }), request({ model: 'claude-sonnet-4.5' })]
-    const next = vi.fn(() => 'core-result')
-    const results = await Promise.all(requests.map(async original => {
-      const messages = original.messages
-      const result = runtime.listener?.(original, next)
-      expect(original.messages).toBe(messages)
-      return result
-    }))
-    expect(results).toEqual(['core-result', 'core-result'])
-    expect(requests.map(original => original.model)).toEqual(['gpt-5-mini', 'claude-sonnet-4.5'])
-    expect(next).toHaveBeenCalledTimes(2)
-    expect(fetchMock).not.toHaveBeenCalled()
+    const next = vi.fn(() => undefined)
+    const original = request({ model: 'gpt-5.4' })
+    const messages = original.messages
+    const stream = runtime.listener?.(original, next) as AsyncIterable<StreamChunk>
+    selection.current = { provider: 'other-route', model: 'model-C' }
+    await drain(stream)
+    expect(original.messages).toBe(messages)
+    expect(next).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    for (const [, init] of fetchMock.mock.calls) expect(JSON.parse(String(init?.body)).model).toBe('gpt-5.4')
+    expect(runtime.promptSection?.text()).toBe('')
   })
 
   it('serves a whitelisted provider when it is the current chat route', async () => {
@@ -935,16 +1713,19 @@ describe('github-copilot apply', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('defers the plan to the first request when the route is unsettled at attach', async () => {
-    const fetchMock = vi.fn(async () => { throw new Error('should never be called') })
+  it('allows explicit inline requests without an initiator but never guesses a traditional search route', async () => {
+    const fetchMock = searchFetch()
     vi.stubGlobal('fetch', fetchMock)
-    // No default-model selection yet: the attach-time settings change cannot
-    // resolve a route, so nothing is probed and the plan waits for a request.
     const runtime = buildRuntime({}, { current: null })
     apply(runtime.ctx, { ...config, probe: true })
-    const next = vi.fn(() => 'next-value')
-    expect(runtime.listener?.(request(), next)).toBe('next-value')
     expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.searchProviders[0]?.available()).toBe(false)
+    await expect(runtime.searchProviders[0]!.search({ query: 'news' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    await search(runtime, 'inline')
+    await search(runtime, 'inline')
+    // Explicit agentless calls have operation-local plans, never a shared fallback cache.
+    expect(proofCount(fetchMock)).toBe(2)
+    expect(runtime.promptSection?.text()).toBe('')
   })
 
   it('never probes for requests outside the gate', async () => {
@@ -969,7 +1750,7 @@ describe('github-copilot apply', () => {
     apply(runtime.ctx, config)
     expect(runtime.promptSection?.text()).toBe('')
     runtime.listener?.(request(), () => undefined)
-    expect(runtime.promptSection?.text()).toContain('web_search')
+    expect(await runtime.promptText({ provider: 'github-copilot', model: 'gpt-5.4' })).toContain('web_search')
   })
 
   it('keeps the prompt section empty while the probe has not settled', async () => {

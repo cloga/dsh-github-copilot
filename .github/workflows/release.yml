@@ -1,57 +1,84 @@
 name: Release
 
+# Only the fully gated main CI caller may publish. A tag created with
+# GITHUB_TOKEN does not start another workflow, so this workflow creates and
+# publishes the exact release itself.
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  # Serialize all repository releases. Two main runs may carry the same prepared
+  # version, so SHA-scoped concurrency would still race on one tag and draft.
+  group: dsh-github-copilot-release
+  cancel-in-progress: false
 
 jobs:
-  verify:
-    uses: ./.github/workflows/ci.yml
-    permissions:
-      contents: read
-  release:
-    needs: verify
+  plan:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'cloga/dsh-github-copilot' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      tag: ${{ steps.plan.outputs.tag }}
+      sha: ${{ steps.plan.outputs.sha }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/checkout@v6
         with:
-          repository: deepseek-ai/deepseek-harness
-          ref: d347e703908d0406b7a7ef80e3a0e594d86b2215
-          path: dsh-upstream
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
-
-      - uses: pnpm/action-setup@v6
-
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           package-manager-cache: false
+      - id: plan
+        name: Determine exact version and refuse unreleased important changes
+        run: node scripts/release-policy.mjs --plan
 
-      - name: Verify tag matches package version
-        shell: bash
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
-            echo "Tag $GITHUB_REF_NAME does not match package version $version" >&2
-            exit 1
-          fi
-          tag_type="$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")"
-          if [[ "$tag_type" != "tag" ]]; then
-            echo "Release tag $GITHUB_REF_NAME must be annotated, got $tag_type" >&2
-            exit 1
-          fi
-
+  release:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.release == 'true' }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: b2e3b2a0125854567a4a5fcba75782e42fe84901
+          path: dsh-upstream
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
-      - name: Install alpha.1 Core pi-ai closure
+      - name: Install alpha2 Core pi-ai closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
       - run: pnpm verify:upstream -- dsh-upstream
       - run: pnpm verify:controlled-core -- dsh-upstream
+      - name: Install tagged Session and Remote verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-api-session-controller...'
+      - name: Install tagged search verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
+      - name: Verify current unchanged tagged runtime before packing
+        shell: bash
+        run: |
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.1.5-alpha.2
+          node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-release/vitest.config.mts"
       - name: Verify plugin package
         run: pnpm verify
       - run: mkdir artifacts
@@ -61,25 +88,16 @@ jobs:
         run: |
           version="$(node -p "require('./package.json').version")"
           pnpm verify:tarball -- "artifacts/dsh-github-copilot-$version.tgz"
-      - name: Write SHA-256 manifest
+      - name: Write and verify SHA-256 manifest
         shell: bash
         run: |
           cd artifacts
           sha256sum -- *.tgz > SHA256SUMS
           sha256sum --check SHA256SUMS
-
-      - name: Create GitHub Release
+      - name: Publish exact annotated tag and immutable GitHub Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          RELEASE_SHA: ${{ needs.plan.outputs.sha }}
         shell: bash
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          release_flags=()
-          if [[ "$version" =~ -(alpha|beta|rc)\. ]]; then
-            release_flags+=(--prerelease)
-          fi
-          gh release create "$GITHUB_REF_NAME" artifacts/*.tgz artifacts/SHA256SUMS \
-            --verify-tag \
-            --title "dsh-github-copilot $version" \
-            --generate-notes \
-            "${release_flags[@]}"
+        run: node scripts/publish-release.mjs "${RELEASE_TAG#v}"

@@ -10,7 +10,7 @@
 - [ ] `pnpm verify` (source/test types, Agent contract, tooling tests, clean build, import smoke)
 - [ ] `pnpm pack --pack-destination artifacts`
 - [ ] `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`
-- [ ] All Windows/Linux x controlled-rc.2/rc.1/alpha.1 CI checks passed
+- [ ] All Windows/Linux x controlled-rc.2/rc.1/0.1.3-alpha.1/0.1.5-alpha.1/0.1.5-alpha.2 CI checks passed
 
 ### Evidence limits
 
