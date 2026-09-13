@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.14`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.15`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 ## 已测试基线
 
@@ -52,7 +52,7 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 若启动时还有额外 patch，用重复的 `--patch /absolute/file` 参数一并提供。必须得到 `supported: true` 才继续安装；自定义、已禁用、嵌套、已有隔离映射的 web 服务或路由保留名称冲突会在修改前拒绝。预检只用 Core 公开解析接口，不启动插件、不读取认证凭据、不改配置。**`dsh plugin add` 不会自动执行这项预检**；这是安装者必做步骤，不是对任意第三方组合的兼容保证。
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.14/dsh-github-copilot-0.4.0-alpha.14.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.15/dsh-github-copilot-0.4.0-alpha.15.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
@@ -185,6 +185,8 @@ Chat 选择器和 `/model` 的冷启动 `listModels()` 会确保共享托管 sou
 已登录且元数据缺失、idle、过期、error 或 loading 时，打开 Models 会另行调用一次非强制 Remote `githubCopilot.ensureModels()`。error 状态重新打开后可在共享失败冷却结束时重试，但不会在同次挂载内循环重试；loading 只加入已有 Host 请求以观察完成，不额外访问网络。新鲜 ready 缓存不拉取；真正 `unavailable` 且无模型的结果不自动重试。正常使用模型也会确保元数据有效。Host 合并并发调用为一个发现请求，不设周期刷新定时器。默认最大复用窗口为 **24 小时**（`accountModelTtlMs: 86400000`），失败冷却为 **5 分钟**（`accountModelFailureCooldownMs: 300000`），均可在插件 `github-copilot` 设置中配置。显式登录／界面切换账号成功后强制发现一次；**Manage → Refresh models**（`githubCopilot.discoverModels()`）与错误处的 **Retry** 仍可主动使用，必要时通过原生 OAuth 生命周期刷新令牌，不生成聊天请求或切换模型。
 
 同账号上次元数据可以在 TTL 刷新、loading 或 error 时继续展示，但这种旧数据显示绝不能授权请求。凭据／账号／权限失效或 proof 到期立即撤销旧请求证据；24 小时只是最大元数据复用窗口，不延长 token。后台凭据／reset 通知清除 Client 状态并读状态，不对每次 token 事件强制发现；下次打开／使用再确保元数据。状态读取和详情切换本身仍只读且无网络请求。
+
+创建新的元数据 lease 前，托管路由在前置检查阶段使用 **5 分 30 秒的续期阈值**：覆盖原生 SDK 提前 5 分钟续期的窗口，再留 30 秒准备余量。元数据准备会消耗这段余量，并不保证到后续 lease 创建或发请求时仍有完整的 5 分 30 秒。可复用的 warm 缓存进入该窗口时，先撤下旧缓存，再由现有 single-flight 发现流程完成原生 OAuth 续期、重新校验元数据，之后才准备模型调用；其它调用加入同一 flight，不用 force 绕过失败冷却。原生 `Models.getAuth()` 接收相同的最小有效期预算，续期后仍不足预算就提前失败，不循环刷新。状态读取仍不访问网络。这修复了自身续期可能使 warm-cache 请求报 `OAuth auth derivation failed ... COPILOT_PREVIEW_METADATA_STALE` 的路径。界面 **Updated** 是模型元数据时间，不是 OAuth 刷新时间。账号、权限和接口校验不放松；已经准备好的请求若等待过久跨入续期窗口或失去 proof，仍安全拒绝，不自动重放消息。托管搜索的连续性和探测检查保持独立，凭据通知后仍可能拒绝该次搜索。
 
 明确的 `UNKNOWN_MODEL` 结果触发一次有界元数据刷新，不重放失败消息，不自动切换模型；普通 HTTP／网络错误不能猜成模型不存在。账号／token／权限代际检查阻止旧结果覆盖新账号；发现不复制凭据、不改写选择或历史。发现时间、接受／拒绝模型及能力警告仍只是元数据证据，不证明真实调用成功。
 
@@ -349,8 +351,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 标记为 private，以防发布到 registry。Release tag 必须严格等于 `v${package.json.version}`。新版本使用标准 SemVer 预发布标识（`alpha`、`beta` 或 `rc`）；历史上的 `cloga` 后缀用于标识下游 fork 构建，新版本不再使用。Release workflow 会执行 frozen install 和完整验证门禁、打包 tarball、写入 `SHA256SUMS`，按版本标记 prerelease，并且只在前序步骤全部成功后创建 GitHub Release。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.14/dsh-github-copilot-0.4.0-alpha.14.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.14/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.15/dsh-github-copilot-0.4.0-alpha.15.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.15/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -358,7 +360,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.14.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.15.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
