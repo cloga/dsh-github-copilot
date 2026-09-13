@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.14"
+    "version": "0.4.0-alpha.15"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -279,9 +279,18 @@
       "sourceMarkers": [
         {"file": "src/preview-route.ts", "marker": "COPILOT_PREVIEW_METADATA_STALE"},
         {"file": "src/preview-route.ts", "marker": "copilotEntitlementKey"},
-        {"file": "src/preview-route.ts", "marker": "credentials/record-updated"}
+        {"file": "src/preview-route.ts", "marker": "credentials/record-updated"},
+        {"file": "src/preview-route.ts", "marker": "renewBeforeLease"},
+        {"file": "src/account-model-auth.ts", "marker": "minOAuthValidityMs: ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS"}
       ],
       "tests": [
+        {"file": "tests/preview-route.spec.ts", "name": "renews warm metadata before native OAuth refresh invalidates a new %s lease"},
+        {"file": "tests/preview-route.spec.ts", "name": "applies the warm renewal boundary with %i milliseconds remaining"},
+        {"file": "tests/preview-route.spec.ts", "name": "joins a warm renewal flight across catalog and model callers"},
+        {"file": "tests/preview-route.spec.ts", "name": "joins an existing metadata HTTP flight when token validity crosses the renewal threshold"},
+        {"file": "tests/preview-route.spec.ts", "name": "bounds a warm renewal %s without model wire or cooldown bypass"},
+        {"file": "tests/preview-route.spec.ts", "name": "persists warm-refresh entitlement removal without dispatching the formerly allowed model"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not rebind or replay an old prepared lease after it crosses the native refresh window"},
         {"file": "tests/preview-route.spec.ts", "name": "requires rediscovery when an already prepared token rotates without a credential notification"},
         {"file": "tests/preview-route.spec.ts", "name": "rejects silent same-token entitlement removal before dispatch and requires rediscovery"},
         {"file": "tests/preview-route.spec.ts", "name": "does not serve expired catalog facts or prepared model snapshots"},

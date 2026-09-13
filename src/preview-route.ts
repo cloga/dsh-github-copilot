@@ -14,7 +14,7 @@ import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } fro
 import { abortable } from './http.ts'
 import { accountModelFromDescriptor, copilotPublicHeaders, createAccountProvider } from './preview-provider.ts'
 import type { AccountProviderGuard } from './preview-provider.ts'
-import { copilotAccountKey, copilotEntitlementKey, createAccountModelAuth } from './account-model-auth.ts'
+import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS, copilotAccountKey, copilotEntitlementKey, createAccountModelAuth } from './account-model-auth.ts'
 import { createAccountModelSource } from './account-model-source.ts'
 import type { AccountModelLoadOptions, AccountModelSnapshot, AccountModelSource } from './account-model-source.ts'
 import type { AccountModelDescriptor, AccountModelRejection } from './account-model-catalog.ts'
@@ -437,7 +437,13 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     configured = true
     readError = undefined
     const cached = source.readDisplaySnapshot()
-    if (cached !== undefined && (cached.accountKey !== copilotAccountKey(grant) || snapshotProof?.tokenFingerprint !== tokenFingerprint(grant.access) || grant.expires <= Date.now())) {
+    // A warm cache must not mint a lease that native getAuth immediately revokes
+    // by renewing its token. Retire only reusable cache here: callers must join
+    // an existing flight, not cancel its HTTP/checking phase. Renewal stays in
+    // source.load's auth phase, which rebases its own credential notification.
+    const renewBeforeLease = source.readSnapshot() !== undefined
+      && grant.expires <= Date.now() + ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS
+    if (cached !== undefined && (cached.accountKey !== copilotAccountKey(grant) || snapshotProof?.tokenFingerprint !== tokenFingerprint(grant.access) || grant.expires <= Date.now() || renewBeforeLease)) {
       source.invalidate(); provenSnapshot = undefined; snapshotProof = undefined
     }
     try {

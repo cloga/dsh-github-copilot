@@ -5,6 +5,7 @@ import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../src/preview-route.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
+import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY as KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW, GITHUB_COPILOT_PREVIEW_MODEL_ID as MODEL } from '../src/copilot-identity.ts'
 
 interface RecordValue { kind: 'grant'; payload: Record<string, unknown> }
@@ -860,6 +861,212 @@ describe('plugin-owned account Copilot route', () => {
     // AccountModelSource then fetches endpoint/capability metadata once.
     expect(urls.filter(url => url.endsWith('/models'))).toHaveLength(2)
     expect(urls.filter(url => url.endsWith('/responses'))).toHaveLength(1)
+  })
+
+  it.each(['request', 'direct', 'search'] as const)('renews warm metadata before native OAuth refresh invalidates a new %s lease', async entry => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    const fresh = 'tid=synthetic-warm;proxy-ep=proxy.individual.githubcopilot.com;'
+    const urls: string[] = []
+    stubFetch(async input => {
+      const url = String(input)
+      urls.push(url)
+      if (url.endsWith('/copilot_internal/v2/token')) return new Response(JSON.stringify({ token: fresh, expires_at: Math.floor(Date.now() / 1000) + 3600 }))
+      if (url.endsWith('/models')) return catalogResponse()
+      if (url.endsWith('/responses')) return response()
+      throw new Error('unexpected synthetic URL')
+    }, true)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000, availableModelIds: [MODEL] }), { accountModelTtlMs: 86_400_000 })
+      const service = harness.ctx.get('githubCopilotPreview')!
+      expect((await service.discover()).available).toBe(true)
+      expect(harness.modify).not.toHaveBeenCalled()
+      clock.mockReturnValue(start + 100_001)
+      if (entry === 'search') {
+        expect(await service.resolveRequestAuth(MODEL)).toMatchObject({ apiKey: fresh })
+      } else if (entry === 'direct') {
+        const assembler = new BlockAssembler()
+        for await (const chunk of harness.adapter.stream({ provider: PREVIEW, model: MODEL, messages: [] })) assembler.push(chunk)
+        expect(assembler.finish).toEqual({ kind: 'stop' })
+      } else {
+        expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+      }
+      expect(harness.current()?.payload.access).toBe(fresh)
+      expect(harness.modify).toHaveBeenCalledTimes(1)
+      expect(urls.filter(url => url.endsWith('/copilot_internal/v2/token'))).toHaveLength(1)
+      expect(urls.filter(url => url.endsWith('/models'))).toHaveLength(3)
+      expect(urls.filter(url => url.endsWith('/responses'))).toHaveLength(entry === 'search' ? 0 : 1)
+    } finally { clock.mockRestore() }
+  })
+
+  it.each([330_001, 330_000, 300_001, 300_000, 299_999])('applies the warm renewal boundary with %i milliseconds remaining', async remaining => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    const urls: string[] = []
+    stubFetch(async input => {
+      const url = String(input); urls.push(url)
+      if (url.endsWith('/copilot_internal/v2/token')) return new Response(JSON.stringify({ token: 'tid=boundary;proxy-ep=proxy.individual.githubcopilot.com;', expires_at: Math.floor(Date.now() / 1000) + 3600 }))
+      if (url.endsWith('/models')) return catalogResponse()
+      if (url.endsWith('/responses')) return response()
+      throw new Error('unexpected synthetic URL')
+    }, true)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000, availableModelIds: [MODEL] }), { accountModelTtlMs: 86_400_000 })
+      await harness.ctx.get('githubCopilotPreview')!.discover()
+      clock.mockReturnValue(start + 400_000 - remaining)
+      expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+      const renewed = remaining <= ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS
+      expect(urls.filter(url => url.endsWith('/copilot_internal/v2/token'))).toHaveLength(renewed ? 1 : 0)
+      expect(urls.filter(url => url.endsWith('/models'))).toHaveLength(renewed ? 3 : 1)
+      expect(urls.filter(url => url.endsWith('/responses'))).toHaveLength(1)
+    } finally { clock.mockRestore() }
+  })
+
+  it('joins a warm renewal flight across catalog and model callers', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    let releaseToken: (() => void) | undefined
+    const urls: string[] = []
+    stubFetch(async input => {
+      const url = String(input); urls.push(url)
+      if (url.endsWith('/copilot_internal/v2/token')) {
+        await new Promise<void>(resolve => { releaseToken = resolve })
+        return new Response(JSON.stringify({ token: 'tid=joined;proxy-ep=proxy.individual.githubcopilot.com;', expires_at: Math.floor(Date.now() / 1000) + 3600 }))
+      }
+      if (url.endsWith('/models')) return catalogResponse()
+      if (url.endsWith('/responses')) return response()
+      throw new Error('unexpected synthetic URL')
+    }, true)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000, availableModelIds: [MODEL] }), { accountModelTtlMs: 86_400_000 })
+      const service = harness.ctx.get('githubCopilotPreview')!
+      await service.discover()
+      clock.mockReturnValue(start + 100_001)
+      const request = call(harness.ctx)
+      await vi.waitFor(() => expect(releaseToken).toBeDefined())
+      const catalog = harness.ctx.llm.listModels(PREVIEW)
+      await service.refresh()
+      releaseToken!()
+      const [reply, models] = await Promise.all([request, catalog])
+      expect(reply.assembler.finish).toEqual({ kind: 'stop' })
+      expect(models.map(model => model.id)).toEqual([MODEL])
+      expect(urls.filter(url => url.endsWith('/copilot_internal/v2/token'))).toHaveLength(1)
+      expect(urls.filter(url => url.endsWith('/models'))).toHaveLength(3)
+      expect(urls.filter(url => url.endsWith('/responses'))).toHaveLength(1)
+    } finally { clock.mockRestore() }
+  })
+
+  it('joins an existing metadata HTTP flight when token validity crosses the renewal threshold', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    let releaseMetadata: (() => void) | undefined
+    let metadataSignal: AbortSignal | undefined
+    let metadataRequests = 0
+    const urls: string[] = []
+    stubFetch(async (input, init) => {
+      const url = String(input); urls.push(url)
+      if (url.endsWith('/models')) {
+        if (++metadataRequests === 2) {
+          metadataSignal = init?.signal ?? undefined
+          await new Promise<void>(resolve => { releaseMetadata = resolve })
+        }
+        return catalogResponse()
+      }
+      if (url.endsWith('/responses')) return response()
+      throw new Error('OAuth renewal must not occur during this joined flight')
+    }, true)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000, availableModelIds: [MODEL] }), { accountModelTtlMs: 86_400_000 })
+      const service = harness.ctx.get('githubCopilotPreview')!
+      await service.discover()
+      clock.mockReturnValue(start + 400_000 - ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS - 1)
+      const refreshing = service.discover({ force: true })
+      await vi.waitFor(() => expect(releaseMetadata).toBeDefined())
+      clock.mockReturnValue(start + 400_000 - ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS)
+      const request = call(harness.ctx)
+      // Drain the admission microtasks while the synthetic HTTP response is held.
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
+      expect(metadataSignal?.aborted).toBe(false)
+      expect(metadataRequests).toBe(2)
+      releaseMetadata!()
+      const [view, result] = await Promise.all([refreshing, request])
+      expect(view.available).toBe(true)
+      expect(result.assembler.finish).toEqual({ kind: 'stop' })
+      expect(metadataRequests).toBe(2)
+      expect(urls.filter(url => url.endsWith('/responses'))).toHaveLength(1)
+      expect(harness.modify).not.toHaveBeenCalled()
+    } finally { releaseMetadata?.(); clock.mockRestore() }
+  })
+
+  it.each(['short-token', 'server-failure'] as const)('bounds a warm renewal %s without model wire or cooldown bypass', async mode => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    const urls: string[] = []
+    stubFetch(async input => {
+      const url = String(input); urls.push(url)
+      if (url.endsWith('/copilot_internal/v2/token')) return mode === 'server-failure' ? new Response('private failure', { status: 503 })
+        : new Response(JSON.stringify({ token: 'tid=short;proxy-ep=proxy.individual.githubcopilot.com;', expires_at: Math.floor(Date.now() / 1000) + 600 }))
+      if (url.endsWith('/models')) return catalogResponse()
+      throw new Error('model must not run')
+    }, true)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000, availableModelIds: [MODEL] }), { accountModelTtlMs: 86_400_000, accountModelFailureCooldownMs: 300_000 })
+      const service = harness.ctx.get('githubCopilotPreview')!
+      await service.discover()
+      clock.mockReturnValue(start + 100_001)
+      await expect(call(harness.ctx)).rejects.toThrow(/AUTH/)
+      await expect(call(harness.ctx)).rejects.toThrow(/AUTH/)
+      expect(urls.filter(url => url.endsWith('/copilot_internal/v2/token'))).toHaveLength(1)
+      expect(urls.some(url => url.endsWith('/responses'))).toBe(false)
+      expect(JSON.stringify(service.getView())).not.toMatch(/private failure|tid=short/)
+    } finally { clock.mockRestore() }
+  })
+
+  it('persists warm-refresh entitlement removal without dispatching the formerly allowed model', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    let renewed = false
+    const urls: string[] = []
+    stubFetch(async input => {
+      const url = String(input); urls.push(url)
+      if (url.endsWith('/copilot_internal/v2/token')) {
+        renewed = true
+        return new Response(JSON.stringify({ token: 'tid=revoked-warm;proxy-ep=proxy.individual.githubcopilot.com;', expires_at: Math.floor(Date.now() / 1000) + 3600 }))
+      }
+      if (url.endsWith('/models')) return catalogResponse(renewed ? [] : [catalogItem(MODEL)])
+      throw new Error('revoked model request must not run')
+    }, true)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000, availableModelIds: [MODEL] }), { accountModelTtlMs: 86_400_000 })
+      await harness.ctx.get('githubCopilotPreview')!.discover()
+      clock.mockReturnValue(start + 100_001)
+      await expect(call(harness.ctx)).rejects.toThrow(/ENTITLED/)
+      expect(harness.current()?.payload.availableModelIds).toEqual([])
+      expect(urls.filter(url => url.endsWith('/copilot_internal/v2/token'))).toHaveLength(1)
+      expect(urls.some(url => url.endsWith('/responses'))).toBe(false)
+    } finally { clock.mockRestore() }
+  })
+
+  it('does not rebind or replay an old prepared lease after it crosses the native refresh window', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    const urls: string[] = []
+    stubFetch(async input => {
+      const url = String(input); urls.push(url)
+      if (url.endsWith('/copilot_internal/v2/token')) return new Response(JSON.stringify({ token: 'tid=late;proxy-ep=proxy.individual.githubcopilot.com;', expires_at: Math.floor(Date.now() / 1000) + 3600 }))
+      if (url.endsWith('/models')) return catalogResponse()
+      throw new Error('old model request must not run')
+    }, true)
+    try {
+      const harness = await runtime(grant({ expires: start + 400_000, availableModelIds: [MODEL] }), { accountModelTtlMs: 86_400_000 })
+      const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+      clock.mockReturnValue(start + 100_001)
+      const assembler = new BlockAssembler()
+      for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) assembler.push(chunk)
+      expect(assembler.finish.kind).toBe('error')
+      expect(urls.filter(url => url.endsWith('/copilot_internal/v2/token'))).toHaveLength(1)
+      expect(urls.some(url => url.endsWith('/responses'))).toBe(false)
+    } finally { clock.mockRestore() }
   })
 
   it('serializes canonical and preview refresh through the same credential key', async () => {
