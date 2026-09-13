@@ -283,7 +283,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     const harness = runtime({ configured: true, providerProfile: {} })
     const fetchMock = vi.fn(() => { throw new Error('status must not perform network I/O') })
     vi.stubGlobal('fetch', fetchMock)
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 50; i++) {
       const view = await harness.controller.status()
       expect(view).toMatchObject({
         configured: true, phase: 'signed-in', route: { state: 'needs-repair' },
@@ -500,7 +500,10 @@ describe('GitHubCopilotAuthorizationController', () => {
       },
     })
 
-    await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
+    for (let index = 0; index < 50; index++) {
+      await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
+      await expect(harness.controller.reconcile()).resolves.toMatchObject({ phase: 'signed-in' })
+    }
     await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
     expect(harness.mutate).not.toHaveBeenCalled()
     expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({

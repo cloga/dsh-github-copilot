@@ -36,7 +36,7 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 1. 打开 **设置 → 模型**，找到紧凑的 **GitHub Copilot** 账号行。不需要先添加原生 provider 配置。
 2. 点击 **Sign in with GitHub** 后，验证码区域自动展开，提供醒目的一次性验证码、**Open GitHub verification page**、**Copy code** 和 **Cancel sign-in**。不需要再点一次 **Manage**。
 3. 复制验证码，打开验证链接，在自己的 GitHub 浏览器会话中完成授权。复制成功／失败均有可访问的反馈；手工复制仍可用。不要把 GitHub token 粘贴到 DSH。
-4. DSH 只在授权进行中轮询。成功后，验证码、验证链接和复制反馈清除，自动授权区域收起；紧凑行显示 **Signed in、Refresh models、Manage**。手动打开的管理详情保持展开。取消会清除旧验证码，失败提示不会藏到折叠区域里。
+4. DSH 只在授权进行中轮询：间隔从 500 毫秒增加到 1 秒，再保持为 2 秒。每个账号控制器合并重叠的状态读取；读取失败后暂停轮询，等待点击 **Retry status**。新一轮登录会重置间隔。成功后，验证码、验证链接和复制反馈清除，自动授权区域收起；紧凑行显示 **Signed in、Refresh models、Manage**。手动打开的管理详情保持展开。取消会清除旧验证码，失败提示不会藏到折叠区域里。
 5. **Refresh models** 只主动更新账号模型元数据，不切换当前／默认模型。**Manage** 按需展开模型明细、退出登录和兼容说明，单纯展开不会刷新模型。随后在选择器的 **GitHub Copilot** 分组选择接受的模型（稳定路由 ID 为 `github-copilot-preview`）；刷新错误或拒绝原因见[迁移与排障](#迁移与排障)。
 
 统一账号卡片独立于原生 provider 行存在；不要为了登录而先使用 **添加提供方**。卡片缺失时核对活动 profile 与实际加载的 Host/Client 版本。新版动图展示同一卡片中的 **登录 → 复制验证码 → 已复制 → 已登录 → 刷新账号模型 → 元数据就绪**。用户在 GitHub 完成真实授权是独立步骤，不在录制范围内。
@@ -110,6 +110,8 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 `githubCopilot.status()` 与 Host `describeGitHubCopilotProviderProfile()` 只读取已存状态并规划旧 canonical 配置变更，不写 settings、不刷新 OAuth、不测试网络。状态区分凭据是否已配置，以及旧 route 的 `ready`、`needs-repair`、`not-configured`、`conflict`、`error`。已登录时，`route: not-configured` 通常表示可选的 canonical profile 不存在，是正常单托管路由状态，不是登录错误或修复要求，也不证明托管模型发现已就绪。`ready` 只说明受检查的 canonical 配置无需修复；账号发现与真实模型／搜索调用是独立证据。
 
 点击 **Repair model configuration**（Remote `githubCopilot.reconcile()`）只对已有旧 profile 或经过验证的 journal 执行 revision 检查后的修复，不拉取模型列表、不创建缺失 profile，也不强行覆盖冲突。登录、启动及认证刷新时的 reconciliation 同样保留 profile 缺失。浏览器轮询为只读；部署时需一起更新 Host 与 Client bundle。
+
+状态请求的传输失败不代表 GitHub 授权已经过期。状态重试不会自动重复登录、退出、模型发现或配置修复。紧凑账号控制器会等待过期的在途状态请求结束，再发起新的读取；忽略旧结果不等于取消其网络请求。这些插件内控制用于降低请求压力，不修改 Core 的请求调度。
 
 ### 主动刷新账号模型
 

@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createElement, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { createCompactAccount } from './compact-account.ts'
+import { AUTHORIZATION_POLL_INITIAL_MS, AUTHORIZATION_POLL_MAX_MS, createCompactAccount } from './compact-account.ts'
 import type { CSSProperties, ReactElement } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
@@ -247,18 +247,38 @@ export function GitHubCopilotProviderCard(
   const [copyState, setCopyState] = useState<CopyState>('idle')
   const copyAttempt = useRef(0)
 
-  const refresh = useCallback(async () => {
-    const result = await props.remote.status()
-    if (result.ok) {
-      const view = authorizationViewFrom(result.value)
-      if (view === undefined) { setError('COPILOT_AUTHORIZATION_VIEW_INVALID'); return undefined }
-      setStatus(view)
-      setError(undefined)
-      return view
-    }
-    setError(messageOf(result))
-    return undefined
+  const statusRead = useRef<{
+    readonly remote: GitHubCopilotProviderCardProps['remote']
+    readonly promise: Promise<GitHubCopilotAuthorizationView | undefined>
+  }>()
+  const refresh = useCallback(() => {
+    if (statusRead.current?.remote === props.remote) return statusRead.current.promise
+    const reading = Promise.resolve().then(async () => {
+      try {
+        if (statusRead.current !== request) return undefined
+        const result = await props.remote.status()
+        if (statusRead.current !== request) return undefined
+        if (result.ok) {
+          const view = authorizationViewFrom(result.value)
+          if (view === undefined) { setError('COPILOT_AUTHORIZATION_VIEW_INVALID'); return undefined }
+          setStatus(view)
+          setError(undefined)
+          return view
+        }
+        setError('COPILOT_AUTHORIZATION_STATUS_FAILED')
+      } catch {
+        if (statusRead.current === request) setError('COPILOT_AUTHORIZATION_STATUS_FAILED')
+      }
+      return undefined
+    }).finally(() => {
+      if (statusRead.current === request) statusRead.current = undefined
+    })
+    const request = { remote: props.remote, promise: reading }
+    statusRead.current = request
+    return reading
   }, [props.remote])
+
+  useEffect(() => () => { statusRead.current = undefined }, [props.remote])
 
   useEffect(() => {
     if (props.provider.provider !== GITHUB_COPILOT_PROVIDER_ID) return
@@ -275,26 +295,39 @@ export function GitHubCopilotProviderCard(
   }, [])
 
   useEffect(() => {
-    if (props.provider.provider !== GITHUB_COPILOT_PROVIDER_ID || status?.inFlight !== true) return
+    if (props.provider.provider !== GITHUB_COPILOT_PROVIDER_ID || status?.inFlight !== true || error !== undefined) return
     let disposed = false
+    let delay = AUTHORIZATION_POLL_INITIAL_MS
     let timer: ReturnType<typeof setTimeout> | undefined
     const poll = async (): Promise<void> => {
       const next = await refresh()
-      if (!disposed && (next?.inFlight ?? true)) timer = setTimeout(() => void poll(), 500)
+      if (!disposed && next?.inFlight === true) {
+        delay = Math.min(delay * 2, AUTHORIZATION_POLL_MAX_MS)
+        timer = setTimeout(() => void poll(), delay)
+      }
     }
-    timer = setTimeout(() => void poll(), 500)
+    timer = setTimeout(() => void poll(), delay)
     return () => {
       disposed = true
       if (timer !== undefined) clearTimeout(timer)
     }
-  }, [props.provider.provider, refresh, status?.inFlight])
+  }, [props.provider.provider, refresh, status?.inFlight, error])
 
   if (props.provider.provider !== GITHUB_COPILOT_PROVIDER_ID) return null
 
   const invoke = async (
     operation: () => ReturnType<GitHubCopilotProviderCardProps['remote']['status']>,
   ): Promise<void> => {
-    const result = await operation()
+    statusRead.current = undefined
+    let result: Awaited<ReturnType<typeof operation>>
+    try {
+      result = await operation()
+    } catch {
+      setError('COPILOT_AUTHORIZATION_REQUEST_FAILED')
+      return
+    } finally {
+      statusRead.current = undefined
+    }
     if (result.ok) {
       const view = authorizationViewFrom(result.value)
       if (view === undefined) { setError('COPILOT_AUTHORIZATION_VIEW_INVALID'); return }
@@ -314,6 +347,8 @@ export function GitHubCopilotProviderCard(
   return createElement('div', { 'data-dsh-github-copilot': true },
     createElement('div', { role: 'status', 'aria-live': 'polite' },
       error ?? status?.error ?? (busy ? 'Waiting for GitHub authorization…' : signedIn ? 'Signed in to GitHub Copilot.' : 'Sign in to use GitHub Copilot models.')),
+    error === 'COPILOT_AUTHORIZATION_STATUS_FAILED' || error === 'COPILOT_AUTHORIZATION_VIEW_INVALID'
+      ? createElement('button', { type: 'button', onClick: () => void refresh() }, 'Retry status') : null,
     catalogWarning === undefined ? null : createElement('div', {
       role: 'alert',
       'data-dsh-github-copilot-catalog-warning': status?.catalog?.state,

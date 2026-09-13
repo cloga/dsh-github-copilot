@@ -110,6 +110,26 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
 
 describe('plugin-owned account Copilot route', () => {
+  it('does not republish unchanged directories or fetch models during repeated snapshot reads', async () => {
+    const harness = await runtime()
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    const updated = vi.fn()
+    harness.ctx.on('llm/adapters-updated', updated)
+    harness.modify.mockClear()
+    for (let index = 0; index < 50; index++) {
+      await service.refresh()
+      service.getView()
+      await harness.ctx.llm.listModels(PREVIEW)
+    }
+    expect(discoveryRequests).toHaveLength(1)
+    expect(updated).not.toHaveBeenCalled()
+    expect(harness.modify).not.toHaveBeenCalled()
+    harness.replace(grant({ refresh: 'synthetic-account-b' }))
+    await service.refresh()
+    expect(service.getView().available).toBe(false)
+    expect(updated).toHaveBeenCalled()
+  })
   it('discovers mixed and unseen account models without model-name routing rules', async () => {
     const items = [catalogItem(MODEL), catalogItem('gemini-3.8-flash', '/chat/completions'),
       catalogItem('gpt-5.6-sol-fast'), catalogItem('future-lab-r17', '/v1/messages'),

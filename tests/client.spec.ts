@@ -156,8 +156,8 @@ describe('GitHub Copilot Models client', () => {
       configured: true, keyConfigured: false, remote: remote as never })
     const disposers = effects.map(setup => setup())
     await Promise.resolve()
+    await vi.waitFor(() => expect(setError).toHaveBeenCalledWith('COPILOT_AUTHORIZATION_VIEW_INVALID'))
     expect(setStatus).not.toHaveBeenCalled()
-    expect(setError).toHaveBeenCalledWith('COPILOT_AUTHORIZATION_VIEW_INVALID')
     for (const dispose of disposers) if (typeof dispose === 'function') dispose()
   })
 
@@ -344,6 +344,97 @@ describe('GitHub Copilot Models client', () => {
     expect(React.useState).not.toHaveBeenCalled()
     expect(GitHubCopilotLegacyProviderNotice({ ...props, provider: { ...props.provider, provider: 'other' } })).toBeNull()
     expect(GitHubCopilotLegacyProviderNotice({ ...props, configured: false })).toBeNull()
+  })
+
+  it.each(['rejection', 'failure', 'invalid'] as const)('stops legacy polling after a status %s and reports a safe error', async failure => {
+    vi.useFakeTimers()
+    const pending = { phase: 'authorizing' as const, configured: false, writable: true, inFlight: true, notices: [] }
+    const remote = { status: vi.fn<() => Promise<unknown>>().mockResolvedValueOnce({ ok: true, value: pending }) }
+    if (failure === 'rejection') remote.status.mockRejectedValue(new Error('PRIVATE_TRANSPORT_ERROR'))
+    else remote.status.mockResolvedValue(failure === 'failure'
+      ? { ok: false, error: { message: 'PRIVATE_TRANSPORT_ERROR' } }
+      : { ok: true, value: { phase: 'invalid' } })
+    const setError = vi.fn(), effects: React.EffectCallback[] = []
+    vi.mocked(React.useEffect).mockImplementation(setup => { effects.push(setup) })
+    vi.mocked(React.useCallback).mockImplementation(callback => callback)
+    vi.mocked(React.useRef).mockImplementation(initial => ({ current: initial }))
+    vi.mocked(React.useState)
+      .mockReturnValueOnce([pending, vi.fn()])
+      .mockReturnValueOnce([undefined, setError])
+      .mockReturnValueOnce([false, vi.fn()])
+      .mockReturnValueOnce(['idle', vi.fn()])
+    GitHubCopilotProviderCard({
+      provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
+      configured: false, keyConfigured: false, remote: remote as never,
+    })
+    for (const setup of effects) {
+      const cleanup = setup()
+      if (typeof cleanup === 'function') panelCleanups.push(cleanup)
+    }
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(remote.status).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(setError).toHaveBeenLastCalledWith(failure === 'invalid'
+      ? 'COPILOT_AUTHORIZATION_VIEW_INVALID' : 'COPILOT_AUTHORIZATION_STATUS_FAILED')
+  })
+
+  it('merges repeated legacy status retries without repeating authorization writes', async () => {
+    const wait = deferred<unknown>(), remote = modelRemote()
+    remote.status.mockReturnValue(wait.promise)
+    vi.mocked(React.useEffect).mockImplementation(() => {})
+    vi.mocked(React.useCallback).mockImplementation(callback => callback)
+    vi.mocked(React.useRef).mockImplementation(initial => ({ current: initial }))
+    vi.mocked(React.useState)
+      .mockReturnValueOnce([undefined, vi.fn()])
+      .mockReturnValueOnce(['COPILOT_AUTHORIZATION_STATUS_FAILED', vi.fn()])
+      .mockReturnValueOnce([false, vi.fn()])
+      .mockReturnValueOnce(['idle', vi.fn()])
+    const tree = GitHubCopilotProviderCard({
+      provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
+      configured: false, keyConfigured: false, remote: remote as never,
+    })
+    const retry = descendants(tree).find(element => element.type === 'button' && element.props.children === 'Retry status')
+    expect(retry).toBeDefined()
+    for (let index = 0; index < 100; index++) retry!.props.onClick()
+    await Promise.resolve()
+    expect(remote.status).toHaveBeenCalledOnce()
+    expect(remote.start).not.toHaveBeenCalled()
+    expect(remote.cancel).not.toHaveBeenCalled()
+    wait.resolve(accountResult())
+    await Promise.resolve()
+  })
+
+  it('does not overwrite legacy cancellation with a late status response', async () => {
+    const pending = { phase: 'authorizing' as const, configured: false, writable: true, inFlight: true, notices: [] }
+    const signedOut = { ...pending, phase: 'signed-out' as const, inFlight: false }
+    const wait = deferred<unknown>(), remote = modelRemote()
+    remote.status.mockReturnValue(wait.promise)
+    remote.cancel.mockResolvedValue({ ok: true, value: signedOut })
+    const setStatus = vi.fn(), effects: React.EffectCallback[] = []
+    vi.mocked(React.useEffect).mockImplementation(setup => { effects.push(setup) })
+    vi.mocked(React.useCallback).mockImplementation(callback => callback)
+    vi.mocked(React.useRef).mockImplementation(initial => ({ current: initial }))
+    vi.mocked(React.useState)
+      .mockReturnValueOnce([pending, setStatus])
+      .mockReturnValueOnce([undefined, vi.fn()])
+      .mockReturnValueOnce([false, vi.fn()])
+      .mockReturnValueOnce(['idle', vi.fn()])
+    const tree = GitHubCopilotProviderCard({
+      provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' },
+      configured: false, keyConfigured: false, remote: remote as never,
+    })
+    for (const setup of effects) {
+      const cleanup = setup()
+      if (typeof cleanup === 'function') panelCleanups.push(cleanup)
+    }
+    await Promise.resolve()
+    const cancel = descendants(tree).find(element => element.type === 'button' && element.props.children === 'Cancel sign-in')
+    cancel!.props.onClick()
+    await vi.waitFor(() => expect(setStatus).toHaveBeenCalledWith(signedOut))
+    wait.resolve({ ok: true, value: pending })
+    for (let index = 0; index < 8; index++) await Promise.resolve()
+    expect(setStatus).toHaveBeenCalledOnce()
+    expect(remote.cancel).toHaveBeenCalledOnce()
   })
 
   it('does not poll shared status after a signed-in render', async () => {
