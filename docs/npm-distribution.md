@@ -32,6 +32,22 @@ publication. Until bootstrap/trusted publishing is configured, the npm step
 fails explicitly and the workflow is **not fully delivered**. This is intentional,
 not a successful skipped step. The already published GitHub archive is retained.
 
+For the already released `v0.4.0-alpha.18`, `.github/workflows/bootstrap-npm.yml`
+is a one-time `workflow_dispatch` follow-up. It is fixed to Release commit
+`08bfccc3b5930b93ef2fe31d9cf9e509f34a8704`, the original Release asset
+digests, and the expected npm SRI. It downloads and validates the immutable
+Release rather than packing workspace bytes. Only the publish step receives the
+repository `NPM_TOKEN`, as `NODE_AUTH_TOKEN`; GitHub access remains read-only and
+the normal release pipeline remains OIDC-only.
+
+The bootstrap reads package, version, and alpha-tag state before any write. A
+matching existing version is read-only; an existing package without this exact
+version stops for maintainer ownership review. True package absence allows one
+exact publish command with lifecycle scripts disabled and no automatic retry.
+An OTP/2FA requirement fails honestly; do not bypass or disable 2FA. After a
+successful first publication and Trusted Publisher setup, remove both this
+workflow and the repository `NPM_TOKEN`.
+
 1. From the verified immutable Release, obtain its original versioned tarball
    and `SHA256SUMS`. Verify the annotated tag/commit, Release state, asset digest,
    archive contents and SHA-256. Do not repack or edit this archive.
