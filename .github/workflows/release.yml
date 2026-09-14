@@ -43,6 +43,7 @@ jobs:
     if: ${{ needs.plan.outputs.release == 'true' }}
     permissions:
       contents: write
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -81,8 +82,11 @@ jobs:
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-release/vitest.config.mts"
       - name: Verify plugin package
         run: pnpm verify
-      - run: mkdir artifacts
-      - run: pnpm pack --pack-destination artifacts
+      - name: Recover original release archive or pack once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.plan.outputs.sha }}
+        run: node scripts/prepare-release-artifact.mjs
       - name: Verify packed archive
         shell: bash
         run: |
@@ -101,3 +105,10 @@ jobs:
           RELEASE_SHA: ${{ needs.plan.outputs.sha }}
         shell: bash
         run: node scripts/publish-release.mjs "${RELEASE_TAG#v}"
+      - name: Install pinned OIDC-capable npm CLI
+        run: npm install --global npm@11.5.1 --registry=https://registry.npmjs.org/ --ignore-scripts
+      - name: Publish the same verified archive to npm and verify integrity
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          node scripts/publish-npm.mjs "$version"

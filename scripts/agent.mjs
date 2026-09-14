@@ -29,6 +29,8 @@ export async function describeRepository(root = repositoryRoot) {
       tarball: `dsh-github-copilot-${pkg.version}.tgz`,
       url: `${baseline.baseline.source}/releases/download/v${pkg.version}/dsh-github-copilot-${pkg.version}.tgz`,
       publicationVerified: false,
+      npm: { spec: `${pkg.name}@${pkg.version}`, registry: pkg.publishConfig?.registry,
+        tag: pkg.publishConfig?.tag, publicationVerified: false },
     },
   }
 }
@@ -37,9 +39,13 @@ export async function planTask(task, root = repositoryRoot) {
   const description = await describeRepository(root)
   const area = Object.hasOwn(description.tasks, task) ? description.tasks[task] : undefined
   if (area === undefined) throw new Error(`Unknown task. Choose: ${Object.keys(description.tasks).join(', ')}`)
+  const scriptTests = area.tests.filter(path => path.startsWith('tests/scripts/'))
+  const unitTests = area.tests.filter(path => !path.startsWith('tests/scripts/'))
   const commands = [
     ['pnpm', 'install', '--frozen-lockfile'],
-    ...(area.tests.length === 0 ? [['pnpm', 'test:scripts']] : [['pnpm', 'exec', 'vitest', 'run', ...area.tests]]),
+    ...(area.tests.length === 0 ? [['pnpm', 'test:scripts']] : []),
+    ...(unitTests.length ? [['pnpm', 'exec', 'vitest', 'run', ...unitTests]] : []),
+    ...(scriptTests.length ? [['node', '--test', ...scriptTests]] : []),
     ['pnpm', 'verify'],
     ['pnpm', 'pack', '--pack-destination', 'artifacts'],
     ['pnpm', 'verify:tarball', '--', `artifacts/${description.release.tarball}`],
@@ -51,7 +57,7 @@ export async function planTask(task, root = repositoryRoot) {
     ...area,
     cwd: 'repository root',
     commands: commands.map(argv => ({ argv, executed: false })),
-    delivery: 'Issue -> feature branch -> focused tests -> complete gate -> review -> authorized merge; important updates continue to verified Release without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Ask before profile installation or interrupting restart; report any publication blocker.',
+    delivery: 'Issue -> feature branch -> focused tests -> complete gate -> review -> authorized merge; important updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Ask before profile installation or interrupting restart; report any publication blocker.',
     boundaries: description.boundaries,
   }
 }
@@ -81,7 +87,7 @@ export async function doctor(root = repositoryRoot, nodeVersion = process.versio
     ok: checks.every(check => check.status !== 'fail'),
     package: description.package,
     checks,
-    notChecked: ['GitHub authentication/CI/Release', 'live DSH profile and loaded plugin', 'Copilot account availability', 'model transport', 'hosted search', 'build freshness', 'pnpm executable version'],
+    notChecked: ['GitHub authentication/CI/Release', 'npm ownership/authentication/publication', 'live DSH profile and loaded plugin', 'Copilot account availability', 'model transport', 'hosted search', 'build freshness', 'pnpm executable version'],
     next: 'Run pnpm verify. Do not treat this report as runtime or release validation.',
   }
 }
