@@ -25,45 +25,24 @@ through the normal reviewed PR path. Version changes include package.json,
 deployment-baseline.json and both README URLs; `publishConfig.tag` must agree
 with the channel. Do not silently rename a taken package.
 
-## First package bootstrap is a maintainer operation
+## Initial package publication is complete
 
-The normal main pipeline publishes the GitHub Release first, then requires npm
-publication. Until bootstrap/trusted publishing is configured, the npm step
-fails explicitly and the workflow is **not fully delivered**. This is intentional,
-not a successful skipped step. The already published GitHub archive is retained.
+The initial `dsh-github-copilot@0.4.0-alpha.18` package was published from the
+immutable `v0.4.0-alpha.18` GitHub Release archive. The public registry version,
+SHA-512 SRI, `alpha` tag, tarball size and SHA-256 were independently verified
+against those original Release bytes. The one-time workflow, token-authenticated
+bootstrap script and their focused tests have therefore been removed. No normal
+release workflow references `NPM_TOKEN`; removing any now-unused repository
+secret remains a separate explicit maintainer operation.
 
-For the already released `v0.4.0-alpha.18`, `.github/workflows/bootstrap-npm.yml`
-is a one-time `workflow_dispatch` follow-up. It is fixed to Release commit
-`08bfccc3b5930b93ef2fe31d9cf9e509f34a8704`, the original Release asset
-digests, and the expected npm SRI. It downloads and validates the immutable
-Release rather than packing workspace bytes. Only the publish step receives the
-repository `NPM_TOKEN`, as `NODE_AUTH_TOKEN`; GitHub access remains read-only and
-the normal release pipeline remains OIDC-only. Node 24 is configured first
-without npm registry authentication; the registry-scoped setup-node step runs
-only after immutable Release verification succeeds.
-
-The bootstrap reads package, version, and alpha-tag state before any write. A
-matching existing version is read-only; an existing package without this exact
-version stops for maintainer ownership review. True package absence allows one
-exact publish command with lifecycle scripts disabled and no automatic retry.
-An OTP/2FA requirement fails honestly; do not bypass or disable 2FA. After a
-successful first publication and Trusted Publisher setup, remove both this
-workflow and the repository `NPM_TOKEN`.
-
-1. From the verified immutable Release, obtain its original versioned tarball
-   and `SHA256SUMS`. Verify the annotated tag/commit, Release state, asset digest,
-   archive contents and SHA-256. Do not repack or edit this archive.
-2. In an approved environment, the authorized maintainer verifies `npm whoami`
-   is the intended account (`cloga`) and performs the first ordinary
-   `npm publish <original-release.tgz> --access public --tag alpha --ignore-scripts --registry=https://registry.npmjs.org/`
-   with interactive 2FA or explicitly authorized legitimate publishing
-   credentials. `<original-release.tgz>` is the exact downloaded real artifact,
-   not a directory or placeholder. Do not print, copy or commit credentials, or
-   weaken 2FA to make this succeed.
-3. Read back the exact npm version and compare `dist.integrity` with the
-   archive's SHA-512 SRI. Configure trusted publishing, then rerun the failed
-   CI release job on its original revision. It recovers the same bytes and
-   verifies the existing npm version without another publish.
+The successful publish was not immediately visible to a read performed about
+four seconds later, so that workflow run ended as a failure even though the
+package and tag subsequently converged. Treat this as an uncertain write, not
+permission to publish again. npm registry package metadata and dist-tags are
+eventually consistent: after any successful or uncertain publish command, wait
+for the exact version to become observable, verify `dist.integrity` and the
+non-decreasing channel tag, then rerun the normal pipeline to reconcile
+read-only. Never retry a publish merely because immediate readback is stale.
 
 **`npm stage publish` cannot bootstrap a nonexistent package.** The
 [official npm stage prerequisites](https://docs.npmjs.com/cli/v11/commands/npm-stage/)
@@ -122,7 +101,8 @@ The npm step reads package/version state before writing. Only E404 means
 absence; auth, TLS, timeout, malformed metadata and registry failures stop
 delivery. An existing exact version is accepted only with matching SHA-512 SRI
 and a channel tag at that version or a newer one. Conflicting bytes fail closed.
-An uncertain write is not retried in-process; rerun the workflow to reconcile.
+An uncertain write is not retried in-process. Allow registry visibility to
+converge, then rerun the workflow to reconcile the exact existing version.
 A matching version with an older/missing tag requires maintainer review; the
 workflow does not silently repair it with separate dist-tag writes.
 

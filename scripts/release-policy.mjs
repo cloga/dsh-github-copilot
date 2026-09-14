@@ -6,22 +6,12 @@ import { fileURLToPath } from 'node:url'
 const REPOSITORY = 'cloga/dsh-github-copilot'
 const PACKAGE_NAME = 'dsh-github-copilot'
 const importantPaths = new Set([
-  'agent-contract.json', 'cordis.patch.yml', 'deployment-baseline.json',
+  'cordis.patch.yml', 'deployment-baseline.json',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
+  'scripts/check-search-composition.mjs',
   'tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
 ])
-const importantPrefixes = ['src/', 'lib/', 'scripts/', '.github/workflows/']
-const oneTimeNpmBootstrapVersion = '0.4.0-alpha.18'
-// The exact set covers the initial bootstrap and immediate pre-cleanup corrections only.
-const oneTimeNpmBootstrapFiles = new Set([
-  '.github/workflows/bootstrap-npm.yml',
-  'agent-contract.json',
-  'docs/npm-distribution.md',
-  'scripts/bootstrap-npm.mjs',
-  'scripts/release-policy.mjs',
-  'tests/scripts/bootstrap-npm.test.mjs',
-  'tests/scripts/release-policy.test.mjs',
-])
+const importantPrefixes = ['src/', 'lib/']
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/
 
 function normalizePath(file) {
@@ -32,14 +22,6 @@ function normalizePath(file) {
 export function isImportantFile(file) {
   const path = normalizePath(file)
   return importantPaths.has(path) || importantPrefixes.some(prefix => path.startsWith(prefix))
-}
-
-export function isOneTimeNpmBootstrapChange(files, version) {
-  if (!Array.isArray(files)) throw new Error('Changed files must be an array')
-  if (version !== oneTimeNpmBootstrapVersion) return false
-  const normalized = new Set(files.map(normalizePath))
-  return normalized.size === oneTimeNpmBootstrapFiles.size
-    && [...oneTimeNpmBootstrapFiles].every(path => normalized.has(path))
 }
 
 export function parseVersion(version) {
@@ -112,8 +94,7 @@ export function assessChange({ baseManifest, manifest, files, readme, readmeZh, 
   const version = manifest.version
   const comparison = compareVersions(version, baseManifest.version)
   if (!Array.isArray(files)) throw new Error('Changed files must be an array')
-  const bootstrapOnly = comparison === 0 && isOneTimeNpmBootstrapChange(files, version)
-  const important = !bootstrapOnly && files.some(isImportantFile)
+  const important = files.some(isImportantFile)
   if (comparison < 0) throw new Error(`Version downgrade is forbidden: ${baseManifest.version} -> ${version}`)
   if (important && comparison <= 0) {
     throw new Error(`Important changes require a strictly newer SemVer than ${baseManifest.version}; update package.json, both READMEs, and deployment-baseline.json`)
@@ -151,14 +132,10 @@ export function assessPlan({ manifest, head, tagInfo = null, files = [], githubR
   if (tagInfo.sha === head) return { release: true, tag, sha: head, prerelease: isPrereleaseVersion(version) }
   if (recovery) throw new Error(`Tag recovery requires ${tag} to point to HEAD (${head})`)
   if (!Array.isArray(files)) throw new Error('Changed files must be an array')
-  const bootstrapOnly = isOneTimeNpmBootstrapChange(files, version)
-  if (!bootstrapOnly && files.some(isImportantFile)) {
+  if (files.some(isImportantFile)) {
     throw new Error(`merged important changes lack a new version: ${tag} does not point to HEAD; bump package.json, both READMEs, and deployment-baseline.json`)
   }
   if (tagInfo.isAncestor !== true) throw new Error(`${tag} is not an ancestor of HEAD; fetch complete history and investigate the release tag`)
-  if (bootstrapOnly) {
-    return { release: false, tag, sha: tagInfo.sha, prerelease: isPrereleaseVersion(version) }
-  }
   // Re-run publication against the exact tagged commit even when only docs/tests
   // followed it. This reconciles a missing release, stranded draft, incomplete
   // assets, or an uncertain prior write instead of silently treating a tag as
