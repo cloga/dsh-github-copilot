@@ -35,6 +35,7 @@ export function validateBootstrapContext(env, mode) {
     'Bootstrap must run from the canonical main branch')
   check(env.BOOTSTRAP_VERSION === BOOTSTRAP.version, 'Only the fixed bootstrap version is allowed')
   if (mode === 'prepare') {
+    // setup-node registry authentication is intentionally configured only after this mode completes.
     check(env.GH_TOKEN && !env.NODE_AUTH_TOKEN && !env.NPM_TOKEN,
       'Release preparation requires only the GitHub Actions token')
   } else {

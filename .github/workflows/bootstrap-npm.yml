@@ -34,12 +34,16 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-          registry-url: https://registry.npmjs.org
       - name: Download and verify the immutable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           BOOTSTRAP_VERSION: ${{ inputs.version }}
         run: node scripts/bootstrap-npm.mjs prepare
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
       - name: Install pinned npm CLI without lifecycle scripts
         env:
           NPM_CONFIG_IGNORE_SCRIPTS: 'true'
