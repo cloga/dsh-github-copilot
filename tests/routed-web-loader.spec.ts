@@ -61,7 +61,12 @@ describe('built routed-web bundle with the public Loader', () => {
         apply(c) {
           new AgentRegistry(c)
           c.provide('githubCopilotSearchRouter', {
-            search: async () => { observed.push('copilot'); return { content: 'Copilot result', sources: [{ url: 'https://example.com/copilot' }], truncated: false } },
+            search: async (request, signal, delegate) => {
+              const provider = c.agents.currentInitiator()?.session.requestHeader()?.config.provider
+              if (provider !== 'github-copilot') return delegate(request, signal)
+              observed.push('copilot')
+              return { content: 'Copilot result', sources: [{ url: 'https://example.com/copilot' }], truncated: false }
+            },
           })
         },
       })

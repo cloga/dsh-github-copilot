@@ -10,9 +10,9 @@ describe('session search settings', () => {
     expect(Config(base)).toMatchObject({ routeWebSearch: true, searchFallback: 'deepseek' })
   })
 
-  it('allows disabling fallback or the routing feature without changing other settings', () => {
-    expect(Config({ ...base, routeWebSearch: false, searchFallback: 'none' })).toMatchObject({
-      ...base, routeWebSearch: false, searchFallback: 'none',
+  it('allows disabling fallback or the routing feature and configuring an independent search model', () => {
+    expect(Config({ ...base, routeWebSearch: false, searchFallback: 'none', searchModel: 'gpt-5.6-sol' })).toMatchObject({
+      ...base, routeWebSearch: false, searchFallback: 'none', searchModel: 'gpt-5.6-sol',
     })
   })
 

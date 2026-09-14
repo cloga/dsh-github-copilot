@@ -23,7 +23,7 @@ function owner(provider: string, id: string): Agent {
   return { id, session: { requestHeader: () => ({ config: { provider, model: `${id}-model` } }) } } as unknown as Agent
 }
 
-async function harness(fallback: 'none' | 'deepseek' = 'none') {
+async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?: string) {
   const ctx = new Context()
   const root = ctx.plugin({
     name: 'routed-web-test-root',
@@ -48,11 +48,13 @@ async function harness(fallback: 'none' | 'deepseek' = 'none') {
   cleanup.push(routedFiber.dispose)
   await routedFiber
   const search = vi.fn(async () => answer)
+  const alternateSearch = vi.fn(async () => ({ ...answer, content: 'alternate answer' }))
   const fetch = vi.fn(async () => ({ url: 'https://example.com', statusCode: 200, contentType: 'text/plain', body: { kind: 'text' as const, content: 'native fetch' }, truncated: false }))
   const providerFiber = ctx.plugin({
     name: 'official-provider-test-double', inject: ['web'],
     apply(c) {
       c.web.registerSearchProvider({ id: 'configured-provider', available: () => true, search })
+      c.web.registerSearchProvider({ id: 'alternate-provider', available: () => true, search: alternateSearch })
       c.web.registerFetchProvider({ id: 'configured-fetch', available: () => true, fetch })
     },
   })
@@ -64,10 +66,16 @@ async function harness(fallback: 'none' | 'deepseek' = 'none') {
     name: 'synthetic-account-router',
     apply(c) {
       c.provide('githubCopilotSearchRouter', {
-        search: async (request, signal, delegate) => (await routeSessionSearch(request, signal, {
-          selection: currentSearchSelection(currentSearchInitiator(c)), managedOwned: false,
-          fallback, copilot, delegate, resolveDeepSeek: async () => deepseek, canContinue: () => true,
-        })).result,
+        search: async (request, signal, delegate, selectProvider) => {
+          if (selectedProvider !== undefined) {
+            if (selectProvider === undefined) throw new Error('missing exact-provider dispatcher')
+            return selectProvider(selectedProvider, request, signal)
+          }
+          return (await routeSessionSearch(request, signal, {
+            selection: currentSearchSelection(currentSearchInitiator(c)), managedOwned: false,
+            fallback, copilot, delegate, resolveDeepSeek: async () => deepseek, canContinue: () => true,
+          })).result
+        },
       })
     },
   })
@@ -92,7 +100,7 @@ async function harness(fallback: 'none' | 'deepseek' = 'none') {
   const agents = ctx.get('agents')!
   let call = 0
   const run = (agent: Agent, args: unknown, signal = new AbortController().signal) => agents.withInitiator(agent, () => tools.execute({ callId: `call-${++call}` as ToolCallId, name: 'web_search', arguments: args, agent, signal }))
-  return { ctx, tools, agents, a, b, d, run, copilot, deepseek, search, fetch, providerFiber, routedFiber, router, original: isolated.get('web')! }
+  return { ctx, tools, agents, a, b, d, run, copilot, deepseek, search, alternateSearch, fetch, providerFiber, routedFiber, router, original: isolated.get('web')! }
 }
 
 describe('plugin-owned web facade with the real official consumer', () => {
@@ -106,6 +114,17 @@ describe('plugin-owned web facade with the real official consumer', () => {
     expect(h.search).toHaveBeenCalledTimes(2)
     expect(h.copilot.search).not.toHaveBeenCalled()
     expect(h.deepseek.search).not.toHaveBeenCalled()
+  })
+
+  it('dispatches a router-selected provider by exact registered id', async () => {
+    const h = await harness('none', 'alternate-provider')
+    const result = await h.run(h.b, { queries: ['query'] })
+    expect(result.isError).toBe(false)
+    expect(result.content).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('alternate answer') }),
+    ]))
+    expect(h.alternateSearch).toHaveBeenCalledOnce()
+    expect(h.search).not.toHaveBeenCalled()
   })
 
   it('routes Copilot without invoking the globally configured provider and keeps source caps', async () => {

@@ -1046,7 +1046,9 @@ describe('GitHub Copilot Models client', () => {
     const injections = new Map<string, () => unknown>()
     const register = vi.fn((options: { name: string; id?: string; order?: number }, _component: unknown) => {
       const dispose = vi.fn()
-      registrations.set(options.name, dispose)
+      const key = options.id === 'github-copilot-search-routing'
+        ? `${options.name}:${options.id}` : options.name
+      registrations.set(key, dispose)
       return dispose
     })
     let ctx: {
@@ -1069,6 +1071,9 @@ describe('GitHub Copilot Models client', () => {
         return Object.assign(new Promise<void>(() => {}), { dispose: disposePresentation })
       }
       const cleanup = callback(ctx)
+      if (services.includes('remote.settings')) {
+        return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })
+      }
       if (typeof cleanup === 'function') cleanupUi = cleanup as () => void
       return Object.assign(Promise.resolve(), { dispose: disposeUi })
     })
@@ -1089,7 +1094,8 @@ describe('GitHub Copilot Models client', () => {
             cleanup = typeof result === 'function' ? result as () => void : undefined
             return cleanup
           }
-          injections.set(name, activate)
+          const key = injections.has(name) ? `${name}:${injections.size}` : name
+          injections.set(key, activate)
           if (declaredSlots.includes(name)) activate()
           return () => { if (!active) return; active = false; cleanup?.(); cleanup = undefined }
         },

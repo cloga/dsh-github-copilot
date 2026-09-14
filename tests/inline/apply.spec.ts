@@ -7,6 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, GITHUB_COPILOT_SETTINGS_NAMESPACE } from '../../src/index.ts'
+import { WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE } from '../../src/web-search-routing-config.ts'
 import type { InlineConfig } from '../../src/config.ts'
 import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 import LlmRuntime, { markAgentLoopRequest, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
@@ -1203,6 +1204,152 @@ describe('session search router Host integration', () => {
     expect(runtime.credentialResolve).not.toHaveBeenCalled()
   })
 
+  it('uses an independently configured account model for a non-Copilot chat session', async () => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const runtime = buildRuntime({}, { current: { provider: 'volcengine', model: 'deepseek-v4-flash' } }, {
+      [GITHUB_COPILOT_SETTINGS_NAMESPACE]: { searchModel: 'gpt-5.4' },
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: {
+        searchMode: 'auto',
+        defaultSearchProvider: 'github-copilot-hosted',
+      },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }),
+      resolveRequestAuth: vi.fn(async () => ({ apiKey: 'synthetic-managed', baseURL })),
+      discover: vi.fn(async () => undefined),
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, providers: ['github-copilot'], probe: false })
+    const delegate = vi.fn(async () => ({ sources: [], truncated: false }))
+    await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'independent search' }, undefined, delegate)
+    expect(delegate).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const payload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { model: string; tools: Array<{ type: string }> }
+    expect(payload).toMatchObject({ model: 'gpt-5.4', tools: [{ type: 'web_search' }] })
+  })
+
+  it('discovers an independent search model absent from the static catalog and keeps proof enabled', async () => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const searchModel = 'synthetic-new-account-search-model'
+    let discovered = false
+    const discover = vi.fn(async () => { discovered = true })
+    const resolveRequestAuth = vi.fn(async () => ({ apiKey: 'synthetic-managed', baseURL }))
+    const runtime = buildRuntime({}, { current: { provider: 'volcengine', model: 'chat-only' } }, {
+      [GITHUB_COPILOT_SETTINGS_NAMESPACE]: { searchModel },
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchMode: 'fixed', defaultSearchProvider: 'github-copilot-hosted' },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: (model: string) => discovered && model === searchModel ? { api: 'openai-responses', baseURL } : undefined,
+      resolveRequestAuth, discover,
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    expect(discover).not.toHaveBeenCalled()
+    await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'new account model' }, undefined, vi.fn())
+    expect(discover).toHaveBeenCalledOnce()
+    expect(proofCount(fetchMock)).toBe(1)
+    expect(resolveRequestAuth).toHaveBeenCalledWith(searchModel, expect.any(AbortSignal))
+    expect(fetchMock.mock.calls.every(([, init]) => JSON.parse(String(init?.body)).model === searchModel)).toBe(true)
+  })
+
+  it.each(['auth', 'response'] as const)('rejects independent search when managed proof expires during %s', async phase => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    let valid = true
+    const runtime = buildRuntime({}, { current: { provider: 'volcengine', model: 'chat-only' } }, {
+      [GITHUB_COPILOT_SETTINGS_NAMESPACE]: { searchModel: 'new-account-model' },
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchMode: 'fixed', defaultSearchProvider: 'github-copilot-hosted' },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }),
+      discover: vi.fn(async () => undefined),
+      captureSearchProof: () => () => valid,
+      resolveRequestAuth: vi.fn(async () => {
+        if (phase === 'auth') valid = false
+        return { apiKey: 'synthetic-managed', baseURL }
+      }),
+    })
+    const fetchMock = vi.fn(async () => {
+      valid = false
+      return new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'expired proof' }, undefined, vi.fn()))
+      .rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fetchMock).toHaveBeenCalledTimes(phase === 'auth' ? 0 : 1)
+  })
+
+  it('dispatches a non-Copilot session to the configured registered provider id', async () => {
+    const runtime = buildRuntime({}, { current: { provider: 'volcengine', model: 'deepseek-v4-flash' } }, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: {
+        searchMode: 'auto',
+        defaultSearchProvider: 'exa',
+      },
+    })
+    apply(runtime.ctx, config)
+    const expected = { sources: [{ url: 'https://example.com' }], truncated: false }
+    const delegate = vi.fn(async () => ({ sources: [], truncated: false }))
+    const selectProvider = vi.fn(async () => expected)
+    const query = { query: 'provider selection' }
+    expect(await runtime.ctx.get('githubCopilotSearchRouter')!.search(query, undefined, delegate, selectProvider)).toBe(expected)
+    expect(selectProvider).toHaveBeenCalledExactlyOnceWith('exa', query, expect.any(AbortSignal))
+    expect(delegate).not.toHaveBeenCalled()
+  })
+
+  it('disables only search when the default provider is none', async () => {
+    const runtime = buildRuntime({}, { current: { provider: 'volcengine', model: 'deepseek-v4-flash' } }, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: {
+        searchMode: 'auto',
+        defaultSearchProvider: 'none',
+      },
+    })
+    apply(runtime.ctx, config)
+    const delegate = vi.fn()
+    const selectProvider = vi.fn()
+    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'disabled' }, undefined, delegate, selectProvider))
+      .rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(delegate).not.toHaveBeenCalled()
+    expect(selectProvider).not.toHaveBeenCalled()
+  })
+
+  it('uses the configured account model in fixed mode even for a different Copilot chat model', async () => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const runtime = buildRuntime({}, { current: { provider: 'github-copilot', model: 'gpt-4.1' } }, {
+      [GITHUB_COPILOT_SETTINGS_NAMESPACE]: { searchModel: 'gpt-5.4' },
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: {
+        searchMode: 'fixed',
+        defaultSearchProvider: 'github-copilot-hosted',
+      },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }),
+      resolveRequestAuth: vi.fn(async () => ({ apiKey: 'synthetic-managed', baseURL })),
+      discover: vi.fn(async () => undefined),
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, providers: ['github-copilot'], probe: false })
+    await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'fixed search' }, undefined, vi.fn())
+    const payload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { model: string }
+    expect(payload.model).toBe('gpt-5.4')
+  })
+
+  it('never invokes legacy inline native search or advertises it in fixed mode', async () => {
+    const runtime = buildRuntime({}, undefined, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchMode: 'fixed', defaultSearchProvider: 'none' },
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const next = vi.fn(() => undefined)
+    await drain(runtime.listener?.(request(), next) as AsyncIterable<StreamChunk> | undefined)
+    expect(next).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await runtime.promptText({ provider: 'github-copilot', model: 'gpt-5.4' })).toBe('')
+  })
+
   it('keeps allowlist-excluded Copilot sessions on the existing path without fallback spending', async () => {
     const runtime = buildRuntime()
     const fetchMock = vi.fn()
@@ -1339,7 +1486,10 @@ describe('github-copilot apply', () => {
   it('uses the settings provider instance API when legacy helpers are absent', () => {
     const runtime = buildRuntime()
     apply(runtime.ctx, config)
-    expect(runtime.installedSettingsSections).toEqual([GITHUB_COPILOT_SETTINGS_NAMESPACE])
+    expect(runtime.installedSettingsSections).toEqual([
+      GITHUB_COPILOT_SETTINGS_NAMESPACE,
+      WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE,
+    ])
   })
 
   it('registers an llm/stream listener and the prompt section', () => {
