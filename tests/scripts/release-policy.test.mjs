@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   assessChange, assessPlan, assertReleaseMetadata, compareVersions, isImportantFile,
-  isPrereleaseVersion, parseChangedFiles, parseVersion, runCli,
+  isOneTimeNpmBootstrapChange, isPrereleaseVersion, parseChangedFiles, parseVersion, runCli,
 } from '../../scripts/release-policy.mjs'
 
 const name = 'dsh-github-copilot'
@@ -22,6 +22,16 @@ const change = (overrides = {}) => assessChange({
 })
 const tagInfo = (overrides = {}) => ({ type: 'tag', sha: previous, manifest, isAncestor: true, ...overrides })
 const plan = (overrides = {}) => assessPlan({ manifest, head, ...overrides })
+const bootstrapVersion = '0.4.0-alpha.18'
+const bootstrapFiles = [
+  '.github/workflows/bootstrap-npm.yml',
+  'agent-contract.json',
+  'docs/npm-distribution.md',
+  'scripts/bootstrap-npm.mjs',
+  'scripts/release-policy.mjs',
+  'tests/scripts/bootstrap-npm.test.mjs',
+  'tests/scripts/release-policy.test.mjs',
+]
 
 test('important paths conservatively cover runtime, package, baseline, config, scripts and workflows', () => {
   for (const path of [
@@ -74,6 +84,29 @@ test('important changes require a strictly newer SemVer; docs and tests may reta
   assert.throws(() => change({ manifest: { name, version: '0.4.0-alpha.2' }, files: ['README.md'] }), /downgrade/)
 })
 
+test('the alpha.18 npm bootstrap exception requires the exact one-time change set', () => {
+  assert.equal(isOneTimeNpmBootstrapChange(bootstrapFiles, bootstrapVersion), true)
+  assert.equal(isOneTimeNpmBootstrapChange(bootstrapFiles.map(path => path.replaceAll('/', '\\')), bootstrapVersion), true)
+  for (const files of [
+    bootstrapFiles.slice(1),
+    [...bootstrapFiles, 'src/index.ts'],
+    bootstrapFiles.map(path => path === 'scripts/bootstrap-npm.mjs' ? 'scripts/other.mjs' : path),
+  ]) assert.equal(isOneTimeNpmBootstrapChange(files, bootstrapVersion), false)
+  assert.equal(isOneTimeNpmBootstrapChange(bootstrapFiles, '0.4.0-alpha.19'), false)
+
+  const sameVersion = { name, version: bootstrapVersion }
+  assert.deepEqual(assessChange({
+    baseManifest: sameVersion,
+    manifest: sameVersion,
+    files: bootstrapFiles,
+  }), { important: false, bumped: false, version: bootstrapVersion })
+  assert.throws(() => assessChange({
+    baseManifest: sameVersion,
+    manifest: sameVersion,
+    files: bootstrapFiles.slice(1),
+  }), /strictly newer SemVer/)
+})
+
 test('every version bump verifies both READMEs and deployment baseline metadata', () => {
   assert.doesNotThrow(() => assertReleaseMetadata({ version, ...metadata(version) }))
   for (const [override, pattern] of [
@@ -95,6 +128,28 @@ test('plan reconciles the exact tagged commit after docs-only commits', () => {
   const expected = { release: true, tag: `v${version}`, sha: previous, prerelease: true }
   assert.deepEqual(plan({ tagInfo: tagInfo(), files: ['README.md', 'tests/a.spec.ts'] }), expected)
   assert.deepEqual(plan({ tagInfo: tagInfo(), files: [] }), expected)
+})
+
+test('plan skips automatic release only for the exact one-time alpha.18 bootstrap', () => {
+  const bootstrapManifest = { name, version: bootstrapVersion }
+  const expected = {
+    release: false,
+    tag: `v${bootstrapVersion}`,
+    sha: previous,
+    prerelease: true,
+  }
+  assert.deepEqual(assessPlan({
+    manifest: bootstrapManifest,
+    head,
+    tagInfo: { type: 'tag', sha: previous, manifest: bootstrapManifest, isAncestor: true },
+    files: bootstrapFiles,
+  }), expected)
+  assert.throws(() => assessPlan({
+    manifest: bootstrapManifest,
+    head,
+    tagInfo: { type: 'tag', sha: previous, manifest: bootstrapManifest, isAncestor: true },
+    files: bootstrapFiles.slice(1),
+  }), /merged important changes lack a new version/)
 })
 
 test('plan fails on unreleased important changes and divergent or invalid tags', () => {
