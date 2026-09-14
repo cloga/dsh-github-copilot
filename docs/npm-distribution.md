@@ -38,7 +38,9 @@ is a one-time `workflow_dispatch` follow-up. It is fixed to Release commit
 digests, and the expected npm SRI. It downloads and validates the immutable
 Release rather than packing workspace bytes. Only the publish step receives the
 repository `NPM_TOKEN`, as `NODE_AUTH_TOKEN`; GitHub access remains read-only and
-the normal release pipeline remains OIDC-only.
+the normal release pipeline remains OIDC-only. Node 24 is configured first
+without npm registry authentication; the registry-scoped setup-node step runs
+only after immutable Release verification succeeds.
 
 The bootstrap reads package, version, and alpha-tag state before any write. A
 matching existing version is read-only; an existing package without this exact

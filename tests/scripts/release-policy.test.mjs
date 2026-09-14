@@ -87,6 +87,7 @@ test('important changes require a strictly newer SemVer; docs and tests may reta
 test('the alpha.18 npm bootstrap exception requires the exact one-time change set', () => {
   assert.equal(isOneTimeNpmBootstrapChange(bootstrapFiles, bootstrapVersion), true)
   assert.equal(isOneTimeNpmBootstrapChange(bootstrapFiles.map(path => path.replaceAll('/', '\\')), bootstrapVersion), true)
+  assert.equal(isOneTimeNpmBootstrapChange([...bootstrapFiles, bootstrapFiles[0]], bootstrapVersion), true)
   for (const files of [
     bootstrapFiles.slice(1),
     [...bootstrapFiles, 'src/index.ts'],

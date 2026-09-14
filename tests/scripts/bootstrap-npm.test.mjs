@@ -220,4 +220,6 @@ test('one-time workflow has only manual trigger, minimal permissions and isolate
   assert.match(workflow, /NPM_CONFIG_LOGS_MAX: '0'/u)
   assert.match(workflow, /npm@11\.5\.1/u)
   assert.match(workflow, /node scripts\/bootstrap-npm\.mjs prepare[\s\S]+node scripts\/bootstrap-npm\.mjs publish/u)
+  assert.equal((workflow.match(/actions\/setup-node@v6/gu) ?? []).length, 2)
+  assert.ok(workflow.indexOf('node scripts/bootstrap-npm.mjs prepare') < workflow.indexOf('registry-url: https://registry.npmjs.org'))
 })

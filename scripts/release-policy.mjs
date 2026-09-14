@@ -12,6 +12,7 @@ const importantPaths = new Set([
 ])
 const importantPrefixes = ['src/', 'lib/', 'scripts/', '.github/workflows/']
 const oneTimeNpmBootstrapVersion = '0.4.0-alpha.18'
+// The exact set covers the initial bootstrap and immediate pre-cleanup corrections only.
 const oneTimeNpmBootstrapFiles = new Set([
   '.github/workflows/bootstrap-npm.yml',
   'agent-contract.json',
