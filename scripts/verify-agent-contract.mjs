@@ -29,7 +29,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(release.userRestrictionsTakePrecedence === true && release.otherChangesRequireExplicitReleaseRequest === true, 'release delivery must respect user scope and exclude implicit unrelated releases')
   require(JSON.stringify(release.importantChanges) === JSON.stringify(['user-visible-feature', 'behavior-fix', 'compatibility-fix', 'security-fix', 'stability-fix']), 'release delivery change classes differ')
   require(JSON.stringify(release.requiredConditions) === JSON.stringify(['authorized-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets']), 'release delivery prerequisites differ')
-  require(JSON.stringify(release.completionEvidence) === JSON.stringify(['published-release-url', 'tag-and-commit', 'asset-and-sha256']), 'release delivery completion evidence differs')
+  require(JSON.stringify(release.completionEvidence) === JSON.stringify(['published-release-url', 'tag-and-commit', 'asset-and-sha256', 'npm-version-and-integrity']), 'release delivery completion evidence differs')
   const file = async path => {
     require(typeof path === 'string' && !path.startsWith('/') && !path.includes('..') && !path.includes('\\') && !path.includes(':'), 'unsafe relative path')
     await access(resolve(root, path))
@@ -60,6 +60,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(ciWorkflow.includes('release-ready:') && ciWorkflow.includes('uses: ./.github/workflows/release.yml'), 'main CI must gate and call reusable release delivery')
   require(releaseWorkflow.includes('workflow_call:') && releaseWorkflow.includes('scripts/release-policy.mjs --plan')
     && releaseWorkflow.includes('scripts/publish-release.mjs'), 'release workflow must plan and publish the exact main commit')
+  require(releaseWorkflow.includes('scripts/publish-npm.mjs') && releaseWorkflow.includes('scripts/prepare-release-artifact.mjs')
+    && releaseWorkflow.includes('id-token: write') && ciWorkflow.includes('id-token: write'),
+  'release workflow must recover the original artifact and require npm OIDC delivery')
   return { schemaVersion: 1, ok: true, taskCount: Object.keys(contract.tasks).length }
 }
 

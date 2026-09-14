@@ -35,7 +35,7 @@ Generated `lib/` output, archives, `.env`, tokens, local credentials, machine st
 
 ## Release changes
 
-GitHub Releases are the only distribution channel. Do not publish this package to npm or remove `private: true`.
+GitHub Releases and npm are the default distribution channels for every new version, superseding the Release-only decision in #43 at the user's request. The public package uses the exact same verified tarball in both channels. No automatic npm opt-out is allowed. See [npm distribution](./docs/npm-distribution.md) for initial maintainer bootstrap, OIDC, retry recovery and organizational access requirements.
 
 Important user-requested features, behavior fixes, compatibility fixes, and security or stability fixes include release follow-through by default after authorized merge and green required CI. Do not stop at the merged PR or ask for a second release confirmation. User instructions limiting delivery to code/review or forbidding publication take precedence; documentation-only, internal-only and unrelated releases are not implicitly authorized. Follow the [important-update delivery rule](./AGENTS.md#important-update-release-delivery).
 

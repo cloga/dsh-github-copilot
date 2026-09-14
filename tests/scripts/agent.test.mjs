@@ -13,6 +13,8 @@ test('describes actual package metadata without claiming a release exists', asyn
   assert.equal(result.package.version, pkg.version)
   assert.equal(result.release.tag, `v${pkg.version}`)
   assert.equal(result.release.publicationVerified, false)
+  assert.equal(result.release.npm.spec, `${pkg.name}@${pkg.version}`)
+  assert.equal(result.release.npm.publicationVerified, false)
   assert.deepEqual(result.baselines.map(baseline => baseline.release), [
     '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2',
   ])
@@ -36,7 +38,11 @@ test('important updates carry release follow-through without a second approval p
   assert.equal(policy.userRestrictionsTakePrecedence, true)
   assert.equal(policy.otherChangesRequireExplicitReleaseRequest, true)
   assert.deepEqual(policy.requiredConditions, ['authorized-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets'])
-  assert.deepEqual(policy.completionEvidence, ['published-release-url', 'tag-and-commit', 'asset-and-sha256'])
+  assert.deepEqual(policy.completionEvidence, ['published-release-url', 'tag-and-commit', 'asset-and-sha256', 'npm-version-and-integrity'])
+  assert.ok(plan.commands.some(command => command.argv[0] === 'node' && command.argv[1] === '--test'
+    && command.argv.includes('tests/scripts/npm-distribution.test.mjs')))
+  assert.ok(!plan.commands.some(command => command.argv.includes('vitest')
+    && command.argv.some(arg => arg.startsWith('tests/scripts/'))))
   assert.ok(!plan.boundaries.approvalRequired.includes('release'))
   for (const boundary of ['merge', 'install into a user profile', 'sign-out', 'worktree checkout']) {
     assert.ok(plan.boundaries.approvalRequired.includes(boundary))

@@ -143,7 +143,7 @@ When upgrading DSH or pi-ai, inspect the exact tagged public exports and update 
 
 ## Distribution and release invariants
 
-- GitHub Releases are the only distribution channel; `package.json` stays private and npm publishing must not return.
+- GitHub Releases and npm are the default distribution channels for every new version. This supersedes the Release-only decision in #43 at the user's request. Publish the same verified original tarball to both; never repack an existing release or silently skip npm. First package bootstrap and OIDC setup require an authorized maintainer; see [npm distribution](./docs/npm-distribution.md). Never bypass organizational registry restrictions.
 - User-facing install commands must include the required DSH `--profile` option and derive the versioned Release URL from `package.json`.
 - Package version, deployment-baseline version, README URLs, and the annotated `v<version>` tag must agree.
 - New versions use standard SemVer prerelease identifiers (`alpha`, `beta`, `rc`); do not add owner/user names to new version strings.
@@ -156,7 +156,7 @@ When upgrading DSH or pi-ai, inspect the exact tagged public exports and update 
 - Explicit user restrictions such as code-only, review-only or do-not-release take precedence. Pure documentation and internal-only changes are not automatically release-bearing; they need an explicit release request if publication is desired. A task plan is not permission for an unrelated release.
 - Plan version alignment with the implementation PR whenever possible. If the prepared version/tag is unused and aligned, release it; otherwise prepare the next appropriate SemVer version through the normal PR path. Preserve the prerelease channel unless promotion is explicitly requested. Any additional version PR still needs merge approval, not a repeated release-scope question.
 - Check all required CI, tag rules and package/archive checks. Create a fresh annotated tag only on the verified merged revision, let the protected Release workflow publish, and verify the non-draft Release, intended prerelease flag, tag/commit, assets and SHA-256. Never bypass failing CI, move a tag or substitute an unverified local archive.
-- A release-bearing update is not fully delivered until the published Release URL and verified version/commit/assets/checksum are reported. If CI, permissions or network prevents release, report the concrete blocker and the exact pending step; never describe merged-only work as released.
+- A release-bearing update is not fully delivered until the published Release URL, verified version/commit/assets/checksum and npm version/SRI are reported. If CI, permissions or network prevents either channel, report partial delivery and the exact pending step; never describe merged-only or GitHub-only work as fully delivered.
 - This standing release authorization does not authorize profile installation, sign-out, worktree checkout or interruption of running Sessions. Keep published, installed-on-disk and loaded-runtime status separate; a session-interrupting restart still requires explicit acknowledgement.
 
 ## Installation-agent PowerShell practice

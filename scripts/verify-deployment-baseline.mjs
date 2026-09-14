@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { assertTaggedRuntimeClosure } from './tagged-runtime-closure.mjs'
+import { validatePublicPackage } from './publish-npm.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -108,7 +109,7 @@ assert(manifest.baseline?.kind === 'standalone-dsh-plugin', 'standalone ownershi
 assert(manifest.baseline?.source === 'https://github.com/cloga/dsh-github-copilot', 'canonical source changed')
 assert(manifest.package?.name === packageJson.name, 'package name differs')
 assert(manifest.package?.version === packageJson.version, 'package version differs')
-assert(packageJson.private === true, 'package must remain private for GitHub Release-only distribution')
+validatePublicPackage(packageJson)
 assert(manifest.evidence?.kind === 'source-and-synthetic-test-inventory', 'evidence scope must distinguish local inventory from live proof')
 assert(manifest.evidence.peerRangeMeaning === 'package-admission-not-runtime-validation', 'peer admission must not claim every Core runtime is validated')
 for (const limit of ['live-discovery', 'live-model-transport', 'all-admitted-core-versions', 'published-release', 'local-upgrade']) {
@@ -341,7 +342,7 @@ for (const heading of [
   assert(agents.includes(heading), `AGENTS.md is missing ${heading}`)
 }
 assert((await read('CLAUDE.md')).includes('[AGENTS.md](./AGENTS.md)'), 'CLAUDE.md must link AGENTS.md')
-assert((await read('CONTRIBUTING.md')).includes('GitHub Releases are the only distribution channel'), 'CONTRIBUTING.md release contract is missing')
+assert((await read('CONTRIBUTING.md')).includes('GitHub Releases and npm are the default distribution channels'), 'CONTRIBUTING.md release contract is missing')
 assert((await read('SECURITY.md')).includes('/security/advisories/new'), 'SECURITY.md private reporting path is missing')
 assert((await read('.github/PULL_REQUEST_TEMPLATE.md')).includes('## Contract checklist'), 'pull request contract checklist is missing')
 assert((await read('.github/ISSUE_TEMPLATE/bug.yml')).includes('DSH baseline'), 'bug issue form is missing the DSH baseline')
@@ -397,6 +398,10 @@ for (const marker of [
   'pnpm verify:upstream -- dsh-upstream',
   'pnpm verify:controlled-core -- dsh-upstream',
   'scripts/publish-release.mjs',
+  'scripts/prepare-release-artifact.mjs',
+  'scripts/publish-npm.mjs',
+  'id-token: write',
+  'npm@11.5.1',
 ]) {
   assert(releaseWorkflow.includes(marker), `Release workflow is missing ${marker}`)
 }
@@ -412,7 +417,8 @@ const orderedReleaseSteps = [
   '- run: pnpm verify:upstream -- dsh-upstream',
   '- run: pnpm verify:controlled-core -- dsh-upstream',
   '- name: Verify plugin package',
-  '- run: pnpm pack --pack-destination artifacts',
+  '- name: Recover original release archive or pack once',
+  'node scripts/prepare-release-artifact.mjs',
   '- name: Verify packed archive',
   'pnpm verify:tarball --',
   '- name: Write and verify SHA-256 manifest',
@@ -420,6 +426,8 @@ const orderedReleaseSteps = [
   'sha256sum --check SHA256SUMS',
   '- name: Publish exact annotated tag and immutable GitHub Release',
   'scripts/publish-release.mjs',
+  '- name: Publish the same verified archive to npm and verify integrity',
+  'node scripts/publish-npm.mjs',
 ]
 let priorReleaseStep = -1
 for (const step of orderedReleaseSteps) {
