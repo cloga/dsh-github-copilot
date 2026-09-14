@@ -143,7 +143,7 @@ When upgrading DSH or pi-ai, inspect the exact tagged public exports and update 
 
 ## Distribution and release invariants
 
-- GitHub Releases and npm are the default distribution channels for every new version. This supersedes the Release-only decision in #43 at the user's request. Publish the same verified original tarball to both; never repack an existing release or silently skip npm. First package bootstrap and OIDC setup require an authorized maintainer; see [npm distribution](./docs/npm-distribution.md). Never bypass organizational registry restrictions.
+- GitHub Releases and npm are the default distribution channels for every new version. This supersedes the Release-only decision in #43 at the user's request. Publish the same verified original tarball to both; never repack an existing release or silently skip npm. The initial package bootstrap is complete; subsequent publication requires the configured OIDC Trusted Publisher. Registry readback may lag a successful write, so uncertain outcomes must reconcile exact existing bytes after visibility converges and must never trigger an automatic republish. See [npm distribution](./docs/npm-distribution.md). Never bypass organizational registry restrictions.
 - User-facing install commands must include the required DSH `--profile` option and derive the versioned Release URL from `package.json`.
 - Package version, deployment-baseline version, README URLs, and the annotated `v<version>` tag must agree.
 - New versions use standard SemVer prerelease identifiers (`alpha`, `beta`, `rc`); do not add owner/user names to new version strings.

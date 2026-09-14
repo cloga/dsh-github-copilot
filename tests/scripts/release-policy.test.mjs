@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   assessChange, assessPlan, assertReleaseMetadata, compareVersions, isImportantFile,
-  isOneTimeNpmBootstrapChange, isPrereleaseVersion, parseChangedFiles, parseVersion, runCli,
+  isPrereleaseVersion, parseChangedFiles, parseVersion, runCli,
 } from '../../scripts/release-policy.mjs'
 
 const name = 'dsh-github-copilot'
@@ -22,28 +22,19 @@ const change = (overrides = {}) => assessChange({
 })
 const tagInfo = (overrides = {}) => ({ type: 'tag', sha: previous, manifest, isAncestor: true, ...overrides })
 const plan = (overrides = {}) => assessPlan({ manifest, head, ...overrides })
-const bootstrapVersion = '0.4.0-alpha.18'
-const bootstrapFiles = [
-  '.github/workflows/bootstrap-npm.yml',
-  'agent-contract.json',
-  'docs/npm-distribution.md',
-  'scripts/bootstrap-npm.mjs',
-  'scripts/release-policy.mjs',
-  'tests/scripts/bootstrap-npm.test.mjs',
-  'tests/scripts/release-policy.test.mjs',
-]
 
-test('important paths conservatively cover runtime, package, baseline, config, scripts and workflows', () => {
+test('important paths cover runtime, packaged scripts, package metadata and build inputs', () => {
   for (const path of [
-    'src/index.ts', 'src/nested/file.ts', 'lib/index.js', 'scripts/release-policy.mjs',
-    'cordis.patch.yml', 'agent-contract.json', 'deployment-baseline.json', 'package.json',
+    'src/index.ts', 'src/nested/file.ts', 'lib/index.js', 'scripts/check-search-composition.mjs',
+    'cordis.patch.yml', 'deployment-baseline.json', 'package.json',
     'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.tests.json',
-    'tsdown.config.ts', 'vitest.config.ts', '.github/workflows/ci.yml', './src/new.ts',
-    '.github\\workflows\\release.yml',
+    'tsdown.config.ts', 'vitest.config.ts', './src/new.ts',
   ]) assert.equal(isImportantFile(path), true, path)
   for (const path of [
     'README.md', 'README.zh.md', 'AGENTS.md', 'CONTRIBUTING.md', 'docs/runtime.md',
+    'agent-contract.json', 'scripts/release-policy.mjs', 'scripts/publish-npm.mjs',
     'tests/scripts/release-policy.test.mjs', '.github/ISSUE_TEMPLATE/bug.yml',
+    '.github/workflows/ci.yml', '.github\\workflows\\release.yml',
     'package.json.md', 'src-notes.md', 'scripts.md',
   ]) assert.equal(isImportantFile(path), false, path)
   assert.throws(() => isImportantFile(null), /paths must be strings/)
@@ -84,30 +75,6 @@ test('important changes require a strictly newer SemVer; docs and tests may reta
   assert.throws(() => change({ manifest: { name, version: '0.4.0-alpha.2' }, files: ['README.md'] }), /downgrade/)
 })
 
-test('the alpha.18 npm bootstrap exception requires the exact one-time change set', () => {
-  assert.equal(isOneTimeNpmBootstrapChange(bootstrapFiles, bootstrapVersion), true)
-  assert.equal(isOneTimeNpmBootstrapChange(bootstrapFiles.map(path => path.replaceAll('/', '\\')), bootstrapVersion), true)
-  assert.equal(isOneTimeNpmBootstrapChange([...bootstrapFiles, bootstrapFiles[0]], bootstrapVersion), true)
-  for (const files of [
-    bootstrapFiles.slice(1),
-    [...bootstrapFiles, 'src/index.ts'],
-    bootstrapFiles.map(path => path === 'scripts/bootstrap-npm.mjs' ? 'scripts/other.mjs' : path),
-  ]) assert.equal(isOneTimeNpmBootstrapChange(files, bootstrapVersion), false)
-  assert.equal(isOneTimeNpmBootstrapChange(bootstrapFiles, '0.4.0-alpha.19'), false)
-
-  const sameVersion = { name, version: bootstrapVersion }
-  assert.deepEqual(assessChange({
-    baseManifest: sameVersion,
-    manifest: sameVersion,
-    files: bootstrapFiles,
-  }), { important: false, bumped: false, version: bootstrapVersion })
-  assert.throws(() => assessChange({
-    baseManifest: sameVersion,
-    manifest: sameVersion,
-    files: bootstrapFiles.slice(1),
-  }), /strictly newer SemVer/)
-})
-
 test('every version bump verifies both READMEs and deployment baseline metadata', () => {
   assert.doesNotThrow(() => assertReleaseMetadata({ version, ...metadata(version) }))
   for (const [override, pattern] of [
@@ -131,30 +98,35 @@ test('plan reconciles the exact tagged commit after docs-only commits', () => {
   assert.deepEqual(plan({ tagInfo: tagInfo(), files: [] }), expected)
 })
 
-test('plan skips automatic release only for the exact one-time alpha.18 bootstrap', () => {
-  const bootstrapManifest = { name, version: bootstrapVersion }
-  const expected = {
-    release: false,
-    tag: `v${bootstrapVersion}`,
+test('release infrastructure changes reconcile the existing tagged bytes without a version bump', () => {
+  const files = [
+    'agent-contract.json',
+    'docs/npm-distribution.md',
+    'scripts/release-policy.mjs',
+    'tests/scripts/release-policy.test.mjs',
+    '.github/workflows/release.yml',
+  ]
+  assert.deepEqual(assessChange({
+    baseManifest: manifest,
+    manifest,
+    files,
+  }), { important: false, bumped: false, version })
+  assert.deepEqual(plan({ tagInfo: tagInfo(), files }), {
+    release: true,
+    tag: `v${version}`,
     sha: previous,
     prerelease: true,
-  }
-  assert.deepEqual(assessPlan({
-    manifest: bootstrapManifest,
-    head,
-    tagInfo: { type: 'tag', sha: previous, manifest: bootstrapManifest, isAncestor: true },
-    files: bootstrapFiles,
-  }), expected)
-  assert.throws(() => assessPlan({
-    manifest: bootstrapManifest,
-    head,
-    tagInfo: { type: 'tag', sha: previous, manifest: bootstrapManifest, isAncestor: true },
-    files: bootstrapFiles.slice(1),
-  }), /merged important changes lack a new version/)
+  })
 })
 
 test('plan fails on unreleased important changes and divergent or invalid tags', () => {
-  for (const path of ['src/index.ts', 'package.json', 'deployment-baseline.json', 'scripts/tool.mjs', '.github/workflows/ci.yml']) {
+  for (const path of [
+    'src/index.ts',
+    'package.json',
+    'deployment-baseline.json',
+    'scripts/check-search-composition.mjs',
+    'tsdown.config.ts',
+  ]) {
     assert.throws(() => plan({ tagInfo: tagInfo(), files: [path] }), /merged important changes lack a new version/)
   }
   assert.throws(() => plan({ tagInfo: tagInfo({ isAncestor: false }), files: ['README.md'] }), /not an ancestor/)
