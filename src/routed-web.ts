@@ -10,9 +10,19 @@ import { isCopilotSearchSelection } from './search-routing.ts'
 /** Parent dispatch captured from the exact WebRuntime instance serving this call. */
 export type NativeSearch = (request: WebSearchRequest, signal?: AbortSignal) => Promise<WebSearchResult>
 
-/** Host-owned router; no credentials or private provider registry cross this service. */
+/** Exact-id dispatch over providers registered through the routed facade. */
+export type ProviderSearch = (
+  providerId: string, request: WebSearchRequest, signal?: AbortSignal,
+) => Promise<WebSearchResult>
+
+/** Host-owned router; credentials and provider implementation objects stay inside the facade. */
 export interface GitHubCopilotSearchRouter {
-  search(request: WebSearchRequest, signal: AbortSignal | undefined, delegate: NativeSearch): Promise<WebSearchResult>
+  search(
+    request: WebSearchRequest,
+    signal: AbortSignal | undefined,
+    delegate: NativeSearch,
+    selectProvider?: ProviderSearch,
+  ): Promise<WebSearchResult>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -33,6 +43,7 @@ export default class CopilotRoutedWeb extends WebRuntime {
   private readonly bounded: WebRuntime
   private readonly lifetime = new AbortController()
   private readonly pending = new Set<Promise<WebSearchResult>>()
+  private readonly mirroredSearchProviders = new Map<string, WebSearchProvider>()
 
   constructor(ctx: Context, config: WebRuntimeConfig = {}) {
     super(ctx, config)
@@ -43,12 +54,18 @@ export default class CopilotRoutedWeb extends WebRuntime {
       search: (request, signal) => {
         const router = ctx.get('githubCopilotSearchRouter')
         if (router === undefined) throw new WebError('Copilot session search routing is not ready', 'WEB_PROVIDER_UNAVAILABLE')
-        return router.search(request, signal, (query, querySignal) => ctx.githubCopilotOriginalWeb.search(query, querySignal))
+        return router.search(
+          request,
+          signal,
+          (query, querySignal) => ctx.githubCopilotOriginalWeb.search(query, querySignal),
+          (providerId, query, querySignal) => this.searchWithProvider(providerId, query, querySignal),
+        )
       },
     })
     ctx.effect(() => async () => {
       this.lifetime.abort()
       await Promise.allSettled(this.pending)
+      this.mirroredSearchProviders.clear()
     })
   }
 
@@ -56,9 +73,33 @@ export default class CopilotRoutedWeb extends WebRuntime {
     return new WebError('Copilot search service was disposed', 'WEB_PROVIDER_UNAVAILABLE')
   }
 
+  private searchWithProvider(
+    providerId: string, request: WebSearchRequest, signal?: AbortSignal,
+  ): Promise<WebSearchResult> {
+    const provider = this.mirroredSearchProviders.get(providerId)
+    if (provider === undefined) {
+      return Promise.reject(new WebError(`configured web provider "${providerId}" is not registered`, 'WEB_PROVIDER_CONFIGURED_MISSING'))
+    }
+    if (!provider.available()) {
+      return Promise.reject(new WebError(`configured web provider "${providerId}" is registered but unavailable`, 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE'))
+    }
+    return provider.search(request, signal)
+  }
+
   override registerSearchProvider(provider: WebSearchProvider): () => void {
     if (this.lifetime.signal.aborted) throw this.disposedError()
-    return this.ctx.githubCopilotOriginalWeb.registerSearchProvider(provider)
+    const disposeOriginal = this.ctx.githubCopilotOriginalWeb.registerSearchProvider(provider)
+    const providers = this.mirroredSearchProviders
+    const disposeMirror = this.ctx.effect(function* () {
+      providers.set(provider.id, provider)
+      yield () => {
+        if (providers.get(provider.id) === provider) providers.delete(provider.id)
+      }
+    }, 'github-copilot.search-provider-mirror')
+    return () => {
+      disposeMirror()
+      disposeOriginal()
+    }
   }
 
   override registerFetchProvider(provider: WebFetchProvider): () => void {
@@ -76,7 +117,11 @@ export default class CopilotRoutedWeb extends WebRuntime {
     const selection = currentSearchSelection(currentSearchInitiator(this.ctx))
     const owned = selection?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
       && isPluginPreviewProvider(this.ctx, selection.provider)
-    if (!isCopilotSearchSelection(selection, owned)) return this.ctx.githubCopilotOriginalWeb.search(request, signal)
+    // Preserve the stock web path when the router has not activated. Copilot
+    // requests remain fail-closed; unrelated models keep working during partial load.
+    if (!isCopilotSearchSelection(selection, owned) && this.ctx.get('githubCopilotSearchRouter') === undefined) {
+      return this.ctx.githubCopilotOriginalWeb.search(request, signal)
+    }
     const boundSignal = AbortSignal.any([...signal === undefined ? [] : [signal], this.lifetime.signal])
     const operation = this.bounded.search(request, boundSignal)
     this.pending.add(operation)

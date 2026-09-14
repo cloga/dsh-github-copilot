@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.16"
+    "version": "0.4.0-alpha.17"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -172,11 +172,19 @@
       "sourceMarkers": [
         {"file": "src/routed-web.ts", "marker": "extends WebRuntime"},
         {"file": "src/index.ts", "marker": "ctx.provide('githubCopilotSearchRouter'"},
+        {"file": "src/web-search-routing-config.ts", "marker": "WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE"},
+        {"file": "src/web-search-routing-card.ts", "marker": "data-dsh-web-search-routing"},
         {"file": "cordis.patch.yml", "marker": "web: github-copilot-original-web"}
       ],
       "tests": [
         {"file": "tests/routed-web.spec.ts", "name": "keeps the configured provider for DeepSeek and all other model routes"},
+        {"file": "tests/routed-web.spec.ts", "name": "dispatches a router-selected provider by exact registered id"},
         {"file": "tests/routed-web.spec.ts", "name": "retains pre-execute denial and the surrounding execution middleware"},
+        {"file": "tests/inline/apply.spec.ts", "name": "uses an independently configured account model for a non-Copilot chat session"},
+        {"file": "tests/inline/apply.spec.ts", "name": "discovers an independent search model absent from the static catalog and keeps proof enabled"},
+        {"file": "tests/inline/apply.spec.ts", "name": "rejects independent search when managed proof expires during %s"},
+        {"file": "tests/inline/apply.spec.ts", "name": "uses the configured account model in fixed mode even for a different Copilot chat model"},
+        {"file": "tests/client-bundle.spec.ts", "name": "registers web-search routing as a separate Models footer card"},
         {"file": "tests/routed-web-loader.spec.ts", "name": "loads the built facade and delegate entries without changing official tools"}
       ]
     },

@@ -7,6 +7,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type z from '@deepseek-ai/schemastery'
 import AuthorizationService from '@deepseek-ai/dsh-authorization'
 // Bring the `systemPrompt` service declaration (dsh-agent augmentation) into
 // the type graph: module augmentations only apply when their module is part
@@ -14,6 +15,8 @@ import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
+import { WebError } from '@deepseek-ai/dsh-web'
+import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
 import * as dshSettings from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, candidatesForRoute, sameCandidates, SearchPlan } from './plan.ts'
@@ -23,10 +26,17 @@ import { currentChatRoute, currentSearchInitiator, currentSearchSelection } from
 import type { CurrentChatRoute } from './current-provider.ts'
 import { Config } from './config.ts'
 import type { InlineConfig } from './config.ts'
+import {
+  NO_DEFAULT_SEARCH_PROVIDER,
+  WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE,
+  WebSearchRoutingConfigSchema,
+} from './web-search-routing-config.ts'
+import type { WebSearchRoutingConfig } from './web-search-routing-config.ts'
 import { contentHasImageAttachments, inlineWireStream } from './wire.ts'
 import type { InlineHooks } from './wire.ts'
-import { createTraditionalSearchProvider } from './traditional-search.ts'
+import { createTraditionalSearchProvider, GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID } from './traditional-search.ts'
 import { isCopilotSearchSelection, routeSessionSearch } from './search-routing.ts'
+import type { SearchSelection } from './search-routing.ts'
 import { createDeepSeekSearchFallback } from './deepseek-search-fallback.ts'
 import { isPluginPreviewProvider } from './model-protocol.ts'
 import type {} from './routed-web.ts'
@@ -40,7 +50,7 @@ import { contentHasFileCompat } from './content-file.ts'
 import { hasResponsesReplayContext } from './serialize.ts'
 import { resolveCopilotResponsesReasoning } from './responses-reasoning.ts'
 import previewPlugin from './preview-route.ts'
-import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import { GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
   GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -72,6 +82,12 @@ export const GITHUB_COPILOT_SETTINGS_NAMESPACE = 'github-copilot' as SettingsNam
 /** Schema of the plugin's settings section, exported for composition consumers. */
 export { Config } from './config.ts'
 export type { InlineConfig } from './config.ts'
+export {
+  NO_DEFAULT_SEARCH_PROVIDER,
+  WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE,
+  WebSearchRoutingConfigSchema,
+} from './web-search-routing-config.ts'
+export type { WebSearchRoutingConfig } from './web-search-routing-config.ts'
 export { assertDshCompatibility, DSH_COMPATIBILITY } from './compatibility.ts'
 export {
   GITHUB_COPILOT_CREDENTIAL_KEY,
@@ -89,28 +105,28 @@ export type {
 
 type PromptRouteText = (owner: Agent | undefined, selection: { provider?: string; model?: string }) => string
 
-interface SettingsSectionHooks {
-  setSource(source: () => InlineConfig): void
+interface SettingsSectionHooks<T> {
+  setSource(source: () => T): void
   onChange(): void
 }
 
 interface InstanceSettingsInstaller {
-  installSection(
+  installSection<T>(
     owner: Context,
     namespace: SettingsNamespace,
-    schema: typeof Config,
-    entry: InlineConfig,
-    hooks: SettingsSectionHooks,
+    schema: z<T>,
+    entry: T,
+    hooks: SettingsSectionHooks<T>,
   ): void
 }
 
 interface LegacySettingsModule {
-  installSettingsSection?(
+  installSettingsSection?<T>(
     owner: Context,
     namespace: SettingsNamespace,
-    schema: typeof Config,
-    entry: InlineConfig,
-    hooks: SettingsSectionHooks,
+    schema: z<T>,
+    entry: T,
+    hooks: SettingsSectionHooks<T>,
   ): void
 }
 
@@ -121,21 +137,23 @@ function isInstanceSettingsInstaller(value: unknown): value is InstanceSettingsI
     && typeof value.installSection === 'function'
 }
 
-function installWebSearchSettings(
+function installSettingsNamespace<T>(
   ctx: Context,
-  config: InlineConfig,
-  hooks: SettingsSectionHooks,
+  namespace: SettingsNamespace,
+  schema: z<T>,
+  config: T,
+  hooks: SettingsSectionHooks<T>,
 ): void {
   const legacyInstaller = (dshSettings as LegacySettingsModule).installSettingsSection
   if (legacyInstaller !== undefined) {
-    legacyInstaller(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, Config, config, hooks)
+    legacyInstaller(ctx, namespace, schema, config, hooks)
     return
   }
   ctx.inject(['settings'], (settingsCtx) => {
     if (!isInstanceSettingsInstaller(settingsCtx.settings)) {
       throw new Error('github-copilot: settings service does not support section installation')
     }
-    settingsCtx.settings.installSection(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, Config, config, hooks)
+    settingsCtx.settings.installSection(ctx, namespace, schema, config, hooks)
   })
 }
 
@@ -183,6 +201,10 @@ function ensureAuthorization(ctx: Context): void {
 function activate(ctx: Context, config: InlineConfig): PromptRouteText {
   assertDshCompatibility(ctx)
   let current: () => InlineConfig = () => config
+  let routingCurrent: () => WebSearchRoutingConfig = () => ({
+    searchMode: 'auto',
+    defaultSearchProvider: 'deepseek-official',
+  })
   ctx.plugin(previewPlugin, { accountModelSettings: () => current() })
   ctx.plugin(GitHubCopilotAuthorizationController)
   const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx, async () => {
@@ -208,6 +230,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     cancellation: AbortController
     inline?: CachedPlan
     traditional?: CachedPlan
+    configured?: CachedPlan
   }
   // Weak keys never retain a Session merely because it searched once. Values
   // contain no Agent reference. Route changes replace only this owner's cache;
@@ -340,10 +363,12 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
 
   function plan(
     route: CurrentChatRoute | undefined, cfg: InlineConfig,
-    owner: object | undefined, surface: 'inline' | 'traditional',
+    owner: object | undefined, surface: 'inline' | 'traditional' | 'configured',
   ): SearchPlan {
     const plans = owner === undefined ? undefined : plansFor(owner)
-    const candidates = surface === 'traditional' ? traditionalCandidates(route, cfg) : candidatesForRoute(route)
+    const candidates = surface === 'inline' ? candidatesForRoute(route)
+      : surface === 'configured' ? configuredCandidates(route, cfg)
+        : traditionalCandidates(route, cfg)
     const cached = plans?.[surface]
     if (matches(cached, route, candidates, cfg)) return cached.plan
     const startedAt = generation
@@ -383,9 +408,43 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     return plan(currentChatRoute(ctx, selection), cfg, owner, 'traditional')
   }
 
+  function configuredSearchSelection(cfg: InlineConfig): SearchSelection | undefined {
+    const model = cfg.searchModel?.trim()
+    if (model === undefined || model.length === 0) return undefined
+    return { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model }
+  }
+
+  /** Build a Copilot search plan from the provider-owned search model, not the chat route. */
+  async function configuredWebPlan(signal?: AbortSignal): Promise<SearchPlan> {
+    const owner = currentSearchInitiator(ctx)
+    const cfg = current()
+    const selection = configuredSearchSelection(cfg)
+    const startedAt = generation
+    if (owner === undefined || disposedOwners.has(owner) || selection === undefined) {
+      throw new Error('github-copilot: independent hosted search requires an initiating Agent and github-copilot.searchModel')
+    }
+    const plans = plansFor(owner)
+    const signals = [proofCancellation.signal, plans.cancellation.signal]
+    if (signal !== undefined) signals.push(signal)
+    await ctx.get('githubCopilotPreview')?.discover({ force: false, signal: AbortSignal.any(signals) })
+    if (!active || startedAt !== generation || plans.cancellation.signal.aborted || signal?.aborted === true) {
+      throw new Error('github-copilot: configured search proof invalidated during route resolution')
+    }
+    return plan(currentChatRoute(ctx, selection), cfg, owner, 'configured')
+  }
+
   function traditionalCandidates(route: CurrentChatRoute | undefined, cfg: InlineConfig): readonly SearchPlanCandidate[] {
     if (!cfg.enabled || route === undefined) return []
     if (cfg.providers.length > 0 && !cfg.providers.includes(route.provider)) return []
+    return candidatesForRoute(route).filter(candidate => candidate.protocol === 'openai-responses')
+  }
+
+  function configuredCandidates(route: CurrentChatRoute | undefined, cfg: InlineConfig): readonly SearchPlanCandidate[] {
+    if (!cfg.enabled || route === undefined) return []
+    const allowed = cfg.providers.length === 0
+      || cfg.providers.includes(GITHUB_COPILOT_PROVIDER_ID)
+      || cfg.providers.includes(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    if (!allowed) return []
     return candidatesForRoute(route).filter(candidate => candidate.protocol === 'openai-responses')
   }
 
@@ -411,27 +470,95 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     return !matches(cached, route, candidates, cfg) || cached.plan.available()
   }
 
+  /** Local readiness for the provider-owned Copilot search model. */
+  function configuredAvailable(): boolean {
+    if (!active) return false
+    const owner = currentSearchInitiator(ctx)
+    if (owner === undefined || disposedOwners.has(owner)) return false
+    const cfg = current()
+    const selection = configuredSearchSelection(cfg)
+    if (selection === undefined) return false
+    const route = currentChatRoute(ctx, selection)
+    const candidates = configuredCandidates(route, cfg)
+    if (candidates.length === 0) {
+      const allowed = cfg.providers.length === 0
+        || cfg.providers.includes(GITHUB_COPILOT_PROVIDER_ID)
+        || cfg.providers.includes(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+      return cfg.enabled && allowed && route?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+        && route.api === undefined && ctx.get('githubCopilotPreview')?.getView().configured === true
+    }
+    const cached = ownerPlans.get(owner)?.configured
+    return !matches(cached, route, candidates, cfg) || cached.plan.available()
+  }
+
   const traditionalProvider = createTraditionalSearchProvider(
     traditionalAvailable,
     webPlan,
     hooks,
     current,
   )
+  async function configuredSearch(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
+    const owner = currentSearchInitiator(ctx)
+    const startedGeneration = generation
+    const cfg = current()
+    let proof: (() => boolean) | undefined
+    let preview: Context['githubCopilotPreview'] | undefined
+    const assertCurrent = () => {
+      if (signal?.aborted) throw new WebError('web search aborted', 'WEB_ABORTED')
+      if (!active || generation !== startedGeneration || owner === undefined || disposedOwners.has(owner)
+        || preview === undefined || ctx.get('githubCopilotPreview') !== preview || proof?.() !== true) {
+        throw new WebError('configured Copilot search owner or account proof invalidated', 'WEB_PROVIDER_UNAVAILABLE')
+      }
+    }
+    const provider = createTraditionalSearchProvider(configuredAvailable, async requestSignal => {
+      const searchPlan = await configuredWebPlan(requestSignal)
+      preview = ctx.get('githubCopilotPreview')
+      proof = preview?.captureSearchProof()
+      assertCurrent()
+      return searchPlan
+    }, {
+      ...hooks,
+      resolveApiKey: async candidate => {
+        // Probe authentication may start before the plan resolver returns. Its
+        // native account checks remain in hooks; final dispatch also checks the
+        // captured operation proof after asynchronous authentication.
+        const auth = await hooks.resolveApiKey(candidate)
+        if (proof !== undefined) assertCurrent()
+        return auth
+      },
+    }, () => cfg,
+    'github-copilot-hosted requires github-copilot.searchModel selecting an account-authorized OpenAI Responses model')
+    const result = await provider.search(request, signal)
+    assertCurrent()
+    return result
+  }
   ctx.web.registerSearchProvider(traditionalProvider)
   ctx.provide('githubCopilotSearchRouter', {
-    search: async (request, signal, delegate) => {
+    search: async (request, signal, delegate, selectProvider) => {
       const cfg = current()
+      const routing = routingCurrent()
       const owner = currentSearchInitiator(ctx)
       const selection = currentSearchSelection(owner)
       const managedOwned = selection?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
         && isPluginPreviewProvider(ctx, selection.provider)
-      if (!cfg.enabled || cfg.routeWebSearch === false || owner === undefined
-        || !isCopilotSearchSelection(selection, managedOwned)
-        || (cfg.providers.length > 0 && !cfg.providers.includes(selection?.provider ?? ''))) {
+      if (!cfg.enabled || cfg.routeWebSearch === false || owner === undefined) {
         return delegate(request, signal)
       }
+      const copilotSelection = isCopilotSearchSelection(selection, managedOwned)
+      const nativeAllowed = copilotSelection
+        && (cfg.providers.length === 0 || cfg.providers.includes(selection?.provider ?? ''))
+      const useNative = (routing.searchMode ?? 'auto') === 'auto' && nativeAllowed
+        && (selectProvider === undefined || traditionalAvailable())
+      const defaultProviderId = routing.defaultSearchProvider?.trim() || 'deepseek-official'
+      if (!useNative && defaultProviderId === NO_DEFAULT_SEARCH_PROVIDER) {
+        throw new WebError('web search is disabled by github-copilot-search-routing.defaultSearchProvider', 'WEB_PROVIDER_UNAVAILABLE')
+      }
+      // Legacy direct callers do not supply exact-id dispatch. Preserve their
+      // original delegate and signal identity for every non-Copilot backend.
+      if (!useNative && defaultProviderId !== GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID
+        && selectProvider === undefined) return delegate(request, signal)
       const startedGeneration = generation
-      const managedPreview = managedOwned ? ctx.get('githubCopilotPreview') : undefined
+      const managedPreview = useNative && managedOwned ? ctx.get('githubCopilotPreview') : undefined
       const managedProof = managedPreview?.captureSearchProof()
       const ownerSignal = plansFor(owner).cancellation.signal
       const boundSignal = AbortSignal.any([
@@ -440,11 +567,23 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
         ownerSignal,
       ])
       const canContinue = (): boolean => active && generation === startedGeneration && !disposedOwners.has(owner)
-        && (!managedOwned || ctx.get('githubCopilotPreview') === managedPreview && managedProof?.() === true)
+        && (!useNative || !managedOwned
+          || ctx.get('githubCopilotPreview') === managedPreview && managedProof?.() === true)
+
+      if (!useNative) {
+        if (defaultProviderId === GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID) {
+          return configuredSearch(request, boundSignal)
+        }
+        return selectProvider!(defaultProviderId, request, boundSignal)
+      }
+
       const outcome = await routeSessionSearch(request, boundSignal, {
         selection,
         managedOwned,
-        fallback: cfg.searchFallback ?? 'deepseek',
+        // Retain the known pre-dispatch-guarded DeepSeek failure fallback only
+        // when it is also the selected default. Never silently spend on DeepSeek
+        // after the user chose another backend or disabled the default.
+        fallback: defaultProviderId === 'deepseek-official' ? cfg.searchFallback ?? 'deepseek' : 'none',
         copilot: traditionalProvider,
         delegate,
         resolveDeepSeek: () => createDeepSeekSearchFallback(ctx, owner, canContinue),
@@ -454,12 +593,18 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     },
   })
 
-  installWebSearchSettings(ctx, config, {
+  installSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, Config, config, {
     setSource: (source) => {
       current = source
     },
     // Invalidate only. Even an event burst coalesces into one fresh proof per
     // search surface on its next actual request, never one probe per event.
+    onChange: invalidatePlans,
+  })
+  installSettingsNamespace(ctx, WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE, WebSearchRoutingConfigSchema, {}, {
+    setSource: (source) => {
+      routingCurrent = source
+    },
     onChange: invalidatePlans,
   })
 
@@ -475,7 +620,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     // Zero-cost gate first: disabled plugins, non-loop requests, purposed
     // calls, provider mismatches, and image-bearing requests never build a
     // plan and never start a probe.
-    if (!active) return next()
+    if (!active || routingCurrent().searchMode === 'fixed') return next()
     const owner = currentSearchInitiator(ctx)
     if (owner !== undefined && disposedOwners.has(owner)) return next()
     const route = currentChatRoute(ctx, request)
@@ -498,7 +643,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     text: () => '',
   })
   return (owner, selection) => {
-    if (!active || owner === undefined || disposedOwners.has(owner)) return ''
+    if (!active || owner === undefined || disposedOwners.has(owner) || routingCurrent().searchMode === 'fixed') return ''
     const route = currentChatRoute(ctx, selection)
     const cfg = current()
     if (route === undefined || (cfg.providers.length > 0 && !cfg.providers.includes(route.provider))) return ''

@@ -5,6 +5,12 @@
  */
 
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import type {
+  RemoteResult,
+  SettingsDescribeValue,
+  SettingsNamespaceView,
+  SettingsPathOpView,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import type { ReactNode } from 'react'
 
 export {}
@@ -39,6 +45,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       kind: 'list'
       scope: 'root'
       owner: { children?: never }
+    }
+  }
+}
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface TypertRemoteNamespaceMap {
+    settings: {
+      describe(): Promise<RemoteResult<SettingsDescribeValue>>
+      mutate(
+        ns: string,
+        ops: readonly SettingsPathOpView[],
+        expectedRevision?: number,
+      ): Promise<RemoteResult<SettingsNamespaceView>>
     }
   }
 }

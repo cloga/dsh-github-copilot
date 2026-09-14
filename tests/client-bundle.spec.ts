@@ -130,6 +130,15 @@ describe('tsdown client artifact', () => {
     const slotDisposals = new Map<string, ReturnType<typeof vi.fn>>()
     const result = { ok: true, value: { phase: 'signed-out', configured: false, writable: true, inFlight: false, notices: [] } }
     const remote = { status: vi.fn(async () => result), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(), discoverModels: vi.fn(), ensureModels: vi.fn(), reconcile: vi.fn() }
+    const settingsRemote = {
+      describe: vi.fn(async () => ({ ok: true, value: { writable: true, hasDocument: true, namespaces: [
+        { ns: 'github-copilot-search-routing', schema: {}, value: { searchMode: 'auto', defaultSearchProvider: 'deepseek-official' }, applies: 'live', secrets: [], revision: 1 },
+        { ns: 'github-copilot', schema: {}, value: {}, applies: 'live', secrets: [], revision: 1 },
+      ] } })),
+      mutate: vi.fn(async (ns: string) => ({ ok: true, value: {
+        ns, schema: {}, value: {}, applies: 'live', secrets: [], revision: 2,
+      } })),
+    }
     const cleanups: Array<() => void> = []
     const events = new Map<string, () => void>()
     const on = vi.fn((event: string, listener: () => void) => {
@@ -137,15 +146,17 @@ describe('tsdown client artifact', () => {
       return () => { events.delete(event) }
     })
     const ctx = {
-      remote: { $mount: vi.fn(async () => async () => {}), $on: on, githubCopilot: remote },
+      remote: { $mount: vi.fn(async () => async () => {}), $on: on, githubCopilot: remote, settings: settingsRemote },
       on,
       logger: { warn: vi.fn() },
       slots: {
         spec: () => ({ kind: 'list', scope: 'root' }),
-        register(options: { name: string }, render: Render) {
-          registrations.set(options.name, render)
-          const dispose = vi.fn(() => { registrations.delete(options.name) })
-          slotDisposals.set(options.name, dispose)
+        register(options: { name: string; id?: string }, render: Render) {
+          const key = options.name === 'settings.models.footer' && options.id === 'github-copilot-search-routing'
+            ? `${options.name}:${options.id}` : options.name
+          registrations.set(key, render)
+          const dispose = vi.fn(() => { registrations.delete(key) })
+          slotDisposals.set(key, dispose)
           return dispose
         },
         inject(name: string, setup: () => (() => void)) {
@@ -173,7 +184,7 @@ describe('tsdown client artifact', () => {
       cleanups.push(unmount)
       return { render, unmount }
     }
-    return { client, ctx, remote, registrations, injections, slotDisposals, instance, events,
+    return { client, ctx, remote, settingsRemote, registrations, injections, slotDisposals, instance, events,
       dispose: async () => { await dispose(); for (const cleanup of cleanups) cleanup() } }
   }
 
@@ -198,6 +209,14 @@ describe('tsdown client artifact', () => {
       expect(fixture.remote.status).toHaveBeenCalledOnce()
       expect(fixture.remote.start).not.toHaveBeenCalled()
       expect(fixture.remote.discoverModels).not.toHaveBeenCalled()
+    } finally { await fixture.dispose() }
+  })
+
+  it('registers web-search routing as a separate Models footer card', async () => {
+    const fixture = await surfaceFixture()
+    try {
+      expect(fixture.registrations.has('settings.models.footer')).toBe(true)
+      expect(fixture.registrations.has('settings.models.footer:github-copilot-search-routing')).toBe(true)
     } finally { await fixture.dispose() }
   })
 

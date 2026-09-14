@@ -13,6 +13,8 @@ import type { GitHubCopilotAuthorizationView } from './authorization-controller.
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { installReasoningPresentation } from './reasoning-presentation.ts'
+import { WebSearchRoutingCard } from './web-search-routing-card.ts'
+export { WebSearchRoutingCard } from './web-search-routing-card.ts'
 import {
   GITHUB_COPILOT_PROVIDER_ID,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
@@ -915,6 +917,64 @@ function registerUi(ctx: ClientContext): () => void {
   }
 }
 
+/** Optional search settings must never hold account authorization UI in waiting. */
+function registerSearchUi(ctx: ClientContext): () => void {
+  let active = true
+  let footerActive = false
+  let sectionActive = false
+  let fallback: (() => void) | undefined
+  const render = () => createElement(WebSearchRoutingCard, {
+    settings: ctx.remote.settings, copilot: ctx.remote.githubCopilot,
+  })
+  const syncFallback = () => {
+    if (active && sectionActive && !footerActive) {
+      fallback ??= ctx.slots.register({
+        name: 'settings.section', id: 'github-copilot-search-routing', order: 12, label: 'Web search',
+      }, render)
+    } else {
+      fallback?.()
+      fallback = undefined
+    }
+  }
+  let footer: () => void = () => {}
+  try {
+    footer = ctx.slots.inject('settings.models.footer', () => {
+      try {
+        const spec = ctx.slots.spec?.('settings.models.footer')
+        if (spec?.kind !== 'list' || spec.scope !== 'root') return () => {}
+        const dispose = ctx.slots.register({
+          name: 'settings.models.footer', id: 'github-copilot-search-routing', order: 20,
+        }, render)
+        footerActive = true
+        syncFallback()
+        let removed = false
+        return () => {
+          if (removed) return
+          removed = true
+          dispose()
+          footerActive = false
+          syncFallback()
+        }
+      } catch {
+        ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_FOOTER_UNAVAILABLE')
+        return () => {}
+      }
+    })
+  } catch { ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_FOOTER_UNAVAILABLE') }
+  const section = ctx.slots.inject('settings.section', () => {
+    sectionActive = true
+    syncFallback()
+    return () => { sectionActive = false; syncFallback() }
+  })
+  return () => {
+    active = false
+    footer()
+    section()
+    fallback?.()
+    fallback = undefined
+  }
+}
+
 /** Mount the plugin-owned Remote namespace and register the Models card seat. */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(githubCopilotRemote)
@@ -926,6 +986,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     await disposeRemote()
     throw error
   }
+  const searchUi = ctx.inject(['remote.githubCopilot', 'remote.settings', 'slots'], registerSearchUi)
   // The optional Chat contribution must not hold authorization activation on older Cores.
   const presentation = ctx.inject(['uiConversation', 'slots'], scope => installReasoningPresentation({
     slots: scope.slots,
@@ -934,6 +995,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }))
   return async () => {
     await presentation.dispose()
+    await searchUi.dispose()
     await ui.dispose()
     await disposeRemote()
   }

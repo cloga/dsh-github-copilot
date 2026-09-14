@@ -34,6 +34,8 @@ export interface InlineConfig {
   routeWebSearch?: boolean
   /** Automatic fallback, disclosed in results; no per-search approval dialog. */
   searchFallback?: 'none' | 'deepseek'
+  /** Copilot model used when `github-copilot-hosted` serves independently of the initiating chat model. */
+  searchModel?: string
   /** Internal JSON backup of route leaves temporarily owned by the GPT-6 overlay. */
   temporaryRouteBackup?: string
 }
@@ -54,5 +56,6 @@ export const Config: z<InlineConfig> = z.object({
   accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
   routeWebSearch: z.boolean().default(true),
   searchFallback: z.union(['none', 'deepseek']).default('deepseek'),
+  searchModel: z.string().hidden(),
   temporaryRouteBackup: z.string().hidden(),
 })

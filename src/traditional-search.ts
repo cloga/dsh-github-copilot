@@ -35,6 +35,7 @@ export function createTraditionalSearchProvider(
   plan: (signal?: AbortSignal) => SearchPlan | Promise<SearchPlan>,
   hooks: InlineHooks,
   config: () => InlineConfig,
+  unavailableMessage = 'the github-copilot-hosted search provider requires an initiating Agent via agents.currentInitiator() and an eligible Session.requestHeader().config route',
 ): WebSearchProvider {
   return {
     id: GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -42,7 +43,7 @@ export function createTraditionalSearchProvider(
     search: (request, signal) => {
       if (signal?.aborted === true) return Promise.reject(aborted())
       if (!available()) {
-        return Promise.reject(new WebError('the github-copilot-hosted search provider requires an initiating Agent via agents.currentInitiator() and an eligible Session.requestHeader().config route', 'WEB_PROVIDER_UNAVAILABLE'))
+        return Promise.reject(new WebError(unavailableMessage, 'WEB_PROVIDER_UNAVAILABLE'))
       }
       return searchResponses(request, signal, plan, hooks, config())
     },
