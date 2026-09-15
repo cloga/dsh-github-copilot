@@ -307,6 +307,7 @@ assert(alpha016Core?.tag === currentDsh.tag && alpha016Core.commit === currentDs
   && alpha016Core.configHotReload === 'serialized-coalesced-last-good-recovery'
   && alpha016Core.optionalPlugins === 'startup-policy-owned-by-consumer'
   && alpha016Core.attachmentCache === 'request-variants-under-dsh-cache-normalized-path-stable'
+  && alpha016Core.imageOffload === 'durable-projection-then-retry'
   && alpha016Core.teamTools === 'spawn-teammate-and-provider-owned-task-pagination'
   && alpha016Core.evidenceScope === officialCore.evidenceScope
   && alpha016Core.standaloneNpmArtifacts === 'not-tested'

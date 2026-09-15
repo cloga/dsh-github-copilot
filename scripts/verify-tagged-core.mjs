@@ -47,7 +47,17 @@ function runtimeExport(value) {
 async function sourceEntry(core, directory, output, tracked) {
   if (typeof output !== 'string' || !output.startsWith('./lib/') || !/\.(?:mjs|cjs|js)$/.test(output)) return undefined
   const stem = output.slice('./lib/'.length).replace(/\.(?:mjs|cjs|js)$/, '')
-  const options = [join(directory, 'src', `${stem}.ts`), join(directory, 'src', `${stem}.tsx`), join(directory, 'src', stem, 'index.ts')]
+  const sourceStem = stem.startsWith('types/') ? stem.slice('types/'.length) : stem
+  const options = [
+    join(directory, 'src', `${stem}.ts`),
+    join(directory, 'src', `${stem}.tsx`),
+    join(directory, 'src', stem, 'index.ts'),
+    ...sourceStem === stem ? [] : [
+      join(directory, 'src', `${sourceStem}.ts`),
+      join(directory, 'src', `${sourceStem}.tsx`),
+      join(directory, 'src', sourceStem, 'index.ts'),
+    ],
+  ]
   const found = []
   for (const path of options) {
     if (!tracked.has(slash(relative(core, path)))) continue

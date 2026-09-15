@@ -138,6 +138,7 @@
           "configHotReload": "serialized-coalesced-last-good-recovery",
           "optionalPlugins": "startup-policy-owned-by-consumer",
           "attachmentCache": "request-variants-under-dsh-cache-normalized-path-stable",
+          "imageOffload": "durable-projection-then-retry",
           "teamTools": "spawn-teammate-and-provider-owned-task-pagination",
           "evidenceScope": "unchanged-tagged-source-target",
           "standaloneNpmArtifacts": "not-tested",

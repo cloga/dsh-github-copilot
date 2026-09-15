@@ -55,6 +55,17 @@ async function fixture(release = '0.1.3-alpha.1') {
     } }))
     await source(`${dir}/src/index.ts`, 'export const untouched = true\n')
   }
+  await source('packages/compaction/compaction-image-offload/package.json', JSON.stringify({
+    name: '@deepseek-ai/dsh-compaction-image-offload',
+    version: release,
+    type: 'module',
+    exports: {
+      '.': { types: './lib/types/index.d.ts', default: './lib/index.js' },
+      './projection': { types: './lib/types/projection.d.ts', default: './lib/types/projection.js' },
+    },
+  }))
+  await source('packages/compaction/compaction-image-offload/src/index.ts', 'export const untouched = true\n')
+  await source('packages/compaction/compaction-image-offload/src/projection.ts', 'export const imageOffloadProjection = {}\n')
   const commands = []
   const git = (_cwd, args) => {
     commands.push(args)
@@ -105,6 +116,8 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   const llm = config.resolve.alias.find(alias => alias.find.test('@deepseek-ai/dsh-llm'))
   assert.equal(llm.replacement, join(value.core, 'packages/llm/llm/src/index.ts'))
   assert.equal(llm.find.test('@deepseek-ai/dsh-llm-pi-ai'), false)
+  const projection = config.resolve.alias.find(alias => alias.find.test('@deepseek-ai/dsh-compaction-image-offload/projection'))
+  assert.equal(projection.replacement, join(value.core, 'packages/compaction/compaction-image-offload/src/projection.ts'))
   assert.equal(config.resolve.alias.some(alias => alias.find.test('@earendil-works/pi-ai')), false)
   assert.equal(config.resolve.alias.some(alias => alias.find.test('@deepseek-ai/cosmokit')), false)
   const guard = config.plugins.find(plugin => plugin.name === 'tagged-core-public-import-guard')

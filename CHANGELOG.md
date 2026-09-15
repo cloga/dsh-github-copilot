@@ -10,6 +10,9 @@
   pagination, PTC runtime and `workflow-ptc` names, cancellable Sandbox/Shell
   preparation, optional-plugin startup policy, attachment cache separation,
   and Team task pagination without taking ownership of those Core services.
+- Follow the 0.1.6 image-budget contract: preserve `IMAGE_OFFLOAD_REQUIRED`,
+  apply the Core durable `image/offload` projection, and prove the retried
+  Copilot request uses the mapped read-only normalized path without image bytes.
 - Preserve provider-scoped Copilot tool-schema filtering and the existing
   immutable GitHub Release plus npm OIDC distribution design. This version is
   prepared for a Draft compatibility PR only; it is not published by this change.

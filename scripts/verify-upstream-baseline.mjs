@@ -191,6 +191,14 @@ if (baseline.release === '0.1.6-alpha.1') {
     "this.cacheRoot = dshCachePath({ dshHome }, 'attachments')",
     'this.root = join(dshHome, \'attachments\', \'v1\')',
   ])
+  await assertMarkers('packages/compaction/compaction-image-offload/src/index.ts', [
+    "failure.code !== IMAGE_OFFLOAD_REQUIRED_CODE || failure.offloadImages === undefined",
+    "return Promise.resolve<RequestErrorAction>({ kind: 'retry' })",
+  ])
+  await assertMarkers('packages/compaction/compaction-image-offload/src/projection.ts', [
+    "SessionMessageProjection<'image/offload'>",
+    "type: 'image/offload'",
+  ])
   await assertMarkers('packages/experimental/tool-agent-team/src/index.ts', [
     "name: 'spawn_teammate'",
     "name: 'team_task_list'",

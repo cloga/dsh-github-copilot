@@ -1283,7 +1283,7 @@ describe('plugin-owned account Copilot route', () => {
       } as unknown as Context['attachments'])
       owner.provide('fs', { processPathFromHostPath: () => '/execution-world/offloaded.png' })
     } })
-    stubFetch(vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
       const serialized = JSON.stringify(body.input)
       expect(serialized).toContain('image omitted to fit request image limits')
@@ -1291,11 +1291,51 @@ describe('plugin-owned account Copilot route', () => {
       expect(serialized).not.toContain('private-host')
       expect(serialized).not.toContain('data:image/')
       return response()
-    }))
-    const result = await call(harness.ctx, { messages: [createUserMessage({
+    })
+    stubFetch(fetch)
+    const original = createUserMessage({
       content: [{ type: 'image', attachment }], source: { kind: 'user' },
-    })] })
-    expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    })
+    const first = await call(harness.ctx, { messages: [original] })
+    if (process.env.DSH_PUBLISHED_CORE_RELEASE !== '0.1.6-alpha.1') {
+      expect(first.assembler.finish).toEqual({ kind: 'stop' })
+      return
+    }
+
+    expect(first.assembler.finish).toMatchObject({
+      kind: 'error',
+      failure: { code: 'IMAGE_OFFLOAD_REQUIRED', offloadImages: 1 },
+    })
+    expect(fetch).not.toHaveBeenCalled()
+
+    const sessionPackage: string = '@deepseek-ai/dsh-session'
+    const projectionPackage: string = '@deepseek-ai/dsh-compaction-image-offload/projection'
+    const sessionApi = await import(sessionPackage) as {
+      Session: { create: (...args: unknown[]) => unknown }
+      SessionId: (id: string) => unknown
+    }
+    const projectionApi = await import(projectionPackage) as {
+      imageOffloadProjection: unknown
+    }
+    const session = Reflect.apply(sessionApi.Session.create, sessionApi.Session, [
+      sessionApi.SessionId('copilot-preview-image-offload'),
+      undefined,
+      undefined,
+      undefined,
+      [projectionApi.imageOffloadProjection],
+    ]) as {
+      append(type: string, data: unknown, intent?: unknown): { seq: number }
+      deriveMessages(): Message[]
+    }
+    const source = session.append('user/message', original, { surfaceOp: 'append' })
+    session.append('image/offload', { targets: [{ seq: source.seq, imageIndexes: [0] }] })
+    const projected = session.deriveMessages()
+    expect(projected[0]?.content[0]).toMatchObject({ type: 'image', offloaded: true })
+    expect(original.content[0]).not.toHaveProperty('offloaded')
+
+    const retried = await call(harness.ctx, { messages: projected })
+    expect(retried.assembler.finish).toEqual({ kind: 'stop' })
+    expect(fetch).toHaveBeenCalledOnce()
   })
 
   it('cancels an in-flight SDK request on disposal without deleting the shared grant', async () => {

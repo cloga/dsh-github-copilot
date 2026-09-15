@@ -42,7 +42,7 @@ bundle 通过插件自有的 Models 页策略分流搜索：`auto` 优先合格�
 
 ### Alpha.19 DSH 0.1.6 兼容适配（#125）
 
-精确固定的 `dsh-v0.1.6-alpha.1` 源码 fixture 现在会等待串行 `agent/created` 初始化完成后，再读取 live Session projection。静态与运行时 gate 同时核对：继续通过 request-header/projection 取状态而不新增同步历史读取；MCP SDK v2 resource cursor；`dsh-ptc-runtime` 与 `dsh-workflow-ptc` 名称；隔离 Node PTC 的空模型环境；异步可取消的 Sandbox/Shell 准备；由应用消费者决定的可选插件启动失败；请求图片缓存移入 DSH cache 但 normalized attachment 路径保持独立；以及 Team task 的 provider-owned 分页。插件不导入或接管 MCP、PTC、Workflow、Sandbox、Shell、Team 服务。该 tag 没有通用 `HostGrant`／`hostGrants` API，插件也不注册此类耦合。Copilot tool schema 过滤继续移除 `pwsh`、文件与 `run_code` 的不可用提权参数，同时保留 Team 分页字段。本版本仅准备 Draft 兼容 PR，不表示已发布。
+精确固定的 `dsh-v0.1.6-alpha.1` 源码 fixture 现在会等待串行 `agent/created` 初始化完成后，再读取 live Session projection。静态与运行时 gate 同时核对：继续通过 request-header/projection 取状态而不新增同步历史读取；MCP SDK v2 resource cursor；`dsh-ptc-runtime` 与 `dsh-workflow-ptc` 名称；隔离 Node PTC 的空模型环境；异步可取消的 Sandbox/Shell 准备；由应用消费者决定的可选插件启动失败；请求图片缓存移入 DSH cache 但 normalized attachment 路径保持独立；以及 Team task 的 provider-owned 分页。图片预算恢复不会把首个 `IMAGE_OFFLOAD_REQUIRED` 当作成功；fixture 会记录 Core `image/offload` projection，并证明重试后的 Copilot 请求仅发送带映射只读 normalized 路径的占位文本，不再发送图片字节。插件不导入或接管 MCP、PTC、Workflow、Sandbox、Shell、Team 服务。该 tag 没有通用 `HostGrant`／`hostGrants` API，插件也不注册此类耦合。Copilot tool schema 过滤继续移除 `pwsh`、文件与 `run_code` 的不可用提权参数，同时保留 Team 分页字段。本版本仅准备 Draft 兼容 PR，不表示已发布。
 
 ## 安装与登录
 
