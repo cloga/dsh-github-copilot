@@ -50,6 +50,31 @@ function assembly(provider: string) {
           required: ['file_path'],
         },
       },
+      {
+        name: 'run_code',
+        description: 'Run code through the selected PTC runtime',
+        parameters: {
+          type: 'object',
+          properties: {
+            code: { type: 'string' },
+            description: { type: 'string' },
+            sandbox_permissions: { type: 'string' },
+            justification: { type: 'string' },
+          },
+          required: ['code', 'description'],
+        },
+      },
+      {
+        name: 'team_task_list',
+        description: 'List Team tasks with provider-owned pagination',
+        parameters: {
+          type: 'object',
+          properties: {
+            cursor: { type: 'integer' },
+            limit: { type: 'integer' },
+          },
+        },
+      },
     ],
   }
 }
@@ -66,6 +91,11 @@ describe('Copilot tool-schema compatibility', () => {
       required: ['command'],
     })
     expect(filtered.tools[2]).toBe(input.tools[2])
+    expect(filtered.tools[3]?.parameters.properties).toEqual({
+      code: { type: 'string' },
+      description: { type: 'string' },
+    })
+    expect(filtered.tools[4]).toBe(input.tools[4])
     expect(input.tools[0]?.parameters.properties).toHaveProperty('sandbox_permissions')
     expect(input.tools[0]?.parameters.required).toEqual(['command', 'sandbox_permissions', 'justification'])
   })

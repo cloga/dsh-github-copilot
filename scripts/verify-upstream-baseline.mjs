@@ -116,7 +116,7 @@ await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',
 ])
 
-if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2'].includes(baseline.release)) {
+if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1'].includes(baseline.release)) {
   for (const path of ['package.json', 'packages/core/session/package.json', 'packages/llm/llm-pi-ai/package.json']) {
     const metadata = JSON.parse(await readFile(resolve(upstream, path), 'utf8'))
     if (metadata.version !== baseline.release) throw new Error(`DSH target package version differs in ${path}`)
@@ -132,9 +132,75 @@ if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2'].includes(base
   ])
 }
 
-if (['0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2'].includes(baseline.release)) {
+if (['0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1'].includes(baseline.release)) {
   await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', ['modelErrors: ReadonlyMap<string, string>', 'piProvider?: Provider', 'catalogError?: string'])
   await assertMarkers('packages/llm/llm-pi-ai/src/adapter.ts', ['profile.modelErrors.get(model)', "throw new LlmError(failure, 'INVALID_CONFIG')"])
+}
+
+if (baseline.release === '0.1.6-alpha.1') {
+  await assertMarkers('packages/core/agent/src/index.ts', [
+    'async announce(agent: Agent, source: SessionStartSource, signal?: AbortSignal): Promise<void>',
+    "await this.ctx.serial(entry.carrier, 'agent/created'",
+  ])
+  await assertMarkers('packages/core/agent/src/runtime-types.ts', [
+    "'agent/created'(this: Scoped<Agent>",
+    '@mode serial',
+  ])
+  await assertMarkers('packages/core/session/src/index.ts', [
+    '@deprecated Existing logic may remain unmigrated for now, but new calls are prohibited.',
+    'registerMessageProjection(projection: SessionMessageProjection)',
+  ])
+  await assertMarkers('packages/mcp/mcp-client/src/connection.ts', [
+    "versionNegotiation: { mode: 'auto' }",
+    'generation.listResources(',
+    'request.cursor === undefined ? undefined : { cursor: request.cursor }',
+  ])
+  await assertMarkers('packages/mcp/mcp-client/package.json', [
+    '"@modelcontextprotocol/client": "2.0.0"',
+  ])
+  await assertMarkers('packages/mcp/mcp-client/src/tools.ts', [
+    "client.listTools(undefined, { cacheMode: 'refresh' })",
+  ])
+  await assertMarkers('packages/mcp/mcp-resources/src/index.ts', [
+    "method: 'resources/list' | 'resources/templates/list'; cursor?: string",
+  ])
+  await assertMarkers('packages/ptc-runtime/ptc-runtime/package.json', [
+    '"name": "@deepseek-ai/dsh-ptc-runtime"',
+  ])
+  await assertMarkers('packages/workflow/workflow-ptc/package.json', [
+    '"name": "@deepseek-ai/dsh-workflow-ptc"',
+  ])
+  await assertMarkers('packages/ptc-runtime/ptc-runtime-node/src/process.ts', [
+    'processState.env = Object.create(null) as NodeJS.ProcessEnv',
+  ])
+  await assertMarkers('packages/sandbox/sandbox/src/index.ts', [
+    'abstract confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv>',
+  ])
+  await assertMarkers('packages/shell/shell/src/index.ts', [
+    'abstract start(spec: ShellExecSpec): Promise<ShellProcess>',
+  ])
+  await assertMarkers('packages/boot/app-boot/src/index.ts', [
+    'Inactive entries from the global required list reject startup.',
+    'inactive entries produce one warning and leave successful siblings running.',
+  ])
+  await assertMarkers('packages/boot/app-boot/src/watch-config.ts', [
+    'while (state.dirty)',
+    "ctx.logger.warn('config reload at %C failed'",
+  ])
+  await assertMarkers('packages/attachment/attachment-local/src/index.ts', [
+    "this.cacheRoot = dshCachePath({ dshHome }, 'attachments')",
+    'this.root = join(dshHome, \'attachments\', \'v1\')',
+  ])
+  await assertMarkers('packages/experimental/tool-agent-team/src/index.ts', [
+    "name: 'spawn_teammate'",
+    "name: 'team_task_list'",
+    'nextCursor: cursor + limit',
+  ])
+  await assertMarkers('packages/experimental/agent-team-profile/cordis.patch.yml', [
+    '- id: tool-subagent-fork',
+    'disabled: true',
+    'maxMembers: 8',
+  ])
 }
 
 console.log(`Verified DSH ${baseline.release} public seams at ${commit}.`)

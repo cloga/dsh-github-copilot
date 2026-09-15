@@ -48,6 +48,6 @@ The added regressions cover silent expiry/replacement, native final assertions, 
 
 1. Complete the full verification gate and update deployment/agent evidence inventories, public export smoke and both READMEs.
 2. Add end-to-end coverage of the main router's managed metadata, fallback credentials/options, cancellations during discovery/fallback, mixed multi-query provenance, and complete unload/reload behavior.
-3. Run retained exact Core-baseline fixtures, not only the development artifact. Do not infer seven-pin runtime compatibility from type checks.
+3. Run retained exact Core-baseline fixtures, not only the development artifact. Do not infer eight-pin runtime compatibility from type checks.
 4. Align the new package version, release metadata and package/archive tests.
 5. Run bounded live Copilot hosted-search and permitted-fallback acceptance separately. A successful chat request does not prove hosted search. No live profile installation, global search selection change or restart has occurred for this work.

@@ -37,7 +37,8 @@ const contexts: Context[] = []
 beforeAll(() => {
   // Fail rather than silently substitute the installed peer or another baseline.
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1'])
+    .toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(3)
 })
 
@@ -72,6 +73,17 @@ function fixture({ mountController = true } = {}) {
   })
   provideDouble(ctx, 'fileUploads', { registerAgentResolver: registration })
   const agents = new AgentRegistry(ctx)
+  const created = new Set<string>()
+  if (process.env.DSH_PUBLISHED_CORE_RELEASE === '0.1.6-alpha.1') {
+    Reflect.apply(ctx.on, ctx, ['agent/created', async (payload: {
+      agent: Agent
+      source: string
+    }) => {
+      await Promise.resolve()
+      expect(payload.source).toBe('startup')
+      created.add(payload.agent.id)
+    }])
+  }
   const projections = new SessionProjectionRegistry(ctx)
   let selectedDefault = defaultC
   const currentSelection = vi.fn(() => selectedDefault)
@@ -110,14 +122,17 @@ function fixture({ mountController = true } = {}) {
     canOpenPath: () => false, openPath: forbidden,
   }) : undefined
   const shells: AgentShell[] = []
-  const add = (id: string, status: Agent['status'] = 'idle') => {
+  const add = async (id: string, status: Agent['status'] = 'idle') => {
     const session = Session.create(SessionId(id))
     const shell: AgentShell = { id: session.id, session, status, ctx }
     Object.defineProperty(shell, 'options', { get: forbidden })
     // No fake loop: the real registry accepts an already-created Agent. Only its
     // public id/session/status/ctx leaves are used by registration and these reads.
     const agent = shell as Agent
-    agents.register(agent)
+    await agents.register(agent)
+    if (process.env.DSH_PUBLISHED_CORE_RELEASE === '0.1.6-alpha.1') {
+      expect(created.has(agent.id)).toBe(true)
+    }
     shells.push(shell)
     return agent
   }
@@ -149,12 +164,12 @@ function requestConfig(selection: MigrationSelection): RequestConfig {
     ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(selection.reasoningEffort) }) }
 }
 
-describe('Core 0.1.5 alpha public Session context (actual controller projection)', () => {
-  it('installs the actual controller fold and applies pending > header > genuinely-empty default', () => {
+describe('tagged Core public Session context (actual controller projection)', () => {
+  it('installs the actual controller fold and applies pending > header > genuinely-empty default', async () => {
     const f = fixture()
     expect(f.controller).toBeInstanceOf(SessionController)
-    const a = f.add('projection-A', 'running')
-    const empty = f.add('projection-empty')
+    const a = await f.add('projection-A', 'running')
+    const empty = await f.add('projection-empty')
     expect(empty.session.header.version).toBe(3)
     expect(empty.session.seq).toBe(0)
     expect(empty.session.requestHeader()).toBeUndefined()
@@ -184,8 +199,8 @@ describe('Core 0.1.5 alpha public Session context (actual controller projection)
   })
 
   it('isolates concurrent real initiator A/B contexts from the future global default C', async () => {
-    const f = fixture(), a = f.add('concurrent-A', 'running'), b = f.add('concurrent-B', 'running')
-    const empty = f.add('concurrent-empty')
+    const f = fixture(), a = await f.add('concurrent-A', 'running'), b = await f.add('concurrent-B', 'running')
+    const empty = await f.add('concurrent-empty')
     recordHeader(a.session, nativeA)
     recordHeader(b.session, otherB)
     const gate = Promise.withResolvers<void>()
@@ -215,8 +230,8 @@ describe('Core 0.1.5 alpha public Session context (actual controller projection)
     expect(f.forbidden).not.toHaveBeenCalled()
   })
 
-  it('keeps recorded request context separate from pending future intent and activity claims', () => {
-    const f = fixture(), a = f.add('recorded-not-in-flight', 'running')
+  it('keeps recorded request context separate from pending future intent and activity claims', async () => {
+    const f = fixture(), a = await f.add('recorded-not-in-flight', 'running')
     recordHeader(a.session, nativeA)
     a.session.append('model/selection', managedPending)
     a.session.append('turn/start', { turn: 1 })
@@ -233,8 +248,8 @@ describe('Core 0.1.5 alpha public Session context (actual controller projection)
     expect(f.forbidden).not.toHaveBeenCalled()
   })
 
-  it('omits adapter-defaulted effort from future intent but preserves it in the recorded header', () => {
-    const f = fixture(), a = f.add('adapter-default', 'running'), b = f.add('explicit-effort')
+  it('omits adapter-defaulted effort from future intent but preserves it in the recorded header', async () => {
+    const f = fixture(), a = await f.add('adapter-default', 'running'), b = await f.add('explicit-effort')
     const event = recordHeader(a.session, nativeA, true)
     recordHeader(b.session, otherB)
     const header = a.session.requestHeader()
@@ -254,9 +269,9 @@ describe('Core 0.1.5 alpha public Session context (actual controller projection)
     expect(f.observe().sessions[0]?.effectiveSelection).toEqual(managedPending)
   })
 
-  it('fails closed when the real registry has no modelSelection owner despite a header/default', () => {
-    const f = fixture({ mountController: false }), a = f.add('unsupported-projection')
-    f.add('unsupported-empty')
+  it('fails closed when the real registry has no modelSelection owner despite a header/default', async () => {
+    const f = fixture({ mountController: false }), a = await f.add('unsupported-projection')
+    await f.add('unsupported-empty')
     recordHeader(a.session, nativeA)
     expect(f.projections.stateOf(a.session, 'modelSelection')).toBeUndefined()
     const result = f.observe()
@@ -266,8 +281,8 @@ describe('Core 0.1.5 alpha public Session context (actual controller projection)
       .toEqual([['unknown', null], ['unknown', null]])
   })
 
-  it('does not claim complete recorded-request evidence for a running genuinely-empty Session', () => {
-    const f = fixture(), a = f.add('running-before-first-header', 'running')
+  it('does not claim complete recorded-request evidence for a running genuinely-empty Session', async () => {
+    const f = fixture(), a = await f.add('running-before-first-header', 'running')
     expect(f.observe()).toMatchObject({ complete: { sessions: false }, sessions: [{ id: a.id,
       selectionSource: 'default', effectiveSelection: defaultC, activeRequestSelection: null }] })
     expect(currentSearchSelection(a)).toBeUndefined()

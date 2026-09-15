@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
@@ -145,15 +145,16 @@ assert(
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(
-  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2',
-  'DSH peer range must retain the previous five baselines and append 0.1.5-rc.1 and 0.1.5-rc.2',
+  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1',
+  'DSH peer range must retain all earlier baselines and append 0.1.6-alpha.1',
 )
+assert(packageJson.engines?.dsh === peerRange, 'top-level engines.dsh must declare the same host compatibility range')
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
-assert(dshBaselines.length === 7, 'exactly seven DSH baselines must be declared')
+assert(dshBaselines.length === 8, 'exactly eight DSH baselines must be declared')
 const currentDsh = manifest.supportedBaselines.dsh
-assert(currentDsh.release === '0.1.5-alpha.2'
-  && currentDsh.tag === 'dsh-v0.1.5-alpha.2'
-  && currentDsh.commit === 'b2e3b2a0125854567a4a5fcba75782e42fe84901', 'current Core target must be the exact official 0.1.5-alpha.2 tag')
+assert(currentDsh.release === '0.1.6-alpha.1'
+  && currentDsh.tag === 'dsh-v0.1.6-alpha.1'
+  && currentDsh.commit === '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d', 'current Core target must be the exact official 0.1.6-alpha.1 tag')
 assert(
   dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
     && entry.commit === 'a772dbbde82780bff2b9394427e9f0a24cafa1d5'
@@ -197,7 +198,8 @@ assert(JSON.stringify(officialCore.runtimeTests) === JSON.stringify([
 ]), 'target tagged-runtime evidence inventory differs')
 for (const path of officialCore.runtimeTests) await access(resolve(root, path))
 const alpha2Core = dshBaselines.find(entry => entry.release === '0.1.5-alpha.2')
-assert(alpha2Core?.tag === currentDsh.tag && alpha2Core.commit === currentDsh.commit
+assert(alpha2Core?.tag === 'dsh-v0.1.5-alpha.2'
+  && alpha2Core.commit === 'b2e3b2a0125854567a4a5fcba75782e42fe84901'
   && alpha2Core.source === officialCore.source && alpha2Core.modelsUi === officialCore.modelsUi
   && alpha2Core.providerHeaders === officialCore.providerHeaders && alpha2Core.strictModeCompat === officialCore.strictModeCompat
   && alpha2Core.fileContentHelper === officialCore.fileContentHelper
@@ -290,6 +292,44 @@ for (const capability of manifest.capabilities) {
     assert((await testNames(test.file)).has(test.name), `${capability.id} enabled test missing: ${test.name} (${test.file})`)
   }
 }
+const alpha016Core = dshBaselines.find(entry => entry.release === '0.1.6-alpha.1')
+assert(alpha016Core?.tag === currentDsh.tag && alpha016Core.commit === currentDsh.commit
+  && alpha016Core.source === officialCore.source && alpha016Core.modelsUi === officialCore.modelsUi
+  && alpha016Core.providerHeaders === officialCore.providerHeaders
+  && alpha016Core.strictModeCompat === officialCore.strictModeCompat
+  && alpha016Core.hostGrants === 'no-public-api-no-plugin-coupling'
+  && alpha016Core.fileContentHelper === officialCore.fileContentHelper
+  && alpha016Core.agentCreation === 'awaited-serial-agent-created'
+  && alpha016Core.sessionHistory === 'request-header-and-projections-no-new-sync-history'
+  && alpha016Core.mcpSdk === 'client-v2-tools-and-resource-pagination'
+  && alpha016Core.ptcRuntime === 'dsh-ptc-runtime-and-workflow-ptc'
+  && alpha016Core.sandboxShell === 'async-cancellable-preparation'
+  && alpha016Core.configHotReload === 'serialized-coalesced-last-good-recovery'
+  && alpha016Core.optionalPlugins === 'startup-policy-owned-by-consumer'
+  && alpha016Core.attachmentCache === 'request-variants-under-dsh-cache-normalized-path-stable'
+  && alpha016Core.teamTools === 'spawn-teammate-and-provider-owned-task-pagination'
+  && alpha016Core.evidenceScope === officialCore.evidenceScope
+  && alpha016Core.standaloneNpmArtifacts === 'not-tested'
+  && alpha016Core.managedProviderValidation === 'synthetic-tagged-source-runtime'
+  && alpha016Core.resolvedProfileDiagnostics === 'plugin-owned-empty-modelErrors'
+  && JSON.stringify(alpha016Core.runtimeTests) === JSON.stringify([
+    'tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
+    'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts',
+    'tests/tool-schema-compat.spec.ts', 'tests/fixtures/session-context-core.fixture.ts',
+    'tests/fixtures/remote-core.fixture.ts',
+  ]), '0.1.6-alpha.1 must declare exact lifecycle, MCP, PTC, sandbox, attachment, Team and source-runtime evidence')
+
+const pluginSourcePaths = (await readdir(resolve(root, 'src'), { recursive: true }))
+  .filter(path => path.endsWith('.ts'))
+for (const sourcePath of pluginSourcePaths) {
+  const source = await readFile(resolve(root, 'src', sourcePath), 'utf8')
+  assert(!/@deepseek-ai\/dsh-(?:code-runtime|ptc-runtime|workflow-ptc|workflow-worker-thread|mcp|sandbox|shell|experimental-agent-team)/u.test(source),
+    `plugin source must not acquire unowned 0.1.6 service dependencies: src/${sourcePath}`)
+  assert(!/\b(?:HostGrant|hostGrants|spawn_teammate|team_task_(?:create|list|get|update))\b/u.test(source),
+    `plugin source must not register or couple to Team/host-grant APIs: src/${sourcePath}`)
+  assert(!/agent\/session-start|\.snapshotEvents\(|\.eventAt\(|\.ownEvents\(/u.test(source),
+    `plugin production source must use 0.1.6 agent/created and projected Session state: src/${sourcePath}`)
+}
 
 const index = await read('src/index.ts')
 for (const symbol of manifest.requiredExports?.['.'] ?? []) {
@@ -372,10 +412,11 @@ for (const command of [
   'b2e3b2a0125854567a4a5fcba75782e42fe84901',
   '183f08e9c6dde7e36cd2318eaee70b0da08fb35e',
   'fb2c4b9e698e30edb738bca4cf0618587db7d203',
+  '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
-  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2'",
-  "if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2'",
+  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1'",
+  "if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1'",
   'node scripts/verify-tagged-core.mjs prepare',
   'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
@@ -391,8 +432,8 @@ for (const marker of [
   "github.event_name == 'push' && github.ref == 'refs/heads/main'",
   'fetch-depth: 0',
   'scripts/release-policy.mjs --plan',
-  'b2e3b2a0125854567a4a5fcba75782e42fe84901',
-  '--release 0.1.5-alpha.2',
+  '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
+  '--release 0.1.6-alpha.1',
   'node scripts/verify-tagged-core.mjs prepare',
   'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
@@ -413,7 +454,7 @@ for (const marker of [
 ]) assert(workflow.includes(marker), `CI release gate is missing ${marker}`)
 const orderedReleaseSteps = [
   '- run: pnpm install --frozen-lockfile',
-  '- name: Install alpha2 Core pi-ai closure',
+  '- name: Install 0.1.6 Core pi-ai closure',
   '- run: pnpm verify:upstream -- dsh-upstream',
   '- run: pnpm verify:controlled-core -- dsh-upstream',
   '- name: Verify plugin package',
