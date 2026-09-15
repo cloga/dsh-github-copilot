@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { prepareTaggedCoreFixture, TAGGED_CORE_RELEASES } from '../../scripts/verify-tagged-core.mjs'
 
-test('admits the exact 0.1.5-rc.2 source pin while retaining prior tagged baselines', () => {
+test('admits the exact 0.1.6-alpha.1 source pin while retaining prior tagged baselines', () => {
   assert.deepEqual(TAGGED_CORE_RELEASES, {
     '0.1.2-rc.1': 'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
     '0.1.3-alpha.1': 'd347e703908d0406b7a7ef80e3a0e594d86b2215',
@@ -14,6 +14,7 @@ test('admits the exact 0.1.5-rc.2 source pin while retaining prior tagged baseli
     '0.1.5-alpha.2': 'b2e3b2a0125854567a4a5fcba75782e42fe84901',
     '0.1.5-rc.1': '183f08e9c6dde7e36cd2318eaee70b0da08fb35e',
     '0.1.5-rc.2': 'fb2c4b9e698e30edb738bca4cf0618587db7d203',
+    '0.1.6-alpha.1': '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
   })
 })
 
@@ -54,6 +55,17 @@ async function fixture(release = '0.1.3-alpha.1') {
     } }))
     await source(`${dir}/src/index.ts`, 'export const untouched = true\n')
   }
+  await source('packages/compaction/compaction-image-offload/package.json', JSON.stringify({
+    name: '@deepseek-ai/dsh-compaction-image-offload',
+    version: release,
+    type: 'module',
+    exports: {
+      '.': { types: './lib/types/index.d.ts', default: './lib/index.js' },
+      './projection': { types: './lib/types/projection.d.ts', default: './lib/types/projection.js' },
+    },
+  }))
+  await source('packages/compaction/compaction-image-offload/src/index.ts', 'export const untouched = true\n')
+  await source('packages/compaction/compaction-image-offload/src/projection.ts', 'export const imageOffloadProjection = {}\n')
   const commands = []
   const git = (_cwd, args) => {
     commands.push(args)
@@ -104,6 +116,8 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   const llm = config.resolve.alias.find(alias => alias.find.test('@deepseek-ai/dsh-llm'))
   assert.equal(llm.replacement, join(value.core, 'packages/llm/llm/src/index.ts'))
   assert.equal(llm.find.test('@deepseek-ai/dsh-llm-pi-ai'), false)
+  const projection = config.resolve.alias.find(alias => alias.find.test('@deepseek-ai/dsh-compaction-image-offload/projection'))
+  assert.equal(projection.replacement, join(value.core, 'packages/compaction/compaction-image-offload/src/projection.ts'))
   assert.equal(config.resolve.alias.some(alias => alias.find.test('@earendil-works/pi-ai')), false)
   assert.equal(config.resolve.alias.some(alias => alias.find.test('@deepseek-ai/cosmokit')), false)
   const guard = config.plugins.find(plugin => plugin.name === 'tagged-core-public-import-guard')
@@ -131,7 +145,7 @@ test('maps import-condition mjs vendor exports without aliasing the plugin vendo
   assert.equal(resolver.resolveId('@deepseek-ai/schemastery', join(value.root, 'src/config.ts')), null)
 }))
 
-for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2']) {
+for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1']) {
   test(`selects the actual adapter, Session and Remote regression suite for ${release}`, async () => {
     const value = await fixture(release)
     try {
@@ -139,12 +153,16 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       for (const name of ['session-context-core.fixture.ts', 'remote-core.fixture.ts']) {
         await writeFile(join(value.root, 'tests/fixtures', name), 'export {}')
       }
+      if (release === '0.1.6-alpha.1') {
+        await writeFile(join(value.root, 'tests/tool-schema-compat.spec.ts'), 'export {}')
+      }
       const report = await prepareTaggedCoreFixture(value, value)
       const config = (await import(pathToFileURL(report.configPath).href)).default
       assert.equal(report.commit, TAGGED_CORE_RELEASES[release])
       assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
       assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
         'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts',
+        ...release === '0.1.6-alpha.1' ? ['tests/tool-schema-compat.spec.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts'])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })

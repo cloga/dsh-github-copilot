@@ -17,11 +17,12 @@ A focused DSH companion for GitHub Copilot sign-in, account-aware model profiles
 | DSH `0.1.2-rc.1` | Tag commit [`a66e470`](https://github.com/deepseek-ai/deepseek-harness/commit/a66e4702047846cdaa10c66c9d3df3951f5ea70d) | **Settings → Models** provider card |
 | DSH `0.1.3-alpha.1` | Tag commit [`d347e70`](https://github.com/deepseek-ai/deepseek-harness/commit/d347e703908d0406b7a7ef80e3a0e594d86b2215) | **Settings → Models** provider card |
 | Official DSH `0.1.5-alpha.1` | Tag commit [`5dda764`](https://github.com/deepseek-ai/deepseek-harness/commit/5dda764ed3aa172535a7967b06ff95d9cbfe536a) | **Settings → Models** provider card |
-| Official DSH `0.1.5-alpha.2` (current target) | Tag commit [`b2e3b2a`](https://github.com/deepseek-ai/deepseek-harness/commit/b2e3b2a0125854567a4a5fcba75782e42fe84901) | **Settings → Models** provider card |
+| Official DSH `0.1.5-alpha.2` | Tag commit [`b2e3b2a`](https://github.com/deepseek-ai/deepseek-harness/commit/b2e3b2a0125854567a4a5fcba75782e42fe84901) | **Settings → Models** provider card |
 | Official DSH `0.1.5-rc.1` | Tag commit [`183f08e`](https://github.com/deepseek-ai/deepseek-harness/commit/183f08e9c6dde7e36cd2318eaee70b0da08fb35e) | **Settings → Models** provider card |
 | Official DSH `0.1.5-rc.2` | Tag commit [`fb2c4b9`](https://github.com/deepseek-ai/deepseek-harness/commit/fb2c4b9e698e30edb738bca4cf0618587db7d203) | **Settings → Models** provider card |
+| Official DSH `0.1.6-alpha.1` (current target) | Tag commit [`0a15e36`](https://github.com/deepseek-ai/deepseek-harness/commit/0a15e36e7f82b6ed45af6fa9759f29b40dcd965d) | **Settings → Models** provider card |
 
-The table retains historical source pins; it does not imply the account-model route has been verified on every baseline. Published-artifact synthetic transport tests use the **rc.1 adapter with pi 0.85.1**; development dependencies remain pinned to `0.1.2-rc.1`. The controlled rc.2 pin is historical regression evidence only. DSH `0.1.3-alpha.1`, official `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1` and `0.1.5-rc.2` are unchanged tagged-source targets: CI exercises each through an isolated test resolver, without building or patching Core. These source-runtime checks must pass before claiming their compatibility; they do not establish standalone npm-artifact, live endpoint, installed Desktop or loaded-runtime proof. The `0.1.3-alpha.1` standalone npm artifacts were not published; no standalone-artifact claim is made for the new target. Existing public Host, Client and Remote seams are retained, so this certification does not rewrite those implementations. Stock Core model-entry `api` support is not a prerequisite for the plugin-owned route. Package peer ranges are admission constraints, not live compatibility proof. No Core patch is installed by this plugin.
+The table retains historical source pins; it does not imply the account-model route has been verified on every baseline. Published-artifact synthetic transport tests use the **rc.1 adapter with pi 0.85.1**; development dependencies remain pinned to `0.1.2-rc.1`. The controlled rc.2 pin is historical regression evidence only. DSH `0.1.3-alpha.1`, official `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, and `0.1.6-alpha.1` are unchanged tagged-source targets: CI exercises each through an isolated test resolver, without building or patching Core. These source-runtime checks must pass before claiming compatibility; they do not establish standalone npm-artifact, live endpoint, installed Desktop, or loaded-runtime proof. Existing public Host, Client, and Remote seams are retained. Stock Core model-entry `api` support is not a prerequisite for the plugin-owned route. Package peer and `engines.dsh` ranges are admission declarations, not live compatibility proof. No Core patch is installed by this plugin.
 
 ### Alpha.11 compatibility correction (#105)
 
@@ -37,9 +38,13 @@ The first alpha.11 publication attempt stopped before packing: the tagged Sessio
 
 The bundle routes search through a plugin-owned Models-page policy: `auto` prefers eligible native Copilot search and otherwise uses the configured default provider; `fixed` always uses that provider. A separately selected account model lets Volcengine and other non-Copilot chat Sessions use Copilot hosted search. The implementation uses public web-service composition without Core or preset edits. Source and synthetic tests are not proof of live Copilot search, release publication or local activation; see [routing evidence](docs/session-search-routing.md).
 
+### Alpha.19 DSH 0.1.6 compatibility adaptation (#125)
+
+The exact `dsh-v0.1.6-alpha.1` source fixture now awaits serialized `agent/created` initialization before reading live Session projections. Static and runtime gates also verify the retained request-header/projection path instead of adding synchronous history reads; MCP SDK v2 resource cursors; the `dsh-ptc-runtime` and `dsh-workflow-ptc` contracts; empty model environment for isolated Node PTC; asynchronous cancellable Sandbox/Shell preparation; consumer-owned optional-plugin startup failures; attachment request caches under DSH cache while normalized attachment paths remain stable; and provider-owned Team task pagination. For image-budget recovery, the adapter's first `IMAGE_OFFLOAD_REQUIRED` result remains an error; the fixture records the Core `image/offload` projection and proves the retried Copilot request sends the mapped read-only normalized path as placeholder text without image bytes. The plugin does not import or own MCP, PTC, Workflow, Sandbox, Shell, or Team services. Upstream exposes no generic `HostGrant`/`hostGrants` API in this tag, and the plugin registers no such coupling. Copilot schema compatibility continues to remove unsupported escalation controls from `pwsh`, filesystem, and `run_code` schemas while preserving Team pagination fields. This compatibility version is prepared as a Draft and is not a release claim.
+
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.18`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.19`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -50,7 +55,7 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 Include any launcher patch files with repeated `--patch /absolute/file` arguments. Require `supported: true`; otherwise do not install the routing bundle. The preflight rejects custom, disabled, nested or already-isolated web-service layouts and reserved routing collisions before any mutation. It parses through public Core APIs and never boots plugins, resolves credentials or rewrites configuration. **`dsh plugin add` does not automatically run this preflight.** It is a required installer/operator step, not a universal compatibility guarantee.
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.18/dsh-github-copilot-0.4.0-alpha.18.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.19/dsh-github-copilot-0.4.0-alpha.19.tgz
 ```
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
@@ -113,7 +118,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the Release `SHA256SUMS` and npm `dist.integrity`; package preparation is not proof of publication. After npm publication is verified, the official Desktop package manager can use `dsh-github-copilot@0.4.0-alpha.18` rather than a URL or file. The required search-composition preflight below still applies before installation; do not use the CLI to modify a Desktop-managed profile. See [npm distribution and first-package prerequisites](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the Release `SHA256SUMS` and npm `dist.integrity`; package preparation is not proof of publication. After npm publication is verified, the official Desktop package manager can use `dsh-github-copilot@0.4.0-alpha.19` rather than a URL or file. The required search-composition preflight below still applies before installation; do not use the CLI to modify a Desktop-managed profile. See [npm distribution and first-package prerequisites](./docs/npm-distribution.md).
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -315,9 +320,9 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-Use Node 24 LTS for development and the pinned pnpm version; runtime dependencies require Node >=22.19.0. `pnpm verify` runs the Agent contract check, source and local test typechecking, baseline markers, clean build, Vitest and Node tooling tests, and a real built Host import plus Client/Remote smoke. After packing, run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz` to verify archive exports, media, allowed contents and equality to that build. CI checks all seven exact Core sources/config fixtures on Windows and Linux: controlled `0.1.1-rc.2`, `0.1.2-rc.1`, `0.1.3-alpha.1`, official `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1` and `0.1.5-rc.2`. The five tagged-source targets also run unchanged tagged-source runtime fixtures; release publication depends on that full matrix.
+Use Node 24 LTS for development and the pinned pnpm version; runtime dependencies require Node >=22.19.0. `pnpm verify` runs the Agent contract check, source and local test typechecking, baseline markers, clean build, Vitest and Node tooling tests, and a real built Host import plus Client/Remote smoke. After packing, run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz` to verify archive exports, media, allowed contents and equality to that build. CI checks all eight exact Core sources/config fixtures on Windows and Linux: controlled `0.1.1-rc.2`, `0.1.2-rc.1`, `0.1.3-alpha.1`, official `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, and `0.1.6-alpha.1`. The six tagged-source targets also run unchanged tagged-source runtime fixtures; release publication depends on that full matrix.
 
-For the optional reasoning UI integration, `pnpm verify:reasoning-ui -- <Core checkout>` runs a synthetic native-renderer, Slot registry and history-assembly fixture against a clean pinned `0.1.2-rc.1`, `0.1.3-alpha.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1` or `0.1.5-rc.2` checkout with its Chat dependencies installed. It exclusively creates one temporary test file and removes it only if unchanged. This is local integration/static-render evidence, not a live browser or Copilot API test; CI runs it on all six supported Chat baselines.
+For the optional reasoning UI integration, `pnpm verify:reasoning-ui -- <Core checkout>` runs a synthetic native-renderer, Slot registry and history-assembly fixture against a clean pinned `0.1.2-rc.1`, `0.1.3-alpha.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, or `0.1.6-alpha.1` checkout with its Chat dependencies installed. It exclusively creates one temporary test file and removes it only if unchanged. This is local integration/static-render evidence, not a live browser or Copilot API test; CI runs it on all seven supported Chat baselines.
 
 ### Agent-driven development
 
@@ -349,8 +354,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.18/dsh-github-copilot-0.4.0-alpha.18.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.18/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.19/dsh-github-copilot-0.4.0-alpha.19.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.19/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -358,7 +363,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.18.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.19.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

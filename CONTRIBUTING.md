@@ -29,7 +29,7 @@ Core inspection is read-only. Isolated tests may use unchanged pinned Core artif
    Validate the resulting exact path with `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`. The release task plan supplies that path automatically. Never run broad cleanup on an existing artifacts directory just to package again.
 6. Inspect the complete diff, compare expected versus actual results, and report what was NOT checked. Source markers, stubbed unit tests, built module imports, upstream config fixtures, authenticated API calls, installation, and loaded UI are different evidence layers.
 7. Commit with the issue reference and accurate attribution. For work assisted by DSH use `Assisted-by: DeepSeek Harness (DSH)`. Other agents must name the actual tool; do not infer authorship from the model vendor or copy a bot identity. Add `Co-authored-by` only for real verified collaborators. No fabricated email, author replacement or published-history rewrite.
-8. Push the feature branch and open a PR containing `Fixes #<issue>`, verification, risks and rollback. Merge only with explicit approval and after all Windows/Linux x controlled-rc.2/rc.1/0.1.3-alpha.1/0.1.5-alpha.1/0.1.5-alpha.2/0.1.5-rc.1/0.1.5-rc.2 CI jobs pass.
+8. Push the feature branch and open a PR containing `Fixes #<issue>`, verification, risks and rollback. Merge only with explicit approval and after all Windows/Linux x controlled-rc.2/rc.1/0.1.3-alpha.1/0.1.5-alpha.1/0.1.5-alpha.2/0.1.5-rc.1/0.1.5-rc.2/0.1.6-alpha.1 CI jobs pass.
 
 Generated `lib/` output, archives, `.env`, tokens, local credentials, machine state and production screenshots with real authorization codes must not be committed. Use synthetic fixtures for screenshots and report staged UI honestly.
 

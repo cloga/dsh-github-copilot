@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: b2e3b2a0125854567a4a5fcba75782e42fe84901
+          ref: 0a15e36e7f82b6ed45af6fa9759f29b40dcd965d
           path: dsh-upstream
           persist-credentials: false
       - uses: pnpm/action-setup@v6
@@ -64,7 +64,7 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
-      - name: Install alpha2 Core pi-ai closure
+      - name: Install 0.1.6 Core pi-ai closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
       - run: pnpm verify:upstream -- dsh-upstream
@@ -72,13 +72,16 @@ jobs:
       - name: Install tagged Session and Remote verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-api-session-controller...'
+      - name: Install 0.1.6 image-offload verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-compaction-image-offload...'
       - name: Install tagged search verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
       - name: Verify current unchanged tagged runtime before packing
         shell: bash
         run: |
-          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.1.5-alpha.2
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.1.6-alpha.1
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-release/vitest.config.mts"
       - name: Verify plugin package
         run: pnpm verify

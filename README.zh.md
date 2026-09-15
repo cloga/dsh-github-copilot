@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.18`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.19`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 ## 已测试基线
 
@@ -19,11 +19,12 @@
 | DSH `0.1.2-rc.1` | Tag commit [`a66e470`](https://github.com/deepseek-ai/deepseek-harness/commit/a66e4702047846cdaa10c66c9d3df3951f5ea70d) | **Settings → Models** provider card |
 | DSH `0.1.3-alpha.1` | Tag commit [`d347e70`](https://github.com/deepseek-ai/deepseek-harness/commit/d347e703908d0406b7a7ef80e3a0e594d86b2215) | **Settings → Models** provider card |
 | 官方 DSH `0.1.5-alpha.1` | Tag commit [`5dda764`](https://github.com/deepseek-ai/deepseek-harness/commit/5dda764ed3aa172535a7967b06ff95d9cbfe536a) | **Settings → Models** provider card |
-| 官方 DSH `0.1.5-alpha.2`（当前目标） | Tag commit [`b2e3b2a`](https://github.com/deepseek-ai/deepseek-harness/commit/b2e3b2a0125854567a4a5fcba75782e42fe84901) | **Settings → Models** provider card |
+| 官方 DSH `0.1.5-alpha.2` | Tag commit [`b2e3b2a`](https://github.com/deepseek-ai/deepseek-harness/commit/b2e3b2a0125854567a4a5fcba75782e42fe84901) | **Settings → Models** provider card |
 | 官方 DSH `0.1.5-rc.1` | Tag commit [`183f08e`](https://github.com/deepseek-ai/deepseek-harness/commit/183f08e9c6dde7e36cd2318eaee70b0da08fb35e) | **Settings → Models** provider card |
 | 官方 DSH `0.1.5-rc.2` | Tag commit [`fb2c4b9`](https://github.com/deepseek-ai/deepseek-harness/commit/fb2c4b9e698e30edb738bca4cf0618587db7d203) | **Settings → Models** provider card |
+| 官方 DSH `0.1.6-alpha.1`（当前目标） | Tag commit [`0a15e36`](https://github.com/deepseek-ai/deepseek-harness/commit/0a15e36e7f82b6ed45af6fa9759f29b40dcd965d) | **Settings → Models** provider card |
 
-上表保留历史源码 pin，不表示账号模型路由在所有基线上都已验收。已发布制品的合成 transport 测试使用 **rc.1 adapter 与 pi `0.85.1`**，开发依赖继续精确固定为 `0.1.2-rc.1`；受控 rc.2 仅为历史回归证据。原始 rc.2 tag 不能解析逐模型 `api`，不能用版本号证明混合协议可用；插件通过已发布的 adapter 接口传入经校验的模型数据，不以新增 Core 服务或修改 Core 为前提。`0.1.3-alpha.1`、官方 `0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1` 与 `0.1.5-rc.2` 均作为未修改的标签源码目标，由 CI 使用隔离测试解析器运行，不构建或给 Core 打补丁。对应源码运行检查通过前不宣称兼容性已验收；这些检查不是独立 npm 制品、真实端点、已安装 Desktop 或已加载运行时的证明。`0.1.3-alpha.1` 没有发布独立 npm 制品；新目标不作独立制品验收声明。已有公开 Host、Client 与 Remote 接口保留，因此本次认证不重写这些实现。Peer range 只约束包准入，不是真实兼容性证明；插件不安装 Core 补丁。
+上表保留历史源码 pin，不表示账号模型路由在所有基线上都已验收。已发布制品的合成 transport 测试使用 **rc.1 adapter 与 pi `0.85.1`**，开发依赖继续精确固定为 `0.1.2-rc.1`；受控 rc.2 仅为历史回归证据。`0.1.3-alpha.1`、官方 `0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1`、`0.1.5-rc.2` 与 `0.1.6-alpha.1` 均作为未修改的标签源码目标，由 CI 使用隔离测试解析器运行，不构建或给 Core 打补丁。对应源码运行检查通过前不宣称兼容性已验收；这些检查不是独立 npm 制品、真实端点、已安装 Desktop 或已加载运行时的证明。已有公开 Host、Client 与 Remote 接口保留。Peer range 与 `engines.dsh` 只声明包准入，不是真实兼容性证明；插件不安装 Core 补丁。
 
 ### Alpha.11 兼容修复（#105）
 
@@ -39,6 +40,10 @@ Core `0.1.5-alpha.2` 新增必需的 `ResolvedPiAiProviderProfile.modelErrors`�
 
 bundle 通过插件自有的 Models 页策略分流搜索：`auto` 优先合格的 Copilot 原生搜索，否则使用配置的默认 Provider；`fixed` 始终使用该 Provider。单独选择账号模型后，火山方舟等非 Copilot 聊天会话也能使用 Copilot 托管搜索。全部通过公开 web 服务组合实现，不改 Core 或预设。源码和合成测试不代表真实 Copilot 搜索、已发布或本机已生效；详见[分流验收范围](docs/session-search-routing.md)。
 
+### Alpha.19 DSH 0.1.6 兼容适配（#125）
+
+精确固定的 `dsh-v0.1.6-alpha.1` 源码 fixture 现在会等待串行 `agent/created` 初始化完成后，再读取 live Session projection。静态与运行时 gate 同时核对：继续通过 request-header/projection 取状态而不新增同步历史读取；MCP SDK v2 resource cursor；`dsh-ptc-runtime` 与 `dsh-workflow-ptc` 名称；隔离 Node PTC 的空模型环境；异步可取消的 Sandbox/Shell 准备；由应用消费者决定的可选插件启动失败；请求图片缓存移入 DSH cache 但 normalized attachment 路径保持独立；以及 Team task 的 provider-owned 分页。图片预算恢复不会把首个 `IMAGE_OFFLOAD_REQUIRED` 当作成功；fixture 会记录 Core `image/offload` projection，并证明重试后的 Copilot 请求仅发送带映射只读 normalized 路径的占位文本，不再发送图片字节。插件不导入或接管 MCP、PTC、Workflow、Sandbox、Shell、Team 服务。该 tag 没有通用 `HostGrant`／`hostGrants` API，插件也不注册此类耦合。Copilot tool schema 过滤继续移除 `pwsh`、文件与 `run_code` 的不可用提权参数，同时保留 Team 分页字段。本版本仅准备 Draft 兼容 PR，不表示已发布。
+
 ## 安装与登录
 
 将当前 release 安装到你实际使用的 profile（其它 profile 请替换 `web`）：
@@ -52,7 +57,7 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 若启动时还有额外 patch，用重复的 `--patch /absolute/file` 参数一并提供。必须得到 `supported: true` 才继续安装；自定义、已禁用、嵌套、已有隔离映射的 web 服务或路由保留名称冲突会在修改前拒绝。预检只用 Core 公开解析接口，不启动插件、不读取认证凭据、不改配置。**`dsh plugin add` 不会自动执行这项预检**；这是安装者必做步骤，不是对任意第三方组合的兼容保证。
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.18/dsh-github-copilot-0.4.0-alpha.18.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.19/dsh-github-copilot-0.4.0-alpha.19.tgz
 ```
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
@@ -115,7 +120,7 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对 Release 的 `SHA256SUMS` 与 npm 的 `dist.integrity`；准备好包不表示已发布。确认 npm 发布后，官方 Desktop 包管理器使用 `dsh-github-copilot@0.4.0-alpha.18`，不是 URL 或本地文件。安装前仍须完成下述 search-composition 预检；不要使用 CLI 修改 Desktop 管理的 profile。首次建包及后续 OIDC 前置条件见 [npm 分发说明](./docs/npm-distribution.md)。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对 Release 的 `SHA256SUMS` 与 npm 的 `dist.integrity`；准备好包不表示已发布。确认 npm 发布后，官方 Desktop 包管理器使用 `dsh-github-copilot@0.4.0-alpha.19`，不是 URL 或本地文件。安装前仍须完成下述 search-composition 预检；不要使用 CLI 修改 Desktop 管理的 profile。首次建包及后续 OIDC 前置条件见 [npm 分发说明](./docs/npm-distribution.md)。
 
 不需要运行 `copilot2api`，不需要外部 gateway、placeholder API key、原始 GitHub token 或单独安装 `dsh-web-search-provider`。
 
@@ -326,9 +331,9 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-开发建议使用 Node 24 LTS 和固定的 pnpm 版本；运行时依赖要求 Node >=22.19.0。`pnpm verify` 检查 Agent contract、源码与本地测试类型、baseline marker、干净构建、Vitest 与 Node 工具测试，以及真实构建 Host 导入和 Client/Remote smoke。打包后执行 `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`，检查归档 export、图片、允许的文件以及与本次构建的一致性。CI 在 Windows/Linux 上验证七个精确 Core 源码与配置 fixture：受控 `0.1.1-rc.2`、`0.1.2-rc.1`、`0.1.3-alpha.1`、官方 `0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1` 与 `0.1.5-rc.2`；五个标签源码目标还运行未修改的标签源码运行时 fixture。发布必须等待完整矩阵通过。
+开发建议使用 Node 24 LTS 和固定的 pnpm 版本；运行时依赖要求 Node >=22.19.0。`pnpm verify` 检查 Agent contract、源码与本地测试类型、baseline marker、干净构建、Vitest 与 Node 工具测试，以及真实构建 Host 导入和 Client/Remote smoke。打包后执行 `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`，检查归档 export、图片、允许的文件以及与本次构建的一致性。CI 在 Windows/Linux 上验证八个精确 Core 源码与配置 fixture：受控 `0.1.1-rc.2`、`0.1.2-rc.1`、`0.1.3-alpha.1`、官方 `0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1`、`0.1.5-rc.2` 与 `0.1.6-alpha.1`；六个标签源码目标还运行未修改的标签源码运行时 fixture。发布必须等待完整矩阵通过。
 
-对于可选的思考显示集成，`pnpm verify:reasoning-ui -- <Core checkout>` 会在已安装 Chat 依赖的干净、精确 pin 的 `0.1.2-rc.1`、`0.1.3-alpha.1`、`0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1` 或 `0.1.5-rc.2` checkout 中，执行合成的原生渲染器、Slot 注册器与历史组装 fixture。它只会独占创建一个临时测试文件，并仅在文件未被修改时清理。这是本地集成／静态渲染证据，不是真实浏览器或 Copilot API 测试；CI 在六个支持该 Chat 接口的基线上运行此项。
+对于可选的思考显示集成，`pnpm verify:reasoning-ui -- <Core checkout>` 会在已安装 Chat 依赖的干净、精确 pin 的 `0.1.2-rc.1`、`0.1.3-alpha.1`、`0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1`、`0.1.5-rc.2` 或 `0.1.6-alpha.1` checkout 中，执行合成的原生渲染器、Slot 注册器与历史组装 fixture。它只会独占创建一个临时测试文件，并仅在文件未被修改时清理。这是本地集成／静态渲染证据，不是真实浏览器或 Copilot API 测试；CI 在七个支持该 Chat 接口的基线上运行此项。
 
 ### Agent 驱动开发
 
@@ -360,8 +365,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.18/dsh-github-copilot-0.4.0-alpha.18.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.18/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.19/dsh-github-copilot-0.4.0-alpha.19.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.19/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -369,7 +374,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.18.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.19.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

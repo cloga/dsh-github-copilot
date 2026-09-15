@@ -11,12 +11,14 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
   '0.1.5-alpha.2': 'b2e3b2a0125854567a4a5fcba75782e42fe84901',
   '0.1.5-rc.1': '183f08e9c6dde7e36cd2318eaee70b0da08fb35e',
   '0.1.5-rc.2': 'fb2c4b9e698e30edb738bca4cf0618587db7d203',
+  '0.1.6-alpha.1': '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
 })
 const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
   'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts']
 function runtimeTests(release) {
-  return ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2'].includes(release)
-    ? [...tests, 'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts']
+  return ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1'].includes(release)
+    ? [...tests, ...release === '0.1.6-alpha.1' ? ['tests/tool-schema-compat.spec.ts'] : [],
+        'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts']
     : tests
 }
 const slash = value => value.replaceAll('\\', '/')
@@ -45,7 +47,17 @@ function runtimeExport(value) {
 async function sourceEntry(core, directory, output, tracked) {
   if (typeof output !== 'string' || !output.startsWith('./lib/') || !/\.(?:mjs|cjs|js)$/.test(output)) return undefined
   const stem = output.slice('./lib/'.length).replace(/\.(?:mjs|cjs|js)$/, '')
-  const options = [join(directory, 'src', `${stem}.ts`), join(directory, 'src', `${stem}.tsx`), join(directory, 'src', stem, 'index.ts')]
+  const sourceStem = stem.startsWith('types/') ? stem.slice('types/'.length) : stem
+  const options = [
+    join(directory, 'src', `${stem}.ts`),
+    join(directory, 'src', `${stem}.tsx`),
+    join(directory, 'src', stem, 'index.ts'),
+    ...sourceStem === stem ? [] : [
+      join(directory, 'src', `${sourceStem}.ts`),
+      join(directory, 'src', `${sourceStem}.tsx`),
+      join(directory, 'src', sourceStem, 'index.ts'),
+    ],
+  ]
   const found = []
   for (const path of options) {
     if (!tracked.has(slash(relative(core, path)))) continue
