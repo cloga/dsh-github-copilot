@@ -927,6 +927,7 @@ function registerSearchUi(ctx: ClientContext): () => void {
   let fallback: (() => void) | undefined
   const render = () => createElement(WebSearchRoutingCard, {
     settings: ctx.remote.settings, copilot: ctx.remote.githubCopilot,
+    routing: ctx.remote.githubCopilotSearchRouting,
   })
   const syncFallback = () => {
     if (active && sectionActive && !footerActive) {

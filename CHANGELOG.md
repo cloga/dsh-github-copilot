@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.23 (prepared)
+
+- Fix Model roles loading by exposing the dedicated Host `view`, `save` and `create` methods through the public Typert Remote service, retaining strict validation, CAS and session-creation ownership (#134).
+- Replace Copilot-specific Auto/fixed labels and static provider suggestions with a real registered search-provider catalog shared by the primary and final-fallback selectors (#135).
+- Follow the initiating Chat provider in Auto mode, keep an explicitly selected primary independent of Chat, and attempt at most one distinct final fallback. Preserve legacy settings without automatic writes and keep model choices provider-owned.
+- Capture registration and account continuity before asynchronous work; silently revoked Copilot proof, cancellation, unload or registration replacement cannot authorize a paid fallback.
+- Add real Host Gateway, registration-lifecycle, provider-routing and UI regressions plus an isolated built-component browser fixture. Preserve alpha.21 shared-peer ownership and alpha.22 React Client external declarations; no Core or live-profile changes are included.
+
 ## 0.4.0-alpha.22 (prepared)
 
 - Declare React as the DSH Client ModuleLoader external used by the actual built Client bundle, while removing it from the strict Desktop Node peer graph and retaining it only for development.

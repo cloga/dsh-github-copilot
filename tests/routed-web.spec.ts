@@ -10,8 +10,10 @@ import { applyWebSearchTool } from '@deepseek-ai/dsh-tool-web'
 import { WebError, WebRuntime } from '@deepseek-ai/dsh-web'
 import type { WebSearchProvider, WebSearchResult } from '@deepseek-ai/dsh-web'
 import CopilotRoutedWeb from '../src/routed-web.ts'
+import type { CapturedSearchProvider } from '../src/routed-web.ts'
 import * as WebDelegate from '../src/web-delegate.ts'
 import { routeSessionSearch } from '../src/search-routing.ts'
+import { routeSearchTools } from '../src/search-tool-routing.ts'
 import { currentSearchInitiator, currentSearchSelection } from '../src/current-provider.ts'
 
 const cleanup: Array<() => Promise<void> | void> = []
@@ -23,7 +25,7 @@ function owner(provider: string, id: string): Agent {
   return { id, session: { requestHeader: () => ({ config: { provider, model: `${id}-model` } }) } } as unknown as Agent
 }
 
-async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?: string) {
+async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?: string, captured = false) {
   const ctx = new Context()
   const root = ctx.plugin({
     name: 'routed-web-test-root',
@@ -66,7 +68,17 @@ async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?
     name: 'synthetic-account-router',
     apply(c) {
       c.provide('githubCopilotSearchRouter', {
-        search: async (request, signal, delegate, selectProvider) => {
+        search: async (request, signal, delegate, selectProvider, captureSearchProvider) => {
+          if (captured) {
+            if (captureSearchProvider === undefined) throw new Error('missing captureSearchProvider seam')
+            const primary = captureSearchProvider('alternate-provider')
+            const final = captureSearchProvider('configured-provider')
+            const signals = [signal, primary?.signal, final?.signal].filter((item): item is AbortSignal => item !== undefined)
+            return routeSearchTools(request, AbortSignal.any(signals), {
+              primary, fallback: final,
+              canContinue: () => primary?.current() !== false && final?.current() !== false,
+            })
+          }
           if (selectedProvider !== undefined) {
             if (selectProvider === undefined) throw new Error('missing exact-provider dispatcher')
             return selectProvider(selectedProvider, request, signal)
@@ -125,6 +137,80 @@ describe('plugin-owned web facade with the real official consumer', () => {
     ]))
     expect(h.alternateSearch).toHaveBeenCalledOnce()
     expect(h.search).not.toHaveBeenCalled()
+  })
+
+  it('provides captured registration dispatch without changing source caps', async () => {
+    const h = await harness('none', undefined, true)
+    const result = await h.run(h.b, { queries: ['captured primary'] })
+    expect(result.isError).toBe(false)
+    expect(h.alternateSearch).toHaveBeenCalledOnce()
+    expect(h.search).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ value: { sources: [{ url: 'https://example.com/1' }, { url: 'https://example.com/2' }], truncated: true } })
+  })
+
+  it.each(['success', 'failure'])('rejects captured primary %s after provider disposal without a final fallback', async outcome => {
+    const h = await harness('none', undefined, true)
+    let release!: () => void, started!: () => void
+    const entered = new Promise<void>(resolve => { started = resolve })
+    const gate = new Promise<void>(resolve => { release = resolve })
+    h.alternateSearch.mockImplementation(async () => {
+      started()
+      await gate
+      if (outcome === 'failure') throw new WebError('private upstream failure', 'WEB_PROVIDER_ERROR')
+      return { ...answer, content: 'stale result' }
+    })
+    const pending = h.run(h.b, { queries: ['dispose captured provider'] })
+    await entered
+    await h.providerFiber.dispose()
+    release()
+    const result = await pending
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).not.toContain('stale result')
+    expect(h.search).not.toHaveBeenCalled()
+  })
+
+  it('does not revive an old capture when the exact same provider object is registered again under the same id', async () => {
+    const h = await harness()
+    await h.router.dispose()
+    const captured: CapturedSearchProvider[] = []
+    const router = h.ctx.plugin({
+      name: 'capture-retention-test-router',
+      apply(c) {
+        c.provide('githubCopilotSearchRouter', {
+          search: async (request, signal, _delegate, _select, capture) => {
+            const provider = capture?.('repeated-provider')
+            if (provider === undefined) throw new Error('missing captured provider')
+            captured.push(provider)
+            return provider.search(request, signal)
+          },
+        })
+      },
+    })
+    cleanup.push(router.dispose)
+    await router
+    const search = vi.fn(async () => answer)
+    const provider = { id: 'repeated-provider', available: () => true, search }
+    let unregister: (() => void) | undefined
+    const first = h.ctx.plugin({ name: 'first-search-registration', inject: ['web'], apply: c => { unregister = c.web.registerSearchProvider(provider) } })
+    cleanup.push(first.dispose)
+    await first
+    expect((await h.run(h.b, { queries: ['first'] })).isError).toBe(false)
+    const old = captured[0]!
+    expect(old.owns(provider)).toBe(true)
+    unregister!()
+    expect(old.current()).toBe(false)
+    expect(old.signal.aborted).toBe(true)
+    const second = h.ctx.plugin({ name: 'second-search-registration', inject: ['web'], apply: c => { c.web.registerSearchProvider(provider) } })
+    cleanup.push(second.dispose)
+    await second
+    unregister!()
+    await first.dispose()
+    await expect(old.search({ query: 'retained stale capture' })).rejects.toMatchObject({ code: 'WEB_ABORTED' })
+    expect(old.owns(provider)).toBe(false)
+    expect((await h.run(h.b, { queries: ['second'] })).isError).toBe(false)
+    expect(captured[1]?.owns(provider)).toBe(true)
+    expect(h.ctx.get('githubCopilotSearchCatalog')!.list()).toContain('repeated-provider')
+    expect(search).toHaveBeenCalledTimes(2)
   })
 
   it('routes Copilot without invoking the globally configured provider and keeps source caps', async () => {

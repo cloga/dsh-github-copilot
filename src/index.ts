@@ -10,6 +10,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type z from '@deepseek-ai/schemastery'
 import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import GitHubCopilotDualModel from './dual-model-host.ts'
+import SearchRoutingController from './search-routing-host.ts'
 // Bring the `systemPrompt` service declaration (dsh-agent augmentation) into
 // the type graph: module augmentations only apply when their module is part
 // of the program.
@@ -33,6 +34,10 @@ import {
   WebSearchRoutingConfigSchema,
 } from './web-search-routing-config.ts'
 import type { WebSearchRoutingConfig } from './web-search-routing-config.ts'
+import { normalizeWebSearchRouting } from './search-routing-policy.ts'
+import { routeSearchTools } from './search-tool-routing.ts'
+import type { SearchToolProvider } from './search-tool-routing.ts'
+import type { CapturedSearchProvider } from './routed-web.ts'
 import { contentHasImageAttachments, inlineWireStream } from './wire.ts'
 import type { InlineHooks } from './wire.ts'
 import { createTraditionalSearchProvider, GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID } from './traditional-search.ts'
@@ -105,6 +110,12 @@ export type {
 } from './authorization-controller.ts'
 
 type PromptRouteText = (owner: Agent | undefined, selection: { provider?: string; model?: string }) => string
+
+class ConfiguredSearchProofInvalidated extends WebError {
+  constructor() {
+    super('configured Copilot search owner or account proof invalidated', 'WEB_PROVIDER_UNAVAILABLE')
+  }
+}
 
 interface SettingsSectionHooks<T> {
   setSource(source: () => T): void
@@ -209,6 +220,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
   ctx.plugin(previewPlugin, { accountModelSettings: () => current() })
   ctx.plugin(GitHubCopilotAuthorizationController)
   ctx.plugin(GitHubCopilotDualModel)
+  ctx.plugin(SearchRoutingController)
   const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx, async () => {
     await ensureGitHubCopilotProviderProfile(ctx)
   })
@@ -503,48 +515,132 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     const owner = currentSearchInitiator(ctx)
     const startedGeneration = generation
     const cfg = current()
-    let proof: (() => boolean) | undefined
-    let preview: Context['githubCopilotPreview'] | undefined
+    // Capture continuity before discovery can revoke the old account revision.
+    // Cold metadata is allowed by the owner proof; a later account change is not.
+    const preview = ctx.get('githubCopilotPreview')
+    const proof = preview?.captureSearchProof()
     const assertCurrent = () => {
       if (signal?.aborted) throw new WebError('web search aborted', 'WEB_ABORTED')
       if (!active || generation !== startedGeneration || owner === undefined || disposedOwners.has(owner)
         || preview === undefined || ctx.get('githubCopilotPreview') !== preview || proof?.() !== true) {
-        throw new WebError('configured Copilot search owner or account proof invalidated', 'WEB_PROVIDER_UNAVAILABLE')
+        throw new ConfiguredSearchProofInvalidated()
       }
     }
+    assertCurrent()
     const provider = createTraditionalSearchProvider(configuredAvailable, async requestSignal => {
+      assertCurrent()
       const searchPlan = await configuredWebPlan(requestSignal)
-      preview = ctx.get('githubCopilotPreview')
-      proof = preview?.captureSearchProof()
       assertCurrent()
       return searchPlan
     }, {
       ...hooks,
       resolveApiKey: async candidate => {
-        // Probe authentication may start before the plan resolver returns. Its
-        // native account checks remain in hooks; final dispatch also checks the
-        // captured operation proof after asynchronous authentication.
+        // Probe authentication may start before the plan resolver returns, so
+        // keep the entry proof around both discovery and native authentication.
+        assertCurrent()
         const auth = await hooks.resolveApiKey(candidate)
-        if (proof !== undefined) assertCurrent()
+        assertCurrent()
         return auth
       },
     }, () => cfg,
     'github-copilot-hosted requires github-copilot.searchModel selecting an account-authorized OpenAI Responses model')
-    const result = await provider.search(request, signal)
-    assertCurrent()
-    return result
+    try {
+      const result = await provider.search(request, signal)
+      assertCurrent()
+      return result
+    } catch (error) {
+      // Probe/wire translation may replace the original exception, including a
+      // swallowed discovery failure. Recheck the entry proof before any fallback.
+      assertCurrent()
+      throw error
+    }
   }
   ctx.web.registerSearchProvider(traditionalProvider)
   ctx.provide('githubCopilotSearchRouter', {
-    search: async (request, signal, delegate, selectProvider) => {
+    search: async (request, signal, delegate, selectProvider, captureSearchProvider) => {
       const cfg = current()
       const routing = routingCurrent()
+      const policy = normalizeWebSearchRouting(routing)
       const owner = currentSearchInitiator(ctx)
       const selection = currentSearchSelection(owner)
       const managedOwned = selection?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
         && isPluginPreviewProvider(ctx, selection.provider)
-      if (!cfg.enabled || cfg.routeWebSearch === false || owner === undefined) {
+      if (!cfg.enabled || cfg.routeWebSearch === false) return delegate(request, signal)
+      if (!policy.legacy && captureSearchProvider === undefined) {
+        throw new WebError('explicit search routing requires captureSearchProvider from the routed Web facade', 'WEB_PROVIDER_UNAVAILABLE')
+      }
+      if (owner === undefined) {
+        if (!policy.legacy) throw new WebError('explicit search routing requires agents.currentInitiator()', 'WEB_PROVIDER_UNAVAILABLE')
         return delegate(request, signal)
+      }
+      if (captureSearchProvider !== undefined) {
+        if (policy.primaryProvider === NO_DEFAULT_SEARCH_PROVIDER) {
+          throw new WebError('web search is disabled by the primary search provider setting', 'WEB_PROVIDER_UNAVAILABLE')
+        }
+        const startedGeneration = generation
+        const registrations: CapturedSearchProvider[] = []
+        let usingManagedPrimary = false
+        let configuredProofInvalid = false
+        const managedPreview = managedOwned ? ctx.get('githubCopilotPreview') : undefined
+        const managedProof = managedPreview?.captureSearchProof()
+        const capture = (id: string): CapturedSearchProvider | undefined => {
+          const provider = captureSearchProvider(id)
+          if (provider !== undefined) registrations.push(provider)
+          return provider
+        }
+        const missing = (id: string): SearchToolProvider => ({
+          id,
+          search: async () => { throw new WebError('the configured search provider is not registered', 'WEB_PROVIDER_CONFIGURED_MISSING') },
+        })
+        const configured = (id: string): SearchToolProvider => {
+          const registration = capture(id)
+          if (registration === undefined) return missing(id)
+          if (id !== GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID || !registration.owns(traditionalProvider)) return registration
+          return {
+            id,
+            search: async (query, querySignal) => {
+              try { return await configuredSearch(query, querySignal) }
+              catch (error) {
+                // Configured search owns a separate account proof. Its invalidation
+                // must not be translated into a generic paid-fallback opportunity.
+                if (error instanceof ConfiguredSearchProofInvalidated) configuredProofInvalid = true
+                throw error
+              }
+            },
+          }
+        }
+        let primary: SearchToolProvider | undefined
+        if (policy.primaryProvider === 'auto') {
+          const nativeAllowed = isCopilotSearchSelection(selection, managedOwned)
+            && (cfg.providers.length === 0 || cfg.providers.includes(selection?.provider ?? ''))
+          if (nativeAllowed) {
+            const native = capture(GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID)
+            // Only our exact registration can authorize alias-based native search.
+            // Another implementation choosing this id must never receive our auth or model.
+            if (native?.owns(traditionalProvider)) {
+              usingManagedPrimary = managedOwned
+              primary = native
+            }
+          } else if (selection !== undefined) primary = capture(selection.provider)
+        } else primary = configured(policy.primaryProvider)
+        const fallback = policy.defaultProvider === NO_DEFAULT_SEARCH_PROVIDER
+          ? undefined : configured(policy.defaultProvider)
+        const boundSignal = AbortSignal.any([
+          ...signal === undefined ? [] : [signal],
+          proofCancellation.signal,
+          plansFor(owner).cancellation.signal,
+          ...registrations.map(provider => provider.signal),
+        ])
+        const canContinue = () => active && generation === startedGeneration && !disposedOwners.has(owner)
+          && !configuredProofInvalid && registrations.every(provider => provider.current())
+          && (!usingManagedPrimary || ctx.get('githubCopilotPreview') === managedPreview && managedProof?.() === true)
+        // Generic dispatch calls the captured registration, including DeepSeek.
+        // An id is not proof that it is the official adapter or has a pre-auth hook.
+        // The older direct-call path below retains its separately owned guarded factory.
+        return routeSearchTools(request, boundSignal, {
+          primary, fallback, canContinue,
+          allowFailureFallback: !policy.legacy || cfg.searchFallback !== 'none',
+        })
       }
       const copilotSelection = isCopilotSearchSelection(selection, managedOwned)
       const nativeAllowed = copilotSelection
@@ -622,7 +718,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     // Zero-cost gate first: disabled plugins, non-loop requests, purposed
     // calls, provider mismatches, and image-bearing requests never build a
     // plan and never start a probe.
-    if (!active || routingCurrent().searchMode === 'fixed') return next()
+    if (!active || normalizeWebSearchRouting(routingCurrent()).primaryProvider !== 'auto') return next()
     const owner = currentSearchInitiator(ctx)
     if (owner !== undefined && disposedOwners.has(owner)) return next()
     const route = currentChatRoute(ctx, request)
@@ -645,7 +741,8 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     text: () => '',
   })
   return (owner, selection) => {
-    if (!active || owner === undefined || disposedOwners.has(owner) || routingCurrent().searchMode === 'fixed') return ''
+    const policy = normalizeWebSearchRouting(routingCurrent())
+    if (!active || owner === undefined || disposedOwners.has(owner) || policy.primaryProvider !== 'auto') return ''
     const route = currentChatRoute(ctx, selection)
     const cfg = current()
     if (route === undefined || (cfg.providers.length > 0 && !cfg.providers.includes(route.provider))) return ''
@@ -654,7 +751,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     const owned = route.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && isPluginPreviewProvider(ctx, route.provider)
     if (!cfg.enabled || cfg.routeWebSearch === false || ctx.get('githubCopilotOriginalWeb') === undefined
       || !isCopilotSearchSelection(route, owned)) return nativeGuidance
-    const disclosure = cfg.searchFallback === 'none'
+    const disclosure = policy.defaultProvider === NO_DEFAULT_SEARCH_PROVIDER || policy.legacy && cfg.searchFallback === 'none'
       ? 'Copilot search fallback is disabled. Do not silently substitute another paid search backend after a search failure.'
       : 'When web_search reports a fallback, explicitly tell the user the actual search backend (and custom endpoint/model when provided) and possible API charges in your answer. Never describe fallback results as Copilot search. Automatic fallback does not need per-search confirmation.'
     return [nativeGuidance, disclosure].filter(Boolean).join('\n\n')

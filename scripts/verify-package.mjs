@@ -80,10 +80,21 @@ if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
 const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)).default
 const authorizationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilot')
 const roleDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDualModel')
+const catalogDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSearchRouting')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 11 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'migrationStatus', 'reconcile', 'signOut', 'start', 'status'])
-  || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])) {
-  throw new Error('built Remote entry must retain eight authorization/migration controls and exactly three independent model-role methods')
+if (remote.descriptors.length !== 12 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'migrationStatus', 'reconcile', 'signOut', 'start', 'status'])
+  || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
+  || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])) {
+  throw new Error('built Remote entry must retain eight authorization/migration controls, three model-role methods and one independent search catalog')
+}
+const catalog = catalogDescriptors[0]
+if (catalog.id !== 'dsh-github-copilot:githubCopilotSearchRouting.providers'
+  || catalog.service !== 'githubCopilotSearchRouting' || catalog.invocation.kind !== 'direct'
+  || catalog.parameters.length !== 0 || catalog.result.mode !== 'strict'
+  || catalog.result.typeSymbol !== 'dsh-github-copilot#SearchProviderCatalog') throw new Error('search catalog Remote identity or codec differs')
+catalog.result.schema.parse({ supported: true, providers: [{ id: 'fixture-provider' }] })
+if (catalog.result.schema.safeParse({ supported: true, providers: [{ id: 'fixture-provider', credentials: 'private' }] }).success) {
+  throw new Error('search catalog output accepts private provider fields')
 }
 for (const descriptor of authorizationDescriptors) {
   if (descriptor.id !== `dsh-github-copilot:githubCopilot.${descriptor.method}`

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.22"
+    "version": "0.4.0-alpha.23"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -234,8 +234,12 @@
     {
       "id": "session-model-search-routing",
       "required": true,
-      "evidenceScope": "development-real-consumer-and-loader-synthetic",
+      "evidenceScope": "development-real-consumer-loader-gateway-and-ui-synthetic",
       "sourceMarkers": [
+        {"file": "src/search-routing-host.ts", "marker": "extends TypertRemoteService"},
+        {"file": "src/search-routing-remote.ts", "marker": "githubCopilotSearchRouting.providers"},
+        {"file": "src/search-routing-policy.ts", "marker": "normalizeWebSearchRouting"},
+        {"file": "src/search-tool-routing.ts", "marker": "routeSearchTools"},
         {"file": "src/routed-web.ts", "marker": "extends WebRuntime"},
         {"file": "src/index.ts", "marker": "ctx.provide('githubCopilotSearchRouter'"},
         {"file": "src/web-search-routing-config.ts", "marker": "WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE"},
@@ -243,6 +247,9 @@
         {"file": "cordis.patch.yml", "marker": "web: github-copilot-original-web"}
       ],
       "tests": [
+        {"file": "tests/search-provider-catalog.spec.ts", "name": "lists only actual facade registrations without availability checks, auth or search"},
+        {"file": "tests/scripts/search-provider-gateway.test.mjs", "name": "search catalog Remote reaches actual facade registrations and unloads cleanly"},
+        {"file": "tests/web-search-routing-card.spec.ts", "name": "loads one actual provider catalog into both selectors without Copilot-specific Auto labels"},
         {"file": "tests/routed-web.spec.ts", "name": "keeps the configured provider for DeepSeek and all other model routes"},
         {"file": "tests/routed-web.spec.ts", "name": "dispatches a router-selected provider by exact registered id"},
         {"file": "tests/routed-web.spec.ts", "name": "retains pre-execute denial and the surrounding execution middleware"},

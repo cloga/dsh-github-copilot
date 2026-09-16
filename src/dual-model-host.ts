@@ -1,8 +1,8 @@
 /** Optional plugin-owned planner/executor sessions; no Core/default-model mutation. */
 import { createHash } from 'node:crypto'
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import * as dshScope from '@deepseek-ai/dsh-scope'
-import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
 import { z as json } from 'zod'
 import type {} from './dual-model-remote.ts'
@@ -122,7 +122,7 @@ function dedicatedAddress(agent: Agent): boolean {
 declare module '@deepseek-ai/cordis' { interface Context { githubCopilotDualModel: GitHubCopilotDualModel } }
 
 /** Always mountable; missing optional APIs produce a safe unsupported view. */
-export default class GitHubCopilotDualModel extends Service {
+export default class GitHubCopilotDualModel extends TypertRemoteService {
   // A plain holder retains the plugin owner rather than Cordis' caller-traced
   // Service.ctx. Remotes must not lend their own fiber to durable root creation.
   private readonly owner: { readonly ctx: Context }
@@ -238,6 +238,7 @@ export default class GitHubCopilotDualModel extends Service {
     if (!parsed.success || !revision(descriptor.revision)) return fail('DUAL_MODEL_UNSUPPORTED')
     return { configuration: parsed.data, revision: descriptor.revision }
   }
+  @Remote
   async view(): Promise<DualModelView> {
     const empty = { supported: false, diagnostic: 'DUAL_MODEL_UNSUPPORTED', writable: false, revision: null, configuration: DEFAULT_CONFIG, models: [], workspaces: [] }
     try {
@@ -253,6 +254,7 @@ export default class GitHubCopilotDualModel extends Service {
         models, workspaces: json.array(CatalogEntryJson).max(1024).parse(cap.workspaces.list().map(workspace => ({ id: workspace.id, name: workspace.title }))) }
     } catch { return empty }
   }
+  @Remote
   async save(input: DualModelSaveRequest): Promise<DualModelView> {
     try { return await this.saveOnce(input) }
     catch (error) { fail(reasonOf(error, 'DUAL_MODEL_SAVE_FAILED')) }
@@ -268,6 +270,7 @@ export default class GitHubCopilotDualModel extends Service {
     catch (error) { fail(reasonOf(error, 'DUAL_MODEL_SAVE_FAILED')) }
     return this.view()
   }
+  @Remote
   create(input: DualModelCreateRequest): Promise<DualModelCreateResult> {
     const parsed = CreateJson.safeParse(input)
     if (!parsed.success) return Promise.reject(new RemoteError('copilot/dual-model', 'DUAL_MODEL_INVALID_REQUEST', { reason: 'DUAL_MODEL_INVALID_REQUEST' }))
