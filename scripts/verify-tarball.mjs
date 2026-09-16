@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import { repositoryRoot } from './agent.mjs'
+import { readDesktopSharedPackageContracts, verifyDesktopPackageGraph } from './verify-desktop-package-graph.mjs'
 
 const MAX_BYTES = 32 * 1024 * 1024
 const text = bytes => bytes.toString('utf8').replace(/\0.*$/su, '')
@@ -94,6 +95,9 @@ export async function verifyTarball(path, root = repositoryRoot) {
     delete expectedPacked.scripts.prepack
   }
   if (!isDeepStrictEqual(pkg, expectedPacked)) throw new Error('Archive manifest differs from normalized checkout metadata')
+  const desktopSharedGraphs = pkg.name === 'dsh-github-copilot'
+    ? verifyDesktopPackageGraph(pkg, await readDesktopSharedPackageContracts())
+    : []
   if (baseline.package.version !== pkg.version) throw new Error('Archive baseline version mismatch')
   const required = ['cordis.patch.yml', 'README.md', 'README.zh.md', 'LICENSE', 'deployment-baseline.json',
     ...expected.files.filter(path => !path.includes('*') && !path.endsWith('/')),
@@ -127,6 +131,7 @@ export async function verifyTarball(path, root = repositoryRoot) {
   return {
     schemaVersion: 1, ok: true, package: { name: pkg.name, version: pkg.version },
     files: files.size, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'),
+    desktopSharedGraphs,
     evidence: 'Archive structure, exports, bundled media and equality to local build. No live DSH or model calls.',
   }
 }

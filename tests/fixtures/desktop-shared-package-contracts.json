@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "projection": "manifest-runtime-and-peer-names",
+  "contracts": [
+    {
+      "id": "desktop-0.1.5-rc.2-installed-runtime",
+      "runtimeVersion": "0.1.5-rc.2",
+      "sourceKind": "installed-desktop-runtime-descriptor",
+      "sourceCommit": "87506730d5f511316bac5ea623610e124908c657",
+      "sourceSha256": "210cacaf3842643ef6c124fd23cb3b67caf7008e97868c733550b56ba7a1e836",
+      "sourceBytes": 2508638,
+      "packageCount": 241,
+      "auditedPackages": {
+        "@deepseek-ai/cordis": "4.0.2",
+        "@deepseek-ai/dsh-agent": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-agent-default-model": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-authorization": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-client-ui-renderer": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-client-ui-settings-models": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-client-ui-slots": null,
+        "@deepseek-ai/dsh-credentials": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-launch-environment": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-llm": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-llm-pi-ai": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-scope": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-settings": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-typert-protocol": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-web": "0.1.5-rc.2",
+        "@deepseek-ai/dsh-web-search-deepseek": "0.1.5-rc.2",
+        "@deepseek-ai/schemastery": "3.18.2",
+        "@earendil-works/pi-ai": null,
+        "react": null,
+        "zod": null
+      }
+    },
+    {
+      "id": "desktop-0.1.6-alpha.1-generated-package-set",
+      "runtimeVersion": "0.1.6-alpha.1",
+      "sourceKind": "generated-desktop-package-set-input",
+      "upstreamContractCommit": "0a15e36e7f82b6ed45af6fa9759f29b40dcd965d",
+      "candidateSourceCommit": "b0752036cf6d439b6f96d300684d836fd1e044f0",
+      "sourceSha256": "51b25ad67e6b0198edca0ec9baf8ebd06d26217dd33d1a2a4cce7e881382e6ea",
+      "sourceBytes": 74498,
+      "packageCount": 246,
+      "descriptorStatus": "not-materialized",
+      "auditedPackages": {
+        "@deepseek-ai/cordis": "4.0.2",
+        "@deepseek-ai/dsh-agent": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-agent-default-model": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-api-remotes": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-authorization": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-client-ui-renderer": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-client-ui-settings-models": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-client-ui-slots": null,
+        "@deepseek-ai/dsh-credentials": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-launch-environment": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-llm": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-llm-pi-ai": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-scope": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-settings": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-typert-protocol": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-web": "0.1.6-alpha.1",
+        "@deepseek-ai/dsh-web-search-deepseek": "0.1.6-alpha.1",
+        "@deepseek-ai/schemastery": "3.18.2",
+        "@earendil-works/pi-ai": null,
+        "react": null,
+        "zod": null
+      }
+    }
+  ]
+}

@@ -5,8 +5,16 @@ import vm from 'node:vm'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
-if (packageJson.dependencies?.['@deepseek-ai/dsh-authorization'] === undefined) {
-  throw new Error('package must install the rc.2 authorization bootstrap dependency')
+for (const name of ['@deepseek-ai/dsh-authorization', '@deepseek-ai/schemastery']) {
+  if (packageJson.dependencies?.[name] !== undefined || packageJson.optionalDependencies?.[name] !== undefined) {
+    throw new Error(`package must not bundle Desktop host package ${name}`)
+  }
+  if (packageJson.peerDependencies?.[name] === undefined || packageJson.peerDependenciesMeta?.[name]?.optional === true) {
+    throw new Error(`package must require Desktop host peer ${name}`)
+  }
+  if (packageJson.devDependencies?.[name] === undefined) {
+    throw new Error(`package development must retain ${name}`)
+  }
 }
 if (packageJson.dependencies?.zod === undefined) {
   throw new Error('package must install the strict Remote codec runtime dependency')
