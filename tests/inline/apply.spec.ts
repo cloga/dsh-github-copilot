@@ -16,7 +16,11 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { agentEvents, installModelSelection } from '@deepseek-ai/dsh-agent'
 import { createRequire } from 'node:module'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { WebError, WebRuntime } from '@deepseek-ai/dsh-web'
+import CopilotRoutedWeb from '../../src/routed-web.ts'
+import * as WebDelegate from '../../src/web-delegate.ts'
 import type { WebFetchProvider, WebSearchProvider } from '@deepseek-ai/dsh-web'
+import type { CaptureSearchProvider } from '../../src/routed-web.ts'
 import { GITHUB_COPILOT_PREVIEW_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../../src/copilot-identity.ts'
 
 vi.mock('@deepseek-ai/dsh-settings', () => ({ installSettingsSection: undefined }))
@@ -1448,6 +1452,329 @@ describe('session search router Host integration', () => {
     await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'cancelled account' }, undefined, vi.fn())).rejects.toMatchObject({ code: 'WEB_ABORTED' })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(runtime.credentialResolve).not.toHaveBeenCalled()
+  })
+})
+
+function capturedSearchProviders(runtime: FakeRuntime, extras: WebSearchProvider[] = []) {
+  const registrations = new Map([...runtime.searchProviders, ...extras].map(provider => [provider.id, { provider, cancellation: new AbortController() }]))
+  const capture: CaptureSearchProvider = id => {
+    const entry = registrations.get(id)
+    if (entry === undefined) return undefined
+    return {
+      id, signal: entry.cancellation.signal,
+      current: () => registrations.get(id) === entry && !entry.cancellation.signal.aborted,
+      owns: provider => entry.provider === provider,
+      search: async (query, signal) => {
+        if (!entry.provider.available()) throw new WebError('unavailable registered provider', 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE')
+        return entry.provider.search(query, signal)
+      },
+    }
+  }
+  return { capture, dispose: (id: string) => { registrations.get(id)?.cancellation.abort(); registrations.delete(id) } }
+}
+
+describe('registered cross-provider routing integration', () => {
+  it('connects the real facade to the actual Host router with concurrent initiating Agents and capped exact-id dispatch', async () => {
+    const root = new Context()
+    const agentFiber = root.plugin(AgentRegistry)
+    await agentFiber
+    const isolated = root.isolate('web', Symbol('original-cross-provider-web'))
+    const original = isolated.plugin(WebRuntime, { searchProvider: 'not-selected' })
+    await original
+    const delegate = isolated.plugin(WebDelegate)
+    await delegate
+    const facade = root.plugin(CopilotRoutedWeb)
+    await facade
+    const runtime = buildRuntime({}, undefined, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: 'auto', defaultSearchProvider: 'final-search' },
+    }, undefined, root.agents)
+    apply(runtime.ctx, config)
+    const a = testAgent({ provider: 'provider-A', model: 'model-A' }), b = testAgent({ provider: 'provider-B', model: 'model-B' })
+    const result = (content: string) => ({ content, sources: [{ url: 'https://example.com/1' }, { url: 'https://example.com/2' }], truncated: false })
+    const searchA = vi.fn(async () => result('A')), searchB = vi.fn(async () => result('B')), fallback = vi.fn(async () => result('fallback'))
+    const bridge = root.plugin({
+      name: 'synthetic-router-bridge', inject: ['web'],
+      apply(c) {
+        c.provide('githubCopilotSearchRouter', runtime.ctx.get('githubCopilotSearchRouter')!)
+        for (const provider of runtime.searchProviders) c.web.registerSearchProvider(provider)
+        c.web.registerSearchProvider({ id: 'provider-A', available: () => true, search: searchA })
+        c.web.registerSearchProvider({ id: 'provider-B', available: () => true, search: searchB })
+        c.web.registerSearchProvider({ id: 'final-search', available: () => true, search: fallback })
+      },
+    })
+    await bridge
+    try {
+      const [ra, rb] = await Promise.all([
+        root.agents.withInitiator(a, () => root.web.search({ query: 'A', maxResults: 1 })),
+        root.agents.withInitiator(b, () => root.web.search({ query: 'B', maxResults: 1 })),
+      ])
+      expect(ra).toMatchObject({ content: 'A', sources: [{ url: 'https://example.com/1' }], truncated: true })
+      expect(rb).toMatchObject({ content: 'B', sources: [{ url: 'https://example.com/1' }], truncated: true })
+      expect(searchA).toHaveBeenCalledExactlyOnceWith({ query: 'A', maxResults: 1 }, expect.any(AbortSignal))
+      expect(searchB).toHaveBeenCalledExactlyOnceWith({ query: 'B', maxResults: 1 }, expect.any(AbortSignal))
+      expect(fallback).not.toHaveBeenCalled()
+    } finally {
+      await bridge.dispose()
+      runtime.dispose()
+      await facade.dispose()
+      await delegate.dispose()
+      await original.dispose()
+      await agentFiber.dispose()
+    }
+  })
+
+  it.each(['future-provider', 'MiXeD-provider'])('Auto follows the exact initiating %s id without model or prefix guesses', async provider => {
+    const runtime = buildRuntime({}, { current: { provider, model: 'arbitrary-chat-model' } }, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: 'auto', defaultSearchProvider: 'final-search' },
+    })
+    apply(runtime.ctx, config)
+    await flushStartup()
+    runtime.credentialRead.mockClear()
+    const expected = { sources: [], truncated: false }
+    const search = vi.fn(async () => expected), fallback = vi.fn(async () => expected)
+    const catalog = capturedSearchProviders(runtime, [
+      { id: provider, available: () => true, search },
+      { id: 'final-search', available: () => true, search: fallback },
+    ])
+    const delegate = vi.fn(), oldSelect = vi.fn()
+    expect(await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'follow provider' }, undefined, delegate, oldSelect, catalog.capture)).toBe(expected)
+    expect(search).toHaveBeenCalledOnce()
+    expect(fallback).not.toHaveBeenCalled()
+    expect(delegate).not.toHaveBeenCalled()
+    expect(oldSelect).not.toHaveBeenCalled()
+    expect(runtime.credentialRead).not.toHaveBeenCalled()
+  })
+
+  it('uses only the final default when the exact Chat provider is absent, not a similar registered alias', async () => {
+    const runtime = buildRuntime({}, { current: { provider: 'another-vendor', model: 'chat-only' } }, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: 'auto', defaultSearchProvider: 'final-search' },
+    })
+    apply(runtime.ctx, config)
+    const expected = { sources: [], truncated: false }
+    const alias = vi.fn(async () => expected), fallback = vi.fn(async () => expected)
+    const catalog = capturedSearchProviders(runtime, [
+      { id: 'another-vendor-official', available: () => true, search: alias },
+      { id: 'final-search', available: () => true, search: fallback },
+    ])
+    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'no exact match' }, undefined, vi.fn(), vi.fn(), catalog.capture)
+    expect(result.content).toContain('final-search')
+    expect(result.content).toContain('may incur')
+    expect(alias).not.toHaveBeenCalled()
+    expect(fallback).toHaveBeenCalledOnce()
+  })
+
+  it.each(['auto', 'first-search'])('uses one distinct final fallback after %s primary failure without substituting a factory by id', async primary => {
+    const runtime = buildRuntime({}, { current: { provider: 'first-search', model: 'chat-only' } }, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: primary, defaultSearchProvider: 'deepseek-official' },
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const search = vi.fn(async () => { throw new Error('private first-search failure') })
+    const fallback = vi.fn(async () => ({ content: 'registered custom implementation', sources: [], truncated: false }))
+    const catalog = capturedSearchProviders(runtime, [
+      { id: 'first-search', available: () => true, search },
+      { id: 'deepseek-official', available: () => true, search: fallback },
+    ])
+    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'final fallback' }, undefined, vi.fn(), vi.fn(), catalog.capture)
+    expect(result.content).toContain('registered custom implementation')
+    expect(result.content).toContain('deepseek-official')
+    expect(result.content).not.toContain('private first-search failure')
+    expect(search).toHaveBeenCalledOnce()
+    expect(fallback).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialResolve).not.toHaveBeenCalled()
+  })
+
+  it.each(['primary', 'fallback'])('does not fall back or publish stale results when captured %s registration is disposed', async removed => {
+    const runtime = buildRuntime({}, { current: { provider: 'first-search', model: 'chat-only' } }, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: 'auto', defaultSearchProvider: 'final-search' },
+    })
+    apply(runtime.ctx, config)
+    const fallback = vi.fn(async () => ({ sources: [], truncated: false }))
+    const search = vi.fn(async () => {
+      catalog.dispose(removed === 'primary' ? 'first-search' : 'final-search')
+      throw new WebError('private invalidation', 'WEB_PROVIDER_ERROR')
+    })
+    const catalog = capturedSearchProviders(runtime, [
+      { id: 'first-search', available: () => true, search },
+      { id: 'final-search', available: () => true, search: fallback },
+    ])
+    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'invalidated' }, undefined, vi.fn(), vi.fn(), catalog.capture)).rejects.toMatchObject({ code: 'WEB_ABORTED' })
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('preserves legacy failure-spending disable while a newly explicit selector controls its own fallback', async () => {
+    const runtime = buildRuntime({}, { current: { provider: 'first-search', model: 'chat-only' } }, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchMode: 'auto', defaultSearchProvider: 'final-search' },
+    })
+    apply(runtime.ctx, { ...config, searchFallback: 'none' })
+    await flushStartup()
+    runtime.settingsMutate.mockClear()
+    const search = vi.fn(async () => { throw new WebError('unavailable', 'WEB_PROVIDER_UNAVAILABLE') })
+    const fallback = vi.fn(async () => ({ sources: [], truncated: false }))
+    const catalog = capturedSearchProviders(runtime, [
+      { id: 'first-search', available: () => true, search },
+      { id: 'final-search', available: () => true, search: fallback },
+    ])
+    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'legacy disabled failure spending' }, undefined, vi.fn(), vi.fn(), catalog.capture)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fallback).not.toHaveBeenCalled()
+    runtime.settingsDocument[WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE] = { searchProvider: 'auto', defaultSearchProvider: 'final-search' }
+    runtime.triggerSettingsChange(WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE)
+    await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'explicit new policy' }, undefined, vi.fn(), vi.fn(), catalog.capture)
+    expect(fallback).toHaveBeenCalledOnce()
+    expect(runtime.settingsMutate).not.toHaveBeenCalled()
+  })
+
+  it.each(['auto', 'github-copilot-hosted'])('uses owned Copilot %s without adopting another Chat model for configured search', async primary => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'initiating-model' } }, {
+      [GITHUB_COPILOT_SETTINGS_NAMESPACE]: { searchModel: 'provider-search-model' },
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: primary, defaultSearchProvider: 'final-search' },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }),
+      discover: vi.fn(async () => undefined),
+      resolveRequestAuth: vi.fn(async () => ({ apiKey: 'synthetic-managed', baseURL })),
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const fallback = vi.fn(async () => ({ sources: [], truncated: false }))
+    const catalog = capturedSearchProviders(runtime, [{ id: 'final-search', available: () => true, search: fallback }])
+    await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'owned Copilot' }, undefined, vi.fn(), vi.fn(), catalog.capture)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).model).toBe(primary === 'auto' ? 'initiating-model' : 'provider-search-model')
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('does not treat a same-id third-party registration as the plugin-owned native Copilot alias', async () => {
+    const runtime = buildRuntime({}, undefined, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: 'auto', defaultSearchProvider: 'final-search' },
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    await flushStartup()
+    runtime.credentialRead.mockClear()
+    const impostor = vi.fn(async () => ({ sources: [], truncated: false }))
+    const fallback = vi.fn(async () => ({ sources: [], truncated: false }))
+    const catalog = capturedSearchProviders(runtime, [
+      { id: 'github-copilot-hosted', available: () => true, search: impostor },
+      { id: 'final-search', available: () => true, search: fallback },
+    ])
+    await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'not our registration' }, undefined, vi.fn(), vi.fn(), catalog.capture)
+    expect(impostor).not.toHaveBeenCalled()
+    expect(fallback).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(runtime.credentialRead).not.toHaveBeenCalled()
+  })
+
+  it.each(['auto', 'github-copilot-hosted'])('never sends a final fallback after the owned %s account proof expires during transport', async primary => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    let valid = true
+    const runtime = buildRuntime({}, { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'initiating-model' } }, {
+      [GITHUB_COPILOT_SETTINGS_NAMESPACE]: { searchModel: 'provider-search-model' },
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: primary, defaultSearchProvider: 'final-search' },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }),
+      captureSearchProof: () => () => valid,
+      discover: vi.fn(async () => undefined),
+      resolveRequestAuth: vi.fn(async () => ({ apiKey: 'synthetic-managed', baseURL })),
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      valid = false
+      return new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] }))
+    }))
+    apply(runtime.ctx, config)
+    const fallback = vi.fn(async () => ({ sources: [], truncated: false }))
+    const catalog = capturedSearchProviders(runtime, [{ id: 'final-search', available: () => true, search: fallback }])
+    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'expired proof' }, undefined, vi.fn(), vi.fn(), catalog.capture)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it.each(['silent-revocation', 'unsupported-capability', 'cold-supported'] as const)('binds fixed Copilot search to its entry proof across discovery: %s', async discoveryOutcome => {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    let revision = 0
+    let discovered = false
+    const captureSearchProof = vi.fn(() => {
+      const capturedRevision = revision
+      return () => revision === capturedRevision
+    })
+    const discover = vi.fn(async () => {
+      await Promise.resolve()
+      if (discoveryOutcome === 'silent-revocation') {
+        // Preview discovery can swallow a failed stored-grant read after revoking
+        // its lifetime revision and clearing route facts, without a record event.
+        revision++
+        discovered = false
+      } else discovered = true
+    })
+    const runtime = buildRuntime({}, { current: { provider: 'unrelated-chat-provider', model: 'chat-model' } }, {
+      [GITHUB_COPILOT_SETTINGS_NAMESPACE]: { searchModel: 'provider-search-model' },
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'final-search' },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => discovered ? {
+        api: discoveryOutcome === 'unsupported-capability' ? 'openai-completions' : 'openai-responses', baseURL,
+      } : undefined,
+      captureSearchProof, discover,
+      resolveRequestAuth: vi.fn(async () => ({ apiKey: 'synthetic-managed', baseURL })),
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const fallback = vi.fn(async () => ({ content: 'paid fallback result', sources: [], truncated: false }))
+    const catalog = capturedSearchProviders(runtime, [{ id: 'final-search', available: () => true, search: fallback }])
+    const operation = runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'entry-bound configured proof' }, undefined, vi.fn(), vi.fn(), catalog.capture)
+    if (discoveryOutcome === 'silent-revocation') {
+      await expect(operation).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+      expect(fallback).not.toHaveBeenCalled()
+      expect(fetchMock).not.toHaveBeenCalled()
+    } else if (discoveryOutcome === 'unsupported-capability') {
+      const result = await operation
+      expect(result.content).toContain('final-search')
+      expect(fallback).toHaveBeenCalledOnce()
+      expect(fetchMock).not.toHaveBeenCalled()
+    } else {
+      await operation
+      expect(fetchMock).toHaveBeenCalledOnce()
+      expect(fallback).not.toHaveBeenCalled()
+    }
+    expect(discover).toHaveBeenCalledOnce()
+    expect(captureSearchProof).toHaveBeenCalledOnce()
+    expect(captureSearchProof.mock.invocationCallOrder[0]).toBeLessThan(discover.mock.invocationCallOrder[0]!)
+  })
+
+  it('preserves legacy fixed none even with the captured dispatcher', async () => {
+    const runtime = buildRuntime({}, undefined, { [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchMode: 'fixed', defaultSearchProvider: 'none' } })
+    apply(runtime.ctx, config)
+    const catalog = capturedSearchProviders(runtime)
+    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'disabled' }, undefined, vi.fn(), vi.fn(), catalog.capture)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+  })
+
+  it('rejects explicitly configured routing without a captured registration seam rather than delegating', async () => {
+    const runtime = buildRuntime({}, { current: { provider: 'unrelated', model: 'chat' } }, {
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: 'fixed-search', defaultSearchProvider: 'final-search' },
+    })
+    apply(runtime.ctx, config)
+    const delegate = vi.fn(), selectProvider = vi.fn()
+    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'missing seam' }, undefined, delegate, selectProvider)).rejects.toThrow('captureSearchProvider')
+    expect(delegate).not.toHaveBeenCalled()
+    expect(selectProvider).not.toHaveBeenCalled()
+  })
+
+  it.each(['fixed-search', 'none'])('does not let inline native search override the new %s primary even when legacy mode is auto', async searchProvider => {
+    const runtime = buildRuntime({}, undefined, { [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider, searchMode: 'auto' } })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, config)
+    const next = vi.fn(() => undefined)
+    await drain(runtime.listener?.(request(), next) as AsyncIterable<StreamChunk> | undefined)
+    expect(next).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await runtime.promptText({ provider: 'github-copilot', model: 'gpt-5.4' })).toBe('')
   })
 })
 

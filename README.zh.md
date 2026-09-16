@@ -238,22 +238,22 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
 
 **设置 → 模型**下新增独立的 **Web search** 卡片；旧版 Core 没有 Models footer 时，使用独立的 **设置 → Web search** 分区。策略由本插件的 `github-copilot-search-routing` 命名空间持有，不占用 Core 通用命名空间；卸载本插件后恢复原 web 服务。
 
-当前 Auto 自动关联只识别本插件的 Copilot 聊天路由。其他搜索 Provider 可显式选为默认／固定后端；仅注册 WebSearchProvider 不能证明它与某个聊天 Provider 的关联。
+**Search provider** 主选择器提供 **Auto — follow Chat** 和通过路由外观层实际注册的搜索 Provider；**Default search provider** 使用同一目录，额外提供 **None — no fallback**。选择项代表搜索后端，不代表单个模型：即使多个账号模型可以执行搜索，Copilot 仍然只有一个搜索后端。
 
-- `github-copilot-search-routing.searchMode: auto` 优先使用发起会话的合格 Copilot 原生搜索；其他聊天路由使用 `defaultSearchProvider`。
-- `github-copilot-search-routing.searchMode: fixed` 忽略聊天模型，始终使用 `defaultSearchProvider`。
-- `github-copilot-search-routing.defaultSearchProvider` 是已注册的搜索提供方 id，例如 `deepseek-official`、`github-copilot-hosted`、`exa` 或 `perplexity`；设为 `none` 只禁用默认／固定搜索，不影响聊天。
-- 当 `github-copilot-hosted` 独立于聊天模型提供搜索时，`github-copilot.searchModel` 指定用于辅助搜索请求、且账号已授权的 OpenAI Responses 模型。
+- `github-copilot-search-routing.searchProvider: auto` 跟随发起 Chat 的 Provider。本插件自有 Copilot 别名保留既有 owner 和模型能力检查；其他 Chat Provider 的原始 ID 必须精确匹配已注册的搜索 Provider ID，不猜名字、后缀或模型家族。这是路由约定，不承诺独立注册的后端一定使用相同模型或账号。
+- 将 `searchProvider` 设为具体 ID，就固定主搜索后端，不再随 Chat 改变。
+- `defaultSearchProvider` 仅在无匹配主后端或主搜索失败时作最终兜底，最多尝试一次；与主后端相同时不重试，成功但结果为空也不触发兜底。`none` 仅关闭兜底，不关闭主搜索。
+- 显式选择 Copilot 或将它作为兜底时，使用 Provider 自有的 `github-copilot.searchModel`。其他后端自行管理模型配置（若有）；后端已注册不代表其每个模型都支持搜索。
 
-`auto` 模式下，Copilot 聊天会话仍优先使用当前所选模型的原生托管搜索，并保留原有账号／协议／probe 检查。火山方舟或其他非 Copilot 会话可以改用显式配置的 Copilot 搜索模型；聊天与搜索是两次独立请求。选择其他已注册提供方时，路由外观层按 id 直接调用该提供方。网页抓取不变。
+旧 `searchMode: auto/fixed` 配置继续兼容读取，不自动写入。旧 fixed 保留原 default 作为主后端；fixed 加 `none` 继续禁用。用户明确保存后才写入新的独立配置键。界面会说明保存将采用选中的最终兜底并可能产生 API 费用；旧的 `github-copilot.searchFallback: none` 失败兜底付费限制保留到明确保存新选择为止。已保存但未注册的 ID 保持显示为不可用，不静默替换。
 
-`github-copilot.routeWebSearch` 保留为兼容开关：设为 `false` 时恢复原始 web 服务配置。`github-copilot.searchFallback`（默认 `deepseek`；或设为 `none`）仅在默认 Provider 也选为 `deepseek-official` 时控制原生 Copilot 失败后的回退；选择其他默认 Provider 不会暗中请求 DeepSeek。Copilot 登录不会提供 DeepSeek Key；选择或回退到 `deepseek-official` 都需要单独配置 DeepSeek 凭据，并可能产生 DeepSeek API 费用。
+`github-copilot.routeWebSearch: false` 仍委托原始 web 服务。其余情况下，取消、卸载及捕获的账号证明失效都不能触发兜底。通用注册后端必须遵守取消信号，但公开接口没有提供其内部鉴权后、网络发送前的检查钩子；历史 Copilot／DeepSeek 直调路径保留更强的自有发送前保护。两条路径都不会用 Copilot 登录替其他 Provider 提供凭据。
 
-无需把全局 `web.searchProvider` 改成 Copilot。Models 页路由器会为每次搜索按 id 选择已注册 Provider；旧的全局 `github-copilot-hosted` 手工 override 仍可能破坏保留的原始路径，应当删除。DSH 官方还提供独立的 `exa` 与 `perplexity` 搜索 Provider 包；只有安装、挂载并配置凭据后才会可用。社区 Provider 也可以通过同一个公开注册 seam 接入。bundle 仍预期标准官方 `web` 行，自定义或非标准 web 服务组合需要单独审查。详见[实现与验收范围](docs/session-search-routing.md)。
+目录只包含本路由外观层观察到的注册，不包含直接在其他作用域注册的隐藏后端。列目录不做可用性探测、模型发现、凭据读取或搜索；实际调用时再检查可用性，不再把写死的示例列表当成已安装支持。非标准 web 组合仍需审查，网页抓取不变。详见[实现与验收范围](docs/session-search-routing.md)。
 
 请求经过严格 Host 校验后，直接发往 credential 解析出的 HTTPS Copilot endpoint：GitHub-hosted `api.*.githubcopilot.com`，或已接受 GitHub Enterprise credential 对应的 `copilot-api.<signed-in-enterprise-domain>`。Credential 不会经过外部 gateway。
 
-默认 `probe: true` 时，搜索 fail closed：当前 route 必须是 canonical Copilot 或本插件拥有的托管账号路由，账号必须允许该模型，所选协议必须支持对应搜索表面，且 bounded capability probe 必须成功。托管模型还必须有当前账号的有效发现证据，不能拿另一个 pi 副本的静态条目代替。显式设置 `probe: false` 只会跳过 capability proof，并信任所选原生协议；route、account、protocol、endpoint 与 authentication 检查仍然生效。底层 hosted-search provider 自身不执行回退；新的会话分流层可按明确披露的策略对符合条件的失败执行 DeepSeek 回退，但取消和 owner／账号证明失效仍立即终止。请求只要包含任意 Core file block（包括嵌套在 tool-result content 内的文件），也会 fail closed 到 `next()`，由 Core 保留文件投影，避免 hosted-search serializer 静默丢弃文件上下文。
+默认 `probe: true` 时，搜索 fail closed：当前 route 必须是 canonical Copilot 或本插件拥有的托管账号路由，账号必须允许该模型，所选协议必须支持对应搜索表面，且 bounded capability probe 必须成功。托管模型还必须有当前账号的有效发现证据，不能拿另一个 pi 副本的静态条目代替。显式设置 `probe: false` 只会跳过 capability proof，并信任所选原生协议；route、account、protocol、endpoint 与 authentication 检查仍然生效。底层 hosted-search provider 自身不执行回退；路由外观层可对符合条件的失败使用显式选择的最终兜底后端，但取消和 owner／账号证明失效仍立即终止。请求只要包含任意 Core file block（包括嵌套在 tool-result content 内的文件），也会 fail closed 到 `next()`，由 Core 保留文件投影，避免 hosted-search serializer 静默丢弃文件上下文。
 
 搜索 proof 采用惰性验证：attach、settings 更新以及 `llm-pi-ai/github-copilot` 的 `credentials/record-updated` 事件只使缓存计划失效，不启动网络工作。下一次真实且符合条件的请求才重新验证；忽略无关凭据更新，连续事件不会引发重复的提前 probe。失效或卸载会取消正在执行的 proof。如果凭据在 proof 或最终认证解析期间改变，当前请求会 fail closed，避免把账号 A 的 proof 用于账号 B。更新后可重新提交请求；不会自动循环重试，也不会隐式使用 `probe: false`。
 

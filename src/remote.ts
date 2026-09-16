@@ -10,6 +10,7 @@ import { z } from 'zod'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { GitHubCopilotMigrationStatus } from './migration-status.ts'
 import dualModelRemote from './dual-model-remote.ts'
+import searchRoutingRemote from './search-routing-remote.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
@@ -119,6 +120,7 @@ const contribution: TypertRemoteContribution = {
       result: { mode: 'strict', typeSymbol: GITHUB_COPILOT_MIGRATION_STATUS_TYPE_SYMBOL, schema: GitHubCopilotMigrationStatusSchema },
     },
     ...dualModelRemote.descriptors,
+    ...searchRoutingRemote.descriptors,
   ],
 }
 

@@ -36,6 +36,10 @@ function ok<T>(value: T) { return { ok: true as const, value } }
 const failure = () => ({ ok: false as const, error: { code: 'FAILED', message: 'PRIVATE_REMOTE_ERROR' } })
 function remotes(provider?: string) {
   return {
+    routing: { providers: vi.fn(async () => ok({ supported: true, providers: [...new Set([
+      'deepseek-official', HOSTED, 'exa', 'custom-provider', 'draft-provider', 'concurrent-provider',
+      'replacement-provider', 'new-provider', ...(provider && provider !== 'none' && provider !== 'auto' ? [provider] : []),
+    ])].map(id => ({ id })) })) },
     settings: { describe: vi.fn(async () => ok(settingsValue(provider))),
       mutate: vi.fn(async (_ns: string, _ops: unknown, revision?: number) => ok(namespace(_ns, (revision ?? 0) + 1))) },
     copilot: { status: vi.fn(async () => ok({ phase: 'signed-in', configured: true, writable: true,
@@ -136,11 +140,63 @@ async function ready(remote = remotes()) {
 }
 
 describe('independent Web search Settings card', () => {
-  it('loads auto/default settings and labels provider and model candidates as suggestions only', async () => {
+  it.each(['rejected', 'unsupported', 'malformed'] as const)('does not invent provider options when the catalog is %s', async kind => {
+    const remote = remotes()
+    if (kind === 'rejected') remote.routing.providers.mockRejectedValueOnce(new Error('PRIVATE_CATALOG_ERROR'))
+    else remote.routing.providers.mockResolvedValueOnce(ok(kind === 'unsupported'
+      ? { supported: false, providers: [] }
+      : { supported: true, providers: [{ id: 'injected', secret: 'PRIVATE_CATALOG_ERROR' }] }) as never)
+    const card = await ready(remote)
+    expect(text(card.render())).toContain('Search provider list is unavailable')
+    expect(text(card.render())).not.toContain('PRIVATE_')
+    expect(field(card.render(), 'web-search-save').props.disabled).toBe(true)
+    expect(descendants(card.render()).some(node => node.type === 'option' && node.props.value === 'exa')).toBe(false)
+    click(card.render(), 'web-search-reload'); await settle()
+    expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
+  })
+
+  it('retains an unavailable saved provider until the user explicitly replaces it', async () => {
+    const remote = remotes('retired-provider')
+    remote.routing.providers.mockResolvedValue(ok({ supported: true, providers: [{ id: 'custom-provider' }] }))
+    const card = await ready(remote)
+    expect(field(card.render(), 'web-search-provider').props.value).toBe('retired-provider')
+    expect(text(card.render())).toContain('retired-provider — unavailable')
+    expect(field(card.render(), 'web-search-save').props.disabled).toBe(true)
+    expect(remote.settings.mutate).not.toHaveBeenCalled()
+    change(card.render(), 'web-search-provider', 'custom-provider')
+    expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
+  })
+
+  it('reads legacy fixed and disabled choices without migration writes', async () => {
+    const remote = remotes('none'), value = settingsValue('none')
+    value.namespaces[0]!.value.searchMode = 'fixed'
+    remote.settings.describe.mockResolvedValue(ok(value))
+    const card = await ready(remote)
+    expect(field(card.render(), 'web-search-mode').props.value).toBe('none')
+    expect(field(card.render(), 'web-search-provider').props.value).toBe('none')
+    expect(remote.settings.mutate).not.toHaveBeenCalled()
+  })
+
+  it('uses the new primary over legacy mode and edits Copilot models for a fixed primary', async () => {
+    const remote = remotes('exa'), value = settingsValue('exa')
+    value.namespaces[0]!.value.searchMode = 'auto'
+    value.namespaces[0]!.value.searchProvider = HOSTED
+    remote.settings.describe.mockResolvedValue(ok(value))
+    const card = await ready(remote)
+    expect(field(card.render(), 'web-search-mode').props.value).toBe(HOSTED)
+    expect(field(card.render(), 'copilot-search-model').props.value).toBe('responses-model')
+    expect(field(card.render(), 'web-search-provider').props.value).toBe('exa')
+  })
+  it('loads one actual provider catalog into both selectors without Copilot-specific Auto labels', async () => {
     const card = await ready(remotes(HOSTED))
     const tree = card.render()
     expect(text(tree)).toContain('Web search')
-    expect(text(tree)).toMatch(/suggestions.*not.*installed/i)
+    expect(text(tree)).not.toContain('native Copilot search first')
+    expect(field(tree, 'web-search-provider').type).toBe('select')
+    const options = (name: string) => descendants(field(tree, name)).filter(node => node.type === 'option').map(node => node.props.value)
+    expect(options('web-search-mode').filter(value => value !== 'auto')).toEqual(options('web-search-provider').filter(value => value !== 'none'))
+    expect(options('web-search-mode')).toContain('custom-provider')
+    expect(options('web-search-mode')).not.toContain('perplexity')
     expect(text(tree)).toMatch(/suggestions.*not.*capability/i)
     expect(field(tree, 'web-search-mode').props.value).toBe('auto')
     expect(field(tree, 'copilot-search-model').props.value).toBe('responses-model')
@@ -150,13 +206,13 @@ describe('independent Web search Settings card', () => {
 
   it('captures event values before deferred state updates and saves arbitrary provider IDs with narrow CAS', async () => {
     const card = await ready()
-    change(card.render(), 'web-search-mode', 'fixed')
-    change(card.render(), 'web-search-provider', ' custom-provider ')
+    change(card.render(), 'web-search-mode', 'custom-provider')
+    change(card.render(), 'web-search-provider', 'exa')
     click(card.render(), 'web-search-save')
     await settle()
     expect(card.remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(ROUTING, [
-      { op: 'set', path: ['searchMode'], value: 'fixed' },
-      { op: 'set', path: ['defaultSearchProvider'], value: 'custom-provider' },
+      { op: 'set', path: ['searchProvider'], value: 'custom-provider' },
+      { op: 'set', path: ['defaultSearchProvider'], value: 'exa' },
     ], 4)
     expect(text(card.render())).toContain('Saved.')
     expect(descendants(card.render()).some(node => node.props['data-dsh-copilot-search-model'])).toBe(false)
@@ -293,13 +349,13 @@ describe('independent Web search Settings card', () => {
     expect(text(card.render())).toContain('Enter a Copilot Responses model')
     change(card.render(), 'web-search-provider', ' ')
     click(card.render(), 'web-search-save')
-    expect(text(card.render())).toContain('Enter a registered search provider id')
+    expect(text(card.render())).toContain('Choose a registered search provider')
     expect(card.remote.settings.mutate).not.toHaveBeenCalled()
     change(card.render(), 'web-search-provider', 'none')
     click(card.render(), 'web-search-save')
     await settle()
     expect(card.remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(ROUTING, [
-      { op: 'set', path: ['searchMode'], value: 'auto' },
+      { op: 'set', path: ['searchProvider'], value: 'auto' },
       { op: 'set', path: ['defaultSearchProvider'], value: 'none' },
     ], 4)
   })
