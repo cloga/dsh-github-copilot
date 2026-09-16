@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module'
 import { createHash } from 'node:crypto'
+import { isAbsolute, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent as CoreAgent } from '@deepseek-ai/dsh-agent'
 import { createScope, bindScopeParent, scopeTarget } from '@deepseek-ai/dsh-scope'
@@ -13,6 +15,9 @@ const require = createRequire(createRequire(import.meta.url).resolve('@deepseek-
 const { Session, SESSION_FORMAT_VERSION } = require('@deepseek-ai/dsh-session') as { SESSION_FORMAT_VERSION: number; Session: { create(id: CoreAgent['id'], seed?: readonly unknown[], header?: unknown, inherited?: number): CoreAgent['session'] } }
 const { SessionProjectionRegistry } = require('@deepseek-ai/dsh-session-projection') as { SessionProjectionRegistry: new(ctx: Context) => { register(definition: unknown): () => void; stateOf(session: CoreAgent['session'], key: string): unknown } }
 const PROVIDER = 'github-copilot-preview'
+// Session validates native absolute paths. This in-memory fixture needs no disk
+// directory, but its metadata must be valid on both Windows and POSIX runners.
+const FIXTURE_CWD = resolve(tmpdir(), 'dsh-github-copilot-dual-model-fixture')
 function operationId(label: string): string { return `00000000-0000-4000-8000-${createHash('sha256').update(label).digest('hex').slice(0, 12)}` }
 const contexts: Context[] = []
 afterEach(async () => { for (const ctx of contexts.splice(0)) await ctx.fiber.dispose(); vi.restoreAllMocks() })
@@ -41,7 +46,7 @@ async function fixture() {
   ctx.provide('githubCopilotPreview', preview)
   const llm = { resolveCallConfig: vi.fn(async (route: { provider: string; model: string }) => ({ ...route })) }
   ctx.provide('llm', llm)
-  const workspace = { id: 'workspace-1', title: 'Existing project', path: 'C:\\project', attachSession: vi.fn(async (_id: string) => {}) }
+  const workspace = { id: 'workspace-1', title: 'Existing project', path: FIXTURE_CWD, attachSession: vi.fn(async (_id: string) => {}) }
   const workspaces = { get: vi.fn((id: string) => id === workspace.id ? workspace : undefined), list: () => [workspace] }
   ctx.provide('workspaceRegistry', workspaces)
   const presets = { resolve: vi.fn(async () => ({ id: 'default' })), standingKeyFor: vi.fn(async () => presetKey),
@@ -78,7 +83,7 @@ async function fixture() {
     sendMessage: vi.fn(), listChildren: vi.fn(), drainContinuableDescendants: vi.fn(async () => {}),
     startContinuable: vi.fn(async (spec: { request: { parent: FakeAgent; agentOptions: { provider: string; model: string }; toolFilter: { allow: readonly string[] } } }) => {
       const id = `child-${agentsMap.size}`, parent = spec.request.parent
-      const session = Session.create(id as CoreAgent['id'], undefined, { id, version: SESSION_FORMAT_VERSION, createdAt: 2, cwd: 'C:\\project', parentSession: parent.id, origin: 'subagent', isSeeded: false })
+      const session = Session.create(id as CoreAgent['id'], undefined, { id, version: SESSION_FORMAT_VERSION, createdAt: 2, cwd: FIXTURE_CWD, parentSession: parent.id, origin: 'subagent', isSeeded: false })
       const append = session.append as (type: string, data: unknown) => unknown
       append.call(session, 'subagent/descriptor', { version: 1, mode: 'continuable', provider: 'spawn', label: 'task', agentProvider: spec.request.agentOptions.provider, agentModel: spec.request.agentOptions.model, toolFilter: spec.request.toolFilter })
       const agent = makeAgent(id, session); bindScopeParent(agent, presetKey); agentsMap.set(id, agent); publish(agent)
@@ -96,6 +101,13 @@ async function fixture() {
 }
 
 describe('optional dedicated planner/executor Host', () => {
+  it('uses native absolute fixture metadata without relaxing Core path validation', () => {
+    const id = 'native-path-fixture' as CoreAgent['id']
+    const header = { id, version: SESSION_FORMAT_VERSION, createdAt: 1, isSeeded: false }
+    expect(isAbsolute(FIXTURE_CWD)).toBe(true)
+    expect(Session.create(id, undefined, { ...header, cwd: FIXTURE_CWD }).header.cwd).toBe(FIXTURE_CWD)
+    expect(() => Session.create(id, undefined, { ...header, cwd: 'relative-project' })).toThrow(/cwd must be an absolute path/)
+  })
   it('is unsupported without public seams and leaves ordinary login usable', async () => {
     const ctx = new Context(); contexts.push(ctx); const service = new GitHubCopilotDualModel(ctx)
     expect(await service.view()).toMatchObject({ supported: false, writable: false, configuration: { enabled: false } })
@@ -119,7 +131,7 @@ describe('optional dedicated planner/executor Host', () => {
   it('seeds an immutable plugin policy before publication, flushes, and attaches only an existing workspace', async () => {
     const f = await fixture(); await f.enable(); const result = await f.create()
     const options = f.agents.create.mock.calls[0]![0]
-    expect(options).toMatchObject({ sessionId: result.sessionId, agentOptions: { provider: PROVIDER, model: 'plan-A' }, meta: { isSeeded: false, cwd: 'C:\\project' }, inheritedEventCount: 0 })
+    expect(options).toMatchObject({ sessionId: result.sessionId, agentOptions: { provider: PROVIDER, model: 'plan-A' }, meta: { isSeeded: false, cwd: FIXTURE_CWD }, inheritedEventCount: 0 })
     expect(options.seed[0]).toMatchObject({ type: DUAL_MODEL_POLICY_EVENT, ignorable: true, data: { plannerModel: 'plan-A', executorModel: 'exec-B', rootSessionId: result.sessionId } })
     expect(f.flush).toHaveBeenCalledOnce(); expect(f.workspace.attachSession).toHaveBeenCalledWith(result.sessionId)
     await f.service.save({ configuration: { enabled: true, plannerModel: 'future-C', executorModel: 'future-C' }, expectedRevision: f.revision() })
@@ -160,6 +172,7 @@ describe('optional dedicated planner/executor Host', () => {
     expect(f.subagents.startContinuable).toHaveBeenCalledWith(expect.objectContaining({ provider: 'spawn', request: expect.objectContaining({ parent, maxDepth: 1, agentOptions: { provider: PROVIDER, model: 'exec-B' }, toolFilter: { allow: expect.arrayContaining(['write', 'send_message']) } }) }))
     const child = [...f.agentsMap.values()].find(agent => agent.session.header.origin === 'subagent')!
     expect(child.session.header.parentSession).toBe(parent.id)
+    expect(child.session.header.cwd).toBe(FIXTURE_CWD)
     expect((await f.execute(child, 'write')).isError).toBe(false)
     expect((await f.execute(child, 'subagent')).isError).toBe(true)
     expect((await f.execute(child, DUAL_MODEL_EXECUTE_TOOL, { description: 'again', prompt: 'again' })).isError).toBe(true)
