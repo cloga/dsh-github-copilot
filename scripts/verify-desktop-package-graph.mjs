@@ -51,7 +51,13 @@ export function verifyDesktopPackageGraph(manifest, contracts) {
     ...entries(manifest.optionalDependencies),
   ])
   const peers = Object.fromEntries(entries(manifest.peerDependencies))
-  const declared = [...new Set([...Object.keys(dependencies), ...Object.keys(peers)])].sort()
+  const rawExternals = manifest.dsh?.client?.external ?? []
+  if (!Array.isArray(rawExternals) || rawExternals.some(name => typeof name !== 'string' || name.length === 0)
+    || new Set(rawExternals).size !== rawExternals.length) {
+    throw new Error('Client external declarations are invalid')
+  }
+  const clientExternals = new Set(rawExternals)
+  const declared = [...new Set([...Object.keys(dependencies), ...Object.keys(peers), ...clientExternals])].sort()
   const requiredPeers = new Set(['@deepseek-ai/dsh-authorization', '@deepseek-ai/schemastery'])
 
   for (const contract of contracts) {
@@ -66,7 +72,12 @@ export function verifyDesktopPackageGraph(manifest, contracts) {
       throw new Error(`${contract.id}: dependency declarations changed without a shared-package audit`)
     }
     for (const [name, hostVersion] of Object.entries(contract.auditedPackages)) {
-      if (hostVersion === null) continue
+      if (hostVersion === null) {
+        if (name in peers && manifest.peerDependenciesMeta?.[name]?.optional !== true) {
+          throw new Error(`${contract.id}: ${manifest.name} requires missing non-host peer ${name}`)
+        }
+        continue
+      }
       if (typeof hostVersion !== 'string') throw new Error(`${contract.id}: invalid shared version for ${name}`)
       if (name in dependencies) {
         throw new Error(`${contract.id}: ${manifest.name} must declare ${name} as a peer dependency`)
@@ -76,6 +87,15 @@ export function verifyDesktopPackageGraph(manifest, contracts) {
       if (!admits(hostVersion, range)) {
         throw new Error(`${contract.id}: ${name}@${range} does not admit host ${hostVersion}`)
       }
+    }
+  }
+
+  for (const name of clientExternals) {
+    if (name in dependencies || name in peers) {
+      throw new Error(`Client external ${name} must not be a Node dependency or peer`)
+    }
+    if (typeof manifest.devDependencies?.[name] !== 'string') {
+      throw new Error(`Standalone development must retain Client external ${name} as a dev dependency`)
     }
   }
 

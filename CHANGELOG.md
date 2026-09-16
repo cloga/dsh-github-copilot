@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.22 (prepared)
+
+- Declare React as the DSH Client ModuleLoader external used by the actual built Client bundle, while removing it from the strict Desktop Node peer graph and retaining it only for development.
+- Extend packed-manifest validation from Host shared-package intersection to every declared required peer and Client external, preserving required authorization/schemastery Host peers.
+- Regress the actual packaged Desktop 0.1.5 startup failure `requires missing react@^18.2.0` without bundling a second React instance or weakening `autoInstallPeers: false` graph validation.
+
 ## 0.4.0-alpha.21 (prepared)
 
 - Move Desktop-owned `@deepseek-ai/dsh-authorization` and `@deepseek-ai/schemastery` from private runtime dependencies to required compatible peers while retaining development copies for standalone build and test verification.

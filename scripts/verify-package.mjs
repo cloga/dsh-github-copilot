@@ -50,10 +50,18 @@ if (handoff?.id !== packageJson.name || typeof handoff.factory !== 'function') {
   throw new Error('built client must register the package id through window.__ModuleLoader__.load')
 }
 const react = await import('react')
+const requestedExternals = []
 const clientExports = handoff.factory((specifier) => {
+  requestedExternals.push(specifier)
   if (specifier === 'react') return react
   throw new Error(`built client requested undeclared loader external: ${specifier}`)
 })
+if (JSON.stringify(packageJson.dsh?.client?.external) !== JSON.stringify(['react'])
+  || JSON.stringify([...new Set(requestedExternals)]) !== JSON.stringify(['react'])
+  || packageJson.dependencies?.react !== undefined || packageJson.optionalDependencies?.react !== undefined
+  || packageJson.peerDependencies?.react !== undefined || packageJson.devDependencies?.react === undefined) {
+  throw new Error('built Client must load the singleton React external without adding it to the Node package graph')
+}
 if (typeof clientExports.apply !== 'function' || !Array.isArray(clientExports.inject)) {
   throw new Error('built client must materialize apply and inject exports')
 }

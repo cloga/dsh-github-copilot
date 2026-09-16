@@ -36,3 +36,20 @@ test('shared graph gate rejects bundled, optional, incompatible, or unaudited ho
   }, contracts), /changed without a shared-package audit/)
 })
 
+test('client externals stay outside the strict Node peer graph', () => {
+  assert.throws(() => verifyDesktopPackageGraph({
+    ...manifest,
+    dsh: { ...manifest.dsh, client: { ...manifest.dsh.client, external: undefined } },
+    peerDependencies: { ...manifest.peerDependencies, react: '^18.2.0' },
+  }, contracts), /requires missing non-host peer react/)
+  assert.throws(() => verifyDesktopPackageGraph({
+    ...manifest,
+    peerDependencies: { ...manifest.peerDependencies, react: '^18.2.0' },
+    peerDependenciesMeta: { ...manifest.peerDependenciesMeta, react: { optional: true } },
+  }, contracts), /Client external react must not be a Node dependency or peer/)
+  const { react: _react, ...withoutReact } = manifest.devDependencies
+  assert.throws(() => verifyDesktopPackageGraph({
+    ...manifest,
+    devDependencies: withoutReact,
+  }, contracts), /retain Client external react as a dev dependency/)
+})
