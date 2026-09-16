@@ -1,6 +1,7 @@
 import { Service } from '@deepseek-ai/cordis'
 
 export class RemoteError extends Error {
+  readonly isDSHRemoteError = true
   constructor(
     readonly code: string,
     message: string,

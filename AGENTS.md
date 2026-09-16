@@ -31,7 +31,7 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 `dsh-github-copilot` is a companion to official DSH `0.1.6-alpha.1`, DSH `0.1.5-rc.2`, DSH `0.1.5-rc.1`, DSH `0.1.5-alpha.2`, DSH `0.1.5-alpha.1`, DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
 
-This repository owns eight narrow surfaces:
+This repository owns nine narrow surfaces:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution with one shared account-state owner and Client-safe Remote descriptors; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
@@ -41,6 +41,11 @@ This repository owns eight narrow surfaces:
 6. Provider-scoped tool-schema compatibility for Copilot payload behaviors; Core remains the tool and execution owner.
 7. A bounded account-discovery route that supplies validated endpoint/capability metadata to the published native adapter, without maintaining model-ID routing rules or changing Core's catalog.
 8. Optional, provider-scoped Chat presentation for completed empty reasoning disclosures; durable content and encrypted replay metadata remain Core-owned.
+9. Opt-in model-role settings and dedicated new planner/executor sessions, using public Agent/Session/subagent APIs without changing existing sessions, global defaults or native Subagent model-selection settings.
+
+## Dedicated model-role boundary (#127)
+
+`src/dual-model-host.ts`, `dual-model-types.ts`, `dual-model-remote.ts`, `dual-model-card.ts` and `dual-model-ui.ts` own this optional flow; see `docs/dual-model.md`. The three role Remotes use a separate namespace and strict codecs; the eight existing authorization/migration descriptors retain their original contracts. Policy is captured once per explicitly created root and restored through a namespaced projection. Account discovery and the native adapter remain the only model/auth owners. Dedicated tool restrictions are workflow controls, not a sandbox against shell code. Missing public seams must disable only this feature, never require a Core patch. A failed recovery of an existing create is uncertain: keep its request UUID unless Host evidence explicitly establishes not-created. Do not use `session.selectModel` to initialize roles because it also changes the future global default; the creation seed uses the existing session-local event format. Ordinary user model-picker actions remain Core-owned.
 
 ## File map
 

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "kind": "built-component-synthetic-fixture",
+  "packageVersion": "0.4.0-alpha.20",
+  "sourceBranch": "feature/copilot-dual-model",
+  "baselineCommit": "f44fd1b15ba93dad3bea0c498648dab3392788d5",
+  "component": "src/dual-model-card.ts",
+  "fixture": "tests/browser/dual-model.html",
+  "server": "tests/browser/serve-dual-model.mjs",
+  "clientArtifact": "lib/client.js",
+  "clientArtifactSha256": "65fa84f960e9facdc4ca8c72292c2a136c6e9b5bcf22271d899fb10eba5e12ab",
+  "browser": "Playwright-managed Microsoft Edge",
+  "locale": "zh",
+  "productionServices": false,
+  "modelCalls": false,
+  "accountAndWorkspaceData": "synthetic",
+  "images": [
+    {
+      "path": "docs/images/dual-model-desktop.png",
+      "viewport": { "width": 1440, "height": 1000 },
+      "theme": "dark",
+      "state": "configuration saved; selected workspace; create enabled",
+      "sha256": "0911486f93ff120b85c1d7e97c83f35b742cd912b10ab046b05a3be505790107"
+    },
+    {
+      "path": "docs/images/dual-model-mobile.png",
+      "viewport": { "width": 390, "height": 1000 },
+      "theme": "light",
+      "state": "one synthetic session created and opened through fixture callback",
+      "sha256": "5e6342c844047e9872f3b48eeaeec72036b1453754b1e7e5011d87f1ec1f6d04"
+    }
+  ],
+  "observations": { "horizontalOverflow": false, "syntheticCreatedSessions": 1 },
+  "limits": ["not a production Desktop screenshot", "not a live Copilot model request", "not complete Settings-shell integration proof"]
+}

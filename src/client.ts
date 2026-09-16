@@ -15,6 +15,8 @@ import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './rem
 import { installReasoningPresentation } from './reasoning-presentation.ts'
 import { WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { WebSearchRoutingCard } from './web-search-routing-card.ts'
+export { DualModelCard } from './dual-model-card.ts'
+import { registerDualModelUi } from './dual-model-ui.ts'
 import {
   GITHUB_COPILOT_PROVIDER_ID,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
@@ -987,6 +989,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     throw error
   }
   const searchUi = ctx.inject(['remote.githubCopilot', 'remote.settings', 'slots'], registerSearchUi)
+  const dualModelUi = ctx.inject(['remote.githubCopilotDualModel', 'slots'], registerDualModelUi)
   // The optional Chat contribution must not hold authorization activation on older Cores.
   const presentation = ctx.inject(['uiConversation', 'slots'], scope => installReasoningPresentation({
     slots: scope.slots,
@@ -995,6 +998,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }))
   return async () => {
     await presentation.dispose()
+    await dualModelUi.dispose()
     await searchUi.dispose()
     await ui.dispose()
     await disposeRemote()
