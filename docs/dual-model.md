@@ -30,6 +30,14 @@ The browser generates a request UUID and keeps the original workspace and settin
 
 After a confirmed save conflict, reload settings and review the current configuration. During an uncertain creation the original input is held until confirmation. Reloading the whole browser can lose its in-memory pending receipt; inspect the session list before issuing a fresh creation request. The same supplied request UUID remains idempotent on the Host across process restart.
 
+## Loading and Remote troubleshooting
+
+**Could not load model roles** is a failed Remote load, not an instruction to change global model defaults. A `githubCopilotDualModel/view` HTTP 404 means the Host did not expose the endpoint; Client descriptors alone cannot register Host methods. The Host uses the public `TypertRemoteService` binding and marks only `view`, `save` and `create` with `@Remote`. A source fix does not change an already running installation.
+
+A successful view can still report `DUAL_MODEL_UNSUPPORTED` when optional public capabilities are missing. An off configuration alone does not disable the model selectors. Read-only settings, a missing revision, pending operations, unavailable models and unavailable workspaces retain their existing gates. Reload after an ordinary transient failure; do not repeatedly save or create sessions to diagnose an endpoint failure.
+
+Loading a supported view performs non-forcing account discovery and may use the existing OAuth refresh/network lifecycle. It is not guaranteed to be a credential- or network-side-effect-free probe. Regression tests use isolated synthetic services instead of the live profile.
+
 ## UI verification captures
 
 These are the actual built component with **synthetic** account/workspace responses, not the production Desktop. [Capture provenance and artifact hashes](./images/dual-model-provenance.json) identify the exact evidence.
@@ -49,6 +57,7 @@ Regression evidence is separated deliberately:
 - `dual-model-card.spec.ts`: real React DOM/jsdom interaction, bilingual copy, CAS, unavailable models, stale responses and uncertain-create receipt handling.
 - `dual-model-ui.spec.ts`: optional Slot registration, fallback and cleanup.
 - `dual-model-remote.spec.ts` / `dual-model-gateway.spec.ts`: strict owned codecs and the actual installed Client Gateway with synthetic RPC. Older Client Gateways do not sanitize successful values or arbitrary nested error details; the Host builds bounded DTOs, and the UI renders only its diagnostic allowlist.
+- `tests/scripts/dual-model-host-gateway.test.mjs`: postbuild Node tests drive the real public Host Connection Fetch handler and Gateway, bypassing Vitest's protocol stub. They cover endpoint exposure, unsupported capabilities, domain input validation, private-method refusal, disposal, and synthetic model/workspace view plus CAS save. SRC JSON fallback does not inherit the Client's strict descriptors; Host validation rejects malformed nested inputs.
 - `dual-model-host.spec.ts`: actual Core Session/projection/scope/tool primitives combined with synthetic Agent, model, persistence and workspace edges. This is not a paid live model run or a full installed Desktop certification.
 - `tests/browser/serve-dual-model.mjs`: serves the actual built Client component on a separate loopback fixture using synthetic account/workspace responses. Run after `pnpm build`; the printed URL is explicitly **not** the production DSH GUI.
 

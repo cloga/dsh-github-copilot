@@ -155,6 +155,8 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 
 模型不可用时明确报错，不自动替换。创建结果不明时重试同一个请求，不为绕过未知结果另建会话。功能依赖公开的会话、策略和子代理能力；缺少接口时显示不可用，不把历史版本的包兼容范围当成此功能的全面验收。详见[配置、生命周期、限制与验证范围](./docs/dual-model.md)。本功能包含在 `0.4.0-alpha.22` candidate 中，源码和合成测试不代表已发布或当前 Desktop 已生效。
 
+若卡片显示 **Could not load model roles（无法加载模型分工）**，不要通过修改默认模型绕过：这是设置加载失败，与能力不支持或模型不可用不同。尤其 `githubCopilotDualModel/view` 返回 HTTP 404，表示 Host Remote 未暴露，并非功能开关处于关闭状态。详见[加载故障排查与验证](./docs/dual-model.md#loading-and-remote-troubleshooting)。
+
 ## 全局账号，多模型与独立会话（V3）
 
 一个 Host 所有的 Copilot 账号提供多个账号发现模型。已显式选择或有历史选择的 Session 保持自己的模型上下文：Session A 的搜索使用捕获的发起 Session A 的有效 request-header／config（或请求显式 `GenerateOptions`），不采用 Session B 的选择或未来全局默认 C。搜索 plan 按 owner 缓存，A／B 使用不同模型时不会互相复用或取消 plan；账号元数据仍共享，能力／probe 与凭据检查继续生效。

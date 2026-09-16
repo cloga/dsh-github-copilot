@@ -151,6 +151,8 @@ Under **Settings → Models → Model roles**, enable dedicated dual-model sessi
 
 Unavailable models are not substituted. Uncertain creation retries keep the same request identity. The feature requires public role/session/subagent capabilities and is visibly unavailable when they are absent; historical package compatibility is not blanket certification of this optional flow. See [setup, lifecycle, limitations and evidence](./docs/dual-model.md). The feature is included in the `0.4.0-alpha.22` candidate; source and fixture tests are not proof of publication or Desktop activation.
 
+If the card says **Could not load model roles**, do not change model defaults to work around it: this is a failed settings load, distinct from unsupported capabilities or unavailable models. In particular, a `githubCopilotDualModel/view` HTTP 404 indicates missing Host Remote exposure, not that the feature is off. See [troubleshooting and verification](./docs/dual-model.md#loading-and-remote-troubleshooting).
+
 ## Shared account, independent sessions (V3)
 
 One Host-owned Copilot account supplies many account-discovered models. Each explicitly selected or history-backed Session keeps its own model context: search for Session A uses the captured effective request-header/config of initiating Session A (or explicit request `GenerateOptions`), not Session B's choice or a future global default C. Search plans are cached per owner so different-model A/B requests do not reuse or cancel each other's plans. Account metadata remains shared; capability/probe and credential checks still apply.
