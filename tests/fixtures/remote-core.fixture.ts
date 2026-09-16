@@ -5,7 +5,7 @@ import { it, expect, vi } from 'vitest'
 import remote from '../../src/remote.ts'
 import { name, version } from '#package.json' with { type: 'json' }
 
-it('mounts eight authorization and three role Remote descriptors on the exact target Client gateway', async () => {
+it('mounts authorization, role and search-catalog Remotes on the exact target Client gateway', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1'])
     .toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
@@ -18,8 +18,9 @@ it('mounts eight authorization and three role Remote descriptors on the exact ta
     complete: { sessions: false, defaultSelection: false, routes: false },
     defaultSelection: null, sessions: [], routes: { nativeConfigured: null, nativeRegistered: null, managedRegistered: null },
   }
+  const catalog = { supported: true, providers: [{ id: 'synthetic-registered-search' }] }
   const rpc = vi.fn(async (_path: string, method: string) => ({ ok: true,
-    value: method.endsWith('/migrationStatus') ? migration : view }))
+    value: method.endsWith('/migrationStatus') ? migration : method === 'githubCopilotSearchRouting/providers' ? catalog : view }))
   const stop = vi.fn()
   try {
     ctx.provide('typert', { remotes: { register(value: unknown) { registered.push(value); return async () => {} } },
@@ -31,7 +32,7 @@ it('mounts eight authorization and three role Remote descriptors on the exact ta
     expect(registered).toEqual([remote])
     expect(remote.descriptors.map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut', 'migrationStatus',
-      'view', 'save', 'create',
+      'view', 'save', 'create', 'providers',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.result.mode).toBe('strict')
@@ -45,8 +46,21 @@ it('mounts eight authorization and three role Remote descriptors on the exact ta
       expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilot/${descriptor.method}`, { args: {} }, expect.any(AbortSignal))
     }
     expect(rpc).toHaveBeenCalledTimes(8)
+    const catalogDescriptor = remote.descriptors.find(item => item.namespace === 'githubCopilotSearchRouting')!
+    expect(catalogDescriptor).toMatchObject({
+      id: 'dsh-github-copilot:githubCopilotSearchRouting.providers', service: 'githubCopilotSearchRouting',
+      method: 'providers', invocation: { kind: 'direct' }, parameters: [],
+      result: { mode: 'strict', typeSymbol: 'dsh-github-copilot#SearchProviderCatalog' },
+    })
+    expect(catalogDescriptor.result.schema.parse(catalog)).toEqual(catalog)
+    expect(() => catalogDescriptor.result.schema.parse({ supported: true,
+      providers: [{ id: 'synthetic-registered-search', credential: 'synthetic-forbidden' }] })).toThrow()
+    await expect(ctx.remote.githubCopilotSearchRouting.providers()).resolves.toEqual({ ok: true, value: catalog })
+    expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilotSearchRouting/providers', { args: {} }, expect.any(AbortSignal))
+    expect(rpc).toHaveBeenCalledTimes(9)
     await dispose()
     expect(ctx.get('remote.githubCopilot')).toBeUndefined()
+    expect(ctx.get('remote.githubCopilotSearchRouting')).toBeUndefined()
   } finally { await ctx.fiber.dispose() }
   expect(stop).toHaveBeenCalledOnce()
 })
