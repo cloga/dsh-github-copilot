@@ -118,15 +118,71 @@ There is no historical bulk backfill and no silent npm opt-out.
 
 ## Installation preflight still applies
 
-After both channels are verified, official Desktop accepts the exact
-`dsh-github-copilot@<version>` npm spec in its package manager. It does not accept
-the Release URL or local tarball in that UI. Follow the existing README
-`scripts/check-search-composition.mjs` preflight before changing configuration;
-the script remains in the package. A successful package lookup or install does
-not prove runtime activation or a successful Copilot request.
+The native Desktop package manager remains the preferred interactive entry
+point when its registry access is permitted and available. After npm publication
+is verified, it accepts the exact `dsh-github-copilot@<version>` npm spec, not a
+Release URL or local tarball in that UI. This UI input restriction is not a
+blanket prohibition on maintaining the same profile through the supported CLI.
+Controlled CLI maintenance is also supported for Desktop-managed profiles under
+the checklist below. Neither entry point replaces the package's required
+`scripts/check-search-composition.mjs` preflight. A package lookup, preflight or
+successful installation is not proof of runtime activation or a model call.
 
-For separately managed CLI profiles only, retain the required `--profile` on
-`dsh plugin` commands. Never use the CLI to write a reserved Desktop-managed
-profile, copy into node_modules, patch Core or restart active Sessions without
-their separate approvals. Installed-on-disk and loaded-runtime evidence remain
-distinct.
+## Controlled offline CLI maintenance
+
+This path installs this package's prebuilt, verified Release without requiring
+access to a blocked npm registry. It is not permission to bypass organizational registry restrictions:
+use only artifacts obtained through organizationally approved sources and
+already available dependency caches. A registry ban remains in force; offline
+installation does not repair TLS or prove that npm publication is healthy. The
+dual-channel **publication** policy above is unchanged.
+
+1. Obtain explicit installation approval for the exact version and profile.
+   Resolve the actual DSH CLI, install anchor, `DSH_HOME` and profile directory;
+   do not assume a shell shim points to the Desktop's current installation.
+2. Verify the original Release tarball with an independently trusted SHA-256,
+   its package name/version and safe archive layout. Do not substitute a local
+   build or repack an existing immutable Release. Extract only the verified
+   artifact before executing its packaged preflight.
+3. Run `scripts/check-search-composition.mjs` against that exact profile, home
+   and install anchor, including any extra startup patches. Require
+   `supported: true`; unknown, conflicting or unsupported composition is a stop,
+   not permission to remove guards or rewrite the profile.
+4. Keep one writer: do not run Desktop package updates and CLI installation
+   concurrently. Take a private backup of installation metadata (package.json,
+   lockfile, bundle/patch configuration and relevant package-manager settings),
+   record the current version, and retain a verified rollback artifact.
+   Do not copy credential stores, `.env` files or browser storage. If ensuring
+   exclusive maintenance requires stopping the Host, obtain separate approval.
+5. Invoke the supported DSH CLI with an absolute path to the verified archive:
+
+   ```sh
+   dsh plugin --profile web add /absolute/path/to/verified-release.tgz --offline --ignore-scripts
+   ```
+
+   Replace `web` and the archive path with the approved targets. `--offline`
+   requires the existing cache; `--ignore-scripts` prevents package lifecycle
+   scripts from creating a second, uncontrolled installation/network path. If
+   the cache is incomplete or a dependency requires a new build, stop and report
+   the missing requirement. Do not silently remove these flags, change registry,
+   add a VPN/proxy/mirror, or fetch blocked dependencies through another channel.
+   Keep TLS verification enabled. Actual platform permission/approval refusals
+   remain authoritative; this procedure does not override them.
+6. Check the exit result and read back the installed version, lock entry and
+   package files against the verified archive. Re-run the composition preflight
+   and an appropriate import-only smoke check without activating the plugin.
+   Inspect all metadata differences: the CLI reconciles `dsh.profile.bundles`
+   and may add unrelated installed bundles. Preserve unrelated settings; stop
+   for review on unexpected changes and revert only changes proven to belong
+   to this operation, never overwrite later user edits with a whole backup.
+   Use the package manager, not manual copying into node_modules or Core patches.
+7. Report the installed version, checksum, backup and evidence limits. Obtain
+   separate restart approval before interrupting the Host or active Sessions.
+   Installed-on-disk and loaded-runtime are separate states: after an approved
+   restart, verify the loaded build and the intended behavior independently.
+
+If installation fails, inspect the actual installed state before retrying or
+rolling back; a failed command is not proof that nothing changed. A rollback
+also needs reviewed, narrowly scoped metadata/dependency restoration. This
+documentation change does not rewrite installed or published historical docs,
+change machine-wide registry policy, or grant blanket approval for future updates.
