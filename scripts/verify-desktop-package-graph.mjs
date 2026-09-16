@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { satisfies } from 'semver'
 import { repositoryRoot } from './agent.mjs'
 
 const DEFAULT_CONTRACT = resolve(repositoryRoot, 'tests/fixtures/desktop-shared-package-contracts.json')
@@ -11,6 +10,27 @@ function record(value) {
 
 function entries(value) {
   return record(value) ? Object.entries(value) : []
+}
+
+function version(value) {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/u.exec(value)
+  if (!match) throw new Error(`Unsupported shared-package version ${JSON.stringify(value)}`)
+  return match.slice(1, 4).map(Number)
+}
+
+function admits(actual, range) {
+  return range.split(/\s+\|\|\s+/u).some((candidate) => {
+    if (!candidate.startsWith('^')) return candidate === actual
+    const expected = version(candidate.slice(1))
+    const found = version(actual)
+    const minimum = found[0] > expected[0]
+      || (found[0] === expected[0] && (found[1] > expected[1]
+        || (found[1] === expected[1] && found[2] >= expected[2])))
+    if (!minimum) return false
+    if (expected[0] > 0) return found[0] === expected[0]
+    if (expected[1] > 0) return found[0] === 0 && found[1] === expected[1]
+    return found[0] === 0 && found[1] === 0 && found[2] === expected[2]
+  })
 }
 
 export async function readDesktopSharedPackageContracts(path = DEFAULT_CONTRACT) {
@@ -53,7 +73,7 @@ export function verifyDesktopPackageGraph(manifest, contracts) {
       }
       const range = peers[name]
       if (typeof range !== 'string') throw new Error(`${contract.id}: missing shared peer ${name}`)
-      if (!satisfies(hostVersion, range)) {
+      if (!admits(hostVersion, range)) {
         throw new Error(`${contract.id}: ${name}@${range} does not admit host ${hostVersion}`)
       }
     }
