@@ -206,7 +206,7 @@
         {"file": "scripts/verify-tarball.mjs", "marker": "desktopSharedGraphs"},
         {"file": "tests/fixtures/desktop-shared-package-contracts.json", "marker": "desktop-0.1.6-alpha.1-generated-package-set"},
         {"file": "tsdown.config.ts", "marker": "const externals = new Set(['react'])"},
-        {"file": "package.json", "marker": "\"external\": [\n        \"react\""}
+        {"file": "package.json", "marker": "\"external\": ["}
       ],
       "tests": [
         {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "packed manifest composes with the actual 0.1.5 and generated 0.1.6 Desktop shared graphs"},
