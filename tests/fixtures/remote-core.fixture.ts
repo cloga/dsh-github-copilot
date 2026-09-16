@@ -5,7 +5,7 @@ import { it, expect, vi } from 'vitest'
 import remote from '../../src/remote.ts'
 import { name, version } from '#package.json' with { type: 'json' }
 
-it('mounts all eight strict plugin Remote descriptors on the exact target Client gateway', async () => {
+it('mounts eight authorization and three role Remote descriptors on the exact target Client gateway', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1'])
     .toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
@@ -31,8 +31,9 @@ it('mounts all eight strict plugin Remote descriptors on the exact target Client
     expect(registered).toEqual([remote])
     expect(remote.descriptors.map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut', 'migrationStatus',
+      'view', 'save', 'create',
     ])
-    for (const descriptor of remote.descriptors) {
+    for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.result.mode).toBe('strict')
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       expect(descriptor.parameters).toEqual([])

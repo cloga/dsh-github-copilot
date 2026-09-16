@@ -1042,6 +1042,7 @@ describe('GitHub Copilot Models client', () => {
     let cleanupUi: (() => void) | undefined
     const disposeUi = vi.fn(async () => { cleanupUi?.(); cleanupUi = undefined })
     const disposePresentation = vi.fn(async () => undefined)
+    const disposeDualModel = vi.fn(async () => undefined)
     const registrations = new Map<string, ReturnType<typeof vi.fn>>()
     const injections = new Map<string, () => unknown>()
     const register = vi.fn((options: { name: string; id?: string; order?: number }, _component: unknown) => {
@@ -1069,6 +1070,11 @@ describe('GitHub Copilot Models client', () => {
     const inject = vi.fn((services: string[], callback: (value: unknown) => unknown) => {
       if (services.includes('uiConversation')) {
         return Object.assign(new Promise<void>(() => {}), { dispose: disposePresentation })
+      }
+      // This fixture has no optional role namespace. Model its independent
+      // waiting Fiber instead of overwriting the account UI's cleanup owner.
+      if (services.includes('remote.githubCopilotDualModel')) {
+        return Object.assign(new Promise<void>(() => {}), { dispose: disposeDualModel })
       }
       const cleanup = callback(ctx)
       if (services.includes('remote.settings')) {
@@ -1106,7 +1112,7 @@ describe('GitHub Copilot Models client', () => {
       on: vi.fn(() => vi.fn()),
       inject,
     }
-    return { ctx, disposeRemote, disposeUi, disposePresentation, register, registrations, injections }
+    return { ctx, disposeRemote, disposeUi, disposePresentation, disposeDualModel, register, registrations, injections }
   }
 
   it('warns before native Copilot re-add without pretending to disable Core Save or creating another account owner', async () => {
@@ -1231,12 +1237,15 @@ describe('GitHub Copilot Models client', () => {
   })
 
   it('does not delay authorization while the optional reasoning presentation waits for Core services', async () => {
-    const { ctx, disposeRemote, disposeUi, disposePresentation } = clientContext(['settings.section'])
+    const { ctx, disposeRemote, disposeUi, disposePresentation, disposeDualModel } = clientContext(['settings.section'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotDualModel', 'slots'], expect.any(Function))
     expect(disposePresentation).not.toHaveBeenCalled()
+    expect(disposeDualModel).not.toHaveBeenCalled()
     await dispose()
     expect(disposePresentation).toHaveBeenCalledOnce()
+    expect(disposeDualModel).toHaveBeenCalledOnce()
     expect(disposeUi).toHaveBeenCalledOnce()
     expect(disposeRemote).toHaveBeenCalledOnce()
   })

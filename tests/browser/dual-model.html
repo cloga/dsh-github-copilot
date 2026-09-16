@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Copilot model roles — isolated component verification</title>
+<link rel="icon" href="data:,">
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;background:#111214;color:#ededed}
+*{box-sizing:border-box}body{margin:0;padding:32px 20px;min-height:100vh}main{max-width:680px;margin:auto}h1{font-size:22px;margin:0 0 8px;font-weight:600}.fixture-note{font-size:13px;line-height:1.5;color:#bbb;margin:0 0 24px}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #91baff;outline-offset:3px}button:not(:disabled):hover{filter:brightness(1.15)}select option{background:#202124;color:#eee}::selection{background:#355787;color:white}body[data-theme=light]{color-scheme:light;background:#fafafa;color:#242424}body[data-theme=light] .fixture-note{color:#565656}body[data-theme=light] select option{background:white;color:#222}@media(max-width:480px){body{padding:20px 12px}h1{font-size:20px}}
+</style>
+</head>
+<body><main><h1>GitHub Copilot</h1><p class="fixture-note">隔离组件验证 · 合成账号与工作区数据，不连接生产服务，不调用模型。</p><div id="app"></div></main>
+<script src="/react.js"></script><script src="/react-dom.js"></script>
+<script>window.__ModuleLoader__={load:function(entry){window.CopilotUI=entry.factory(function(id){if(id==='react')return window.React;throw new Error('Unexpected client dependency: '+id)})}};</script>
+<script src="/client.js"></script>
+<script>
+const q=new URLSearchParams(location.search);document.body.dataset.theme=q.get('theme')||'dark';
+const locale=q.get('lang')||'zh';document.documentElement.lang=locale;
+if(locale==='en')document.querySelector('.fixture-note').textContent='Isolated component verification · synthetic account/workspace data. No production services or model calls.';
+let revision=1;let configuration={enabled:false,plannerModel:'',executorModel:''};const creates=new Map();const calls=[];
+const models=[{id:'account-planner',name:'GPT 6'},{id:'account-executor',name:'GPT-5.6 Sol Fast'}];
+const view=()=>({supported:true,writable:true,revision,configuration:{...configuration},models,workspaces:[{id:'demo-workspace',name:'DSH · 示例工作区'}]});
+const remote={view:async()=>({ok:true,value:view()}),save:async input=>{calls.push({method:'save',input});if(input.expectedRevision!==revision)return{ok:false,error:{code:'copilot/dual-model',details:{reason:'DUAL_MODEL_REVISION_CONFLICT'}}};configuration={...input.configuration};revision++;return{ok:true,value:view()}},create:async input=>{calls.push({method:'create',input});if(!creates.has(input.requestId))creates.set(input.requestId,{sessionId:'synthetic-session-'+creates.size});return{ok:true,value:creates.get(input.requestId)}}};
+window.fixture={calls,creates,remote};
+ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(window.CopilotUI.DualModelCard,{remote,locale,onOpenSession:id=>{window.fixture.opened=id}}));
+</script>
+</body></html>

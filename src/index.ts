@@ -9,6 +9,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type z from '@deepseek-ai/schemastery'
 import AuthorizationService from '@deepseek-ai/dsh-authorization'
+import GitHubCopilotDualModel from './dual-model-host.ts'
 // Bring the `systemPrompt` service declaration (dsh-agent augmentation) into
 // the type graph: module augmentations only apply when their module is part
 // of the program.
@@ -207,6 +208,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
   })
   ctx.plugin(previewPlugin, { accountModelSettings: () => current() })
   ctx.plugin(GitHubCopilotAuthorizationController)
+  ctx.plugin(GitHubCopilotDualModel)
   const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx, async () => {
     await ensureGitHubCopilotProviderProfile(ctx)
   })

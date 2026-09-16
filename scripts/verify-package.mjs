@@ -62,11 +62,14 @@ if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
 }
 
 const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)).default
-const methods = remote.descriptors.map(descriptor => descriptor.method).sort()
-if (JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'migrationStatus', 'reconcile', 'signOut', 'start', 'status'])) {
-  throw new Error('built Remote entry must expose exactly seven authorization controls and independent migrationStatus')
+const authorizationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilot')
+const roleDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDualModel')
+const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
+if (remote.descriptors.length !== 11 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'migrationStatus', 'reconcile', 'signOut', 'start', 'status'])
+  || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])) {
+  throw new Error('built Remote entry must retain eight authorization/migration controls and exactly three independent model-role methods')
 }
-for (const descriptor of remote.descriptors) {
+for (const descriptor of authorizationDescriptors) {
   if (descriptor.id !== `dsh-github-copilot:githubCopilot.${descriptor.method}`
     || descriptor.service !== 'githubCopilotAuthorization' || descriptor.namespace !== 'githubCopilot') {
     throw new Error('built Remote descriptor identity must match its exact owned service and namespace')
@@ -83,6 +86,34 @@ for (const descriptor of remote.descriptors) {
     || typeof descriptor.result.schema?.parse !== 'function'
   ) {
     throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must expose its own exact strict result codec`)
+  }
+}
+if (typeof clientExports.DualModelCard !== 'function') throw new Error('built Client must export the model-role settings card')
+const roleView = { supported: false, writable: false, revision: null,
+  configuration: { enabled: false, plannerModel: '', executorModel: '' }, models: [], workspaces: [] }
+for (const descriptor of roleDescriptors) {
+  if (descriptor.id !== `dsh-github-copilot:githubCopilotDualModel.${descriptor.method}`
+    || descriptor.service !== 'githubCopilotDualModel' || descriptor.invocation.kind !== 'direct') {
+    throw new Error('built model-role descriptor must use its independent exact identity')
+  }
+  const create = descriptor.method === 'create', view = descriptor.method === 'view'
+  const expectedType = `dsh-github-copilot#${create ? 'DualModelCreateResult' : 'DualModelView'}`
+  if (descriptor.result.mode !== 'strict' || descriptor.result.typeSymbol !== expectedType
+    || descriptor.parameters.length !== (view ? 0 : 1)) throw new Error('built model-role codecs or arity differ')
+  const expected = create ? { sessionId: 'fixture-session' } : roleView
+  descriptor.result.schema.parse(expected)
+  if (descriptor.result.schema.safeParse({ ...expected, credential: 'private' }).success) throw new Error('model-role output accepts private fields')
+  if (!view) {
+    const parameter = descriptor.parameters[0]
+    if (parameter.name !== 'input' || parameter.wire !== 'input' || parameter.source !== 'json'
+      || parameter.codec.mode !== 'strict' || parameter.codec.typeSymbol !== `dsh-github-copilot#${create ? 'DualModelCreateRequest' : 'DualModelSaveRequest'}`) {
+      throw new Error('built model-role input must retain its exact strict JSON contract')
+    }
+    const input = create ? { requestId: '993601ac-140a-4fe5-a841-80fc14d249f9', workspaceId: 'workspace', expectedRevision: 0 }
+      : { configuration: roleView.configuration, expectedRevision: 0 }
+    parameter.codec.schema.parse(input)
+    if (parameter.codec.schema.safeParse({ ...input, globalDefault: true }).success
+      || parameter.codec.schema.safeParse({ ...input, expectedRevision: -1 }).success) throw new Error('built model-role input accepts invalid scope or revision')
   }
 }
 const migrationCodec = remote.descriptors.find(descriptor => descriptor.method === 'migrationStatus').result.schema

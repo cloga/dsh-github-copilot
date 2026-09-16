@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.20 (prepared)
+
+- Add opt-in, bilingual **Model roles** settings with account-discovered planning and execution models, revision-checked save, and an explicit new-session entry.
+- Capture the two roles only for dedicated new sessions; preserve existing conversations, global defaults, OAuth ownership and ordinary Subagent settings.
+- Delegate implementation through native continuable executors with an exact route, scoped workflow controls, durable policy replay and explicit model-unavailable errors rather than fallback.
+- Preserve create-request identity across uncertain results, and distinguish a confirmed not-created result from failed recovery of an existing session.
+- Add real React DOM, actual Client Gateway, and Core Session/projection/tool primitive regressions, plus an isolated built-component browser fixture. These tests do not imply a live model call or production Desktop activation.
+
 ## 0.4.0-alpha.19
 
 - Adapt the plugin compatibility contract to DSH `0.1.6-alpha.1` at
