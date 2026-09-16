@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.21 (prepared)
+
+- Move Desktop-owned `@deepseek-ai/dsh-authorization` and `@deepseek-ai/schemastery` from private runtime dependencies to required compatible peers while retaining development copies for standalone build and test verification.
+- Audit every declared dependency and peer against the hash-pinned actual Desktop 0.1.5 runtime descriptor and generated Desktop 0.1.6 package-set input.
+- Make packed-tarball verification reject bundled, optional, incompatible, or newly unaudited shared-package ownership without weakening Desktop validation or changing Copilot lifecycle, image-offload, Models, or authorization behavior.
+
 ## 0.4.0-alpha.20 (prepared)
 
 - Add opt-in, bilingual **Model roles** settings with account-discovered planning and execution models, revision-checked save, and an explicit new-session entry.

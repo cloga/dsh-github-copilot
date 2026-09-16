@@ -134,6 +134,33 @@ assert(
 for (const [dependency, range] of Object.entries(manifest.supportedBaselines?.runtimeDependencies ?? {})) {
   assert(packageJson.dependencies?.[dependency] === range, `${dependency} runtime range differs`)
 }
+for (const [dependency, range] of Object.entries(manifest.supportedBaselines?.sharedPeerDependencies ?? {})) {
+  assert(packageJson.dependencies?.[dependency] === undefined
+    && packageJson.optionalDependencies?.[dependency] === undefined, `${dependency} must not be a private runtime dependency`)
+  assert(packageJson.peerDependencies?.[dependency] === range, `${dependency} shared peer range differs`)
+  assert(packageJson.peerDependenciesMeta?.[dependency]?.optional !== true, `${dependency} shared peer must be required`)
+  assert(typeof packageJson.devDependencies?.[dependency] === 'string', `${dependency} development dependency is missing`)
+}
+assert(
+  JSON.stringify(manifest.supportedBaselines?.desktopSharedPackageContracts) === JSON.stringify([
+    {
+      id: 'desktop-0.1.5-rc.2-installed-runtime',
+      sourceSha256: '210cacaf3842643ef6c124fd23cb3b67caf7008e97868c733550b56ba7a1e836',
+      packageCount: 241,
+    },
+    {
+      id: 'desktop-0.1.6-alpha.1-generated-package-set',
+      sourceSha256: '51b25ad67e6b0198edca0ec9baf8ebd06d26217dd33d1a2a4cce7e881382e6ea',
+      packageCount: 246,
+      descriptorStatus: 'not-materialized',
+    },
+  ]),
+  'Desktop shared-package contract evidence differs',
+)
+assert(
+  manifest.capabilities?.some(capability => capability.id === 'desktop-shared-package-ownership'),
+  'Desktop shared-package ownership capability is missing',
+)
 assert(
   manifest.capabilities?.some(capability => capability.id === 'strict-remote-result-codecs'),
   'strict Remote result codec capability is missing',
@@ -236,7 +263,9 @@ assert(JSON.stringify(declaredPackages) === JSON.stringify(actualDshPeers), 'Cor
 for (const [name, version] of Object.entries(packageJson.devDependencies)) {
   if (name.startsWith('@deepseek-ai/dsh-')) assert(version === manifest.supportedBaselines.dsh.developmentRelease, `${name} must use the exact development Core version`)
 }
-assert(packageJson.dependencies['@deepseek-ai/dsh-authorization'] === '0.1.2-rc.1', 'authorization runtime must use published rc.1')
+assert(packageJson.dependencies?.['@deepseek-ai/dsh-authorization'] === undefined
+  && packageJson.devDependencies['@deepseek-ai/dsh-authorization'] === '0.1.2-rc.1',
+  'authorization must use the Host peer at runtime and the published rc.1 development baseline')
 assert(manifest.supportedBaselines.piAi === '0.85.1', 'managed provider evidence targets exact pi-ai 0.85.1')
 const oldCore = dshBaselines.find(entry => entry.release === '0.1.1-rc.2')
 assert(oldCore.evidenceScope === 'historical-regression-only' && oldCore.managedProviderValidation === 'not-verified', 'historical rc.2 must not claim new managed-provider validation')
