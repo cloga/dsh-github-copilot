@@ -142,6 +142,18 @@ for (const [dependency, range] of Object.entries(manifest.supportedBaselines?.sh
   assert(typeof packageJson.devDependencies?.[dependency] === 'string', `${dependency} development dependency is missing`)
 }
 assert(
+  JSON.stringify(manifest.supportedBaselines?.clientExternals) === JSON.stringify({
+    react: { range: '^18.2.0', owner: 'dsh-client-module-static-singleton', nodeGraph: false },
+  }),
+  'Client external ownership evidence differs',
+)
+assert(JSON.stringify(packageJson.dsh?.client?.external) === JSON.stringify(['react']),
+  'Client must declare the singleton React ModuleLoader external')
+assert(packageJson.dependencies?.react === undefined && packageJson.optionalDependencies?.react === undefined
+  && packageJson.peerDependencies?.react === undefined, 'React must stay outside the Node package graph')
+assert(packageJson.devDependencies?.react === manifest.supportedBaselines.clientExternals.react.range,
+  'React development range differs from the Client external contract')
+assert(
   JSON.stringify(manifest.supportedBaselines?.desktopSharedPackageContracts) === JSON.stringify([
     {
       id: 'desktop-0.1.5-rc.2-installed-runtime',
