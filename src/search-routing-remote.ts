@@ -1,6 +1,7 @@
 /** Client-safe catalog of search registrations observed by the routed facade. */
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
+import { strictRemoteCodec } from './remote-codec.ts'
 
 export const SearchProviderCatalogSchema = z.object({
   supported: z.boolean(),
@@ -21,7 +22,7 @@ const contribution: TypertRemoteContribution = {
     id: 'dsh-github-copilot:githubCopilotSearchRouting.providers',
     namespace: 'githubCopilotSearchRouting', service: 'githubCopilotSearchRouting', method: 'providers',
     invocation: { kind: 'direct' }, parameters: [],
-    result: { mode: 'strict', typeSymbol: 'dsh-github-copilot#SearchProviderCatalog', schema: SearchProviderCatalogSchema },
+    result: strictRemoteCodec('dsh-github-copilot#SearchProviderCatalog', SearchProviderCatalogSchema),
   }],
 }
 export default contribution

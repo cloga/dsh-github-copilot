@@ -50,14 +50,22 @@ interface Tools { schemas(scope?: object): readonly { name: string; description:
 interface Prompt { section(section: { name: string; order: number; text: string }): () => void }
 interface Subagents { getProvider(name: string): { capabilities: { agentOptions: boolean; toolFilter: boolean; persona: boolean; depthLimit: boolean }; prepareContinuable?: unknown } | undefined; startContinuable(spec: { provider: string; label: string; request: { parent: Agent; prompt: { type: 'text'; text: string }[]; agentOptions: Route; persona: string; toolFilter: { allow: readonly string[] }; maxDepth: number }; signal: AbortSignal }): Promise<{ childId: string; messageId: string }>; sendMessage(...args: unknown[]): unknown; listChildren(...args: unknown[]): unknown; drainContinuableDescendants(roots: readonly Agent[]): Promise<void> }
 interface Capabilities { agents: Agents; workspaces: Workspaces; settings: Settings; projections: Projections; persistence: Persistence; sessions: Sessions; inspector: Inspector; presets: Presets; llm: Llm; tools: Tools; subagents: Subagents; preview: GitHubCopilotPreview }
-interface ChildDescriptor { readonly version: 1; readonly mode: 'continuable'; readonly provider: 'spawn'; readonly agentProvider: string; readonly agentModel: string }
+interface ChildDescriptor { readonly version: 3; readonly mode: 'continuable'; readonly provider: 'spawn'; readonly agentProvider: string; readonly agentModel: string }
 interface Projection { readonly id: string; readonly parentId: string | null; readonly origin: string | null; readonly inherited: number; readonly policy: Policy | null; readonly child: ChildDescriptor | null; readonly invalid: boolean }
-const ChildJson = json.object({ version: json.literal(1), mode: json.literal('continuable'), provider: json.literal('spawn'), agentProvider: json.string(), agentModel: json.string() })
+// Native descriptors have been v3 since the retained rc.1 baseline. Version 1
+// here was a plugin/test bug, not a supported Core history migration. Unknown or
+// legacy child records remain on disk but cannot authorize an executor overlay.
+const ChildJson = json.object({ version: json.literal(3), mode: json.literal('continuable'), provider: json.literal('spawn'), agentProvider: json.string(), agentModel: json.string() }).strict()
+const ChildWireJson = ChildJson.extend({
+  label: json.string(), agentReasoningEffort: json.string().optional(), persona: json.string().optional(),
+  toolFilter: json.object({ allow: json.array(json.string()).optional(), deny: json.array(json.string()).optional() }).strict()
+    .refine(value => value.allow !== undefined || value.deny !== undefined).optional(),
+}).strict().transform(({ version, mode, provider, agentProvider, agentModel }): ChildDescriptor => ({ version, mode, provider, agentProvider, agentModel }))
 const ProjectionJson = json.object({ id: json.string(), parentId: json.string().nullable(), origin: json.string().nullable(), inherited: json.number(), policy: PolicyJson.nullable(), child: ChildJson.nullable(), invalid: json.boolean() })
 
 /** A root policy is authoritative only in its own suffix, never in a fork seed. */
 export const dualModelProjection = {
-  key: DUAL_MODEL_PROJECTION, stateVersion: 1, stateSchema: ProjectionJson,
+  key: DUAL_MODEL_PROJECTION, stateVersion: 2, stateSchema: ProjectionJson,
   init: (header: Header, inherited = 0): Projection => ({ id: header.id, parentId: header.parentSession ?? null, origin: header.origin ?? null, inherited, policy: null, child: null, invalid: false }),
   apply: (state: Projection, event: LogEvent): Projection => {
     if (event.seq < state.inherited) return state
@@ -67,8 +75,9 @@ export const dualModelProjection = {
       return { ...state, policy: parsed.data }
     }
     if (event.type === 'subagent/descriptor' && state.origin === 'subagent') {
-      const parsed = ChildJson.safeParse(event.data)
-      return { ...state, child: parsed.success ? parsed.data : null }
+      const parsed = ChildWireJson.safeParse(event.data)
+      if (state.child !== null || !parsed.success) return { ...state, child: null, invalid: true }
+      return { ...state, child: parsed.data }
     }
     return state
   },
@@ -369,7 +378,10 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
     if (this.overlays.has(agent)) return
     const state = this.projection(agent)
     if (!state) { if (dedicatedAddress(agent)) fail('DUAL_MODEL_UNSUPPORTED'); return }
-    if (state.invalid) fail('DUAL_MODEL_POLICY_INVALID')
+    // The projection observes all child descriptors, including valid native
+    // compositions outside this feature's narrow executor contract. Refuse
+    // invalid history only after this root/lineage is established as role-owned.
+    if (state.invalid && (dedicatedAddress(agent) || state.policy !== null)) fail('DUAL_MODEL_POLICY_INVALID')
     if (state.policy) { this.install(agent, state.policy, 'planner'); return }
     if (state.origin !== 'subagent' || state.parentId === null) {
       if (dedicatedAddress(agent)) fail('DUAL_MODEL_POLICY_INVALID')
@@ -381,7 +393,7 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
     if (parentOverlay?.role === 'executor') fail('DUAL_MODEL_DELEGATION_DENIED')
     const parentPolicy = this.projection(parent)?.policy
     if (!parentPolicy) { if (dedicatedAddress(agent)) fail('DUAL_MODEL_POLICY_INVALID'); return }
-    if (!state.child || state.child.agentProvider !== PROVIDER || state.child.agentModel !== parentPolicy.executorModel) fail('DUAL_MODEL_POLICY_INVALID')
+    if (state.invalid || !state.child || state.child.agentProvider !== PROVIDER || state.child.agentModel !== parentPolicy.executorModel) fail('DUAL_MODEL_POLICY_INVALID')
     this.install(agent, parentPolicy, 'executor')
   }
   private install(agent: Agent, policy: Policy, role: 'planner' | 'executor'): void {

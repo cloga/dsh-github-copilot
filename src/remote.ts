@@ -7,6 +7,7 @@ import type {
   TypertRemoteContribution,
 } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
+import { strictRemoteCodec } from './remote-codec.ts'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { GitHubCopilotMigrationStatus } from './migration-status.ts'
 import dualModelRemote from './dual-model-remote.ts'
@@ -64,11 +65,7 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
   error: z.string().optional(),
 }).strict()
 
-const result = {
-  mode: 'strict',
-  typeSymbol: GITHUB_COPILOT_AUTHORIZATION_VIEW_TYPE_SYMBOL,
-  schema: GitHubCopilotAuthorizationViewSchema,
-} as const
+const result = strictRemoteCodec(GITHUB_COPILOT_AUTHORIZATION_VIEW_TYPE_SYMBOL, GitHubCopilotAuthorizationViewSchema)
 
 export const GITHUB_COPILOT_MIGRATION_STATUS_TYPE_SYMBOL
   = 'dsh-github-copilot#GitHubCopilotMigrationStatus'
@@ -117,7 +114,7 @@ const contribution: TypertRemoteContribution = {
       id: 'dsh-github-copilot:githubCopilot.migrationStatus',
       service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'migrationStatus',
       invocation: direct, parameters: [],
-      result: { mode: 'strict', typeSymbol: GITHUB_COPILOT_MIGRATION_STATUS_TYPE_SYMBOL, schema: GitHubCopilotMigrationStatusSchema },
+      result: strictRemoteCodec(GITHUB_COPILOT_MIGRATION_STATUS_TYPE_SYMBOL, GitHubCopilotMigrationStatusSchema),
     },
     ...dualModelRemote.descriptors,
     ...searchRoutingRemote.descriptors,

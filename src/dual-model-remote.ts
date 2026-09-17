@@ -1,6 +1,7 @@
 /** Client-safe, strict wire contract for the optional Copilot model-role feature. */
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
+import { strictRemoteCodec } from './remote-codec.ts'
 import type { DualModelConfig, DualModelView, DualModelSaveRequest, DualModelCreateRequest, DualModelCreateResult } from './dual-model-types.ts'
 export type { DualModelConfig, DualModelView, DualModelSaveRequest, DualModelCreateRequest, DualModelCreateResult } from './dual-model-types.ts'
 
@@ -43,21 +44,21 @@ const contribution: TypertRemoteContribution = {
       id: 'dsh-github-copilot:githubCopilotDualModel.view',
       namespace: 'githubCopilotDualModel', service: 'githubCopilotDualModel', method: 'view',
       invocation: { kind: 'direct' }, parameters: [],
-      result: { mode: 'strict', typeSymbol: 'dsh-github-copilot#DualModelView', schema: DualModelViewSchema },
+      result: strictRemoteCodec('dsh-github-copilot#DualModelView', DualModelViewSchema),
     },
     {
       id: 'dsh-github-copilot:githubCopilotDualModel.save',
       namespace: 'githubCopilotDualModel', service: 'githubCopilotDualModel', method: 'save',
       invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-github-copilot#DualModelSaveRequest', schema: DualModelSaveSchema } }],
-      result: { mode: 'strict', typeSymbol: 'dsh-github-copilot#DualModelView', schema: DualModelViewSchema },
+        codec: strictRemoteCodec('dsh-github-copilot#DualModelSaveRequest', DualModelSaveSchema) }],
+      result: strictRemoteCodec('dsh-github-copilot#DualModelView', DualModelViewSchema),
     },
     {
       id: 'dsh-github-copilot:githubCopilotDualModel.create',
       namespace: 'githubCopilotDualModel', service: 'githubCopilotDualModel', method: 'create',
       invocation: { kind: 'direct' }, parameters: [{ name: 'input', wire: 'input', source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-github-copilot#DualModelCreateRequest', schema: DualModelCreateSchema } }],
-      result: { mode: 'strict', typeSymbol: 'dsh-github-copilot#DualModelCreateResult', schema: DualModelCreateResultSchema },
+        codec: strictRemoteCodec('dsh-github-copilot#DualModelCreateRequest', DualModelCreateSchema) }],
+      result: strictRemoteCodec('dsh-github-copilot#DualModelCreateResult', DualModelCreateResultSchema),
     },
   ],
 }

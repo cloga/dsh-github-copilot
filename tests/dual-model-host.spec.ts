@@ -85,7 +85,7 @@ async function fixture() {
       const id = `child-${agentsMap.size}`, parent = spec.request.parent
       const session = Session.create(id as CoreAgent['id'], undefined, { id, version: SESSION_FORMAT_VERSION, createdAt: 2, cwd: FIXTURE_CWD, parentSession: parent.id, origin: 'subagent', isSeeded: false })
       const append = session.append as (type: string, data: unknown) => unknown
-      append.call(session, 'subagent/descriptor', { version: 1, mode: 'continuable', provider: 'spawn', label: 'task', agentProvider: spec.request.agentOptions.provider, agentModel: spec.request.agentOptions.model, toolFilter: spec.request.toolFilter })
+      append.call(session, 'subagent/descriptor', { version: 3, mode: 'continuable', provider: 'spawn', label: 'task', agentProvider: spec.request.agentOptions.provider, agentModel: spec.request.agentOptions.model, toolFilter: spec.request.toolFilter })
       const agent = makeAgent(id, session); bindScopeParent(agent, presetKey); agentsMap.set(id, agent); publish(agent)
       return { childId: id, messageId: 'accepted' }
     }) }
@@ -163,6 +163,43 @@ describe('optional dedicated planner/executor Host', () => {
     expect((await f.execute(agent, 'dynamic_bypass')).isError).toBe(true)
     const ordinary = f.makeAgent('ordinary', Session.create('ordinary' as CoreAgent['id'])); bindScopeParent(ordinary, await f.presets.standingKeyFor())
     expect((await f.execute(ordinary, 'write')).isError).toBe(false)
+  })
+  it.each([
+    { version: 3, mode: 'continuable', provider: 'spawn', label: 'inherited model' },
+    { version: 3, mode: 'continuable', provider: 'fork', label: 'forked child', agentProvider: PROVIDER, agentModel: 'exec-B' },
+  ])('leaves ordinary native children unaffected by narrow role descriptor validation: $provider', async descriptor => {
+    const f = await fixture()
+    const parent = f.makeAgent('ordinary-parent', Session.create('ordinary-parent' as CoreAgent['id']))
+    f.agentsMap.set(parent.id, parent)
+    const id = `ordinary-${descriptor.provider}-child`
+    const session = Session.create(id as CoreAgent['id'], undefined, {
+      id, version: SESSION_FORMAT_VERSION, createdAt: 2, cwd: FIXTURE_CWD,
+      parentSession: parent.id, origin: 'subagent', isSeeded: false,
+    })
+    const append = session.append as (type: string, data: unknown) => unknown
+    append.call(session, 'subagent/descriptor', descriptor)
+    const child = f.makeAgent(id, session)
+    bindScopeParent(child, await f.presets.standingKeyFor())
+    f.agentsMap.set(id, child)
+    expect(f.projections.stateOf(session, DUAL_MODEL_PROJECTION)).toMatchObject({ invalid: true, child: null })
+    expect(() => f.publish(child)).not.toThrow()
+    expect((await f.execute(child, 'write')).isError).toBe(false)
+    expect(f.tools.get(DUAL_MODEL_EXECUTE_TOOL, child)).toBeUndefined()
+  })
+  it('still rejects invalid child descriptors when their parent has a dedicated role policy', async () => {
+    const f = await fixture(); await f.enable()
+    const { sessionId } = await f.create()
+    const id = 'invalid-dedicated-child'
+    const session = Session.create(id as CoreAgent['id'], undefined, {
+      id, version: SESSION_FORMAT_VERSION, createdAt: 2, cwd: FIXTURE_CWD,
+      parentSession: sessionId, origin: 'subagent', isSeeded: false,
+    })
+    const append = session.append as (type: string, data: unknown) => unknown
+    append.call(session, 'subagent/descriptor', { version: 3, mode: 'continuable', provider: 'spawn', label: 'missing model' })
+    const child = f.makeAgent(id, session)
+    bindScopeParent(child, await f.presets.standingKeyFor())
+    expect(() => f.publish(child)).toThrow('DUAL_MODEL_POLICY_INVALID')
+    expect((await f.execute(child, 'write')).isError).toBe(true)
   })
   it('fixes the native executor route, records lineage, and prevents executor delegation', async () => {
     const f = await fixture(); await f.enable(); const { sessionId } = await f.create(), parent = f.agentsMap.get(sessionId)!

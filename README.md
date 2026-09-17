@@ -9,9 +9,9 @@
 
 A focused DSH companion for GitHub Copilot sign-in, account-aware model profiles, Copilot-specific tool compatibility, and provider-hosted search. It reuses DSH's built-in `@deepseek-ai/dsh-llm-pi-ai`; it is not a second Copilot model adapter or catalog.
 
-## Tested baselines
+## Compatibility baselines and qualification targets
 
-| DSH surface | Tested source | Models UI |
+| DSH surface | Exact source pin | Models UI seam |
 |---|---|---|
 | Controlled Desktop `0.1.1-rc.2` baseline | Controlled Core commit [`a772dbb`](https://github.com/cloga/deepseek-harness/commit/a772dbbde82780bff2b9394427e9f0a24cafa1d5) on `cloga-pi-ai-model-api` | Dedicated **Settings → GitHub Copilot** section |
 | DSH `0.1.2-rc.1` | Tag commit [`a66e470`](https://github.com/deepseek-ai/deepseek-harness/commit/a66e4702047846cdaa10c66c9d3df3951f5ea70d) | **Settings → Models** provider card |
@@ -20,9 +20,10 @@ A focused DSH companion for GitHub Copilot sign-in, account-aware model profiles
 | Official DSH `0.1.5-alpha.2` | Tag commit [`b2e3b2a`](https://github.com/deepseek-ai/deepseek-harness/commit/b2e3b2a0125854567a4a5fcba75782e42fe84901) | **Settings → Models** provider card |
 | Official DSH `0.1.5-rc.1` | Tag commit [`183f08e`](https://github.com/deepseek-ai/deepseek-harness/commit/183f08e9c6dde7e36cd2318eaee70b0da08fb35e) | **Settings → Models** provider card |
 | Official DSH `0.1.5-rc.2` | Tag commit [`fb2c4b9`](https://github.com/deepseek-ai/deepseek-harness/commit/fb2c4b9e698e30edb738bca4cf0618587db7d203) | **Settings → Models** provider card |
-| Official DSH `0.1.6-alpha.1` (current target) | Tag commit [`0a15e36`](https://github.com/deepseek-ai/deepseek-harness/commit/0a15e36e7f82b6ed45af6fa9759f29b40dcd965d) | **Settings → Models** provider card |
+| Official DSH `0.1.6-alpha.1` | Tag commit [`0a15e36`](https://github.com/deepseek-ai/deepseek-harness/commit/0a15e36e7f82b6ed45af6fa9759f29b40dcd965d) | **Settings → Models** provider card |
+| Official DSH `0.1.6-alpha.2` (current qualification target) | Tag `dsh-v0.1.6-alpha.2`, commit [`ddefc45`](https://github.com/deepseek-ai/deepseek-harness/commit/ddefc45fbc7f8e46dd73185e68295696d1297887) | **Settings → Models** provider card |
 
-The table retains historical source pins; it does not imply the account-model route has been verified on every baseline. Published-artifact synthetic transport tests use the **rc.1 adapter with pi 0.85.1**; development dependencies remain pinned to `0.1.2-rc.1`. The controlled rc.2 pin is historical regression evidence only. DSH `0.1.3-alpha.1`, official `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, and `0.1.6-alpha.1` are unchanged tagged-source targets: CI exercises each through an isolated test resolver, without building or patching Core. These source-runtime checks must pass before claiming compatibility; they do not establish standalone npm-artifact, live endpoint, installed Desktop, or loaded-runtime proof. Existing public Host, Client, and Remote seams are retained. Stock Core model-entry `api` support is not a prerequisite for the plugin-owned route. Package peer and `engines.dsh` ranges are admission declarations, not live compatibility proof. No Core patch is installed by this plugin.
+The table retains historical source pins; it does not imply the account-model route has been verified on every baseline. Published-artifact synthetic transport tests use the **rc.1 adapter with pi 0.85.1**; development dependencies remain pinned to `0.1.2-rc.1`. The controlled rc.2 pin is historical regression evidence only. DSH `0.1.3-alpha.1`, official `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.6-alpha.1`, and `0.1.6-alpha.2` are unchanged tagged-source targets: CI exercises each through an isolated test resolver, without building or patching Core. These source-runtime checks must pass before claiming compatibility; they do not establish standalone npm-artifact, live endpoint, installed Desktop, or loaded-runtime proof. Existing public Host, Client, and Remote seams are retained. Stock Core model-entry `api` support is not a prerequisite for the plugin-owned route. Package peer and `engines.dsh` ranges are admission declarations, not live compatibility proof. No Core patch is installed by this plugin.
 
 ### Alpha.11 compatibility correction (#105)
 
@@ -52,9 +53,15 @@ The built Client intentionally requests React from DSH's browser `ModuleLoader` 
 
 Alpha.24 fixes the Web search card's missing traced Remote dependency. It remains in **Settings → Models** (`settings.models.footer`, list/root), with an old-Core Web search section fallback, not General. The search child waits independently for its routing namespace; account controls and all search safety guards are unchanged. Actual packaged Desktop acceptance is still a separate gate.
 
+### Alpha.25 official-first DSH 0.1.6-alpha.2 adaptation
+
+The candidate appends the ninth exact target, `dsh-v0.1.6-alpha.2` at `ddefc45fbc7f8e46dd73185e68295696d1297887`. Strict Remote descriptors now provide alpha.2 `create()` factories while retaining a legacy `schema` bridge to the same strict parser. Dedicated executor projection admission uses native `subagent/descriptor` **v3**, already v3 in rc.1: the old v1 assumption was a plugin bug, not an upstream v1-to-v3 migration. Projection cache **`stateVersion: 2`** forces refolding, not history conversion. Unknown/v1/v2 descriptor histories fail closed and remain unmodified; review the old child and explicitly create a new child if needed, never fake a conversion by relabeling its descriptor.
+
+Source markers, local rc.1-backed focused tests and fifteen scoped exact-source runtime tests passed (alpha.2 contracts 8, Remote 1 and Session-context 6). Full local `pnpm verify` passed: 1373 Vitest tests with 2 expected skips, 176 tooling tests, typechecks, build and package smoke; pack/tarball verification also passed. The scoped run used a supplemental resolver with official TypeScript `6.0.3`, declared `mime-types@3.0.2` and `ws@8.21.0`, and shared Zod `^4.4.3`, without source/dependency patches; it is not full official-root-helper qualification. Broad frozen dependency installation remains blocked by the configured mirror returning HTTP 404 for `node-addon-require-builtin@0.1.6`. **CI qualification has not executed.** No published-artifact compatibility, live Desktop activation, OAuth or real model-call success is claimed. The [official-first matrix](./docs/official-first-016-alpha2.md) records exact official sources, support scope, retained gaps and retirement triggers rather than assuming missing parity from feature names.
+
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.24`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.25`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -67,7 +74,7 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For approved online installation, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.24/dsh-github-copilot-0.4.0-alpha.24.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.25/dsh-github-copilot-0.4.0-alpha.25.tgz
 ```
 
 If registry access is blocked or unavailable, do not retry it through another network. Desktop-managed profiles may instead use the [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance), with an approved, checksum-verified local Release and existing dependency cache (`--offline --ignore-scripts`). All preflight and approval requirements still apply.
@@ -132,7 +139,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.24`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.25`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -151,7 +158,7 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 Under **Settings → Models → Model roles**, enable dedicated dual-model sessions, select two available account models, save, and choose **Create session with this configuration** for an existing workspace. The planner handles planning and acceptance; `copilot_execute` delegates implementation to a native continuable child with a fixed execution model. Configuration is off by default and affects only sessions created through this entry. It does not change the global default, existing sessions, credentials or the ordinary Subagent model-selection setting.
 
-Unavailable models are not substituted. Uncertain creation retries keep the same request identity. The feature requires public role/session/subagent capabilities and is visibly unavailable when they are absent; historical package compatibility is not blanket certification of this optional flow. See [setup, lifecycle, limitations and evidence](./docs/dual-model.md). The feature is included in the `0.4.0-alpha.24` candidate; source and fixture tests are not proof of publication or Desktop activation.
+Unavailable models are not substituted. Uncertain creation retries keep the same request identity. The feature requires public role/session/subagent capabilities and is visibly unavailable when they are absent; historical package compatibility is not blanket certification of this optional flow. See [setup, lifecycle, limitations and evidence](./docs/dual-model.md). The feature is included in the `0.4.0-alpha.25` candidate; source and fixture tests are not proof of publication or Desktop activation.
 
 If the card says **Could not load model roles**, do not change model defaults to work around it: this is a failed settings load, distinct from unsupported capabilities or unavailable models. In particular, a `githubCopilotDualModel/view` HTTP 404 indicates missing Host Remote exposure, not that the feature is off. See [troubleshooting and verification](./docs/dual-model.md#loading-and-remote-troubleshooting).
 
@@ -342,9 +349,9 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-Use Node 24 LTS for development and the pinned pnpm version; runtime dependencies require Node >=22.19.0. `pnpm verify` runs the Agent contract check, source and local test typechecking, baseline markers, clean build, Vitest and Node tooling tests, and a real built Host import plus Client/Remote smoke. After packing, run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz` to verify archive exports, media, allowed contents and equality to that build. CI checks all eight exact Core sources/config fixtures on Windows and Linux: controlled `0.1.1-rc.2`, `0.1.2-rc.1`, `0.1.3-alpha.1`, official `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, and `0.1.6-alpha.1`. The six tagged-source targets also run unchanged tagged-source runtime fixtures; release publication depends on that full matrix.
+Use Node 24 LTS for development and the pinned pnpm version; runtime dependencies require Node >=22.19.0. `pnpm verify` runs the Agent contract check, source and local test typechecking, baseline markers, clean build, Vitest and Node tooling tests, and a real built Host import plus Client/Remote smoke. After packing, run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz` to verify archive exports, media, allowed contents and equality to that build. The CI definition targets all nine exact Core sources/config fixtures on Windows and Linux: controlled `0.1.1-rc.2`, `0.1.2-rc.1`, `0.1.3-alpha.1`, official `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.6-alpha.1`, and `0.1.6-alpha.2`. All seven tagged-source targets are gated by unchanged tagged-source runtime fixtures; release publication depends on that full matrix. This candidate's CI qualification has not executed; see the alpha.25 evidence limits above.
 
-For the optional reasoning UI integration, `pnpm verify:reasoning-ui -- <Core checkout>` runs a synthetic native-renderer, Slot registry and history-assembly fixture against a clean pinned `0.1.2-rc.1`, `0.1.3-alpha.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, or `0.1.6-alpha.1` checkout with its Chat dependencies installed. It exclusively creates one temporary test file and removes it only if unchanged. This is local integration/static-render evidence, not a live browser or Copilot API test; CI runs it on all seven supported Chat baselines.
+For the optional reasoning UI integration, `pnpm verify:reasoning-ui -- <Core checkout>` runs a synthetic native-renderer, Slot registry and history-assembly fixture against a clean pinned `0.1.2-rc.1`, `0.1.3-alpha.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.6-alpha.1`, or `0.1.6-alpha.2` checkout with its Chat dependencies installed. It exclusively creates one temporary test file and removes it only if unchanged. This is local integration/static-render evidence, not a live browser or Copilot API test; the CI definition covers all eight supported Chat baselines, without implying this candidate's qualification has run.
 
 ### Agent-driven development
 
@@ -376,8 +383,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.24/dsh-github-copilot-0.4.0-alpha.24.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.24/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.25/dsh-github-copilot-0.4.0-alpha.25.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.25/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -385,7 +392,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.24.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.25.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

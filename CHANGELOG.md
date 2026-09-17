@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0-alpha.25 (candidate)
+
+- Append the ninth exact official target `dsh-v0.1.6-alpha.2` at `ddefc45fbc7f8e46dd73185e68295696d1297887`, retaining all older pins and exact `0.1.2-rc.1` development dependencies.
+- Supply strict Remote `create()` factories with a legacy `schema` bridge over the same parser; preserve endpoint contracts and validation rather than weakening to `src-json`.
+- Correct dedicated executor projection admission to native `subagent/descriptor` v3. Native descriptors were already v3 in rc.1; the plugin's old v1 assumption was a bug, not an upstream format migration.
+- Bump the plugin projection cache to `stateVersion: 2` to force refolding. Unknown/v1/v2 descriptor histories fail closed and remain unmodified; recovery requires a reviewed new child, never relabeling or fabricated conversion.
+- Add strict-codec, descriptor/projection and exact-alpha.2 contract fixtures, plus an [official-first comparison and retirement plan](./docs/official-first-016-alpha2.md) for retained custom surfaces.
+- Evidence remains limited: source markers, local rc.1-backed focused tests and fifteen scoped exact-source runtime tests passed (alpha.2 contracts 8, Remote 1 and Session-context 6; supplemental resolver with official TypeScript `6.0.3`, declared `mime-types@3.0.2` and `ws@8.21.0`, and shared Zod `^4.4.3`, no source/dependency patches). Full local `pnpm verify` passed: 1373 Vitest tests with 2 expected skips, 176 tooling tests, typechecks/build/package smoke; pack/tarball verification passed. Broad frozen dependency installation remains blocked by the configured mirror's `node-addon-require-builtin@0.1.6` HTTP 404. Full official-root-helper and CI qualification remain pending. This candidate is not a published-artifact, live Desktop, OAuth or model-call compatibility claim.
+
 ## 0.4.0-alpha.24 (prepared)
 
 - Declare the exact `remote.githubCopilotSearchRouting` dependency in the search UI child Fiber so the Web search card can render under Cordis service tracing (#137).

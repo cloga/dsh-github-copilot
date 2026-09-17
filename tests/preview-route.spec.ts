@@ -1297,7 +1297,7 @@ describe('plugin-owned account Copilot route', () => {
       content: [{ type: 'image', attachment }], source: { kind: 'user' },
     })
     const first = await call(harness.ctx, { messages: [original] })
-    if (process.env.DSH_PUBLISHED_CORE_RELEASE !== '0.1.6-alpha.1') {
+    if (!['0.1.6-alpha.1', '0.1.6-alpha.2'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
       expect(first.assembler.finish).toEqual({ kind: 'stop' })
       return
     }
