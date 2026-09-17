@@ -50,9 +50,11 @@ The candidate manifest treats `@deepseek-ai/dsh-authorization` and `@deepseek-ai
 
 The built Client intentionally requests React from DSH's browser `ModuleLoader` singleton. React is not a Desktop Host shared package and must not be installed as a required Node profile peer. Alpha.22 declares `dsh.client.external: [\"react\"]`, removes the root React peer, and retains React only as a development dependency. Packed verification now audits every required peer and Client external, confirms the real built Client requests exactly React from the loader, and preserves authorization/schemastery as required Host peers. This fixes the packaged Desktop startup error `requires missing react@^18.2.0` without enabling peer auto-install, bundling another React copy, or weakening Desktop graph validation. Actual packaged Electron loading remains a downstream acceptance gate.
 
+Alpha.24 fixes the Web search card's missing traced Remote dependency. It remains in **Settings → Models** (`settings.models.footer`, list/root), with an old-Core Web search section fallback, not General. The search child waits independently for its routing namespace; account controls and all search safety guards are unchanged. Actual packaged Desktop acceptance is still a separate gate.
+
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.23`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.24`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -65,7 +67,7 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For approved online installation, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.23/dsh-github-copilot-0.4.0-alpha.23.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.24/dsh-github-copilot-0.4.0-alpha.24.tgz
 ```
 
 If registry access is blocked or unavailable, do not retry it through another network. Desktop-managed profiles may instead use the [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance), with an approved, checksum-verified local Release and existing dependency cache (`--offline --ignore-scripts`). All preflight and approval requirements still apply.
@@ -130,7 +132,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.23`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.24`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -149,7 +151,7 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 Under **Settings → Models → Model roles**, enable dedicated dual-model sessions, select two available account models, save, and choose **Create session with this configuration** for an existing workspace. The planner handles planning and acceptance; `copilot_execute` delegates implementation to a native continuable child with a fixed execution model. Configuration is off by default and affects only sessions created through this entry. It does not change the global default, existing sessions, credentials or the ordinary Subagent model-selection setting.
 
-Unavailable models are not substituted. Uncertain creation retries keep the same request identity. The feature requires public role/session/subagent capabilities and is visibly unavailable when they are absent; historical package compatibility is not blanket certification of this optional flow. See [setup, lifecycle, limitations and evidence](./docs/dual-model.md). The feature is included in the `0.4.0-alpha.23` candidate; source and fixture tests are not proof of publication or Desktop activation.
+Unavailable models are not substituted. Uncertain creation retries keep the same request identity. The feature requires public role/session/subagent capabilities and is visibly unavailable when they are absent; historical package compatibility is not blanket certification of this optional flow. See [setup, lifecycle, limitations and evidence](./docs/dual-model.md). The feature is included in the `0.4.0-alpha.24` candidate; source and fixture tests are not proof of publication or Desktop activation.
 
 If the card says **Could not load model roles**, do not change model defaults to work around it: this is a failed settings load, distinct from unsupported capabilities or unavailable models. In particular, a `githubCopilotDualModel/view` HTTP 404 indicates missing Host Remote exposure, not that the feature is off. See [troubleshooting and verification](./docs/dual-model.md#loading-and-remote-troubleshooting).
 
@@ -374,8 +376,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.23/dsh-github-copilot-0.4.0-alpha.23.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.23/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.24/dsh-github-copilot-0.4.0-alpha.24.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.24/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -383,7 +385,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.23.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.24.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

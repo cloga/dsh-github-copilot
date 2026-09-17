@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.24 (prepared)
+
+- Declare the exact `remote.githubCopilotSearchRouting` dependency in the search UI child Fiber so the Web search card can render under Cordis service tracing (#137).
+- Regress the actual Client apply/render callback with real Cordis traced services on both the Models footer and legacy section, including independent account activation and routing-service loss cleanup.
+- Preserve all account, cancellation and paid-fallback guards. Isolated tests do not claim packaged Desktop activation or live search success.
+
 ## 0.4.0-alpha.23 (prepared)
 
 - Fix Model roles loading by exposing the dedicated Host `view`, `save` and `create` methods through the public Typert Remote service, retaining strict validation, CAS and session-creation ownership (#134).
