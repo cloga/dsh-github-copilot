@@ -989,7 +989,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     await disposeRemote()
     throw error
   }
-  const searchUi = ctx.inject(['remote.githubCopilot', 'remote.settings', 'slots'], registerSearchUi)
+  const searchUi = ctx.inject(['remote.githubCopilot', 'remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
   const dualModelUi = ctx.inject(['remote.githubCopilotDualModel', 'slots'], registerDualModelUi)
   // The optional Chat contribution must not hold authorization activation on older Cores.
   const presentation = ctx.inject(['uiConversation', 'slots'], scope => installReasoningPresentation({
