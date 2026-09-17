@@ -24,6 +24,7 @@ const alphaPins = new Map([
   [RC_015_1, '183f08e9c6dde7e36cd2318eaee70b0da08fb35e'],
   [RC_015_2, 'fb2c4b9e698e30edb738bca4cf0618587db7d203'],
   [ALPHA_016, '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d'],
+  ['0.1.6-alpha.2', 'ddefc45fbc7f8e46dd73185e68295696d1297887'],
 ])
 function packageInfo(name: string): { version: string; path: string } {
   const path = realpathSync(require.resolve(`${name}/package.json`))

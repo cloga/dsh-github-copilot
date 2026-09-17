@@ -116,7 +116,7 @@ await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',
 ])
 
-if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1'].includes(baseline.release)) {
+if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2'].includes(baseline.release)) {
   for (const path of ['package.json', 'packages/core/session/package.json', 'packages/llm/llm-pi-ai/package.json']) {
     const metadata = JSON.parse(await readFile(resolve(upstream, path), 'utf8'))
     if (metadata.version !== baseline.release) throw new Error(`DSH target package version differs in ${path}`)
@@ -132,7 +132,7 @@ if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.
   ])
 }
 
-if (['0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1'].includes(baseline.release)) {
+if (['0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2'].includes(baseline.release)) {
   await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', ['modelErrors: ReadonlyMap<string, string>', 'piProvider?: Provider', 'catalogError?: string'])
   await assertMarkers('packages/llm/llm-pi-ai/src/adapter.ts', ['profile.modelErrors.get(model)', "throw new LlmError(failure, 'INVALID_CONFIG')"])
 }
@@ -211,4 +211,13 @@ if (baseline.release === '0.1.6-alpha.1') {
   ])
 }
 
+if (baseline.release === '0.1.6-alpha.2') {
+  await assertMarkers('packages/typert/protocol/src/types.ts', ['readonly create: () => TypertSchema'])
+  await assertMarkers('packages/typert/registry/src/service.ts', ["typeof codec.create !== 'function'", 'strict codec has no create() factory'])
+  await assertMarkers('packages/subagent/subagent/src/descriptor.ts', ['SUBAGENT_DESCRIPTOR_VERSION = 3', 'readonly label: string', 'if (version !== SUBAGENT_DESCRIPTOR_VERSION) return undefined'])
+  await assertMarkers('packages/subagent/subagent/src/index.ts', ['snapshotSubagentDescriptor,', 'foldSubagentDescriptor,'])
+  await assertMarkers('packages/session/session-projection/src/index.ts', ['restoreFloor(checkpoint:', 'row.ver !== def.stateVersion', 'def.stateSchema.parse(row.val)'])
+  await assertMarkers('packages/client/ui-settings-models/src/client/slot-contract.ts', ["scope: 'root'", 'ModelsFooterOwnerProps'])
+  await assertMarkers('packages/web/web/src/index.ts', ['registerSearchProvider(', 'searchProvider', 'WEB_PROVIDER_CONFIGURED_MISSING'])
+}
 console.log(`Verified DSH ${baseline.release} public seams at ${commit}.`)

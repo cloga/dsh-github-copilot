@@ -43,6 +43,9 @@ jobs:
           - release: 0.1.6-alpha.1
             repository: deepseek-ai/deepseek-harness
             commit: 0a15e36e7f82b6ed45af6fa9759f29b40dcd965d
+          - release: 0.1.6-alpha.2
+            repository: deepseek-ai/deepseek-harness
+            commit: ddefc45fbc7f8e46dd73185e68295696d1297887
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -72,11 +75,15 @@ jobs:
       - name: Verify real Core config integration
         run: pnpm verify:controlled-core -- dsh-upstream
       - name: Install tagged Session and Remote verification closure
-        if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1'
+        if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2'
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-api-session-controller...'
+      - name: Install alpha2 subagent descriptor verification closure
+        if: matrix.dsh.release == '0.1.6-alpha.2'
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
       - name: Install 0.1.6 image-offload verification closure
-        if: matrix.dsh.release == '0.1.6-alpha.1'
+        if: matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2'
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-compaction-image-offload...'
       - name: Install tagged search verification closure
@@ -84,12 +91,12 @@ jobs:
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
       - name: Prepare unchanged alpha tagged-source runtime verification
-        if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1'
+        if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2'
         shell: bash
         run: |
           node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.dsh.release }}"
       - name: Exercise actual alpha runtime without building or patching Core
-        if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1'
+        if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2'
         shell: bash
         run: |
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts"

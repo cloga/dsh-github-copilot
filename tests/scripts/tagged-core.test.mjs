@@ -15,6 +15,7 @@ test('admits the exact 0.1.6-alpha.1 source pin while retaining prior tagged bas
     '0.1.5-rc.1': '183f08e9c6dde7e36cd2318eaee70b0da08fb35e',
     '0.1.5-rc.2': 'fb2c4b9e698e30edb738bca4cf0618587db7d203',
     '0.1.6-alpha.1': '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
+    '0.1.6-alpha.2': 'ddefc45fbc7f8e46dd73185e68295696d1297887',
   })
 })
 
@@ -145,7 +146,7 @@ test('maps import-condition mjs vendor exports without aliasing the plugin vendo
   assert.equal(resolver.resolveId('@deepseek-ai/schemastery', join(value.root, 'src/config.ts')), null)
 }))
 
-for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1']) {
+for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2']) {
   test(`selects the actual adapter, Session and Remote regression suite for ${release}`, async () => {
     const value = await fixture(release)
     try {
@@ -153,8 +154,13 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       for (const name of ['session-context-core.fixture.ts', 'remote-core.fixture.ts']) {
         await writeFile(join(value.root, 'tests/fixtures', name), 'export {}')
       }
-      if (release === '0.1.6-alpha.1') {
+      if (release.startsWith('0.1.6-')) {
         await writeFile(join(value.root, 'tests/tool-schema-compat.spec.ts'), 'export {}')
+      }
+      if (release === '0.1.6-alpha.2') {
+        for (const name of ['fixtures/alpha2-contracts-core.fixture.ts', 'remote-codec.spec.ts', 'dual-model-projection.spec.ts']) {
+          await writeFile(join(value.root, 'tests', name), 'export {}')
+        }
       }
       const report = await prepareTaggedCoreFixture(value, value)
       const config = (await import(pathToFileURL(report.configPath).href)).default
@@ -162,7 +168,8 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
       assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
         'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts',
-        ...release === '0.1.6-alpha.1' ? ['tests/tool-schema-compat.spec.ts'] : [],
+        ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts'] : [],
+        ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts'])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })

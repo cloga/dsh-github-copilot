@@ -184,16 +184,17 @@ assert(
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(
-  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1',
-  'DSH peer range must retain all earlier baselines and append 0.1.6-alpha.1',
+  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2',
+  'DSH peer range must retain all earlier baselines and append 0.1.6-alpha.2',
 )
 assert(packageJson.engines?.dsh === peerRange, 'top-level engines.dsh must declare the same host compatibility range')
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
-assert(dshBaselines.length === 8, 'exactly eight DSH baselines must be declared')
+assert(dshBaselines.length === 9, 'exactly nine DSH baselines must be declared')
+assert(new Set(dshBaselines.map(entry => entry.release)).size === 9, 'DSH baseline releases must be unique')
 const currentDsh = manifest.supportedBaselines.dsh
-assert(currentDsh.release === '0.1.6-alpha.1'
-  && currentDsh.tag === 'dsh-v0.1.6-alpha.1'
-  && currentDsh.commit === '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d', 'current Core target must be the exact official 0.1.6-alpha.1 tag')
+assert(currentDsh.release === '0.1.6-alpha.2'
+  && currentDsh.tag === 'dsh-v0.1.6-alpha.2'
+  && currentDsh.commit === 'ddefc45fbc7f8e46dd73185e68295696d1297887', 'current Core target must be the exact official 0.1.6-alpha.2 tag')
 assert(
   dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
     && entry.commit === 'a772dbbde82780bff2b9394427e9f0a24cafa1d5'
@@ -334,7 +335,8 @@ for (const capability of manifest.capabilities) {
   }
 }
 const alpha016Core = dshBaselines.find(entry => entry.release === '0.1.6-alpha.1')
-assert(alpha016Core?.tag === currentDsh.tag && alpha016Core.commit === currentDsh.commit
+assert(alpha016Core?.tag === 'dsh-v0.1.6-alpha.1'
+  && alpha016Core.commit === '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d'
   && alpha016Core.source === officialCore.source && alpha016Core.modelsUi === officialCore.modelsUi
   && alpha016Core.providerHeaders === officialCore.providerHeaders
   && alpha016Core.strictModeCompat === officialCore.strictModeCompat
@@ -360,6 +362,31 @@ assert(alpha016Core?.tag === currentDsh.tag && alpha016Core.commit === currentDs
     'tests/tool-schema-compat.spec.ts', 'tests/fixtures/session-context-core.fixture.ts',
     'tests/fixtures/remote-core.fixture.ts',
   ]), '0.1.6-alpha.1 must declare exact lifecycle, MCP, PTC, sandbox, attachment, Team and source-runtime evidence')
+
+const alpha0162Core = dshBaselines.find(entry => entry.release === '0.1.6-alpha.2')
+assert(alpha0162Core?.tag === currentDsh.tag && alpha0162Core.commit === currentDsh.commit
+  && alpha0162Core.source === officialCore.source && alpha0162Core.modelsUi === officialCore.modelsUi
+  && alpha0162Core.providerHeaders === officialCore.providerHeaders
+  && alpha0162Core.strictModeCompat === officialCore.strictModeCompat
+  && alpha0162Core.fileContentHelper === officialCore.fileContentHelper
+  && alpha0162Core.agentCreation === alpha016Core.agentCreation
+  && alpha0162Core.sessionHistory === alpha016Core.sessionHistory
+  && alpha0162Core.strictRemoteCodecs === 'create-factories-with-legacy-schema-bridge'
+  && alpha0162Core.roleChildDescriptorVersion === 3
+  && alpha0162Core.roleChildCacheVersion === 2
+  && alpha0162Core.roleChildHistory === 'unknown-legacy-history-fail-closed'
+  && alpha0162Core.runtimeDependencies === 'public-resolution-and-unload'
+  && alpha0162Core.clientSessionContext === 'multiple-session-owner-isolation'
+  && alpha0162Core.evidenceScope === officialCore.evidenceScope
+  && alpha0162Core.standaloneNpmArtifacts === 'not-tested'
+  && alpha0162Core.managedProviderValidation === 'synthetic-tagged-source-runtime'
+  && alpha0162Core.resolvedProfileDiagnostics === 'plugin-owned-empty-modelErrors'
+  && JSON.stringify(alpha0162Core.runtimeTests) === JSON.stringify([
+    ...alpha016Core.runtimeTests.slice(0, -2), 'tests/fixtures/alpha2-contracts-core.fixture.ts',
+    'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts',
+    ...alpha016Core.runtimeTests.slice(-2),
+  ]), '0.1.6-alpha.2 must declare exact codec, child, dependency lifetime, Client owner and bounded source-runtime targets')
+for (const path of alpha0162Core.runtimeTests) await access(resolve(root, path))
 
 const pluginSourcePaths = (await readdir(resolve(root, 'src'), { recursive: true }))
   .filter(path => path.endsWith('.ts'))
@@ -442,9 +469,15 @@ for (const path of [
   assert(!source.includes('db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5'), `${path} retains the superseded alpha.5 commit`)
 }
 
-const workflow = await read('.github/workflows/ci.yml')
+const workflow = (await read('.github/workflows/ci.yml')).replaceAll('\r\n', '\n')
 assertTaggedRuntimeClosure(workflow)
 assertTaggedRuntimeClosure(releaseWorkflow)
+const subagentClosure = "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'"
+for (const [path, source] of [['CI', workflow], ['Release', releaseWorkflow]]) {
+  assert(source.includes(subagentClosure), `${path} must install the alpha2 native child-descriptor closure`)
+}
+assert(workflow.includes("if: matrix.dsh.release == '0.1.6-alpha.2'\n        working-directory: dsh-upstream\n        run: " + subagentClosure),
+  'CI native child-descriptor closure must be scoped to alpha2')
 for (const command of [
   'a772dbbde82780bff2b9394427e9f0a24cafa1d5',
   'repository: cloga/deepseek-harness',
@@ -455,10 +488,11 @@ for (const command of [
   '183f08e9c6dde7e36cd2318eaee70b0da08fb35e',
   'fb2c4b9e698e30edb738bca4cf0618587db7d203',
   '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
+  'ddefc45fbc7f8e46dd73185e68295696d1297887',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
-  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1'",
-  "if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1'",
+  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2'",
+  "if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2'",
   'node scripts/verify-tagged-core.mjs prepare',
   'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
@@ -474,8 +508,8 @@ for (const marker of [
   "github.event_name == 'push' && github.ref == 'refs/heads/main'",
   'fetch-depth: 0',
   'scripts/release-policy.mjs --plan',
-  '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
-  '--release 0.1.6-alpha.1',
+  'ddefc45fbc7f8e46dd73185e68295696d1297887',
+  '--release 0.1.6-alpha.2',
   'node scripts/verify-tagged-core.mjs prepare',
   'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
