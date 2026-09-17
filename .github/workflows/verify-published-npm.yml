@@ -1,0 +1,56 @@
+name: Verify published npm bytes
+
+# This workflow can read publication evidence; it cannot publish or repair it.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact existing package version
+        required: true
+        default: 0.4.0-alpha.25
+        type: string
+      expected_sha:
+        description: Exact immutable release source commit
+        required: true
+        default: 5458fda2854d5956e0c8d68a0f0b0a6e55833c8b
+        type: string
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/verify-published-npm.yml
+      - scripts/verify-published-npm.mjs
+      - tests/scripts/verify-published-npm.test.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # A draft preparation PR does not perform registry reads before review.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Test read-only verifier without network
+        run: node --test tests/scripts/verify-published-npm.test.mjs
+      - name: Read exact immutable release and public npm metadata
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFY_VERSION: ${{ inputs.version || '0.4.0-alpha.25' }}
+          VERIFY_SOURCE_SHA: ${{ inputs.expected_sha || '5458fda2854d5956e0c8d68a0f0b0a6e55833c8b' }}
+        run: node scripts/verify-published-npm.mjs --version "$VERIFY_VERSION" --expected-sha "$VERIFY_SOURCE_SHA" --artifact-dir "$RUNNER_TEMP/npm-publication-verification"
+      - name: Preserve minimal success or failure receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: npm-publication-readback-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/npm-publication-verification/npm-publication-receipt.json
+          if-no-files-found: error
+          retention-days: 30
