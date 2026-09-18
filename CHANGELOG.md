@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.26 (prepared)
+
+- Fix low-contrast native dropdown options in dark mode for planning/execution models, workspaces and search providers (#142).
+- Pair opaque application-theme surfaces with primary or secondary foreground tokens on both selects and options, with readable system-color fallbacks on hosts without those tokens.
+- Preserve disabled/unavailable choices and all selection, CAS and session behavior. Add focused regressions and remove fixture-only option colors that masked the production bug; no Core or dependency changes are required.
+
 ## 0.4.0-alpha.25 (candidate)
 
 - Append the ninth exact official target `dsh-v0.1.6-alpha.2` at `ddefc45fbc7f8e46dd73185e68295696d1297887`, retaining all older pins and exact `0.1.2-rc.1` development dependencies.

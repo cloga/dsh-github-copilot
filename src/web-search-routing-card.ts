@@ -5,6 +5,7 @@ import type { ChangeEvent, CSSProperties, ReactElement } from 'react'
 import { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { SearchProviderCatalogSchema } from './search-routing-remote.ts'
 import { normalizeWebSearchRouting } from './search-routing-policy.ts'
+import { nativeOptionStyle, nativeSelectStyle } from './native-select-style.ts'
 
 const GITHUB_COPILOT_SETTINGS_NAMESPACE = 'github-copilot'
 const WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE = 'github-copilot-search-routing'
@@ -177,8 +178,8 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
     }
   }, [disabled, draft, missingCopilot, missingProvider, props.settings, usesCopilot])
 
-  const providerOptions = () => providers.map(id => createElement('option', { key: id, value: id }, id))
-  const unavailableOption = (id: string, known: boolean) => known ? null : createElement('option', { value: id, disabled: true }, `${id || '(empty)'} — unavailable`)
+  const providerOptions = () => providers.map(id => createElement('option', { key: id, value: id, style: nativeOptionStyle() }, id))
+  const unavailableOption = (id: string, known: boolean) => known ? null : createElement('option', { value: id, disabled: true, style: nativeOptionStyle(true) }, `${id || '(empty)'} — unavailable`)
   return createElement('section', { style: cardStyle, 'data-dsh-web-search-routing': true },
     createElement('div', null,
       createElement('h3', { style: { margin: 0, fontSize: '16px' } }, 'Web search'),
@@ -187,17 +188,17 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
     ),
     createElement('label', { style: fieldStyle },
       createElement('span', { style: { fontSize: '13px', fontWeight: 600 } }, 'Search provider'),
-      createElement('select', { style: controlStyle, disabled, value: draft.primary, 'data-dsh-web-search-mode': true,
+      createElement('select', { style: nativeSelectStyle(disabled), disabled, value: draft.primary, 'data-dsh-web-search-mode': true,
         onChange: (event: ChangeEvent<HTMLSelectElement>) => { const primary = event.currentTarget.value; setDraft(current => ({ ...current, primary })) } },
-      createElement('option', { value: 'auto' }, 'Auto — follow Chat'),
-      draft.primary === 'none' ? createElement('option', { value: 'none' }, 'Disabled — saved configuration') : null,
+      createElement('option', { value: 'auto', style: nativeOptionStyle() }, 'Auto — follow Chat'),
+      draft.primary === 'none' ? createElement('option', { value: 'none', style: nativeOptionStyle() }, 'Disabled — saved configuration') : null,
       ...providerOptions(), unavailableOption(draft.primary, primaryKnown)),
     ),
     createElement('label', { style: fieldStyle },
       createElement('span', { style: { fontSize: '13px', fontWeight: 600 } }, 'Default search provider'),
-      createElement('select', { style: controlStyle, disabled, value: draft.provider, 'data-dsh-web-search-provider': true,
+      createElement('select', { style: nativeSelectStyle(disabled), disabled, value: draft.provider, 'data-dsh-web-search-provider': true,
         onChange: (event: ChangeEvent<HTMLSelectElement>) => { const provider = event.currentTarget.value; setDraft(current => ({ ...current, provider })) } },
-      createElement('option', { value: NO_DEFAULT_SEARCH_PROVIDER }, 'None — no fallback'),
+      createElement('option', { value: NO_DEFAULT_SEARCH_PROVIDER, style: nativeOptionStyle() }, 'None — no fallback'),
       ...providerOptions(), unavailableOption(draft.provider, fallbackKnown)),
       createElement('span', { style: hintStyle }, 'Final fallback only: used when Auto has no matching provider or the primary search fails. The same provider is never retried as its own fallback.'),
     ),
