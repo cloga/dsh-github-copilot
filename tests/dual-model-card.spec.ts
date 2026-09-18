@@ -70,6 +70,40 @@ async function configure(card: Card) {
 }
 
 describe('scoped Copilot dual-model card in the real React DOM', () => {
+  it.each([true, false])('pairs theme foregrounds with opaque select and option surfaces (writable=%s)', async writable => {
+    const remote = remotes(view({ writable }))
+    const card = await mount(remote)
+    for (const name of ['planner', 'executor', 'workspace']) {
+      const control = card.field<HTMLSelectElement>(name)
+      expect(control.style.backgroundColor).toBe('var(--dsw-alias-bg-layer-1, Canvas)')
+      expect(control.style.color).toBe(writable ? 'var(--dsw-alias-label-primary, CanvasText)' : 'var(--dsw-alias-label-secondary, GrayText)')
+      for (const option of Array.from(control.options)) {
+        expect(option.style.backgroundColor).toBe('var(--dsw-alias-bg-layer-1, Canvas)')
+        expect(option.style.color).toBe(option.disabled ? 'var(--dsw-alias-label-secondary, GrayText)' : 'var(--dsw-alias-label-primary, CanvasText)')
+      }
+    }
+    expect(remote.save).not.toHaveBeenCalled()
+    expect(remote.create).not.toHaveBeenCalled()
+  })
+
+  it('keeps unavailable saved model and workspace options themed without replacing their values', async () => {
+    const configuration = { ...enabled, plannerModel: 'retired-model' }
+    const remote = remotes(view({ configuration }))
+    const card = await mount(remote)
+    await select(card, 'workspace', 'project-b')
+    remote.view.mockResolvedValueOnce(ok(view({ configuration, workspaces: [{ id: 'project-a', name: 'Project A' }] })))
+    await click(card, 'reload')
+    for (const [name, value] of [['planner', 'retired-model'], ['workspace', 'project-b']] as const) {
+      const control = card.field<HTMLSelectElement>(name)
+      expect(control.value).toBe(value)
+      const option = Array.from(control.options).find(item => item.value === value)!
+      expect(option.disabled).toBe(true)
+      expect(option.style.backgroundColor).toBe('var(--dsw-alias-bg-layer-1, Canvas)')
+      expect(option.style.color).toBe('var(--dsw-alias-label-secondary, GrayText)')
+    }
+    expect(remote.save).not.toHaveBeenCalled()
+    expect(remote.create).not.toHaveBeenCalled()
+  })
   it.each([['en-US', 'Model roles', 'Save configuration'], ['zh-CN', '模型分工', '保存配置']] as const)(
     'renders localized, labeled controls and defaults off: %s', async (locale, title, save) => {
       const remote = remotes()

@@ -1,5 +1,6 @@
 import { createElement, useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties, ReactElement } from 'react'
+import { nativeOptionStyle, nativeSelectStyle } from './native-select-style.ts'
 
 /** Client-owned contracts: no Host implementation or credential imports. */
 export interface DualModelConfig {
@@ -145,11 +146,6 @@ const cardStyle: CSSProperties = {
 const fieldStyle: CSSProperties = { display: 'grid', gap: '6px', minWidth: 0 }
 const textStyle: CSSProperties = { margin: 0, fontSize: '13px', lineHeight: 1.5 }
 const labelStyle: CSSProperties = { fontSize: '13px', fontWeight: 600 }
-const controlStyle: CSSProperties = {
-  width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '9px 11px', borderRadius: '9px', color: 'inherit',
-  border: '1px solid color-mix(in srgb, currentColor 24%, transparent)',
-  background: 'color-mix(in srgb, currentColor 3%, transparent)', font: 'inherit',
-}
 const buttonStyle: CSSProperties = {
   padding: '9px 16px', maxWidth: '100%', borderRadius: '999px', cursor: 'pointer',
   whiteSpace: 'normal', overflowWrap: 'anywhere', font: 'inherit', color: 'inherit',
@@ -305,7 +301,7 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
     return createElement('div', { style: fieldStyle },
       createElement('label', { htmlFor: `${id}-${role}`, style: labelStyle }, label),
       createElement('select', {
-        id: `${id}-${role}`, style: controlStyle, value, disabled,
+        id: `${id}-${role}`, style: nativeSelectStyle(disabled), value, disabled,
         [`data-dsh-dual-model-${role}`]: true,
         'aria-invalid': draft.enabled && !models.some(model => model.id === value) ? true : undefined,
         'aria-describedby': `${id}-model-help`,
@@ -316,9 +312,9 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
           setDraft(current => ({ ...current, [role === 'planner' ? 'plannerModel' : 'executorModel']: value }))
         },
       },
-      createElement('option', { value: '', disabled: true }, t.selectModel),
-      missing ? createElement('option', { value, disabled: true }, `${value} (${t.unavailable})`) : null,
-      ...models.map(model => createElement('option', { key: model.id, value: model.id }, model.name || model.id))),
+      createElement('option', { value: '', disabled: true, style: nativeOptionStyle(true) }, t.selectModel),
+      missing ? createElement('option', { value, disabled: true, style: nativeOptionStyle(true) }, `${value} (${t.unavailable})`) : null,
+      ...models.map(model => createElement('option', { key: model.id, value: model.id, style: nativeOptionStyle() }, model.name || model.id))),
     )
   }
   const viewNotice: Message | undefined = !view ? undefined : !view.supported ? diagnostic(view.diagnostic) ?? 'unsupported'
@@ -349,16 +345,16 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
     view && draft.enabled && !validModels ? ` ${t.modelsMissing}` : ''),
   createElement('div', { style: fieldStyle },
     createElement('label', { htmlFor: `${id}-workspace`, style: labelStyle }, t.workspace),
-    createElement('select', { id: `${id}-workspace`, style: controlStyle, disabled, value: shownWorkspace,
+    createElement('select', { id: `${id}-workspace`, style: nativeSelectStyle(disabled), disabled, value: shownWorkspace,
       'data-dsh-dual-model-workspace': true,
       onChange: (event: ChangeEvent<HTMLSelectElement>) => {
         const value = event.currentTarget.value
         if (!disabled && view?.workspaces.some(item => item.id === value)) setWorkspace(value)
       } },
-    createElement('option', { value: '', disabled: true }, t.selectWorkspace),
+    createElement('option', { value: '', disabled: true, style: nativeOptionStyle(true) }, t.selectWorkspace),
     shownWorkspace && !view?.workspaces.some(item => item.id === shownWorkspace)
-      ? createElement('option', { value: shownWorkspace, disabled: true }, `${shownWorkspace} (${t.unavailable})`) : null,
-    ...(view?.workspaces ?? []).map(item => createElement('option', { key: item.id, value: item.id }, item.name || item.id))),
+      ? createElement('option', { value: shownWorkspace, disabled: true, style: nativeOptionStyle(true) }, `${shownWorkspace} (${t.unavailable})`) : null,
+    ...(view?.workspaces ?? []).map(item => createElement('option', { key: item.id, value: item.id, style: nativeOptionStyle() }, item.name || item.id))),
     view && view.workspaces.length === 0 ? createElement('p', { style: textStyle }, t.noWorkspaces) : null),
   viewNotice ? createElement('p', { style: textStyle }, t[viewNotice]) : null,
   !pending && view && !viewNotice ? createElement('p', { style: textStyle }, dirty ? t.dirty : !draft.enabled ? t.disabled : '') : null,

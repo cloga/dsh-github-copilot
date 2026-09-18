@@ -140,6 +140,40 @@ async function ready(remote = remotes()) {
 }
 
 describe('independent Web search Settings card', () => {
+  it.each([true, false])('themes both provider selects and every option without changing settings (writable=%s)', async writable => {
+    const remote = remotes(), value = settingsValue()
+    value.writable = writable
+    remote.settings.describe.mockResolvedValue(ok(value))
+    const card = await ready(remote)
+    for (const name of ['web-search-mode', 'web-search-provider']) {
+      const control = field(card.render(), name)
+      expect(control.props.style.backgroundColor).toBe('var(--dsw-alias-bg-layer-1, Canvas)')
+      expect(control.props.style.color).toBe(writable ? 'var(--dsw-alias-label-primary, CanvasText)' : 'var(--dsw-alias-label-secondary, GrayText)')
+      for (const option of descendants(control).filter(item => item.type === 'option')) {
+        expect(option.props.style.backgroundColor).toBe('var(--dsw-alias-bg-layer-1, Canvas)')
+        expect(option.props.style.color).toBe(option.props.disabled ? 'var(--dsw-alias-label-secondary, GrayText)' : 'var(--dsw-alias-label-primary, CanvasText)')
+      }
+    }
+    expect(remote.settings.mutate).not.toHaveBeenCalled()
+  })
+
+  it('themes saved disabled and unavailable provider options without substituting them', async () => {
+    const remote = remotes(), value = settingsValue('retired-provider')
+    value.namespaces[0]!.value.searchProvider = 'none'
+    remote.settings.describe.mockResolvedValue(ok(value))
+    const card = await ready(remote)
+    const primary = field(card.render(), 'web-search-mode'), fallback = field(card.render(), 'web-search-provider')
+    expect(primary.props.value).toBe('none')
+    expect(fallback.props.value).toBe('retired-provider')
+    const savedOff = descendants(primary).find(item => item.type === 'option' && item.props.value === 'none')!
+    const unavailable = descendants(fallback).find(item => item.type === 'option' && item.props.value === 'retired-provider')!
+    expect(savedOff.props.style.backgroundColor).toBe('var(--dsw-alias-bg-layer-1, Canvas)')
+    expect(savedOff.props.style.color).toBe('var(--dsw-alias-label-primary, CanvasText)')
+    expect(unavailable.props.disabled).toBe(true)
+    expect(unavailable.props.style.backgroundColor).toBe('var(--dsw-alias-bg-layer-1, Canvas)')
+    expect(unavailable.props.style.color).toBe('var(--dsw-alias-label-secondary, GrayText)')
+    expect(remote.settings.mutate).not.toHaveBeenCalled()
+  })
   it.each(['rejected', 'unsupported', 'malformed'] as const)('does not invent provider options when the catalog is %s', async kind => {
     const remote = remotes()
     if (kind === 'rejected') remote.routing.providers.mockRejectedValueOnce(new Error('PRIVATE_CATALOG_ERROR'))

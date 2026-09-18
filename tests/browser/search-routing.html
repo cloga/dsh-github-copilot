@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="en"><head>
+<html lang="en" translate="no"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Search routing — isolated component verification</title><link rel="icon" href="data:,">
 <style>
-:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;background:#111214;color:#ededed}
-*{box-sizing:border-box}body{margin:0;padding:32px 20px;min-height:100vh}main{max-width:700px;margin:auto}h1{font-size:22px;margin:0 0 8px;font-weight:600}.fixture-note{font-size:13px;line-height:1.5;color:#bbb;margin:0 0 24px}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #91baff;outline-offset:3px}button:not(:disabled):hover{filter:brightness(1.15)}select option{background:#202124;color:#eee}::selection{background:#355787;color:white}body[data-theme=light]{color-scheme:light;background:#fafafa;color:#242424}body[data-theme=light] .fixture-note{color:#565656}body[data-theme=light] select option{background:white;color:#222}@media(max-width:480px){body{padding:20px 12px}h1{font-size:20px}}
+:root{color-scheme:normal;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;background:#111214;color:#ededed}
+/* Synthetic app-theme tokens only; native option colors come from the component. */
+*{box-sizing:border-box}body{--dsw-alias-bg-layer-1:#202124;--dsw-alias-label-primary:#ededed;--dsw-alias-label-secondary:#b8b8b8;--dsw-alias-border-l2:#666;margin:0;padding:32px 20px;min-height:100vh}main{max-width:700px;margin:auto}h1{font-size:22px;margin:0 0 8px;font-weight:600}.fixture-note{font-size:13px;line-height:1.5;color:#bbb;margin:0 0 24px}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #91baff;outline-offset:3px}button:not(:disabled):hover{filter:brightness(1.15)}::selection{background:#355787;color:white}body[data-theme=light]{--dsw-alias-bg-layer-1:#fff;--dsw-alias-label-primary:#242424;--dsw-alias-label-secondary:#595959;--dsw-alias-border-l2:#999;background:#fafafa;color:#242424}body[data-theme=light] .fixture-note{color:#565656}@media(max-width:480px){body{padding:20px 12px}h1{font-size:20px}}
 </style></head>
 <body><main><h1>Search settings</h1><p class="fixture-note">Isolated built component · synthetic providers only. No production services, credentials or searches.</p><div id="app"></div></main>
 <script src="/react.js"></script><script src="/react-dom.js"></script>
@@ -12,6 +13,8 @@
 <script src="/client.js"></script>
 <script>
 const q=new URLSearchParams(location.search);document.body.dataset.theme=q.get('theme')||'dark';
+const uaScheme=q.get('uaScheme');if(uaScheme==='light'||uaScheme==='dark')document.documentElement.style.colorScheme=uaScheme;
+const setTheme=theme=>{if(theme==='light'||theme==='dark')document.body.dataset.theme=theme;};
 const ROUTING='github-copilot-search-routing',COPILOT='github-copilot';
 const state={routingRevision:4,copilotRevision:7,configuration:{searchProvider:'auto',defaultSearchProvider:'deepseek-official'},model:'fixture-responses-model',providers:['deepseek-official','github-copilot-hosted','exa','community-search-provider-with-a-long-identifier'],calls:[]};
 const ns=(id,revision,value)=>({ns:id,revision,value,schema:{},applies:'live',secrets:[]});
@@ -21,6 +24,6 @@ for(const operation of operations){if(id===ROUTING)state.configuration[operation
 }};
 const routing={providers:async()=>({ok:true,value:{supported:true,providers:state.providers.map(id=>({id}))}})};
 const copilot={status:async()=>({ok:true,value:{phase:'signed-in',configured:true,writable:true,inFlight:false,notices:[],accountModels:{state:'ready',models:[{id:'fixture-responses-model',name:'Fixture model',api:'openai-responses'}],rejected:[]}}})};
-window.fixture=state;
+window.fixture=state;window.fixture.setTheme=setTheme;
 ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(window.CopilotUI.WebSearchRoutingCard,{settings,routing,copilot}));
 </script></body></html>

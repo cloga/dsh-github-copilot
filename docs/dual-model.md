@@ -56,6 +56,14 @@ These are the actual built component with **synthetic** account/workspace respon
 
 ![Light narrow screen: one synthetic session created](./images/dual-model-mobile.png)
 
+## Native dropdown appearance
+
+Model, workspace and search-provider selects and their options use the application's surface, primary/secondary text and border tokens. They do not infer the application theme from the operating system. Hosts without the tokens use paired system-color fallbacks. This is presentation only: changing theme does not save settings or replace selections.
+
+After building, `node tests/browser/verify-native-selects.mjs --playwright-module /absolute/path/to/existing/playwright-core/index.mjs --channel msedge` runs optional isolated browser checks without installing a browser dependency. It checks computed option/control colors, synthetic contrast, theme switching without remount or writes, 375px layout and enabled-control system fallbacks. The fixtures supply theme tokens rather than global option styling, so fixture CSS cannot hide a missing component style.
+
+Page screenshots do not necessarily contain the OS-owned expanded popup. Check the expanded native menu separately on the target browser, including unavailable/disabled entries and the selected highlight. The automated computed-style checks are not full Windows popup-painting or live Desktop acceptance evidence; historical captures above predate this appearance fix.
+
 ## Public integration and evidence
 
 The feature reuses public settings, account discovery, scope, Agent creation, Session projection/persistence, workspace attachment, tool restrictions/guards and native continuable subagents. It does not access Core private registries, edit prototypes, patch deployed packages, copy grants, install another wire adapter or require a Core change.
