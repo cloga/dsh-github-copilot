@@ -10,6 +10,7 @@ function fixture(available = true) {
   const ctx = {
     remote: { githubCopilotDualModel: available ? remote : undefined },
     get: vi.fn(() => undefined), logger: { warn: vi.fn() },
+    inject: vi.fn(() => ({ dispose: vi.fn(async () => {}) })),
     slots: {
       spec: vi.fn(() => ({ kind: 'list', scope: 'root' })),
       inject(name: string, callback: () => (() => void)) {

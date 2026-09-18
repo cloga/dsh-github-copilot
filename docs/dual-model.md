@@ -6,8 +6,8 @@ Issue [#127](https://github.com/cloga/dsh-github-copilot/issues/127). This is an
 
 1. Open **Settings → Models → Model roles** (Chinese: **模型分工**). Older supported Clients use the **Copilot · Model roles** settings section.
 2. Enable dual-model sessions and select a **Planning model** and an **Execution model** from this account's available Copilot models. Model names and IDs come from the existing account-discovery service, never an implementation table.
-3. Save the configuration. The revision-checked save affects only this plugin's `github-copilot-dual-model` namespace. No global model default, credential, other provider or existing session is changed.
-4. Select an existing workspace and choose **Create session with this configuration**. Return to the application if the host's settings surface remains open, then enter the task in the new conversation.
+3. Save the profile-global configuration; no workspace is required. The revision-checked save affects only this plugin's `github-copilot-dual-model` namespace, not a per-workspace setting. No global model default, credential, other provider or existing session is changed.
+4. Check the read-only current workspace under **New dedicated session**, then choose **Create session with this configuration**. There is no workspace dropdown. If no current workspace can be established, open one in the application first; the plugin never guesses the first or most recent workspace. Return to the application if the host's settings surface remains open, then enter the task in the new conversation.
 5. The planner clarifies the task, reads evidence and performs acceptance review. `copilot_execute` creates a native continuable execution child using the captured execution route. Its result shows the actual delegated provider/model and child ID; acceptance of the prompt is not completion. The original `send_message`, `list_agents` and `interrupt_agent` capabilities continue the child and expose its status.
 
 For example, if the account advertises them, choose GPT 6 for planning and GPT-5.6 Sol Fast for execution. These are examples, not hard-coded defaults or promises of account entitlement. Acceptance uses the planning model. Both roles share the existing Host-only Copilot OAuth lifecycle.
@@ -26,7 +26,7 @@ The ordinary **Subagent → Allow agents to choose models for subagents** settin
 
 ## Create, retry and recovery
 
-The browser generates a request UUID and keeps the original workspace and settings revision after an uncertain create. It never automatically replays creation. A user retry reuses that identity; the Host derives the same session ID, checks the stored operation before mutable settings, and either returns the original session or reports a conflict. It does not create a second root to work around an unknown result. Workspace attachment and session flush use public APIs; partial creation remains explicit and recoverable.
+The browser generates a request UUID and keeps the original workspace and settings revision after an uncertain create, even when the application's current workspace changes or the card remounts under the same Remote owner. It never automatically replays creation. A user retry reuses that identity; the Host derives the same session ID, checks the stored operation before mutable settings, and either returns the original session or reports a conflict. It does not create a second root to work around an unknown result. Workspace attachment and session flush use public APIs; partial creation remains explicit and recoverable.
 
 After a confirmed save conflict, reload settings and review the current configuration. During an uncertain creation the original input is held until confirmation. Reloading the whole browser can lose its in-memory pending receipt; inspect the session list before issuing a fresh creation request. The same supplied request UUID remains idempotent on the Host across process restart.
 
@@ -50,7 +50,7 @@ Loading a supported view performs non-forcing account discovery and may use the 
 
 ## UI verification captures
 
-These are the actual built component with **synthetic** account/workspace responses, not the production Desktop. [Capture provenance and artifact hashes](./images/dual-model-provenance.json) identify the exact evidence.
+These historical captures show the actual built component with **synthetic** account/workspace responses, not the production Desktop. They predate the current-workspace change and still show the removed destination dropdown; use the current browser fixture for the updated layout. [Capture provenance and artifact hashes](./images/dual-model-provenance.json) identify the exact evidence.
 
 ![Dark desktop: saved planner/executor configuration](./images/dual-model-desktop.png)
 
@@ -58,9 +58,9 @@ These are the actual built component with **synthetic** account/workspace respon
 
 ## Native dropdown appearance
 
-Model, workspace and search-provider selects and their options use the application's surface, primary/secondary text and border tokens. They do not infer the application theme from the operating system. Hosts without the tokens use paired system-color fallbacks. This is presentation only: changing theme does not save settings or replace selections.
+Model and search-provider selects and their options use the application's surface, primary/secondary text and border tokens. They do not infer the application theme from the operating system. Hosts without the tokens use paired system-color fallbacks. This is presentation only: changing theme does not save settings or replace selections.
 
-After building, `node tests/browser/verify-native-selects.mjs --playwright-module /absolute/path/to/existing/playwright-core/index.mjs --channel msedge` runs optional isolated browser checks without installing a browser dependency. It checks computed option/control colors, synthetic contrast, theme switching without remount or writes, 375px layout and enabled-control system fallbacks. The fixtures supply theme tokens rather than global option styling, so fixture CSS cannot hide a missing component style.
+After building, `node tests/browser/verify-native-selects.mjs --playwright-module /absolute/path/to/existing/playwright-core/index.mjs --channel msedge` runs optional isolated browser checks without installing a browser dependency. It checks computed option/control colors, synthetic contrast, theme switching without remount or writes, 375px layout and enabled-control system fallbacks. The fixtures supply theme tokens rather than global option styling, so fixture CSS cannot hide a missing component style. It also exercises English/Chinese workspace flows: save without a workspace, preserve drafts on destination changes, block unknown destinations, and retry the original uncertain creation after navigation. These run against the built card with synthetic props/Remote responses; mounted public-list wiring is covered separately by the integration tests.
 
 Page screenshots do not necessarily contain the OS-owned expanded popup. Check the expanded native menu separately on the target browser, including unavailable/disabled entries and the selected highlight. The automated computed-style checks are not full Windows popup-painting or live Desktop acceptance evidence; historical captures above predate this appearance fix.
 
@@ -68,12 +68,15 @@ Page screenshots do not necessarily contain the OS-owned expanded popup. Check t
 
 The feature reuses public settings, account discovery, scope, Agent creation, Session projection/persistence, workspace attachment, tool restrictions/guards and native continuable subagents. It does not access Core private registries, edit prototypes, patch deployed packages, copy grants, install another wire adapter or require a Core change.
 
-Missing public capabilities yield an unavailable card. The package's broad compatibility range covers its existing account/search features; it is **not** a promise that this optional flow works on every historical baseline.
+Missing Host role capabilities yield an unavailable card. Missing Client navigation/list capabilities disable fresh dedicated-session creation, not profile-global configuration. The package's broad compatibility range covers its existing account/search features; it is **not** a promise that this optional flow works on every historical baseline.
+
+Current workspace observation uses only the public `sessions.list` and `workspaces.list` snapshot/subscribe faces. On [exact official alpha.2](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/api/session-controller/src/client/sessions/service.ts), `SessionListState` no longer exposes `current`: the plugin reads the unique `byId` row with positive public `retainedBy.mainView` ownership, matching the source used by [Core's UI Session adapter](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/client/ui-session/src/client/index.ts). Retained legacy Clients expose `current` directly. Both paths require ready lists and unique workspace membership through `workspaceId` / `sessionIds`. Pending, unavailable or ambiguous selection is not a creation destination. The observer never retains a Session, opens history, reads private navigation state, or calls native new-session navigation. One Remote face per registration owner preserves unsaved edits and uncertain receipts while those lists update.
 
 Regression evidence is separated deliberately:
 
 - `dual-model-card.spec.ts`: real React DOM/jsdom interaction, bilingual copy, CAS, unavailable models, stale responses and uncertain-create receipt handling.
 - `dual-model-ui.spec.ts`: optional Slot registration, fallback and cleanup.
+- `current-workspace.spec.ts` / `dual-model-workspace-ui.spec.ts`: synthetic public legacy/current-target list shapes, real Cordis dependency tracing and React-mounted Slot callbacks, current-workspace changes without draft loss, optional-service lifetime, and uncertain request retention across navigation and surface remounts. These are not live Desktop navigation certification.
 - `dual-model-remote.spec.ts` / `dual-model-gateway.spec.ts`: strict owned codecs and the actual installed Client Gateway with synthetic RPC. Older Client Gateways do not sanitize successful values or arbitrary nested error details; the Host builds bounded DTOs, and the UI renders only its diagnostic allowlist.
 - `tests/scripts/dual-model-host-gateway.test.mjs`: postbuild Node tests drive the real public Host Connection Fetch handler and Gateway, bypassing Vitest's protocol stub. They cover endpoint exposure, unsupported capabilities, domain input validation, private-method refusal, disposal, and synthetic model/workspace view plus CAS save. SRC JSON fallback does not inherit the Client's strict descriptors; Host validation rejects malformed nested inputs.
 - `dual-model-host.spec.ts`: actual Core Session/projection/scope/tool primitives combined with synthetic Agent, model, persistence and workspace edges. This is not a paid live model run or a full installed Desktop certification.
@@ -85,7 +88,7 @@ Publication, Desktop installation, runtime activation and successful real model 
 
 ## 中文摘要
 
-在设置的「模型分工」卡中启用功能，选择主模型和执行模型，保存后选择工作区，再点「用此配置新建会话」。主模型负责规划、读取证据和验收；执行子代理使用创建时固定的模型修改代码、运行测试。不是在同一会话里自动来回切换模型，也不是只靠提示词建议执行者换模型。
+在设置的「模型分工」卡中启用功能，选择主模型和执行模型，保存同一配置档案内通用的全局设置；保存不需要工作区。「新建专用会话」只读显示应用当前工作区，再点「用此配置新建会话」。没有当前工作区时请先打开工作区，不自动选第一个或最近的工作区，也不再提供独立工作区下拉框。主模型负责规划、读取证据和验收；执行子代理使用创建时固定的模型修改代码、运行测试。不是在同一会话里自动来回切换模型，也不是只靠提示词建议执行者换模型。
 
 仅专用入口创建的新会话采用此策略；不修改已有会话、全局默认模型、登录凭据或原生 Subagent 授权开关。模型不可用时明确报错，不自动换模型。需要换角色模型时请另建会话，不要用普通模型选择器改专用角色。插件卸载后不再提供该策略保障；这是协作流程约束，不代替 Core 的沙箱或审批。
 
