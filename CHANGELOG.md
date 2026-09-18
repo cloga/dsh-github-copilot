@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.27 (prepared)
+
+- Remove the separate Model roles workspace dropdown: role settings remain profile-global and saving does not require a workspace (#144).
+- Show the current workspace read-only for explicit dedicated-session creation, observing public Client lists on both legacy selection and alpha.2 main-view ownership. Missing or ambiguous selection disables creation rather than choosing a first/recent workspace.
+- Retain one traced Remote face per UI registration so navigation preserves drafts and uncertain-create UUID/workspace/revision across footer/fallback remounts. Ordinary and existing sessions remain unchanged.
+- Add mounted Cordis/React and current-workspace regressions without changing Core, dependencies, Host codecs or session policy.
+
 ## 0.4.0-alpha.26 (prepared)
 
 - Fix low-contrast native dropdown options in dark mode for planning/execution models, workspaces and search providers (#142).

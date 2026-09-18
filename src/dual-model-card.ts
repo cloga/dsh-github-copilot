@@ -26,6 +26,8 @@ export interface DualModelRemote {
 export interface DualModelCardProps {
   remote: DualModelRemote
   locale?: string
+  /** Current Client workspace; never a saved role setting or an implicit fallback. */
+  currentWorkspaceId?: string
   onOpenSession?: (id: string) => void
 }
 
@@ -44,11 +46,14 @@ const off: DualModelConfig = { enabled: false, plannerModel: '', executorModel: 
 const copy = {
   en: {
     title: 'Model roles', description: 'The planning model plans and reviews acceptance. The execution model changes code and runs tests.',
-    scope: 'Only new dual-model sessions use this configuration. Existing sessions and the global default stay unchanged. Models are never substituted automatically.',
+    scope: 'These role settings are profile-global, not workspace-specific. They apply only when you explicitly create a dedicated dual-model session. Ordinary and existing sessions, history, and the global default stay unchanged. Models are never substituted automatically.',
     enabled: 'Enable dual-model sessions', planner: 'Planning model', executor: 'Execution model',
     acceptance: 'Acceptance always uses the planning model.', selectModel: 'Select an available model', unavailable: 'unavailable',
     modelsMissing: 'Choose two available account models to save an enabled configuration. An unavailable saved model is kept, not replaced.',
-    workspace: 'Workspace for the new session', selectWorkspace: 'Select a workspace', noWorkspaces: 'No accessible workspaces are available. Reload settings after opening a workspace.',
+    newSession: 'New dedicated session', sessionScope: 'Create a new session in the current workspace using the saved role settings.',
+    workspace: 'New session destination', originalWorkspace: 'Original destination (retained for this request)',
+    noWorkspace: 'No current workspace. Open a workspace to create a session; you can still save role settings.',
+    currentWorkspaceUnavailable: 'The current workspace is unavailable. Open an accessible workspace and reload settings before creating a session.',
     save: 'Save configuration', saving: 'Saving…', create: 'Create session with this configuration', creating: 'Creating session…',
     retryCreate: 'Retry the same creation request', openCreated: 'Open created session',
     reload: 'Reload settings', reloadTitle: 'Reload saved values and discard unsaved edits', loading: 'Loading model roles…',
@@ -58,7 +63,7 @@ const copy = {
     revision: 'A settings revision is unavailable. Reload settings before saving or creating a session.',
     conflict: 'These settings changed elsewhere. Reload settings to review the saved configuration before trying again.',
     modelUnavailable: 'A selected model is unavailable. Reload settings and choose available account models. No model was substituted.',
-    workspaceUnavailable: 'The selected workspace is unavailable. Reload settings and choose an accessible workspace.',
+    workspaceUnavailable: 'The creation workspace is unavailable. Open an accessible workspace and reload settings before creating a new session.',
     loadError: 'Could not load model roles. Reload settings to retry.',
     saveError: 'The save was not confirmed. Reload settings to check the saved configuration before trying again.',
     uncertain: 'Session creation is not confirmed. Retry the same request to recover its result without creating a duplicate. Workspace and configuration are held until confirmation.',
@@ -69,11 +74,14 @@ const copy = {
   },
   zh: {
     title: '模型分工', description: '主模型负责规划与验收；执行模型负责修改代码和运行测试。',
-    scope: '仅对新建的双模型会话生效。已有会话和全局默认模型保持不变。不会自动替换模型。',
+    scope: '模型分工设置适用于整个配置档案，不按工作区保存；仅在显式新建专用双模型会话时生效。普通会话、已有会话、历史记录和全局默认模型保持不变。不会自动替换模型。',
     enabled: '启用双模型会话', planner: '主模型（规划）', executor: '执行模型',
     acceptance: '验收固定跟随主模型。', selectModel: '选择可用模型', unavailable: '不可用',
     modelsMissing: '启用时须选择两个当前账号可用的模型才能保存。已保存但不可用的模型会保留，不会自动替换。',
-    workspace: '新会话的工作区', selectWorkspace: '选择工作区', noWorkspaces: '暂无可访问的工作区。打开工作区后重新加载设置。',
+    newSession: '新建专用会话', sessionScope: '使用已保存的模型分工设置，在当前工作区新建会话。',
+    workspace: '新会话目标工作区', originalWorkspace: '原目标工作区（为此请求保留）',
+    noWorkspace: '当前没有工作区。请打开工作区后新建会话；仍可保存模型分工设置。',
+    currentWorkspaceUnavailable: '当前工作区不可用。请打开可访问的工作区并重新加载设置后，再新建会话。',
     save: '保存配置', saving: '正在保存…', create: '用此配置新建会话', creating: '正在创建会话…',
     retryCreate: '重试同一创建请求', openCreated: '打开已创建的会话',
     reload: '重新加载设置', reloadTitle: '重新读取已保存的配置，并放弃未保存的修改', loading: '正在加载模型分工…',
@@ -83,7 +91,7 @@ const copy = {
     revision: '无法获取设置版本。请重新加载设置后，再保存或新建会话。',
     conflict: '设置已在其他位置修改。请重新加载，检查已保存的配置后再重试。',
     modelUnavailable: '所选模型当前不可用。请重新加载设置并选择可用模型。未自动替换任何模型。',
-    workspaceUnavailable: '所选工作区当前不可用。请重新加载设置并选择可访问的工作区。',
+    workspaceUnavailable: '创建会话的目标工作区不可用。请打开可访问的工作区并重新加载设置后，再新建会话。',
     loadError: '无法加载模型分工。请重新加载设置以重试。',
     saveError: '尚未确认保存结果。请重新加载并检查已保存的配置后再重试。',
     uncertain: '尚未确认会话创建结果。请重试同一请求以获取结果，避免重复创建。确认前将保持原工作区和配置不变。',
@@ -160,7 +168,6 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
   const id = useId()
   const [view, setView] = useState<DualModelView>()
   const [draft, setDraft] = useState<DualModelConfig>(off)
-  const [workspace, setWorkspace] = useState('')
   const [phase, setPhase] = useState<'loading' | 'idle' | 'saving' | 'creating'>('loading')
   const [message, setMessage] = useState<Message>()
   const [needsReload, setNeedsReload] = useState(false)
@@ -178,7 +185,6 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
     setNeedsReload(true)
     const creation = creations.get(props.remote)
     setPending(creation)
-    if (creation) setWorkspace(creation.input.workspaceId)
     try {
       const result = await props.remote.view()
       if (!current()) return
@@ -203,7 +209,6 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
     owner.active = true
     setView(undefined)
     setDraft(off)
-    setWorkspace('')
     void load()
     return () => { owner.active = false; owner.generation++; owner.busy = false }
   }, [load])
@@ -215,8 +220,9 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
     && models.some(model => model.id === draft.executorModel)
   const disabled = busy || !!pending || needsReload || !view?.supported || !view.writable || !validRevision(view.revision)
   const saveDisabled = disabled || (draft.enabled && !validModels)
-  const createDisabled = pending ? busy : disabled || dirty || !draft.enabled || !validModels
-    || !view?.workspaces.some(item => item.id === workspace)
+  const workspaceId = pending?.input.workspaceId ?? props.currentWorkspaceId
+  const destination = view?.workspaces.find(item => item.id === workspaceId)
+  const createDisabled = pending ? busy : disabled || dirty || !draft.enabled || !validModels || !destination
 
   const save = async () => {
     const owner = lifecycle.current
@@ -249,9 +255,10 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
     if (!owner.active || owner.busy || createDisabled) return
     let creation = creations.get(props.remote)
     if (!creation) {
-      if (!view || !validRevision(view.revision)) return
+      if (!view || !validRevision(view.revision) || !props.currentWorkspaceId
+        || !view.workspaces.some(item => item.id === props.currentWorkspaceId)) return
       try {
-        creation = { input: { requestId: globalThis.crypto.randomUUID(), workspaceId: workspace, expectedRevision: view.revision } }
+        creation = { input: { requestId: globalThis.crypto.randomUUID(), workspaceId: props.currentWorkspaceId, expectedRevision: view.revision } }
       } catch { setMessage('requestUnavailable'); return }
       creations.set(props.remote, creation)
     }
@@ -320,7 +327,8 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
   const viewNotice: Message | undefined = !view ? undefined : !view.supported ? diagnostic(view.diagnostic) ?? 'unsupported'
     : !view.writable ? 'readonly' : !validRevision(view.revision) ? 'revision' : undefined
   const status = phase === 'loading' ? t.loading : message ? t[message] : ''
-  const shownWorkspace = pending?.input.workspaceId ?? workspace
+  const workspaceLabel = destination?.name || (pending ? pending.input.workspaceId
+    : destination ? t.workspace : workspaceId ? t.currentWorkspaceUnavailable : t.noWorkspace)
 
   return createElement('section', {
     style: cardStyle, 'data-dsh-dual-model-card': true, 'aria-labelledby': `${id}-title`, 'aria-busy': busy,
@@ -343,30 +351,25 @@ export function DualModelCard(props: DualModelCardProps): ReactElement {
   field('executor', t.executor, draft.executorModel),
   createElement('p', { id: `${id}-model-help`, style: textStyle }, t.acceptance,
     view && draft.enabled && !validModels ? ` ${t.modelsMissing}` : ''),
-  createElement('div', { style: fieldStyle },
-    createElement('label', { htmlFor: `${id}-workspace`, style: labelStyle }, t.workspace),
-    createElement('select', { id: `${id}-workspace`, style: nativeSelectStyle(disabled), disabled, value: shownWorkspace,
-      'data-dsh-dual-model-workspace': true,
-      onChange: (event: ChangeEvent<HTMLSelectElement>) => {
-        const value = event.currentTarget.value
-        if (!disabled && view?.workspaces.some(item => item.id === value)) setWorkspace(value)
-      } },
-    createElement('option', { value: '', disabled: true, style: nativeOptionStyle(true) }, t.selectWorkspace),
-    shownWorkspace && !view?.workspaces.some(item => item.id === shownWorkspace)
-      ? createElement('option', { value: shownWorkspace, disabled: true, style: nativeOptionStyle(true) }, `${shownWorkspace} (${t.unavailable})`) : null,
-    ...(view?.workspaces ?? []).map(item => createElement('option', { key: item.id, value: item.id, style: nativeOptionStyle() }, item.name || item.id))),
-    view && view.workspaces.length === 0 ? createElement('p', { style: textStyle }, t.noWorkspaces) : null),
   viewNotice ? createElement('p', { style: textStyle }, t[viewNotice]) : null,
-  !pending && view && !viewNotice ? createElement('p', { style: textStyle }, dirty ? t.dirty : !draft.enabled ? t.disabled : '') : null,
   createElement('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', minWidth: 0 } },
     createElement('button', { type: 'button', style: styleForButton(saveDisabled), disabled: saveDisabled,
       'data-dsh-dual-model-save': true, onClick: () => { void save() } }, phase === 'saving' ? t.saving : t.save),
-    createElement('button', { type: 'button', style: styleForButton(createDisabled), disabled: createDisabled,
+    createElement('button', { type: 'button', style: styleForButton(busy || !!pending),
+      disabled: busy || !!pending, title: t.reloadTitle, 'data-dsh-dual-model-reload': true,
+      onClick: () => { if (!creations.has(props.remote)) void load() } }, t.reload)),
+  createElement('div', { role: 'group', 'aria-labelledby': `${id}-new-session`,
+    style: { ...fieldStyle, gap: '8px', borderTop: '1px solid color-mix(in srgb, currentColor 20%, transparent)', paddingTop: '14px' } },
+    createElement('h4', { id: `${id}-new-session`, style: { ...labelStyle, margin: 0 } }, t.newSession),
+    !pending ? createElement('p', { style: textStyle }, t.sessionScope) : null,
+    createElement('div', { style: fieldStyle },
+      createElement('span', { id: `${id}-workspace-label`, style: labelStyle }, pending ? t.originalWorkspace : t.workspace),
+      createElement('p', { id: `${id}-workspace`, style: textStyle, 'aria-labelledby': `${id}-workspace-label`,
+        'data-dsh-dual-model-workspace': true, 'data-workspace-id': workspaceId }, workspaceLabel)),
+    !pending && view && !viewNotice ? createElement('p', { style: textStyle }, dirty ? t.dirty : !draft.enabled ? t.disabled : '') : null,
+    createElement('button', { type: 'button', style: { ...styleForButton(createDisabled), justifySelf: 'start' }, disabled: createDisabled,
       'data-dsh-dual-model-create': true, onClick: () => { void create() } },
     phase === 'creating' ? t.creating : pending?.sessionId ? t.openCreated : pending ? t.retryCreate : t.create)),
   createElement('div', { role: 'status', 'aria-live': 'polite', 'aria-atomic': true, style: textStyle }, status),
-  createElement('button', { type: 'button', style: { ...styleForButton(busy || !!pending), justifySelf: 'start' },
-    disabled: busy || !!pending, title: t.reloadTitle, 'data-dsh-dual-model-reload': true,
-    onClick: () => { if (!creations.has(props.remote)) void load() } }, t.reload),
   )
 }

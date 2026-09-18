@@ -22,9 +22,12 @@ const locale=q.get('lang')||'zh';document.documentElement.lang=locale;
 if(locale==='en')document.querySelector('.fixture-note').textContent='Isolated component verification · synthetic account/workspace data. No production services or model calls.';
 let revision=1;let configuration={enabled:false,plannerModel:'',executorModel:''};const creates=new Map();const calls=[];
 const models=[{id:'account-planner',name:'GPT 6'},{id:'account-executor',name:'GPT-5.6 Sol Fast'}];
-const view=()=>({supported:true,writable:true,revision,configuration:{...configuration},models,workspaces:[{id:'demo-workspace',name:'DSH · 示例工作区'}]});
+const view=()=>({supported:true,writable:true,revision,configuration:{...configuration},models,workspaces:[{id:'demo-workspace',name:'DSH · 示例工作区'},{id:'second-workspace',name:'DSH · 第二工作区'}]});
 const remote={view:async()=>({ok:true,value:view()}),save:async input=>{calls.push({method:'save',input});if(input.expectedRevision!==revision)return{ok:false,error:{code:'copilot/dual-model',details:{reason:'DUAL_MODEL_REVISION_CONFLICT'}}};configuration={...input.configuration};revision++;return{ok:true,value:view()}},create:async input=>{calls.push({method:'create',input});if(!creates.has(input.requestId))creates.set(input.requestId,{sessionId:'synthetic-session-'+creates.size});return{ok:true,value:creates.get(input.requestId)}}};
-window.fixture={calls,creates,remote,setTheme};
-ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(window.CopilotUI.DualModelCard,{remote,locale,onOpenSession:id=>{window.fixture.opened=id}}));
+const root=ReactDOM.createRoot(document.getElementById('app'));
+window.fixture={calls,creates,remote,setTheme,currentWorkspaceId:q.get('workspace')==='none'?undefined:'demo-workspace'};
+const render=()=>root.render(React.createElement(window.CopilotUI.DualModelCard,{remote,locale,currentWorkspaceId:window.fixture.currentWorkspaceId,onOpenSession:id=>{window.fixture.opened=id}}));
+window.fixture.setWorkspace=id=>{window.fixture.currentWorkspaceId=typeof id==='string'?id:undefined;render();};
+render();
 </script>
 </body></html>

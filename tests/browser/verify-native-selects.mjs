@@ -52,7 +52,7 @@ try {
   const page = await context.newPage()
   page.on('pageerror', error => errors.push(error.message))
   for (const [surface, selector, count] of [
-    ['dual', '[data-dsh-dual-model-card] select', 3],
+    ['dual', '[data-dsh-dual-model-card] select', 2],
     ['search', '[data-dsh-web-search-routing] select', 2],
   ]) {
     await page.goto(`${origin}/${surface}?theme=dark&uaScheme=light&lang=en`)
@@ -96,11 +96,65 @@ try {
     assert.ok(contrast(fallback.color, fallback.background) >= 4.5)
     results.push({ surface, case: 'missing-token system fallback', ...fallback })
   }
+  // The role card has no destination picker: creation follows an explicit current
+  // workspace prop, while saving and drafts remain independent of navigation.
+  const workspaceFlows = []
+  for (const locale of ['en', 'zh']) {
+    const labels = locale === 'en'
+      ? { enable: 'Enable dual-model sessions', planner: 'Planning model', executor: 'Execution model', save: 'Save configuration', create: 'Create session with this configuration', retry: 'Retry the same creation request' }
+      : { enable: '启用双模型会话', planner: '主模型（规划）', executor: '执行模型', save: '保存配置', create: '用此配置新建会话', retry: '重试同一创建请求' }
+    await page.setViewportSize({ width: locale === 'en' ? 900 : 375, height: 900 })
+    await page.goto(`${origin}/dual?theme=dark&lang=${locale}&workspace=none`)
+    await page.getByLabel(labels.enable, { exact: true }).check()
+    await page.getByLabel(labels.planner, { exact: true }).selectOption('account-planner')
+    await page.getByLabel(labels.executor, { exact: true }).selectOption('account-executor')
+    assert.equal(await page.locator('[data-dsh-dual-model-card] select').count(), 2)
+    await page.getByRole('button', { name: labels.save, exact: true }).click()
+    await page.waitForFunction(() => window.fixture.calls.length === 1)
+    assert.equal(await page.getByRole('button', { name: labels.create, exact: true }).isDisabled(), true)
+    const save = await page.evaluate(() => window.fixture.calls[0])
+    assert.deepEqual(Object.keys(save.input).sort(), ['configuration', 'expectedRevision'])
+    await page.evaluate(() => window.fixture.setWorkspace('demo-workspace'))
+    const destination = page.locator('[data-dsh-dual-model-workspace]')
+    await page.waitForFunction(() => document.querySelector('[data-dsh-dual-model-workspace]')?.getAttribute('data-workspace-id') === 'demo-workspace')
+    await page.getByLabel(labels.executor, { exact: true }).selectOption('account-planner')
+    await page.evaluate(() => window.fixture.setWorkspace('second-workspace'))
+    await page.waitForFunction(() => document.querySelector('[data-dsh-dual-model-workspace]')?.getAttribute('data-workspace-id') === 'second-workspace')
+    assert.equal(await page.getByLabel(labels.executor, { exact: true }).inputValue(), 'account-planner')
+    await page.getByRole('button', { name: labels.save, exact: true }).click()
+    await page.waitForFunction(() => window.fixture.calls.length === 2)
+    await page.evaluate(() => window.fixture.setWorkspace('unknown-workspace'))
+    await page.waitForFunction(() => document.querySelector('[data-dsh-dual-model-workspace]')?.getAttribute('data-workspace-id') === 'unknown-workspace')
+    assert.equal(await page.getByRole('button', { name: labels.create, exact: true }).isDisabled(), true)
+    await page.evaluate(() => {
+      window.fixture.setWorkspace('second-workspace')
+      const original = window.fixture.remote.create
+      let first = true
+      window.fixture.remote.create = async input => {
+        if (first) { first = false; window.fixture.calls.push({ method: 'create', input }); throw new Error('Synthetic uncertain result') }
+        return original(input)
+      }
+    })
+    await page.getByRole('button', { name: labels.create, exact: true }).click()
+    await page.getByRole('button', { name: labels.retry, exact: true }).waitFor()
+    await page.evaluate(() => window.fixture.setWorkspace('demo-workspace'))
+    assert.equal(await destination.getAttribute('data-workspace-id'), 'second-workspace')
+    assert.equal(await page.evaluate(() => window.fixture.calls.filter(c => c.method === 'create').length), 1)
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+    await page.screenshot({ path: resolve(out, `workspace-${locale}-pending.png`), fullPage: true })
+    await page.getByRole('button', { name: labels.retry, exact: true }).click()
+    await page.waitForFunction(() => window.fixture.opened !== undefined)
+    const creates = await page.evaluate(() => window.fixture.calls.filter(c => c.method === 'create'))
+    assert.equal(creates.length, 2)
+    assert.deepEqual(creates[0].input, creates[1].input)
+    assert.equal(creates[0].input.workspaceId, 'second-workspace')
+    workspaceFlows.push({ locale, savesWithoutWorkspace: true, draftPreserved: true, unknownBlocked: true, retryInputPreserved: true })
+  }
   assert.deepEqual(errors, [])
-  const evidence = { channel, browserVersion: browser.version(), synthetic: true, results, errors,
+  const evidence = { channel, browserVersion: browser.version(), synthetic: true, results, workspaceFlows, errors,
     popupNote: 'These are page/control captures. Computed option styles do not attest Windows native popup painting; inspect the expanded native popup separately.' }
   await writeFile(resolve(out, 'results.json'), JSON.stringify(evidence, null, 2))
-  console.log(JSON.stringify({ ok: true, channel, browserVersion: browser.version(), cases: results.length, output: out, synthetic: true }))
+  console.log(JSON.stringify({ ok: true, channel, browserVersion: browser.version(), cases: results.length, workspaceFlows: workspaceFlows.length, output: out, synthetic: true }))
 } finally {
   await browser?.close()
   await new Promise(done => server.close(done))

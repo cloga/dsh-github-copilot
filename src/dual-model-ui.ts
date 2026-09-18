@@ -4,6 +4,9 @@ import { createElement, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
 import type {} from './dual-model-remote.ts'
 import { DualModelCard } from './dual-model-card.ts'
+import type { DualModelRemote } from './dual-model-card.ts'
+import { createCurrentWorkspaceSource } from './current-workspace.ts'
+import type { CurrentWorkspaceSource } from './current-workspace.ts'
 import type { SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 
 interface LocaleReader {
@@ -13,7 +16,7 @@ interface LocaleReader {
 interface WorkspaceNavigator { openSession(id: string): void }
 const emptySubscribe = () => () => {}
 
-function DualModelSurface({ ctx, close }: { ctx: Context; close?: () => void }): ReactElement {
+function DualModelSurface({ ctx, remote, workspaceSource, close }: { ctx: Context; remote: DualModelRemote; workspaceSource: CurrentWorkspaceSource; close?: () => void }): ReactElement {
   // These are the public optional Client service faces; no private store or DOM mutation.
   const locale = ctx.get('locale') as LocaleReader | undefined
   const navigation = ctx.get('uiWorkspace') as WorkspaceNavigator | undefined
@@ -22,9 +25,11 @@ function DualModelSurface({ ctx, close }: { ctx: Context; close?: () => void }):
     () => locale?.getLocale().active ?? 'en',
     () => 'en',
   )
+  const currentWorkspaceId = useSyncExternalStore(workspaceSource.subscribe, workspaceSource.getSnapshot, () => undefined)
   return createElement(DualModelCard, {
-    remote: ctx.remote.githubCopilotDualModel,
+    remote,
     locale: language,
+    currentWorkspaceId,
     onOpenSession: navigation === undefined ? undefined : (id: string) => {
       navigation.openSession(id)
       close?.()
@@ -34,14 +39,18 @@ function DualModelSurface({ ctx, close }: { ctx: Context; close?: () => void }):
 
 /** A single visible seat under Models, with a section fallback on older Clients. */
 export function registerDualModelUi(ctx: Context): () => void {
-  if (ctx.remote.githubCopilotDualModel === undefined) return () => {}
+  // Keep one traced Remote face across rerenders and footer/fallback transfers.
+  // A fresh Cordis proxy would otherwise reset drafts and uncertain-create identity.
+  const remote = ctx.remote.githubCopilotDualModel
+  if (remote === undefined) return () => {}
+  const workspaceSource = createCurrentWorkspaceSource(ctx)
   let active = true, footerActive = false, sectionActive = false
   let fallback: (() => void) | undefined
   const syncFallback = () => {
     if (active && sectionActive && !footerActive) {
       fallback ??= ctx.slots.register({
         name: 'settings.section', id: 'github-copilot-dual-model', order: 13, label: 'Copilot · Model roles',
-      }, (props: SettingsSectionOwnerProps) => createElement(DualModelSurface, { ctx, close: props.close }))
+      }, (props: SettingsSectionOwnerProps) => createElement(DualModelSurface, { ctx, remote, workspaceSource, close: props.close }))
     } else { fallback?.(); fallback = undefined }
   }
   let footer: () => void = () => {}
@@ -52,7 +61,7 @@ export function registerDualModelUi(ctx: Context): () => void {
         if (spec?.kind !== 'list' || spec.scope !== 'root') return () => {}
         const dispose = ctx.slots.register({
           name: 'settings.models.footer', id: 'github-copilot-dual-model', order: 15,
-        }, () => createElement(DualModelSurface, { ctx }))
+        }, () => createElement(DualModelSurface, { ctx, remote, workspaceSource }))
         footerActive = true
         syncFallback()
         let removed = false
@@ -73,6 +82,7 @@ export function registerDualModelUi(ctx: Context): () => void {
   })
   return () => {
     active = false
+    workspaceSource.dispose()
     footer()
     section()
     fallback?.()
