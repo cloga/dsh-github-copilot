@@ -1208,6 +1208,319 @@ describe('session search router Host integration', () => {
     expect(runtime.credentialResolve).not.toHaveBeenCalled()
   })
 
+  function automaticSearchFixture(options: {
+    primary?: string
+    override?: string
+    cold?: boolean
+    config?: Partial<InlineConfig>
+    models?: Array<{ id: string; api: string }>
+  } = {}) {
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const state = { discovered: !options.cold, valid: true, revision: 0, factsValid: true, models: options.models ?? [
+      { id: 'z-search', api: 'openai-responses' }, { id: 'a-search', api: 'openai-responses' },
+    ] }
+    const discover = vi.fn(async () => { state.discovered = true })
+    const resolveRequestAuth = vi.fn(async (_model: string, _signal?: AbortSignal) => ({ apiKey: 'synthetic-managed', baseURL }))
+    const runtime = buildRuntime({}, { current: { provider: 'unrelated-chat', model: 'never-use-chat' } }, {
+      [GITHUB_COPILOT_SETTINGS_NAMESPACE]: options.override === undefined ? {} : { searchModel: options.override },
+      [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: {
+        searchProvider: options.primary ?? 'github-copilot-hosted',
+        defaultSearchProvider: options.primary === 'auto' ? 'github-copilot-hosted' : 'none',
+      },
+    }, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true,
+        state: state.discovered ? 'ready' : 'idle', models: state.discovered ? state.models : [] }),
+      routeFacts: (model: string) => {
+        const found = state.discovered && state.factsValid ? state.models.find(item => item.id === model) : undefined
+        return found === undefined ? undefined : { api: found.api, baseURL }
+      },
+      captureSearchProof: () => {
+        const revision = state.revision
+        return () => state.valid && state.revision === revision
+      },
+      discover, resolveRequestAuth,
+    })
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true, ...options.config })
+    const catalog = capturedSearchProviders(runtime)
+    const execute = (signal?: AbortSignal) => runtime.ctx.get('githubCopilotSearchRouter')!.search(
+      { query: 'provider-first query' }, signal, vi.fn(), vi.fn(), catalog.capture)
+    const payloads = () => fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)) as {
+      model: string; input: Array<{ content: Array<{ text: string }> }>
+    })
+    return { runtime, state, discover, resolveRequestAuth, fetchMock, execute, payloads }
+  }
+
+  it.each(['auto', 'github-copilot-hosted'])('automatically resolves account-owned Responses candidates for %s without a search model', async primary => {
+    const fixture = automaticSearchFixture({ primary, cold: true })
+    fixture.runtime.searchProviders[0]!.available()
+    expect(fixture.discover).not.toHaveBeenCalled()
+    expect(fixture.resolveRequestAuth).not.toHaveBeenCalled()
+    expect(fixture.fetchMock).not.toHaveBeenCalled()
+    await flushStartup()
+    fixture.runtime.settingsMutate.mockClear()
+    await fixture.execute()
+    expect(fixture.discover).toHaveBeenCalledWith({ force: false, signal: expect.any(AbortSignal) })
+    expect(fixture.payloads().map(item => item.model)).toEqual(['a-search', 'a-search'])
+    expect(proofCount(fixture.fetchMock)).toBe(1)
+    expect(fixture.runtime.settingsMutate).not.toHaveBeenCalled()
+  })
+
+  it('probes the next automatic candidate only after unsupported capability and caches the full candidate set', async () => {
+    const fixture = automaticSearchFixture()
+    fixture.fetchMock.mockImplementation(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { model: string }
+      return body.model === 'a-search' ? new Response('{}', { status: 400 })
+        : new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] }))
+    })
+    await fixture.execute()
+    expect(fixture.payloads().map(item => item.model)).toEqual(['a-search', 'z-search', 'z-search'])
+    await fixture.execute()
+    expect(proofCount(fixture.fetchMock)).toBe(2)
+    expect(fixture.payloads().map(item => item.model)).toEqual(['a-search', 'z-search', 'z-search', 'z-search'])
+    fixture.state.models = [{ id: 'b-search', api: 'openai-responses' }, ...fixture.state.models]
+    await fixture.execute()
+    expect(fixture.payloads().slice(-3).map(item => item.model)).toEqual(['a-search', 'b-search', 'b-search'])
+  })
+
+  it.each(['caller', 'deadline'] as const)('keeps a ready configured proof independent of the former request %s', async cause => {
+    const fixture = automaticSearchFixture()
+    const firstCaller = new AbortController(), firstDeadline = new AbortController(), secondDeadline = new AbortController()
+    const timeouts = vi.spyOn(AbortSignal, 'timeout')
+      .mockReturnValueOnce(firstDeadline.signal).mockReturnValueOnce(secondDeadline.signal)
+    let release!: (value: Response) => void
+    const held = new Promise<Response>(resolve => { release = resolve })
+    try {
+      await fixture.execute(firstCaller.signal)
+      fixture.fetchMock.mockImplementationOnce(async () => held)
+      const second = fixture.execute().then(() => 'completed', error => error.code)
+      await flushStartup()
+      const querySignal = fixture.fetchMock.mock.calls.at(-1)?.[1]?.signal
+      if (cause === 'caller') firstCaller.abort()
+      else firstDeadline.abort()
+      await flushStartup()
+      const aborted = querySignal?.aborted
+      release(new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] })))
+      expect(await second).toBe('completed')
+      expect(aborted).toBe(false)
+      expect(proofCount(fixture.fetchMock)).toBe(1)
+      expect(fixture.fetchMock).toHaveBeenCalledTimes(3)
+      await fixture.execute()
+      expect(proofCount(fixture.fetchMock)).toBe(1)
+    } finally {
+      release(new Response('{}', { status: 400 }))
+      fixture.runtime.dispose()
+      timeouts.mockRestore()
+    }
+  })
+
+  it('isolates simultaneous configured probes for the same owner when the first caller cancels', async () => {
+    const fixture = automaticSearchFixture()
+    const firstCaller = new AbortController()
+    let releaseFirst!: (value: Response) => void, releaseSecond!: (value: Response) => void
+    const firstReply = new Promise<Response>(resolve => { releaseFirst = resolve })
+    const secondReply = new Promise<Response>(resolve => { releaseSecond = resolve })
+    fixture.fetchMock.mockImplementationOnce(async () => firstReply)
+      .mockImplementationOnce(async () => secondReply)
+    const first = fixture.execute(firstCaller.signal).then(() => 'completed', error => error.code)
+    await flushStartup()
+    const second = fixture.execute().then(() => 'completed', error => error.code)
+    await flushStartup()
+    const probesStarted = proofCount(fixture.fetchMock)
+    firstCaller.abort()
+    releaseFirst(new Response('{}', { status: 400 }))
+    releaseSecond(new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] })))
+    expect(await first).toBe('WEB_ABORTED')
+    expect(await second).toBe('completed')
+    expect(probesStarted).toBe(2)
+    expect(fixture.fetchMock).toHaveBeenCalledTimes(3)
+    await fixture.execute()
+    expect(proofCount(fixture.fetchMock)).toBe(2)
+  })
+
+  it('passes caller cancellation into pending configured authentication without revoking another probe', async () => {
+    const fixture = automaticSearchFixture()
+    const firstCaller = new AbortController()
+    let authSignal: AbortSignal | undefined
+    fixture.resolveRequestAuth.mockImplementationOnce(async (_model, signal) => {
+      authSignal = signal
+      await new Promise<void>((_resolve, reject) => {
+        signal!.addEventListener('abort', () => reject(new Error('synthetic caller cancellation')), { once: true })
+      })
+      throw new Error('cancelled authentication cannot resolve')
+    })
+    let release!: (value: Response) => void
+    const held = new Promise<Response>(resolve => { release = resolve })
+    fixture.fetchMock.mockImplementationOnce(async () => held)
+    const first = fixture.execute(firstCaller.signal).then(() => 'completed', error => error.code)
+    await flushStartup()
+    const second = fixture.execute().then(() => 'completed', error => error.code)
+    await flushStartup()
+    firstCaller.abort()
+    release(new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] })))
+    expect(await first).toBe('WEB_ABORTED')
+    expect(await second).toBe('completed')
+    expect(authSignal?.aborted).toBe(true)
+    expect(fixture.resolveRequestAuth).toHaveBeenCalledTimes(3)
+    expect(proofCount(fixture.fetchMock)).toBe(1)
+    expect(fixture.fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache a cancelled configured probe as negative capability evidence', async () => {
+    const fixture = automaticSearchFixture()
+    const firstCaller = new AbortController()
+    fixture.fetchMock.mockImplementationOnce(async () => {
+      firstCaller.abort()
+      return new Response('{}', { status: 400 })
+    })
+    await expect(fixture.execute(firstCaller.signal)).rejects.toMatchObject({ code: 'WEB_ABORTED' })
+    await flushStartup()
+    await fixture.execute()
+    expect(proofCount(fixture.fetchMock)).toBe(2)
+    expect(fixture.fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('retains noncancelled configured negative capability evidence without repeated probes', async () => {
+    const fixture = automaticSearchFixture()
+    fixture.fetchMock.mockImplementation(async () => new Response('{}', { status: 400 }))
+    await expect(fixture.execute()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    await expect(fixture.execute()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(proofCount(fixture.fetchMock)).toBe(2)
+  })
+
+  it('reproves identical automatic candidates after a silent account-proof revision', async () => {
+    const fixture = automaticSearchFixture()
+    await fixture.execute()
+    fixture.state.revision++
+    await fixture.execute()
+    expect(proofCount(fixture.fetchMock)).toBe(2)
+    expect(fixture.payloads().map(item => item.model)).toEqual(['a-search', 'a-search', 'a-search', 'a-search'])
+  })
+
+  it('binds the second automatic candidate and its verified alternate spelling to the managed account', async () => {
+    const fixture = automaticSearchFixture()
+    fixture.fetchMock.mockImplementation(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { model: string; tools: Array<{ type: string }> }
+      if (body.model === 'a-search') return new Response('{}', { status: 400 })
+      return new Response(JSON.stringify({ output: body.tools[0]?.type === 'web_search_2025_08_26'
+        ? [{ type: 'web_search_call' }] : [] }))
+    })
+    await fixture.execute()
+    expect(fixture.payloads().map(item => item.model)).toEqual(['a-search', 'z-search', 'z-search', 'z-search'])
+    expect(JSON.parse(String(fixture.fetchMock.mock.calls.at(-1)?.[1]?.body)).tools)
+      .toEqual([{ type: 'web_search_2025_08_26' }])
+    expect(fixture.resolveRequestAuth).toHaveBeenLastCalledWith('z-search', expect.any(AbortSignal))
+  })
+
+  it('bounds automatic proof to three eligible candidates in deterministic id order', async () => {
+    const fixture = automaticSearchFixture({ models: [
+      { id: 'd-search', api: 'openai-responses' }, { id: 'a-not-responses', api: 'anthropic-messages' },
+      { id: 'c-search', api: 'openai-responses' }, { id: 'b-search', api: 'openai-responses' },
+      { id: 'a-search', api: 'openai-responses' },
+    ] })
+    fixture.fetchMock.mockImplementation(async () => new Response('{}', { status: 400 }))
+    await expect(fixture.execute()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fixture.payloads().map(item => item.model)).toEqual(['a-search', 'b-search', 'c-search'])
+    expect(proofCount(fixture.fetchMock)).toBe(3)
+  })
+
+  it.each(['github-copilot', GITHUB_COPILOT_PREVIEW_PROVIDER_ID])('accepts the configured-search allowlist alias %s', async provider => {
+    const fixture = automaticSearchFixture({ config: { providers: [provider], probe: false }, override: '  ' })
+    await fixture.execute()
+    expect(fixture.payloads().map(item => item.model)).toEqual(['a-search'])
+    expect(proofCount(fixture.fetchMock)).toBe(0)
+  })
+
+  it('does not discover or probe allowlist-excluded automatic search', async () => {
+    const fixture = automaticSearchFixture({ config: { providers: ['another-provider'] } })
+    await expect(fixture.execute()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fixture.discover).not.toHaveBeenCalled()
+    expect(fixture.resolveRequestAuth).not.toHaveBeenCalled()
+    expect(fixture.fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each([{ models: [] }, { models: [{ id: 'chat-only', api: 'anthropic-messages' }] }])('fails automatic search without eligible Responses metadata: $models', async ({ models }) => {
+    const fixture = automaticSearchFixture({ models, cold: true })
+    await expect(fixture.execute()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fixture.discover).toHaveBeenCalledOnce()
+    expect(fixture.resolveRequestAuth).not.toHaveBeenCalled()
+    expect(fixture.fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps an explicit unknown search model authoritative instead of selecting another model', async () => {
+    const fixture = automaticSearchFixture({ override: 'unknown-search' })
+    await expect(fixture.execute()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fixture.resolveRequestAuth).not.toHaveBeenCalled()
+    expect(fixture.fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['credential-event', 'silent-proof', 'cancel'] as const)('prevents later automatic probes and final queries after %s invalidation', async change => {
+    const fixture = automaticSearchFixture()
+    const controller = new AbortController()
+    fixture.fetchMock.mockImplementation(async () => {
+      if (change === 'credential-event') fixture.runtime.emitCredentialUpdate(credentialKey)
+      else if (change === 'silent-proof') fixture.state.valid = false
+      else controller.abort()
+      return new Response('{}', { status: 400 })
+    })
+    await expect(fixture.execute(controller.signal)).rejects.toMatchObject({
+      code: change === 'silent-proof' ? 'WEB_PROVIDER_UNAVAILABLE' : 'WEB_ABORTED',
+    })
+    await flushStartup()
+    expect(fixture.fetchMock).toHaveBeenCalledOnce()
+    expect(fixture.resolveRequestAuth).toHaveBeenCalledOnce()
+  })
+
+  it('preserves a valid explicit search override instead of the first automatic model', async () => {
+    const fixture = automaticSearchFixture({ override: ' z-search ' })
+    await fixture.execute()
+    expect(fixture.payloads().map(item => item.model)).toEqual(['z-search', 'z-search'])
+  })
+
+  it('does not substitute a supported automatic model after an explicit override probe fails', async () => {
+    const fixture = automaticSearchFixture({ override: 'z-search' })
+    fixture.fetchMock.mockImplementation(async () => new Response('{}', { status: 400 }))
+    await expect(fixture.execute()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fixture.payloads().map(item => item.model)).toEqual(['z-search'])
+  })
+
+  it('does not authorize automatic candidates from stale display metadata without current route facts', async () => {
+    const fixture = automaticSearchFixture()
+    fixture.state.factsValid = false
+    await expect(fixture.execute()).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fixture.fetchMock).not.toHaveBeenCalled()
+    expect(fixture.resolveRequestAuth).not.toHaveBeenCalled()
+  })
+
+  it('never spends a final fallback after automatic candidate proof is silently revoked', async () => {
+    const fixture = automaticSearchFixture()
+    fixture.runtime.settingsDocument[WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE] = {
+      searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'paid-final',
+    }
+    fixture.runtime.triggerSettingsChange(WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE)
+    const fallback = vi.fn(async () => ({ sources: [], truncated: false }))
+    const catalog = capturedSearchProviders(fixture.runtime, [{ id: 'paid-final', available: () => true, search: fallback }])
+    fixture.fetchMock.mockImplementation(async () => {
+      fixture.state.valid = false
+      return new Response('{}', { status: 400 })
+    })
+    await expect(fixture.runtime.ctx.get('githubCopilotSearchRouter')!.search(
+      { query: 'revoked automatic proof' }, undefined, vi.fn(), vi.fn(), catalog.capture,
+    )).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fixture.fetchMock).toHaveBeenCalledOnce()
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('does not retry the final automatic query on another eligible model', async () => {
+    const fixture = automaticSearchFixture()
+    fixture.fetchMock.mockImplementation(async (_input, init) => String(init?.body).includes('Probe web search capability.')
+      ? new Response(JSON.stringify({ output: [{ type: 'web_search_call' }] }))
+      : new Response('{}', { status: 500 }))
+    await expect(fixture.execute()).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+    expect(fixture.payloads().map(item => item.model)).toEqual(['a-search', 'a-search'])
+  })
+
   it('uses an independently configured account model for a non-Copilot chat session', async () => {
     const baseURL = 'https://api.business.githubcopilot.com'
     const runtime = buildRuntime({}, { current: { provider: 'volcengine', model: 'deepseek-v4-flash' } }, {

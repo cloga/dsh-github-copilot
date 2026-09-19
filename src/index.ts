@@ -243,6 +243,13 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     route: CurrentChatRoute | undefined
     probe: { enabled: boolean; timeoutMs: number }
     generation: number
+    assertProof?: () => void
+    probeSignal?: AbortSignal
+  }
+  interface ConfiguredPlanOperation {
+    readonly signal?: AbortSignal
+    readonly assertCurrent: () => void
+    readonly assertProof: () => void
   }
   interface OwnerPlans {
     cancellation: AbortController
@@ -250,9 +257,9 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     traditional?: CachedPlan
     configured?: CachedPlan
   }
-  // Weak keys never retain a Session merely because it searched once. Values
-  // contain no Agent reference. Route changes replace only this owner's cache;
-  // operations already started continue with their captured route.
+  // Weak keys do not retain a Session solely for its cached plans and guards.
+  // Route changes replace only this owner's cache; operations already started
+  // continue with their captured route.
   const ownerPlans = new WeakMap<object, OwnerPlans>()
   const disposedOwners = new WeakSet<object>()
   const candidateSignals = new WeakMap<SearchPlanCandidate, AbortSignal>()
@@ -342,21 +349,29 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
 
   function createPlan(
     candidates: readonly SearchPlanCandidate[], cfg: InlineConfig,
-    route: CurrentChatRoute | undefined, plans: OwnerPlans | undefined,
+    provider: string | undefined, plans: OwnerPlans | undefined,
+    operation?: ConfiguredPlanOperation,
   ): SearchPlan {
     const startedAt = generation
-    const signal = plans === undefined ? proofCancellation.signal
-      : AbortSignal.any([proofCancellation.signal, plans.cancellation.signal])
-    const provider = route?.provider
-    function bind(candidate: SearchPlanCandidate): void {
+    const signal = AbortSignal.any([proofCancellation.signal,
+      ...plans === undefined ? [] : [plans.cancellation.signal]])
+    // Only unfinished probes belong to the creating request. A verified plan
+    // must never lend that request's cancellation or deadline to a later query.
+    const probeSignal = operation?.signal === undefined ? signal : AbortSignal.any([signal, operation.signal])
+    function bind(candidate: SearchPlanCandidate, lifetime: AbortSignal): void {
       candidateGenerations.set(candidate, startedAt)
-      candidateSignals.set(candidate, signal)
+      candidateSignals.set(candidate, lifetime)
       if (provider !== undefined) candidateProviders.set(candidate, provider)
     }
-    for (const candidate of candidates) bind(candidate)
+    for (const candidate of candidates) bind(candidate, cfg.probe ? probeSignal : signal)
     const nextPlan = new SearchPlan(
       candidates,
-      candidate => probeCandidate(candidate, hooks.resolveApiKey, cfg.probeTimeoutMs, signal),
+      candidate => probeCandidate(candidate, async selected => {
+        operation?.assertCurrent()
+        const auth = await hooks.resolveApiKey(selected)
+        operation?.assertCurrent()
+        return auth
+      }, cfg.probeTimeoutMs, probeSignal),
       cfg.probe,
       signal,
     )
@@ -364,7 +379,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     // that exact chosen object before any caller awaits settle() to use it.
     void nextPlan.settled.then(() => {
       const chosen = nextPlan.chosenCandidate()
-      if (chosen !== undefined) bind(chosen)
+      if (chosen !== undefined) bind(chosen, signal)
     })
     return nextPlan
   }
@@ -373,7 +388,15 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     cached: CachedPlan | undefined, route: CurrentChatRoute | undefined,
     candidates: readonly SearchPlanCandidate[], cfg: InlineConfig,
   ): cached is CachedPlan {
+    // A silent account-proof revision can revoke an old configured capability
+    // verdict without emitting a credential event or changing endpoint facts.
+    try { cached?.assertProof?.() } catch { return false }
+    // Concurrent configured callers own separate unfinished probes. Cancellation
+    // is not negative capability evidence, but a completed unsupported verdict is.
+    if (cached?.assertProof !== undefined && cached.plan.chosenCandidate() === undefined
+      && (cached.plan.available() || cached.probeSignal?.aborted === true)) return false
     return cached !== undefined && cached.generation === generation
+      && cached.plan.signal?.aborted !== true
       && sameRoute(route, cached.route)
       && cached.probe.enabled === cfg.probe && cached.probe.timeoutMs === cfg.probeTimeoutMs
       && sameCandidates(candidates, cached.plan.candidates)
@@ -382,19 +405,25 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
   function plan(
     route: CurrentChatRoute | undefined, cfg: InlineConfig,
     owner: object | undefined, surface: 'inline' | 'traditional' | 'configured',
+    operation?: ConfiguredPlanOperation,
   ): SearchPlan {
     const plans = owner === undefined ? undefined : plansFor(owner)
     const candidates = surface === 'inline' ? candidatesForRoute(route)
-      : surface === 'configured' ? configuredCandidates(route, cfg)
+      : surface === 'configured' ? configuredCandidates(cfg)
         : traditionalCandidates(route, cfg)
     const cached = plans?.[surface]
     if (matches(cached, route, candidates, cfg)) return cached.plan
     const startedAt = generation
-    const nextPlan = createPlan(candidates, cfg, route, plans)
+    // Configured candidates all belong to the account-owned route, even when
+    // automatic selection has no single model route to use as a cache key.
+    const provider = surface === 'configured' ? GITHUB_COPILOT_PREVIEW_PROVIDER_ID : route?.provider
+    const nextPlan = createPlan(candidates, cfg, provider, plans, operation)
     // A resolver may synchronously invalidate credentials before construction returns.
     if (generation === startedAt && active && plans?.cancellation.signal.aborted !== true) {
       if (plans !== undefined) plans[surface] = {
         plan: nextPlan, route, probe: probeSettings(cfg), generation: startedAt,
+        ...operation === undefined ? {} : { assertProof: operation.assertProof,
+          ...operation.signal === undefined ? {} : { probeSignal: operation.signal } },
       }
     }
     if (surface === 'inline') {
@@ -432,23 +461,27 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     return { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model }
   }
 
-  /** Build a Copilot search plan from the provider-owned search model, not the chat route. */
-  async function configuredWebPlan(signal?: AbortSignal): Promise<SearchPlan> {
+  /** Resolve provider-owned candidates only on an actual search, never from Chat defaults. */
+  async function configuredWebPlan(assertCurrent: () => void, assertProof: () => void, signal?: AbortSignal): Promise<SearchPlan> {
     const owner = currentSearchInitiator(ctx)
     const cfg = current()
     const selection = configuredSearchSelection(cfg)
     const startedAt = generation
-    if (owner === undefined || disposedOwners.has(owner) || selection === undefined) {
-      throw new Error('github-copilot: independent hosted search requires an initiating Agent and github-copilot.searchModel')
+    if (owner === undefined || disposedOwners.has(owner) || !configuredAllowed(cfg)) {
+      throw new Error('github-copilot: independent hosted search requires an initiating Agent and an allowed Copilot provider')
     }
     const plans = plansFor(owner)
     const signals = [proofCancellation.signal, plans.cancellation.signal]
     if (signal !== undefined) signals.push(signal)
     await ctx.get('githubCopilotPreview')?.discover({ force: false, signal: AbortSignal.any(signals) })
+    assertCurrent()
     if (!active || startedAt !== generation || plans.cancellation.signal.aborted || signal?.aborted === true) {
       throw new Error('github-copilot: configured search proof invalidated during route resolution')
     }
-    return plan(currentChatRoute(ctx, selection), cfg, owner, 'configured')
+    // Passing undefined to currentChatRoute would read Chat: automatic plans
+    // intentionally have no route key and fingerprint the entire candidate set.
+    const route = selection === undefined ? undefined : currentChatRoute(ctx, selection)
+    return plan(route, cfg, owner, 'configured', { assertCurrent, assertProof, ...signal === undefined ? {} : { signal } })
   }
 
   function traditionalCandidates(route: CurrentChatRoute | undefined, cfg: InlineConfig): readonly SearchPlanCandidate[] {
@@ -457,13 +490,31 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     return candidatesForRoute(route).filter(candidate => candidate.protocol === 'openai-responses')
   }
 
-  function configuredCandidates(route: CurrentChatRoute | undefined, cfg: InlineConfig): readonly SearchPlanCandidate[] {
-    if (!cfg.enabled || route === undefined) return []
-    const allowed = cfg.providers.length === 0
+  function configuredAllowed(cfg: InlineConfig): boolean {
+    return cfg.enabled && (cfg.providers.length === 0
       || cfg.providers.includes(GITHUB_COPILOT_PROVIDER_ID)
-      || cfg.providers.includes(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
-    if (!allowed) return []
-    return candidatesForRoute(route).filter(candidate => candidate.protocol === 'openai-responses')
+      || cfg.providers.includes(GITHUB_COPILOT_PREVIEW_PROVIDER_ID))
+  }
+
+  function configuredCandidates(cfg: InlineConfig): readonly SearchPlanCandidate[] {
+    if (!configuredAllowed(cfg)) return []
+    const selection = configuredSearchSelection(cfg)
+    // A nonempty legacy override is authoritative, including an unknown or
+    // unsupported model. Never silently replace it with an automatic candidate.
+    if (selection !== undefined) return candidatesForRoute(currentChatRoute(ctx, selection))
+      .filter(candidate => candidate.protocol === 'openai-responses')
+    const preview = ctx.get('githubCopilotPreview')
+    const ids = [...new Set(preview?.getView().models.map(model => model.id) ?? [])].sort()
+    const candidates: SearchPlanCandidate[] = []
+    for (const model of ids) {
+      const route = currentChatRoute(ctx, { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model })
+      // Display metadata may be stale. Only current account-owned routeFacts
+      // supply protocol and endpoint evidence; neither proves search capability.
+      if (route?.api !== 'openai-responses') continue
+      candidates.push(...candidatesForRoute(route))
+      if (candidates.length === 3) break
+    }
+    return candidates
   }
 
   /** Local checks only; availability must never start a credential lookup or probe. */
@@ -494,16 +545,17 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     const owner = currentSearchInitiator(ctx)
     if (owner === undefined || disposedOwners.has(owner)) return false
     const cfg = current()
+    if (!configuredAllowed(cfg)) return false
     const selection = configuredSearchSelection(cfg)
-    if (selection === undefined) return false
-    const route = currentChatRoute(ctx, selection)
-    const candidates = configuredCandidates(route, cfg)
+    const route = selection === undefined ? undefined : currentChatRoute(ctx, selection)
+    const candidates = configuredCandidates(cfg)
     if (candidates.length === 0) {
-      const allowed = cfg.providers.length === 0
-        || cfg.providers.includes(GITHUB_COPILOT_PROVIDER_ID)
-        || cfg.providers.includes(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
-      return cfg.enabled && allowed && route?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
-        && route.api === undefined && ctx.get('githubCopilotPreview')?.getView().configured === true
+      const view = ctx.get('githubCopilotPreview')?.getView()
+      // A cold/stale snapshot can be ensured by the actual request. Ready
+      // metadata with no eligible automatic candidate remains unavailable.
+      return view?.configured === true && (selection === undefined
+        ? view.state !== 'ready'
+        : route?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && route.api === undefined)
     }
     const cached = ownerPlans.get(owner)?.configured
     return !matches(cached, route, candidates, cfg) || cached.plan.available()
@@ -523,17 +575,20 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     // Cold metadata is allowed by the owner proof; a later account change is not.
     const preview = ctx.get('githubCopilotPreview')
     const proof = preview?.captureSearchProof()
-    const assertCurrent = () => {
-      if (signal?.aborted) throw new WebError('web search aborted', 'WEB_ABORTED')
+    const assertProof = () => {
       if (!active || generation !== startedGeneration || owner === undefined || disposedOwners.has(owner)
         || preview === undefined || ctx.get('githubCopilotPreview') !== preview || proof?.() !== true) {
         throw new ConfiguredSearchProofInvalidated()
       }
     }
+    const assertCurrent = () => {
+      if (signal?.aborted) throw new WebError('web search aborted', 'WEB_ABORTED')
+      assertProof()
+    }
     assertCurrent()
     const provider = createTraditionalSearchProvider(configuredAvailable, async requestSignal => {
       assertCurrent()
-      const searchPlan = await configuredWebPlan(requestSignal)
+      const searchPlan = await configuredWebPlan(assertCurrent, assertProof, requestSignal)
       assertCurrent()
       return searchPlan
     }, {
@@ -547,7 +602,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
         return auth
       },
     }, () => cfg,
-    'github-copilot-hosted requires github-copilot.searchModel selecting an account-authorized OpenAI Responses model')
+    'github-copilot-hosted requires an eligible account-authorized Responses search candidate; an explicit searchModel override must also be eligible')
     try {
       const result = await provider.search(request, signal)
       assertCurrent()

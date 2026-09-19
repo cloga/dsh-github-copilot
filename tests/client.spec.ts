@@ -1130,6 +1130,24 @@ describe('GitHub Copilot Models client', () => {
     await dispose()
   })
 
+  it('captures stable search Remotes instead of resetting the card on parent renders', async () => {
+    const { ctx, register } = clientContext(['settings.models.footer'])
+    const settings = vi.fn(() => ({ describe: vi.fn(), mutate: vi.fn() }))
+    const routing = vi.fn(() => ({ providers: vi.fn() }))
+    Object.defineProperty(ctx.remote, 'settings', { get: settings })
+    Object.defineProperty(ctx.remote, 'githubCopilotSearchRouting', { get: routing })
+    const dispose = await apply(ctx as never)
+    const render = register.mock.calls.find(([options]) => options.id === 'github-copilot-search-routing')?.[1] as () => ReactElement
+    const first = render(), second = render()
+    expect(first.props.settings).toBe(second.props.settings)
+    expect(first.props.routing).toBe(second.props.routing)
+    expect(settings).toHaveBeenCalledTimes(1)
+    expect(routing).toHaveBeenCalledTimes(1)
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], expect.any(Function))
+    expect(first.props).not.toHaveProperty('copilot')
+    await dispose()
+  })
+
   it('registers coordinated provider and fallback seats without starting either controller during registration', async () => {
     const { ctx, register, registrations, injections } = clientContext([
       'settings.models.provider-card', 'settings.models.footer', 'settings.section',

@@ -61,7 +61,7 @@ Source markers, local rc.1-backed focused tests and fifteen scoped exact-source 
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.28`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.29`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -74,7 +74,7 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For approved online installation, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.28/dsh-github-copilot-0.4.0-alpha.28.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.29/dsh-github-copilot-0.4.0-alpha.29.tgz
 ```
 
 If registry access is blocked or unavailable, do not retry it through another network. Desktop-managed profiles may instead use the [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance), with an approved, checksum-verified local Release and existing dependency cache (`--offline --ignore-scripts`). All preflight and approval requirements still apply.
@@ -139,7 +139,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.28`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.29`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -158,7 +158,7 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 Under **Settings → Models → Model roles**, enable dedicated dual-model sessions, select two available account models, and save the profile-global settings. No workspace is needed to save. **Create session with this configuration** uses the application's current workspace, shown read-only; open a workspace first if none is current. There is no separate workspace dropdown and no first/recent-workspace fallback. The planner handles planning and acceptance; `copilot_execute` delegates implementation to a native continuable child with a fixed execution model. Configuration is off by default and affects only sessions created through this entry. It does not change the global default, existing sessions, credentials or the ordinary Subagent model-selection setting.
 
-Unavailable models are not substituted. Uncertain creation retries keep the same request identity. The feature requires public role/session/subagent capabilities and is visibly unavailable when they are absent; historical package compatibility is not blanket certification of this optional flow. See [setup, lifecycle, limitations and evidence](./docs/dual-model.md). The feature is included in the `0.4.0-alpha.28` candidate; source and fixture tests are not proof of publication or Desktop activation.
+Unavailable models are not substituted. Uncertain creation retries keep the same request identity. The feature requires public role/session/subagent capabilities and is visibly unavailable when they are absent; historical package compatibility is not blanket certification of this optional flow. See [setup, lifecycle, limitations and evidence](./docs/dual-model.md). The feature is included in the `0.4.0-alpha.29` candidate; source and fixture tests are not proof of publication or Desktop activation.
 
 If the card says **Could not load model roles**, do not change model defaults to work around it: this is a failed settings load, distinct from unsupported capabilities or unavailable models. In particular, a `githubCopilotDualModel/view` HTTP 404 indicates missing Host Remote exposure, not that the feature is off. See [troubleshooting and verification](./docs/dual-model.md#loading-and-remote-troubleshooting).
 
@@ -226,7 +226,7 @@ Before a grant is persisted or reused, the Host normalizer rebuilds only pi-ai's
 
 ## Hosted search
 
-Auto-mode native search identity comes from the captured initiating Session's effective request-header/config or explicit `GenerateOptions`, never the future global chat default. Fixed/default Copilot search instead uses only the explicit provider-owned `github-copilot.searchModel`; it never borrows another Session's model. Core `Agent.options` remains the activation seed: model selection overrides request/assembly, with effective config recorded in `Session.requestHeader().config` before tools. Without a proven initiating owner, traditional search is unavailable. After a new model is selected but before its next request, the previous header must not be treated as current prompt guidance. Per-owner plan caches keep different-model Sessions independent. An actual cold managed search first ensures the shared account metadata without force, then derives model facts and applies the existing account/protocol/allowlist/probe gates. Explicit marked `GenerateOptions` can still bind eligible inline requests, uncached when no owner is available, under all existing guards.
+Auto-mode native search identity comes from the captured initiating Session's effective request-header/config or explicit `GenerateOptions`, never the future global chat default. Fixed/fallback Copilot search instead resolves its execution model inside the provider from current account metadata, while preserving a nonempty explicit `github-copilot.searchModel` override; it never borrows the Chat model or another Session's selection. Core `Agent.options` remains the activation seed: model selection overrides request/assembly, with effective config recorded in `Session.requestHeader().config` before tools. Without a proven initiating owner, traditional search is unavailable. After a new model is selected but before its next request, the previous header must not be treated as current prompt guidance. Per-owner plan caches keep different-model Sessions independent. An actual cold managed search first ensures the shared account metadata without force, then derives model facts and applies the existing account/protocol/allowlist/probe gates. Explicit marked `GenerateOptions` can still bind eligible inline requests, uncached when no owner is available, under all existing guards.
 
 **Credential-change limit:** an OAuth notification during initial lazy metadata discovery cannot distinguish the discovery's own token rotation from an external account change through current public status. That first search deliberately fails closed with `WEB_PROVIDER_UNAVAILABLE`, before probe/wire work. A later user/driver request may retry with refreshed credentials; there is no automatic retry or promise of seamless first-attempt refresh.
 
@@ -241,14 +241,15 @@ The bundle composes a plugin-owned web-service facade while preserving the origi
 
 A separate **Web search** card under **Settings → Models** controls routing across search backends. On older Core versions without the Models footer, it appears as **Settings → Web search**. The companion owns the namespaced policy (`github-copilot-search-routing`); it does not claim a global Core namespace. Removing the companion restores the original web service.
 
-The **Search provider** selector offers **Auto — follow Chat** and the actual search providers registered through the routed facade. **Default search provider** uses the same catalog, with an additional **None — no fallback** choice. These are search backends, not individual models: Copilot is one backend even when different account models can execute its search requests.
+The **Search provider** selector offers **Auto — follow Chat** and the actual search providers registered through the routed facade. **Fallback provider** uses the same catalog, with an additional **None — no fallback** choice. These are search backends, not individual models: Copilot is one backend even when different account models can execute its search requests. Ordinary setup needs only these provider choices, not a separate search model.
 
 - `github-copilot-search-routing.searchProvider: auto` follows the initiating Chat provider. Copilot's plugin-owned aliases retain their existing ownership and model-capability checks; other Chat provider IDs must exactly match a registered search provider ID. Names, suffixes and model families are never guessed. This convention does not promise the same model or account across independently registered providers.
 - A concrete `searchProvider` ID pins the primary backend independently of Chat.
 - `defaultSearchProvider` is only the final fallback when no primary matches or the primary search fails. It is attempted at most once, never retried when it is already the primary, and never replaces a successful empty result. `none` disables fallback without disabling the primary.
-- Copilot selected explicitly or as the fallback uses its provider-owned `github-copilot.searchModel`. Other backends own their model configuration, if any. A registered backend is not proof that every model supports search.
+- Copilot selected explicitly or as the fallback automatically considers at most three eligible Responses candidates from current account route facts, sorted by model ID. The default capability probe must succeed before the final user query is sent once; metadata alone is not proof, and a failed final query is not replayed across models. This internal selection does not change Chat or global defaults. Other backends own their model configuration, if any.
+- A saved nonempty `github-copilot.searchModel` remains authoritative; the plugin does not silently replace an invalid override. Its read-only details offer a separate explicit reset to automatic selection (`searchModel: ''`). Saving provider routing never changes this override.
 
-Existing `searchMode: auto/fixed` settings remain readable without automatic writes. Legacy fixed mode preserves its old default as the primary; fixed plus `none` stays disabled. An explicit save writes the new independent keys. The UI explains that saving adopts the chosen final fallback, including possible API charges; legacy `github-copilot.searchFallback: none` failure-spending restrictions remain until that choice is saved. Unregistered saved IDs remain visible as unavailable instead of being silently substituted.
+Existing `searchMode: auto/fixed` settings remain readable without automatic writes. Legacy fixed mode preserves its old default as the primary; fixed plus `none` stays disabled. An explicit save writes both routing keys together with one revision-checked mutation; it does not require the Copilot settings namespace or fetch an account/model list. Stable Remote references keep enclosing page renders from resetting the draft. On a revision conflict, reload saved settings and reapply the intended choices; a rejected or unconfirmed response is not reported as success. Saving proves only configuration persistence, not live search capability. The UI explains that saving adopts the chosen final fallback, including possible API charges; legacy `github-copilot.searchFallback: none` failure-spending restrictions remain until that choice is saved. Unregistered saved IDs remain visible as unavailable instead of being silently substituted.
 
 `github-copilot.routeWebSearch: false` still delegates to the original configured web service. Otherwise cancellation, unload and captured account-proof invalidation never authorize a fallback. Generic registered backends must honor cancellation; their public interface does not expose an internal pre-network authorization hook. The historical direct Copilot/DeepSeek path retains its stronger owned pre-dispatch guard. Neither path supplies another provider's credentials from Copilot sign-in.
 
@@ -335,7 +336,7 @@ Existing installations must follow the [single-route migration guide](./docs/sin
 - **Canonical route says `not-configured`:** with configured login this is normal managed-only mode; inspect account discovery separately rather than creating a native profile.
 - **Delete dialog stays on “Deleting…”:** this update does not prove that hang fixed. Do not repeatedly delete; after an authorized Host stop, inspect persisted settings and follow the migration guide before deciding whether any removal is still needed.
 - **No Think text:** the provider may omit public summaries, but nonempty summaries must survive the Responses parser. Check selected effort and named errors. Empty disclosures are hidden only after completion; encrypted replay is never displayed. Reasoning/replay-bearing histories use native Core transport.
-- **Hosted search unavailable:** for managed-only use, select an accepted Responses model under **GitHub Copilot** and inspect discovery/probe errors for `ctx.web` search. The custom inline path is legacy-canonical only; normal managed chat success does not prove search support.
+- **Hosted search unavailable:** for explicit/fallback Copilot, inspect account discovery/probe diagnostics; ordinary setup no longer requires selecting a search model. A legacy override remains authoritative until you explicitly reset it to automatic selection. Auto following Copilot Chat still requires that initiating model to support search. The custom inline path is legacy-canonical only; a saved provider choice or normal managed chat success does not prove search support.
 - **Legacy endpoint/key still present:** reconciliation preserves unowned fields by design. Review explicit migration; never force-remove an ownership marker.
 
 ## Package entries and source map
@@ -398,8 +399,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.28/dsh-github-copilot-0.4.0-alpha.28.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.28/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.29/dsh-github-copilot-0.4.0-alpha.29.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.29/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -407,7 +408,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.28.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.29.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

@@ -16,14 +16,19 @@ const q=new URLSearchParams(location.search);document.body.dataset.theme=q.get('
 const uaScheme=q.get('uaScheme');if(uaScheme==='light'||uaScheme==='dark')document.documentElement.style.colorScheme=uaScheme;
 const setTheme=theme=>{if(theme==='light'||theme==='dark')document.body.dataset.theme=theme;};
 const ROUTING='github-copilot-search-routing',COPILOT='github-copilot';
-const state={routingRevision:4,copilotRevision:7,configuration:{searchProvider:'auto',defaultSearchProvider:'deepseek-official'},model:'fixture-responses-model',providers:['deepseek-official','github-copilot-hosted','exa','community-search-provider-with-a-long-identifier'],calls:[]};
+const state={routingRevision:4,copilotRevision:7,configuration:{searchProvider:'auto',defaultSearchProvider:'deepseek-official'},model:q.has('override')?'fixture-responses-model':'',providers:['deepseek-official','github-copilot-hosted','exa','community-search-provider-with-a-long-identifier'],calls:[],describes:0,statusCalls:0,writable:!q.has('readonly'),hold:false};
 const ns=(id,revision,value)=>({ns:id,revision,value,schema:{},applies:'live',secrets:[]});
-const settings={describe:async()=>({ok:true,value:{writable:true,hasDocument:true,namespaces:[ns(ROUTING,state.routingRevision,{...state.configuration}),ns(COPILOT,state.copilotRevision,{searchModel:state.model})]}}),mutate:async(id,operations,revision)=>{
-state.calls.push({id,operations,revision});const key=id===ROUTING?'routingRevision':'copilotRevision';if(revision!==state[key])return{ok:false,error:{code:'CONFLICT'}};
+const settings={describe:async()=>{state.describes++;return{ok:true,value:{writable:state.writable,hasDocument:true,namespaces:[ns(ROUTING,state.routingRevision,{...state.configuration}),ns(COPILOT,state.copilotRevision,{searchModel:state.model})]}};},mutate:async(id,operations,revision)=>{
+state.calls.push({id,operations,revision});if(state.hold)await new Promise(resolve=>{state.release=resolve;});const key=id===ROUTING?'routingRevision':'copilotRevision';if(revision!==state[key])return{ok:false,error:{code:'settings-conflict',message:'PRIVATE_FIXTURE_ERROR'}};
 for(const operation of operations){if(id===ROUTING)state.configuration[operation.path[0]]=operation.value;else state.model=operation.value;}state[key]++;return{ok:true,value:ns(id,state[key],id===ROUTING?{...state.configuration}:{searchModel:state.model})};
 }};
 const routing={providers:async()=>({ok:true,value:{supported:true,providers:state.providers.map(id=>({id}))}})};
-const copilot={status:async()=>({ok:true,value:{phase:'signed-in',configured:true,writable:true,inFlight:false,notices:[],accountModels:{state:'ready',models:[{id:'fixture-responses-model',name:'Fixture model',api:'openai-responses'}],rejected:[]}}})};
-window.fixture=state;window.fixture.setTheme=setTheme;
-ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(window.CopilotUI.WebSearchRoutingCard,{settings,routing,copilot}));
+const copilot={status:async()=>{state.statusCalls++;return{ok:true,value:{phase:'signed-in',configured:true,writable:true,inFlight:false,notices:[],accountModels:{state:'ready',models:[{id:'fixture-responses-model',name:'Fixture model',api:'openai-responses'}],rejected:[]}}};}};
+// Model the real traced Remote identity behavior: a fresh face per property read.
+// Invoke the actual built search registration, not a fixture-only component wrapper.
+const registrations=new Map();const remote={$mount:async()=>()=>{},get settings(){return{...settings};},get githubCopilotSearchRouting(){return{...routing};},get githubCopilot(){return{...copilot};}};
+const ctx={remote,logger:{warn:console.warn},slots:{spec:()=>({kind:'list',scope:'root'}),inject:(name,callback)=>name==='settings.models.footer'||name==='settings.section'?callback():()=>{},register:(spec,render)=>{registrations.set(spec.id,render);return()=>registrations.delete(spec.id);}},inject:(deps,callback)=>{const cleanup=deps.includes('remote.settings')?callback(ctx):()=>{};return Object.assign(Promise.resolve(),{dispose:async()=>cleanup()});}};
+window.fixture=state;state.setTheme=setTheme;
+const root=ReactDOM.createRoot(document.getElementById('app'));
+window.CopilotUI.apply(ctx).then(dispose=>{state.dispose=dispose;state.render=()=>root.render(registrations.get(ROUTING)());state.render();});
 </script></body></html>

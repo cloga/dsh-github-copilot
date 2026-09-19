@@ -42,7 +42,7 @@ export interface InlineConfig {
   routeWebSearch?: boolean
   /** Automatic fallback, disclosed in results; no per-search approval dialog. */
   searchFallback?: 'none' | 'deepseek'
-  /** Copilot model used when `github-copilot-hosted` serves independently of the initiating chat model. */
+  /** Optional authoritative legacy override; otherwise hosted search resolves bounded account-owned candidates independently of Chat. */
   searchModel?: string
   /** Internal JSON backup of route leaves temporarily owned by the GPT-6 overlay. */
   temporaryRouteBackup?: string
