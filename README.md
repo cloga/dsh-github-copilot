@@ -61,7 +61,7 @@ Source markers, local rc.1-backed focused tests and fifteen scoped exact-source 
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.27`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.28`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -74,7 +74,7 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For approved online installation, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.27/dsh-github-copilot-0.4.0-alpha.27.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.28/dsh-github-copilot-0.4.0-alpha.28.tgz
 ```
 
 If registry access is blocked or unavailable, do not retry it through another network. Desktop-managed profiles may instead use the [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance), with an approved, checksum-verified local Release and existing dependency cache (`--offline --ignore-scripts`). All preflight and approval requirements still apply.
@@ -139,7 +139,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.27`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.28`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -158,7 +158,7 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 Under **Settings → Models → Model roles**, enable dedicated dual-model sessions, select two available account models, and save the profile-global settings. No workspace is needed to save. **Create session with this configuration** uses the application's current workspace, shown read-only; open a workspace first if none is current. There is no separate workspace dropdown and no first/recent-workspace fallback. The planner handles planning and acceptance; `copilot_execute` delegates implementation to a native continuable child with a fixed execution model. Configuration is off by default and affects only sessions created through this entry. It does not change the global default, existing sessions, credentials or the ordinary Subagent model-selection setting.
 
-Unavailable models are not substituted. Uncertain creation retries keep the same request identity. The feature requires public role/session/subagent capabilities and is visibly unavailable when they are absent; historical package compatibility is not blanket certification of this optional flow. See [setup, lifecycle, limitations and evidence](./docs/dual-model.md). The feature is included in the `0.4.0-alpha.27` candidate; source and fixture tests are not proof of publication or Desktop activation.
+Unavailable models are not substituted. Uncertain creation retries keep the same request identity. The feature requires public role/session/subagent capabilities and is visibly unavailable when they are absent; historical package compatibility is not blanket certification of this optional flow. See [setup, lifecycle, limitations and evidence](./docs/dual-model.md). The feature is included in the `0.4.0-alpha.28` candidate; source and fixture tests are not proof of publication or Desktop activation.
 
 If the card says **Could not load model roles**, do not change model defaults to work around it: this is a failed settings load, distinct from unsupported capabilities or unavailable models. In particular, a `githubCopilotDualModel/view` HTTP 404 indicates missing Host Remote exposure, not that the feature is off. See [troubleshooting and verification](./docs/dual-model.md#loading-and-remote-troubleshooting).
 
@@ -277,9 +277,19 @@ This optional integration uses the public `conversation.chat.node` keyed slot an
 ### Capability warnings and adapter limits
 
 - `REASONING_EFFORTS_UNSUPPORTED` means some advertised reasoning labels cannot be expressed faithfully by the selected native SDK protocol. They are not guessed, and ordinary requests remain available. Explicit unsupported efforts—including an unadvertised `off`—are rejected rather than silently treated as defaults.
-- `INPUT_LIMIT_NOT_ENFORCED_BY_CORE` means the provider advertises a separate prompt limit smaller than its combined context. The plugin retains both values, but the published Core model-info interface exposes only combined context; it does not automatically enforce the independent input limit. Oversized requests can still be rejected by the provider.
+- `INPUT_LIMIT_ESTIMATED_GUARD` means the managed route applies a plugin-owned estimated input guard while retaining the provider's distinct input, context and output capacities. This is not exact provider token counting or a claim that Core exposes a separate input limit; provider overflow remains possible.
 - The Core-facing integration uses the published adapter's normal `streamSimple` path. Its advanced `stream` entry explicitly rejects incompatible protocol-specific SDK client objects; this does not disable normal conversation streaming.
 - Unknown pricing is represented as unpriced metadata, not a claim that a model is free. Public summaries remain optional provider output.
+
+## Managed request budgets and compaction
+
+The managed `github-copilot-preview` route estimates the complete native request, including current system/tool prefixes, and checks both the independent prompt limit and combined input/output capacity before model transport. Its operational input budget is `min(prompt limit when advertised, context capacity - requested/default output reservation) - safety allowance`. Supplier capacities are not rewritten. Invalid output policy or exhausted headroom fails explicitly; no history is silently truncated and no model is substituted.
+
+For a marked ordinary agent-loop request with a matching initiating Session and committed request configuration, optional token-meter and enabled stock automatic compaction, the plugin signals local estimated pressure at 90% of that budget. Core owns the existing bounded compaction/rebuild path and commits only a valid smaller checkpoint. It does not compact concurrently inside a frozen request. Missing optional seams disable this early signal, not the final native budget guard; `auto: false` or zero stock overflow retries remain respected. Canonical/user-owned routes and other providers are unchanged.
+
+Calls explicitly marked `purpose: 'compaction'` bypass the early-pressure signal and use the full hard budget. When no caller or adapter-resolved reasoning effort is present, `prefer-low` selects an advertised supported `minimal` or `low` effort; unsupported controls preserve provider defaults. An explicit or materialized effort wins. The requested summary output cap remains unchanged, preserving Core's auxiliary summary record; the plugin does not blindly raise/lower it or accept truncated output as a checkpoint. `enabled` remains a hosted-search switch, not a switch for this managed-route protection.
+
+**Existing oversized history is not guaranteed recoverable.** Manual compact can still exceed the hard budget and is rejected before model transport with a safe diagnostic. Output truncation remains a distinct native `max-tokens` outcome. This change adds no chunked summarizer, silent history deletion, automatic model switching or new retry loop. Configure an appropriate summary route/cap through official compaction policy when needed; do not repeatedly resubmit an unchanged impossible request. See [the implementation and acceptance boundary](./docs/copilot-compaction.md).
 
 ## Copilot tool compatibility
 
@@ -296,12 +306,15 @@ The plugin does not rewrite `$DSH_HOME/AGENTS.md`. Installers may merge these ru
 
 ## Settings
 
-The plugin's `github-copilot` settings section controls account-metadata freshness and hosted search. `enabled` still controls hosted search only:
+The plugin's `github-copilot` settings section controls account-metadata freshness, managed request budgets and hosted search. `enabled` still controls hosted search only:
 
 | Key | Default | Scope and meaning |
 |---|---:|---|
 | `accountModelTtlMs` | `86400000` | Maximum account-metadata reuse window in milliseconds (24h); does not extend credentials or proof validity. |
 | `accountModelFailureCooldownMs` | `300000` | Failure cooldown in milliseconds (5min) for non-forcing discovery; no periodic retries. |
+| `requestBudgetSafetyTokens` | `4096` | Non-negative safe-integer estimated input allowance; larger values reduce available input. |
+| `requestBudgetPressureRatio` | `0.9` | Fraction (0.01–1, step 0.01) for early local pressure, only with supported enabled stock recovery. |
+| `compactionReasoning` | `prefer-low` | Choose supported minimal/low only when summary effort is absent; `preserve` keeps native defaults. |
 | `enabled` | `true` | Enable both hosted-search surfaces. |
 | `providers` | `[]` | Optional route allowlist for both surfaces; empty follows the initiating route. Existing nonempty lists are preserved; Ops must explicitly review any legacy-ID change to `github-copilot-preview`. |
 | `includeSources` | `true` | Request provider citations on the inline path. The `ctx.web` bridge always requests and returns sources. |
@@ -310,7 +323,7 @@ The plugin's `github-copilot` settings section controls account-metadata freshne
 | `probe` | `true` | Require capability proof on both surfaces; `false` explicitly trusts the native protocol. |
 | `probeTimeoutMs` | `30000` | Whole capability-probe deadline, in milliseconds. |
 
-There are no token, API-key, model-catalog, or endpoint settings in this package.
+There are no credential-token, API-key, model-catalog, or endpoint settings in this package.
 
 ## Migration and troubleshooting
 
@@ -385,8 +398,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.27/dsh-github-copilot-0.4.0-alpha.27.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.27/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.28/dsh-github-copilot-0.4.0-alpha.28.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.28/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -394,7 +407,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.27.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.28.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

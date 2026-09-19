@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.27"
+    "version": "0.4.0-alpha.28"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -167,7 +167,7 @@
           "standaloneNpmArtifacts": "not-tested",
           "managedProviderValidation": "synthetic-tagged-source-runtime",
           "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
-          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
         }
       ],
       "packages": [
@@ -299,6 +299,25 @@
         {"file": "tests/routed-web.spec.ts", "name": "preserves fallback provenance in canonical value, rendered content and web-card metadata"},
         {"file": "tests/deepseek-search-fallback.spec.ts", "name": "checks the actual managed proof after native fallback auth: %s"},
         {"file": "tests/deepseek-search-fallback.spec.ts", "name": "checks continuity after native literal-key auth (permitted=%s)"}
+      ]
+    },
+    {
+      "id": "managed-request-budget-and-compaction-policy",
+      "required": true,
+      "activation": "account-bound-estimated-admission-and-optional-stock-recovery",
+      "sourceMarkers": [
+        {"file": "src/request-budget.ts", "marker": "calculateRequestBudget"},
+        {"file": "src/compaction-pressure.ts", "marker": "installCopilotCompactionPressure"},
+        {"file": "src/preview-route.ts", "marker": "COPILOT_CONTEXT_BUDGET_EXCEEDED"},
+        {"file": "src/preview-provider.ts", "marker": "inspectRequest"}
+      ],
+      "tests": [
+        {"file": "tests/preview-route.spec.ts", "name": "rejects independent input overflow before model wire, prepared=%s"},
+        {"file": "tests/preview-route.spec.ts", "name": "reserves the requested output separately from the independent prompt ceiling"},
+        {"file": "tests/preview-route.spec.ts", "name": "uses supported low effort for compaction only without rewriting its output cap"},
+        {"file": "tests/preview-route.spec.ts", "name": "refuses an already oversized manual summary without sending or truncating its history"},
+        {"file": "tests/preview-route.spec.ts", "name": "keeps output truncation distinct from context overflow and successful summary output"},
+        {"file": "tests/preview-route.spec.ts", "name": "isolates concurrent chat success from a rejected compaction admission"}
       ]
     },
     {

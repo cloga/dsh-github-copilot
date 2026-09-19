@@ -294,7 +294,7 @@ assert(metadata?.activation === 'validated-account-endpoints-and-capabilities', 
 const publicAdapter = manifest.capabilities?.find(capability => capability.id === 'public-adapter-account-model-route')
 assert(publicAdapter?.activation === 'published-adapter-and-native-sdk', 'managed route must reuse the public adapter and native SDK')
 assert(!manifest.capabilities.some(capability => capability.id === 'capability-gated-mixed-copilot-protocols'), 'unshipped Core capability requirement must be retired')
-const genericSources = ['src/account-model-catalog.ts', 'src/account-model-source.ts', 'src/account-model-auth.ts', 'src/preview-provider.ts', 'src/preview-route.ts', 'src/pi-provider-bridge.ts']
+const genericSources = ['src/account-model-catalog.ts', 'src/account-model-source.ts', 'src/account-model-auth.ts', 'src/preview-provider.ts', 'src/preview-route.ts', 'src/pi-provider-bridge.ts', 'src/request-budget.ts', 'src/compaction-pressure.ts']
 for (const path of genericSources) await verifyGenericSource(path)
 assert(!(await read('src/model-protocol.ts')).includes('llmPiAiModelProtocol'), 'local catalog facts must not depend on an unshipped Core service')
 const legacyRestore = manifest.capabilities.find(capability => capability.id === 'legacy-global-override-restoration')
@@ -318,7 +318,7 @@ assert(Array.isArray(manifest.capabilities) && manifest.capabilities.length > 0,
 const capabilityIds = new Set(manifest.capabilities.map(capability => capability.id))
 assert(capabilityIds.size === manifest.capabilities.length, 'capability IDs must be unique')
 for (const required of ['account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
-  'public-adapter-account-model-route', 'managed-model-generation-and-lifetime', 'account-discovery-native-oauth',
+  'public-adapter-account-model-route', 'managed-request-budget-and-compaction-policy', 'managed-model-generation-and-lifetime', 'account-discovery-native-oauth',
   'canonical-owner-preservation', 'single-managed-route-native-oauth', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
   'read-only-status-and-explicit-discovery', 'shared-copilot-credential-refresh', 'compact-account-row-and-auth-disclosure']) {
   assert(capabilityIds.has(required), `required plugin-only capability is missing: ${required}`)
@@ -383,7 +383,7 @@ assert(alpha0162Core?.tag === currentDsh.tag && alpha0162Core.commit === current
   && alpha0162Core.resolvedProfileDiagnostics === 'plugin-owned-empty-modelErrors'
   && JSON.stringify(alpha0162Core.runtimeTests) === JSON.stringify([
     ...alpha016Core.runtimeTests.slice(0, -2), 'tests/fixtures/alpha2-contracts-core.fixture.ts',
-    'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts',
+    'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts',
     ...alpha016Core.runtimeTests.slice(-2),
   ]), '0.1.6-alpha.2 must declare exact codec, child, dependency lifetime, Client owner and bounded source-runtime targets')
 for (const path of alpha0162Core.runtimeTests) await access(resolve(root, path))

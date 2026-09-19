@@ -6,6 +6,8 @@
  */
 
 import z from '@deepseek-ai/schemastery'
+import { DEFAULT_REQUEST_BUDGET_POLICY } from './request-budget.ts'
+import type { RequestBudgetPolicy } from './request-budget.ts'
 
 /** Plugin configuration. Defaults make the current chat route decide. */
 export interface InlineConfig {
@@ -30,6 +32,12 @@ export interface InlineConfig {
   accountModelTtlMs?: number
   /** Minimum delay after failed passive discovery; explicit Refresh bypasses it. */
   accountModelFailureCooldownMs?: number
+  /** Estimated managed-route input headroom, separate from truthful catalog capacities. */
+  requestBudgetSafetyTokens?: number
+  /** Fraction of admissible input used by eligible automatic-compaction requests. */
+  requestBudgetPressureRatio?: number
+  /** Supported low effort only for summary calls with no already resolved effort. */
+  compactionReasoning?: RequestBudgetPolicy['compactionReasoning']
   /** Route the official web-search consumer by initiating Session when the bundle isolate is mounted. */
   routeWebSearch?: boolean
   /** Automatic fallback, disclosed in results; no per-search approval dialog. */
@@ -54,6 +62,9 @@ export const Config: z<InlineConfig> = z.object({
   probeTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(30_000),
   accountModelTtlMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(86_400_000),
   accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
+  requestBudgetSafetyTokens: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_REQUEST_BUDGET_POLICY.safetyTokens),
+  requestBudgetPressureRatio: z.number().step(0.01).min(0.01).max(1).default(DEFAULT_REQUEST_BUDGET_POLICY.pressureRatio),
+  compactionReasoning: z.union(['prefer-low', 'preserve']).default(DEFAULT_REQUEST_BUDGET_POLICY.compactionReasoning),
   routeWebSearch: z.boolean().default(true),
   searchFallback: z.union(['none', 'deepseek']).default('deepseek'),
   searchModel: z.string().hidden(),

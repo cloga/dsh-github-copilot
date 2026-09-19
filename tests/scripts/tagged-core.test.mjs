@@ -158,7 +158,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         await writeFile(join(value.root, 'tests/tool-schema-compat.spec.ts'), 'export {}')
       }
       if (release === '0.1.6-alpha.2') {
-        for (const name of ['fixtures/alpha2-contracts-core.fixture.ts', 'remote-codec.spec.ts', 'dual-model-projection.spec.ts']) {
+        for (const name of ['fixtures/alpha2-contracts-core.fixture.ts', 'fixtures/compaction-pressure-core.fixture.ts', 'remote-codec.spec.ts', 'dual-model-projection.spec.ts']) {
           await writeFile(join(value.root, 'tests', name), 'export {}')
         }
       }
@@ -169,7 +169,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
         'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts',
         ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts'] : [],
-        ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
+        ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts'])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })
