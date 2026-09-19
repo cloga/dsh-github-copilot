@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.28 (prepared)
+
+- Enforce plugin-owned estimated independent prompt and combined input/output budgets on the managed Copilot route while preserving advertised context capacity and native transport (#146).
+- Signal eligible exact-session loop pressure before model dispatch through the existing official bounded compaction/rebuild path; respect disabled automatic recovery, model-specific zero retries and cancellation.
+- Prefer supported minimal/low reasoning only for compaction with no supplied or materialized effort, without silently rewriting the requested summary output cap or changing ordinary conversations.
+- Preserve structured local admission failures through SDK wrapping, current system/tool accounting, concurrent-call isolation and distinct output-truncation outcomes. Add configurable safety/pressure/summary policy and regression coverage.
+- Keep already oversized manual summaries as explicit failures; this release does not claim chunked recovery, silent history deletion, automatic model switching, Core changes or local Desktop activation.
+
 ## 0.4.0-alpha.27 (prepared)
 
 - Remove the separate Model roles workspace dropdown: role settings remain profile-global and saving does not require a workspace (#144).

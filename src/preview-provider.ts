@@ -1,5 +1,5 @@
 import { hasApi, lazyStream } from '@earendil-works/pi-ai'
-import type { Api, Model, OAuthAuth, StreamOptions, ThinkingLevelMap } from '@earendil-works/pi-ai'
+import type { Api, Context as PiContext, Model, OAuthAuth, StreamOptions, ThinkingLevelMap } from '@earendil-works/pi-ai'
 import type { AccountModelApi, AccountModelDescriptor } from './account-model-catalog.ts'
 import { coreProviderView } from './pi-provider-bridge.ts'
 import type { CoreCompatibleProvider, SimpleNativeProvider } from './pi-provider-bridge.ts'
@@ -21,6 +21,8 @@ export interface PreviewProviderGuard {
 /** Guard for one selected model in an account-bound descriptor snapshot. */
 export interface AccountProviderGuard extends PreviewProviderGuard {
   readonly selectedModelId?: string
+  /** Per-dispatch admission after native context conversion, before starting a model wire. */
+  inspectRequest?(model: Model<Api>, context: PiContext, options?: StreamOptions): void
   assertEntitled(credential: GitHubCopilotOAuthCredential, modelId: string): void
 }
 
@@ -152,6 +154,7 @@ export function createAccountProvider(
       const entry = table.get(model.id)
       if (model.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID || model.id !== selected()
         || entry === undefined || model.api !== entry.api) throw new Error('COPILOT_MANAGED_MODEL_MISMATCH')
+      guard.inspectRequest?.(model, context, options)
       const lease = await guard.beforeWire(model, options)
       if (typeof options?.apiKey !== 'string' || options.apiKey.length === 0) {
         lease.release()

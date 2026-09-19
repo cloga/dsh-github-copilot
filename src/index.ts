@@ -217,7 +217,11 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     searchMode: 'auto',
     defaultSearchProvider: 'deepseek-official',
   })
-  ctx.plugin(previewPlugin, { accountModelSettings: () => current() })
+  ctx.plugin(previewPlugin, { accountModelSettings: () => current(), requestBudgetSettings: () => {
+    const selected = current()
+    return { safetyTokens: selected.requestBudgetSafetyTokens, pressureRatio: selected.requestBudgetPressureRatio,
+      compactionReasoning: selected.compactionReasoning }
+  } })
   ctx.plugin(GitHubCopilotAuthorizationController)
   ctx.plugin(GitHubCopilotDualModel)
   ctx.plugin(SearchRoutingController)

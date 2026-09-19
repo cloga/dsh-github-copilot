@@ -348,7 +348,7 @@ describe('plugin-owned account Copilot route', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('reports unsupported reasoning and unenforced input budgets without hiding a usable default model', async () => {
+  it('reports unsupported reasoning and estimated input guards without hiding a usable default model', async () => {
     const item = catalogItem('future-budget-model', '/responses', { capabilities: {
       supports: { streaming: true, tool_calls: true, vision: false, reasoning_effort: ['turbo'] },
       limits: { max_context_window_tokens: 64000, max_prompt_tokens: 32000, max_output_tokens: 8000 },
@@ -357,7 +357,7 @@ describe('plugin-owned account Copilot route', () => {
     const harness = await runtime(grant({ availableModelIds: [] }))
     const view = await harness.ctx.get('githubCopilotPreview')!.discover()
     expect(view).toMatchObject({ available: true, rejected: [], warnings: [
-      { id: item.id, code: 'INPUT_LIMIT_NOT_ENFORCED_BY_CORE' },
+      { id: item.id, code: 'INPUT_LIMIT_ESTIMATED_GUARD' },
       { id: item.id, code: 'REASONING_EFFORTS_UNSUPPORTED' },
     ] })
     expect((await call(harness.ctx, { model: item.id })).assembler.finish).toEqual({ kind: 'stop' })
@@ -1497,5 +1497,196 @@ describe('plugin-owned account Copilot route', () => {
     expect(assembler.finish.kind).not.toBe('stop')
     expect(fetch).not.toHaveBeenCalled()
     expect(harness.current()).toBeDefined()
+  })
+})
+
+describe('managed Copilot request budgets and compaction policy', () => {
+  const limited = (input = 32000) => catalogItem(MODEL, '/responses', {
+    capabilities: { supports: { streaming: true, tool_calls: true, reasoning_effort: ['low', 'high'] },
+      limits: { max_context_window_tokens: 64000, max_prompt_tokens: input, max_output_tokens: 8192 } },
+  })
+  async function generate(ctx: Context, options: Partial<GenerateOptions>, prepared: boolean) {
+    const request: GenerateOptions = { provider: PREVIEW, model: MODEL, messages: [], ...options }
+    const stream = prepared
+      ? (await ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL,
+        ...request.maxTokens === undefined ? {} : { maxTokens: request.maxTokens },
+        ...request.reasoningEffort === undefined ? {} : { reasoningEffort: request.reasoningEffort },
+      })).stream(request)
+      : ctx.llm.stream(request)
+    const assembler = new BlockAssembler()
+    for await (const chunk of stream) assembler.push(chunk)
+    return assembler
+  }
+  it.each([false, true])('rejects independent input overflow before model wire, prepared=%s', async prepared => {
+    const wire = vi.fn(async () => response())
+    stubFetch(async (input) => String(input).endsWith('/models') ? catalogResponse([limited()]) : wire(), true)
+    const harness = await runtime()
+    const message = createUserMessage({ content: [{ type: 'text', text: 'x'.repeat(33000 * 4) }], source: { kind: 'user' } })
+    const result = await generate(harness.ctx, { messages: [message], maxTokens: 8192 }, prepared)
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED',
+      message: expect.stringContaining('COPILOT_CONTEXT_BUDGET_EXCEEDED') } })
+    expect(wire).not.toHaveBeenCalled()
+    expect(message.content).toEqual([{ type: 'text', text: 'x'.repeat(33000 * 4) }])
+    expect(await harness.ctx.llm.resolveModelInfo(PREVIEW, MODEL)).toMatchObject({ context: { contextWindow: 64000 } })
+  })
+  it('reserves the requested output separately from the independent prompt ceiling', async () => {
+    const wire = vi.fn(async () => response())
+    stubFetch(async input => String(input).endsWith('/models') ? catalogResponse([limited(64000)]) : wire(), true)
+    const harness = await runtime()
+    const message = createUserMessage({ content: [{ type: 'text', text: 'x'.repeat(53000 * 4) }], source: { kind: 'user' } })
+    const result = await generate(harness.ctx, { messages: [message], maxTokens: 8192 }, false)
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED' } })
+    expect(wire).not.toHaveBeenCalled()
+  })
+  it('uses supported low effort for compaction only without rewriting its output cap', async () => {
+    const bodies: Array<Record<string, unknown>> = []
+    stubFetch(async (input, init) => {
+      if (String(input).endsWith('/models')) return catalogResponse([limited()])
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      return response()
+    }, true)
+    const harness = await runtime()
+    expect((await generate(harness.ctx, { purpose: 'compaction', maxTokens: 8192 }, false)).finish.kind).toBe('stop')
+    expect((await generate(harness.ctx, { maxTokens: 8192 }, false)).finish.kind).toBe('stop')
+    expect(bodies[0]?.reasoning).toMatchObject({ effort: 'low' })
+    expect(bodies[0]?.max_output_tokens).toBe(8192)
+    expect(bodies[1]?.reasoning).toBeUndefined()
+    expect(bodies[1]?.max_output_tokens).toBe(8192)
+  })
+  it('preserves an explicitly selected compaction effort', async () => {
+    let body: Record<string, unknown> | undefined
+    stubFetch(async (input, init) => {
+      if (String(input).endsWith('/models')) return catalogResponse([limited()])
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return response()
+    }, true)
+    const harness = await runtime()
+    await generate(harness.ctx, { purpose: 'compaction', maxTokens: 8192, reasoningEffort: ReasoningEffortId('high') }, true)
+    expect(body?.reasoning).toMatchObject({ effort: 'high' })
+    expect(body?.max_output_tokens).toBe(8192)
+  })
+  it('refuses an already oversized manual summary without sending or truncating its history', async () => {
+    const wire = vi.fn(async () => response())
+    stubFetch(async input => String(input).endsWith('/models') ? catalogResponse([limited()]) : wire(), true)
+    const harness = await runtime()
+    const messages = [createUserMessage({ content: [{ type: 'text', text: 'private-history '.repeat(10000) }], source: { kind: 'user' } })]
+    const result = await generate(harness.ctx, { messages, purpose: 'compaction', maxTokens: 8192 }, false)
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED' } })
+    if (result.finish.kind === 'error') expect(result.finish.failure.message).not.toContain('private-history')
+    expect(wire).not.toHaveBeenCalled()
+    expect(messages).toHaveLength(1)
+  })
+  it('preserves materialized provider reasoning defaults during compaction', async () => {
+    let body: Record<string, unknown> | undefined
+    stubFetch(async (input, init) => {
+      if (String(input).endsWith('/models')) return catalogResponse([limited()])
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return response()
+    }, true)
+    const harness = await runtime(grant(), { reasoning: 'high' })
+    expect((await generate(harness.ctx, { purpose: 'compaction', maxTokens: 8192 }, false)).finish.kind).toBe('stop')
+    expect(body?.reasoning).toMatchObject({ effort: 'high' })
+  })
+  it('classifies impossible policy headroom as nonretryable configuration rather than history overflow', async () => {
+    const wire = vi.fn(async () => response())
+    stubFetch(async input => String(input).endsWith('/models') ? catalogResponse([limited()]) : wire(), true)
+    const harness = await runtime(grant(), { requestBudget: { safetyTokens: 60000 } })
+    expect((await generate(harness.ctx, { maxTokens: 8192 }, false)).finish).toMatchObject({ kind: 'error',
+      failure: { code: 'INVALID_REQUEST', message: expect.stringContaining('COPILOT_REQUEST_NO_INPUT_HEADROOM') } })
+    expect(wire).not.toHaveBeenCalled()
+  })
+  it('rejects an output cap above advertised capacity without silently lowering it', async () => {
+    const wire = vi.fn(async () => response())
+    stubFetch(async input => String(input).endsWith('/models') ? catalogResponse([limited()]) : wire(), true)
+    const harness = await runtime()
+    expect((await generate(harness.ctx, { purpose: 'compaction', maxTokens: 8193 }, false)).finish).toMatchObject({ kind: 'error',
+      failure: { code: 'INVALID_REQUEST', message: expect.stringContaining('COPILOT_REQUEST_OUTPUT_LIMIT_EXCEEDED') } })
+    expect(wire).not.toHaveBeenCalled()
+  })
+  it('keeps output truncation distinct from context overflow and successful summary output', async () => {
+    stubFetch(async input => {
+      if (String(input).endsWith('/models')) return catalogResponse([limited()])
+      const partial = (await response().text()).replace('response.completed', 'response.incomplete')
+        .replace('"status":"completed"', '"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}')
+      return new Response(partial, { headers: { 'content-type': 'text/event-stream' } })
+    }, true)
+    const harness = await runtime()
+    expect((await generate(harness.ctx, { purpose: 'compaction', maxTokens: 8192 }, false)).finish).toEqual({ kind: 'max-tokens' })
+  })
+  it('prices current tool schemas even when historical usage supplies a tiny anchor', async () => {
+    const wire = vi.fn(async () => response())
+    stubFetch(async input => String(input).endsWith('/models') ? catalogResponse([limited()]) : wire(), true)
+    const harness = await runtime()
+    const first = await call(harness.ctx)
+    const result = await generate(harness.ctx, { messages: [first.message], maxTokens: 8192,
+      tools: [{ name: 'owned', description: 'private-tool-description '.repeat(7000), parameters: { type: 'object', properties: {} } }] }, false)
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED' } })
+    if (result.finish.kind === 'error') expect(result.finish.failure.message).not.toContain('private-tool-description')
+    expect(wire).toHaveBeenCalledTimes(1)
+  })
+  it('isolates concurrent chat success from a rejected compaction admission', async () => {
+    const wire = vi.fn(async () => response())
+    stubFetch(async input => String(input).endsWith('/models') ? catalogResponse([limited()]) : wire(), true)
+    const harness = await runtime()
+    await harness.ctx.get('githubCopilotPreview')!.discover()
+    const oversized = createUserMessage({ content: [{ type: 'text', text: 'x'.repeat(33000 * 4) }], source: { kind: 'user' } })
+    const [summary, chat] = await Promise.all([
+      generate(harness.ctx, { messages: [oversized], purpose: 'compaction', maxTokens: 8192 }, false),
+      generate(harness.ctx, { maxTokens: 8192 }, false),
+    ])
+    expect(summary.finish).toMatchObject({ kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED' } })
+    expect(chat.finish.kind).toBe('stop')
+    expect(wire).toHaveBeenCalledTimes(1)
+  })
+  it('isolates concurrent dispatches sharing one prepared adapter lease', async () => {
+    const wire = vi.fn(async () => response())
+    stubFetch(async input => String(input).endsWith('/models') ? catalogResponse([limited()]) : wire(), true)
+    const harness = await runtime()
+    // Exercise the public adapter dispatch used by native retries. The outer
+    // LlmRuntime prepared-call handle is intentionally single-use and stays so.
+    const prepared = await harness.adapter.prepareCall(PREVIEW, MODEL)
+    const consume = async (messages: Message[], purpose?: 'compaction') => {
+      const result = new BlockAssembler()
+      try {
+        for await (const chunk of prepared.stream({ provider: PREVIEW, model: MODEL, maxTokens: 8192, messages, purpose })) result.push(chunk)
+        return result.finish
+      } catch (error) {
+        if (!(error instanceof LlmError)) throw error
+        return { kind: 'error' as const, failure: { code: error.code, message: error.message } }
+      }
+    }
+    const oversized = createUserMessage({ content: [{ type: 'text', text: 'x'.repeat(33000 * 4) }], source: { kind: 'user' } })
+    const [summary, chat] = await Promise.all([consume([oversized], 'compaction'), consume([])])
+    expect(summary).toMatchObject({ kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED' } })
+    expect(chat.kind).toBe('stop')
+    expect(wire).toHaveBeenCalledTimes(1)
+  })
+  it('captures policy once per dispatch while a credential read is awaiting', async () => {
+    let safetyTokens = 0
+    const wire = vi.fn(async () => response())
+    stubFetch(async input => String(input).endsWith('/models') ? catalogResponse([limited()]) : wire(), true)
+    const harness = await runtime(grant(), { requestBudgetSettings: () => ({ safetyTokens }) })
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL, maxTokens: 8192 })
+    let reached!: () => void
+    let release!: () => void
+    const pending = new Promise<void>(resolve => { release = resolve })
+    const ready = new Promise<void>(resolve => { reached = resolve })
+    harness.reads.mockImplementationOnce(async () => { reached(); await pending; return harness.current() })
+    const message = createUserMessage({ content: [{ type: 'text', text: 'x'.repeat(10000 * 4) }], source: { kind: 'user' } })
+    const consume = async () => {
+      const result = new BlockAssembler()
+      for await (const chunk of prepared.stream({ ...prepared.config, messages: [message] })) result.push(chunk)
+      return result.finish
+    }
+    const first = consume()
+    try {
+      await Promise.race([ready, first.then(() => { throw new Error('request did not reach the controlled credential read') })])
+      safetyTokens = 30000
+      release()
+      expect((await first).kind).toBe('stop')
+      expect((await generate(harness.ctx, { messages: [message], maxTokens: 8192 }, false)).finish)
+        .toMatchObject({ kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED' } })
+      expect(wire).toHaveBeenCalledTimes(1)
+    } finally { release() }
   })
 })

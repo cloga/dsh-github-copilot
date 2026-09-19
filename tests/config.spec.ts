@@ -22,6 +22,26 @@ describe('session search settings', () => {
   })
 })
 
+describe('managed request and compaction settings', () => {
+  it('defaults to estimated headroom, early pressure and supported low summary effort', () => {
+    expect(Config(base)).toMatchObject({ requestBudgetSafetyTokens: 4096, requestBudgetPressureRatio: 0.9, compactionReasoning: 'prefer-low' })
+  })
+  it('allows explicit headroom and preserving summary reasoning', () => {
+    expect(Config({ ...base, requestBudgetSafetyTokens: 6000, requestBudgetPressureRatio: 1, compactionReasoning: 'preserve' })).toMatchObject({
+      requestBudgetSafetyTokens: 6000, requestBudgetPressureRatio: 1, compactionReasoning: 'preserve',
+    })
+  })
+  it.each([-1, 0.5, Number.NaN, Infinity])('rejects invalid token allowance %s', value => {
+    expect(() => Config({ ...base, requestBudgetSafetyTokens: value })).toThrow()
+  })
+  it.each([0, -1, 1.1, Number.NaN, Infinity])('rejects invalid pressure fraction %s', value => {
+    expect(() => Config({ ...base, requestBudgetPressureRatio: value })).toThrow()
+  })
+  it('does not accept an unsupported summary reasoning policy', () => {
+    expect(() => Config({ ...base, compactionReasoning: 'force-off' } as unknown as InlineConfig)).toThrow()
+  })
+})
+
 describe('account model cache settings', () => {
   it('defaults to a day of metadata reuse and five minutes between passive failure retries', () => {
     expect(Config(base)).toMatchObject({ accountModelTtlMs: 86_400_000, accountModelFailureCooldownMs: 300_000 })

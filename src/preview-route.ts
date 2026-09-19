@@ -2,11 +2,12 @@ import { createHash } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { Config as PiAiConfig, PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { PiAiAdapterOptions, PiAiProviderProfile, ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { LlmError, resolveImageAttachmentAccess, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { LlmError, ReasoningEffortId, resolveImageAttachmentAccess, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, PreparedAdapterCall, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import type { CredentialStore } from '@earendil-works/pi-ai'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
+import { estimateContextTokens, estimateMessageTokens } from '@earendil-works/pi-ai/utils/estimate'
 import { createGitHubCopilotCredentialStore, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
@@ -19,13 +20,20 @@ import { createAccountModelSource } from './account-model-source.ts'
 import type { AccountModelLoadOptions, AccountModelSnapshot, AccountModelSource } from './account-model-source.ts'
 import type { AccountModelDescriptor, AccountModelRejection } from './account-model-catalog.ts'
 import type { InlineConfig } from './config.ts'
+import { assessRequestBudget, calculateRequestBudget, resolveRequestBudgetPolicy, selectCompactionReasoning } from './request-budget.ts'
+import type { RequestBudgetFailure, RequestBudgetPolicy } from './request-budget.ts'
+import { installCopilotCompactionPressure } from './compaction-pressure.ts'
 
 /** Safe request knobs; identities, model tables, endpoints and credentials are not configurable. */
 export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   'reasoning' | 'cacheRetention' | 'transport' | 'timeoutMs' | 'websocketConnectTimeoutMs'
   | 'streamIdleTimeoutMs' | 'maxRequestImageBytes' | 'requestImagePixelBudget' | 'requestImageMaxBytes' | 'retryPolicy'>
   & Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
-  & { readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'> }
+  & {
+    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
+    readonly requestBudget?: Partial<RequestBudgetPolicy>
+    readonly requestBudgetSettings?: () => Partial<RequestBudgetPolicy>
+  }
 
 export interface GitHubCopilotPreviewView {
   readonly provider: typeof GITHUB_COPILOT_PREVIEW_PROVIDER_ID
@@ -216,12 +224,21 @@ function resolvedProfile(provider: ReturnType<typeof createAccountProvider>['pro
   })
 }
 
-/** Only ownership/discovery/lifetime guards are added; Core owns model conversion and wire/replay. */
+/** Classify only an owned admission decision, never an arbitrary provider error string. */
+function budgetFailure(result: RequestBudgetFailure): LlmError {
+  const contextExceeded = result.code === 'COPILOT_REQUEST_INPUT_LIMIT_EXCEEDED'
+    || result.code === 'COPILOT_REQUEST_CONTEXT_LIMIT_EXCEEDED'
+  return new LlmError(contextExceeded ? `COPILOT_CONTEXT_BUDGET_EXCEEDED: ${result.message}` : result.message,
+    contextExceeded ? 'CONTEXT_WINDOW_EXCEEDED' : 'INVALID_REQUEST')
+}
+
+/** Account-bound admission and purpose defaults; Core owns model conversion and wire/replay. */
 class PreviewAdapter extends PiAiAdapter {
   constructor(private readonly lifetime: PreviewLifetime,
-    private readonly optionsFor: (lease?: Lease) => PiAiAdapterOptions,
+    private readonly optionsFor: (lease?: Lease, inspectRequest?: AccountProviderGuard['inspectRequest']) => PiAiAdapterOptions,
     private readonly discoverSnapshot: (options?: AccountModelLoadOptions) => Promise<AccountModelSnapshot>,
     private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
+    private readonly requestBudgetSettings: () => Partial<RequestBudgetPolicy>,
   ) { super(optionsFor()) }
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     owned(provider)
@@ -251,7 +268,7 @@ class PreviewAdapter extends PiAiAdapter {
     const snapshot = await this.discoverSnapshot({ signal })
     const lease = await this.lease(snapshot, model, signal, cached === snapshot)
     const prepared = await this.withRecovery(snapshot, signal, () => new PiAiAdapter(this.optionsFor(lease)).prepareCall(provider, model, signal))
-    return { model: prepared.model, stream: options => this.guardedStream(lease, prepared.stream, options) }
+    return { model: prepared.model, stream: options => this.guardedStream(lease, options) }
   }
   override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const owner = this
@@ -260,8 +277,7 @@ class PreviewAdapter extends PiAiAdapter {
       const cached = owner.lifetime.source.readSnapshot()
       const snapshot = await owner.discoverSnapshot({ signal: options.signal })
       const lease = await owner.lease(snapshot, options.model, options.signal, cached === snapshot)
-      const native = new PiAiAdapter(owner.optionsFor(lease))
-      yield* owner.guardedStream(lease, request => native.stream(request), options)
+      yield* owner.guardedStream(lease, options)
     })()
   }
   private async lease(snapshot: AccountModelSnapshot, model: string, signal: AbortSignal | undefined, reused: boolean): Promise<Lease> {
@@ -280,28 +296,71 @@ class PreviewAdapter extends PiAiAdapter {
       throw cause
     }
   }
-  private guardedStream(lease: Lease, dispatch: PreparedAdapterCall['stream'], options: GenerateOptions): AsyncIterable<StreamChunk> {
+  private guardedStream(lease: Lease, options: GenerateOptions): AsyncIterable<StreamChunk> {
     const owner = this
     return (async function* () {
       owner.lifetime.start(lease)
       owned(options.provider)
       if (options.model !== lease.descriptor.id) throw failure('COPILOT_PREVIEW_MODEL_MISMATCH')
+      const signal = AbortSignal.any([lease.signal, ...options.signal === undefined ? [] : [options.signal]])
+      if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
+      const policy = resolveRequestBudgetPolicy(owner.requestBudgetSettings())
+      const model = accountModelFromDescriptor(lease.descriptor, lease.proof.baseURL)
       if (options.reasoningEffort !== undefined) {
-        const model = accountModelFromDescriptor(lease.descriptor, lease.proof.baseURL)
         const mapping = Object.entries(model.thinkingLevelMap ?? {}).find(([level]) => level === options.reasoningEffort)?.[1]
         if (typeof mapping !== 'string' || mapping.length === 0) throw failure('COPILOT_PREVIEW_REASONING_UNSUPPORTED', 'INVALID_REQUEST')
       }
-      const signal = AbortSignal.any([lease.signal, ...options.signal === undefined ? [] : [options.signal]])
+      // SDK lazyStream retains only error text. Keep an owned failure in this exact
+      // dispatch closure, never on the shared lease, to restore its structured code.
+      let admissionFailure: LlmError | undefined
+      const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
+        if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
+        const calculated = calculateRequestBudget(lease.descriptor, nativeOptions?.maxTokens, policy)
+        if (!calculated.ok) {
+          admissionFailure = budgetFailure(calculated)
+          throw admissionFailure
+        }
+        // A previous usage anchor can omit changed system/tool prefixes. Price the
+        // current prefix and every message independently as a second lower bound.
+        const prefix = estimateContextTokens({ messages: [],
+          ...context.systemPrompt === undefined ? {} : { systemPrompt: context.systemPrompt },
+          ...context.tools === undefined ? {} : { tools: context.tools },
+        }).tokens
+        const fresh = context.messages.reduce((tokens, message) => tokens + estimateMessageTokens(message), prefix)
+        const estimate = Math.max(estimateContextTokens(context).tokens, fresh)
+        const admitted = assessRequestBudget(estimate, calculated.budget)
+        if (!admitted.ok) {
+          admissionFailure = budgetFailure(admitted)
+          throw admissionFailure
+        }
+      }
       try {
-        for await (const chunk of dispatch({ ...options, signal })) {
+        // Same immutable descriptor/profile generation, but request-local provider
+        // callbacks: concurrent compaction and chat cannot share purpose or errors.
+        const native = new PiAiAdapter(owner.optionsFor(lease, inspectRequest))
+        const prepared = await native.prepareCall(options.provider, options.model, signal)
+        const suppliedEffort = options.reasoningEffort ?? prepared.model.reasoning?.defaultEffort
+        const effort = options.purpose === 'compaction'
+          ? selectCompactionReasoning<string>(getSupportedThinkingLevels(model), suppliedEffort, policy.compactionReasoning)
+          : suppliedEffort
+        const request = { ...options, signal,
+          ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
+        }
+        for await (const chunk of native.stream(request)) {
+          if (admissionFailure !== undefined) {
+            if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
+            throw admissionFailure
+          }
           if (chunk.type === 'finish' && chunk.reason.kind === 'error' && chunk.reason.failure.code === 'UNKNOWN_MODEL') {
             await owner.refreshRejected(lease.snapshot, signal)
           }
           yield chunk
         }
+        if (admissionFailure !== undefined) throw admissionFailure
       } catch (cause) {
+        if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
         if (cause instanceof LlmError && cause.code === 'UNKNOWN_MODEL') await owner.refreshRejected(lease.snapshot, signal)
-        throw cause
+        throw admissionFailure ?? cause
       }
     })()
   }
@@ -309,8 +368,11 @@ class PreviewAdapter extends PiAiAdapter {
 
 /** Register one stable account route; attach/status remain network-free. */
 export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
-  const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings, ...requestConfig } = config
+  const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings,
+    requestBudget, requestBudgetSettings, ...requestConfig } = config
   const cacheSettings = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs }))
+  const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
+  resolveRequestBudgetPolicy(budgetSettings())
   const store = createGitHubCopilotCredentialStore(ctx, GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
   const nativeAuth = createAccountModelAuth(createGitHubCopilotCredentialStore(ctx))
   const nativeModels = getBuiltinModels('github-copilot')
@@ -370,7 +432,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     const rejected = snapshot?.rejected.map(({ id, code }) => Object.freeze({ ...id === undefined ? {} : { id }, code })) ?? []
     const warnings = snapshot?.models.flatMap(model => {
       const codes: string[] = []
-      if (model.maxInputTokens !== undefined && model.maxInputTokens < model.contextWindow) codes.push('INPUT_LIMIT_NOT_ENFORCED_BY_CORE')
+      if (model.maxInputTokens !== undefined && model.maxInputTokens < model.contextWindow) codes.push('INPUT_LIMIT_ESTIMATED_GUARD')
       if (snapshotProof !== undefined && accountModelFromDescriptor(model, snapshotProof.baseURL).unmappedReasoningEfforts.length > 0) codes.push('REASONING_EFFORTS_UNSUPPORTED')
       return codes.map(code => Object.freeze({ id: model.id, code }))
     }) ?? []
@@ -477,8 +539,9 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     // stream. Never replay a model wire request or retry generic provider errors.
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
-  const optionsFor = (lease?: Lease): PiAiAdapterOptions => {
-    const { provider } = createAccountProvider(lease?.snapshot.models ?? [], lifetime.guard(lease), lease?.proof.baseURL ?? 'https://api.individual.githubcopilot.com')
+  const optionsFor = (lease?: Lease, inspectRequest?: AccountProviderGuard['inspectRequest']): PiAiAdapterOptions => {
+    const guard = { ...lifetime.guard(lease), ...inspectRequest === undefined ? {} : { inspectRequest } }
+    const { provider } = createAccountProvider(lease?.snapshot.models ?? [], guard, lease?.proof.baseURL ?? 'https://api.individual.githubcopilot.com')
     const profile = Object.freeze({ ...template, piProvider: provider })
     const profiles = new Map([[GITHUB_COPILOT_PREVIEW_PROVIDER_ID, profile]])
     return { profiles: () => profiles, resolveApiKey: async () => { lifetime.assertActive(); return undefined },
@@ -487,7 +550,15 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
       resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(attachments, hostPath => ctx.get('fs')?.processPathFromHostPath(hostPath), ref),
     }
   }
-  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID], new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected))
+  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID], new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings))
+  installCopilotCompactionPressure(ctx, { resolve(request) {
+    const snapshot = source.readSnapshot()
+    if (snapshot === undefined || proofFor(snapshot) === undefined) return undefined
+    const descriptor = snapshot.models.find(model => model.id === request.model)
+    if (descriptor === undefined) return undefined
+    const result = calculateRequestBudget(descriptor, request.maxTokens, resolveRequestBudgetPolicy(budgetSettings()))
+    return result.ok ? { inputBudgetTokens: result.budget.pressureInputLimit } : undefined
+  } })
   notify = () => {
     const view = getView()
     // These are small owned DTOs, not live Cordis objects or credential records.

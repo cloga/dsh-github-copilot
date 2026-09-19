@@ -31,7 +31,7 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 `dsh-github-copilot` is a companion targeting official DSH `0.1.6-alpha.2`, with retained baselines for DSH `0.1.6-alpha.1`, DSH `0.1.5-rc.2`, DSH `0.1.5-rc.1`, DSH `0.1.5-alpha.2`, DSH `0.1.5-alpha.1`, DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
 
-This repository owns nine narrow surfaces:
+This repository owns ten narrow surfaces:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution with one shared account-state owner and Client-safe Remote descriptors; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
@@ -42,6 +42,7 @@ This repository owns nine narrow surfaces:
 7. A bounded account-discovery route that supplies validated endpoint/capability metadata to the published native adapter, without maintaining model-ID routing rules or changing Core's catalog.
 8. Optional, provider-scoped Chat presentation for completed empty reasoning disclosures; durable content and encrypted replay metadata remain Core-owned.
 9. Opt-in model-role settings and dedicated new planner/executor sessions, using public Agent/Session/subagent APIs without changing existing sessions, global defaults or native Subagent model-selection settings.
+10. Managed-route estimated input/output admission, optional exact-request pressure signalling through official compaction recovery, and supported low summary effort only when no effort is already resolved. See [compaction budgets](./docs/copilot-compaction.md). Preserve truthful capacities, requested output caps, native errors/replay and transaction ownership; no hidden history trimming, chunking, new retry loop, competing compaction service or automatic model switch. Preventive guards do not claim recovery of an already oversized manual summary.
 
 ## Dedicated model-role boundary (#127)
 

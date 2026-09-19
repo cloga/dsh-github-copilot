@@ -25,5 +25,12 @@ export function assertTaggedRuntimeClosure(workflow) {
   if (!/^        working-directory: dsh-upstream\s*$/m.test(blocks[search])) {
     throw new Error('tagged search closure must be installed in the pinned Core checkout')
   }
+  const compaction = blocks.findIndex(block => /^        run: pnpm install --frozen-lockfile --filter '@deepseek-ai\/dsh-agent-loop\.\.\.' --filter '@deepseek-ai\/dsh-compaction-basic\.\.\.'\s*$/m.test(block))
+  if (compaction < 0 || compaction >= prepare) {
+    throw new Error('alpha2 tagged runtime requires the compaction dependency closure before preparation')
+  }
+  if (!/^        working-directory: dsh-upstream\s*$/m.test(blocks[compaction])) {
+    throw new Error('tagged compaction closure must be installed in the pinned Core checkout')
+  }
   return true
 }

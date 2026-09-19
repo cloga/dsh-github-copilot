@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.27`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.28`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 Alpha.24 修复 Web search 卡片缺少精确 Remote 依赖声明的问题。卡片仍位于 **Settings → Models**（`settings.models.footer`，list/root），旧 Core 回退到独立 Web search section，而非 General。搜索子 Fiber 独立等待 routing namespace，不影响账号控件和既有搜索安全检查；实际打包 Desktop 验收仍是独立关卡。
 
@@ -76,7 +76,7 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.27/dsh-github-copilot-0.4.0-alpha.27.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.28/dsh-github-copilot-0.4.0-alpha.28.tgz
 ```
 
 若 registry 被公司封禁或不可用，不要更换网络绕行。Desktop 管理的 profile 可以改用[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用来源获准、校验通过的本地 Release 和已有依赖缓存（`--offline --ignore-scripts`）。预检、备份和授权要求仍然适用。
@@ -141,7 +141,7 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。在获准且可用的 registry 网络环境中，优先使用原生 Desktop 包管理器；确认 npm 发布后，它接受 `dsh-github-copilot@0.4.0-alpha.27`，不是 URL 或本地文件。Desktop 管理的 profile 也允许经明确授权的[受控离线 CLI 维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用已验证的本地 Release 和 `--offline --ignore-scripts`，执行必需的组合预检、私密元数据备份、单写入者控制及安装后差异核验。缓存不足或出现权限拒绝时停止，不绕过公司 registry 封禁，不关闭 TLS 校验；重启仍需单独授权。离线安装成功不表示 npm 联网或发布问题已修好。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。在获准且可用的 registry 网络环境中，优先使用原生 Desktop 包管理器；确认 npm 发布后，它接受 `dsh-github-copilot@0.4.0-alpha.28`，不是 URL 或本地文件。Desktop 管理的 profile 也允许经明确授权的[受控离线 CLI 维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用已验证的本地 Release 和 `--offline --ignore-scripts`，执行必需的组合预检、私密元数据备份、单写入者控制及安装后差异核验。缓存不足或出现权限拒绝时停止，不绕过公司 registry 封禁，不关闭 TLS 校验；重启仍需单独授权。离线安装成功不表示 npm 联网或发布问题已修好。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
 不需要运行 `copilot2api`，不需要外部 gateway、placeholder API key、原始 GitHub token 或单独安装 `dsh-web-search-provider`。
 
@@ -162,7 +162,7 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 
 在 **设置 → 模型 → 模型分工** 中启用双模型会话，选择账号下可用的主模型和执行模型，保存全局设置（同一配置档案内通用，不按工作区保存）。保存不需要工作区；**用此配置新建会话** 使用应用当前工作区，并只读显示目标。没有当前工作区时须先打开工作区，不再提供独立下拉框，也不会默认选择第一个或最近的工作区。主模型负责规划与验收；`copilot_execute` 创建原生可继续执行的子代理，并固定其执行模型。默认关闭，仅专用入口创建的新会话采用此策略；不修改全局默认、已有会话、登录凭据或原生 Subagent 授权开关。
 
-模型不可用时明确报错，不自动替换。创建结果不明时重试同一个请求，不为绕过未知结果另建会话。功能依赖公开的会话、策略和子代理能力；缺少接口时显示不可用，不把历史版本的包兼容范围当成此功能的全面验收。详见[配置、生命周期、限制与验证范围](./docs/dual-model.md)。本功能包含在 `0.4.0-alpha.27` candidate 中，源码和合成测试不代表已发布或当前 Desktop 已生效。
+模型不可用时明确报错，不自动替换。创建结果不明时重试同一个请求，不为绕过未知结果另建会话。功能依赖公开的会话、策略和子代理能力；缺少接口时显示不可用，不把历史版本的包兼容范围当成此功能的全面验收。详见[配置、生命周期、限制与验证范围](./docs/dual-model.md)。本功能包含在 `0.4.0-alpha.28` candidate 中，源码和合成测试不代表已发布或当前 Desktop 已生效。
 
 若卡片显示 **Could not load model roles（无法加载模型分工）**，不要通过修改默认模型绕过：这是设置加载失败，与能力不支持或模型不可用不同。尤其 `githubCopilotDualModel/view` 返回 HTTP 404，表示 Host Remote 未暴露，并非功能开关处于关闭状态。详见[加载故障排查与验证](./docs/dual-model.md#loading-and-remote-troubleshooting)。
 
@@ -284,6 +284,16 @@ Responses 解析器会保留公开的 `reasoning_summary_text`、`reasoning_text
 
 此可选集成使用公开的 `conversation.chat.node` keyed slot 与 `uiConversation` location data。检查会核对当前名为 `AssistantNodeView` 的简单 memo 渲染器；未来改名或压缩后不匹配时保留原样。这是兼容检查，不是模块所有权或安全证明：公开注册器无法区分故意使用相同名称和元数据的替代实现。该集成不会因旧版 Core 缺少它们而阻塞登录。扩展接口缺失、不兼容或存在其他 assistant renderer 时，保留原生输出并给出命名明确的兼容诊断。新增显示行为不代表任何账号模型的真实 transport 已验证；不支持该接口的 Core 仍可能显示空 Think。它不会修改只控制 hosted search 的 `github-copilot.enabled` 设置。
 
+## 托管请求预算与 compact
+
+托管的 `github-copilot-preview` 路由在模型发送前估算完整原生请求，包括当前 system／工具定义，并分别检查独立输入上限及输入＋输出总容量。实际输入预算为 `min(已提供的输入上限, 总容量 − 请求或默认输出预留) − 安全余量`，不把真实模型容量替换成预算数字。输出配置无效或完全没有输入空间时明确失败，不静默删历史、不自动换模型。
+
+对于有原生 agent-loop 标记、发起 Session 与已记录请求配置一致、具备 token meter 且官方自动压缩已启用的普通请求，插件在预算的默认 90% 处发出本地估算压力信号。由 Core 执行原有的有界压缩、校验及请求重建，不在已冻结的请求中并发压缩。缺少可选接口时只关闭提前信号，最终原生预算检查仍保留；尊重 `auto: false` 和官方 overflow 重试次数为零的设置。不影响用户自有 canonical 路由或其他供应方。
+
+`purpose: 'compaction'` 的摘要调用绕过提前压力阈值，只检查完整硬预算。没有调用方或适配器已解析的思考等级时，`prefer-low` 从已支持的能力中选择 `minimal` 或 `low`；没有此能力则保持供应方默认。显式或已解析的等级优先。摘要请求的输出上限不被偷偷改写，保持 Core 辅助摘要记录一致；也不会将截断输出当成成功 checkpoint。`enabled` 仍仅控制 hosted search。
+
+**这不保证救回已经超限的旧历史。** 手动 compact 仍可能超过硬预算，此时在模型发送前明确拒绝；输出截断保留为独立的原生 `max-tokens` 结果。本次不增加分块摘要、静默删除历史、自动切换模型或新的重试循环。必要时通过官方压缩配置选择合适的摘要模型／输出上限，不反复提交同一个不可能完成的请求。详见[实现与验收边界](./docs/copilot-compaction.md)。
+
 ## Copilot Tool 兼容
 
 为避免已观察到的无效 Copilot Tool payload，本包会把托管 route 的 `compat.supportsStrictMode` 叶节点设为 `false`，并在所选 provider 为 `github-copilot`，或已确认由本插件挂载的 `github-copilot-preview` 时执行两项仅作用于 Schema 的修复：从 Tool Schema 顶层删除 `sandbox_permissions` 与 `justification`，并把 Core 的多动作 `update_goal` 参数改写为带判别字段的 `oneOf`。这样每种 Goal action 只暴露合法字段：`complete`、`pause`、`resume` 不会携带编辑或阻塞字段，`blocked` 必须提供 `blocked_reason`，只有 `edit` 暴露替换字段。执行仍使用 Core 原本的 Goal Tool 与 Service。非 Copilot prompt assembly 完全不变。
@@ -299,12 +309,15 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 
 ## 设置
 
-插件 `github-copilot` settings section 控制账号元数据新鲜度与 hosted search；`enabled` 仍只控制 hosted search：
+插件 `github-copilot` settings section 控制账号元数据新鲜度、托管请求预算与 hosted search；`enabled` 仍只控制 hosted search：
 
 | 键 | 默认值 | 作用范围与含义 |
 |---|---:|---|
 | `accountModelTtlMs` | `86400000` | 最大账号元数据复用窗口，毫秒（24 小时）；不延长凭据或 proof 有效期。 |
 | `accountModelFailureCooldownMs` | `300000` | 非强制发现的失败冷却，毫秒（5 分钟）；不设周期重试。 |
+| `requestBudgetSafetyTokens` | `4096` | 非负安全整数的估算输入余量；增加会减少可用输入空间。 |
+| `requestBudgetPressureRatio` | `0.9` | 提前压力比例，0.01–1、步长 0.01；仅在官方自动恢复已启用且接口可用时使用。 |
+| `compactionReasoning` | `prefer-low` | 摘要等级缺省时选择已支持的 minimal／low；`preserve` 保留原生默认。 |
 | `enabled` | `true` | 启用两种 hosted-search 表面。 |
 | `providers` | `[]` | 两种表面的可选 route allowlist；空值跟随发起 route。保留已有非空列表；旧 ID 改为 `github-copilot-preview` 须由 Ops 显式审核。 |
 | `includeSources` | `true` | Inline 路径请求供应方引用；`ctx.web` bridge 始终请求并返回 sources。 |
@@ -317,7 +330,7 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 
 ### 能力与公开接口限制
 
-- 发现数据分别保留 context、input 和 output 限额。当前 Core 公开的模型信息接口只表达组合 context 容量，不能独立强制执行供应方 input-token 上限。当 input 上限低于 context 容量时，界面显示 `INPUT_LIMIT_NOT_ENFORCED_BY_CORE`；服务端仍可能因输入超限而拒绝请求。插件不会把 context 偷换成 input，也不会为了补齐它去改 Core。
+- 发现数据分别保留 context、input 和 output 限额；`INPUT_LIMIT_ESTIMATED_GUARD` 表示托管路由已启用插件所有的估算输入检查。它不是供应方精确 token 计数，也不表示 Core 接口已经支持独立输入上限；服务端仍可能拒绝请求。插件不会把真实 context 容量偷换成 input 预算，也不会为了补齐它去改 Core。
 - 不可映射的思考标签以 `REASONING_EFFORTS_UNSUPPORTED` 报告，不声称对应控制已生效。能力警告不等于整个模型被拒绝。
 - 文档中未定价的模型成本元数据不代表实际免费，计费仍以供应方为准。
 - 普通对话使用 native `streamSimple` 的三协议路径；面向 Core 的高级协议专用 `stream` 接口明确不支持跨 SDK 客户端混用。不能仅凭类型检查或普通流式成功推断高级接口也可用。
@@ -396,8 +409,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.27/dsh-github-copilot-0.4.0-alpha.27.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.27/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.28/dsh-github-copilot-0.4.0-alpha.28.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.28/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -405,7 +418,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.27.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.28.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
