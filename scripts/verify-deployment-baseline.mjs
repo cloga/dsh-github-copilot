@@ -289,6 +289,25 @@ const alphaCore = dshBaselines.find(entry => entry.release === '0.1.3-alpha.1')
 assert(alphaCore.evidenceScope === 'unchanged-tagged-source-target'
   && alphaCore.standaloneNpmArtifacts === 'not-published'
   && alphaCore.managedProviderValidation === 'not-verified', 'alpha.1 source evidence must not pretend unavailable npm artifacts were tested')
+const providerOnlySearch = manifest.capabilities?.find(capability => capability.id === 'provider-only-search-settings')
+assert(providerOnlySearch?.required === true
+  && providerOnlySearch.evidenceScope === 'pinned-settings-and-client-contracts-plus-synthetic-routing-no-live-save-claim',
+  'provider-only search settings must retain bounded Settings/Client evidence, not claim live save acceptance')
+for (const name of [
+  'real pinned Client namespace lookups require stable capture across render calls',
+  'provider-only search routing saves both leaves once without a Copilot namespace or model',
+  'stale routing revisions fail CAS and preserve the last successful settings',
+  'hidden legacy searchModel is writable and accepts an explicit empty reset',
+  'pinned generated Client mutate codecs accept routing ops and a flat namespace revision',
+]) {
+  assert(providerOnlySearch.tests?.some(entry => entry.file === 'tests/scripts/search-settings-contract.test.mjs' && entry.name === name),
+    `provider-only search settings must retain real pinned contract regression: ${name}`)
+}
+const searchCard = await read('src/web-search-routing-card.ts')
+assert(!searchCard.includes('GitHubCopilotAuthorizationViewSchema') && !searchCard.includes('props.copilot'),
+  'ordinary provider settings must not depend on account status or model suggestions')
+assert(searchCard.includes('data-dsh-copilot-search-reset') && !searchCard.includes('data-dsh-copilot-search-model'),
+  'ordinary provider settings must preserve explicit legacy reset without a required model selector')
 const metadata = manifest.capabilities?.find(capability => capability.id === 'account-driven-provider-metadata')
 assert(metadata?.activation === 'validated-account-endpoints-and-capabilities', 'managed models must follow account endpoint and capability evidence')
 const publicAdapter = manifest.capabilities?.find(capability => capability.id === 'public-adapter-account-model-route')

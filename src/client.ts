@@ -925,10 +925,10 @@ function registerSearchUi(ctx: ClientContext): () => void {
   let footerActive = false
   let sectionActive = false
   let fallback: (() => void) | undefined
-  const render = () => createElement(WebSearchRoutingCard, {
-    settings: ctx.remote.settings, copilot: ctx.remote.githubCopilot,
-    routing: ctx.remote.githubCopilotSearchRouting,
-  })
+  // Keep traced Remote identities stable across parent renders and async saves.
+  const settings = ctx.remote.settings
+  const routing = ctx.remote.githubCopilotSearchRouting
+  const render = () => createElement(WebSearchRoutingCard, { settings, routing })
   const syncFallback = () => {
     if (active && sectionActive && !footerActive) {
       fallback ??= ctx.slots.register({
@@ -989,7 +989,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     await disposeRemote()
     throw error
   }
-  const searchUi = ctx.inject(['remote.githubCopilot', 'remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
+  const searchUi = ctx.inject(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
   const dualModelUi = ctx.inject(['remote.githubCopilotDualModel', 'slots'], registerDualModelUi)
   // The optional Chat contribution must not hold authorization activation on older Cores.
   const presentation = ctx.inject(['uiConversation', 'slots'], scope => installReasoningPresentation({

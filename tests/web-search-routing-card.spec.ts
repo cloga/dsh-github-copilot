@@ -140,6 +140,30 @@ async function ready(remote = remotes()) {
 }
 
 describe('independent Web search Settings card', () => {
+  it.each(['primary', 'fallback'] as const)('saves Copilot as %s with one routing write and no model prerequisite', async position => {
+    const remote = remotes('none'), value = settingsValue('none')
+    value.namespaces = value.namespaces.filter(entry => entry.ns !== COPILOT)
+    remote.settings.describe.mockResolvedValue(ok(value))
+    const card = await ready(remote)
+    change(card.render(), position === 'primary' ? 'web-search-mode' : 'web-search-provider', HOSTED)
+    expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
+    expect(descendants(card.render()).some(node => node.props['data-dsh-copilot-search-model'])).toBe(false)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(ROUTING, [
+      { op: 'set', path: ['searchProvider'], value: position === 'primary' ? HOSTED : 'auto' },
+      { op: 'set', path: ['defaultSearchProvider'], value: position === 'fallback' ? HOSTED : 'none' },
+    ], 4)
+    expect(remote.copilot.status).not.toHaveBeenCalled()
+    expect(text(card.render())).toContain('Saved.')
+  })
+
+  it('does not rewrite a legacy model override when saving provider routing', async () => {
+    const card = await ready(remotes(HOSTED))
+    click(card.render(), 'web-search-save'); await settle()
+    expect(card.remote.settings.mutate).toHaveBeenCalledTimes(1)
+    expect(card.remote.settings.mutate.mock.calls[0]?.[0]).toBe(ROUTING)
+    expect(text(card.render())).toContain('responses-model')
+  })
   it.each([true, false])('themes both provider selects and every option without changing settings (writable=%s)', async writable => {
     const remote = remotes(), value = settingsValue()
     value.writable = writable
@@ -211,14 +235,14 @@ describe('independent Web search Settings card', () => {
     expect(remote.settings.mutate).not.toHaveBeenCalled()
   })
 
-  it('uses the new primary over legacy mode and edits Copilot models for a fixed primary', async () => {
+  it('uses the new primary over legacy mode and preserves an explicit model override', async () => {
     const remote = remotes('exa'), value = settingsValue('exa')
     value.namespaces[0]!.value.searchMode = 'auto'
     value.namespaces[0]!.value.searchProvider = HOSTED
     remote.settings.describe.mockResolvedValue(ok(value))
     const card = await ready(remote)
     expect(field(card.render(), 'web-search-mode').props.value).toBe(HOSTED)
-    expect(field(card.render(), 'copilot-search-model').props.value).toBe('responses-model')
+    expect(text(card.render())).toContain('responses-model')
     expect(field(card.render(), 'web-search-provider').props.value).toBe('exa')
   })
   it('loads one actual provider catalog into both selectors without Copilot-specific Auto labels', async () => {
@@ -231,9 +255,10 @@ describe('independent Web search Settings card', () => {
     expect(options('web-search-mode').filter(value => value !== 'auto')).toEqual(options('web-search-provider').filter(value => value !== 'none'))
     expect(options('web-search-mode')).toContain('custom-provider')
     expect(options('web-search-mode')).not.toContain('perplexity')
-    expect(text(tree)).toMatch(/suggestions.*not.*capability/i)
+    expect(text(tree)).toContain('No model setup is needed here')
+    expect(text(tree)).toContain('Fallback provider')
     expect(field(tree, 'web-search-mode').props.value).toBe('auto')
-    expect(field(tree, 'copilot-search-model').props.value).toBe('responses-model')
+    expect(text(tree)).toContain('responses-model')
     expect(descendants(tree).some(node => node.type === 'option' && node.props.value === 'other-model')).toBe(false)
     expect(card.remote.settings.mutate).not.toHaveBeenCalled()
   })
@@ -268,25 +293,16 @@ describe('independent Web search Settings card', () => {
     expect(remote.settings.describe).toHaveBeenCalledTimes(2)
   })
 
-  it('does not block routing on rejected or pending optional account suggestions, and clears old suggestions', async () => {
+  it('never loads account model suggestions to display or save providers', async () => {
     const remote = remotes(HOSTED)
+    remote.copilot.status.mockRejectedValue(new Error('PRIVATE_STATUS_ERROR'))
     const card = await ready(remote)
-    expect(descendants(card.render()).some(node => node.type === 'option' && node.props.value === 'responses-model')).toBe(true)
-    remote.copilot.status.mockRejectedValueOnce(new Error('PRIVATE_STATUS_ERROR'))
-    click(card.render(), 'web-search-reload')
-    await settle()
+    click(card.render(), 'web-search-reload'); await settle()
     expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
-    expect(descendants(card.render()).some(node => node.type === 'option' && node.props.value === 'responses-model')).toBe(false)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(remote.copilot.status).not.toHaveBeenCalled()
     expect(text(card.render())).not.toContain('PRIVATE_')
-    const pending = deferred<Awaited<ReturnType<typeof remote.copilot.status>>>()
-    remote.copilot.status.mockReturnValueOnce(pending.promise)
-    click(card.render(), 'web-search-reload')
-    await settle()
-    expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
-    card.unmount()
-    pending.resolve(ok({ phase: 'signed-in', configured: true, writable: true, inFlight: false, notices: [],
-      accountModels: { state: 'ready', rejected: [], models: [] } }))
-    await settle()
+    expect(text(card.render())).toContain('Saved.')
   })
 
   it.each(['readonly', 'missing-routing', 'missing-revision'] as const)('refuses unchecked writes for %s', async kind => {
@@ -303,57 +319,108 @@ describe('independent Web search Settings card', () => {
     expect(remote.settings.mutate).not.toHaveBeenCalled()
   })
 
-  it('requires the Copilot namespace only for Copilot routing and captures the model input eagerly', async () => {
-    const remote = remotes(HOSTED)
-    const value = settingsValue(HOSTED)
-    value.namespaces = value.namespaces.filter(entry => entry.ns !== COPILOT)
-    remote.settings.describe.mockResolvedValueOnce(ok(value))
-    const card = await ready(remote)
-    expect(field(card.render(), 'web-search-save').props.disabled).toBe(true)
-    click(card.render(), 'web-search-save')
-    expect(remote.settings.mutate).not.toHaveBeenCalled()
-    change(card.render(), 'web-search-provider', 'exa')
-    expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
-    click(card.render(), 'web-search-reload')
-    await settle()
-    change(card.render(), 'copilot-search-model', 'future-responses-model')
-    expect(field(card.render(), 'copilot-search-model').props.value).toBe('future-responses-model')
+  it('resets a legacy override only through an explicit separate action', async () => {
+    const card = await ready(remotes(HOSTED))
+    change(card.render(), 'web-search-mode', HOSTED)
+    click(card.render(), 'copilot-search-reset'); await settle()
+    expect(card.remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(COPILOT, [
+      { op: 'set', path: ['searchModel'], value: '' },
+    ], 7)
+    expect(text(card.render())).toContain('Unsaved provider choices have not been applied')
+    expect(field(card.render(), 'web-search-mode').props.value).toBe(HOSTED)
+    expect(descendants(card.render()).some(node => node.props['data-dsh-copilot-search-override'])).toBe(false)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(card.remote.settings.mutate.mock.calls[1]?.[0]).toBe(ROUTING)
+    expect(card.remote.settings.mutate.mock.calls[1]?.[2]).toBe(4)
   })
 
-  it.each(['rejected', 'returned'] as const)('retains partial-save Copilot revision for a safe retry after routing failure: %s', async kind => {
+  it.each(['rejected', 'returned'] as const)('retains draft and safe diagnostics after a routing failure: %s', async kind => {
     const remote = remotes(HOSTED)
-    remote.settings.mutate.mockResolvedValueOnce(ok(namespace(COPILOT, 8)))
     if (kind === 'rejected') remote.settings.mutate.mockRejectedValueOnce(new Error('PRIVATE_SAVE_ERROR'))
     else remote.settings.mutate.mockResolvedValueOnce(failure() as never)
     const card = await ready(remote)
-    click(card.render(), 'web-search-save')
-    await settle()
-    expect(text(card.render())).toContain('Copilot search model was saved')
+    click(card.render(), 'web-search-save'); await settle()
+    expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
+    expect(text(card.render())).toContain('Reload settings')
     expect(text(card.render())).not.toContain('PRIVATE_')
+    expect(field(card.render(), 'web-search-provider').props.value).toBe(HOSTED)
     expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
-    click(card.render(), 'web-search-save')
-    await settle()
-    expect(remote.settings.mutate.mock.calls[2]).toEqual([COPILOT, [
-      { op: 'set', path: ['searchModel'], value: 'responses-model' },
-    ], 8])
-    expect(remote.settings.mutate.mock.calls[3]?.[2]).toBe(4)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(remote.settings.mutate.mock.calls[1]?.[2]).toBe(4)
     expect(text(card.render())).toContain('Saved.')
   })
 
-  it.each(['rejected', 'returned'] as const)('stops at failed model save, permits retry and does not write routing: %s', async kind => {
+  it.each(['rejected', 'returned', 'conflict'] as const)('keeps a failed override reset separate from saving providers: %s', async kind => {
     const remote = remotes(HOSTED)
-    if (kind === 'rejected') remote.settings.mutate.mockRejectedValueOnce(new Error('PRIVATE_MODEL_ERROR'))
+    if (kind === 'rejected') remote.settings.mutate.mockRejectedValueOnce(new Error('PRIVATE_RESET_ERROR'))
+    else if (kind === 'conflict') remote.settings.mutate.mockResolvedValueOnce({ ok: false, error: {
+      code: 'settings-conflict', message: 'PRIVATE_RESET_ERROR', details: { actual: 9 },
+    } } as never)
     else remote.settings.mutate.mockResolvedValueOnce(failure() as never)
     const card = await ready(remote)
-    click(card.render(), 'web-search-save')
-    await settle()
-    expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
+    click(card.render(), 'copilot-search-reset'); await settle()
+    expect(text(card.render())).toContain('responses-model')
     expect(text(card.render())).not.toContain('PRIVATE_')
-    expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
-    click(card.render(), 'web-search-save')
-    await settle()
-    expect(remote.settings.mutate.mock.calls[1]?.[2]).toBe(7)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(remote.settings.mutate.mock.calls[1]?.[0]).toBe(ROUTING)
     expect(text(card.render())).toContain('Saved.')
+  })
+
+  it.each([undefined, -1, 0.5])('requires reload before another routing save when the returned revision is %s', async revision => {
+    const remote = remotes(HOSTED)
+    remote.settings.mutate.mockResolvedValueOnce(ok({ ...namespace(ROUTING, 5), revision }) as never)
+    const card = await ready(remote)
+    change(card.render(), 'web-search-mode', HOSTED)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(text(card.render())).toContain('Save returned no revision')
+    expect(text(card.render())).not.toContain('Saved.')
+    expect(field(card.render(), 'web-search-mode').props.value).toBe(HOSTED)
+    expect(field(card.render(), 'web-search-save').props.disabled).toBe(true)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
+    const refreshed = settingsValue(HOSTED)
+    refreshed.namespaces[0]!.revision = 9
+    remote.settings.describe.mockResolvedValueOnce(ok(refreshed))
+    click(card.render(), 'web-search-reload'); await settle()
+    expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(remote.settings.mutate.mock.calls[1]?.[2]).toBe(9)
+    expect(text(card.render())).toContain('Saved.')
+  })
+
+  it.each([undefined, -1, 0.5])('keeps an uncertain override reset separate from routing when the returned revision is %s', async revision => {
+    const remote = remotes(HOSTED)
+    remote.settings.mutate.mockResolvedValueOnce(ok({ ...namespace(COPILOT, 8), revision }) as never)
+    const card = await ready(remote)
+    change(card.render(), 'web-search-mode', HOSTED)
+    click(card.render(), 'copilot-search-reset'); await settle()
+    expect(text(card.render())).toContain('Save returned no revision')
+    expect(text(card.render())).toContain('responses-model')
+    expect(text(card.render())).not.toContain('Copilot model selection is now automatic')
+    expect(field(card.render(), 'copilot-search-reset').props.disabled).toBe(true)
+    expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
+    click(card.render(), 'copilot-search-reset'); await settle()
+    expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(remote.settings.mutate.mock.calls[1]).toEqual([ROUTING, [
+      { op: 'set', path: ['searchProvider'], value: HOSTED },
+      { op: 'set', path: ['defaultSearchProvider'], value: HOSTED },
+    ], 4])
+    expect(text(card.render())).toContain('responses-model')
+    expect(field(card.render(), 'copilot-search-reset').props.disabled).toBe(true)
+  })
+
+  it('explains a real Remote settings-conflict without exposing its raw details', async () => {
+    const remote = remotes(HOSTED)
+    remote.settings.mutate.mockResolvedValueOnce({ ok: false, error: {
+      code: 'settings-conflict', message: 'PRIVATE_REMOTE_ERROR', details: { actual: 9 },
+    } } as never)
+    const card = await ready(remote)
+    click(card.render(), 'web-search-save'); await settle()
+    expect(text(card.render())).toContain('changed since you opened this page')
+    expect(text(card.render())).not.toContain('PRIVATE_')
+    expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
+    expect(remote.settings.describe).toHaveBeenCalledTimes(1)
   })
 
   it('requires an explicit reload to adopt concurrent revisions without silently overwriting edits', async () => {
@@ -376,11 +443,8 @@ describe('independent Web search Settings card', () => {
     expect(remote.settings.mutate.mock.calls[1]?.[2]).toBe(9)
   })
 
-  it('rejects blank providers and Copilot models but allows none without a Copilot write', async () => {
+  it('rejects blank providers but allows none without a Copilot write', async () => {
     const card = await ready(remotes(HOSTED))
-    change(card.render(), 'copilot-search-model', '  ')
-    click(card.render(), 'web-search-save')
-    expect(text(card.render())).toContain('Enter a Copilot Responses model')
     change(card.render(), 'web-search-provider', ' ')
     click(card.render(), 'web-search-save')
     expect(text(card.render())).toContain('Choose a registered search provider')
@@ -392,6 +456,59 @@ describe('independent Web search Settings card', () => {
       { op: 'set', path: ['searchProvider'], value: 'auto' },
       { op: 'set', path: ['defaultSearchProvider'], value: 'none' },
     ], 4)
+  })
+
+  it.each(['unmount', 'replace'] as const)('ignores disposed override resets after %s and blocks duplicate/reset-routing submissions', async disposal => {
+    for (const outcome of ['resolve', 'reject'] as const) {
+      const remote = remotes(HOSTED)
+      const pending = deferred<Awaited<ReturnType<typeof remote.settings.mutate>>>()
+      remote.settings.mutate.mockReturnValueOnce(pending.promise)
+      const card = await ready(remote)
+      const tree = card.render()
+      click(tree, 'copilot-search-reset')
+      click(tree, 'copilot-search-reset')
+      click(tree, 'web-search-save')
+      expect(remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(COPILOT, [
+        { op: 'set', path: ['searchModel'], value: '' },
+      ], 7)
+      expect(field(card.render(), 'copilot-search-reset').props.disabled).toBe(true)
+      expect(field(card.render(), 'web-search-save').props.disabled).toBe(true)
+      if (disposal === 'unmount') card.unmount()
+      else {
+        const replacement = remotes(HOSTED), value = settingsValue(HOSTED)
+        value.namespaces[1]!.value.searchModel = 'replacement-model'
+        replacement.settings.describe.mockResolvedValueOnce(ok(value))
+        card.render(replacement); await settle()
+      }
+      const counts = card.setters.map(setter => setter.mock.calls.length)
+      if (outcome === 'resolve') pending.resolve(ok(namespace(COPILOT, 8)))
+      else pending.reject(new Error('PRIVATE_LATE_RESET'))
+      await settle()
+      expect(card.setters.map(setter => setter.mock.calls.length)).toEqual(counts)
+      expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
+      if (disposal === 'replace') {
+        expect(text(card.render())).toContain('replacement-model')
+        expect(text(card.render())).not.toContain('PRIVATE_')
+        expect(text(card.render())).not.toContain('Copilot model selection is now automatic')
+      }
+      card.unmount()
+    }
+  })
+
+  it('blocks an override reset while routing save is pending without applying it later', async () => {
+    const remote = remotes(HOSTED)
+    const pending = deferred<Awaited<ReturnType<typeof remote.settings.mutate>>>()
+    remote.settings.mutate.mockReturnValueOnce(pending.promise)
+    const card = await ready(remote)
+    const tree = card.render()
+    click(tree, 'web-search-save')
+    click(tree, 'copilot-search-reset')
+    expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
+    expect(remote.settings.mutate.mock.calls[0]?.[0]).toBe(ROUTING)
+    pending.resolve(ok(namespace(ROUTING, 5))); await settle()
+    expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
+    expect(text(card.render())).toContain('responses-model')
+    expect(field(card.render(), 'copilot-search-reset').props.disabled).toBe(false)
   })
 
   it.each(['resolve', 'reject'] as const)('ignores final routing save %s after unmount', async outcome => {
@@ -423,12 +540,10 @@ describe('independent Web search Settings card', () => {
     expect(card.setters.map(setter => setter.mock.calls.length)).toEqual(counts)
   })
 
-  it('ignores stale loads and suggestions when Remote declarations are replaced', async () => {
+  it('ignores stale loads when Remote declarations are replaced', async () => {
     const old = remotes(HOSTED)
     const load = deferred<Awaited<ReturnType<typeof old.settings.describe>>>()
-    const account = deferred<Awaited<ReturnType<typeof old.copilot.status>>>()
     old.settings.describe.mockReturnValueOnce(load.promise)
-    old.copilot.status.mockReturnValueOnce(account.promise)
     const card = harness(old)
     card.render()
     const next = remotes('replacement-provider')
@@ -436,13 +551,12 @@ describe('independent Web search Settings card', () => {
     await settle()
     const counts = card.setters.map(setter => setter.mock.calls.length)
     load.resolve(ok(settingsValue(HOSTED)))
-    account.reject(new Error('PRIVATE_OLD_ACCOUNT'))
     await settle()
     expect(card.setters.map(setter => setter.mock.calls.length)).toEqual(counts)
     expect(field(card.render(), 'web-search-provider').props.value).toBe('replacement-provider')
   })
 
-  it.each(['unmount', 'replace'] as const)('does not continue two-namespace save or update state after %s', async disposal => {
+  it.each(['unmount', 'replace'] as const)('prevents double submit and ignores obsolete saves after %s', async disposal => {
     const remote = remotes(HOSTED)
     const pending = deferred<Awaited<ReturnType<typeof remote.settings.mutate>>>()
     remote.settings.mutate.mockReturnValueOnce(pending.promise)
@@ -454,7 +568,7 @@ describe('independent Web search Settings card', () => {
     if (disposal === 'unmount') card.unmount()
     else { card.render(remotes('new-provider')); await settle() }
     const counts = card.setters.map(setter => setter.mock.calls.length)
-    pending.resolve(ok(namespace(COPILOT, 8)))
+    pending.resolve(ok(namespace(ROUTING, 5)))
     await settle()
     expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
     expect(card.setters.map(setter => setter.mock.calls.length)).toEqual(counts)

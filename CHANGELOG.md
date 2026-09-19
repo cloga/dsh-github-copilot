@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.29 (prepared)
+
+- Fix search settings drafts and pending saves being reset by parent renders: capture stable traced Settings/routing Remote faces once per registration (#148).
+- Make ordinary Web search settings provider-only, rename the final default to Fallback provider, and save both routing choices in one namespace CAS without model discovery or a model prerequisite.
+- Resolve independent Copilot search models from current account-owned Responses metadata in deterministic order, with at most three capability-probed candidates and one final query. Preserve allowlists, explicit overrides, account/owner proof, cancellation and fallback policy; never borrow a Chat/global default or hardcode model IDs.
+- Preserve existing model overrides and offer a separate explicit reset to automatic selection. Classify safe save/conflict diagnostics without exposing raw Remote errors.
+- Add real pinned Settings/Client-codec contracts, mounted React/Cordis lifecycle tests, and isolated built-browser before/after reproduction. These are not live OAuth/search, published-release or installed Desktop acceptance claims.
+
 ## 0.4.0-alpha.28 (prepared)
 
 - Enforce plugin-owned estimated independent prompt and combined input/output budgets on the managed Copilot route while preserving advertised context capacity and native transport (#146).

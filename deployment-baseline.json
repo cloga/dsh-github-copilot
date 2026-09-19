@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.28"
+    "version": "0.4.0-alpha.29"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -282,6 +282,34 @@
         {"file": "tests/inline/apply.spec.ts", "name": "uses the configured account model in fixed mode even for a different Copilot chat model"},
         {"file": "tests/client-bundle.spec.ts", "name": "registers web-search routing as a separate Models footer card"},
         {"file": "tests/routed-web-loader.spec.ts", "name": "loads the built facade and delegate entries without changing official tools"}
+      ]
+    },
+    {
+      "id": "provider-only-search-settings",
+      "required": true,
+      "evidenceScope": "pinned-settings-and-client-contracts-plus-synthetic-routing-no-live-save-claim",
+      "sourceMarkers": [
+        {"file": "src/client.ts", "marker": "const settings = ctx.remote.settings"},
+        {"file": "src/client.ts", "marker": "const routing = ctx.remote.githubCopilotSearchRouting"},
+        {"file": "src/web-search-routing-card.ts", "marker": "Fallback provider"},
+        {"file": "src/web-search-routing-card.ts", "marker": "data-dsh-copilot-search-reset"},
+        {"file": "src/index.ts", "marker": "function configuredCandidates(cfg: InlineConfig)"}
+      ],
+      "tests": [
+        {"file": "tests/web-search-routing-card.spec.ts", "name": "saves Copilot as %s with one routing write and no model prerequisite"},
+        {"file": "tests/web-search-routing-card.spec.ts", "name": "does not rewrite a legacy model override when saving provider routing"},
+        {"file": "tests/web-search-routing-card.spec.ts", "name": "never loads account model suggestions to display or save providers"},
+        {"file": "tests/web-search-routing-card.spec.ts", "name": "resets a legacy override only through an explicit separate action"},
+        {"file": "tests/web-search-routing-card.spec.ts", "name": "explains a real Remote settings-conflict without exposing its raw details"},
+        {"file": "tests/client-search-inject.spec.ts", "name": "keeps real mounted drafts and pending saves through parent rerenders (footer=%s)"},
+        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "real pinned Client namespace lookups require stable capture across render calls"},
+        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "provider-only search routing saves both leaves once without a Copilot namespace or model"},
+        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "stale routing revisions fail CAS and preserve the last successful settings"},
+        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "hidden legacy searchModel is writable and accepts an explicit empty reset"},
+        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "pinned generated Client mutate codecs accept routing ops and a flat namespace revision"},
+        {"file": "tests/inline/apply.spec.ts", "name": "automatically resolves account-owned Responses candidates for %s without a search model"},
+        {"file": "tests/inline/apply.spec.ts", "name": "bounds automatic proof to three eligible candidates in deterministic id order"},
+        {"file": "tests/inline/apply.spec.ts", "name": "does not discover or probe allowlist-excluded automatic search"}
       ]
     },
     {
