@@ -191,7 +191,8 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const unit = view?.billing === 'credits' ? t.credits : view?.billing === 'requests' ? t.requests : t.unknown
   const format = (value: number | undefined) => value === undefined ? t.unavailable
     : value > 0 && value < 0.01 ? '<0.01' : new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(value)
-  const compact = (value: number) => new Intl.NumberFormat(language, { notation: 'compact', maximumFractionDigits: 2 }).format(value)
+  const compact = (value: number) => value > 0 && value < 0.01 ? '<0.01'
+    : new Intl.NumberFormat(language, { notation: 'compact', maximumFractionDigits: 2 }).format(value)
   const reading = [
     unit,
     ...(view?.state === 'stale' ? [t.stale] : []),

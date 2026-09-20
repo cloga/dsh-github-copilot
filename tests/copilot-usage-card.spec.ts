@@ -69,6 +69,13 @@ describe('Copilot account usage chip', () => {
     expect(text()).not.toMatch(/\b0 used\b/)
   })
 
+  it('does not round a positive sub-cent credit amount to zero in the compact control', async () => {
+    await mount({ remote: remote(view({ used: 0.001, remaining: 0.999, limit: 1, percentUsed: 0.1 })), contextKey: 'a' })
+    expect(trigger().textContent).toContain('<0.01 used')
+    await click(trigger())
+    expect(text()).toContain('Amounts rounded for display')
+  })
+
   it('uses premium-request units without relabeling them credits', async () => {
     await mount({ remote: remote(view({ billing: 'requests' })), contextKey: 'a' })
     await click(trigger())
