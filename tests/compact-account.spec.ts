@@ -707,6 +707,31 @@ function uiHarness(api=remote()) {
 }
 
 describe('compact account rendering',()=>{
+  it.each([signedOut, pending, discovered])('omits compatibility guidance even with Manage open: $phase', async initial => {
+    const ui = uiHarness(remote(initial))
+    ui.render(); await flush()
+    button(ui.render(), 'Manage').props.onClick()
+    const tree = ui.render()
+    expect(button(tree, 'Manage').props['aria-expanded']).toBe(true)
+    expect(text(tree)).not.toContain('Compatibility and existing configurations')
+    expect(elements(tree).some(el => el.props['data-dsh-github-copilot-compatibility'])).toBe(false)
+    expect(elements(tree).some(el => el.type === 'a' && el.props.href?.includes('single-route-migration'))).toBe(false)
+    expect(ui.api.reconcile).not.toHaveBeenCalled()
+    expect(ui.api.signOut).not.toHaveBeenCalled()
+  })
+
+  it('retains explicit legacy repair without the removed compatibility disclosure', async () => {
+    const ui = uiHarness(remote({ ...discovered, route: { state: 'needs-repair' } }))
+    ui.render(); await flush()
+    button(ui.render(), 'Manage').props.onClick()
+    const tree = ui.render()
+    expect(text(tree)).toContain('Model configuration needs reconciliation')
+    expect(text(tree)).not.toContain('Compatibility and existing configurations')
+    expect(ui.api.reconcile).not.toHaveBeenCalled()
+    await button(tree, 'Repair model configuration').props.onClick()
+    expect(ui.api.reconcile).toHaveBeenCalledOnce()
+  })
+
   it('keeps the Host cache timestamp outside Manage and live regions through refresh and failure', async () => {
     const discoveredAt = 1_700_000_000_000
     const cached = { ...discovered, accountModels: { ...discovered.accountModels!, discoveredAt } }

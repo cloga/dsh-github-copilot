@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.30 (prepared)
+
+- Route verification links on recognized Desktop v1 hosts through the existing same-window external-navigation handoff instead of popup creation; retain new tabs on web hosts (#150).
+- Display a selectable verification address for manual browser handoff without claiming that the system browser opened or authorization succeeded.
+- Remove the Compatibility and existing configurations disclosure from Manage. Preserve legacy configuration diagnostics, explicit repair, migration documentation, credentials and session behavior.
+- Cover Desktop/web targets, manual URL handoff and expanded Manage across account states. Synthetic Client evidence does not establish live Desktop activation or OAuth success.
+
 ## 0.4.0-alpha.29 (prepared)
 
 - Fix search settings drafts and pending saves being reset by parent renders: capture stable traced Settings/routing Remote faces once per registration (#148).

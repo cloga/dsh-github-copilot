@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as Cordis from '@deepseek-ai/cordis'
 import * as React from 'react'
+import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 
@@ -21,6 +22,7 @@ interface ModuleLoaderWindow {
 
 afterEach(() => {
   delete (window as ModuleLoaderWindow).__ModuleLoader__
+  vi.unstubAllGlobals()
 })
 
 describe('tsdown client artifact', () => {
@@ -81,6 +83,38 @@ describe('tsdown client artifact', () => {
 
     expect(exports.apply).toBeTypeOf('function')
     expect(exports.inject).toEqual(['remote', 'slots'])
+  })
+
+  it.each([true, false])('renders the built verification handoff and clears expired URLs (desktop: %s)', async desktop => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    vi.stubGlobal('dshDesktop', desktop ? { protocolVersion: 1 } : undefined)
+    const { exports } = loadArtifact()
+    const Notice = exports.GitHubCopilotAuthorizationNotice as typeof import('../src/client.ts').GitHubCopilotAuthorizationNotice
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    try {
+      await React.act(async () => root.render(React.createElement(Notice, {
+        message: 'Continue on GitHub.', url: 'https://github.com/login/device',
+        code: 'ABCD-EFGH', copyState: 'idle', onCopy: vi.fn(),
+      })))
+      const link = container.querySelector('a')!
+      expect(link.href).toBe('https://github.com/login/device')
+      expect(link.target).toBe(desktop ? '_self' : '_blank')
+      expect(link.rel).toBe('noreferrer')
+      expect(container.querySelector('[data-dsh-github-copilot-verification-url]')?.textContent)
+        .toBe('https://github.com/login/device')
+      expect(link.hasAttribute('onclick')).toBe(false)
+      await React.act(async () => root.render(React.createElement(Notice, {
+        message: 'Waiting for authorization.', copyState: 'idle', onCopy: vi.fn(),
+      })))
+      expect(container.querySelector('a')).toBeNull()
+      expect(container.textContent).not.toContain('https://github.com/login/device')
+      expect(container.textContent).not.toContain('ABCD-EFGH')
+    } finally {
+      await React.act(async () => root.unmount())
+      container.remove()
+    }
   })
 
   it('exports the cache timestamp formatter and isolated clock component in the built Client', () => {
