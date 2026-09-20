@@ -16,6 +16,8 @@ export interface PreviewProviderGuard {
   assertActive(): void
   assertAccount(credential: GitHubCopilotOAuthCredential): void
   beforeWire(model: Model<Api>, options?: StreamOptions): Promise<{ signal: AbortSignal; release(): void }>
+  /** Actual model HTTP 401 only; called after release, without replaying the request. */
+  onUnauthorized?(): void
 }
 
 /** Guard for one selected model in an account-bound descriptor snapshot. */
@@ -170,15 +172,29 @@ export function createAccountProvider(
       headers['x-api-key'] = null
       // Alias identity is retained for replay. Anthropic's native alias branch
       // uses API-key auth unless we provide verified Bearer header-owned auth.
+      let unauthorized = false
+      const fetch = options.fetch ?? globalThis.fetch
+      const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
+        const response = await fetch(input, init)
+        // onResponse is success-only in some native SDK adapters. Observe the
+        // real HTTP status via their public fetch seam, never error-message text.
+        if (response.status === 401) unauthorized = true
+        return response
+      }
       const wireOptions = model.api === 'anthropic-messages'
-        ? { ...options, signal: lease.signal, apiKey: undefined, headers }
-        : { ...options, signal: lease.signal, headers }
+        ? { ...options, signal: lease.signal, apiKey: undefined, headers, fetch: observeResponse }
+        : { ...options, signal: lease.signal, headers, fetch: observeResponse }
       if (!hasApi(model, 'openai-responses') && !hasApi(model, 'openai-completions') && !hasApi(model, 'anthropic-messages')) {
         lease.release()
         throw new Error('COPILOT_MANAGED_PROTOCOL_UNSUPPORTED')
       }
       return (async function* () {
-        try { yield* native.streamSimple(model, context, wireOptions) } finally { lease.release() }
+        try { yield* native.streamSimple(model, context, wireOptions) } finally {
+          lease.release()
+          if (unauthorized && !guard.signal.aborted && !options.signal?.aborted) {
+            try { guard.onUnauthorized?.() } catch { /* Preserve the native terminal result. */ }
+          }
+        }
       })()
     }),
   }

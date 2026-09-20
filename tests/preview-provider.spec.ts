@@ -3,6 +3,8 @@ import '@earendil-works/pi-ai/api/openai-responses'
 import '@earendil-works/pi-ai/api/openai-completions'
 import '@earendil-works/pi-ai/api/anthropic-messages'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
+import { lazyStream } from '@earendil-works/pi-ai'
+import * as copilotSdk from '@earendil-works/pi-ai/providers/github-copilot'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { accountModelFromDescriptor, createAccountProvider, copilotPublicHeaders } from '../src/preview-provider.ts'
 import type { AccountProviderGuard } from '../src/preview-provider.ts'
@@ -12,6 +14,13 @@ import { Config as CoreConfig, PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import { BlockAssembler, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW } from '../src/copilot-identity.ts'
+
+// Preserve the real factory by default; one observer identity test replaces only
+// its returned stream entrypoint, without modifying the installed ESM module.
+vi.mock('@earendil-works/pi-ai/providers/github-copilot', async importOriginal => {
+  const original = await importOriginal<typeof import('@earendil-works/pi-ai/providers/github-copilot')>()
+  return { ...original, githubCopilotProvider: vi.fn(original.githubCopilotProvider) }
+})
 
 const baseURL = 'https://api.individual.githubcopilot.com'
 const endpoint: Record<AccountModelApi, string> = { 'openai-responses': '/responses', 'openai-completions': '/chat/completions', 'anthropic-messages': '/v1/messages' }
@@ -156,6 +165,169 @@ describe('account-driven native provider', () => {
     const converted = accountModelFromDescriptor(descriptor('anthropic-messages', 'future-lab-r17', ['low', 'high'], false), baseURL)
     expect(converted.reasoning).toBe(false)
     expect(converted.unmappedReasoningEfforts).toEqual(['high', 'low'])
+  })
+})
+
+describe('account provider model HTTP authorization observation', () => {
+  const apis = ['openai-responses', 'openai-completions', 'anthropic-messages'] as const
+  function rejectedResponse(status = 401) {
+    return new Response(JSON.stringify({ error: { type: 'authentication_error', message: 'synthetic rejected request' } }), {
+      status, headers: { 'content-type': 'application/json' },
+    })
+  }
+  function observedProvider(api: AccountModelApi, onUnauthorized?: () => void) {
+    const item = descriptor(api)
+    const controller = new AbortController()
+    const caller = new AbortController()
+    const wire = new AbortController()
+    const order: string[] = []
+    const release = vi.fn(() => { order.push('release'); wire.abort() })
+    const unauthorized = vi.fn(() => { order.push('unauthorized'); onUnauthorized?.() })
+    const guard: AccountProviderGuard = { ...accountGuard(item.id), signal: controller.signal,
+      beforeWire: async (_model, options) => {
+        expect(options?.apiKey).toBe('synthetic-account-token')
+        return { signal: AbortSignal.any([controller.signal, caller.signal, wire.signal]), release }
+      },
+      onUnauthorized: unauthorized,
+    }
+    const { provider, models } = createAccountProvider([item], guard, baseURL)
+    return { controller, caller, wire, order, release, unauthorized,
+      async call(fetch?: typeof globalThis.fetch) {
+        const options = { apiKey: 'synthetic-account-token', signal: caller.signal, maxRetries: 0,
+          ...fetch === undefined ? {} : { fetch },
+        }
+        const stream = provider.streamSimple(models[0]!, { messages: [] }, options)
+        for await (const _event of stream) { /* Drain native events, including the unchanged terminal failure. */ }
+        const result = await stream.result()
+        await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(1))
+        return result
+      },
+    }
+  }
+
+  it('passes the exact custom fetch arguments and Response through the public observer', async () => {
+    const input = new Request(`${baseURL}/responses`, { method: 'POST' })
+    const init: RequestInit = { method: 'POST', headers: { 'x-synthetic': 'unchanged' }, body: 'synthetic-body' }
+    const response = rejectedResponse()
+    const customFetch = vi.fn(async (..._args: Parameters<typeof globalThis.fetch>) => response)
+    const ambientFetch = vi.fn(async () => { throw new Error('Custom fetch must not reach the ambient transport') })
+    vi.stubGlobal('fetch', ambientFetch)
+    const native = copilotSdk.githubCopilotProvider()
+    let receivedResponse: Response | undefined
+    let bodyUsedBeforeNative: boolean | undefined
+    // Only this seam test supplies the request arguments itself. The native SDK
+    // still consumes the returned Response and produces the terminal error.
+    const factory = vi.mocked(copilotSdk.githubCopilotProvider)
+    const originalFactory = factory.getMockImplementation()!
+    factory.mockImplementationOnce(() => ({ ...native,
+      streamSimple: (model, context, options) => lazyStream(model, async () => {
+        receivedResponse = await options!.fetch!(input, init)
+        bodyUsedBeforeNative = receivedResponse.bodyUsed
+        return native.streamSimple(model, context, { ...options, fetch: async () => receivedResponse! })
+      }),
+    }))
+    try {
+      const harness = observedProvider('openai-responses')
+      const result = await harness.call(customFetch)
+      expect(customFetch).toHaveBeenCalledTimes(1)
+      expect(customFetch.mock.calls[0]![0]).toBe(input)
+      expect(customFetch.mock.calls[0]![1]).toBe(init)
+      expect(receivedResponse).toBe(response)
+      expect(bodyUsedBeforeNative).toBe(false)
+      expect(ambientFetch).not.toHaveBeenCalled()
+      expect(result.stopReason).toBe('error')
+      expect(result.errorMessage).toContain('401')
+      expect(harness.order).toEqual(['release', 'unauthorized'])
+    } finally { factory.mockReset().mockImplementation(originalFactory) }
+  })
+
+  it.each(apis)('reports a real %s HTTP 401 once after releasing its wire without replay', async api => {
+    const harness = observedProvider(api)
+    const fetch = vi.fn(async () => {
+      expect(harness.release).not.toHaveBeenCalled()
+      expect(harness.unauthorized).not.toHaveBeenCalled()
+      return rejectedResponse()
+    })
+    const result = await harness.call(fetch)
+    expect(result.stopReason).toBe('error')
+    expect(result.errorMessage).toContain('401')
+    expect(result.errorMessage).toContain('synthetic rejected request')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(harness.wire.signal.aborted).toBe(true)
+    expect(harness.unauthorized).toHaveBeenCalledTimes(1)
+    expect(harness.order).toEqual(['release', 'unauthorized'])
+  })
+
+  it.each(apis)('observes the existing global fetch fallback for %s without adding requests', async api => {
+    const fetch = vi.fn(async () => rejectedResponse())
+    vi.stubGlobal('fetch', fetch)
+    const harness = observedProvider(api)
+    const result = await harness.call()
+    expect(result.stopReason).toBe('error')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(harness.order).toEqual(['release', 'unauthorized'])
+  })
+
+  it.each(apis)('does not treat a %s HTTP 403 as token rejection', async api => {
+    const harness = observedProvider(api)
+    const fetch = vi.fn(async () => rejectedResponse(403))
+    const result = await harness.call(fetch)
+    expect(result.stopReason).toBe('error')
+    expect(result.errorMessage).toContain('403')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(harness.unauthorized).not.toHaveBeenCalled()
+    expect(harness.order).toEqual(['release'])
+  })
+
+  it.each(apis)('does not infer HTTP status from a thrown %s transport error', async api => {
+    const harness = observedProvider(api)
+    const fetch = vi.fn(async () => { throw new Error('401 API key is invalid: synthetic transport failure, not a Response') })
+    const result = await harness.call(fetch)
+    expect(result.stopReason).toBe('error')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(harness.unauthorized).not.toHaveBeenCalled()
+    expect(harness.order).toEqual(['release'])
+  })
+
+  it.each(apis)('does not interpret a %s successful response body as an HTTP 401', async api => {
+    const harness = observedProvider(api)
+    const fetch = vi.fn(async () => new Response((await nativeEvents(api).text()).replaceAll('Hello.', '401 API key is invalid.'), {
+      headers: { 'content-type': 'text/event-stream' },
+    }))
+    const result = await harness.call(fetch)
+    expect(result.stopReason).toBe('stop')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(harness.unauthorized).not.toHaveBeenCalled()
+    expect(harness.order).toEqual(['release'])
+  })
+
+  it.each(apis.flatMap(api => (['caller', 'controller'] as const).map(owner => ({ api, owner }))))(
+    'does not retire credentials when $owner cancellation races with a $api HTTP 401', async ({ api, owner }) => {
+      const harness = observedProvider(api)
+      const fetch = vi.fn(async () => {
+        harness[owner].abort()
+        return rejectedResponse()
+      })
+      const result = await harness.call(fetch)
+      expect(result.stopReason).toBe('aborted')
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(harness.unauthorized).not.toHaveBeenCalled()
+      expect(harness.order).toEqual(['release'])
+    },
+  )
+
+  it.each(apis)('preserves the native %s failure when the rejection callback throws', async api => {
+    const baseline = observedProvider(api)
+    const expected = await baseline.call(async () => rejectedResponse())
+    const harness = observedProvider(api, () => { throw new Error('synthetic callback failure must not replace native error') })
+    const fetch = vi.fn(async () => rejectedResponse())
+    const result = await harness.call(fetch)
+    expect(result.stopReason).toBe(expected.stopReason)
+    expect(result.errorMessage).toBe(expected.errorMessage)
+    expect(result.errorMessage).not.toContain('synthetic callback failure')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(harness.unauthorized).toHaveBeenCalledTimes(1)
+    expect(harness.order).toEqual(['release', 'unauthorized'])
   })
 })
 

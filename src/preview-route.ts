@@ -374,7 +374,21 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
   resolveRequestBudgetPolicy(budgetSettings())
   const store = createGitHubCopilotCredentialStore(ctx, GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
-  const nativeAuth = createAccountModelAuth(createGitHubCopilotCredentialStore(ctx))
+  let rejectedAuth: Proof | undefined
+  let authRecovery: { readonly accountKey: string; readonly at: number } | undefined
+  const nativeAuth = createAccountModelAuth(createGitHubCopilotCredentialStore(ctx), grant => {
+    const accountKey = copilotAccountKey(grant)
+    if (rejectedAuth?.accountKey !== accountKey || rejectedAuth.tokenFingerprint !== tokenFingerprint(grant.access)) return false
+    const now = Date.now()
+    const cooldown = Math.max(1000, cacheSettings().accountModelFailureCooldownMs ?? 300_000)
+    const age = authRecovery === undefined ? undefined : now - authRecovery.at
+    // Metadata invalidation resets its own cooldown. Bound rejected-token
+    // recovery separately per account, including successful but rejected renewals.
+    if (!Number.isFinite(now) || authRecovery?.accountKey === accountKey
+      && (age === undefined || !Number.isFinite(age) || age < cooldown)) throw failure('COPILOT_PREVIEW_AUTH_RECOVERY_COOLDOWN')
+    authRecovery = { accountKey, at: now }
+    return true
+  })
   const nativeModels = getBuiltinModels('github-copilot')
   const nativeApis = new Map(nativeModels.map(model => [model.id, model.api]))
   let lastValidatedProof: Proof | undefined
@@ -540,7 +554,19 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
   const optionsFor = (lease?: Lease, inspectRequest?: AccountProviderGuard['inspectRequest']): PiAiAdapterOptions => {
-    const guard = { ...lifetime.guard(lease), ...inspectRequest === undefined ? {} : { inspectRequest } }
+    const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...inspectRequest === undefined ? {} : { inspectRequest },
+      onUnauthorized() {
+        // A late response from before sign-in, refresh or disposal cannot retire
+        // a newer credential. This synchronous fence precedes every state change.
+        if (lease === undefined || !lifetime.isCurrent(lease.revision)
+          || provenSnapshot !== lease.snapshot || snapshotProof !== lease.proof) return
+        rejectedAuth = lease.proof
+        lifetime.change()
+        provenSnapshot = undefined; snapshotProof = undefined; lastValidatedProof = undefined
+        // No auth/discovery here and no replay. Native renewal belongs to the
+        // next independent caller through the shared discovery single flight.
+      },
+    }
     const { provider } = createAccountProvider(lease?.snapshot.models ?? [], guard, lease?.proof.baseURL ?? 'https://api.individual.githubcopilot.com')
     const profile = Object.freeze({ ...template, piProvider: provider })
     const profiles = new Map([[GITHUB_COPILOT_PREVIEW_PROVIDER_ID, profile]])
