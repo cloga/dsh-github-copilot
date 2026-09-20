@@ -1,4 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
+import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
@@ -6,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../src/preview-route.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
+import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY as KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW, GITHUB_COPILOT_PREVIEW_MODEL_ID as MODEL } from '../src/copilot-identity.ts'
 
 interface RecordValue { kind: 'grant'; payload: Record<string, unknown> }
@@ -859,6 +861,171 @@ describe('plugin-owned account Copilot route', () => {
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
+  it.each([401, 403])('handles actual HTTP %i without replay and renews only a rejected token on the next request', async status => {
+    const requests: Array<{ path: string; authorization: string | null }> = []
+    const fresh = 'synthetic-after-rejection'
+    stubFetch(async (input, init) => {
+      const path = new URL(String(input)).pathname
+      const authorization = new Headers(init?.headers).get('authorization')
+      requests.push({ path, authorization })
+      if (path === '/copilot_internal/v2/token') return new Response(JSON.stringify({ token: fresh, expires_at: Math.floor(Date.now() / 1000) + 3600 }))
+      if (path === '/models') return catalogResponse()
+      if (authorization === `Bearer ${fresh}`) return response()
+      return new Response(JSON.stringify({ error: { message: 'synthetic rejection' } }), { status })
+    }, true)
+    const original = grant()
+    const harness = await runtime(original)
+    const first = await call(harness.ctx)
+    expect(first.assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+    expect(requests.map(request => request.path)).toEqual(['/models', '/responses'])
+    expect(harness.modify).not.toHaveBeenCalled()
+    expect(harness.current()).toEqual(original)
+    const next = await call(harness.ctx)
+    expect(next.assembler.finish.kind).toBe(status === 401 ? 'stop' : 'error')
+    expect(requests.filter(request => request.path === '/responses')).toEqual([
+      { path: '/responses', authorization: 'Bearer synthetic-current-access' },
+      { path: '/responses', authorization: status === 401 ? `Bearer ${fresh}` : 'Bearer synthetic-current-access' },
+    ])
+    expect(requests.filter(request => request.path === '/copilot_internal/v2/token')).toHaveLength(status === 401 ? 1 : 0)
+    expect(harness.modify).toHaveBeenCalledTimes(status === 401 ? 1 : 0)
+    expect(harness.current()?.payload.expires).toBeGreaterThan(Date.now())
+  })
+
+  it('shares rejected-token renewal across concurrent new callers without replaying failed wires', async () => {
+    const paths: string[] = []
+    let releaseRefresh: (() => void) | undefined
+    stubFetch(async (input, init) => {
+      const path = new URL(String(input)).pathname
+      paths.push(path)
+      if (path === '/copilot_internal/v2/token') {
+        await new Promise<void>(resolve => { releaseRefresh = resolve })
+        return new Response(JSON.stringify({ token: 'synthetic-concurrent-renewal', expires_at: Math.floor(Date.now() / 1000) + 3600 }))
+      }
+      if (path === '/models') return catalogResponse()
+      return new Headers(init?.headers).get('authorization') === 'Bearer synthetic-current-access'
+        ? new Response('synthetic rejection', { status: 401 }) : response()
+    }, true)
+    const harness = await runtime()
+    expect((await call(harness.ctx)).assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+    expect(paths).toEqual(['/models', '/responses'])
+    const first = call(harness.ctx)
+    await vi.waitFor(() => expect(releaseRefresh).toBeDefined())
+    const second = call(harness.ctx)
+    releaseRefresh!()
+    expect((await first).assembler.finish).toEqual({ kind: 'stop' })
+    expect((await second).assembler.finish).toEqual({ kind: 'stop' })
+    expect(paths.filter(path => path === '/copilot_internal/v2/token')).toHaveLength(1)
+    expect(paths.filter(path => path === '/responses')).toHaveLength(3)
+    expect(harness.modify).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['same-token', 'new-token'] as const)('bounds repeated 401 recovery after a %s native renewal', async renewal => {
+    const paths: string[] = []
+    stubFetch(async input => {
+      const path = new URL(String(input)).pathname
+      paths.push(path)
+      if (path === '/copilot_internal/v2/token') return new Response(JSON.stringify({
+        token: renewal === 'same-token' ? 'synthetic-current-access' : 'synthetic-still-rejected',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }))
+      if (path === '/models') return catalogResponse()
+      return new Response('synthetic rejection', { status: 401 })
+    }, true)
+    const harness = await runtime(grant(), { accountModelFailureCooldownMs: 300_000 })
+    expect((await call(harness.ctx)).assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+    if (renewal === 'same-token') await expect(call(harness.ctx)).rejects.toThrow(/AUTH/)
+    else expect((await call(harness.ctx)).assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await harness.ctx.get('githubCopilotPreview')!.discover({ force: true })
+      await expect(call(harness.ctx)).rejects.toThrow(/AUTH|SOURCE/)
+    }
+    expect(paths.filter(path => path === '/copilot_internal/v2/token')).toHaveLength(1)
+    expect(paths.filter(path => path === '/responses')).toHaveLength(renewal === 'same-token' ? 1 : 2)
+    expect(harness.modify).toHaveBeenCalledTimes(1)
+    expect(harness.current()?.payload.expires).toBeGreaterThan(Date.now())
+  })
+
+  it.each(['account', 'token', 'metadata'] as const)('ignores a late HTTP 401 after the current %s changes', async change => {
+    const harness = await runtime()
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    let finish: ((response: Response) => void) | undefined
+    let wires = 0
+    let renewals = 0
+    stubFetch(async input => {
+      const path = new URL(String(input)).pathname
+      if (path === '/models') return catalogResponse()
+      if (path === '/copilot_internal/v2/token') { renewals++; throw new Error('new sign-in must not be refreshed') }
+      if (++wires === 1) return await new Promise<Response>(resolve => { finish = resolve })
+      return response()
+    }, true)
+    const old = call(harness.ctx)
+    await vi.waitFor(() => expect(finish).toBeDefined())
+    if (change !== 'metadata') harness.replace(grant({
+      refresh: change === 'account' ? 'synthetic-new-account' : 'synthetic-account-a', access: 'synthetic-new-sign-in',
+    }))
+    await service.refresh()
+    await service.discover({ force: true })
+    finish!(new Response('synthetic old rejection', { status: 401 }))
+    expect((await old).assembler.finish.kind).not.toBe('stop')
+    expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+    expect(service.getView().available).toBe(true)
+    expect(renewals).toBe(0)
+    expect(harness.modify).not.toHaveBeenCalled()
+  })
+
+  it('ignores an old HTTP 401 after source publication but before the owner adopts the new snapshot', async () => {
+    const harness = await runtime()
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    let finish: ((response: Response) => void) | undefined
+    let wires = 0
+    let renewals = 0
+    stubFetch(async input => {
+      const path = new URL(String(input)).pathname
+      if (path === '/models') return catalogResponse()
+      if (path === '/copilot_internal/v2/token') { renewals++; throw new Error('new metadata must not trigger token renewal') }
+      if (++wires === 1) return await new Promise<Response>(resolve => { finish = resolve })
+      return response()
+    }, true)
+    const old = call(harness.ctx)
+    await vi.waitFor(() => expect(finish).toBeDefined())
+    // This seam belongs to the plugin, not Core. Run the real source load and
+    // pause only its caller continuation after the new cache is already public.
+    const lifetime = Reflect.get(harness.adapter, 'lifetime') as { source: AccountModelSource }
+    const source = lifetime.source
+    const originalLoad = source.load.bind(source)
+    const previous = source.readDisplaySnapshot()
+    let publish!: (snapshot: AccountModelSnapshot) => void
+    const published = new Promise<AccountModelSnapshot>(resolve => { publish = resolve })
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const load = vi.spyOn(source, 'load').mockImplementationOnce(async options => {
+      const snapshot = await originalLoad(options)
+      publish(snapshot)
+      await gate
+      return snapshot
+    })
+    const discovery = service.discover({ force: true })
+    try {
+      const replacement = await published
+      expect(replacement).not.toBe(previous)
+      expect(source.readDisplaySnapshot()).toBe(replacement)
+      finish!(new Response('synthetic old rejection', { status: 401 }))
+      expect((await old).assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+      expect(source.readDisplaySnapshot()).toBe(replacement)
+      release()
+      expect((await discovery).available).toBe(true)
+      expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+      expect(renewals).toBe(0)
+      expect(harness.modify).not.toHaveBeenCalled()
+    } finally {
+      release()
+      await discovery
+      load.mockRestore()
+    }
+  })
+
   it.each(['request', 'catalog'] as const)('refreshes the shared grant from a cold %s without aborting its own discovery', async entry => {
     const fresh = 'tid=synthetic;proxy-ep=proxy.individual.githubcopilot.com;'
     const urls: string[] = []
@@ -1173,6 +1340,47 @@ describe('plugin-owned account Copilot route', () => {
     expect(service.routeFacts(MODEL)).toBeUndefined()
     expect(JSON.stringify(failed)).not.toContain('PRIVATE_ERROR_BODY')
   })
+
+  it.each(['same-account', 'different-account'] as const)(
+    'uses fresh OAuth after sign-out and %s sign-in with the same conversation history', async account => {
+      const requests: Array<{ path: string; authorization: string | null }> = []
+      stubFetch(async (input, init) => {
+        const path = new URL(String(input)).pathname
+        requests.push({ path, authorization: new Headers(init?.headers).get('authorization') })
+        return path === '/models' ? catalogResponse() : response()
+      }, true)
+      const harness = await runtime()
+      const service = harness.ctx.get('githubCopilotPreview')!
+      const sessionId = 'synthetic-reauth-session' as NonNullable<GenerateOptions['sessionId']>
+      const first = await call(harness.ctx, { sessionId })
+      expect(first.assembler.finish).toEqual({ kind: 'stop' })
+      const history: Message[] = [first.message,
+        createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } })]
+      const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+      await harness.ctx.credentials.deleteRecord(parseCredentialKey(KEY))
+      await service.refresh()
+      expect(service.getView()).toMatchObject({ configured: false, available: false, models: [] })
+      await expect(call(harness.ctx, { sessionId, messages: history })).rejects.toThrow(/OAUTH/)
+      expect(requests).toEqual([
+        { path: '/models', authorization: 'Bearer synthetic-current-access' },
+        { path: '/responses', authorization: 'Bearer synthetic-current-access' },
+      ])
+      harness.replace(grant({ refresh: account === 'same-account' ? 'synthetic-account-a' : 'synthetic-account-b',
+        access: 'synthetic-reauth-access' }))
+      await service.refresh()
+      const old = new BlockAssembler()
+      for await (const chunk of prepared.stream({ ...prepared.config, sessionId, messages: history })) old.push(chunk)
+      expect(old.finish).toMatchObject({ kind: 'aborted', failure: { code: 'ABORTED' } })
+      expect(requests).toHaveLength(2)
+      const next = await call(harness.ctx, { sessionId, messages: history })
+      expect(next.assembler.finish).toEqual({ kind: 'stop' })
+      expect(next.message.source).toMatchObject({ provider: PREVIEW, model: MODEL })
+      expect(requests.slice(2)).toEqual([
+        { path: '/models', authorization: 'Bearer synthetic-reauth-access' },
+        { path: '/responses', authorization: 'Bearer synthetic-reauth-access' },
+      ])
+    },
+  )
 
   it('rejects a previously prepared account snapshot after a credential switch', async () => {
     const harness = await runtime()

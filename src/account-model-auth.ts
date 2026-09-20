@@ -38,6 +38,7 @@ function active(signal: AbortSignal): void {
  */
 export function createAccountModelAuth(
   credentials: CredentialStore,
+  renewRejectedCredential?: (grant: GitHubCopilotOAuthCredential) => boolean,
 ): Pick<AccountModelSourceDependencies, 'resolveAuth' | 'assertAuthCurrent'> {
   const native = githubCopilotProvider()
   const oauth = native.auth.oauth
@@ -78,6 +79,12 @@ export function createAccountModelAuth(
       try {
         const before = await readGrant(signal)
         const key = copilotAccountKey(before)
+        const rejectedAccess = renewRejectedCredential?.(before) === true ? before.access : undefined
+        // An observed 401 revokes local reuse, even before the stored expiry.
+        // Project expiry only into native getAuth's read/locked mutation input;
+        // only a genuine native refresh result may be persisted to the Host.
+        const forResolution = (grant: GitHubCopilotOAuthCredential): GitHubCopilotOAuthCredential =>
+          rejectedAccess !== undefined && grant.access === rejectedAccess ? { ...grant, expires: 0 } : grant
         const guardedOAuth: OAuthAuth = {
           ...oauth,
           login: async () => { throw new Error('COPILOT_ACCOUNT_USE_CANONICAL_SIGN_IN') },
@@ -105,15 +112,16 @@ export function createAccountModelAuth(
             const value = await credentials.read(provider)
             active(signal)
             if (value?.type !== 'oauth') throw new Error('COPILOT_ACCOUNT_OAUTH_REQUIRED')
-            matches(normalizeGitHubCopilotOAuthCredential(value), key)
-            return value
+            const grant = normalizeGitHubCopilotOAuthCredential(value)
+            matches(grant, key)
+            return forResolution(grant)
           },
           list: () => credentials.list(),
           modify: (provider, mutate) => credentials.modify(provider, async value => {
             active(signal)
             if (value?.type !== 'oauth') throw new Error('COPILOT_ACCOUNT_OAUTH_REQUIRED')
             matches(normalizeGitHubCopilotOAuthCredential(value), key)
-            const next = await mutate(value)
+            const next = await mutate(forResolution(normalizeGitHubCopilotOAuthCredential(value)))
             active(signal)
             if (next !== undefined) matches(normalizeGitHubCopilotOAuthCredential(next), key)
             return next
@@ -127,6 +135,7 @@ export function createAccountModelAuth(
         if (resolved?.auth.apiKey === undefined) throw new Error('COPILOT_ACCOUNT_OAUTH_REQUIRED')
         const grant = await readGrant(signal)
         matches(grant, key)
+        if (rejectedAccess !== undefined && grant.access === rejectedAccess) throw new Error('COPILOT_ACCOUNT_TOKEN_REJECTED')
         const auth: AccountModelAuth = {
           apiKey: resolved.auth.apiKey,
           baseURL: trustedGitHubCopilotBaseUrl(resolved.auth.baseUrl, grant),
