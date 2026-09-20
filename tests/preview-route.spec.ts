@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../src/preview-route.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
+import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY as KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW, GITHUB_COPILOT_PREVIEW_MODEL_ID as MODEL } from '../src/copilot-identity.ts'
 
 interface RecordValue { kind: 'grant'; payload: Record<string, unknown> }
@@ -971,6 +972,58 @@ describe('plugin-owned account Copilot route', () => {
     expect(service.getView().available).toBe(true)
     expect(renewals).toBe(0)
     expect(harness.modify).not.toHaveBeenCalled()
+  })
+
+  it('ignores an old HTTP 401 after source publication but before the owner adopts the new snapshot', async () => {
+    const harness = await runtime()
+    const service = harness.ctx.get('githubCopilotPreview')!
+    await service.discover()
+    let finish: ((response: Response) => void) | undefined
+    let wires = 0
+    let renewals = 0
+    stubFetch(async input => {
+      const path = new URL(String(input)).pathname
+      if (path === '/models') return catalogResponse()
+      if (path === '/copilot_internal/v2/token') { renewals++; throw new Error('new metadata must not trigger token renewal') }
+      if (++wires === 1) return await new Promise<Response>(resolve => { finish = resolve })
+      return response()
+    }, true)
+    const old = call(harness.ctx)
+    await vi.waitFor(() => expect(finish).toBeDefined())
+    // This seam belongs to the plugin, not Core. Run the real source load and
+    // pause only its caller continuation after the new cache is already public.
+    const lifetime = Reflect.get(harness.adapter, 'lifetime') as { source: AccountModelSource }
+    const source = lifetime.source
+    const originalLoad = source.load.bind(source)
+    const previous = source.readDisplaySnapshot()
+    let publish!: (snapshot: AccountModelSnapshot) => void
+    const published = new Promise<AccountModelSnapshot>(resolve => { publish = resolve })
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const load = vi.spyOn(source, 'load').mockImplementationOnce(async options => {
+      const snapshot = await originalLoad(options)
+      publish(snapshot)
+      await gate
+      return snapshot
+    })
+    const discovery = service.discover({ force: true })
+    try {
+      const replacement = await published
+      expect(replacement).not.toBe(previous)
+      expect(source.readDisplaySnapshot()).toBe(replacement)
+      finish!(new Response('synthetic old rejection', { status: 401 }))
+      expect((await old).assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+      expect(source.readDisplaySnapshot()).toBe(replacement)
+      release()
+      expect((await discovery).available).toBe(true)
+      expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+      expect(renewals).toBe(0)
+      expect(harness.modify).not.toHaveBeenCalled()
+    } finally {
+      release()
+      await discovery
+      load.mockRestore()
+    }
   })
 
   it.each(['request', 'catalog'] as const)('refreshes the shared grant from a cold %s without aborting its own discovery', async entry => {

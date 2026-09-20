@@ -559,7 +559,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
         // A late response from before sign-in, refresh or disposal cannot retire
         // a newer credential. This synchronous fence precedes every state change.
         if (lease === undefined || !lifetime.isCurrent(lease.revision)
-          || provenSnapshot !== lease.snapshot || snapshotProof !== lease.proof) return
+          || source.readDisplaySnapshot() !== lease.snapshot || provenSnapshot !== lease.snapshot || snapshotProof !== lease.proof) return
         rejectedAuth = lease.proof
         lifetime.change()
         provenSnapshot = undefined; snapshotProof = undefined; lastValidatedProof = undefined
