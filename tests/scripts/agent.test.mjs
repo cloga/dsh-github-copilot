@@ -156,5 +156,8 @@ test('CLI unknown input returns one JSON error with exit 2', () => {
 test('agent contract references actual files and verification gates', async () => {
   const result = await verifyAgentContract()
   assert.equal(result.ok, true)
-  assert.equal(result.taskCount, 7)
+  assert.equal(result.taskCount, 8)
+  const usage = await planTask('usage')
+  assert.ok(usage.read.includes('src/copilot-usage-host.ts'))
+  assert.ok(usage.tests.includes('tests/scripts/copilot-usage-gateway.test.mjs'))
 })

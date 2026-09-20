@@ -81,11 +81,26 @@ const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)
 const authorizationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilot')
 const roleDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDualModel')
 const catalogDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSearchRouting')
+const usageDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 12 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'migrationStatus', 'reconcile', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 14 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'migrationStatus', 'reconcile', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
-  || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])) {
-  throw new Error('built Remote entry must retain eight authorization/migration controls, three model-role methods and one independent search catalog')
+  || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
+  || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])) {
+  throw new Error('built Remote entry must retain eight authorization/migration controls, three model-role methods, one search catalog and two quota methods')
+}
+if (typeof clientExports.CopilotUsageCard !== 'function') throw new Error('built Client must export the account usage card')
+for (const descriptor of usageDescriptors) {
+  if (descriptor.id !== `dsh-github-copilot:githubCopilotUsage.${descriptor.method}`
+    || descriptor.service !== 'githubCopilotUsage' || descriptor.invocation.kind !== 'direct'
+    || descriptor.parameters.length !== 0 || descriptor.result.mode !== 'strict'
+    || descriptor.result.typeSymbol !== 'dsh-github-copilot#CopilotUsageView') throw new Error('quota Remote identity or codec differs')
+  const view = { state: 'ready', billing: 'credits', budget: 'pooled', used: 10, observedAt: 1 }
+  descriptor.result.schema.parse(view)
+  if (descriptor.result.schema.safeParse({ ...view, credentials: 'private' }).success
+    || descriptor.result.schema.safeParse({ ...view, remaining: 20 }).success) {
+    throw new Error('quota Remote accepts private fields or fabricated pooled balances')
+  }
 }
 const catalog = catalogDescriptors[0]
 if (catalog.id !== 'dsh-github-copilot:githubCopilotSearchRouting.providers'

@@ -336,7 +336,7 @@ assert(
 assert(Array.isArray(manifest.capabilities) && manifest.capabilities.length > 0, 'capability inventory is missing')
 const capabilityIds = new Set(manifest.capabilities.map(capability => capability.id))
 assert(capabilityIds.size === manifest.capabilities.length, 'capability IDs must be unique')
-for (const required of ['account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
+for (const required of ['account-quota-composer-usage', 'account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
   'public-adapter-account-model-route', 'managed-request-budget-and-compaction-policy', 'managed-model-generation-and-lifetime', 'managed-http-auth-rejection-recovery', 'account-discovery-native-oauth',
   'canonical-owner-preservation', 'single-managed-route-native-oauth', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
   'read-only-status-and-explicit-discovery', 'shared-copilot-credential-refresh', 'compact-account-row-and-auth-disclosure']) {

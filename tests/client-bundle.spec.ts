@@ -200,7 +200,8 @@ describe('tsdown client artifact', () => {
         },
       },
       inject(dependencies: string[], setup: (ctx: unknown) => (() => void)) {
-        const cleanup = dependencies.includes('uiConversation') ? () => {} : setup(ctx)
+        const cleanup = dependencies.some(name => name === 'uiConversation' || name === 'remote.githubCopilotUsage')
+          ? () => {} : setup(ctx)
         return Object.assign(Promise.resolve(), { dispose: async () => { cleanup() } })
       },
     }
@@ -378,7 +379,7 @@ describe('tsdown client artifact', () => {
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut', 'migrationStatus',
-      'view', 'save', 'create', 'providers',
+      'view', 'save', 'create', 'providers', 'get', 'refresh',
     ])
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
@@ -429,6 +430,21 @@ describe('tsdown client artifact', () => {
     rpcCall.mockResolvedValueOnce({ ok: true, value: migration })
     await expect(ctx.remote.githubCopilot.migrationStatus()).resolves.toEqual({ ok: true, value: migration })
     expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilot/migrationStatus', { args: {} }, expect.any(AbortSignal))
+
+    const usage = { state: 'ready', billing: 'credits', budget: 'individual',
+      used: 3600, remaining: 16400, limit: 20000, percentUsed: 18, observedAt: 1 }
+    const usageDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
+    expect(usageDescriptors.map(descriptor => descriptor.method)).toEqual(['get', 'refresh'])
+    for (const descriptor of usageDescriptors) {
+      if (descriptor.result.mode !== 'strict') throw new Error('expected independent strict usage codec')
+      const codec = descriptor.result
+      expect(descriptor.parameters).toEqual([])
+      expect(codec.schema.parse(usage)).toEqual(usage)
+      expect(() => codec.schema.parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
+    }
+    rpcCall.mockResolvedValueOnce({ ok: true, value: usage })
+    await expect(ctx.remote.githubCopilotUsage.get()).resolves.toEqual({ ok: true, value: usage })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotUsage/get', { args: {} }, expect.any(AbortSignal))
 
     const statusDescriptor = contributions[0]!.descriptors.find(
       descriptor => descriptor.method === 'status',

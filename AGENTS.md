@@ -31,7 +31,7 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 `dsh-github-copilot` is a companion targeting official DSH `0.1.6-alpha.2`, with retained baselines for DSH `0.1.6-alpha.1`, DSH `0.1.5-rc.2`, DSH `0.1.5-rc.1`, DSH `0.1.5-alpha.2`, DSH `0.1.5-alpha.1`, DSH `0.1.3-alpha.1`, DSH `0.1.2-rc.1`, and the controlled DSH Desktop `0.1.1-rc.2` Core baseline. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
 
-This repository owns ten narrow surfaces:
+This repository owns eleven narrow surfaces:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution with one shared account-state owner and Client-safe Remote descriptors; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
@@ -43,6 +43,7 @@ This repository owns ten narrow surfaces:
 8. Optional, provider-scoped Chat presentation for completed empty reasoning disclosures; durable content and encrypted replay metadata remain Core-owned.
 9. Opt-in model-role settings and dedicated new planner/executor sessions, using public Agent/Session/subagent APIs without changing existing sessions, global defaults or native Subagent model-selection settings.
 10. Managed-route estimated input/output admission, optional exact-request pressure signalling through official compaction recovery, and supported low summary effort only when no effort is already resolved. See [compaction budgets](./docs/copilot-compaction.md). Preserve truthful capacities, requested output caps, native errors/replay and transaction ownership; no hidden history trimming, chunking, new retry loop, competing compaction service or automatic model switch. Preventive guards do not claim recovery of an already oversized manual summary.
+11. Optional account quota reads and a session-scoped composer usage control through public credentials, strict Remotes and additive slots. Keep account billing-cycle credits separate from context tokens and session cost. Missing, pooled, legacy and stale data must retain their real semantics; never infer credits from token estimates or account deltas. See [quota boundaries](./docs/copilot-usage.md).
 
 ## Dedicated model-role boundary (#127)
 
@@ -59,6 +60,7 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/web-search-routing-config.ts`, `src/web-search-routing-card.ts`: plugin-owned cross-provider live routing settings and the Models-page control surface.
 - `src/reasoning-presentation.ts`: guarded native Chat delegation and historical Copilot provenance; filters temporary view props only, never messages, signatures, replay indexes or usage.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
+- `src/copilot-usage-host.ts`, `src/copilot-usage-remote.ts`, `src/copilot-usage-card.ts`, `src/copilot-usage-ui.ts`: bounded Host quota snapshots, an independent strict namespace and reversible composer presentation. No real account fetches in tests, private Client store/DOM injection, new credential owner or general model wire.
 - `src/current-provider.ts`: selected DSH route plus installed pi-ai catalog facts.
 - `src/temporary-models.ts`: exact, account-gated corrections with semantic protocol/capability retirement.
 - `src/model-protocol.ts`: explicit Core capability detection and conservative legacy fallback.
