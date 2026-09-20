@@ -63,6 +63,31 @@ describe('account discovery native OAuth binding', () => {
     expect(memory.credentials.modify).toHaveBeenCalled()
     expect(urls).toHaveLength(2)
   })
+  it('does not persist a projected expiration when rejected-token renewal fails', async () => {
+    const original = grant()
+    const memory = store(original)
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('synthetic refresh failure') }))
+    await expect(createAccountModelAuth(memory.credentials, () => true).resolveAuth(signal())).rejects.toThrow('COPILOT_ACCOUNT_AUTH_FAILED')
+    expect(memory.current()).toBe(original)
+    expect(memory.current()).toMatchObject({ expires: expect.any(Number), access: 'synthetic-access' })
+    expect(normalizeGitHubCopilotOAuthCredential(original).expires).toBeGreaterThan(Date.now())
+    expect(memory.credentials.modify).toHaveBeenCalledTimes(1)
+  })
+  it('does not expire or refresh a newer same-account token observed under the record lock', async () => {
+    const memory = store()
+    const replacement = grant({ access: 'synthetic-new-sign-in' })
+    memory.credentials.modify = vi.fn(async (_id, mutate) => {
+      memory.replace(replacement)
+      expect(await mutate(replacement)).toBeUndefined()
+      return memory.current()
+    })
+    const fetch = vi.fn(async () => { throw new Error('replacement must not be refreshed') })
+    vi.stubGlobal('fetch', fetch)
+    expect(await createAccountModelAuth(memory.credentials, () => true).resolveAuth(signal())).toMatchObject({ apiKey: 'synthetic-new-sign-in' })
+    expect(memory.current()).toBe(replacement)
+    expect(normalizeGitHubCopilotOAuthCredential(replacement).expires).toBeGreaterThan(Date.now())
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('rejects account replacement during refresh without overwriting the replacement', async () => {
     const memory = store(grant({ expires: 0 }))
     // Emulate the Host serialized mutator observing the newer account before OAuth executes.

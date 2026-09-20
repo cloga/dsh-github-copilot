@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.30"
+    "version": "0.4.0-alpha.31"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -451,6 +451,26 @@
         {"file": "tests/preview-route.spec.ts", "name": "does not let a retry cross to another account after its first attempt"},
         {"file": "tests/preview-route.spec.ts", "name": "refuses a duplicate route through the public registry without taking over the existing adapter"},
         {"file": "tests/preview-route.spec.ts", "name": "withdraws only its own route and refuses an already-prepared call after disposal"}
+      ]
+    },
+    {
+      "id": "managed-http-auth-rejection-recovery",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/preview-provider.ts", "marker": "response.status === 401"},
+        {"file": "src/preview-route.ts", "marker": "COPILOT_PREVIEW_AUTH_RECOVERY_COOLDOWN"},
+        {"file": "src/account-model-auth.ts", "marker": "renewRejectedCredential"},
+        {"file": "src/account-model-auth.ts", "marker": "COPILOT_ACCOUNT_TOKEN_REJECTED"}
+      ],
+      "tests": [
+        {"file": "tests/preview-route.spec.ts", "name": "uses fresh OAuth after sign-out and %s sign-in with the same conversation history"},
+        {"file": "tests/preview-route.spec.ts", "name": "handles actual HTTP %i without replay and renews only a rejected token on the next request"},
+        {"file": "tests/preview-route.spec.ts", "name": "shares rejected-token renewal across concurrent new callers without replaying failed wires"},
+        {"file": "tests/preview-route.spec.ts", "name": "bounds repeated 401 recovery after a %s native renewal"},
+        {"file": "tests/preview-route.spec.ts", "name": "ignores a late HTTP 401 after the current %s changes"},
+        {"file": "tests/preview-route.spec.ts", "name": "ignores an old HTTP 401 after source publication but before the owner adopts the new snapshot"},
+        {"file": "tests/account-model-auth.spec.ts", "name": "does not persist a projected expiration when rejected-token renewal fails"},
+        {"file": "tests/account-model-auth.spec.ts", "name": "does not expire or refresh a newer same-account token observed under the record lock"}
       ]
     },
     {

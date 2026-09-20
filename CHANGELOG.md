@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.31 (prepared)
+
+- Retire the exact current managed-route token proof after an observed model HTTP 401, preserving the native failure without replay, logout or model switching (#152).
+- Let the next independent caller renew a rejected token through native `Models.getAuth()` and the serialized canonical credential store, even if its stored expiry is still in the future. Never persist a projected expiration or replace a newer sign-in.
+- Bound recovery per account using the existing cooldown setting (five minutes by default, one-second floor); reject identical-token renewal and ignore late generations, 403, cancellation and error strings without an observed HTTP response.
+- Cover sign-out/sign-in with retained conversation history, native HTTP transports, concurrent renewal, credential races and cooldown. Synthetic evidence does not prove the original endpoint rejection cause, live OAuth/model acceptance, WebSocket recovery, publication or Desktop activation.
+
 ## 0.4.0-alpha.30 (prepared)
 
 - Route verification links on recognized Desktop v1 hosts through the existing same-window external-navigation handoff instead of popup creation; retain new tabs on web hosts (#150).
