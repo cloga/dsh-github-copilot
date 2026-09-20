@@ -15,7 +15,7 @@ vi.mock('react', async importOriginal => {
 })
 
 const panelCleanups: Array<() => void> = []
-afterEach(() => { for (const cleanup of panelCleanups.splice(0)) cleanup(); vi.resetAllMocks(); vi.useRealTimers() })
+afterEach(() => { for (const cleanup of panelCleanups.splice(0)) cleanup(); vi.resetAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals() })
 import {
   activeAuthorizationNotice,
   authorizationViewFrom,
@@ -226,10 +226,35 @@ describe('GitHub Copilot Models client', () => {
     expect(button?.props.children).toBe('Copy code')
     expect(link?.props).toMatchObject({
       href: 'https://github.com/login/device',
+      target: '_blank',
       children: 'Open GitHub verification page',
     })
     button?.props.onClick()
     expect(onCopy).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    [{ dshDesktop: { protocolVersion: 1 } }, '_self'],
+    [{}, '_blank'],
+    [{ dshDesktop: null }, '_blank'],
+    [{ dshDesktop: { protocolVersion: 2 } }, '_blank'],
+  ] as const)('selects the supported desktop navigation handoff without opening during render: %j', (host, target) => {
+    const open = vi.fn()
+    const assign = vi.fn()
+    vi.stubGlobal('window', { ...host, open, location: { assign } })
+    const tree = GitHubCopilotAuthorizationNotice({
+      message: 'Continue on GitHub.', url: 'https://github.com/login/device',
+      copyState: 'idle', onCopy: vi.fn(),
+    })
+    const elements = descendants(tree)
+    expect(elements.find(element => element.type === 'a')?.props).toMatchObject({
+      href: 'https://github.com/login/device', target, rel: 'noreferrer',
+    })
+    expect(elements.find(element => element.props['data-dsh-github-copilot-verification-url'])?.props).toMatchObject({
+      children: 'https://github.com/login/device', style: expect.objectContaining({ userSelect: 'all' }),
+    })
+    expect(open).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
   })
 
   it('announces successful and failed copy outcomes accessibly', () => {

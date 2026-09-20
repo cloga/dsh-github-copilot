@@ -198,6 +198,17 @@ interface AuthorizationNoticeProps {
   readonly buttonStyle?: CSSProperties
 }
 
+function verificationLinkTarget(): '_self' | '_blank' {
+  if (typeof window !== 'undefined' && 'dshDesktop' in window) {
+    const desktop = window.dshDesktop
+    // Desktop's public v1 preload marker identifies its will-navigate handoff
+    // to the system browser; do not depend on creating a WebView popup.
+    if (typeof desktop === 'object' && desktop !== null
+      && 'protocolVersion' in desktop && desktop.protocolVersion === 1) return '_self'
+  }
+  return '_blank'
+}
+
 /** Pure presentation for the in-flight GitHub device-code handoff. */
 export function GitHubCopilotAuthorizationNotice(props: AuthorizationNoticeProps): ReactElement {
   const feedback = props.copyState === 'copying'
@@ -214,9 +225,15 @@ export function GitHubCopilotAuthorizationNotice(props: AuthorizationNoticeProps
   createElement('div', null, props.message),
   props.url === undefined ? null : createElement('a', {
     href: props.url,
-    target: '_blank',
+    target: verificationLinkTarget(),
     rel: 'noreferrer',
   }, 'Open GitHub verification page'),
+  props.url === undefined ? null : createElement('div', null,
+    'If the browser does not open, copy this address into your browser:',
+    createElement('code', {
+      'data-dsh-github-copilot-verification-url': true,
+      style: { display: 'block', userSelect: 'all', overflowWrap: 'anywhere' },
+    }, props.url)),
   props.code === undefined ? null : createElement('div', null,
     createElement('div', { style: { marginBottom: '0.4rem', fontWeight: 600 } }, 'Your one-time code'),
     createElement('div', { style: codeRowStyle },
@@ -686,32 +703,13 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     routeStatusMessage(view) === undefined ? null : createElement('p', { role: 'status' }, routeStatusMessage(view)),
     view?.route?.state === 'needs-repair' && signedIn ? actionButton('Repair model configuration', account.reconcile, pendingAction) : null,
     signedIn ? actionButton(state.operation === 'signOut' ? 'Signing out…' : 'Sign out', account.signOut, pendingAction || view?.writable === false) : null,
-    view?.writable === false ? createElement('p', { style: { fontSize: '13px' } }, 'Credentials are read-only in this profile.') : null,
-    compatibilityDetails()) : null)
+    view?.writable === false ? createElement('p', { style: { fontSize: '13px' } }, 'Credentials are read-only in this profile.') : null) : null)
 }
 
 /** Standalone footer presentation; registered Models seats use the shared surface coordinator. */
 export function GitHubCopilotPreviewFooter(props: GitHubCopilotPreviewFooterProps): ReactElement {
   return createElement('div', { 'data-dsh-github-copilot-preview-footer': true },
     createElement(GitHubCopilotCompactAccount, { remote: props.remote }))
-}
-
-function compatibilityDetails(): ReactElement {
-  return createElement('details', { 'data-dsh-github-copilot-compatibility': true },
-    createElement('summary', null, 'Compatibility and existing configurations'),
-    createElement('p', null,
-      `GitHub Copilot uses account-discovered models. The internal route ID ${GITHUB_COPILOT_PREVIEW_PROVIDER_ID} is retained for existing sessions and explicit /model selections.`),
-    createElement('p', null,
-      `An existing ${GITHUB_COPILOT_PROVIDER_ID} profile is a legacy configuration, not a second account. It is kept until explicit migration. Sign out disconnects the shared GitHub authorization; it does not remove saved profiles.`),
-    migrationLink())
-}
-
-function migrationLink(): ReactElement {
-  return createElement('a', {
-    href: 'https://github.com/cloga/dsh-github-copilot/blob/main/docs/single-route-migration.md',
-    target: '_blank',
-    rel: 'noreferrer',
-  }, 'Review the single-route migration guide')
 }
 
 type AccountSurfaceKind = 'provider' | 'footer' | 'settings'
