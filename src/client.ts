@@ -16,7 +16,10 @@ import { installReasoningPresentation } from './reasoning-presentation.ts'
 import { WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { DualModelCard } from './dual-model-card.ts'
+export { CopilotUsageCard } from './copilot-usage-card.ts'
 import { registerDualModelUi } from './dual-model-ui.ts'
+import { registerCopilotUsageUi } from './copilot-usage-ui.ts'
+import { externalLinkTarget } from './external-link.ts'
 import {
   GITHUB_COPILOT_PROVIDER_ID,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
@@ -198,17 +201,6 @@ interface AuthorizationNoticeProps {
   readonly buttonStyle?: CSSProperties
 }
 
-function verificationLinkTarget(): '_self' | '_blank' {
-  if (typeof window !== 'undefined' && 'dshDesktop' in window) {
-    const desktop = window.dshDesktop
-    // Desktop's public v1 preload marker identifies its will-navigate handoff
-    // to the system browser; do not depend on creating a WebView popup.
-    if (typeof desktop === 'object' && desktop !== null
-      && 'protocolVersion' in desktop && desktop.protocolVersion === 1) return '_self'
-  }
-  return '_blank'
-}
-
 /** Pure presentation for the in-flight GitHub device-code handoff. */
 export function GitHubCopilotAuthorizationNotice(props: AuthorizationNoticeProps): ReactElement {
   const feedback = props.copyState === 'copying'
@@ -225,7 +217,7 @@ export function GitHubCopilotAuthorizationNotice(props: AuthorizationNoticeProps
   createElement('div', null, props.message),
   props.url === undefined ? null : createElement('a', {
     href: props.url,
-    target: verificationLinkTarget(),
+    target: externalLinkTarget(),
     rel: 'noreferrer',
   }, 'Open GitHub verification page'),
   props.url === undefined ? null : createElement('div', null,
@@ -989,6 +981,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }
   const searchUi = ctx.inject(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
   const dualModelUi = ctx.inject(['remote.githubCopilotDualModel', 'slots'], registerDualModelUi)
+  const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
   // The optional Chat contribution must not hold authorization activation on older Cores.
   const presentation = ctx.inject(['uiConversation', 'slots'], scope => installReasoningPresentation({
     slots: scope.slots,
@@ -996,6 +989,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
   }))
   return async () => {
+    await usageUi.dispose()
     await presentation.dispose()
     await dualModelUi.dispose()
     await searchUi.dispose()

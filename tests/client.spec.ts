@@ -1101,6 +1101,9 @@ describe('GitHub Copilot Models client', () => {
       if (services.includes('remote.githubCopilotDualModel')) {
         return Object.assign(new Promise<void>(() => {}), { dispose: disposeDualModel })
       }
+      if (services.includes('remote.githubCopilotUsage')) {
+        return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
+      }
       const cleanup = callback(ctx)
       if (services.includes('remote.settings')) {
         return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })

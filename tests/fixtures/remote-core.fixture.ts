@@ -19,12 +19,14 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     defaultSelection: null, sessions: [], routes: { nativeConfigured: null, nativeRegistered: null, managedRegistered: null },
   }
   const catalog = { supported: true, providers: [{ id: 'synthetic-registered-search' }] }
+  const usage = { state: 'ready', billing: 'credits', budget: 'individual',
+    used: 3600, remaining: 16400, limit: 20000, percentUsed: 18, observedAt: 1 }
   const roleView = { supported: true, writable: true, revision: 2,
     configuration: { enabled: true, plannerModel: 'planner', executorModel: 'executor' },
     models: [{ id: 'planner', name: 'Planner' }, { id: 'executor', name: 'Executor' }], workspaces: [{ id: 'workspace', name: 'Workspace' }] }
   const created = { sessionId: 'synthetic-role-root' }
   const rpc = vi.fn(async (_path: string, method: string) => ({ ok: true,
-    value: method.endsWith('/migrationStatus') ? migration : method === 'githubCopilotSearchRouting/providers' ? catalog
+    value: method.startsWith('githubCopilotUsage/') ? usage : method.endsWith('/migrationStatus') ? migration : method === 'githubCopilotSearchRouting/providers' ? catalog
       : method === 'githubCopilotDualModel/create' ? created : method.startsWith('githubCopilotDualModel/') ? roleView : view }))
   const stop = vi.fn()
   try {
@@ -37,7 +39,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     expect(registered).toEqual([remote])
     expect(remote.descriptors.map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut', 'migrationStatus',
-      'view', 'save', 'create', 'providers',
+      'view', 'save', 'create', 'providers', 'get', 'refresh',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.result.mode).toBe('strict')
@@ -63,6 +65,13 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     await expect(ctx.remote.githubCopilotSearchRouting.providers()).resolves.toEqual({ ok: true, value: catalog })
     expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilotSearchRouting/providers', { args: {} }, expect.any(AbortSignal))
     expect(rpc).toHaveBeenCalledTimes(9)
+    for (const method of ['get', 'refresh'] as const) {
+      await expect(ctx.remote.githubCopilotUsage[method]()).resolves.toEqual({ ok: true, value: usage })
+      expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilotUsage/${method}`, { args: {} }, expect.any(AbortSignal))
+    }
+    const usageDescriptor = remote.descriptors.find(item => item.namespace === 'githubCopilotUsage')!
+    expect(usageDescriptor.result.schema.parse(usage)).toEqual(usage)
+    expect(() => usageDescriptor.result.schema.parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
     await expect(ctx.remote.githubCopilotDualModel.view()).resolves.toEqual({ ok: true, value: roleView })
     await expect(ctx.remote.githubCopilotDualModel.save({ configuration: roleView.configuration, expectedRevision: 2 }))
       .resolves.toEqual({ ok: true, value: roleView })
@@ -88,6 +97,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     expect(ctx.get('remote.githubCopilot')).toBeUndefined()
     expect(ctx.get('remote.githubCopilotDualModel')).toBeUndefined()
     expect(ctx.get('remote.githubCopilotSearchRouting')).toBeUndefined()
+    expect(ctx.get('remote.githubCopilotUsage')).toBeUndefined()
   } finally { await ctx.fiber.dispose() }
   expect(stop).toHaveBeenCalledOnce()
 })

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.31 (prepared)
+
+- Add an optional, Copilot-session-scoped composer usage control without replacing the native Context meter or changing other providers (#153).
+- Read bounded account quota snapshots through the canonical Host-owned OAuth grant and a separate strict usage Remote namespace; preserve the existing authorization contracts.
+- Distinguish AI credits, legacy premium requests, individual budgets, shared pools, unavailable data and last-known snapshots. Never invent remaining credits from missing metadata, token estimates or another session.
+- Keep per-session credits explicitly unavailable until a supported public native accounting seam exposes complete provider-reported usage; no second model transport, Core patch, live-profile installation or restart is included.
+
 ## 0.4.0-alpha.30 (prepared)
 
 - Route verification links on recognized Desktop v1 hosts through the existing same-window external-navigation handoff instead of popup creation; retain new tabs on web hosts (#150).

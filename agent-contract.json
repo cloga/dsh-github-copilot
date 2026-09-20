@@ -30,6 +30,12 @@
     "attribution": "Assisted-by identifies the actual assisting tool; never infer a co-author from a model provider"
   },
   "tasks": {
+    "usage": {
+      "purpose": "Bounded account quota snapshots and an optional Copilot-only composer usage control",
+      "read": ["src/copilot-usage-types.ts", "src/copilot-usage-normalize.ts", "src/copilot-usage-host.ts", "src/copilot-usage-remote.ts", "src/copilot-usage-card.ts", "src/copilot-usage-ui.ts", "docs/copilot-usage.md"],
+      "tests": ["tests/copilot-usage-normalize.spec.ts", "tests/copilot-usage-host.spec.ts", "tests/copilot-usage-remote.spec.ts", "tests/copilot-usage-card.spec.ts", "tests/copilot-usage-ui.spec.ts", "tests/scripts/copilot-usage-gateway.test.mjs", "tests/client-bundle.spec.ts", "tests/fixtures/remote-core.fixture.ts"],
+      "risk": "Account billing-cycle usage is not context occupancy or session credits. Use canonical Host-only OAuth through public credentials and a separate strict namespace. No secondary credential owner, guessed enterprise endpoint, redirected credential, provider raw error, general model wire or Core patch. Validate amounts and units; pooled credits_used has no individual denominator, legacy requests are not AI credits, percentage-only data does not prove precise remaining units. Missing data is unavailable, not zero or unlimited. Bound network/cache/failure behavior and guard account continuity across asynchronous work, cached reads, invalidation and disposal. Add only a session-scoped public composer dock contribution; no private DOM/store injection or global-default inference for existing Sessions. Per-session credit accounting stays unavailable until complete attributable receipts are exposed by supported unchanged public APIs. Synthetic endpoint/UI evidence does not establish real quota permissions, billing latency or live Desktop activation."
+    },
     "authorization": {
       "purpose": "OAuth lifecycle, grant normalization and read-only live migration readiness",
       "read": ["src/authorization-controller.ts", "src/copilot-auth.ts", "src/copilot-grant.ts", "src/migration-status.ts", "src/remote.ts"],

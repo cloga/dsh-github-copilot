@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.30"
+    "version": "0.4.0-alpha.31"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -220,6 +220,24 @@
     ]
   },
   "capabilities": [
+    {
+      "id": "account-quota-composer-usage",
+      "required": true,
+      "evidenceScope": "synthetic-quota-and-public-remote-ui-contracts-not-live-account-access",
+      "sourceMarkers": [
+        {"file": "src/index.ts", "marker": "ctx.plugin(GitHubCopilotUsageController)"},
+        {"file": "src/client.ts", "marker": "registerCopilotUsageUi"},
+        {"file": "src/remote.ts", "marker": "...copilotUsageRemote.descriptors"},
+        {"file": "docs/copilot-usage.md", "marker": "Percentage-only data must not create falsely precise absolute amounts"}
+      ],
+      "tests": [
+        {"file": "tests/copilot-usage-normalize.spec.ts", "name": "never invents precise amounts from a rounded percentage"},
+        {"file": "tests/copilot-usage-ui.spec.ts", "name": "uses real Cordis Remote tracing and reversible public SlotRegistry registration"},
+        {"file": "tests/scripts/copilot-usage-gateway.test.mjs", "name": "quota Remote reaches the actual Host gateway without startup or signed-out network requests"},
+        {"file": "tests/client-bundle.spec.ts", "name": "mounts strict Host result codecs through the published rc.1 client carrier"},
+        {"file": "tests/fixtures/remote-core.fixture.ts", "name": "mounts authorization, role and search-catalog Remotes on the exact target Client gateway"}
+      ]
+    },
     {
       "id": "desktop-shared-package-ownership",
       "required": true,
@@ -559,7 +577,7 @@
         {"file": "src/client.ts", "marker": "settings.models.provider-card"},
         {"file": "src/client.ts", "marker": "copyAuthorizationCode"},
         {"file": "src/client.ts", "marker": "data-dsh-github-copilot-device-code"},
-        {"file": "src/client.ts", "marker": "verificationLinkTarget"},
+        {"file": "src/external-link.ts", "marker": "externalLinkTarget"},
         {"file": "src/client.ts", "marker": "data-dsh-github-copilot-verification-url"},
         {"file": "src/authorization-controller.ts", "marker": "GitHubCopilotAuthorizationController"}
       ],
