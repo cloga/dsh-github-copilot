@@ -12,6 +12,8 @@
 <script>window.__ModuleLoader__={load:function(entry){window.CopilotUI=entry.factory(function(id){if(id==='react')return window.React;throw new Error('Unexpected client dependency: '+id)})}};</script>
 <script src="/client.js"></script>
 <script>
+// Built-export regression only: the all-slot lifecycle is covered by Cordis tests.
+if ('DualModelCard' in window.CopilotUI) throw new Error('Built Client still exports the retired model-role card');
 const q=new URLSearchParams(location.search);document.body.dataset.theme=q.get('theme')||'dark';
 const uaScheme=q.get('uaScheme');if(uaScheme==='light'||uaScheme==='dark')document.documentElement.style.colorScheme=uaScheme;
 const setTheme=theme=>{if(theme==='light'||theme==='dark')document.body.dataset.theme=theme;};

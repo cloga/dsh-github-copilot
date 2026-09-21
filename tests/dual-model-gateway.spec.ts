@@ -4,11 +4,8 @@ import { resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import * as Cordis from '@deepseek-ai/cordis'
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
-import { act, createElement } from 'react'
-import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import contribution from '../src/dual-model-remote.ts'
-import { DualModelCard } from '../src/dual-model-card.ts'
 import type { DualModelView } from '../src/dual-model-types.ts'
 
 // Node resolution deliberately bypasses the unit-suite's Typert stub alias.
@@ -110,7 +107,7 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
     expect(resultSchema('view').parse(result.ok ? result.value : undefined)).toEqual(validView)
   })
 
-  it('encodes save under input, preserving both model IDs and the exact CAS revision', async () => {
+  it('retains legacy save encoding under input with exact model IDs and revision', async () => {
     const f = await fixture()
     const saved = { ...validView, revision: 8 }
     f.rpcCall.mockResolvedValueOnce({ ok: true, value: saved })
@@ -122,6 +119,19 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
     expect(payload.args.input).not.toBe(saveInput)
     expect(payload.args.input.configuration).not.toBe(configuration)
     expect(payload.args.input.configuration).toEqual(configuration)
+  })
+
+  it('carries retirement view and refusals through the unchanged strict contracts', async () => {
+    const f = await fixture()
+    const retired = { ...validView, supported: false, writable: false, diagnostic: 'DUAL_MODEL_RETIRED', models: [], workspaces: [] }
+    f.rpcCall.mockResolvedValueOnce({ ok: true, value: retired })
+    expect(await f.remote.view()).toEqual({ ok: true, value: retired })
+    expect(resultSchema('view').parse(retired)).toEqual(retired)
+    const reason = 'DUAL_MODEL_RETIRED'
+    f.rpcCall.mockResolvedValueOnce({ ok: false, error: new RemoteError('copilot/dual-model', reason, { reason }) })
+    expect(await f.remote.save(saveInput)).toMatchObject({ ok: false, error: { code: 'copilot/dual-model', details: { reason } } })
+    f.rpcCall.mockResolvedValueOnce({ ok: false, error: new RemoteError('copilot/dual-model', reason, { reason, creation: 'not-created' }) })
+    expect(await f.remote.create(createInput)).toMatchObject({ ok: false, error: { code: 'copilot/dual-model', details: { reason, creation: 'not-created' } } })
   })
 
   it('encodes create with the same UUID, explicit workspace and expected revision on a manual retry', async () => {
@@ -138,7 +148,7 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
     }
   })
 
-  it('allows saving disabled configuration with empty model IDs, and preserves revision zero', async () => {
+  it('retains legacy encoding of disabled configuration and revision zero', async () => {
     const f = await fixture()
     const input = { configuration: { enabled: false, plannerModel: '', executorModel: '' }, expectedRevision: 0 }
     await f.remote.save(input)
@@ -225,7 +235,7 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
       { args: { input: createInput } }, expect.any(AbortSignal))
   })
 
-  it('documents unvalidated rc.1 error details and proves the real card never renders them', async () => {
+  it('documents unvalidated rc.1 error details without claiming Client filtering', async () => {
     const f = await fixture()
     f.rpcCall.mockResolvedValue({ ok: false, error: {
       code: 'copilot/dual-model', message: 'PRIVATE_MESSAGE',
@@ -234,18 +244,10 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
     const result = await f.remote.view()
     if (result.ok) throw new Error('expected a Remote failure')
     // This legacy Client does not filter message/details. Host owners must emit
-    // safe RemoteErrors; the card separately maps stable diagnostics for display.
+    // safe RemoteErrors; keeping the descriptor does not sanitize unsafe owners.
     expect(result.error.message).toBe('PRIVATE_MESSAGE')
     expect(result.error.details).toEqual({ reason: 'DUAL_MODEL_UNSUPPORTED', secret: 'PRIVATE_DETAILS' })
     expect(result.error).not.toHaveProperty('privateBody')
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-    const container = document.createElement('div')
-    document.body.append(container)
-    const root = createRoot(container)
-    cleanups.push(async () => { await act(async () => { root.unmount() }) })
-    await act(async () => { root.render(createElement(DualModelCard, { remote: f.remote, locale: 'en-US' })) })
-    expect(container.textContent).toContain('Dual-model sessions are unavailable')
-    expect(container.textContent).not.toContain('PRIVATE_')
   })
 
   it.each(['view', 'save'] as const)('rejects unknown and malformed %s results in the registered Host codec', async method => {

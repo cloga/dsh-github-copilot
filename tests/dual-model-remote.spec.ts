@@ -31,6 +31,11 @@ describe('dual-model Remote boundary', () => {
     }
     expect(DualModelCreateSchema.safeParse({ ...request, requestId: '../bad' }).success).toBe(false)
   })
+  it('accepts retirement with retained settings without weakening the strict view codec', () => {
+    const view = { supported: false, writable: false, revision: 7, diagnostic: 'DUAL_MODEL_RETIRED', configuration, models: [], workspaces: [] }
+    expect(DualModelViewSchema.parse(view)).toEqual(view)
+    expect(DualModelViewSchema.safeParse({ ...view, migrate: true }).success).toBe(false)
+  })
   it('accepts unavailable and disabled states, but never leaks credentials or arbitrary diagnostics', () => {
     const view = { supported: false, writable: false, revision: null,
       diagnostic: 'DUAL_MODEL_UNSUPPORTED', configuration: { enabled: false, plannerModel: '', executorModel: '' }, models: [], workspaces: [] }

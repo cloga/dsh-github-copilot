@@ -21,13 +21,14 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
   const catalog = { supported: true, providers: [{ id: 'synthetic-registered-search' }] }
   const usage = { state: 'ready', billing: 'credits', budget: 'individual',
     used: 3600, remaining: 16400, limit: 20000, percentUsed: 18, observedAt: 1 }
-  const roleView = { supported: true, writable: true, revision: 2,
-    configuration: { enabled: true, plannerModel: 'planner', executorModel: 'executor' },
-    models: [{ id: 'planner', name: 'Planner' }, { id: 'executor', name: 'Executor' }], workspaces: [{ id: 'workspace', name: 'Workspace' }] }
-  const created = { sessionId: 'synthetic-role-root' }
-  const rpc = vi.fn(async (_path: string, method: string) => ({ ok: true,
-    value: method.startsWith('githubCopilotUsage/') ? usage : method.endsWith('/migrationStatus') ? migration : method === 'githubCopilotSearchRouting/providers' ? catalog
-      : method === 'githubCopilotDualModel/create' ? created : method.startsWith('githubCopilotDualModel/') ? roleView : view }))
+  const roleView = { supported: false, writable: false, revision: 2, diagnostic: 'DUAL_MODEL_RETIRED',
+    configuration: { enabled: true, plannerModel: 'planner', executorModel: 'executor' }, models: [], workspaces: [] }
+  const recovered = { sessionId: 'synthetic-existing-role-root' }
+  const retiredError = { code: 'copilot/dual-model', message: 'DUAL_MODEL_RETIRED', details: { reason: 'DUAL_MODEL_RETIRED' } }
+  const rpc = vi.fn(async (_path: string, method: string) => method === 'githubCopilotDualModel/save'
+    ? { ok: false, error: retiredError } : { ok: true,
+      value: method.startsWith('githubCopilotUsage/') ? usage : method.endsWith('/migrationStatus') ? migration : method === 'githubCopilotSearchRouting/providers' ? catalog
+        : method === 'githubCopilotDualModel/create' ? recovered : method.startsWith('githubCopilotDualModel/') ? roleView : view })
   const stop = vi.fn()
   try {
     ctx.provide('typert', { remotes: { register(value: unknown) { registered.push(value); return async () => {} } },
@@ -74,9 +75,9 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     expect(() => usageDescriptor.result.schema.parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
     await expect(ctx.remote.githubCopilotDualModel.view()).resolves.toEqual({ ok: true, value: roleView })
     await expect(ctx.remote.githubCopilotDualModel.save({ configuration: roleView.configuration, expectedRevision: 2 }))
-      .resolves.toEqual({ ok: true, value: roleView })
+      .resolves.toMatchObject({ ok: false, error: retiredError })
     await expect(ctx.remote.githubCopilotDualModel.create({ requestId: '00000000-0000-4000-8000-000000000001', workspaceId: 'workspace', expectedRevision: 2 }))
-      .resolves.toEqual({ ok: true, value: created })
+      .resolves.toEqual({ ok: true, value: recovered })
     const saveDescriptor = remote.descriptors.find(item => item.namespace === 'githubCopilotDualModel' && item.method === 'save')!
     expect(() => saveDescriptor.parameters[0].codec.create().parse({
       configuration: { ...roleView.configuration, token: 'synthetic-forbidden' }, expectedRevision: 2,

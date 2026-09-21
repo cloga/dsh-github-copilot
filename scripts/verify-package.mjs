@@ -130,7 +130,7 @@ for (const descriptor of authorizationDescriptors) {
     throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must expose its own exact strict result codec`)
   }
 }
-if (typeof clientExports.DualModelCard !== 'function') throw new Error('built Client must export the model-role settings card')
+if ('DualModelCard' in clientExports) throw new Error('built Client must not export the retired model-role settings card')
 const roleView = { supported: false, writable: false, revision: null,
   configuration: { enabled: false, plannerModel: '', executorModel: '' }, models: [], workspaces: [] }
 for (const descriptor of roleDescriptors) {

@@ -1,4 +1,6 @@
-# Copilot model roles — direction contract
+# Copilot model roles — retired historical direction
+
+Superseded by user-requested retirement in #158 (alpha.34 candidate). Do not implement or restore this card, planner/executor selectors, or dedicated-session action. Ordinary Sessions and Core-owned subagents are the intended experience; the plugin retains only existing-history compatibility. The original direction below is historical context, not current authorization.
 
 Mode: Operate. Local extension of the established Settings → Models account surface. The user approved the two-model card and dedicated new-session action; no new visual world or concept tournament applies.
 
