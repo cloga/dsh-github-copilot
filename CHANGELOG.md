@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.35 (prepared)
+
+- Match the account-usage control to native secondary statistics typography, line height and pill spacing (#160).
+- Keep its label on one line within the host's available width, with ellipsis and a full-label tooltip for constrained layouts; independent details, focus and account-wide billing semantics remain unchanged.
+- Remove the permanently unavailable Session credits section. Hide missing, malformed, zero or elapsed reset metadata instead of displaying the Unix epoch; prefer a valid snapshot reset, then a valid account-level date, without inventing dates or discarding otherwise valid quota amounts.
+- Continue using the existing additive composer dock. Shared-row placement and responsive wrapping belong to the host layout; no private DOM relocation, native statistics replacement or new Core API dependency is introduced by this plugin.
+- Preserve alpha.34's Model roles retirement and compatibility-only historical Session behavior. This presentation update does not install, activate or restart a profile.
+
 ## 0.4.0-alpha.34 (prepared, PR-only)
 
 - Retire the Model roles / planner-executor settings, legacy Settings fallback, and dedicated-session creation UI (#158); ordinary Sessions and Core-owned subagents remain the intended workflow.

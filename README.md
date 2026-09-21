@@ -65,13 +65,15 @@ Alpha.33 corrects alpha.32's missing selector argument to the public Session hoo
 
 For a Session using `github-copilot` or `github-copilot-preview`, an optional **Credits** control shows the signed-in account's reported billing-cycle usage and remaining allocation. It uses the public composer dock, leaves the native Context meter unchanged, and disappears for other providers. Open it for budget, reset time, freshness and refresh details. Unsupported Client slots disable only this optional control.
 
-Numbers are not token estimates: legacy accounts show **Premium requests**, a shared organization pool may provide used credits without any individual remaining balance, and absent data is **Unavailable**, never zero or unlimited. Failed refreshes may retain explicitly **last-known** same-account values; authentication/account invalidation removes them. **This session** remains unavailable because the supported native adapter does not expose complete provider-reported credit accounting through the public plugin contract. It is not inferred from account deltas.
+Alpha.35 matches native secondary statistics typography and pill spacing. A host with a shared wrapping dock can place Credits directly after Cache hit and wrap entries when space runs out; older hosts retain their own layout. A reading wider than its allocated width is ellipsized, with its complete text retained for accessibility, the tooltip and independent details. The plugin does not move native DOM or replace statistics; [responsive layout ownership and evidence limits](./docs/copilot-usage.md#responsive-statistics-presentation-alpha35) remain explicit.
+
+Numbers are not token estimates: legacy accounts show **Premium requests**, a shared organization pool may provide used credits without any individual remaining balance, and absent data is **Unavailable**, never zero or unlimited. Failed refreshes may retain explicitly **last-known** same-account values; authentication/account invalidation removes them. Per-session credits are not displayed because the supported native adapter does not expose complete provider-reported credit accounting through the public plugin contract. They are not inferred from account deltas. Reset time is shown only when a valid supplier-reported next-reset date is later than the snapshot observation; missing, invalid, zero or elapsed reset metadata is omitted without discarding otherwise valid account amounts.
 
 The Host reads GitHub's internal quota endpoint using the existing canonical OAuth grant, with bounded requests and cache lifetimes; no new sign-in, credential store, model transport, settings write or model switch is added. This internal endpoint can change or deny access; enterprise custom endpoints are not guessed. The public enterprise/organization metrics reports are not used as a live personal balance service. See [data semantics, lifecycle and evidence limits](./docs/copilot-usage.md). Synthetic tests do not establish real account access, billing freshness or installed Desktop activation.
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.34`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.35`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -84,7 +86,7 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For approved online installation, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.34/dsh-github-copilot-0.4.0-alpha.34.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.35/dsh-github-copilot-0.4.0-alpha.35.tgz
 ```
 
 If registry access is blocked or unavailable, do not retry it through another network. Desktop-managed profiles may instead use the [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance), with an approved, checksum-verified local Release and existing dependency cache (`--offline --ignore-scripts`). All preflight and approval requirements still apply.
@@ -149,7 +151,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.34`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. The native Desktop package manager is preferred when permitted registry access is available; after npm publication is verified it accepts `dsh-github-copilot@0.4.0-alpha.35`, not a URL or file. Desktop-managed profiles also support explicitly approved [controlled offline CLI maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance) with a verified local Release and `--offline --ignore-scripts`. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. Offline installation is not proof that npm networking/publication was repaired. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -166,7 +168,7 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 ## Retired planner / executor experience
 
-The `0.4.0-alpha.34` candidate removes **Model roles**, its legacy **Copilot · Model roles** fallback, the planning/execution selectors and the dedicated-session creation button (#158). Use ordinary Sessions and Core-owned model selection/subagents; this plugin adds no replacement role UI or automatic model mapping.
+Since `0.4.0-alpha.34`, **Model roles**, its legacy **Copilot · Model roles** fallback, the planning/execution selectors and the dedicated-session creation button are retired (#158). Use ordinary Sessions and Core-owned model selection/subagents; this plugin adds no replacement role UI or automatic model mapping.
 
 Parent-model → subagent-model rules and their native settings UI are separate, still-pending work in [Core PR #95](https://github.com/cloga/deepseek-harness/pull/95). Removing this plugin UI does not make those rules available on older or currently installed Core versions, and does not depend on that PR shipping.
 
@@ -410,8 +412,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.34/dsh-github-copilot-0.4.0-alpha.34.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.34/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.35/dsh-github-copilot-0.4.0-alpha.35.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.35/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -419,7 +421,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.34.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.35.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

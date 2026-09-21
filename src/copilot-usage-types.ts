@@ -7,7 +7,7 @@ export interface CopilotUsageView {
   readonly remaining?: number
   readonly limit?: number
   readonly percentUsed?: number
-  /** Unix epoch milliseconds, only when explicitly reported by the supplier. */
+  /** Supplier-reported next reset in Unix epoch milliseconds, later than observedAt. */
   readonly resetAt?: number
   readonly observedAt?: number
   readonly diagnostic?: string

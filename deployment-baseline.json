@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.34"
+    "version": "0.4.0-alpha.35"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -233,6 +233,10 @@
       ],
       "tests": [
         {"file": "tests/copilot-usage-normalize.spec.ts", "name": "never invents precise amounts from a rounded percentage"},
+        {"file": "tests/copilot-usage-normalize.spec.ts", "name": "falls back from an absent snapshot reset and invalid UTC metadata to a valid account date"},
+        {"file": "tests/copilot-usage-normalize.spec.ts", "name": "does not let invalid optional account metadata suppress a valid snapshot reset"},
+        {"file": "tests/copilot-usage-card.spec.ts", "name": "uses native secondary type tokens and a bounded single-line trigger"},
+        {"file": "tests/copilot-usage-card.spec.ts", "name": "shows supplied account amounts without an unsupported Session credits section"},
         {"file": "tests/copilot-usage-ui.spec.ts", "name": "uses real Cordis Remote tracing and reversible public SlotRegistry registration"},
         {"file": "tests/copilot-usage-ui.spec.ts", "name": "renders the usage trigger through a required Session selector for %s"},
         {"file": "tests/fixtures/copilot-usage-selector-core.fixture.ts", "name": "renders and reacts to the owning Session on %s"},
