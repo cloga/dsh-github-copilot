@@ -235,7 +235,7 @@ function budgetFailure(result: RequestBudgetFailure): LlmError {
 /** Account-bound admission and purpose defaults; Core owns model conversion and wire/replay. */
 class PreviewAdapter extends PiAiAdapter {
   constructor(private readonly lifetime: PreviewLifetime,
-    private readonly optionsFor: (lease?: Lease, inspectRequest?: AccountProviderGuard['inspectRequest']) => PiAiAdapterOptions,
+    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure'>) => PiAiAdapterOptions,
     private readonly discoverSnapshot: (options?: AccountModelLoadOptions) => Promise<AccountModelSnapshot>,
     private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
     private readonly requestBudgetSettings: () => Partial<RequestBudgetPolicy>,
@@ -312,13 +312,13 @@ class PreviewAdapter extends PiAiAdapter {
       }
       // SDK lazyStream retains only error text. Keep an owned failure in this exact
       // dispatch closure, never on the shared lease, to restore its structured code.
-      let admissionFailure: LlmError | undefined
+      let requestFailure: LlmError | undefined
       const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
         if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
         const calculated = calculateRequestBudget(lease.descriptor, nativeOptions?.maxTokens, policy)
         if (!calculated.ok) {
-          admissionFailure = budgetFailure(calculated)
-          throw admissionFailure
+          requestFailure = budgetFailure(calculated)
+          throw requestFailure
         }
         // A previous usage anchor can omit changed system/tool prefixes. Price the
         // current prefix and every message independently as a second lower bound.
@@ -330,14 +330,20 @@ class PreviewAdapter extends PiAiAdapter {
         const estimate = Math.max(estimateContextTokens(context).tokens, fresh)
         const admitted = assessRequestBudget(estimate, calculated.budget)
         if (!admitted.ok) {
-          admissionFailure = budgetFailure(admitted)
-          throw admissionFailure
+          requestFailure = budgetFailure(admitted)
+          throw requestFailure
         }
       }
       try {
         // Same immutable descriptor/profile generation, but request-local provider
         // callbacks: concurrent compaction and chat cannot share purpose or errors.
-        const native = new PiAiAdapter(owner.optionsFor(lease, inspectRequest))
+        const native = new PiAiAdapter(owner.optionsFor(lease, { inspectRequest,
+          onReplayFailure(error) {
+            // Only this dispatch's verified wire/payload observer can set this;
+            // arbitrary upstream text must never masquerade as a compatibility failure.
+            if (!signal.aborted) requestFailure = new LlmError(error.message, 'INVALID_REQUEST')
+          },
+        }))
         const prepared = await native.prepareCall(options.provider, options.model, signal)
         const suppliedEffort = options.reasoningEffort ?? prepared.model.reasoning?.defaultEffort
         const effort = options.purpose === 'compaction'
@@ -347,20 +353,20 @@ class PreviewAdapter extends PiAiAdapter {
           ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
         }
         for await (const chunk of native.stream(request)) {
-          if (admissionFailure !== undefined) {
+          if (requestFailure !== undefined) {
             if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
-            throw admissionFailure
+            throw requestFailure
           }
           if (chunk.type === 'finish' && chunk.reason.kind === 'error' && chunk.reason.failure.code === 'UNKNOWN_MODEL') {
             await owner.refreshRejected(lease.snapshot, signal)
           }
           yield chunk
         }
-        if (admissionFailure !== undefined) throw admissionFailure
+        if (requestFailure !== undefined) throw requestFailure
       } catch (cause) {
         if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
         if (cause instanceof LlmError && cause.code === 'UNKNOWN_MODEL') await owner.refreshRejected(lease.snapshot, signal)
-        throw admissionFailure ?? cause
+        throw requestFailure ?? cause
       }
     })()
   }
@@ -553,8 +559,8 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     // stream. Never replay a model wire request or retry generic provider errors.
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
-  const optionsFor = (lease?: Lease, inspectRequest?: AccountProviderGuard['inspectRequest']): PiAiAdapterOptions => {
-    const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...inspectRequest === undefined ? {} : { inspectRequest },
+  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure'> = {}): PiAiAdapterOptions => {
+    const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...hooks,
       onUnauthorized() {
         // A late response from before sign-in, refresh or disposal cannot retire
         // a newer credential. This synchronous fence precedes every state change.
