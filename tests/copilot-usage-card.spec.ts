@@ -46,7 +46,50 @@ function deferred<T>() {
 }
 
 describe('Copilot account usage chip', () => {
-  it('shows exact supplied units, account scope and honest session unavailability', async () => {
+  it('uses native secondary type tokens and a bounded single-line trigger', async () => {
+    await mount()
+    const control = trigger()
+    expect(control.style.fontSize).toBe('var(--dsh-content-font-size-secondary, 13px)')
+    expect(control.style.lineHeight).toBe('calc(20px + var(--dsh-content-font-delta-secondary, 0px))')
+    expect(control.style.padding).toBe('1px 8px')
+    expect(control.style.maxWidth).toBe('100%')
+    expect(control.style.whiteSpace).toBe('nowrap')
+    expect(control.style.overflow).toBe('hidden')
+    expect(control.style.textOverflow).toBe('ellipsis')
+    expect(control.title).toBe(control.textContent)
+  })
+
+  it.each(['en-US', 'zh-CN'])('retains the full long reading and exact details in %s', async locale => {
+    const api = remote(view({ used: 772540, remaining: 1227460, limit: 2000000, percentUsed: 38.627 }))
+    await mount({ remote: api, contextKey: 'long-reading', locale })
+    expect(trigger().title).toBe(trigger().textContent)
+    expect(trigger().title.length).toBeGreaterThan(0)
+    await click(trigger())
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(text()).toContain(new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(772540))
+    expect(api.get).toHaveBeenCalledTimes(1)
+    expect(api.refresh).not.toHaveBeenCalled()
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    expect(document.activeElement).toBe(trigger())
+  })
+
+  it('keeps loading and unavailable full-label tooltips in sync without extra reads', async () => {
+    const pending = deferred<ReturnType<typeof ok>>()
+    const api = { get: vi.fn(() => pending.promise), refresh: vi.fn() }
+    await mount({ remote: api, contextKey: 'pending-reading' })
+    expect(trigger().title).toContain('Loading')
+    expect(trigger().title).toBe(trigger().textContent)
+    await act(async () => { pending.resolve(ok({ state: 'unavailable', billing: 'unknown', budget: 'unknown',
+      diagnostic: 'COPILOT_USAGE_SNAPSHOT_MISSING' })) })
+    expect(trigger().title).toContain('Not available')
+    expect(trigger().title).toBe(trigger().textContent)
+    await click(trigger())
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+    expect(api.get).toHaveBeenCalledTimes(1)
+    expect(api.refresh).not.toHaveBeenCalled()
+  })
+
+  it('shows supplied account amounts without an unsupported Session credits section', async () => {
     const api = remote()
     await mount({ remote: api, contextKey: 'a' })
     expect(trigger().textContent).toContain('42.25 used')
@@ -54,11 +97,41 @@ describe('Copilot account usage chip', () => {
     expect(api.get).toHaveBeenCalledTimes(1)
     await click(trigger())
     expect(text()).toContain('Account-wide')
-    expect(text()).toContain('This session')
-    expect(text()).toContain('Not available')
-    expect(text()).toContain('does not expose per-session billing usage')
+    expect(text()).not.toContain('This session')
+    expect(text()).not.toContain('Not available')
+    expect(text()).not.toContain('does not expose per-session billing usage')
     expect(text()).not.toContain('673')
     expect(document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('42.25')
+  })
+
+  it.each([undefined, 0, 1, 1_799_999_999_999, 1_800_000_000_000])(
+    'hides missing, epoch or elapsed reset %s while preserving amounts and freshness', async resetAt => {
+      await mount({ remote: remote(view({ resetAt })), contextKey: 'unknown-reset' })
+      await click(trigger())
+      expect(text()).not.toContain('Resets:')
+      expect(text()).not.toContain('1970')
+      expect(text()).not.toContain('This session')
+      expect(text()).toContain('42.25')
+      expect(text()).toContain('57.75')
+      expect(text()).toContain('Last updated:')
+    },
+  )
+
+  it.each(['en-US', 'zh-CN'])('shows an explicitly reported future reset in %s', async locale => {
+    const resetAt = 1_900_000_000_000
+    await mount({ remote: remote(view({ resetAt })), contextKey: 'known-reset', locale })
+    await click(trigger())
+    expect(text()).toContain(new Date(resetAt).toLocaleString(locale))
+    expect(text()).toContain(locale === 'zh-CN' ? '重置时间:' : 'Resets:')
+  })
+
+  it('rejects a purported ready snapshot without observation instead of presenting its amounts or reset', async () => {
+    await mount({ remote: remote(view({ resetAt: 1_900_000_000_000, observedAt: undefined })), contextKey: 'no-observation' })
+    await click(trigger())
+    expect(text()).not.toContain('Resets:')
+    expect(text()).not.toContain('Last updated:')
+    expect(text()).not.toContain('42.25')
+    expect(document.querySelector('[role="alert"]')).not.toBeNull()
   })
 
   it('never derives remaining from a percentage and does not turn unknown into zero', async () => {
@@ -110,8 +183,9 @@ describe('Copilot account usage chip', () => {
     await mount({ remote: remote(), contextKey: 'a', locale: 'zh-CN' })
     expect(trigger().textContent).toContain('已用')
     await click(trigger())
-    expect(text()).toContain('本会话')
-    expect(text()).toContain('暂不可用')
+    expect(text()).not.toContain('本会话')
+    expect(text()).not.toContain('暂不可用')
+    expect(text()).toContain('账号范围')
     expect(button('刷新')).toBeDefined()
   })
 

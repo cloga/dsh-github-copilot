@@ -50,14 +50,37 @@ describe('Copilot account quota normalization', () => {
       state: 'unavailable', diagnostic: 'COPILOT_USAGE_INVALID_RESPONSE',
     })
   })
-  it('validates explicit reset dates and prefers snapshot epoch seconds', () => {
-    expect(normalizeCopilotUsage(payload({ quota_reset_at: 1_900_000_000 }), observedAt).resetAt).toBe(1_900_000_000_000)
-    expect(normalizeCopilotUsage({ ...payload(), quota_reset_date: '2027-01-01' }, observedAt).resetAt)
-      .toBe(Date.parse('2027-01-01T00:00:00Z'))
-    for (const reset of ['2027-02-30', 'not a date', '', '2027-01-01T25:00:00Z']) {
-      expect(normalizeCopilotUsage({ ...payload(), quota_reset_date: reset }, observedAt).state).toBe('unavailable')
-    }
+  it('uses explicitly reported future reset dates and prefers valid snapshot epoch seconds', () => {
+    expect(normalizeCopilotUsage({ ...payload({ quota_reset_at: 1_900_000_000 }),
+      quota_reset_date: '2028-01-01' }, observedAt).resetAt).toBe(1_900_000_000_000)
+    expect(normalizeCopilotUsage({ ...payload(), quota_reset_date: '2028-01-01' }, observedAt).resetAt)
+      .toBe(Date.parse('2028-01-01T00:00:00Z'))
     expect(normalizeCopilotUsage(payload(), observedAt).resetAt).toBeUndefined()
+  })
+  it.each([0, -1, null, '', '0', 1, 1.5, NaN, Infinity, 1e20, observedAt / 1000])(
+    'omits missing, sentinel, invalid or elapsed snapshot reset %s without losing valid amounts', reset => {
+      const result = normalizeCopilotUsage(payload({ quota_reset_at: reset }), observedAt)
+      expect(result).toMatchObject({ state: 'ready', used: 25, remaining: 75, limit: 100, observedAt })
+      expect(result.resetAt).toBeUndefined()
+    },
+  )
+  it.each(['2027-02-30', 'not a date', '', '2028-01-01T25:00:00Z', '1970-01-01', '2027-01-01', null, 0])(
+    'omits unusable optional account reset %s without invalidating the quota', reset => {
+      const result = normalizeCopilotUsage({ ...payload(), quota_reset_date_utc: reset }, observedAt)
+      expect(result).toMatchObject({ state: 'ready', used: 25, remaining: 75 })
+      expect(result.resetAt).toBeUndefined()
+    },
+  )
+  it('falls back from an absent snapshot reset and invalid UTC metadata to a valid account date', () => {
+    const result = normalizeCopilotUsage({ ...payload({ quota_reset_at: 0 }),
+      quota_reset_date_utc: '', quota_reset_date: '2028-01-01' }, observedAt)
+    expect(result.resetAt).toBe(Date.parse('2028-01-01T00:00:00Z'))
+    expect(normalizeCopilotUsage({ ...payload(), limited_user_reset_date: '2028-01-01' }, observedAt).resetAt)
+      .toBe(result.resetAt)
+  })
+  it('does not let invalid optional account metadata suppress a valid snapshot reset', () => {
+    expect(normalizeCopilotUsage({ ...payload({ quota_reset_at: 1_900_000_000 }),
+      quota_reset_date_utc: 'unknown' }, observedAt)).toMatchObject({ state: 'ready', resetAt: 1_900_000_000_000 })
   })
   it('uses the free chat quota instead of a zero premium allocation', () => {
     expect(normalizeCopilotUsage({ ...payload({ entitlement: '0', quota_remaining: 0, percent_remaining: 0 }),

@@ -23,8 +23,7 @@ const copy = {
     used: 'used', left: 'left', usedLabel: 'Used this cycle', remaining: 'Remaining',
     unavailable: 'Not available', loading: 'Loading…', stale: 'Last known',
     individual: 'Cycle budget', pooled: 'Shared budget · no personal balance available',
-    budgetUnknown: 'Budget unavailable', session: 'This session',
-    sessionExplanation: 'The native adapter does not expose per-session billing usage. Token counts are not billing amounts.',
+    budgetUnknown: 'Budget unavailable',
     close: 'Close usage details', refresh: 'Refresh', refreshing: 'Refreshing…',
     error: 'Could not refresh usage. Try again.', unavailableExplanation: 'Account usage is currently unavailable.',
     signedOut: 'Sign in to Copilot in Models to view account usage.',
@@ -39,8 +38,7 @@ const copy = {
     used: '已用', left: '剩余', usedLabel: '本周期已用', remaining: '剩余',
     unavailable: '暂不可用', loading: '正在加载…', stale: '上次已知数据',
     individual: '周期额度', pooled: '共享额度 · 无个人余额信息',
-    budgetUnknown: '额度上限暂不可用', session: '本会话',
-    sessionExplanation: '原生适配器未提供单个会话的计费用量。Token 数量不等于计费额度。',
+    budgetUnknown: '额度上限暂不可用',
     close: '关闭用量详情', refresh: '刷新', refreshing: '正在刷新…',
     error: '无法刷新用量，请重试。', unavailableExplanation: '当前无法获取账号用量。',
     signedOut: '请在模型设置中登录 Copilot，以查看账号用量。',
@@ -200,20 +198,24 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     remaining === undefined ? undefined : `${compact(remaining)} ${t.left}`,
   ].filter(Boolean).join(' · ')
   const noAmount = used === undefined && remaining === undefined
+  const triggerText = `${reading}${noAmount ? ` · ${busy ? t.loading : t.unavailable}` : ''}`
   const observed = available ? dateLabel(view.observedAt, language) : undefined
-  const reset = available ? dateLabel(view.resetAt, language) : undefined
+  const reset = available && view.resetAt !== undefined && view.observedAt !== undefined
+    && view.resetAt > view.observedAt ? dateLabel(view.resetAt, language) : undefined
 
   return h('span', { style: { display: 'inline-flex', minWidth: 0, maxWidth: '100%', fontFamily: 'var(--dsw-font-family, inherit)' } },
     h('button', {
-      ref: trigger, type: 'button', 'data-copilot-usage-trigger': '',
+      ref: trigger, type: 'button', 'data-copilot-usage-trigger': '', title: triggerText,
       'aria-haspopup': 'dialog', 'aria-expanded': open, 'aria-controls': open ? id : undefined,
       onClick: () => { setOpen(value => !value) },
       style: {
-        ...button, border: 'none', background: 'transparent', borderRadius: 16, padding: '3px 5px',
-        fontSize: 11, minWidth: 0, lineHeight: 1.5, textAlign: 'center', overflowWrap: 'anywhere',
-        color: secondary, fontVariantNumeric: 'tabular-nums',
+        ...button, border: 'none', background: 'transparent', borderRadius: 24, padding: '1px 8px',
+        fontSize: 'var(--dsh-content-font-size-secondary, 13px)', minWidth: 0, maxWidth: '100%',
+        lineHeight: 'calc(20px + var(--dsh-content-font-delta-secondary, 0px))', textAlign: 'center',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        color: 'var(--dsw-alias-label-tertiary, GrayText)', fontVariantNumeric: 'tabular-nums',
       },
-    }, `${reading}${noAmount ? ` · ${busy ? t.loading : t.unavailable}` : ''}`),
+    }, triggerText),
     open ? h('div', {
       id, ref: panel, role: 'dialog', 'aria-labelledby': `${id}-title`, 'aria-describedby': `${id}-scope`,
       popover: 'manual',
@@ -248,9 +250,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     h('p', { style: muted }, available && view.budget === 'pooled' ? t.pooled : limit === undefined ? t.budgetUnknown : `${t.individual}: ${format(limit)} ${unit}`),
     numbers ? h('p', { style: muted }, t.rounding) : null,
     reset === undefined ? null : h('p', { style: muted }, `${t.reset}: ${reset}`),
-    h('div', { style: separator },
-      h('div', { style: row }, h('strong', null, t.session), h('span', null, t.unavailable)),
-      h('p', { style: { ...muted, marginTop: 4 } }, t.sessionExplanation)),
     h('div', { style: { ...row, ...separator } },
       h('span', { style: muted }, observed === undefined ? null : `${t.lastUpdated}: ${observed}`),
       h('button', {

@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.34`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.35`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 Alpha.24 修复 Web search 卡片缺少精确 Remote 依赖声明的问题。卡片仍位于 **Settings → Models**（`settings.models.footer`，list/root），旧 Core 回退到独立 Web search section，而非 General。搜索子 Fiber 独立等待 routing namespace，不影响账号控件和既有搜索安全检查；实际打包 Desktop 验收仍是独立关卡。
 
@@ -67,7 +67,9 @@ Alpha.33 修正 alpha.32 调用公开 Session hook 时遗漏 selector 参数的�
 
 当前会话使用 `github-copilot` 或 `github-copilot-preview` 时，可选的 **Credits / 额度** 控件显示已登录账号本计费周期的已用量及服务端明确提供的剩余额度。控件通过公开 composer dock 增补，不修改原生 Context meter；切换其他 provider 后隐藏。展开可查看预算、重置时间、数据新鲜度并刷新。旧 Client 缺少公开插槽时只停用这一可选功能。
 
-数字不是 token 费用估算：旧计费账号显示 **Premium requests / 高级请求**；企业共享池可能只有已用 credits，没有个人剩余量。缺失数据显示不可用，不伪装成零或无限。刷新失败可保留明确标注的同账号历史快照；认证失效或账号变化会清除快照。**当前会话**消耗暂时显示不可用，因为受支持的原生 adapter 没有通过公开插件契约提供完整的 credit 计量；不会用账号余额差值推算。
+Alpha.35 对齐原生统计栏的次级字号、行高和 pill 间距。采用共用可换行横排布局的宿主可将 Credits 直接放在 Cache hit 后，空间不足时再换行；旧版宿主仍保留自己的布局。单个读数超过分配宽度时显示省略号，但无障碍文本、悬停提示和独立详情保留完整内容。插件不会移动原生 DOM 或替换统计组件；详见[响应式布局所有权与验收边界](./docs/copilot-usage.md#responsive-statistics-presentation-alpha35)。
+
+数字不是 token 费用估算：旧计费账号显示 **Premium requests / 高级请求**；企业共享池可能只有已用 credits，没有个人剩余量。缺失数据显示不可用，不伪装成零或无限。刷新失败可保留明确标注的同账号历史快照；认证失效或账号变化会清除快照。受支持的原生 adapter 没有通过公开插件契约提供完整的会话 credit 计量，因此不显示这一无法提供数据的区域，也不会用账号余额差值推算。重置时间只在供应方明确提供有效且晚于快照观察时间的下次重置日期时显示；缺失、无效、零值或已过期的重置元数据直接省略，不因此丢弃其他有效的账号用量。
 
 Host 使用现有 canonical OAuth grant 有界读取 GitHub 内部额度端点，不增加登录流程、凭据存储、模型传输、设置写入或模型切换。内部接口可能变化或拒绝访问；自定义企业端点不会被猜测。公开企业／组织报表也不被当作个人实时余额接口。详见[数据语义、生命周期与证据边界](./docs/copilot-usage.md)。合成测试不代表真实账号接口可用、账单实时或当前 Desktop 已生效。
 
@@ -86,7 +88,7 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.34/dsh-github-copilot-0.4.0-alpha.34.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.35/dsh-github-copilot-0.4.0-alpha.35.tgz
 ```
 
 若 registry 被公司封禁或不可用，不要更换网络绕行。Desktop 管理的 profile 可以改用[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用来源获准、校验通过的本地 Release 和已有依赖缓存（`--offline --ignore-scripts`）。预检、备份和授权要求仍然适用。
@@ -151,7 +153,7 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。在获准且可用的 registry 网络环境中，优先使用原生 Desktop 包管理器；确认 npm 发布后，它接受 `dsh-github-copilot@0.4.0-alpha.34`，不是 URL 或本地文件。Desktop 管理的 profile 也允许经明确授权的[受控离线 CLI 维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用已验证的本地 Release 和 `--offline --ignore-scripts`，执行必需的组合预检、私密元数据备份、单写入者控制及安装后差异核验。缓存不足或出现权限拒绝时停止，不绕过公司 registry 封禁，不关闭 TLS 校验；重启仍需单独授权。离线安装成功不表示 npm 联网或发布问题已修好。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。在获准且可用的 registry 网络环境中，优先使用原生 Desktop 包管理器；确认 npm 发布后，它接受 `dsh-github-copilot@0.4.0-alpha.35`，不是 URL 或本地文件。Desktop 管理的 profile 也允许经明确授权的[受控离线 CLI 维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用已验证的本地 Release 和 `--offline --ignore-scripts`，执行必需的组合预检、私密元数据备份、单写入者控制及安装后差异核验。缓存不足或出现权限拒绝时停止，不绕过公司 registry 封禁，不关闭 TLS 校验；重启仍需单独授权。离线安装成功不表示 npm 联网或发布问题已修好。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
 不需要运行 `copilot2api`，不需要外部 gateway、placeholder API key、原始 GitHub token 或单独安装 `dsh-web-search-provider`。
 
@@ -170,7 +172,7 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 
 ## 已退役的规划／执行专用体验
 
-`0.4.0-alpha.34` candidate 移除 **模型分工（Model roles）**、旧版 **Copilot · Model roles** 设置入口、规划／执行模型选择器和新建专用会话按钮（#158）。今后使用普通 Session 与 Core 自己的模型选择／subagent；插件不新增替代角色页面，也不自动映射模型。
+自 `0.4.0-alpha.34` 起，**模型分工（Model roles）**、旧版 **Copilot · Model roles** 设置入口、规划／执行模型选择器和新建专用会话按钮已退役（#158）。今后使用普通 Session 与 Core 自己的模型选择／subagent；插件不新增替代角色页面，也不自动映射模型。
 
 父模型 → subagent 模型规则及其原生设置 UI 属于另一个仍待交付的 [Core PR #95](https://github.com/cloga/deepseek-harness/pull/95)。移除本插件 UI 不代表旧版或当前安装的 Core 已具有规则功能，也不依赖该 PR 先发布。
 
@@ -421,8 +423,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.34/dsh-github-copilot-0.4.0-alpha.34.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.34/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.35/dsh-github-copilot-0.4.0-alpha.35.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.35/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -430,7 +432,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.34.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.35.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

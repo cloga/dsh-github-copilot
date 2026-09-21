@@ -5,17 +5,21 @@ import type { CopilotUsageView, CopilotUsageDiagnostic } from './copilot-usage-t
 const amount = z.number().finite().min(0).max(COPILOT_USAGE_MAX_AMOUNT)
 const entitlement = z.union([amount, z.literal(-1), z.string().max(32).regex(/^(?:-1|(?:0|[1-9]\d*)(?:\.\d+)?)$/u)])
   .transform(Number).refine(value => Number.isFinite(value) && value <= COPILOT_USAGE_MAX_AMOUNT)
+// Reset metadata is optional; malformed or absent dates must not discard valid amounts.
+const resetSeconds = z.unknown().transform(value => typeof value === 'number' && Number.isInteger(value)
+  && value > 0 && value <= Math.floor(COPILOT_USAGE_MAX_TIMESTAMP / 1000) ? value * 1000 : undefined)
+const resetCalendar = z.unknown().transform(resetDate)
 const snapshot = z.object({
   unlimited: z.boolean(), entitlement: entitlement.optional(),
   percent_remaining: z.number().finite().min(0).max(100).optional(),
   quota_remaining: amount.optional(), credits_used: amount.optional(),
   has_quota: z.boolean().optional(), token_based_billing: z.boolean().optional(),
-  quota_reset_at: z.number().int().min(0).max(Math.floor(COPILOT_USAGE_MAX_TIMESTAMP / 1000)).optional(),
+  quota_reset_at: resetSeconds.optional(),
 })
 const response = z.object({
   token_based_billing: z.boolean().optional(), access_type_sku: z.string().max(128).optional(),
-  quota_reset_date: z.string().max(64).optional(), quota_reset_date_utc: z.string().max(64).optional(),
-  limited_user_reset_date: z.string().max(64).optional(),
+  quota_reset_date: resetCalendar.optional(), quota_reset_date_utc: resetCalendar.optional(),
+  limited_user_reset_date: resetCalendar.optional(),
   quota_snapshots: z.object({ chat: snapshot.optional(), premium_interactions: snapshot.optional() }).optional(),
   monthly_quotas: z.object({ chat: amount }).optional(),
   limited_user_quotas: z.object({ chat: amount }).optional(),
@@ -28,8 +32,9 @@ export function unavailableCopilotUsage(
   return { state: diagnostic === 'COPILOT_USAGE_SIGNED_OUT' ? 'signed-out' : 'unavailable', billing, budget, diagnostic }
 }
 
-function resetDate(value: string): number | undefined {
-  if (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/u.test(value)) return undefined
+function resetDate(value: unknown): number | undefined {
+  if (typeof value !== 'string' || value.length > 64
+    || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/u.test(value)) return undefined
   // Date.parse normalizes impossible days, so separately validate the calendar date.
   const date = value.slice(0, 10)
   const day = Date.parse(`${date}T00:00:00Z`)
@@ -51,10 +56,9 @@ export function normalizeCopilotUsage(input: unknown, observedAt: number): Copil
   const billing = data.token_based_billing ? 'credits' : 'requests'
   const quota = data.access_type_sku === 'free_limited_copilot'
     ? data.quota_snapshots?.chat : data.quota_snapshots?.premium_interactions
-  const reset = data.quota_reset_date_utc ?? data.quota_reset_date ?? data.limited_user_reset_date
-  const accountReset = reset === undefined ? undefined : resetDate(reset)
-  if (reset !== undefined && accountReset === undefined) return unavailableCopilotUsage('COPILOT_USAGE_INVALID_RESPONSE', billing)
-  const resetAt = quota?.quota_reset_at === undefined ? accountReset : quota.quota_reset_at * 1000
+  const resetAt = [quota?.quota_reset_at, data.quota_reset_date_utc,
+    data.quota_reset_date, data.limited_user_reset_date]
+    .find(value => value !== undefined && value > observedAt)
   const dates = { observedAt, ...resetAt === undefined ? {} : { resetAt } }
   if (!quota) {
     const limit = data.monthly_quotas?.chat, remaining = data.limited_user_quotas?.chat

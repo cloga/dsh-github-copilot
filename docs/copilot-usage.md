@@ -6,7 +6,7 @@ The optional composer control separates three quantities:
 | --- | --- | --- |
 | Context occupancy | Current native request/context window | Remains owned by DSH's native meter. |
 | Account usage and remaining allocation | GitHub account billing cycle, across Copilot applications | Display only validated provider quota data; identify stale snapshots explicitly. |
-| Session credits | Complete provider-reported usage attributable to this DSH Session | Unavailable in this version. Do not infer it from tokens, cost estimates or account balance changes. |
+| Session credits | Complete provider-reported usage attributable to this DSH Session | Not displayed because the supported adapter does not supply it. Do not infer it from tokens, cost estimates or account balance changes. |
 
 ## Presentation
 
@@ -38,7 +38,7 @@ Verified reference sources:
 - [GitHub's public organization/enterprise usage reporting API](https://docs.github.com/en/rest/copilot/copilot-usage-metrics) and [report fields](https://docs.github.com/en/copilot/reference/copilot-usage-metrics/copilot-usage-metrics). Daily administrator reports are not a live personal balance API.
 - [GitHub's explanation of used credits with no individual budget](https://github.blog/changelog/2026-07-20-copilot-users-can-now-see-ai-credits-used-per-billing-cycle/).
 
-The internal client observes per-turn `copilot_usage.total_nano_aiu`, but existence in another client's wire response is not evidence that the supported DSH/pi adapter exposes complete session accounting to plugins. On the exact alpha.2 source, [`mapUsage`](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/llm/llm-pi-ai/src/stream.ts) maps only token counts and cache counts into the public [`StreamChunk` usage contract](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/llm/llm/src/types.ts). Opaque replay state is not an accounting escape hatch. Until an unchanged public seam provides attributable, deduplicated receipts for ordinary calls, retries and background activity, **This session** remains unavailable.
+The internal client observes per-turn `copilot_usage.total_nano_aiu`, but existence in another client's wire response is not evidence that the supported DSH/pi adapter exposes complete session accounting to plugins. On the exact alpha.2 source, [`mapUsage`](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/llm/llm-pi-ai/src/stream.ts) maps only token counts and cache counts into the public [`StreamChunk` usage contract](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/llm/llm/src/types.ts). Opaque replay state is not an accounting escape hatch. Until an unchanged public seam provides attributable, deduplicated receipts for ordinary calls, retries and background activity, per-session credit values are not displayed.
 
 Synthetic tests cover parsing, lifecycle, failure states, strict transport and UI. They do not establish production quota permissions, billing latency, live OAuth/model transport, installed Desktop bytes or loaded plugin state. No real account calls are made merely to generate test evidence.
 
@@ -49,6 +49,16 @@ Alpha.32 called `useSession()` without the selector required by the public Core 
 The correction consumes the existing `useSession(selector)` contract and selects only a boolean for the current, open, non-removed Session. It does not introduce a compatibility shim, copy Session data, patch Core, substitute model selection, or alter quota requests. The exact official alpha.1/alpha.2 contract is `SnapshotSelectorHook<T>` in `packages/client/store/src/contract.ts`, with the `bindSnapshotSelector` implementation in `packages/client/ui-renderer/src/client/bind.ts`. Model projection remains the public `useProjection('modelSelection')` reader, whose key-only overload is supported.
 
 Validation must include positive rendering with actual selector-hook behavior for both canonical and managed Copilot routes, reactive provider/Session changes and disposal. A null/hidden signed-out surface alone is insufficient. Synthetic quota results prove rendering and lifecycle only, not live account permissions or balances. Current-runtime activation must be checked separately after an explicitly authorized upgrade; reloading alpha.32 does not fix its source call.
+
+## Responsive statistics presentation (alpha.35)
+
+The unavailable Session credits section is omitted rather than permanently displaying a placeholder. Reset metadata is optional and independent from validated quota amounts: missing, malformed, zero or elapsed values are ignored. Select a supplier-reported next reset later than the snapshot observation, preferring the snapshot timestamp before valid UTC account, account or limited-user dates; never invent the next billing date. Invalid optional date metadata does not discard otherwise valid account amounts. The Client also hides reset rows without a known observation time or a later reset.
+
+The compact control uses the native secondary font-size and line-height tokens, tertiary text color and pill padding. It stays one line within its allocated width, with ellipsis and a full-label tooltip if a single reading is wider than the available space. The complete reading remains its accessible button text; exact supplied amounts and account-wide scope remain available in the independent details dialog. Loading and unavailable text use the same bounds without extra quota requests.
+
+The host owns placement of the existing public dock entries. On a shared-row host, the usage entry follows the native statistics group and can appear immediately after Cache hit; on an older stacked host, it retains that host's placement. The plugin neither relocates native DOM nor overrides native statistics styles, and it does not require a modified Core to activate. A separately authorized Desktop Client layout task owns wrapping and actual assembled native-statistics geometry checks.
+
+Official `0.1.6-alpha.2` already provides the shared dock row in [`InputBar.module.css`](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css) and an intrinsic native statistics group in [`StatsPills.module.css`](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/client/ui-chat/src/client/chat/StatsPills.module.css). Reuse that official presentation primitive rather than inventing another statistics Slot or copying its token calculations. Wide/narrow layout and popup acceptance must use actual native components alongside the released Client; standalone plugin tests or a synthetic sibling label are not proof of native Cache hit alignment.
 
 ## Official-first retirement
 
