@@ -42,6 +42,14 @@ The internal client observes per-turn `copilot_usage.total_nano_aiu`, but existe
 
 Synthetic tests cover parsing, lifecycle, failure states, strict transport and UI. They do not establish production quota permissions, billing latency, live OAuth/model transport, installed Desktop bytes or loaded plugin state. No real account calls are made merely to generate test evidence.
 
+## Session selector correction (alpha.33)
+
+Alpha.32 called `useSession()` without the selector required by the public Core hook. A registration can therefore exist while the Slot renderer has retired its crashed entry; installed-version receipts and signed-out absence tests are not proof that the control renders in an eligible Session.
+
+The correction consumes the existing `useSession(selector)` contract and selects only a boolean for the current, open, non-removed Session. It does not introduce a compatibility shim, copy Session data, patch Core, substitute model selection, or alter quota requests. The exact official alpha.1/alpha.2 contract is `SnapshotSelectorHook<T>` in `packages/client/store/src/contract.ts`, with the `bindSnapshotSelector` implementation in `packages/client/ui-renderer/src/client/bind.ts`. Model projection remains the public `useProjection('modelSelection')` reader, whose key-only overload is supported.
+
+Validation must include positive rendering with actual selector-hook behavior for both canonical and managed Copilot routes, reactive provider/Session changes and disposal. A null/hidden signed-out surface alone is insufficient. Synthetic quota results prove rendering and lifecycle only, not live account permissions or balances. Current-runtime activation must be checked separately after an explicitly authorized upgrade; reloading alpha.32 does not fix its source call.
+
 ## Official-first retirement
 
 Retain this bounded companion feature only while native DSH lacks equivalent public account-usage presentation for the required scope. Migrate to native functionality once equivalent data semantics, account invalidation, session attribution, accessible presentation and supported-version acceptance are verified. Do not require a Core patch or add a parallel model transport to complete this integration.

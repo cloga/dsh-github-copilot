@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.32"
+    "version": "0.4.0-alpha.33"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -227,12 +227,15 @@
       "sourceMarkers": [
         {"file": "src/index.ts", "marker": "ctx.plugin(GitHubCopilotUsageController)"},
         {"file": "src/client.ts", "marker": "registerCopilotUsageUi"},
+        {"file": "src/copilot-usage-ui.ts", "marker": "runtime.useSession(session =>"},
         {"file": "src/remote.ts", "marker": "...copilotUsageRemote.descriptors"},
         {"file": "docs/copilot-usage.md", "marker": "Percentage-only data must not create falsely precise absolute amounts"}
       ],
       "tests": [
         {"file": "tests/copilot-usage-normalize.spec.ts", "name": "never invents precise amounts from a rounded percentage"},
         {"file": "tests/copilot-usage-ui.spec.ts", "name": "uses real Cordis Remote tracing and reversible public SlotRegistry registration"},
+        {"file": "tests/copilot-usage-ui.spec.ts", "name": "renders the usage trigger through a required Session selector for %s"},
+        {"file": "tests/fixtures/copilot-usage-selector-core.fixture.ts", "name": "renders and reacts to the owning Session on %s"},
         {"file": "tests/scripts/copilot-usage-gateway.test.mjs", "name": "quota Remote reaches the actual Host gateway without startup or signed-out network requests"},
         {"file": "tests/client-bundle.spec.ts", "name": "mounts strict Host result codecs through the published rc.1 client carrier"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "mounts authorization, role and search-catalog Remotes on the exact target Client gateway"}

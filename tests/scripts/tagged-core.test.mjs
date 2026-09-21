@@ -109,6 +109,8 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   assert.equal(config.root, value.root)
   assert.equal(config.envDir, value.target)
   assert.ok(config.cacheDir.startsWith(value.target))
+  assert.equal(config.esbuild.jsx, 'automatic')
+  assert.deepEqual(config.resolve.dedupe, ['react', 'react-dom'])
   assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
     'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts'])
   assert.equal(config.test.env.DSH_CORE_EVIDENCE, 'tagged-source-runtime')
@@ -156,6 +158,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       }
       if (release.startsWith('0.1.6-')) {
         await writeFile(join(value.root, 'tests/tool-schema-compat.spec.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/fixtures/copilot-usage-selector-core.fixture.ts'), 'export {}')
       }
       if (release === '0.1.6-alpha.2') {
         for (const name of ['fixtures/alpha2-contracts-core.fixture.ts', 'fixtures/compaction-pressure-core.fixture.ts', 'remote-codec.spec.ts', 'dual-model-projection.spec.ts']) {
@@ -168,7 +171,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
       assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
         'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts',
-        ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts'] : [],
+        ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
         ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts'])
     } finally { await rm(value.base, { recursive: true, force: true }) }

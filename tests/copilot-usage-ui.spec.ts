@@ -50,6 +50,10 @@ function source<T>(initial: T) {
   return {
     set(next: T) { value = next; listeners.forEach(listener => listener()) },
     use: () => useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener) } }, () => value),
+    useSelector: <S,>(select: (snapshot: T) => S): S => {
+      const snapshot = useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener) } }, () => value)
+      return select(snapshot)
+    },
   }
 }
 const selected = (provider: string) => ({ provider, model: 'account-model' })
@@ -89,7 +93,7 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
     const root = createRoot(container)
     cleanups.push(() => { root.unmount() })
     const render = async (id = 'a') => {
-      await act(async () => { root.render(createElement(f.component(), { sessionId: id, useSession: session.use, useProjection })) })
+      await act(async () => { root.render(createElement(f.component(), { sessionId: id, useSession: session.useSelector, useProjection })) })
     }
     await render()
     expect(f.remote.get).not.toHaveBeenCalled()
@@ -107,6 +111,32 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
     await act(async () => { projection.set({ lastUsed: null, next: selected('github-copilot') }) })
     await render('b')
     expect(container.textContent).toBe('')
+  })
+
+  it.each(['github-copilot', 'github-copilot-preview'])('renders the usage trigger through a required Session selector for %s', async provider => {
+    const f = fixture()
+    f.declare()
+    const session = source({ sessionId: 'current', removed: false, openState: 'open' })
+    const useSession = vi.fn(session.useSelector)
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    cleanups.push(() => { root.unmount() })
+    await act(async () => {
+      root.render(createElement(f.component(), {
+        sessionId: 'current', useSession,
+        useProjection: () => ({ lastUsed: null, next: selected(provider) }),
+      }))
+    })
+    expect(useSession).toHaveBeenCalledWith(expect.any(Function))
+    expect(container.querySelector('[data-copilot-usage-trigger]')).not.toBeNull()
+    expect(container.textContent).toContain('7 used')
+    expect(f.remote.get).toHaveBeenCalledTimes(1)
+    await act(async () => { session.set({ sessionId: 'current', removed: true, openState: 'open' }) })
+    expect(container.querySelector('[data-copilot-usage-trigger]')).toBeNull()
+    await act(async () => { session.set({ sessionId: 'current', removed: false, openState: 'loading' }) })
+    expect(container.querySelector('[data-copilot-usage-trigger]')).toBeNull()
+    expect(f.remote.get).toHaveBeenCalledTimes(1)
   })
 
   it('disables only this feature with a named missing runtime diagnostic', async () => {
@@ -160,7 +190,7 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
       try {
         const props = {
           sessionId: 'current-session',
-          useSession: () => ({ sessionId: 'current-session', removed: false, openState: 'open', blank: false }),
+          useSession: <T,>(select: (snapshot: unknown) => T): T => select({ sessionId: 'current-session', removed: false, openState: 'open', blank: false }),
           useProjection: () => ({ lastUsed: selected('github-copilot'), next: selected('github-copilot') }),
         }
         await act(async () => {
