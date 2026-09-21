@@ -108,13 +108,30 @@ export async function taggedCoreAliases(core, trackedPaths, release) {
   }
   return { packages, aliases, vendors }
 }
+/** Keep the renderer, its external CJS selector shim and ReactDOM on one installed React. */
+export function taggedRendererRuntimeAliases(packages, release) {
+  if (!release.startsWith('0.1.6-')) return []
+  const renderer = packages.find(item => item.name === '@deepseek-ai/dsh-client-ui-renderer')
+  if (renderer === undefined) throw new Error('tagged selector fixture lacks the public renderer package')
+  const require = createRequire(renderer.manifestPath)
+  const names = ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-dom', 'react-dom/client',
+    'use-sync-external-store/shim/with-selector']
+  const aliases = names.map(name => ({ name, entry: require.resolve(name) }))
+  const react = aliases[0].entry
+  for (const alias of aliases.slice(1)) {
+    if (!same(createRequire(alias.entry).resolve('react'), react)) {
+      throw new Error(`TAGGED_RENDERER_REACT_IDENTITY_MISMATCH: ${alias.name}`)
+    }
+  }
+  return aliases
+}
 function identitySource(report) {
   const entry = name => slash(report.packages.find(item => item.name === name).entry)
   const moduleUrl = name => pathToFileURL(report.packages.find(item => item.name === name).entry).href
   return `// Test-only unchanged tagged-source identity. Never installed as a plugin.\nimport { Context } from ${JSON.stringify(moduleUrl('@deepseek-ai/cordis'))}\nimport LlmRuntime, { LlmAdapter } from ${JSON.stringify(moduleUrl('@deepseek-ai/dsh-llm'))}\nimport { PiAiAdapter } from ${JSON.stringify(moduleUrl('@deepseek-ai/dsh-llm-pi-ai'))}\nimport { Context as PublicContext } from '@deepseek-ai/cordis'\nimport PublicRuntime, { LlmAdapter as PublicAdapter } from '@deepseek-ai/dsh-llm'\nimport { PiAiAdapter as PublicPiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'\nif (Context !== PublicContext || LlmRuntime !== PublicRuntime || LlmAdapter !== PublicAdapter || PiAiAdapter !== PublicPiAiAdapter || !(PiAiAdapter.prototype instanceof LlmAdapter)) throw new Error('TAGGED_CORE_CLASS_IDENTITY_MISMATCH')\nexport { Context, LlmRuntime, PiAiAdapter }\nexport const coreRoot = ${JSON.stringify(report.coreRoot)}\nexport const llmEntry = ${JSON.stringify(entry('@deepseek-ai/dsh-llm'))}\nexport const adapterEntry = ${JSON.stringify(entry('@deepseek-ai/dsh-llm-pi-ai'))}\nexport const attachmentEntry = ${JSON.stringify(entry('@deepseek-ai/dsh-attachment'))}\n`
 }
 function configSource(report) {
-  return `// Isolated test resolver only; no Core build or implementation writes.\nimport { relative, isAbsolute } from 'node:path'\nimport { standardDecoratorPlugin, vitestExecArgv } from ${JSON.stringify(pathToFileURL(join(report.coreRoot, 'vitest.shared.ts')).href)}\nconst aliases = ${JSON.stringify(report.aliases)}\nconst vendors = new Map(${JSON.stringify(report.vendors.map(item => [item.name, item.entry]))})\nconst core = ${JSON.stringify(report.coreRoot)}\nconst escape = value => value.replace(/[.*+?^$\x7b\x7d()|[\x5d\\\\]/g, '\\\\$&')\nfunction isCoreSource(importer) {\n  if (!importer) return false\n  const file = importer.split('?')[0].replace(/^\\/@fs\\//, '')\n  if (file.replaceAll('\\\\', '/').includes('/node_modules/')) return false\n  const suffix = relative(core, file)\n  return suffix === '' || suffix !== '..' && !suffix.startsWith('../') && !suffix.startsWith('..\\\\') && !isAbsolute(suffix)\n}\nexport default {\n  root: ${JSON.stringify(report.pluginRoot)}, envDir: ${JSON.stringify(report.scratch)}, cacheDir: ${JSON.stringify(join(report.scratch, 'vite-cache'))},\n  esbuild: { jsx: 'automatic' },\n  resolve: { dedupe: ['react', 'react-dom'], alias: aliases.map(item => ({ find: new RegExp('^' + escape(item.name) + '$'), replacement: item.entry })) },\n  plugins: [standardDecoratorPlugin(), { name: 'tagged-core-public-import-guard', enforce: 'pre', resolveId(id, importer) {\n    if (id.startsWith('@deepseek-ai/dsh-') || id === '@deepseek-ai/cordis' || id.startsWith('@deepseek-ai/cordis/')) throw new Error('TAGGED_CORE_PUBLIC_EXPORT_UNMAPPED: ' + id)\n    if (isCoreSource(importer) && vendors.has(id)) return vendors.get(id)\n    return null\n  } }],\n  test: { include: ${JSON.stringify(runtimeTests(report.release))}, setupFiles: [${JSON.stringify(report.identityModule)}],\n    server: { deps: { inline: ['use-sync-external-store'] } },\n    execArgv: vitestExecArgv, env: { DSH_CORE_EVIDENCE: 'tagged-source-runtime', DSH_TAGGED_CORE_MANIFEST: ${JSON.stringify(report.manifestPath)}, DSH_PUBLISHED_CORE_RELEASE: ${JSON.stringify(report.release)} }\n  }\n}\n`
+  return `// Isolated test resolver only; no Core build or implementation writes.\nimport { relative, isAbsolute } from 'node:path'\nimport { standardDecoratorPlugin, vitestExecArgv } from ${JSON.stringify(pathToFileURL(join(report.coreRoot, 'vitest.shared.ts')).href)}\nconst aliases = ${JSON.stringify([...report.aliases, ...report.rendererRuntimeAliases])}\nconst vendors = new Map(${JSON.stringify(report.vendors.map(item => [item.name, item.entry]))})\nconst core = ${JSON.stringify(report.coreRoot)}\nconst escape = value => value.replace(/[.*+?^$\x7b\x7d()|[\x5d\\\\]/g, '\\\\$&')\nfunction isCoreSource(importer) {\n  if (!importer) return false\n  const file = importer.split('?')[0].replace(/^\\/@fs\\//, '')\n  if (file.replaceAll('\\\\', '/').includes('/node_modules/')) return false\n  const suffix = relative(core, file)\n  return suffix === '' || suffix !== '..' && !suffix.startsWith('../') && !suffix.startsWith('..\\\\') && !isAbsolute(suffix)\n}\nexport default {\n  root: ${JSON.stringify(report.pluginRoot)}, envDir: ${JSON.stringify(report.scratch)}, cacheDir: ${JSON.stringify(join(report.scratch, 'vite-cache'))},\n  esbuild: { jsx: 'automatic' },\n  resolve: { alias: aliases.map(item => ({ find: new RegExp('^' + escape(item.name) + '$'), replacement: item.entry })) },\n  plugins: [standardDecoratorPlugin(), { name: 'tagged-core-public-import-guard', enforce: 'pre', resolveId(id, importer) {\n    if (id.startsWith('@deepseek-ai/dsh-') || id === '@deepseek-ai/cordis' || id.startsWith('@deepseek-ai/cordis/')) throw new Error('TAGGED_CORE_PUBLIC_EXPORT_UNMAPPED: ' + id)\n    if (isCoreSource(importer) && vendors.has(id)) return vendors.get(id)\n    return null\n  } }],\n  test: { include: ${JSON.stringify(runtimeTests(report.release))}, setupFiles: [${JSON.stringify(report.identityModule)}],\n    execArgv: vitestExecArgv, env: { DSH_CORE_EVIDENCE: 'tagged-source-runtime', DSH_TAGGED_CORE_MANIFEST: ${JSON.stringify(report.manifestPath)}, DSH_PUBLISHED_CORE_RELEASE: ${JSON.stringify(report.release)} }\n  }\n}\n`
 }
 
 /** Prepare only runner-owned config/identity files; read Core and plugin source without changing either. */
@@ -135,6 +152,7 @@ export async function prepareTaggedCoreFixture({ root, core, target, release }, 
   const tracked = git(coreRoot, ['ls-files', '-z']).split('\0').filter(Boolean)
   if (!tracked.includes('vitest.shared.ts')) throw new Error('tagged Core standard decorator test helper is missing')
   const inventory = await taggedCoreAliases(coreRoot, tracked, release)
+  const rendererRuntimeAliases = taggedRendererRuntimeAliases(inventory.packages, release)
   const require = createRequire(join(pluginRoot, 'package.json'))
   const vitestCli = runner ?? join(dirname(require.resolve('vitest/package.json')), 'vitest.mjs')
   for (const path of [...runtimeTests(release).map(name => join(pluginRoot, name)), vitestCli, join(coreRoot, 'vitest.shared.ts')]) {
@@ -144,7 +162,7 @@ export async function prepareTaggedCoreFixture({ root, core, target, release }, 
   const identityModule = join(scratch, 'identity.ts')
   const manifestPath = join(scratch, 'tagged-core-fixture.json')
   const report = { schemaVersion: 1, kind: 'tagged-source-runtime', coreRoot, release, commit,
-    pluginRoot, scratch, configPath, identityModule, manifestPath, ...inventory,
+    pluginRoot, scratch, configPath, identityModule, manifestPath, ...inventory, rendererRuntimeAliases,
     runner: { command: process.execPath, args: [vitestCli, 'run', '--config', configPath], cwd: pluginRoot },
     executed: { install: false, build: false, tests: false },
   }

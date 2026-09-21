@@ -4,7 +4,8 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, realpath } f
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
-import { prepareTaggedCoreFixture, TAGGED_CORE_RELEASES } from '../../scripts/verify-tagged-core.mjs'
+import { createRequire } from 'node:module'
+import { prepareTaggedCoreFixture, taggedRendererRuntimeAliases, TAGGED_CORE_RELEASES } from '../../scripts/verify-tagged-core.mjs'
 
 test('admits the exact 0.1.6-alpha.1 source pin while retaining prior tagged baselines', () => {
   assert.deepEqual(TAGGED_CORE_RELEASES, {
@@ -47,6 +48,7 @@ async function fixture(release = '0.1.3-alpha.1') {
     ['packages/llm/llm', '@deepseek-ai/dsh-llm', release],
     ['packages/llm/llm-pi-ai', '@deepseek-ai/dsh-llm-pi-ai', release],
     ['packages/attachment/attachment', '@deepseek-ai/dsh-attachment', release],
+    ['packages/client/ui-renderer', '@deepseek-ai/dsh-client-ui-renderer', release],
     ['vendor/cordis', '@deepseek-ai/cordis', '4.0.2'],
     ['vendor/cosmokit', '@deepseek-ai/cosmokit', '1.8.3'],
   ]) {
@@ -67,6 +69,18 @@ async function fixture(release = '0.1.3-alpha.1') {
   }))
   await source('packages/compaction/compaction-image-offload/src/index.ts', 'export const untouched = true\n')
   await source('packages/compaction/compaction-image-offload/src/projection.ts', 'export const imageOffloadProjection = {}\n')
+  // Resolver-only synthetic inputs: never executed, installed, or used as runtime evidence.
+  for (const [name, files] of [
+    ['react', ['index.js', 'jsx-runtime.js', 'jsx-dev-runtime.js']],
+    ['react-dom', ['index.js', 'client.js']],
+    ['use-sync-external-store', ['shim/with-selector.js']],
+  ]) {
+    for (const file of files) {
+      const path = join(core, 'node_modules', name, file)
+      await mkdir(join(path, '..'), { recursive: true })
+      await writeFile(path, 'throw new Error("resolver fixture must not execute")\n')
+    }
+  }
   const commands = []
   const git = (_cwd, args) => {
     commands.push(args)
@@ -110,7 +124,8 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   assert.equal(config.envDir, value.target)
   assert.ok(config.cacheDir.startsWith(value.target))
   assert.equal(config.esbuild.jsx, 'automatic')
-  assert.deepEqual(config.resolve.dedupe, ['react', 'react-dom'])
+  assert.deepEqual(report.rendererRuntimeAliases, [])
+  assert.equal(config.resolve.dedupe, undefined)
   assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
     'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts'])
   assert.equal(config.test.env.DSH_CORE_EVIDENCE, 'tagged-source-runtime')
@@ -169,6 +184,19 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       const config = (await import(pathToFileURL(report.configPath).href)).default
       assert.equal(report.commit, TAGGED_CORE_RELEASES[release])
       assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
+      if (release.startsWith('0.1.6-')) {
+        const require = createRequire(join(value.core, 'packages/client/ui-renderer/package.json'))
+        const names = ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-dom', 'react-dom/client',
+          'use-sync-external-store/shim/with-selector']
+        assert.deepEqual(report.rendererRuntimeAliases.map(item => item.name), names)
+        for (const name of names) {
+          const alias = config.resolve.alias.find(item => item.find.test(name))
+          assert.equal(alias.replacement, require.resolve(name))
+          assert.equal(createRequire(alias.replacement).resolve('react'), require.resolve('react'))
+        }
+        assert.equal(config.resolve.dedupe, undefined)
+        assert.equal(config.test.server, undefined)
+      }
       assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
         'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts',
         ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
@@ -177,6 +205,17 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })
 }
+
+test('rejects an external selector shim resolving a second React instead of hiding it with Vite dedupe', async () => {
+  const value = await fixture('0.1.6-alpha.2')
+  try {
+    const split = join(value.core, 'node_modules/use-sync-external-store/node_modules/react')
+    await mkdir(split, { recursive: true })
+    await writeFile(join(split, 'index.js'), 'throw new Error("split React resolver fixture must not execute")\n')
+    const packages = [{ name: '@deepseek-ai/dsh-client-ui-renderer', manifestPath: join(value.core, 'packages/client/ui-renderer/package.json') }]
+    assert.throws(() => taggedRendererRuntimeAliases(packages, value.release), /TAGGED_RENDERER_REACT_IDENTITY_MISMATCH: use-sync-external-store/)
+  } finally { await rm(value.base, { recursive: true, force: true }) }
+})
 
 test('rejects unknown or mismatched release pins before creating scratch', async () => withFixture(async value => {
   await assert.rejects(prepareTaggedCoreFixture({ ...value, release: 'latest' }, value), /unsupported/)
