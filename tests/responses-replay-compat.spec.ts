@@ -5,7 +5,6 @@ import {
   normalizeCopilotResponsesPayload,
 } from '../src/responses-replay-compat.ts'
 
-const scopeMessage = 'input item ID does not belong to this connection'
 const encoder = new TextEncoder()
 
 function normalize(input: unknown[]) {
@@ -170,7 +169,10 @@ describe('Copilot Responses wire replay normalization', () => {
   })
 })
 
-describe('strict bounded Copilot input item scope classification', () => {
+describe.each([
+  'input item ID does not belong to this connection',
+  'input item does not belong to this connection',
+])('strict bounded Copilot input item scope classification: %s', scopeMessage => {
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
   it.each([
@@ -220,6 +222,9 @@ describe('strict bounded Copilot input item scope classification', () => {
     JSON.stringify({ type: 'authentication_error', error: { message: scopeMessage } }),
     JSON.stringify({ code: 'invalid_api_key', type: 'authentication_error', error: { message: scopeMessage } }),
     JSON.stringify({ message: 'expired token', error: { message: scopeMessage } }),
+    JSON.stringify({ message: scopeMessage === 'input item ID does not belong to this connection'
+      ? 'input item does not belong to this connection' : 'input item ID does not belong to this connection',
+    error: { message: scopeMessage } }),
     JSON.stringify({ message: '', error: { message: scopeMessage } }),
     JSON.stringify({ message: null, error: { message: scopeMessage } }),
     JSON.stringify({ message: scopeMessage, error: null }),

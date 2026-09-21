@@ -437,18 +437,48 @@ describe('managed Responses replay compatibility', () => {
     expect(result.replayFailure).toHaveBeenCalledTimes(1)
     expect(result.unauthorized).not.toHaveBeenCalled()
   })
-  it('recognizes the real input-item HTTP 401 without retiring auth and preserves the native Response', async () => {
-    const response = new Response(JSON.stringify({ message: 'input item ID does not belong to this connection', code: '' }), {
-      status: 401, headers: { 'content-type': 'application/json' },
+  it.each([
+    'input item ID does not belong to this connection',
+    'input item does not belong to this connection',
+  ])('recognizes the real input-item HTTP 401 without retiring auth and preserves the native Response: %s', async message => {
+    const body = JSON.stringify({ message, code: '', private_detail: 'synthetic-private-response-body' })
+    const response = new Response(body, {
+      status: 401, headers: { 'content-type': 'application/json', 'x-synthetic': 'unchanged' },
     })
     const fetch = vi.fn(async () => response)
-    const result = await invoke({ messages: [] }, { fetch })
-    expect(result.result.stopReason).toBe('error')
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(result.unauthorized).not.toHaveBeenCalled()
-    expect(result.replayFailure).toHaveBeenCalledTimes(1)
-    expect(result.replayFailure.mock.calls[0]![0].message).toContain('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH')
-    expect(response.status).toBe(401)
+    const context = replayContext()
+    const original = JSON.stringify(context)
+    const native = copilotSdk.githubCopilotProvider()
+    const factory = vi.mocked(copilotSdk.githubCopilotProvider)
+    const originalFactory = factory.getMockImplementation()!
+    let receivedResponse: Response | undefined
+    let bodyUsedBeforeNative: boolean | undefined
+    let receivedBody: string | undefined
+    factory.mockImplementationOnce(() => ({ ...native,
+      streamSimple: (model, context, options) => native.streamSimple(model, context, { ...options,
+        fetch: async (input, init) => {
+          receivedResponse = await options!.fetch!(input, init)
+          bodyUsedBeforeNative = receivedResponse.bodyUsed
+          receivedBody = await receivedResponse.clone().text()
+          return receivedResponse
+        },
+      }),
+    }))
+    try {
+      const result = await invoke(context, { fetch })
+      expect(result.result.stopReason).toBe('error')
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(receivedResponse).toBe(response)
+      expect(bodyUsedBeforeNative).toBe(false)
+      expect(receivedBody).toBe(body)
+      expect(result.unauthorized).not.toHaveBeenCalled()
+      expect(result.replayFailure).toHaveBeenCalledTimes(1)
+      expect(result.replayFailure.mock.calls[0]![0].message).toContain('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH')
+      expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/input item|synthetic-private-response-body/)
+      expect(JSON.stringify(context)).toBe(original)
+      expect(response.status).toBe(401)
+      expect(response.headers.get('x-synthetic')).toBe('unchanged')
+    } finally { factory.mockReset().mockImplementation(originalFactory) }
   })
 })
 

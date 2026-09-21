@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.37 (prepared)
+
+- Recognize both observed uncoded Responses scope-401 messages, including `input item does not belong to this connection` without `ID`, so that request-local rejection does not retire shared OAuth proof or abort neighboring calls (#164).
+- Retain exact message matching, consistent outer/nested envelopes, genuine-auth code/type precedence, HTTP-status and bounded-body checks; do not broaden classification to arbitrary connection text.
+- Exercise both variants through the real native adapter for concurrent isolation, same-lease independent dispatches, cancellation, credential reuse and genuine-auth renewal. The fixture reproduces the defect without cron.
+- Keep payload normalization, encrypted history, model selection and transport unchanged. This contains a classification defect; it does not establish why the remaining historical item is rejected or claim complete live-session recovery. No Core, cron, dependency or installed-profile change is included.
+
 ## 0.4.0-alpha.36 (prepared)
 
 - Add managed Responses wire-only replay normalization through the native SDK's public `onPayload` seam, preserving durable history, encrypted reasoning, message phases and tool-result pairing (#162). Reference-only or incomplete ID-bearing forms fail explicitly instead of silently discarding history.

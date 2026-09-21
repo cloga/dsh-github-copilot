@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.36"
+    "version": "0.4.0-alpha.37"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -483,17 +483,23 @@
       "required": true,
       "scope": "managed-github-copilot-preview-responses-only",
       "liveEndpointAcceptance": "not-verified",
+      "classificationOnlyFollowup": true,
+      "recognizedUncoded401Messages": [
+        "input item ID does not belong to this connection",
+        "input item does not belong to this connection"
+      ],
       "sourceMarkers": [
         {"file": "src/responses-replay-compat.ts", "marker": "normalizeCopilotResponsesPayload"},
         {"file": "src/responses-replay-compat.ts", "marker": "isCopilotInputItemScopeError"},
+        {"file": "src/responses-replay-compat.ts", "marker": "input item does not belong to this connection"},
         {"file": "src/preview-provider.ts", "marker": "onPayload"},
         {"file": "src/preview-route.ts", "marker": "onReplayFailure(error)"}
       ],
       "tests": [
         {"file": "tests/preview-provider.spec.ts", "name": "normalizes only wire item IDs after native serialization while preserving durable replay and tool pairing"},
-        {"file": "tests/preview-route.spec.ts", "name": "classifies an exact Responses replay-scope 401 locally and reuses the same credential without discovery or refresh"},
-        {"file": "tests/preview-route.spec.ts", "name": "does not abort a parallel native request when another dispatch receives a replay-scope 401"},
-        {"file": "tests/preview-route.spec.ts", "name": "does not retain a replay-scope failure across independent dispatches of one native prepared lease"}
+        {"file": "tests/preview-route.spec.ts", "name": "classifies \"$message\" in a $envelope Responses 401 locally and reuses the same credential without discovery or refresh"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not abort a parallel native request when another dispatch receives a replay-scope 401: %s"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not retain a replay-scope failure across independent dispatches of one native prepared lease: %s"}
       ]
     },
     {
