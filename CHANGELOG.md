@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.33 (prepared)
+
+- Fix the account-usage composer component to call the public `useSession(selector)` hook with a selector instead of assuming a no-argument snapshot API (#156).
+- Preserve native Session ownership and select only the open/current/not-removed predicate; no Core patch, credential change, network-policy change or automatic restart is required.
+- Add positive canonical/managed Copilot rendering and required-selector lifecycle regressions. Earlier signed-out absence tests do not establish that the eligible-session control can render.
+
 ## 0.4.0-alpha.32 (prepared)
 
 - Add an optional, Copilot-session-scoped composer usage control without replacing the native Context meter or changing other providers (#153).

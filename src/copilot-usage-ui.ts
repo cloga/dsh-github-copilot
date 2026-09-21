@@ -15,7 +15,8 @@ interface Slots {
 }
 interface RuntimeProps {
   sessionId: string
-  useSession(): unknown
+  // Public SnapshotSelectorHook requires a selector; it is not a snapshot getter.
+  useSession<T>(selector: (snapshot: unknown) => T): T
   useProjection(key: 'modelSelection'): unknown
 }
 function record(value: unknown): value is Record<string, unknown> {
@@ -59,7 +60,8 @@ function Surface({ runtime, remote, locale, diagnostic }: {
   locale: LocaleReader | undefined
   diagnostic: (code: string) => void
 }): ReactElement | null {
-  const session = runtime.useSession()
+  const valid = runtime.useSession(session => record(session) && session.sessionId === runtime.sessionId
+    && session.removed === false && session.openState === 'open')
   const projection = runtime.useProjection('modelSelection')
   const language = useSyncExternalStore(
     locale === undefined ? emptySubscribe : listener => locale.subscribe(listener),
@@ -67,8 +69,6 @@ function Surface({ runtime, remote, locale, diagnostic }: {
     () => 'en',
   )
   const current = effectiveCopilot(projection)
-  const valid = record(session) && session.sessionId === runtime.sessionId
-    && session.removed === false && session.openState === 'open'
   useEffect(() => {
     if (projection === undefined) diagnostic('COPILOT_USAGE_MODEL_PROJECTION_UNAVAILABLE')
   }, [projection, diagnostic])

@@ -84,6 +84,11 @@ jobs:
       - name: Install tagged search verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
+      - name: Install pinned Core renderer verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-client-ui-renderer...'
+      - name: Build plugin Client for pinned Core selector regression
+        run: pnpm build
       - name: Verify current unchanged tagged runtime before packing
         shell: bash
         run: |
