@@ -58,10 +58,11 @@ async function runtime(initial: RecordValue | undefined = grant(), config: Previ
   }
 }
 function event(type: string, data: Record<string, unknown>) { return `data: ${JSON.stringify({ type, ...data })}\n\n` }
-function response(tool = false) {
+function response(tool = false, phase?: 'commentary' | 'final_answer') {
   const reasoning = { type: 'reasoning', id: 'rs_synthetic', summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'synthetic-opaque-replay' }
   const output = tool ? { type: 'function_call', id: 'fc_synthetic', call_id: 'call_synthetic', name: 'echo', arguments: '{"value":"hi"}' }
-    : { type: 'message', id: 'msg_synthetic', role: 'assistant', content: [{ type: 'output_text', text: 'hello' }] }
+    : { type: 'message', id: 'msg_synthetic', role: 'assistant', content: [{ type: 'output_text', text: 'hello' }],
+      ...phase === undefined ? {} : { phase } }
   return new Response([
     event('response.created', { response: { id: 'resp_synthetic' } }),
     event('response.output_item.added', { output_index: 0, item: { type: 'reasoning', id: reasoning.id } }),
@@ -827,6 +828,7 @@ describe('plugin-owned account Copilot route', () => {
     expect(first.message.source).toMatchObject({ replayState: { response: { provider: PREVIEW, model: MODEL } } })
     const tool = first.message.content.find(block => block.type === 'tool-call')!
     if (tool.type !== 'tool-call') throw new Error('expected native tool call')
+    const durableReplay = JSON.stringify(first.message)
     const second = await call(harness.ctx, { messages: [first.message, {
       id: 'synthetic-tool' as Message['id'], role: 'user', source: { kind: 'tool', callId: tool.id },
       content: [{ type: 'tool-result', toolCallId: tool.id, content: [{ type: 'text', text: 'hi' }], isError: false }],
@@ -837,7 +839,40 @@ describe('plugin-owned account Copilot route', () => {
       expect.objectContaining({ type: 'function_call', call_id: 'call_synthetic' }),
       expect.objectContaining({ type: 'function_call_output', call_id: 'call_synthetic' }),
     ]))
+    const replayInput = requests[1]!.input as Array<Record<string, unknown>>
+    for (const item of replayInput.filter(item => ['reasoning', 'function_call', 'function_call_output'].includes(String(item.type)))) {
+      expect(item).not.toHaveProperty('id')
+    }
+    expect(JSON.stringify(first.message)).toBe(durableReplay)
     expect(second.message.content.every(block => block.type !== 'text' || !block.text.includes('synthetic-opaque-replay'))).toBe(true)
+  })
+
+  it.each(['commentary', 'final_answer'] as const)('preserves native assistant %s phase on second-turn replay without connection-scoped IDs', async phase => {
+    const requests: Array<Record<string, unknown>> = []
+    stubFetch(async (_input, init) => {
+      requests.push(JSON.parse(String(init?.body)))
+      return response(false, phase)
+    })
+    const harness = await runtime()
+    const first = await call(harness.ctx)
+    expect(first.assembler.finish).toEqual({ kind: 'stop' })
+    const durableReplay = JSON.stringify(first.message)
+    const second = await call(harness.ctx, { messages: [first.message,
+      createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } }),
+    ] })
+    expect(second.assembler.finish).toEqual({ kind: 'stop' })
+    const replayInput = requests[1]!.input as Array<Record<string, unknown>>
+    expect(replayInput).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'reasoning', encrypted_content: 'synthetic-opaque-replay',
+        summary: [{ type: 'summary_text', text: 'Public summary.' }] }),
+      expect.objectContaining({ type: 'message', role: 'assistant', phase,
+        content: [{ type: 'output_text', text: 'hello', annotations: [] }] }),
+    ]))
+    for (const item of replayInput.filter(item => item.type === 'reasoning' || item.type === 'message')) {
+      expect(item).not.toHaveProperty('id')
+    }
+    expect(JSON.stringify(first.message)).toBe(durableReplay)
+    expect(requests).toHaveLength(2)
   })
 
   it('keeps registration stable but refuses missing OAuth or server-revoked entitlement before model requests', async () => {
@@ -859,6 +894,141 @@ describe('plugin-owned account Copilot route', () => {
     vi.stubEnv('COPILOT_GITHUB_TOKEN', 'ambient-must-not-be-used')
     await expect(harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })).rejects.toThrow(/OAUTH|CREDENTIAL/)
     expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('classifies an exact Responses replay-scope 401 locally and reuses the same credential without discovery or refresh', async () => {
+    const requests: Array<{ path: string; authorization: string | null; model?: string }> = []
+    stubFetch(async (input, init) => {
+      const path = new URL(String(input)).pathname
+      requests.push({ path, authorization: new Headers(init?.headers).get('authorization'),
+        ...path === '/responses' ? { model: JSON.parse(String(init?.body)).model } : {} })
+      if (path === '/models') return catalogResponse()
+      if (path !== '/responses') throw new Error('Replay rejection must not refresh OAuth')
+      if (requests.filter(request => request.path === '/responses').length > 1) return response()
+      return new Response(JSON.stringify({ error: { message: 'input item ID does not belong to this connection',
+        code: '', private_detail: 'synthetic-private-response-body' } }),
+      { status: 401, headers: { 'content-type': 'application/json' } })
+    }, true)
+    const original = grant()
+    const harness = await runtime(original)
+    const first = await call(harness.ctx)
+    expect(first.assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST',
+      message: expect.stringContaining('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH') } })
+    expect(JSON.stringify(first.assembler.finish)).not.toMatch(/synthetic-private-response-body|synthetic-current-access|input item ID/)
+    expect(requests.map(request => request.path)).toEqual(['/models', '/responses'])
+    expect(harness.ctx.get('githubCopilotPreview')!.getView().available).toBe(true)
+    expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+    expect(requests.map(request => request.path)).toEqual(['/models', '/responses', '/responses'])
+    expect(requests.filter(request => request.path === '/responses')).toEqual([
+      { path: '/responses', authorization: 'Bearer synthetic-current-access', model: MODEL },
+      { path: '/responses', authorization: 'Bearer synthetic-current-access', model: MODEL },
+    ])
+    expect(harness.modify).not.toHaveBeenCalled()
+    expect(harness.current()).toEqual(original)
+  })
+
+  it.each(['nested', 'outer'] as const)('retains native AUTH and rejected-token renewal for %s authentication fields even with exact replay-scope text', async location => {
+    const paths: string[] = []
+    stubFetch(async (input, init) => {
+      const path = new URL(String(input)).pathname
+      paths.push(path)
+      if (path === '/models') return catalogResponse()
+      if (path === '/copilot_internal/v2/token') return new Response(JSON.stringify({
+        token: 'synthetic-after-typed-auth-error', expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }))
+      if (new Headers(init?.headers).get('authorization') === 'Bearer synthetic-after-typed-auth-error') return response()
+      const error = { message: 'input item ID does not belong to this connection' }
+      const body = location === 'nested'
+        ? { error: { ...error, type: 'authentication_error' } }
+        : { code: 'invalid_api_key', type: 'authentication_error', error }
+      return new Response(JSON.stringify(body), { status: 401, headers: { 'content-type': 'application/json' } })
+    }, true)
+    const harness = await runtime()
+    expect((await call(harness.ctx)).assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+    expect(paths).toEqual(['/models', '/responses'])
+    expect(harness.ctx.get('githubCopilotPreview')!.getView().available).toBe(false)
+    expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+    expect(paths.filter(path => path === '/copilot_internal/v2/token')).toHaveLength(1)
+    expect(paths.filter(path => path === '/responses')).toHaveLength(2)
+    expect(harness.modify).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not abort a parallel native request when another dispatch receives a replay-scope 401', async () => {
+    let finishParallel: ((result: Response) => void) | undefined
+    let parallelSignal: AbortSignal | undefined
+    let wires = 0
+    stubFetch(async (_input, init) => {
+      if (++wires !== 1) return new Response(JSON.stringify({ error: {
+        message: 'input item ID does not belong to this connection',
+      } }), { status: 401, headers: { 'content-type': 'application/json' } })
+      parallelSignal = init?.signal ?? undefined
+      return await new Promise<Response>((resolve, reject) => {
+        finishParallel = resolve
+        parallelSignal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+      })
+    })
+    const harness = await runtime()
+    const parallel = call(harness.ctx)
+    await vi.waitFor(() => expect(finishParallel).toBeDefined())
+    try {
+      const rejected = await call(harness.ctx)
+      expect(rejected.assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+      expect(parallelSignal?.aborted).toBe(false)
+      finishParallel!(response())
+      expect((await parallel).assembler.finish).toEqual({ kind: 'stop' })
+      expect(wires).toBe(2)
+      expect(discoveryRequests).toHaveLength(1)
+      expect(harness.modify).not.toHaveBeenCalled()
+      expect(harness.ctx.get('githubCopilotPreview')!.getView().available).toBe(true)
+    } finally {
+      finishParallel!(response())
+      await parallel
+    }
+  })
+
+  it('does not retain a replay-scope failure across independent dispatches of one native prepared lease', async () => {
+    let wires = 0
+    stubFetch(async () => ++wires === 1
+      ? new Response(JSON.stringify({ error: { message: 'input item ID does not belong to this connection' } }),
+        { status: 401, headers: { 'content-type': 'application/json' } })
+      : response())
+    const harness = await runtime()
+    // Native adapter leases can be re-dispatched by Core; the outer runtime
+    // prepared-call handle remains single-use. This test installs no retry loop.
+    const prepared = await harness.adapter.prepareCall(PREVIEW, MODEL)
+    const consume = async () => {
+      const assembler = new BlockAssembler()
+      for await (const chunk of prepared.stream({ provider: PREVIEW, model: MODEL, messages: [] })) assembler.push(chunk)
+      return assembler.finish
+    }
+    await expect(consume()).rejects.toMatchObject({ code: 'INVALID_REQUEST',
+      message: expect.stringContaining('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH') })
+    expect(wires).toBe(1)
+    expect(await consume()).toEqual({ kind: 'stop' })
+    expect(wires).toBe(2)
+    expect(discoveryRequests).toHaveLength(1)
+    expect(harness.modify).not.toHaveBeenCalled()
+  })
+
+  it('lets caller cancellation win over a late replay-scope 401 without retiring shared authorization', async () => {
+    let finish: ((result: Response) => void) | undefined
+    let wires = 0
+    stubFetch(async () => {
+      if (++wires > 1) return response()
+      return await new Promise<Response>(resolve => { finish = resolve })
+    })
+    const harness = await runtime()
+    const controller = new AbortController()
+    const pending = call(harness.ctx, { signal: controller.signal })
+    await vi.waitFor(() => expect(finish).toBeDefined())
+    controller.abort()
+    finish!(new Response(JSON.stringify({ error: { message: 'input item ID does not belong to this connection' } }),
+      { status: 401, headers: { 'content-type': 'application/json' } }))
+    expect((await pending).assembler.finish).toMatchObject({ kind: 'aborted', failure: { code: 'ABORTED' } })
+    expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+    expect(wires).toBe(2)
+    expect(discoveryRequests).toHaveLength(1)
+    expect(harness.modify).not.toHaveBeenCalled()
   })
 
   it.each([401, 403])('handles actual HTTP %i without replay and renews only a rejected token on the next request', async status => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.36 (prepared)
+
+- Add managed Responses wire-only replay normalization through the native SDK's public `onPayload` seam, preserving durable history, encrypted reasoning, message phases and tool-result pairing (#162). Reference-only or incomplete ID-bearing forms fail explicitly instead of silently discarding history.
+- Recognize the exact structured input-item connection-scope HTTP 401 without retiring shared OAuth proof or aborting neighboring calls. Surface a sanitized, dispatch-local `INVALID_REQUEST`; genuine and unrecognized authentication failures retain existing recovery.
+- Preserve native transport, caller callbacks, cancellation, credentials and model selection. No automatic request retry, alternate adapter, Core/SDK patch, canonical-route takeover or live-profile mutation is introduced.
+- Add real-SDK/pinned-Core synthetic regressions for replay shape, caller callback composition, bounded response inspection, parallel isolation, cancellation and genuine authentication recovery. Real Copilot acceptance of existing conversations, deployment and activation remain separate acceptance steps.
+
 ## 0.4.0-alpha.35 (prepared)
 
 - Match the account-usage control to native secondary statistics typography, line height and pill spacing (#160).

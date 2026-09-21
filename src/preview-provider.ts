@@ -9,6 +9,7 @@ import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
+import { CopilotResponsesReplayError, isCopilotInputItemScopeError, normalizeCopilotResponsesPayload } from './responses-replay-compat.ts'
 
 /** Per-call authorization/lifetime checks supplied by the owning route. */
 export interface PreviewProviderGuard {
@@ -16,8 +17,10 @@ export interface PreviewProviderGuard {
   assertActive(): void
   assertAccount(credential: GitHubCopilotOAuthCredential): void
   beforeWire(model: Model<Api>, options?: StreamOptions): Promise<{ signal: AbortSignal; release(): void }>
-  /** Actual model HTTP 401 only; called after release, without replaying the request. */
+  /** Actual model HTTP 401, excluding proven Responses replay-scope failures; no request replay. */
   onUnauthorized?(): void
+  /** Dispatch-local, verified replay failure; never inferred from SDK error text. */
+  onReplayFailure?(error: CopilotResponsesReplayError): void
 }
 
 /** Guard for one selected model in an account-bound descriptor snapshot. */
@@ -173,17 +176,36 @@ export function createAccountProvider(
       // Alias identity is retained for replay. Anthropic's native alias branch
       // uses API-key auth unless we provide verified Bearer header-owned auth.
       let unauthorized = false
+      const responses = model.api === 'openai-responses'
+      const reportReplayFailure = (error: CopilotResponsesReplayError): void => {
+        if (lease.signal.aborted || options.signal?.aborted) return
+        try { guard.onReplayFailure?.(error) } catch { /* Keep native cleanup and terminal delivery intact. */ }
+      }
+      const onPayload: StreamOptions['onPayload'] = responses ? async (payload, selectedModel) => {
+        // Preserve caller callback ordering and undefined-as-no-replacement semantics.
+        const replacement = await options.onPayload?.(payload, selectedModel)
+        if (lease.signal.aborted || options.signal?.aborted) throw new Error('COPILOT_MANAGED_ABORTED')
+        try { return normalizeCopilotResponsesPayload(replacement === undefined ? payload : replacement) }
+        catch (error) {
+          if (error instanceof CopilotResponsesReplayError) reportReplayFailure(error)
+          throw error
+        }
+      } : options.onPayload
       const fetch = options.fetch ?? globalThis.fetch
       const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
         const response = await fetch(input, init)
-        // onResponse is success-only in some native SDK adapters. Observe the
-        // real HTTP status via their public fetch seam, never error-message text.
-        if (response.status === 401) unauthorized = true
+        // A bounded clone identifies only the observed request-scope rejection.
+        // Preserve the original Response/status/body for the native SDK.
+        if (response.status === 401) {
+          if (responses && await isCopilotInputItemScopeError(response, lease.signal)) {
+            reportReplayFailure(new CopilotResponsesReplayError('scope-mismatch'))
+          } else unauthorized = true
+        }
         return response
       }
       const wireOptions = model.api === 'anthropic-messages'
         ? { ...options, signal: lease.signal, apiKey: undefined, headers, fetch: observeResponse }
-        : { ...options, signal: lease.signal, headers, fetch: observeResponse }
+        : { ...options, signal: lease.signal, headers, fetch: observeResponse, onPayload }
       if (!hasApi(model, 'openai-responses') && !hasApi(model, 'openai-completions') && !hasApi(model, 'anthropic-messages')) {
         lease.release()
         throw new Error('COPILOT_MANAGED_PROTOCOL_UNSUPPORTED')

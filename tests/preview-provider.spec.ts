@@ -4,6 +4,7 @@ import '@earendil-works/pi-ai/api/openai-completions'
 import '@earendil-works/pi-ai/api/anthropic-messages'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { lazyStream } from '@earendil-works/pi-ai'
+import type { Context as PiContext, StreamOptions } from '@earendil-works/pi-ai'
 import * as copilotSdk from '@earendil-works/pi-ai/providers/github-copilot'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { accountModelFromDescriptor, createAccountProvider, copilotPublicHeaders } from '../src/preview-provider.ts'
@@ -328,6 +329,126 @@ describe('account provider model HTTP authorization observation', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(harness.unauthorized).toHaveBeenCalledTimes(1)
     expect(harness.order).toEqual(['release', 'unauthorized'])
+  })
+})
+
+describe('managed Responses replay compatibility', () => {
+  function replayContext(): PiContext {
+    return { messages: [{ role: 'user', content: 'Synthetic task', timestamp: 0 }, {
+      role: 'assistant', api: 'openai-responses', provider: PREVIEW, model: 'future-lab-r17',
+      stopReason: 'toolUse', timestamp: 0,
+      usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      content: [
+        { type: 'thinking', thinking: 'Public summary.', thinkingSignature: JSON.stringify({
+          type: 'reasoning', id: 'rs_old_scope', summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'opaque-old-reasoning',
+        }) },
+        { type: 'text', text: 'Checking.', textSignature: JSON.stringify({ v: 1, id: 'msg_old_scope', phase: 'commentary' }) },
+        { type: 'toolCall', id: 'call_check|fc_old_scope', name: 'check', arguments: { id: 'keep-business-id' } },
+      ],
+    }, { role: 'toolResult', toolCallId: 'call_check|fc_old_scope', toolName: 'check',
+      content: [{ type: 'text', text: 'Done.' }], isError: false, timestamp: 0 }] }
+  }
+  async function invoke(context: PiContext, options: Partial<StreamOptions> = {}, api: AccountModelApi = 'openai-responses') {
+    const item = descriptor(api)
+    const release = vi.fn()
+    const unauthorized = vi.fn()
+    const replayFailure = vi.fn()
+    const guard: AccountProviderGuard = { ...accountGuard(item.id),
+      beforeWire: async () => ({ signal: new AbortController().signal, release }),
+      onUnauthorized: unauthorized, onReplayFailure: replayFailure,
+    }
+    const { provider, models } = createAccountProvider([item], guard, baseURL)
+    let body: Record<string, unknown> | undefined
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return nativeEvents(api)
+    })
+    const stream = provider.streamSimple(models[0]!, context, {
+      apiKey: 'synthetic-account-token', maxRetries: 0, fetch, ...options,
+    })
+    for await (const _event of stream) { /* Consume the real native SDK stream. */ }
+    const result = await stream.result()
+    await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(1))
+    return { body, fetch, result, release, unauthorized, replayFailure }
+  }
+  it('normalizes only wire item IDs after native serialization while preserving durable replay and tool pairing', async () => {
+    const context = replayContext()
+    const original = JSON.stringify(context)
+    const result = await invoke(context)
+    expect(result.result.stopReason).toBe('stop')
+    expect(result.fetch).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(context)).toBe(original)
+    const input = result.body!.input as Record<string, unknown>[]
+    expect(input.some(item => Object.hasOwn(item, 'id'))).toBe(false)
+    expect(input.find(item => item.type === 'reasoning')).toEqual({ type: 'reasoning',
+      summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'opaque-old-reasoning' })
+    expect(input.find(item => item.type === 'message')).toMatchObject({ phase: 'commentary', content: [{ type: 'output_text', text: 'Checking.' }] })
+    const call = input.find(item => item.type === 'function_call')!
+    const output = input.find(item => item.type === 'function_call_output')!
+    expect(call.call_id).toBe(output.call_id)
+    expect(JSON.parse(String(call.arguments))).toEqual({ id: 'keep-business-id' })
+    expect(result.body!.store).toBe(false)
+    expect(result.replayFailure).not.toHaveBeenCalled()
+    expect(result.unauthorized).not.toHaveBeenCalled()
+  })
+  it.each(['unchanged', 'mutated', 'replacement'] as const)('composes the asynchronous caller callback before normalization: %s', async mode => {
+    let effective: Record<string, unknown> | undefined
+    let before = ''
+    const callback = vi.fn(async (payload: unknown) => {
+      const record = payload as Record<string, unknown>
+      expect((record.input as Record<string, unknown>[]).some(item => item.id !== undefined)).toBe(true)
+      if (mode === 'replacement') effective = Object.freeze({ ...record, marker: mode })
+      else {
+        if (mode === 'mutated') record.marker = mode
+        effective = record
+      }
+      before = JSON.stringify(effective)
+      return mode === 'replacement' ? effective : undefined
+    })
+    const result = await invoke(replayContext(), { onPayload: callback })
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(result.result.stopReason).toBe('stop')
+    expect((result.body!.input as Record<string, unknown>[]).some(item => item.id !== undefined)).toBe(false)
+    expect(result.body!.marker).toBe(mode === 'unchanged' ? undefined : mode)
+    expect(JSON.stringify(effective)).toBe(before)
+  })
+  it('retains callback failure and releases its lease without issuing a request', async () => {
+    const result = await invoke(replayContext(), { onPayload() { throw new Error('synthetic caller failure') } })
+    expect(result.result.stopReason).toBe('error')
+    expect(result.result.errorMessage).toContain('synthetic caller failure')
+    expect(result.fetch).not.toHaveBeenCalled()
+    expect(result.unauthorized).not.toHaveBeenCalled()
+    expect(result.replayFailure).not.toHaveBeenCalled()
+  })
+  it.each(['openai-completions', 'anthropic-messages'] as const)('leaves non-Responses %s callbacks and payloads native-owned', async api => {
+    const callback = vi.fn((payload: unknown) => ({ ...payload as object, marker: { id: 'unchanged-nested-id' } }))
+    const result = await invoke({ messages: [] }, { onPayload: callback }, api)
+    expect(result.result.stopReason).toBe('stop')
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(result.body!.marker).toEqual({ id: 'unchanged-nested-id' })
+    expect(result.replayFailure).not.toHaveBeenCalled()
+  })
+  it('reports a reference-only payload without network, auth invalidation or unsafe history conversion', async () => {
+    const result = await invoke({ messages: [] }, { onPayload: () => ({ input: [{ type: 'item_reference', id: 'rs_only_reference' }] }) })
+    expect(result.result.stopReason).toBe('error')
+    expect(result.result.errorMessage).toContain('COPILOT_RESPONSES_REPLAY_')
+    expect(result.fetch).not.toHaveBeenCalled()
+    expect(result.replayFailure).toHaveBeenCalledTimes(1)
+    expect(result.unauthorized).not.toHaveBeenCalled()
+  })
+  it('recognizes the real input-item HTTP 401 without retiring auth and preserves the native Response', async () => {
+    const response = new Response(JSON.stringify({ message: 'input item ID does not belong to this connection', code: '' }), {
+      status: 401, headers: { 'content-type': 'application/json' },
+    })
+    const fetch = vi.fn(async () => response)
+    const result = await invoke({ messages: [] }, { fetch })
+    expect(result.result.stopReason).toBe('error')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(result.unauthorized).not.toHaveBeenCalled()
+    expect(result.replayFailure).toHaveBeenCalledTimes(1)
+    expect(result.replayFailure.mock.calls[0]![0].message).toContain('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH')
+    expect(response.status).toBe(401)
   })
 })
 

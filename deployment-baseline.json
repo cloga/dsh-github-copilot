@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.35"
+    "version": "0.4.0-alpha.36"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -476,6 +476,24 @@
         {"file": "tests/preview-route.spec.ts", "name": "does not let a retry cross to another account after its first attempt"},
         {"file": "tests/preview-route.spec.ts", "name": "refuses a duplicate route through the public registry without taking over the existing adapter"},
         {"file": "tests/preview-route.spec.ts", "name": "withdraws only its own route and refuses an already-prepared call after disposal"}
+      ]
+    },
+    {
+      "id": "managed-responses-replay-scope-isolation",
+      "required": true,
+      "scope": "managed-github-copilot-preview-responses-only",
+      "liveEndpointAcceptance": "not-verified",
+      "sourceMarkers": [
+        {"file": "src/responses-replay-compat.ts", "marker": "normalizeCopilotResponsesPayload"},
+        {"file": "src/responses-replay-compat.ts", "marker": "isCopilotInputItemScopeError"},
+        {"file": "src/preview-provider.ts", "marker": "onPayload"},
+        {"file": "src/preview-route.ts", "marker": "onReplayFailure(error)"}
+      ],
+      "tests": [
+        {"file": "tests/preview-provider.spec.ts", "name": "normalizes only wire item IDs after native serialization while preserving durable replay and tool pairing"},
+        {"file": "tests/preview-route.spec.ts", "name": "classifies an exact Responses replay-scope 401 locally and reuses the same credential without discovery or refresh"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not abort a parallel native request when another dispatch receives a replay-scope 401"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not retain a replay-scope failure across independent dispatches of one native prepared lease"}
       ]
     },
     {
