@@ -1,4 +1,4 @@
-/** Optional plugin-owned planner/executor sessions; no Core/default-model mutation. */
+/** Retired planner/executor entry points; retained policies stay enforceable without migration. */
 import { createHash } from 'node:crypto'
 import { Context } from '@deepseek-ai/cordis'
 import * as dshScope from '@deepseek-ai/dsh-scope'
@@ -20,7 +20,6 @@ const ConfigJson = json.object({ enabled: json.boolean(), plannerModel: json.str
 const RevisionJson = json.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const CreateJson = json.object({ requestId: json.string().uuid(), workspaceId: json.string().min(1).max(512), expectedRevision: RevisionJson }).strict()
 const SaveJson = json.object({ configuration: ConfigJson, expectedRevision: RevisionJson }).strict()
-const CatalogEntryJson = json.object({ id: json.string().min(1).max(512), name: json.string().min(1).max(1024) }).strict()
 const ExecuteJson = json.object({ description: json.string().min(1).max(160), prompt: json.string().min(1).max(100_000) }).strict()
 const PolicyJson = json.object({ version: json.literal(1), rootSessionId: json.string(), requestId: json.string(), workspaceId: json.string(), settingsRevision: json.number().int().nonnegative(), cwd: json.string(), agentPreset: json.string(), provider: json.literal(PROVIDER), plannerModel: json.string().min(1), executorModel: json.string().min(1), executorTools: json.array(json.string()), plannerTools: json.array(json.string()) }).strict()
 type Policy = json.infer<typeof PolicyJson>
@@ -31,9 +30,7 @@ interface LogEvent { readonly type: string; readonly seq: number; readonly data:
 interface Header { readonly id: string; readonly cwd?: string; readonly parentSession?: string; readonly origin?: string; readonly agentPreset?: string }
 interface Session { readonly id: string; readonly header: Header }
 interface Agent { readonly id: string; readonly ctx: Context; readonly session: Session; cancel(reason: { kind: 'disposed' }): void; whenIdle(): Promise<void> }
-interface Handle { readonly agent: Agent; dispose(): Promise<void> }
-interface CreateOptions { sessionId: string; agentOptions: { provider: string; model: string }; meta: { cwd: string; agentPreset: string; isSeeded: false }; inheritedEventCount: number; seed: readonly (LogEvent & { time: number })[]; signal: AbortSignal; setup(ctx: Context, agent: Agent): Promise<void> }
-interface Agents { list(): Agent[]; get(id: string): Agent | undefined; create(options: CreateOptions): Promise<Handle>; resume(options: unknown): Promise<Handle> }
+interface Agents { list(): Agent[]; get(id: string): Agent | undefined }
 interface Workspace { readonly id: string; readonly title: string; readonly path: string; attachSession(id: string): Promise<void> }
 interface Workspaces { list(): Workspace[]; get(id: string): Workspace | undefined }
 interface Settings { readonly writable: boolean; register(ns: string, schema: unknown): unknown; describe(options: { redactSecrets: true }): readonly { ns: string; revision: number; value: unknown }[]; replace(ns: string, value: object, revision: number): Promise<void> }
@@ -83,10 +80,8 @@ export const dualModelProjection = {
   },
 }
 
-const ROOT_TOOLS = [DUAL_MODEL_EXECUTE_TOOL, 'read', 'read_image', 'glob', 'grep', 'skill', 'ask_user_question', 'todo_write', 'send_message', 'list_agents', 'interrupt_agent'] as const
-// An explicit end-capability allowlist, not a blanket MCP/shell/delegation wildcard.
-// Shell execution is intentionally an executor capability; it is NOT a security sandbox.
-const EXECUTOR_TOOLS = ['read', 'read_image', 'glob', 'grep', 'skill', 'write', 'edit', 'pwsh', 'bash', 'present', 'todo_write', 'send_message', 'list_agents', 'interrupt_agent', 'job_list', 'job_output', 'job_kill'] as const
+// Tool allowlists come only from each retained policy, never from current settings.
+// Shell execution in an existing executor policy is NOT a security sandbox.
 const EXECUTOR_PERSONA = 'You are the execution agent for a dedicated Copilot planner/executor session. Implement only the delegated task. Your provider and model are fixed by the session policy. Do not create other agents, workflows, dynamic plugins, or alternate model calls. Report the changed files, verification, limitations, and actual results to your direct parent with send_message. Do not claim tests or work you did not perform.'
 function roleText(policy: Policy, role: 'planner' | 'executor'): string {
   return role === 'planner' ? `You are the planning and acceptance agent. Read the current code and evidence, plan, clarify, delegate implementation through ${DUAL_MODEL_EXECUTE_TOOL}, and independently review results. Do not implement changes or run commands directly. Your planning model is ${policy.plannerModel}; execution is fixed to ${policy.executorModel}. Use the original send_message/list_agents/interrupt_agent controls to continue and inspect your execution children. Provider: ${PROVIDER}.` : EXECUTOR_PERSONA
@@ -102,7 +97,7 @@ function api<T>(ctx: Context, key: string, methods: readonly string[]): T | unde
   return object(value) && methods.every(method => typeof value[method] === 'function') ? value as T : undefined
 }
 function revision(value: unknown): value is number { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 }
-const ERROR_REASONS = new Set(['DUAL_MODEL_UNSUPPORTED', 'DUAL_MODEL_READ_ONLY', 'DUAL_MODEL_REVISION_CONFLICT', 'DUAL_MODEL_MODEL_UNAVAILABLE', 'DUAL_MODEL_WORKSPACE_UNAVAILABLE', 'DUAL_MODEL_DISABLED', 'DUAL_MODEL_INVALID_REQUEST', 'DUAL_MODEL_REQUEST_CONFLICT', 'DUAL_MODEL_SAVE_FAILED', 'DUAL_MODEL_CREATE_UNCERTAIN', 'DUAL_MODEL_POLICY_INVALID', 'DUAL_MODEL_SELECTION_LOCKED', 'DUAL_MODEL_DELEGATION_DENIED', 'DUAL_MODEL_EXECUTION_FAILED'])
+const ERROR_REASONS = new Set(['DUAL_MODEL_RETIRED', 'DUAL_MODEL_UNSUPPORTED', 'DUAL_MODEL_READ_ONLY', 'DUAL_MODEL_REVISION_CONFLICT', 'DUAL_MODEL_MODEL_UNAVAILABLE', 'DUAL_MODEL_WORKSPACE_UNAVAILABLE', 'DUAL_MODEL_DISABLED', 'DUAL_MODEL_INVALID_REQUEST', 'DUAL_MODEL_REQUEST_CONFLICT', 'DUAL_MODEL_SAVE_FAILED', 'DUAL_MODEL_CREATE_UNCERTAIN', 'DUAL_MODEL_POLICY_INVALID', 'DUAL_MODEL_SELECTION_LOCKED', 'DUAL_MODEL_DELEGATION_DENIED', 'DUAL_MODEL_EXECUTION_FAILED'])
 /** Remote errors cross bundle/realm boundaries; constructor identity is not a protocol. */
 function ownRemoteFailure(error: unknown): { reason: string; creation?: CreationOutcome } | undefined {
   try {
@@ -130,15 +125,14 @@ function dedicatedAddress(agent: Agent): boolean {
 
 declare module '@deepseek-ai/cordis' { interface Context { githubCopilotDualModel: GitHubCopilotDualModel } }
 
-/** Always mountable; missing optional APIs produce a safe unsupported view. */
+/** Always mountable; retired entry points coexist with retained policy enforcement. */
 export default class GitHubCopilotDualModel extends TypertRemoteService {
-  // A plain holder retains the plugin owner rather than Cordis' caller-traced
-  // Service.ctx. Remotes must not lend their own fiber to durable root creation.
+  // Retained policy overlays belong to the plugin owner, not to a Remote
+  // caller's transient fiber or caller-traced Service.ctx.
   private readonly owner: { readonly ctx: Context }
   private readonly lifetime = new AbortController()
   private readonly creates = new Map<string, { key: string; promise: Promise<DualModelCreateResult> }>()
   private readonly overlays = new Map<Agent, { dispose(): Promise<void>; policy: Policy; role: 'planner' | 'executor' }>()
-  private readonly handles = new Map<string, Handle>()
   private settingsReady = false
   private projectionReady = false
   private registrationFailed = false
@@ -196,7 +190,6 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
       const subject = agent as unknown as Agent
       const overlay = this.overlays.get(subject)
       this.overlays.delete(subject)
-      if (this.handles.get(agent.id)?.agent === subject) this.handles.delete(agent.id)
       if (overlay) void overlay.dispose().catch(() => {})
     })
     ctx.effect(() => async () => {
@@ -207,9 +200,8 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
       await subagents?.drainContinuableDescendants(roots).catch(() => {})
       for (const [agent] of this.overlays) agent.cancel({ kind: 'disposed' })
       await Promise.allSettled([...this.overlays.keys()].map(agent => agent.whenIdle()))
-      await Promise.allSettled([...this.handles.values()].map(handle => handle.dispose()))
       await Promise.allSettled([...this.overlays.values()].map(overlay => overlay.dispose()))
-      this.handles.clear(); this.overlays.clear()
+      this.overlays.clear()
     })
     // HMR: replay existing dedicated sessions without modifying their stored policy.
     for (const agent of api<Agents>(ctx, 'agents', ['list'])?.list() ?? []) {
@@ -249,19 +241,11 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
   }
   @Remote
   async view(): Promise<DualModelView> {
-    const empty = { supported: false, diagnostic: 'DUAL_MODEL_UNSUPPORTED', writable: false, revision: null, configuration: DEFAULT_CONFIG, models: [], workspaces: [] }
-    try {
-      const configuration = this.configuration(), cap = this.capabilities()
-      if (!cap) return { ...empty, ...configuration }
-      let models: DualModelView['models'] = [], diagnostic: string | undefined
-      try {
-        const preview = await cap.preview.discover({ force: false, signal: this.lifetime.signal })
-        if (preview.available && preview.state === 'ready') models = json.array(CatalogEntryJson).max(512).parse(preview.models.map(({ id, name }) => ({ id, name })))
-        else diagnostic = 'DUAL_MODEL_MODEL_UNAVAILABLE'
-      } catch { diagnostic = 'DUAL_MODEL_MODEL_UNAVAILABLE' }
-      return { supported: true, ...diagnostic === undefined ? {} : { diagnostic }, writable: cap.settings.writable === true, ...configuration,
-        models, workspaces: json.array(CatalogEntryJson).max(1024).parse(cap.workspaces.list().map(workspace => ({ id: workspace.id, name: workspace.title }))) }
-    } catch { return empty }
+    const empty = { supported: false, diagnostic: 'DUAL_MODEL_RETIRED', writable: false, revision: null, configuration: DEFAULT_CONFIG, models: [], workspaces: [] }
+    // Retained configuration is read-only evidence, not permission to discover an
+    // account or offer new choices. No settings, credentials or defaults migrate.
+    try { return { ...empty, ...this.configuration() } }
+    catch { return empty }
   }
   @Remote
   async save(input: DualModelSaveRequest): Promise<DualModelView> {
@@ -271,13 +255,7 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
   private async saveOnce(input: DualModelSaveRequest): Promise<DualModelView> {
     const parsed = SaveJson.safeParse(input)
     if (!parsed.success) fail('DUAL_MODEL_INVALID_REQUEST')
-    const cap = this.requireCapabilities(), { configuration, expectedRevision } = parsed.data
-    if (cap.settings.writable !== true) fail('DUAL_MODEL_READ_ONLY')
-    if (this.configuration().revision !== expectedRevision) fail('DUAL_MODEL_REVISION_CONFLICT')
-    if (configuration.enabled) await this.assertModels(cap, [configuration.plannerModel, configuration.executorModel])
-    try { await cap.settings.replace(DUAL_MODEL_NAMESPACE, configuration, expectedRevision) }
-    catch (error) { fail(reasonOf(error, 'DUAL_MODEL_SAVE_FAILED')) }
-    return this.view()
+    fail('DUAL_MODEL_RETIRED')
   }
   @Remote
   create(input: DualModelCreateRequest): Promise<DualModelCreateResult> {
@@ -294,63 +272,35 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
   private async createOnce(request: DualModelCreateRequest, id: string): Promise<DualModelCreateResult> {
     let creation: CreationOutcome = 'uncertain'
     try {
-    const cap = this.requireCapabilities()
-    // Resolve the original operation BEFORE reading mutable settings/account state.
-    // A disconnected successful create remains recoverable after a later config save.
-    const existing = await cap.persistence.stat(id)
-    if (existing !== undefined || cap.agents.get(id)) {
-      const inspection = await cap.inspector.inspect(id)
-      let state = dualModelProjection.init(inspection.meta, inspection.inheritedEventCount)
-      for (const event of inspection.events) state = dualModelProjection.apply(state, event)
-      if (state.invalid || !state.policy || !policyMatches(state.policy, request)) fail('DUAL_MODEL_REQUEST_CONFLICT')
-      const workspace = this.workspace(cap, request.workspaceId)
-      if (workspace.path !== state.policy.cwd) fail('DUAL_MODEL_REQUEST_CONFLICT')
-      await workspace.attachSession(id)
-      return { sessionId: id }
+    // Recovery needs only retained identity/history evidence, not current account,
+    // settings or execution capabilities. It never constructs or resumes a root.
+    if (this.lifetime.signal.aborted) fail('DUAL_MODEL_UNSUPPORTED')
+    const ctx = this.owner.ctx
+    const persistence = api<Persistence>(ctx, 'sessionPersistence', ['stat'])
+    const agents = api<Agents>(ctx, 'agents', ['get'])
+    if (!persistence || !agents) fail('DUAL_MODEL_UNSUPPORTED')
+    const existing = await persistence.stat(id)
+    if (existing === undefined && !agents.get(id)) {
+      // Only positive absence permits an old Client to discard its request UUID.
+      creation = 'not-created'
+      fail('DUAL_MODEL_RETIRED')
     }
-    // Only this positive absence observation authorizes a Client to discard its
-    // idempotency key after a subsequent preflight refusal.
-    creation = 'not-created'
-    const current = this.configuration()
-    if (current.revision !== request.expectedRevision) fail('DUAL_MODEL_REVISION_CONFLICT')
-    if (!current.configuration.enabled) fail('DUAL_MODEL_DISABLED')
-    const workspace = this.workspace(cap, request.workspaceId)
-    const captured = { ...current.configuration }
-    await this.assertModels(cap, [captured.plannerModel, captured.executorModel])
-    const preset = await cap.presets.resolve()
-    const standingKey = await cap.presets.standingKeyFor(preset.id)
-    const inheritedNames = new Set(cap.tools.schemas(standingKey).map(tool => tool.name))
-    const executorTools = EXECUTOR_TOOLS.filter(name => inheritedNames.has(name))
-    if (!executorTools.includes('send_message')) fail('DUAL_MODEL_UNSUPPORTED')
-    if (this.configuration().revision !== request.expectedRevision) fail('DUAL_MODEL_REVISION_CONFLICT')
-    if (cap.workspaces.get(workspace.id) !== workspace) fail('DUAL_MODEL_WORKSPACE_UNAVAILABLE')
-    const policy: Policy = { version: 1, rootSessionId: id, requestId: request.requestId, workspaceId: workspace.id, settingsRevision: request.expectedRevision,
-      cwd: workspace.path, agentPreset: preset.id, provider: PROVIDER, plannerModel: captured.plannerModel, executorModel: captured.executorModel,
-      plannerTools: [...ROOT_TOOLS], executorTools: [...executorTools] }
-    // Session.append currently cannot write the ignorable envelope. Seed the complete
-    // external record through public CreateAgentOptions, with zero fork inheritance.
-    // Once construction is invoked, no rejection proves that publication or
-    // durable storage did not occur. Retries must retain this same identity.
-    creation = 'uncertain'
-    const handle = await cap.agents.create({ sessionId: id, agentOptions: { provider: PROVIDER, model: policy.plannerModel },
-      meta: { cwd: policy.cwd, agentPreset: preset.id, isSeeded: false }, inheritedEventCount: 0,
-      seed: [
-        { type: DUAL_MODEL_POLICY_EVENT, seq: 0, time: Date.now(), ignorable: true, data: policy },
-        // The public pending-selection vocabulary lets a cold blank Session and
-        // its picker reconstruct this route without saving a global default.
-        { type: 'model/selection', seq: 1, time: Date.now(), data: { provider: PROVIDER, model: policy.plannerModel } },
-      ], signal: this.lifetime.signal,
-      setup: async (agentCtx, agent) => { await cap.presets.mount(agentCtx, preset.id); this.install(agent, policy, 'planner') },
-    })
-    this.handles.set(id, handle)
-    // Append is best-effort; Session.flush is the public durability barrier.
-    if (!await cap.sessions.flush(handle.agent.session)) fail('DUAL_MODEL_CREATE_UNCERTAIN')
+    const inspector = api<Inspector>(ctx, 'sessionController', ['inspect'])
+    const workspaces = api<Workspaces>(ctx, 'workspaceRegistry', ['get'])
+    if (!inspector || !workspaces) fail('DUAL_MODEL_UNSUPPORTED')
+    const inspection = await inspector.inspect(id)
+    let state = dualModelProjection.init(inspection.meta, inspection.inheritedEventCount)
+    for (const event of inspection.events) state = dualModelProjection.apply(state, event)
+    if (state.id !== id || state.invalid || !state.policy || !policyMatches(state.policy, request)) fail('DUAL_MODEL_REQUEST_CONFLICT')
+    const workspace = this.workspace(workspaces, request.workspaceId)
+    if (workspace.path !== state.policy.cwd) fail('DUAL_MODEL_REQUEST_CONFLICT')
+    if (this.lifetime.signal.aborted) fail('DUAL_MODEL_UNSUPPORTED')
     await workspace.attachSession(id)
     return { sessionId: id }
     } catch (error) { fail(reasonOf(error, 'DUAL_MODEL_CREATE_UNCERTAIN'), creation) }
   }
-  private workspace(cap: Capabilities, id: string): Workspace {
-    const workspace = cap.workspaces.get(id)
+  private workspace(workspaces: Workspaces, id: string): Workspace {
+    const workspace = workspaces.get(id)
     if (!workspace || typeof workspace.path !== 'string' || typeof workspace.attachSession !== 'function') fail('DUAL_MODEL_WORKSPACE_UNAVAILABLE')
     return workspace
   }

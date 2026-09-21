@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.34 (prepared, PR-only)
+
+- Retire the Model roles / planner-executor settings, legacy Settings fallback, and dedicated-session creation UI (#158); ordinary Sessions and Core-owned subagents remain the intended workflow.
+- Remove obsolete role Client components and browser fixtures, with negative registration and adjacent account/search/usage regressions.
+- Keep existing dedicated-session policy replay and strict Remote contracts for compatibility; reject role configuration writes and new dedicated roots explicitly, retaining evidence-only recovery of matching existing requests.
+- Do not migrate or delete saved settings, histories, credentials, model choices or global defaults. Native parent-to-child model rules remain separately pending Core work, not a capability supplied by this retirement.
+- Version metadata prepares the required PR release gate only; merge, publication, installation and activation are not part of this PR-only request.
+
 ## 0.4.0-alpha.33 (prepared)
 
 - Fix the account-usage composer component to call the public `useSession(selector)` hook with a selector instead of assuming a no-argument snapshot API (#156).

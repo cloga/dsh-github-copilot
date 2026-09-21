@@ -4,7 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
 import { HostConnectionService } from '@deepseek-ai/dsh-client-connection'
 import { TypertGatewayService } from '@deepseek-ai/dsh-api-gateway'
-import GitHubCopilotDualModel, { DUAL_MODEL_NAMESPACE } from '../../lib/types/dual-model-host.js'
+import GitHubCopilotDualModel, { DUAL_MODEL_NAMESPACE, DUAL_MODEL_POLICY_EVENT, dualModelSessionId } from '../../lib/types/dual-model-host.js'
 import { GitHubCopilotAuthorizationController } from '../../lib/index.js'
 
 // Postbuild Node tests deliberately bypass Vitest's protocol alias and its no-op
@@ -59,8 +59,8 @@ test('built Host exposes roles through the real Gateway without optional capabil
   const f = await fixture(t)
   const result = await f.call('githubCopilotDualModel/view')
   assert.equal(result.ok, true)
-  assert.deepEqual(result.value, { supported: false, diagnostic: 'DUAL_MODEL_UNSUPPORTED', writable: false, revision: null, configuration, models: [], workspaces: [] })
-  domainError(await f.call('githubCopilotDualModel/save', { input: { configuration, expectedRevision: 0 } }), 'DUAL_MODEL_UNSUPPORTED')
+  assert.deepEqual(result.value, { supported: false, diagnostic: 'DUAL_MODEL_RETIRED', writable: false, revision: null, configuration, models: [], workspaces: [] })
+  domainError(await f.call('githubCopilotDualModel/save', { input: { configuration, expectedRevision: 0 } }), 'DUAL_MODEL_RETIRED')
   domainError(await f.call('githubCopilotDualModel/create', { input: createInput }), 'DUAL_MODEL_UNSUPPORTED')
   assert.equal((await f.call('githubCopilot/migrationStatus')).ok, true)
 })
@@ -99,7 +99,8 @@ test('private methods stay unreachable and role disposal preserves authorization
 // Session, workspace files, model provider, OAuth or network is used here.
 function supportedServices(ctx) {
   let value = { ...configuration }, revision = 0
-  const writes = [], discoveries = []
+  const writes = [], discoveries = [], attachments = [], stored = new Map()
+  const workspace = { id: 'workspace-1', title: 'Fixture project', path: '/fixture', async attachSession(id) { attachments.push(id) } }
   const models = [{ id: 'plan-fixture', name: 'Planning fixture' }, { id: 'exec-fixture', name: 'Execution fixture' }]
   const preview = { provider: 'github-copilot-preview', available: true, state: 'ready', models }
   const unexpected = () => assert.fail('Gateway view/save must not create or modify a Session')
@@ -111,37 +112,58 @@ function supportedServices(ctx) {
     } }
   ctx.provide('settings', settings)
   ctx.provide('sessionProjections', { register: () => () => {}, stateOf: unexpected })
-  ctx.provide('agents', { list: () => [], get: unexpected, create: unexpected, resume: unexpected })
-  ctx.provide('workspaceRegistry', { list: () => [{ id: 'workspace-1', title: 'Fixture project' }], get: unexpected })
-  ctx.provide('sessionPersistence', { stat: unexpected })
+  ctx.provide('agents', { list: () => [], get: () => undefined, create: unexpected, resume: unexpected })
+  ctx.provide('workspaceRegistry', { list: () => [workspace], get: id => id === workspace.id ? workspace : undefined })
+  ctx.provide('sessionPersistence', { stat: async id => stored.get(id)?.meta })
   ctx.provide('sessions', { flush: unexpected })
-  ctx.provide('sessionController', { inspect: unexpected })
+  ctx.provide('sessionController', { inspect: async id => stored.get(id) })
   ctx.provide('agentPresets', { resolve: unexpected, mount: unexpected, composedPreset: unexpected, standingKeyFor: unexpected })
   ctx.provide('llm', { resolveCallConfig: async route => route })
   ctx.provide('tools', { register: unexpected, restrict: unexpected, guard: () => () => {}, schemas: unexpected, presentAs: unexpected })
   ctx.provide('subagents', { getProvider: () => ({ capabilities: { agentOptions: true, persona: true, toolFilter: true, depthLimit: true }, prepareContinuable() {} }),
     startContinuable: unexpected, sendMessage: unexpected, listChildren: unexpected, drainContinuableDescendants: async () => {} })
   ctx.provide('githubCopilotPreview', { getView: () => preview, discover: async options => { discoveries.push(options); return preview } })
-  return { settings, writes, discoveries, models }
+  return { settings, writes, discoveries, attachments, stored, workspace,
+    setConfiguration(next) { value = { ...next }; revision++ } }
 }
 
-test('Gateway returns model/workspace choices while off and saves with namespace CAS', async t => {
+test('Gateway reports retirement and refuses saves/new roots without discovery or mutation', async t => {
   let state
   const f = await fixture(t, ctx => { state = supportedServices(ctx) })
+  const retained = { enabled: true, plannerModel: 'plan-fixture', executorModel: 'exec-fixture' }
+  state.setConfiguration(retained)
   const view = await f.call('githubCopilotDualModel/view')
   assert.equal(view.ok, true)
-  assert.deepEqual(view.value, { supported: true, writable: true, revision: 0, configuration, models: state.models, workspaces: [{ id: 'workspace-1', name: 'Fixture project' }] })
-  assert.equal(state.writes.length, 0)
-  const enabled = { enabled: true, plannerModel: 'plan-fixture', executorModel: 'exec-fixture' }
-  const saved = await f.call('githubCopilotDualModel/save', { input: { configuration: enabled, expectedRevision: 0 } })
-  assert.equal(saved.ok, true)
-  assert.equal(saved.value.revision, 1)
-  assert.deepEqual(saved.value.configuration, enabled)
-  assert.deepEqual(state.writes, [{ ns: DUAL_MODEL_NAMESPACE, next: enabled, expected: 0 }])
-  domainError(await f.call('githubCopilotDualModel/save', { input: { configuration, expectedRevision: 0 } }), 'DUAL_MODEL_REVISION_CONFLICT')
+  assert.deepEqual(view.value, { supported: false, diagnostic: 'DUAL_MODEL_RETIRED', writable: false, revision: 1, configuration: retained, models: [], workspaces: [] })
+  domainError(await f.call('githubCopilotDualModel/save', { input: { configuration, expectedRevision: 1 } }), 'DUAL_MODEL_RETIRED')
   state.settings.writable = false
-  domainError(await f.call('githubCopilotDualModel/save', { input: { configuration, expectedRevision: 1 } }), 'DUAL_MODEL_READ_ONLY')
-  assert.equal(state.writes.length, 1)
-  assert.ok(state.discoveries.length > 0)
-  assert.ok(state.discoveries.every(options => options.force === false && options.signal instanceof AbortSignal))
+  domainError(await f.call('githubCopilotDualModel/save', { input: { configuration, expectedRevision: 0 } }), 'DUAL_MODEL_RETIRED')
+  const created = await f.call('githubCopilotDualModel/create', { input: createInput })
+  domainError(created, 'DUAL_MODEL_RETIRED')
+  assert.equal(created.error.details.creation, 'not-created')
+  assert.deepEqual((await f.call('githubCopilotDualModel/view')).value.configuration, retained)
+  assert.deepEqual(state.writes, []); assert.deepEqual(state.discoveries, []); assert.deepEqual(state.attachments, [])
+  assert.equal(state.stored.size, 0)
+})
+
+test('Gateway recovers only the matching retained root without rewriting its history', async t => {
+  let state
+  const f = await fixture(t, ctx => { state = supportedServices(ctx) })
+  const sessionId = dualModelSessionId(createInput.requestId)
+  const policy = { version: 1, rootSessionId: sessionId, requestId: createInput.requestId, workspaceId: createInput.workspaceId,
+    settingsRevision: createInput.expectedRevision, cwd: state.workspace.path, agentPreset: 'default', provider: 'github-copilot-preview',
+    plannerModel: 'original-planner', executorModel: 'original-executor', plannerTools: ['read'], executorTools: ['write', 'send_message'] }
+  const history = { meta: { id: sessionId, cwd: policy.cwd }, inheritedEventCount: 0,
+    events: [{ seq: 0, type: DUAL_MODEL_POLICY_EVENT, ignorable: true, data: policy }] }
+  state.stored.set(sessionId, history)
+  state.setConfiguration({ enabled: false, plannerModel: 'different-planner', executorModel: 'different-executor' })
+  assert.deepEqual(await f.call('githubCopilotDualModel/create', { input: createInput }), { ok: true, value: { sessionId } })
+  for (const input of [{ ...createInput, workspaceId: 'different' }, { ...createInput, expectedRevision: 1 }]) {
+    const result = await f.call('githubCopilotDualModel/create', { input })
+    domainError(result, 'DUAL_MODEL_REQUEST_CONFLICT')
+    assert.equal(result.error.details.creation, 'uncertain')
+  }
+  assert.deepEqual(state.attachments, [sessionId])
+  assert.equal(state.stored.get(sessionId), history)
+  assert.deepEqual(state.writes, []); assert.deepEqual(state.discoveries, [])
 })

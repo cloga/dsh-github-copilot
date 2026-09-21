@@ -6,7 +6,13 @@ Candidate plugin **`0.4.0-alpha.25`** adds the ninth exact target: official **`d
 
 Prefer official implementations when they satisfy the requirement, including configuration/data migration, API behavior, safety and runtime acceptance. **Complete** means the cited official contract covers the named scope, not that a live deployment passed. **Partial** identifies both an official capability and a concrete remaining requirement. **Unverified** means parity has not been established; it does not mean official support is absent. Decisions are **retain**, **migrate**, or **retire**; conditional retirement requires the evidence in the last column and a reviewed change, never automatic removal on a version bump.
 
-## Compact decision matrix
+## Role-experience retirement follow-up (#158)
+
+The user no longer requires a dedicated planner/executor experience. Alpha.34 therefore **retires the role card, old Settings fallback, configuration writes and new dedicated roots**, independently of official feature parity or pending [Core PR #95](https://github.com/cloga/deepseek-harness/pull/95). That Core PR is separate parent-to-child default routing with its own native UI, not a shipped dependency of this plugin.
+
+The historical role/UI retention decisions below are superseded for new use. **Retain only existing-history policy/route enforcement and exact-request recovery**, with strict compatibility Remotes, until a separately reviewed retirement or migration can preserve those histories safely. Do not silently reinterpret a dedicated history as an ordinary Session. Account/search/usage cards remain unchanged. No new official version or API is adopted by this retirement.
+
+## Compact decision matrix (alpha.25 historical comparison)
 
 | Custom surface / purpose | Exact official source and support | Decision | Remaining gap / retirement trigger |
 |---|---|---|---|

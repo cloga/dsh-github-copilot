@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.33`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.34`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 Alpha.24 修复 Web search 卡片缺少精确 Remote 依赖声明的问题。卡片仍位于 **Settings → Models**（`settings.models.footer`，list/root），旧 Core 回退到独立 Web search section，而非 General。搜索子 Fiber 独立等待 routing namespace，不影响账号控件和既有搜索安全检查；实际打包 Desktop 验收仍是独立关卡。
 
@@ -86,7 +86,7 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.33/dsh-github-copilot-0.4.0-alpha.33.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.34/dsh-github-copilot-0.4.0-alpha.34.tgz
 ```
 
 若 registry 被公司封禁或不可用，不要更换网络绕行。Desktop 管理的 profile 可以改用[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用来源获准、校验通过的本地 Release 和已有依赖缓存（`--offline --ignore-scripts`）。预检、备份和授权要求仍然适用。
@@ -151,7 +151,7 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。在获准且可用的 registry 网络环境中，优先使用原生 Desktop 包管理器；确认 npm 发布后，它接受 `dsh-github-copilot@0.4.0-alpha.33`，不是 URL 或本地文件。Desktop 管理的 profile 也允许经明确授权的[受控离线 CLI 维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用已验证的本地 Release 和 `--offline --ignore-scripts`，执行必需的组合预检、私密元数据备份、单写入者控制及安装后差异核验。缓存不足或出现权限拒绝时停止，不绕过公司 registry 封禁，不关闭 TLS 校验；重启仍需单独授权。离线安装成功不表示 npm 联网或发布问题已修好。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。在获准且可用的 registry 网络环境中，优先使用原生 Desktop 包管理器；确认 npm 发布后，它接受 `dsh-github-copilot@0.4.0-alpha.34`，不是 URL 或本地文件。Desktop 管理的 profile 也允许经明确授权的[受控离线 CLI 维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用已验证的本地 Release 和 `--offline --ignore-scripts`，执行必需的组合预检、私密元数据备份、单写入者控制及安装后差异核验。缓存不足或出现权限拒绝时停止，不绕过公司 registry 封禁，不关闭 TLS 校验；重启仍需单独授权。离线安装成功不表示 npm 联网或发布问题已修好。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
 不需要运行 `copilot2api`，不需要外部 gateway、placeholder API key、原始 GitHub token 或单独安装 `dsh-web-search-provider`。
 
@@ -168,15 +168,15 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 
 DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider。原生 `github-copilot` 的模型目录和 profile 仍属于 Core／用户；插件不拿自己的 pi 依赖副本改写它们。托管账号路由复用公开 adapter 类、SDK 序列化、OAuth method/grant format、token exchange 和 refresh。普通模型请求使用 SDK `streamSimple`，支持供应方明确公布的 Responses、Chat Completions 和 Anthropic Messages 三种协议。跨 SDK 的高级协议专用 `stream` 接口会明确报 `COPILOT_MANAGED_ADVANCED_STREAM_UNSUPPORTED`，不假装不兼容的底层客户端可互换；这不等于普通流式聊天被禁用。
 
-## 可选的规划／执行模型分工
+## 已退役的规划／执行专用体验
 
-在 **设置 → 模型 → 模型分工** 中启用双模型会话，选择账号下可用的主模型和执行模型，保存全局设置（同一配置档案内通用，不按工作区保存）。保存不需要工作区；**用此配置新建会话** 使用应用当前工作区，并只读显示目标。没有当前工作区时须先打开工作区，不再提供独立下拉框，也不会默认选择第一个或最近的工作区。主模型负责规划与验收；`copilot_execute` 创建原生可继续执行的子代理，并固定其执行模型。默认关闭，仅专用入口创建的新会话采用此策略；不修改全局默认、已有会话、登录凭据或原生 Subagent 授权开关。
+`0.4.0-alpha.34` candidate 移除 **模型分工（Model roles）**、旧版 **Copilot · Model roles** 设置入口、规划／执行模型选择器和新建专用会话按钮（#158）。今后使用普通 Session 与 Core 自己的模型选择／subagent；插件不新增替代角色页面，也不自动映射模型。
 
-模型不可用时明确报错，不自动替换。创建结果不明时重试同一个请求，不为绕过未知结果另建会话。功能依赖公开的会话、策略和子代理能力；缺少接口时显示不可用，不把历史版本的包兼容范围当成此功能的全面验收。详见[配置、生命周期、限制与验证范围](./docs/dual-model.md)。本功能包含在 `0.4.0-alpha.33` candidate 中，源码和合成测试不代表已发布或当前 Desktop 已生效。
+父模型 → subagent 模型规则及其原生设置 UI 属于另一个仍待交付的 [Core PR #95](https://github.com/cloga/deepseek-harness/pull/95)。移除本插件 UI 不代表旧版或当前安装的 Core 已具有规则功能，也不依赖该 PR 先发布。
 
-若卡片显示 **Could not load model roles（无法加载模型分工）**，不要通过修改默认模型绕过：这是设置加载失败，与能力不支持或模型不可用不同。尤其 `githubCopilotDualModel/view` 返回 HTTP 404，表示 Host Remote 未暴露，并非功能开关处于关闭状态。详见[加载故障排查与验证](./docs/dual-model.md#loading-and-remote-troubleshooting)。
+已有专用会话的历史和创建时捕获的策略继续由兼容运行时支持，不转换历史、不自动换模型。旧设置不删除、不迁移。旧 Remote 客户端尝试保存设置或创建新专用根会话会收到 `DUAL_MODEL_RETIRED`；已经创建且请求身份完全匹配的会话仍可恢复查询。详见[退役与兼容边界](./docs/dual-model.md)。源码修改、发布和当前运行时生效是不同阶段。
 
-模型和搜索 Provider 的原生下拉控件及不可用选项使用成对的应用主题背景／文字颜色，避免深色模式弹出白底浅字列表；缺少主题 token 的旧环境采用可读的系统颜色回退。配色变化不会保存或替换模型／搜索选择。
+插件的 Web 搜索 Provider 下拉控件及不可用选项使用成对的应用主题背景／文字颜色，避免深色模式弹出白底浅字列表；缺少主题 token 的旧环境采用可读的系统颜色回退。配色变化不会保存或替换搜索选择；模型选择器仍由 Core 负责。
 
 ## 全局账号，多模型与独立会话（V3）
 
@@ -421,8 +421,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.33/dsh-github-copilot-0.4.0-alpha.33.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.33/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.34/dsh-github-copilot-0.4.0-alpha.34.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.34/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -430,7 +430,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.33.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.34.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

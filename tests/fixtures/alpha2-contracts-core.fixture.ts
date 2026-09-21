@@ -83,10 +83,10 @@ describe('exact official alpha.2 role and search contracts', () => {
         expect(response.status).toBe(200)
         return (await response.json()).result
       }
-      expect(await call('view')).toMatchObject({ ok: true, value: { supported: false, diagnostic: 'DUAL_MODEL_UNSUPPORTED' } })
+      expect(await call('view')).toMatchObject({ ok: true, value: { supported: false, diagnostic: 'DUAL_MODEL_RETIRED' } })
       const configuration = { enabled: false, plannerModel: '', executorModel: '' }
       expect(await call('save', { input: { configuration, expectedRevision: 0 } }))
-        .toMatchObject({ ok: false, error: { code: 'copilot/dual-model', details: { reason: 'DUAL_MODEL_UNSUPPORTED' } } })
+        .toMatchObject({ ok: false, error: { code: 'copilot/dual-model', details: { reason: 'DUAL_MODEL_RETIRED' } } })
       expect(await call('save', { input: { configuration: { ...configuration, credential: 'forbidden' }, expectedRevision: 0 } }))
         .toMatchObject({ ok: false, error: { code: 'gateway/input-invalid' } })
       expect(await call('create', { input: { requestId: 'invalid', workspaceId: 'workspace', expectedRevision: 0 } }))

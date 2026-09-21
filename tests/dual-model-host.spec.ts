@@ -22,7 +22,6 @@ function operationId(label: string): string { return `00000000-0000-4000-8000-${
 const contexts: Context[] = []
 afterEach(async () => { for (const ctx of contexts.splice(0)) await ctx.fiber.dispose(); vi.restoreAllMocks() })
 type FakeAgent = Pick<CoreAgent, 'id' | 'ctx' | 'session'> & { cancel: ReturnType<typeof vi.fn>; whenIdle(): Promise<void> }
-type CreateInput = { sessionId: string; meta: { cwd: string; agentPreset: string; isSeeded: false }; seed: readonly { type: string; seq: number; data: unknown; ignorable?: true; time: number }[]; inheritedEventCount: number; agentOptions: { provider: string; model: string }; setup(ctx: Context, agent: FakeAgent): Promise<void> }
 const names = ['read', 'write', 'edit', 'pwsh', 'subagent', 'subagent_fork', 'workflow', 'ralph', 'cordis_define', 'ask_user_question', 'todo_write', 'send_message', 'list_agents', 'interrupt_agent']
 
 async function fixture() {
@@ -52,7 +51,7 @@ async function fixture() {
   const presets = { resolve: vi.fn(async () => ({ id: 'default' })), standingKeyFor: vi.fn(async () => presetKey),
     mount: vi.fn(async (scope: Context, _id: string) => { const agent = [...agentsMap.values()].find(value => value.ctx === scope); if (agent) bindScopeParent(agent, presetKey) }), composedPreset: () => 'default' }
   ctx.provide('agentPresets', presets)
-  const agentsMap = new Map<string, FakeAgent>(), stored = new Map<string, { session: CoreAgent['session']; options: CreateInput }>()
+  const agentsMap = new Map<string, FakeAgent>(), stored = new Map<string, { session: CoreAgent['session'] }>()
   const makeAgent = (id: string, session: CoreAgent['session']): FakeAgent => {
     const agent = { id: id as CoreAgent['id'], session, ctx, cancel: vi.fn(), whenIdle: async () => {} }
     agent.ctx = createScope(ctx, agent).ctx
@@ -60,15 +59,7 @@ async function fixture() {
   }
   const publish = (agent: FakeAgent) => { ctx.emit(scopeTarget(agent as unknown as CoreAgent, agent), 'agent/created', { agent: agent as unknown as CoreAgent }) }
   const agents = { list: () => [...agentsMap.values()], get: (id: string) => agentsMap.get(id), resume: vi.fn(),
-    create: vi.fn(async (options: CreateInput) => {
-      const session = Session.create(options.sessionId as CoreAgent['id'], options.seed, { id: options.sessionId, version: SESSION_FORMAT_VERSION, createdAt: 1, ...options.meta }, options.inheritedEventCount)
-      const agent = makeAgent(options.sessionId, session)
-      agentsMap.set(options.sessionId, agent)
-      try { await options.setup(agent.ctx, agent); publish(agent) }
-      catch (error) { agentsMap.delete(options.sessionId); throw error }
-      stored.set(options.sessionId, { session, options })
-      return { agent, dispose: vi.fn(async () => { agentsMap.delete(agent.id); ctx.emit(scopeTarget(agent as unknown as CoreAgent, agent), 'agent/disposed', { agent: agent as unknown as CoreAgent }) }) }
-    }) }
+    create: vi.fn(async () => { throw new Error('Retired Host must never create a root') }) }
   ctx.provide('agents', agents)
   const persistence = { stat: vi.fn(async (id: string) => stored.has(id) ? { header: stored.get(id)!.session.header } : undefined) }
   ctx.provide('sessionPersistence', persistence)
@@ -93,10 +84,25 @@ async function fixture() {
   const fiber = ctx.plugin(GitHubCopilotDualModel)
   await Promise.resolve(); await Promise.resolve()
   const service = ctx.get('githubCopilotDualModel')!
-  const enable = () => service.save({ configuration: { enabled: true, plannerModel: 'plan-A', executorModel: 'exec-B' }, expectedRevision: revision })
+  const setConfiguration = (value: DualModelConfig) => { configuration = { ...value }; revision++ }
+  // Historical sessions are fixture evidence, not calls to the retired product flow.
+  const seedExisting = async (label = 'operation-one') => {
+    const requestId = operationId(label), id = dualModelSessionId(requestId)
+    const policy = { version: 1, rootSessionId: id, requestId, workspaceId: workspace.id, settingsRevision: revision,
+      cwd: workspace.path, agentPreset: 'default', provider: PROVIDER, plannerModel: 'plan-A', executorModel: 'exec-B',
+      plannerTools: [DUAL_MODEL_EXECUTE_TOOL, 'read', 'read_image', 'glob', 'grep', 'skill', 'ask_user_question', 'todo_write', 'send_message', 'list_agents', 'interrupt_agent'],
+      executorTools: ['read', 'write', 'edit', 'pwsh', 'todo_write', 'send_message', 'list_agents', 'interrupt_agent'] }
+    const session = Session.create(id as CoreAgent['id'], [
+      { type: DUAL_MODEL_POLICY_EVENT, seq: 0, time: 1, ignorable: true, data: policy },
+      { type: 'model/selection', seq: 1, time: 1, data: { provider: PROVIDER, model: 'plan-A' } },
+    ], { id, version: SESSION_FORMAT_VERSION, createdAt: 1, cwd: workspace.path, agentPreset: 'default', isSeeded: false }, 0)
+    const agent = makeAgent(id, session)
+    bindScopeParent(agent, presetKey); agentsMap.set(id, agent); stored.set(id, { session }); publish(agent)
+    return { sessionId: id }
+  }
   const create = (requestId = 'operation-one') => service.create({ requestId: operationId(requestId), workspaceId: workspace.id, expectedRevision: revision })
   const execute = async (agent: FakeAgent, name: string, args: unknown = {}) => tools.execute({ agent: agent as unknown as CoreAgent, name, arguments: args, callId: 'call' as Parameters<ToolRuntime['execute']>[0]['callId'], signal: new AbortController().signal })
-  return { ctx, fiber, service, tools, systemPrompt, projections, settings, llm, preview, workspace, workspaces, presets, agents, agentsMap, stored, inspector, persistence, flush, subagents, makeAgent, publish, enable, create, execute,
+  return { ctx, fiber, service, tools, systemPrompt, projections, settings, llm, preview, workspace, workspaces, presets, agents, agentsMap, stored, inspector, persistence, flush, subagents, makeAgent, publish, seedExisting, setConfiguration, create, execute,
     configuration: () => configuration, revision: () => revision, setPreview: (value: typeof previewView) => { previewView = value }, previewView: () => previewView }
 }
 
@@ -113,49 +119,60 @@ describe('optional dedicated planner/executor Host', () => {
     expect(await service.view()).toMatchObject({ supported: false, writable: false, configuration: { enabled: false } })
     await expect(service.create({ requestId: operationId('test'), workspaceId: 'project', expectedRevision: 0 })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_UNSUPPORTED' } })
   })
-  it('starts disabled, exposes account models and uses one namespace CAS', async () => {
+  it('reports retirement read-only without discovering accounts or changing retained settings', async () => {
     const f = await fixture()
-    expect(await f.service.view()).toMatchObject({ supported: true, revision: 0, configuration: { enabled: false }, models: [{ id: 'plan-A' }, { id: 'exec-B' }, { id: 'future-C' }] })
-    await expect(f.create()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_DISABLED' } })
-    await f.enable()
-    expect(f.settings.replace).toHaveBeenCalledWith(DUAL_MODEL_NAMESPACE, { enabled: true, plannerModel: 'plan-A', executorModel: 'exec-B' }, 0)
-    await expect(f.service.save({ configuration: f.configuration(), expectedRevision: 0 })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_REVISION_CONFLICT' } })
+    const retained = { enabled: true, plannerModel: 'plan-A', executorModel: 'exec-B' }
+    f.setConfiguration(retained)
+    expect(await f.service.view()).toEqual({ supported: false, diagnostic: 'DUAL_MODEL_RETIRED', writable: false,
+      revision: 1, configuration: retained, models: [], workspaces: [] })
+    expect(f.preview.discover).not.toHaveBeenCalled(); expect(f.preview.getView).not.toHaveBeenCalled()
+    expect(f.settings.replace).not.toHaveBeenCalled(); expect(f.configuration()).toEqual(retained)
+    expect(f.agents.create).not.toHaveBeenCalled(); expect(f.workspace.attachSession).not.toHaveBeenCalled()
   })
-  it('honors read-only settings and rejects unentitled models without fallback', async () => {
-    const f = await fixture(); f.settings.writable = false
-    await expect(f.enable()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_READ_ONLY' } })
-    f.settings.writable = true
-    await expect(f.service.save({ configuration: { enabled: true, plannerModel: 'unknown', executorModel: 'exec-B' }, expectedRevision: 0 })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_MODEL_UNAVAILABLE' } })
-    expect(f.agents.create).not.toHaveBeenCalled(); expect(f.settings.replace).not.toHaveBeenCalled()
+  it.each([true, false])('rejects saves when settings writable=%s without writes or discovery', async writable => {
+    const f = await fixture(); f.settings.writable = writable
+    for (const enabled of [true, false]) {
+      await expect(f.service.save({ configuration: { enabled, plannerModel: 'unknown', executorModel: 'exec-B' }, expectedRevision: 999 }))
+        .rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_RETIRED' } })
+    }
+    expect(f.settings.replace).not.toHaveBeenCalled(); expect(f.preview.discover).not.toHaveBeenCalled()
+    expect(f.configuration()).toEqual({ enabled: false, plannerModel: '', executorModel: '' }); expect(f.revision()).toBe(0)
   })
-  it('seeds an immutable plugin policy before publication, flushes, and attaches only an existing workspace', async () => {
-    const f = await fixture(); await f.enable(); const result = await f.create()
-    const options = f.agents.create.mock.calls[0]![0]
-    expect(options).toMatchObject({ sessionId: result.sessionId, agentOptions: { provider: PROVIDER, model: 'plan-A' }, meta: { isSeeded: false, cwd: FIXTURE_CWD }, inheritedEventCount: 0 })
-    expect(options.seed[0]).toMatchObject({ type: DUAL_MODEL_POLICY_EVENT, ignorable: true, data: { plannerModel: 'plan-A', executorModel: 'exec-B', rootSessionId: result.sessionId } })
-    expect(f.flush).toHaveBeenCalledOnce(); expect(f.workspace.attachSession).toHaveBeenCalledWith(result.sessionId)
-    await f.service.save({ configuration: { enabled: true, plannerModel: 'future-C', executorModel: 'future-C' }, expectedRevision: f.revision() })
-    expect(options.seed[0]!.data).toMatchObject({ plannerModel: 'plan-A', executorModel: 'exec-B' })
+  it.each([true, false])('refuses new roots even when retained settings enabled=%s', async enabled => {
+    const f = await fixture(); f.setConfiguration({ enabled, plannerModel: 'plan-A', executorModel: 'exec-B' })
+    await expect(f.create()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_RETIRED', creation: 'not-created' } })
+    expect(f.agents.create).not.toHaveBeenCalled(); expect(f.agents.resume).not.toHaveBeenCalled()
+    expect(f.presets.resolve).not.toHaveBeenCalled(); expect(f.presets.mount).not.toHaveBeenCalled()
+    expect(f.preview.discover).not.toHaveBeenCalled(); expect(f.llm.resolveCallConfig).not.toHaveBeenCalled()
+    expect(f.settings.replace).not.toHaveBeenCalled(); expect(f.flush).not.toHaveBeenCalled()
+    expect(f.workspace.attachSession).not.toHaveBeenCalled(); expect(f.stored.size).toBe(0)
   })
-  it('single-flights repeated creates and recovers the original operation before a later settings revision', async () => {
-    const f = await fixture(); await f.enable()
+  it('single-flights recovery using the original policy before later settings and account changes', async () => {
+    const f = await fixture(), original = await f.seedExisting('retry')
     const request = { requestId: operationId('retry'), workspaceId: f.workspace.id, expectedRevision: f.revision() }
-    const [a, b] = await Promise.all([f.service.create(request), f.service.create(request)])
-    expect(a).toEqual(b); expect(f.agents.create).toHaveBeenCalledOnce()
-    await f.service.save({ configuration: { enabled: false, plannerModel: '', executorModel: '' }, expectedRevision: f.revision() })
-    expect(await f.service.create(request)).toEqual(a)
-    expect(f.agents.create).toHaveBeenCalledOnce()
-    await expect(f.service.create({ ...request, workspaceId: 'different' })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_REQUEST_CONFLICT' } })
-  })
-  it('rejects unavailable workspace and account disappearance without creating a session', async () => {
-    const f = await fixture(); await f.enable()
-    await expect(f.service.create({ requestId: operationId('bad-project'), workspaceId: 'missing', expectedRevision: f.revision() })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_WORKSPACE_UNAVAILABLE' } })
+    const events = f.stored.get(original.sessionId)!.session.snapshotEvents()
+    f.setConfiguration({ enabled: true, plannerModel: 'future-C', executorModel: 'future-C' })
     f.setPreview({ ...f.previewView(), available: false, models: [] })
-    await expect(f.create()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_MODEL_UNAVAILABLE' } })
-    expect(f.agents.create).not.toHaveBeenCalled()
+    const [a, b] = await Promise.all([f.service.create(request), f.service.create(request)])
+    expect(a).toEqual(original); expect(b).toEqual(original); expect(f.inspector.inspect).toHaveBeenCalledOnce()
+    expect(f.workspace.attachSession).toHaveBeenCalledExactlyOnceWith(original.sessionId)
+    expect(f.stored.get(original.sessionId)!.session.snapshotEvents()).toEqual(events)
+    expect(f.agents.create).not.toHaveBeenCalled(); expect(f.flush).not.toHaveBeenCalled()
+    expect(f.settings.replace).not.toHaveBeenCalled(); expect(f.preview.discover).not.toHaveBeenCalled()
+    await expect(f.service.create({ ...request, workspaceId: 'different' })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_REQUEST_CONFLICT', creation: 'uncertain' } })
+    await expect(f.service.create({ ...request, expectedRevision: 99 })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_REQUEST_CONFLICT', creation: 'uncertain' } })
+    expect(f.workspace.attachSession).toHaveBeenCalledTimes(1)
+  })
+  it('recovers a cold stored root without account, settings or execution capabilities', async () => {
+    const f = await fixture(), original = await f.seedExisting()
+    f.agentsMap.delete(original.sessionId)
+    for (const name of ['githubCopilotPreview', 'settings', 'llm', 'agentPresets', 'subagents', 'sessionProjections']) f.ctx.set(name, undefined)
+    expect(await f.create()).toEqual(original)
+    expect(f.agents.create).not.toHaveBeenCalled(); expect(f.agents.resume).not.toHaveBeenCalled()
+    expect(f.preview.discover).not.toHaveBeenCalled(); expect(f.flush).not.toHaveBeenCalled()
   })
   it('denies direct implementation and alternate delegation, retaining genuine parent controls', async () => {
-    const f = await fixture(); await f.enable(); const { sessionId } = await f.create(), agent = f.agentsMap.get(sessionId)!
+    const f = await fixture(); const { sessionId } = await f.seedExisting(), agent = f.agentsMap.get(sessionId)!
     for (const name of ['write', 'pwsh', 'subagent', 'subagent_fork', 'workflow', 'ralph', 'cordis_define']) expect((await f.execute(agent, name)).isError).toBe(true)
     for (const name of ['send_message', 'list_agents', 'interrupt_agent']) expect((await f.execute(agent, name)).isError).toBe(false)
     const own = createScope(f.ctx, agent)
@@ -187,8 +204,8 @@ describe('optional dedicated planner/executor Host', () => {
     expect(f.tools.get(DUAL_MODEL_EXECUTE_TOOL, child)).toBeUndefined()
   })
   it('still rejects invalid child descriptors when their parent has a dedicated role policy', async () => {
-    const f = await fixture(); await f.enable()
-    const { sessionId } = await f.create()
+    const f = await fixture()
+    const { sessionId } = await f.seedExisting()
     const id = 'invalid-dedicated-child'
     const session = Session.create(id as CoreAgent['id'], undefined, {
       id, version: SESSION_FORMAT_VERSION, createdAt: 2, cwd: FIXTURE_CWD,
@@ -202,7 +219,7 @@ describe('optional dedicated planner/executor Host', () => {
     expect((await f.execute(child, 'write')).isError).toBe(true)
   })
   it('fixes the native executor route, records lineage, and prevents executor delegation', async () => {
-    const f = await fixture(); await f.enable(); const { sessionId } = await f.create(), parent = f.agentsMap.get(sessionId)!
+    const f = await fixture(); const { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     expect((await f.execute(parent, DUAL_MODEL_EXECUTE_TOOL, { description: 'Implement task', prompt: 'Do it', model: 'future-C' })).isError).toBe(true)
     const result = await f.execute(parent, DUAL_MODEL_EXECUTE_TOOL, { description: 'Implement task', prompt: 'Do it' })
     expect(result.isError).toBe(false)
@@ -215,11 +232,11 @@ describe('optional dedicated planner/executor Host', () => {
     expect((await f.execute(child, DUAL_MODEL_EXECUTE_TOOL, { description: 'again', prompt: 'again' })).isError).toBe(true)
   })
   it('reinstalls scoped controls on cold replay and never captures new configuration', async () => {
-    const f = await fixture(); await f.enable(); const { sessionId } = await f.create()
+    const f = await fixture(); const { sessionId } = await f.seedExisting()
     const original = f.agentsMap.get(sessionId)!, saved = original.session.snapshotEvents()
     f.ctx.emit(scopeTarget(original as unknown as CoreAgent, original), 'agent/disposed', { agent: original as unknown as CoreAgent }); f.agentsMap.delete(sessionId)
     await Promise.resolve()
-    await f.service.save({ configuration: { enabled: true, plannerModel: 'future-C', executorModel: 'future-C' }, expectedRevision: f.revision() })
+    f.setConfiguration({ enabled: true, plannerModel: 'future-C', executorModel: 'future-C' })
     const restoredSession = Session.create(original.id, saved, original.session.header, 0), resumed = f.makeAgent(sessionId, restoredSession)
     bindScopeParent(resumed, await f.presets.standingKeyFor()); f.agentsMap.set(sessionId, resumed); f.publish(resumed)
     expect(f.tools.get(DUAL_MODEL_EXECUTE_TOOL, resumed)?.description).toContain('/exec-B')
@@ -227,16 +244,15 @@ describe('optional dedicated planner/executor Host', () => {
     expect(f.projections.stateOf(restoredSession, DUAL_MODEL_PROJECTION)).toMatchObject({ policy: { executorModel: 'exec-B' } })
   })
   it('cleans scoped definitions on disposal without removing ordinary tools', async () => {
-    const f = await fixture(); await f.enable(); const { sessionId } = await f.create(), parent = f.agentsMap.get(sessionId)!
+    const f = await fixture(); const { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     await f.fiber.dispose()
     expect(f.tools.get(DUAL_MODEL_EXECUTE_TOOL, parent)).toBeUndefined()
     expect(f.tools.schemas(await f.presets.standingKeyFor()).map(tool => tool.name)).toContain('write')
     expect(parent.cancel).toHaveBeenCalled()
   })
   it('checks effective request routes and refuses picker changes rather than silently overriding them', async () => {
-    const f = await fixture(); await f.enable(); const { sessionId } = await f.create(), root = f.agentsMap.get(sessionId)!
-    const options = f.agents.create.mock.calls[0]![0]
-    expect(options.seed[1]).toMatchObject({ type: 'model/selection', data: { provider: PROVIDER, model: 'plan-A' } })
+    const f = await fixture(); const { sessionId } = await f.seedExisting(), root = f.agentsMap.get(sessionId)!
+    expect(root.session.snapshotEvents()[1]).toMatchObject({ type: 'model/selection', data: { provider: PROVIDER, model: 'plan-A' } })
     const payload = { agent: root as unknown as CoreAgent, turn: 1, step: 1, signal: new AbortController().signal }
     const request = (model: string) => f.ctx.waterfall(scopeTarget(root as unknown as CoreAgent, root), 'agent/request', payload, async () => ({ provider: PROVIDER, model }))
     expect(await request('plan-A')).toMatchObject({ model: 'plan-A' })
@@ -244,20 +260,17 @@ describe('optional dedicated planner/executor Host', () => {
     f.setPreview({ ...f.previewView(), available: false, models: [] })
     await expect(request('plan-A')).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_MODEL_UNAVAILABLE' } })
   })
-  it('forwards the service lifetime to view discovery and the step signal to route preflight', async () => {
+  it('keeps view discovery-free and forwards the step signal for retained route preflight', async () => {
     const f = await fixture(); await f.service.view()
-    const lifetime = f.preview.discover.mock.calls.at(-1)?.[0]?.signal
-    expect(lifetime).toBeInstanceOf(AbortSignal)
-    await f.enable(); const { sessionId } = await f.create(), parent = f.agentsMap.get(sessionId)!
+    expect(f.preview.discover).not.toHaveBeenCalled()
+    const { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     const controller = new AbortController()
     await f.ctx.waterfall(scopeTarget(parent as unknown as CoreAgent, parent), 'agent/request',
       { agent: parent as unknown as CoreAgent, turn: 1, step: 1, signal: controller.signal }, async () => ({ provider: PROVIDER, model: 'plan-A' }))
     expect(f.preview.discover).toHaveBeenLastCalledWith({ force: false, signal: controller.signal })
-    await f.fiber.dispose()
-    expect(lifetime?.aborted).toBe(true)
   })
   it('cancels executor discovery without creating a child or exposing dependency errors', async () => {
-    const f = await fixture(); await f.enable(); const { sessionId } = await f.create(), parent = f.agentsMap.get(sessionId)!
+    const f = await fixture(); const { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     const controller = new AbortController(), started = Promise.withResolvers<AbortSignal>()
     f.preview.discover.mockImplementationOnce(options => new Promise((_resolve, reject) => {
       const signal = options?.signal
@@ -275,7 +288,7 @@ describe('optional dedicated planner/executor Host', () => {
     expect(f.subagents.startContinuable).not.toHaveBeenCalled()
   })
   it('assembles planner instructions and can restore them before the first post-HMR model call', async () => {
-    const f = await fixture(); await f.enable(); const { sessionId } = await f.create(), parent = f.agentsMap.get(sessionId)!
+    const f = await fixture(); const { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     f.ctx.emit(scopeTarget(parent as unknown as CoreAgent, parent), 'agent/disposed', { agent: parent as unknown as CoreAgent })
     await Promise.resolve(); await Promise.resolve()
     const result = await f.systemPrompt.assemble({ scope: parent })
@@ -286,50 +299,65 @@ describe('optional dedicated planner/executor Host', () => {
     expect((await f.execute(parent, 'read')).isError).toBe(false)
   })
   it('recovers the same durable operation after service restart and a settings change', async () => {
-    const f = await fixture(); await f.enable()
+    const f = await fixture()
     const input = { requestId: operationId('restart'), workspaceId: f.workspace.id, expectedRevision: f.revision() }
-    const result = await f.service.create(input)
-    await f.service.save({ configuration: { enabled: false, plannerModel: '', executorModel: '' }, expectedRevision: f.revision() })
+    const result = await f.seedExisting('restart')
+    f.setConfiguration({ enabled: false, plannerModel: '', executorModel: '' })
     await f.fiber.dispose()
     f.ctx.plugin(GitHubCopilotDualModel); await Promise.resolve(); await Promise.resolve()
     expect(await f.ctx.get('githubCopilotDualModel')!.create(input)).toEqual(result)
-    expect(f.agents.create).toHaveBeenCalledOnce()
+    expect(f.agents.create).not.toHaveBeenCalled()
   })
   it('never reports not-created for a lost response when dependencies or its existing workspace are unavailable', async () => {
-    const f = await fixture(); await f.enable()
+    const f = await fixture()
     const input = { requestId: operationId('lost-response'), workspaceId: f.workspace.id, expectedRevision: f.revision() }
-    const original = await f.service.create(input)
+    const original = await f.seedExisting('lost-response')
     f.ctx.set('agents', undefined)
     await expect(f.service.create(input)).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_UNSUPPORTED', creation: 'uncertain' } })
     f.ctx.set('agents', f.agents)
     f.workspaces.get.mockReturnValueOnce(undefined)
     await expect(f.service.create(input)).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_WORKSPACE_UNAVAILABLE', creation: 'uncertain' } })
     expect(await f.service.create(input)).toEqual(original)
-    expect(f.agents.create).toHaveBeenCalledOnce()
+    expect(f.agents.create).not.toHaveBeenCalled()
   })
-  it('reports not-created only after proving absence and before construction begins', async () => {
+  it('reports not-created only after positive absence, never after an evidence failure', async () => {
     const f = await fixture()
-    await expect(f.create()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_DISABLED', creation: 'not-created' } })
-    await f.enable()
-    f.workspaces.get.mockReturnValueOnce(undefined)
-    await expect(f.create()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_WORKSPACE_UNAVAILABLE', creation: 'not-created' } })
-    f.agents.create.mockRejectedValueOnce(new Error('unknown setup outcome'))
-    await expect(f.create()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_CREATE_UNCERTAIN', creation: 'uncertain' } })
+    f.persistence.stat.mockRejectedValueOnce(new Error('private storage failure'))
+    await expect(f.create()).rejects.toMatchObject({ message: 'DUAL_MODEL_CREATE_UNCERTAIN', details: { creation: 'uncertain' } })
+    await expect(f.create()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_RETIRED', creation: 'not-created' } })
+    await f.seedExisting()
+    f.inspector.inspect.mockRejectedValueOnce(new Error('private history failure'))
+    await expect(f.create()).rejects.toMatchObject({ message: 'DUAL_MODEL_CREATE_UNCERTAIN', details: { creation: 'uncertain' } })
+    expect(f.agents.create).not.toHaveBeenCalled(); expect(f.workspace.attachSession).not.toHaveBeenCalled()
+    expect(f.settings.replace).not.toHaveBeenCalled(); expect(f.flush).not.toHaveBeenCalled()
+  })
+  it.each(['root-id', 'workspace-path', 'missing-policy', 'duplicate-policy', 'fork-inherited-policy'])('refuses conflicting retained evidence: %s', async mismatch => {
+    const f = await fixture(), { sessionId } = await f.seedExisting()
+    const inspection = await f.inspector.inspect(sessionId)
+    if (mismatch === 'root-id') inspection.meta = { ...inspection.meta, id: 'different-root' as CoreAgent['id'] }
+    if (mismatch === 'workspace-path') f.workspace.path = resolve(FIXTURE_CWD, 'different')
+    if (mismatch === 'missing-policy') inspection.events = []
+    if (mismatch === 'duplicate-policy') inspection.events = [...inspection.events, inspection.events[0]!]
+    if (mismatch === 'fork-inherited-policy') inspection.inheritedEventCount = 2 as typeof inspection.inheritedEventCount
+    f.inspector.inspect.mockResolvedValueOnce(inspection)
+    await expect(f.create()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_REQUEST_CONFLICT', creation: 'uncertain' } })
+    expect(f.workspace.attachSession).not.toHaveBeenCalled(); expect(f.agents.create).not.toHaveBeenCalled()
+    expect(f.flush).not.toHaveBeenCalled(); expect(f.settings.replace).not.toHaveBeenCalled()
   })
   it('recovers a durable create after uncertain workspace attachment without a second root', async () => {
-    const f = await fixture(); await f.enable()
+    const f = await fixture(); await f.seedExisting()
     f.workspace.attachSession.mockRejectedValueOnce(new Error('credential-body-must-not-escape'))
     await expect(f.create()).rejects.toMatchObject({ message: 'DUAL_MODEL_CREATE_UNCERTAIN', details: { reason: 'DUAL_MODEL_CREATE_UNCERTAIN' } })
     const result = await f.create()
     expect(result.sessionId).toBe(dualModelSessionId(operationId('operation-one')))
-    expect(f.agents.create).toHaveBeenCalledOnce()
+    expect(f.agents.create).not.toHaveBeenCalled()
   })
   it('restores executor restrictions from cold descriptor under its unchanged parent policy', async () => {
-    const f = await fixture(); await f.enable(); const { sessionId } = await f.create(), parent = f.agentsMap.get(sessionId)!
+    const f = await fixture(); const { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     await f.execute(parent, DUAL_MODEL_EXECUTE_TOOL, { description: 'Build', prompt: 'Implement' })
     const child = [...f.agentsMap.values()].find(agent => agent.session.header.origin === 'subagent')!, saved = child.session.snapshotEvents()
     f.ctx.emit(scopeTarget(child as unknown as CoreAgent, child), 'agent/disposed', { agent: child as unknown as CoreAgent }); f.agentsMap.delete(child.id)
-    await f.service.save({ configuration: { enabled: true, plannerModel: 'future-C', executorModel: 'future-C' }, expectedRevision: f.revision() })
+    f.setConfiguration({ enabled: true, plannerModel: 'future-C', executorModel: 'future-C' })
     const resumed = f.makeAgent(child.id, Session.create(child.id, saved, child.session.header, 0))
     bindScopeParent(resumed, await f.presets.standingKeyFor()); f.agentsMap.set(child.id, resumed); f.publish(resumed)
     expect((await f.execute(resumed, 'write')).isError).toBe(false)
@@ -338,34 +366,29 @@ describe('optional dedicated planner/executor Host', () => {
     const result = await f.ctx.waterfall(scopeTarget(resumed as unknown as CoreAgent, resumed), 'agent/request', payload, async () => ({ provider: PROVIDER, model: 'exec-B' }))
     expect(result.model).toBe('exec-B')
   })
-  it('refuses a renamed model from the resolver and bounds credential-free DTOs', async () => {
-    const f = await fixture()
+  it('refuses a renamed executor model from the resolver without alternate delegation', async () => {
+    const f = await fixture(), { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     f.llm.resolveCallConfig.mockImplementation(async route => ({ ...route, model: 'other' }))
-    await expect(f.enable()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_MODEL_UNAVAILABLE' } })
-    f.preview.discover.mockRejectedValueOnce(new Error('secret-never-exported'))
-    expect(await f.service.view()).toMatchObject({ supported: true, diagnostic: 'DUAL_MODEL_MODEL_UNAVAILABLE', models: [] })
-    f.setPreview({ ...f.previewView(), models: [{ id: 'a'.repeat(513), name: 'Invalid length' }] })
-    expect(await f.service.view()).toMatchObject({ diagnostic: 'DUAL_MODEL_MODEL_UNAVAILABLE', models: [] })
+    expect((await f.execute(parent, DUAL_MODEL_EXECUTE_TOOL, { description: 'Build', prompt: 'Implement' })).isError).toBe(true)
+    expect(f.subagents.startContinuable).not.toHaveBeenCalled()
+    expect(await f.service.view()).toMatchObject({ supported: false, diagnostic: 'DUAL_MODEL_RETIRED', models: [] })
   })
-  it('recognizes cross-bundle Remote errors but exports only its fixed reason vocabulary', async () => {
+  it('keeps retained configuration DTOs bounded without account discovery', async () => {
     const f = await fixture()
-    f.settings.replace.mockRejectedValueOnce({ isDSHRemoteError: true, code: 'copilot/dual-model', details: { reason: 'DUAL_MODEL_READ_ONLY' } })
-    await expect(f.enable()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_READ_ONLY' } })
-    f.settings.replace.mockRejectedValueOnce({ isDSHRemoteError: true, code: 'copilot/dual-model', details: { reason: 'private account body', creation: 'not-created' } })
-    await expect(f.enable()).rejects.toMatchObject({ message: 'DUAL_MODEL_SAVE_FAILED', details: { reason: 'DUAL_MODEL_SAVE_FAILED' } })
-    f.settings.replace.mockRejectedValueOnce({ code: 'copilot/dual-model', details: { reason: 'DUAL_MODEL_READ_ONLY' } })
-    await expect(f.enable()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_SAVE_FAILED' } })
+    f.setConfiguration({ enabled: true, plannerModel: 'x'.repeat(513), executorModel: 'exec-B' })
+    expect(await f.service.view()).toMatchObject({ supported: false, diagnostic: 'DUAL_MODEL_RETIRED', writable: false, revision: null, models: [] })
+    expect(f.preview.discover).not.toHaveBeenCalled(); expect(f.settings.replace).not.toHaveBeenCalled()
   })
   it('does not let dependency Remote details forge the create outcome or leak an unknown reason', async () => {
-    const f = await fixture(); await f.enable()
+    const f = await fixture(); await f.seedExisting()
     f.workspace.attachSession.mockRejectedValueOnce({ isDSHRemoteError: true, code: 'copilot/dual-model', details: { reason: 'DUAL_MODEL_WORKSPACE_UNAVAILABLE', creation: 'not-created' } })
     await expect(f.create()).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_WORKSPACE_UNAVAILABLE', creation: 'uncertain' } })
     f.workspace.attachSession.mockRejectedValueOnce({ isDSHRemoteError: true, code: 'copilot/dual-model', details: { reason: 'secret-body', creation: 'invalid-literal' } })
     await expect(f.create()).rejects.toMatchObject({ message: 'DUAL_MODEL_CREATE_UNCERTAIN', details: { reason: 'DUAL_MODEL_CREATE_UNCERTAIN', creation: 'uncertain' } })
-    expect(f.agents.create).toHaveBeenCalledOnce()
+    expect(f.agents.create).not.toHaveBeenCalled()
   })
   it('fails closed on an owned address when the replay capability disappears', async () => {
-    const f = await fixture(); await f.enable(); const { sessionId } = await f.create(), parent = f.agentsMap.get(sessionId)!
+    const f = await fixture(); const { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     f.ctx.emit(scopeTarget(parent as unknown as CoreAgent, parent), 'agent/disposed', { agent: parent as unknown as CoreAgent })
     await Promise.resolve()
     f.ctx.set('sessionProjections', undefined)
