@@ -80,7 +80,12 @@ export function normalizeCopilotResponsesPayload(payload: unknown): unknown {
   }
 }
 
-const scopeMessage = 'input item ID does not belong to this connection'
+// Exact uncoded provider messages observed in real failures. Do not infer scope
+// rejection from arbitrary connection/auth text or expand this into a broad regex.
+const scopeMessages = new Set([
+  'input item ID does not belong to this connection',
+  'input item does not belong to this connection',
+])
 const maxErrorBytes = 8 * 1024
 const errorReadTimeoutMs = 250
 
@@ -102,10 +107,10 @@ async function readScopeError(reader: ReadableStreamDefaultReader<Uint8Array>): 
   const body: unknown = JSON.parse(text)
   if (!isRecord(body)) return false
   const error = Object.hasOwn(body, 'error') ? body.error : body
-  if (!isRecord(error) || error.message !== scopeMessage) return false
+  if (!isRecord(error) || typeof error.message !== 'string' || !scopeMessages.has(error.message)) return false
   // This exception is for the observed uncoded scope error, not an authentication
   // code/type with coincidentally matching text or a contradictory outer message.
-  return (!Object.hasOwn(body, 'message') || body.message === scopeMessage)
+  return (!Object.hasOwn(body, 'message') || body.message === error.message)
     && [body.code, body.type, error.code, error.type]
       .every(value => value === undefined || value === null || value === '')
 }
