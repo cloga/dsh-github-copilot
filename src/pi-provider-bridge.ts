@@ -1,7 +1,7 @@
 import type { Provider, AssistantMessageEventStream } from '@earendil-works/pi-ai'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 
-export type CoreCompatibleProvider = ResolvedPiAiProviderProfile['piProvider']
+export type CoreCompatibleProvider = NonNullable<ResolvedPiAiProviderProfile['piProvider']>
 export type SimpleNativeProvider = Pick<Provider,
   'id' | 'name' | 'baseUrl' | 'headers' | 'auth' | 'getModels' | 'filterModels' | 'streamSimple'>
 type CoreStream = ReturnType<CoreCompatibleProvider['streamSimple']>

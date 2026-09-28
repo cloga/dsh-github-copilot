@@ -11,7 +11,7 @@ import { accountModelFromDescriptor, createAccountProvider, copilotPublicHeaders
 import type { AccountProviderGuard } from '../src/preview-provider.ts'
 import { normalizeAccountModelCatalog } from '../src/account-model-catalog.ts'
 import type { AccountModelApi } from '../src/account-model-catalog.ts'
-import { Config as CoreConfig, PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
+import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import { BlockAssembler, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW } from '../src/copilot-identity.ts'
@@ -81,11 +81,11 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
   const item = descriptor(api)
   const guarded = accountGuard(item.id)
   const { provider } = createAccountProvider([item], guarded, baseURL)
-  const defaults = CoreConfig({ providers: { [PREVIEW]: {} } }).providers![PREVIEW]!
   const profile: ResolvedPiAiProviderProfile = { provider: PREVIEW, displayName: 'Account models', piProvider: provider,
-    streamIdleTimeoutMs: defaults.streamIdleTimeoutMs!, maxRequestImageBytes: defaults.maxRequestImageBytes!,
-    requestImagePixelBudget: defaults.requestImagePixelBudget!, requestImageMaxBytes: defaults.requestImageMaxBytes!,
+    streamIdleTimeoutMs: 300_000, maxRequestImageBytes: 20_971_520,
+    requestImagePixelBudget: 4_194_304, requestImageMaxBytes: 1_048_576,
     retryPolicy: resolveRetryPolicy(undefined, 'fixture'), configuredMaxTokens: new Map(),
+    modelErrors: new Map(),
     ...headers === undefined ? {} : { headers },
   }
   const credential = { type: 'oauth' as const, refresh: 'synthetic-account', access: 'synthetic-account-token', expires: Date.now() + 3600000, availableModelIds: [item.id] }

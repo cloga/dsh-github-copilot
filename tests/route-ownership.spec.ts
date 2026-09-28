@@ -57,24 +57,25 @@ function runtime(initial?: Record<string, unknown>) {
     revisions[namespace] = revisions[namespace]! + 1
   })
   const profile = () => (documents['llm-pi-ai']!.providers as Record<string, Record<string, unknown>>)['github-copilot']
+  const resolved = (namespace: string) => {
+    const section = structuredClone(documents[namespace])
+    if (namespace === 'llm-pi-ai' && defaults && profile()) {
+      (section!.providers as Record<string, unknown>)['github-copilot'] = { ...defaults, ...profile() }
+    }
+    if (namespace === 'llm-pi-ai' && materializeModels && profile()?.models) {
+      const provider = (section!.providers as Record<string, Record<string, unknown>>)['github-copilot']!
+      provider.models = (profile()!.models as Record<string, unknown>[]).map(model => {
+        const entry: Record<string, unknown> = { input: [], compat: {}, ...model }
+        if (stripModelApi) delete entry.api
+        return entry
+      })
+    }
+    return section
+  }
   const settings = {
-    get: (namespace: string) => {
-      const section = structuredClone(documents[namespace])
-      if (namespace === 'llm-pi-ai' && defaults && profile()) {
-        (section!.providers as Record<string, unknown>)['github-copilot'] = { ...defaults, ...profile() }
-      }
-      if (namespace === 'llm-pi-ai' && materializeModels && profile()?.models) {
-        const resolved = (section!.providers as Record<string, Record<string, unknown>>)['github-copilot']!
-        resolved.models = (profile()!.models as Record<string, unknown>[]).map(model => {
-          const entry: Record<string, unknown> = { input: [], compat: {}, ...model }
-          if (stripModelApi) delete entry.api
-          return entry
-        })
-      }
-      return section
-    },
+    get: (namespace: string) => resolved(namespace),
     describe: vi.fn(() => Object.entries(documents).map(([ns, user]) => ({
-      ns, user: structuredClone(user), revision: revisions[ns]!,
+      ns, user: structuredClone(user), value: resolved(ns), revision: revisions[ns]!,
       ...ns !== 'llm-pi-ai' ? {} : {
         secrets,
         ...base === undefined ? {} : { base: { providers: { 'github-copilot': structuredClone(base) } } },

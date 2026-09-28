@@ -83,7 +83,9 @@ describe('Responses public reasoning stream', () => {
   it('refuses Core-owned reasoning history before resolving credentials or sending it', async () => {
     const resolveApiKey = vi.fn(async () => 'synthetic-never-sent')
     vi.stubGlobal('fetch', vi.fn())
-    const history = { id: 'history' as Message['id'], role: 'assistant', content: [{ type: 'reasoning', text: 'Public summary, not a replay item.' }], source: { kind: 'user' } } as Message
+    const history: Message = { id: 'history' as Message['id'], role: 'assistant',
+      content: [{ type: 'reasoning', text: 'Public summary, not a replay item.' }],
+      source: { kind: 'model', provider: 'test', model: 'test' } }
     const chunks: StreamChunk[] = []
     for await (const chunk of inlineStream({ ...request, messages: [history] }, candidate, { resolveApiKey }, cfg)) chunks.push(chunk)
     expect(resolveApiKey).not.toHaveBeenCalled()

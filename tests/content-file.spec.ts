@@ -13,6 +13,15 @@ describe('contentHasFileCompat', () => {
     expect(official).toHaveBeenCalledWith(content)
   })
 
+  it('retains recursive legacy file detection when the official helper returns false', () => {
+    const official = vi.fn(() => false)
+    expect(contentHasFileCompat([{
+      type: 'tool-result',
+      content: [{ type: 'file', attachment: { attachmentId: 'a', name: 'a.txt', bytes: 1 } }],
+    }], official)).toBe(true)
+    expect(official).toHaveBeenCalledOnce()
+  })
+
   it('recurses through tool-result content for older supported Core releases', () => {
     expect(contentHasFileCompat([{
       type: 'tool-result',

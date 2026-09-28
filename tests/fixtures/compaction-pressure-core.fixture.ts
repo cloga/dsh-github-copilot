@@ -1,5 +1,5 @@
 /**
- * Exact alpha2 tagged-source integration: real AgentLoop, LLM runtime, token
+ * Exact tagged-source integration: real AgentLoop, LLM runtime, token
  * meter and unmodified BasicCompactionEngine. Only the external model and
  * authenticated account snapshot are synthetic. This exercises durable
  * in-memory Session events, not disk persistence, OAuth or live model transport.
@@ -84,7 +84,7 @@ class FixtureAdapter extends LlmAdapter {
 
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.1.6-alpha.2')
+  expect(['0.1.6-alpha.2', '0.2.0-rc.1']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(3)
 })
 

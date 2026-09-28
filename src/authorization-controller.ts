@@ -284,7 +284,7 @@ export async function describeGitHubCopilotProviderProfile(ctx: Context): Promis
   if (record === undefined) return { state: 'not-configured' }
   validateGrant(record)
   try {
-    const settings = service<RouteSettings>(ctx, 'settings', ['get', 'describe'])
+    const settings = service<RouteSettings>(ctx, 'settings', ['describe'])
     const snapshot = settingsSnapshot(settings)
     const plan = planRoute(snapshot)
     const needsRepair = plan.operations.length > 0 || plan.clearBackup === true
@@ -302,7 +302,7 @@ async function repairGitHubCopilotProviderProfile(ctx: Context): Promise<GitHubC
   const record = await credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
   if (record === undefined) return { changed: false }
   validateGrant(record)
-  const settings = service<RouteSettings>(ctx, 'settings', ['get', 'describe', 'mutate'])
+  const settings = service<RouteSettings>(ctx, 'settings', ['describe', 'mutate'])
   const snapshot = settingsSnapshot(settings)
   const plan = planRoute(snapshot)
   let markerRevision = snapshot.markerRevision

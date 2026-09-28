@@ -7,7 +7,7 @@ import { name, version } from '#package.json' with { type: 'json' }
 
 it('mounts authorization, role and search-catalog Remotes on the exact target Client gateway', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2'])
+  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'])
     .toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   const ctx = new Context()
   const registered: unknown[] = []
@@ -47,8 +47,8 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       expect(descriptor.parameters).toEqual([])
       const expected = descriptor.method === 'migrationStatus' ? migration : view
-      expect(descriptor.result.schema.parse(expected)).toEqual(expected)
-      expect(() => descriptor.result.schema.parse({ ...expected, credential: 'synthetic-forbidden' })).toThrow()
+      expect(descriptor.result.create().parse(expected)).toEqual(expected)
+      expect(() => descriptor.result.create().parse({ ...expected, credential: 'synthetic-forbidden' })).toThrow()
       const method = ctx.remote.githubCopilot[descriptor.method]
       await expect(method()).resolves.toEqual({ ok: true, value: expected })
       expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilot/${descriptor.method}`, { args: {} }, expect.any(AbortSignal))
@@ -60,8 +60,8 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
       method: 'providers', invocation: { kind: 'direct' }, parameters: [],
       result: { mode: 'strict', typeSymbol: 'dsh-github-copilot#SearchProviderCatalog' },
     })
-    expect(catalogDescriptor.result.schema.parse(catalog)).toEqual(catalog)
-    expect(() => catalogDescriptor.result.schema.parse({ supported: true,
+    expect(catalogDescriptor.result.create().parse(catalog)).toEqual(catalog)
+    expect(() => catalogDescriptor.result.create().parse({ supported: true,
       providers: [{ id: 'synthetic-registered-search', credential: 'synthetic-forbidden' }] })).toThrow()
     await expect(ctx.remote.githubCopilotSearchRouting.providers()).resolves.toEqual({ ok: true, value: catalog })
     expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilotSearchRouting/providers', { args: {} }, expect.any(AbortSignal))
@@ -71,8 +71,8 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
       expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilotUsage/${method}`, { args: {} }, expect.any(AbortSignal))
     }
     const usageDescriptor = remote.descriptors.find(item => item.namespace === 'githubCopilotUsage')!
-    expect(usageDescriptor.result.schema.parse(usage)).toEqual(usage)
-    expect(() => usageDescriptor.result.schema.parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
+    expect(usageDescriptor.result.create().parse(usage)).toEqual(usage)
+    expect(() => usageDescriptor.result.create().parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
     await expect(ctx.remote.githubCopilotDualModel.view()).resolves.toEqual({ ok: true, value: roleView })
     await expect(ctx.remote.githubCopilotDualModel.save({ configuration: roleView.configuration, expectedRevision: 2 }))
       .resolves.toMatchObject({ ok: false, error: retiredError })
@@ -91,7 +91,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     for (const descriptor of remote.descriptors) {
       for (const codec of [descriptor.result, ...descriptor.parameters.map(parameter => parameter.codec)]) {
         expect(codec.mode).toBe('strict')
-        expect(codec.create()).toBe(codec.schema)
+        expect(codec.create().parse).toBeTypeOf('function')
       }
     }
     await dispose()

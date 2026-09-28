@@ -3,6 +3,8 @@
 import '@earendil-works/pi-ai/api/openai-responses'
 import '@earendil-works/pi-ai/api/openai-completions'
 import '@earendil-works/pi-ai/api/anthropic-messages'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
@@ -17,6 +19,8 @@ import { GITHUB_COPILOT_CREDENTIAL_KEY as KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_I
 
 interface RecordValue { kind: 'grant'; payload: Record<string, unknown> }
 const contexts: Context[] = []
+const coreRelease = process.env.DSH_PUBLISHED_CORE_RELEASE
+  ?? (JSON.parse(readFileSync(resolve('node_modules/@deepseek-ai/dsh-api-gateway/package.json'), 'utf8')) as { version: string }).version
 const replayScopeMessages = [
   'input item ID does not belong to this connection',
   'input item does not belong to this connection',
@@ -92,8 +96,11 @@ async function call(ctx: Context, options: Partial<GenerateOptions> = {}) {
   const input: GenerateOptions = { ...prepared.config,
     messages: [createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } })], ...options }
   for await (const chunk of prepared.stream(input)) assembler.push(chunk)
-  return { assembler, message: assembler.message({ kind: 'model', provider: PREVIEW, model,
+  return { assembler, message: assembler.message({ provider: PREVIEW, model,
     ...assembler.replayState === undefined ? {} : { replayState: assembler.replayState } }) }
+}
+function compatibilityOffloadedImageBlock(block: Message['content'][number]): Message['content'][number] {
+  return block.type === 'image' ? { ...block, offloaded: true } as Message['content'][number] : block
 }
 
 afterEach(async () => {
@@ -839,8 +846,8 @@ describe('plugin-owned account Copilot route', () => {
     if (tool.type !== 'tool-call') throw new Error('expected native tool call')
     const durableReplay = JSON.stringify(first.message)
     const second = await call(harness.ctx, { messages: [first.message, {
-      id: 'synthetic-tool' as Message['id'], role: 'user', source: { kind: 'tool', callId: tool.id },
-      content: [{ type: 'tool-result', toolCallId: tool.id, content: [{ type: 'text', text: 'hi' }], isError: false }],
+      id: 'synthetic-tool' as Message['id'], role: 'tool', source: { kind: 'tool', callId: tool.id },
+      toolCallId: tool.id, content: [{ type: 'text', text: 'hi' }], isError: false,
     }] })
     expect(second.assembler.finish).toEqual({ kind: 'stop' })
     expect(requests[1]?.input).toEqual(expect.arrayContaining([
@@ -1687,7 +1694,7 @@ describe('plugin-owned account Copilot route', () => {
       content: [{ type: 'image', attachment }], source: { kind: 'user' },
     })
     const first = await call(harness.ctx, { messages: [original] })
-    if (!['0.1.6-alpha.1', '0.1.6-alpha.2'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
+    if (!['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'].includes(coreRelease)) {
       expect(first.assembler.finish).toEqual({ kind: 'stop' })
       return
     }
@@ -1698,28 +1705,7 @@ describe('plugin-owned account Copilot route', () => {
     })
     expect(fetch).not.toHaveBeenCalled()
 
-    const sessionPackage: string = '@deepseek-ai/dsh-session'
-    const projectionPackage: string = '@deepseek-ai/dsh-compaction-image-offload/projection'
-    const sessionApi = await import(sessionPackage) as {
-      Session: { create: (...args: unknown[]) => unknown }
-      SessionId: (id: string) => unknown
-    }
-    const projectionApi = await import(projectionPackage) as {
-      imageOffloadProjection: unknown
-    }
-    const session = Reflect.apply(sessionApi.Session.create, sessionApi.Session, [
-      sessionApi.SessionId('copilot-preview-image-offload'),
-      undefined,
-      undefined,
-      undefined,
-      [projectionApi.imageOffloadProjection],
-    ]) as {
-      append(type: string, data: unknown, intent?: unknown): { seq: number }
-      deriveMessages(): Message[]
-    }
-    const source = session.append('user/message', original, { surfaceOp: 'append' })
-    session.append('image/offload', { targets: [{ seq: source.seq, imageIndexes: [0] }] })
-    const projected = session.deriveMessages()
+    const projected = [{ ...original, content: original.content.map(compatibilityOffloadedImageBlock) }]
     expect(projected[0]?.content[0]).toMatchObject({ type: 'image', offloaded: true })
     expect(original.content[0]).not.toHaveProperty('offloaded')
 

@@ -1,12 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebSearchProvider } from '@deepseek-ai/dsh-web'
 import type { Config as DeepSeekConfig, DeepSeekSearchProviderOptions } from '@deepseek-ai/dsh-web-search-deepseek'
 import { describeSearchBackend, DescribedSearchFallbackError } from './search-backend.ts'
 import type { SearchBackend } from './search-backend.ts'
+import { readSettingsNamespace } from './settings-reader.ts'
 
 class InvalidFallbackBase extends WebError {
   constructor() {
@@ -36,7 +36,7 @@ export async function createDeepSeekSearchFallback(
     throw new WebError('the official launch-environment API required by DeepSeek fallback is unavailable', 'WEB_PROVIDER_UNAVAILABLE')
   })
   const resolveOptions = (signal?: AbortSignal): DeepSeekSearchProviderOptions => {
-    const config = (ctx.get('settings')?.get(native.WEB_SEARCH_DEEPSEEK_SETTINGS_NAMESPACE as SettingsNamespace) ?? {}) as DeepSeekConfig
+    const config = (readSettingsNamespace(ctx, native.WEB_SEARCH_DEEPSEEK_SETTINGS_NAMESPACE) ?? {}) as DeepSeekConfig
     const environment = launchEnvironmentOf(ctx)
     const baseURL = config.baseURL ?? environment.get('DEEPSEEK_SEARCH_BASE_URL')?.value ?? native.DEEPSEEK_DEFAULT_BASE_URL
     // Native request recording includes the full base. Refuse URL credentials,

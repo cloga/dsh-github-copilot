@@ -73,7 +73,13 @@ async function fixture() {
 function resultSchema(method: string) {
   const descriptor = contribution.descriptors.find(item => item.method === method)
   if (!descriptor || descriptor.result.mode !== 'strict') throw new Error('expected strict result descriptor')
-  return descriptor.result.schema
+  return descriptor.result.create()
+}
+function parameterSchema(method: string) {
+  const descriptor = contribution.descriptors.find(item => item.method === method)
+  const codec = descriptor?.parameters[0]?.codec
+  if (!codec || codec.mode !== 'strict') throw new Error('expected strict parameter descriptor')
+  return codec.create()
 }
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -81,7 +87,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-describe('dual-model contribution through the installed rc.1 Client gateway', () => {
+describe('dual-model contribution through the installed 0.2.0-rc.1 Client gateway', () => {
   it('mounts only the fixed namespace and registers the independent strict contribution', async () => {
     const f = await fixture()
     expect(f.registrations).toEqual([contribution])
@@ -107,7 +113,7 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
     expect(resultSchema('view').parse(result.ok ? result.value : undefined)).toEqual(validView)
   })
 
-  it('retains legacy save encoding under input with exact model IDs and revision', async () => {
+  it('passes the exact save input under input with exact model IDs and revision', async () => {
     const f = await fixture()
     const saved = { ...validView, revision: 8 }
     f.rpcCall.mockResolvedValueOnce({ ok: true, value: saved })
@@ -116,8 +122,8 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
     expect(resultSchema('save').parse(result.ok ? result.value : undefined)).toEqual(saved)
     expect(f.rpcCall).toHaveBeenCalledExactlyOnceWith('/api', 'githubCopilotDualModel/save', { args: { input: saveInput } }, expect.any(AbortSignal))
     const payload = f.rpcCall.mock.calls[0]![2] as { args: { input: typeof saveInput } }
-    expect(payload.args.input).not.toBe(saveInput)
-    expect(payload.args.input.configuration).not.toBe(configuration)
+    expect(payload.args.input).toBe(saveInput)
+    expect(payload.args.input.configuration).toBe(configuration)
     expect(payload.args.input.configuration).toEqual(configuration)
   })
 
@@ -170,10 +176,12 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
     ['oversized model ID', { ...saveInput, configuration: { ...configuration, plannerModel: 'x'.repeat(513) } }],
     ['nonstring model ID', { ...saveInput, configuration: { ...configuration, executorModel: 123 } }],
   ]
-  it.each(invalidSave)('rejects invalid save %s before any transport call', async (_label, input) => {
+  it.each(invalidSave)('leaves invalid save %s for the strict Host codec', async (_label, input) => {
     const f = await fixture()
-    await expect(f.remote.save(input as never)).rejects.toThrow('githubCopilotDualModel/save rejected "input"')
-    expect(f.rpcCall).not.toHaveBeenCalled()
+    await expect(f.remote.save(input as never)).resolves.toEqual({ ok: true, value: validView })
+    expect(f.rpcCall).toHaveBeenCalledExactlyOnceWith('/api', 'githubCopilotDualModel/save',
+      { args: input === undefined ? {} : { input } }, expect.any(AbortSignal))
+    expect(() => parameterSchema('save').parse(input)).toThrow()
   })
 
   const invalidCreate: Array<[string, unknown]> = [
@@ -190,10 +198,12 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
     ['unsafe revision', { ...createInput, expectedRevision: Number.MAX_SAFE_INTEGER + 1 }],
     ['infinite revision', { ...createInput, expectedRevision: Number.POSITIVE_INFINITY }],
   ]
-  it.each(invalidCreate)('rejects invalid create %s before any transport call', async (_label, input) => {
+  it.each(invalidCreate)('leaves invalid create %s for the strict Host codec', async (_label, input) => {
     const f = await fixture()
-    await expect(f.remote.create(input as never)).rejects.toThrow('githubCopilotDualModel/create rejected "input"')
-    expect(f.rpcCall).not.toHaveBeenCalled()
+    await expect(f.remote.create(input as never)).resolves.toEqual({ ok: true, value: validView })
+    expect(f.rpcCall).toHaveBeenCalledExactlyOnceWith('/api', 'githubCopilotDualModel/create',
+      { args: input === undefined ? {} : { input } }, expect.any(AbortSignal))
+    expect(() => parameterSchema('create').parse(input)).toThrow()
   })
 
   it.each([
@@ -235,7 +245,7 @@ describe('dual-model contribution through the installed rc.1 Client gateway', ()
       { args: { input: createInput } }, expect.any(AbortSignal))
   })
 
-  it('documents unvalidated rc.1 error details without claiming Client filtering', async () => {
+  it('documents unvalidated 0.2.0-rc.1 error details without claiming Client filtering', async () => {
     const f = await fixture()
     f.rpcCall.mockResolvedValue({ ok: false, error: {
       code: 'copilot/dual-model', message: 'PRIVATE_MESSAGE',

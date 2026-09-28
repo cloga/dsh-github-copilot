@@ -422,7 +422,7 @@ describe('tsdown client artifact', () => {
     }
     const migrationDescriptor = contributions[0]!.descriptors.find(descriptor => descriptor.method === 'migrationStatus')!
     if (migrationDescriptor.result.mode !== 'strict') throw new Error('expected independent strict migration codec')
-    const migrationCodec = migrationDescriptor.result.schema
+    const migrationCodec = migrationDescriptor.result.create()
     expect(migrationCodec.parse(migration)).toEqual(migration)
     expect(() => migrationCodec.parse(validView)).toThrow()
     expect(() => migrationCodec.parse({ ...migration, credentials: 'private' })).toThrow()
@@ -439,8 +439,9 @@ describe('tsdown client artifact', () => {
       if (descriptor.result.mode !== 'strict') throw new Error('expected independent strict usage codec')
       const codec = descriptor.result
       expect(descriptor.parameters).toEqual([])
-      expect(codec.schema.parse(usage)).toEqual(usage)
-      expect(() => codec.schema.parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
+      const schema = codec.create()
+      expect(schema.parse(usage)).toEqual(usage)
+      expect(() => schema.parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
     }
     rpcCall.mockResolvedValueOnce({ ok: true, value: usage })
     await expect(ctx.remote.githubCopilotUsage.get()).resolves.toEqual({ ok: true, value: usage })
@@ -463,7 +464,7 @@ describe('tsdown client artifact', () => {
       { ...validView, route: { state: 'ready', credential: 'synthetic' } },
     ]
     for (const malformed of malformedViews) {
-      expect(() => resultCodec.schema.parse(malformed)).toThrow()
+      expect(() => resultCodec.create().parse(malformed)).toThrow()
     }
 
     // rc.1 carries the Host result without revalidating it in the gateway.
@@ -472,7 +473,7 @@ describe('tsdown client artifact', () => {
     rpcCall.mockResolvedValueOnce({ ok: true, value: malformedViews[0] })
     const unvalidated = await ctx.remote.githubCopilot.status()
     expect(unvalidated).toEqual({ ok: true, value: malformedViews[0] })
-    expect(() => resultCodec.schema.parse(unvalidated.ok ? unvalidated.value : undefined)).toThrow()
+    expect(() => resultCodec.create().parse(unvalidated.ok ? unvalidated.value : undefined)).toThrow()
     const validateView = client.exports.authorizationViewFrom
     expect(validateView).toBeTypeOf('function')
     expect((validateView as (value: unknown) => unknown)(unvalidated.ok ? unvalidated.value : undefined)).toBeUndefined()

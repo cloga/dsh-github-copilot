@@ -4,7 +4,7 @@ import vm from 'node:vm'
 import { test } from 'node:test'
 import * as cordis from '@deepseek-ai/cordis'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
+import { SettingsConflictError, SettingsForms } from '@deepseek-ai/dsh-settings'
 import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
 import { Config } from '../../lib/types/config.js'
 import { WebSearchRoutingConfigSchema } from '../../lib/types/web-search-routing-config.js'
@@ -16,15 +16,50 @@ const ops = [
   { op: 'set', path: ['defaultSearchProvider'], value: 'github-copilot-hosted' },
 ]
 
-// Real pinned Settings validation/CAS, with only isolated in-memory persistence.
-// No Host SettingsController write through Gateway, browser, live profile, OAuth,
-// or search is exercised. Client Gateway mounting below checks identity only.
-class MemorySettings extends SettingsProvider {
+// The current Core exposes SettingsForms, not the removed SettingsProvider.
+// This isolated state fixture covers routing behavior without a live profile.
+class MemorySettings {
+  entries = new Map()
   writes = []
-  get writable() { return true }
-  async load() { return {} }
-  async persist(ns, value) { this.writes.push({ ns, value }) }
+
+  register(ns, schema, { base }) {
+    this.entries.set(ns, { schema, value: { ...base }, revision: 0 })
+  }
+
+  describe() {
+    return [...this.entries].map(([ns, entry]) => ({
+      autoGenerate: true,
+      ns,
+      schema: entry.schema.toJSON(),
+      revision: entry.revision,
+      applies: 'live',
+      value: entry.value,
+      secrets: [],
+    }))
+  }
+
+  async mutate(ns, ops, expectedRevision) {
+    const entry = this.entries.get(ns)
+    if (entry.revision !== expectedRevision) throw new SettingsConflictError(ns, expectedRevision, entry.revision)
+    const value = structuredClone(entry.value)
+    for (const { op, path, value: nextValue } of ops) {
+      assert.equal(op, 'set')
+      let target = value
+      for (const key of path.slice(0, -1)) target = target[key] ??= {}
+      target[path.at(-1)] = nextValue
+    }
+    entry.value = value
+    entry.revision += 1
+    this.writes.push({ ns, value })
+  }
 }
+
+test('published SettingsForms exposes the descriptor and mutation APIs used by the plugin', () => {
+  for (const method of ['describe', 'update', 'mutate']) {
+    assert.equal(typeof SettingsForms.prototype[method], 'function', method)
+  }
+})
+
 function fixture(t) {
   const ctx = new Context()
   t.after(() => ctx.fiber.dispose())
@@ -67,6 +102,9 @@ async function settingsMutateDescriptor() {
   const descriptor = contribution.descriptors.find(entry => entry.namespace === 'settings' && entry.method === 'mutate')
   assert.ok(descriptor, 'official generated settings/mutate descriptor')
   return descriptor
+}
+function codecSchema(codec) {
+  return typeof codec.create === 'function' ? codec.create() : codec.schema
 }
 
 test('real pinned Client namespace lookups require stable capture across render calls', async t => {
@@ -135,12 +173,13 @@ test('pinned generated Client mutate codecs accept routing ops and a flat namesp
   for (const parameter of descriptor.parameters) {
     const value = { ns: ROUTING, ops, expectedRevision: view(ROUTING).revision }[parameter.name]
     assert.equal(parameter.codec.mode, 'strict')
-    assert.equal(parameter.codec.schema.safeParse(value).success, true, parameter.name)
+    assert.equal(codecSchema(parameter.codec).safeParse(value).success, true, parameter.name)
   }
   await settings.mutate(ROUTING, ops, view(ROUTING).revision)
-  const result = descriptor.result.schema.safeParse(view(ROUTING))
-  assert.equal(result.success, true)
+  const schema = codecSchema(descriptor.result)
+  const result = schema.safeParse(view(ROUTING))
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues))
   assert.equal(result.data.revision, 1)
   assert.equal(result.data.value.defaultSearchProvider, 'github-copilot-hosted')
-  assert.equal(descriptor.result.schema.safeParse({ namespaces: [view(ROUTING)] }).success, false)
+  assert.equal(schema.safeParse({ namespaces: [view(ROUTING)] }).success, false)
 })

@@ -48,6 +48,7 @@ import { createDeepSeekSearchFallback } from './deepseek-search-fallback.ts'
 import { isPluginPreviewProvider } from './model-protocol.ts'
 import type {} from './routed-web.ts'
 import { assertDshCompatibility } from './compatibility.ts'
+import { onSettingsNamespaceUpdated, readSettingsNamespace } from './settings-reader.ts'
 import GitHubCopilotAuthorizationController, {
   ensureGitHubCopilotProviderProfile,
 } from './authorization-controller.ts'
@@ -163,10 +164,25 @@ function installSettingsNamespace<T>(
     return
   }
   ctx.inject(['settings'], (settingsCtx) => {
-    if (!isInstanceSettingsInstaller(settingsCtx.settings)) {
-      throw new Error('github-copilot: settings service does not support section installation')
+    if (isInstanceSettingsInstaller(settingsCtx.settings)) {
+      settingsCtx.settings.installSection(ctx, namespace, schema, config, hooks)
+      return
     }
-    settingsCtx.settings.installSection(ctx, namespace, schema, config, hooks)
+    const configRecord = typeof config === 'object' && config !== null ? config as Record<string, unknown> : undefined
+    const fallback = namespace === WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE
+      ? configRecord?.searchRouting ?? {}
+      : config
+    hooks.setSource(() => {
+      const value = readSettingsNamespace(ctx, namespace)
+      return (value ?? fallback) as T
+    })
+    const watched: ReadonlySet<string> = namespace === WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE
+      ? new Set([namespace, GITHUB_COPILOT_SETTINGS_NAMESPACE])
+      : new Set([namespace])
+    const dispose = onSettingsNamespaceUpdated(ctx, changed => {
+      if (watched.has(changed)) hooks.onChange()
+    })
+    ctx.effect(() => dispose)
   })
 }
 
@@ -908,6 +924,8 @@ function preflight(
   if (!providerAllowed(request, cfg, route)) return false
   if (request.messages.some(message => contentHasFileCompat(message.content))) return false
   if (contentHasImageAttachments(request)) return false
+  // Core owns replaying its first-class developer tool-history messages.
+  if (request.messages.some(message => message.role === 'developer')) return false
   // New Core messages may carry system authority in-band. The legacy Anthropic
   // serializer only models user/assistant turns; let Core preserve that authority.
   if (route?.api === 'anthropic-messages' && request.messages.some(message => String(message.role) === 'system')) return false

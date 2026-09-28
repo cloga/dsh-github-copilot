@@ -330,10 +330,28 @@ function proofCount(fetchMock: ReturnType<typeof searchFetch>): number {
   return fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('Probe web search capability.')).length
 }
 
-async function search(runtime: FakeRuntime, surface: 'inline' | 'web'): Promise<unknown> {
+async function search(runtime: FakeRuntime, surface: 'inline' | 'web', signal?: AbortSignal): Promise<unknown> {
   return surface === 'inline'
     ? drain(runtime.listener?.(request(), () => undefined) as AsyncIterable<StreamChunk> | undefined)
-    : runtime.searchProviders[0]!.search({ query: 'news' })
+    : runtime.searchProviders[0]!.search({ query: 'news' }, signal)
+}
+
+type RouterSearchArgs = Parameters<Context['githubCopilotSearchRouter']['search']>
+function routeSearch(
+  runtime: FakeRuntime,
+  request: RouterSearchArgs[0],
+  signal: RouterSearchArgs[1],
+  delegate: RouterSearchArgs[2],
+  selectProvider?: RouterSearchArgs[3],
+  extras: WebSearchProvider[] = [],
+): ReturnType<Context['githubCopilotSearchRouter']['search']> {
+  const routing = runtime.settingsDocument[WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]
+  const explicit = typeof routing === 'object' && routing !== null && !Array.isArray(routing)
+    && 'searchProvider' in routing && typeof routing.searchProvider === 'string'
+  return runtime.ctx.get('githubCopilotSearchRouter')!.search(
+    request, signal, delegate, selectProvider,
+    explicit ? capturedSearchProviders(runtime, extras).capture : undefined,
+  )
 }
 
 // Inline failures become terminal chunks; ctx.web failures reject.
@@ -1059,7 +1077,7 @@ describe('session search router Host integration', () => {
         }, preview)
         apply(runtime.ctx, { ...config, probe: mode !== 'trust override', searchFallback: 'deepseek' })
         const router = runtime.ctx.get('githubCopilotSearchRouter')!
-        if (mode === 'cached success') await router.search({ query: 'warm probe' }, undefined, vi.fn())
+        if (mode === 'cached success') await routeSearch(runtime, { query: 'warm probe' }, undefined, vi.fn())
         fetchMock.mockClear()
         runtime.credentialResolve.mockClear()
         // webPlan contributes one initial read before resolveRequestAuth. The
@@ -1073,7 +1091,7 @@ describe('session search router Host integration', () => {
           clock.mockReturnValue(start + 1000)
           readsUntilChange = 2
         }
-        const outcome = await router.search({ query: 'invalid account proof' }, undefined, vi.fn())
+        const outcome = await routeSearch(runtime, { query: 'invalid account proof' }, undefined, vi.fn())
           .then(value => ({ value }), error => ({ error }))
         expect(readsUntilChange).toBe(0)
         expect(runtime.credentialResolve).not.toHaveBeenCalled()
@@ -1145,7 +1163,7 @@ describe('session search router Host integration', () => {
           clock.mockReturnValue(start + 1000)
           expect(heldProof()).toBe(true)
         }
-        const search = runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'control' }, undefined, vi.fn())
+        const search = routeSearch(runtime, { query: 'control' }, undefined, vi.fn())
         if (control === 'expiry during transport') {
           await expect(search).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
           expect(heldProof()).toBe(false)
@@ -1201,7 +1219,7 @@ describe('session search router Host integration', () => {
     const delegate = vi.fn(async () => expected)
     const query = { query: 'native', maxResults: 2 }
     const signal = new AbortController().signal
-    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search(query, signal, delegate)
+    const result = await routeSearch(runtime, query, signal, delegate)
     expect(result).toBe(expected)
     expect(delegate).toHaveBeenCalledExactlyOnceWith(query, signal)
     expect(fetchMock).not.toHaveBeenCalled()
@@ -1539,7 +1557,7 @@ describe('session search router Host integration', () => {
     vi.stubGlobal('fetch', fetchMock)
     apply(runtime.ctx, { ...config, providers: ['github-copilot'], probe: false })
     const delegate = vi.fn(async () => ({ sources: [], truncated: false }))
-    await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'independent search' }, undefined, delegate)
+    await routeSearch(runtime, { query: 'independent search' }, undefined, delegate)
     expect(delegate).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledOnce()
     const payload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { model: string; tools: Array<{ type: string }> }
@@ -1564,7 +1582,7 @@ describe('session search router Host integration', () => {
     vi.stubGlobal('fetch', fetchMock)
     apply(runtime.ctx, { ...config, probe: true })
     expect(discover).not.toHaveBeenCalled()
-    await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'new account model' }, undefined, vi.fn())
+    await routeSearch(runtime, { query: 'new account model' }, undefined, vi.fn())
     expect(discover).toHaveBeenCalledOnce()
     expect(proofCount(fetchMock)).toBe(1)
     expect(resolveRequestAuth).toHaveBeenCalledWith(searchModel, expect.any(AbortSignal))
@@ -1593,14 +1611,15 @@ describe('session search router Host integration', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     apply(runtime.ctx, config)
-    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'expired proof' }, undefined, vi.fn()))
+    await expect(routeSearch(runtime, { query: 'expired proof' }, undefined, vi.fn()))
       .rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
     expect(fetchMock).toHaveBeenCalledTimes(phase === 'auth' ? 0 : 1)
   })
 
-  it('dispatches a non-Copilot session to the configured registered provider id', async () => {
+  it('dispatches a non-Copilot session to the captured registered provider', async () => {
     const runtime = buildRuntime({}, { current: { provider: 'volcengine', model: 'deepseek-v4-flash' } }, {
       [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: {
+        searchProvider: 'auto',
         searchMode: 'auto',
         defaultSearchProvider: 'exa',
       },
@@ -1609,9 +1628,14 @@ describe('session search router Host integration', () => {
     const expected = { sources: [{ url: 'https://example.com' }], truncated: false }
     const delegate = vi.fn(async () => ({ sources: [], truncated: false }))
     const selectProvider = vi.fn(async () => expected)
+    const providerSearch = vi.fn(async () => expected)
     const query = { query: 'provider selection' }
-    expect(await runtime.ctx.get('githubCopilotSearchRouter')!.search(query, undefined, delegate, selectProvider)).toBe(expected)
-    expect(selectProvider).toHaveBeenCalledExactlyOnceWith('exa', query, expect.any(AbortSignal))
+    const provider: WebSearchProvider = { id: 'exa', available: () => true, search: providerSearch }
+    const result = await routeSearch(runtime, query, undefined, delegate, selectProvider, [provider])
+    expect(result).toMatchObject(expected)
+    expect(result.content).toContain('final fallback')
+    expect(providerSearch).toHaveBeenCalledExactlyOnceWith(query, expect.any(AbortSignal))
+    expect(selectProvider).not.toHaveBeenCalled()
     expect(delegate).not.toHaveBeenCalled()
   })
 
@@ -1625,7 +1649,7 @@ describe('session search router Host integration', () => {
     apply(runtime.ctx, config)
     const delegate = vi.fn()
     const selectProvider = vi.fn()
-    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'disabled' }, undefined, delegate, selectProvider))
+    await expect(routeSearch(runtime, { query: 'disabled' }, undefined, delegate, selectProvider))
       .rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
     expect(delegate).not.toHaveBeenCalled()
     expect(selectProvider).not.toHaveBeenCalled()
@@ -1648,7 +1672,7 @@ describe('session search router Host integration', () => {
     const fetchMock = searchFetch()
     vi.stubGlobal('fetch', fetchMock)
     apply(runtime.ctx, { ...config, providers: ['github-copilot'], probe: false })
-    await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'fixed search' }, undefined, vi.fn())
+    await routeSearch(runtime, { query: 'fixed search' }, undefined, vi.fn())
     const payload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { model: string }
     expect(payload.model).toBe('gpt-5.4')
   })
@@ -1674,7 +1698,7 @@ describe('session search router Host integration', () => {
     apply(runtime.ctx, { ...config, providers: ['another-provider'], searchFallback: 'deepseek' })
     const expected = { sources: [], truncated: false }
     const delegate = vi.fn(async () => expected)
-    expect(await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'excluded route' }, undefined, delegate)).toBe(expected)
+    expect(await routeSearch(runtime, { query: 'excluded route' }, undefined, delegate)).toBe(expected)
     expect(delegate).toHaveBeenCalledOnce()
     expect(fetchMock).not.toHaveBeenCalled()
     expect(runtime.credentialResolve).not.toHaveBeenCalled()
@@ -1695,7 +1719,7 @@ describe('session search router Host integration', () => {
     vi.stubGlobal('fetch', fetchMock)
     apply(runtime.ctx, config)
     const delegate = vi.fn()
-    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'primary' }, undefined, delegate)
+    const result = await routeSearch(runtime, { query: 'primary' }, undefined, delegate)
     expect(result.content).toContain('Copilot search response')
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`${baseURL}/responses`)
@@ -1717,7 +1741,7 @@ describe('session search router Host integration', () => {
     vi.stubGlobal('fetch', fetchMock)
     apply(runtime.ctx, config)
     const delegate = vi.fn()
-    const result = await runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'fallback' }, undefined, delegate)
+    const result = await routeSearch(runtime, { query: 'fallback' }, undefined, delegate)
     expect(result.content).toContain('deepseek-official')
     expect(result.content).toContain('DeepSeek API charges')
     expect(result.content).toContain('origin=https://deepseek-search.test')
@@ -1740,11 +1764,11 @@ describe('session search router Host integration', () => {
     apply(runtime.ctx, { ...config, searchFallback: 'none' })
     const delegate = vi.fn(async () => ({ sources: [], truncated: false }))
     const router = runtime.ctx.get('githubCopilotSearchRouter')!
-    await expect(router.search({ query: 'no fallback' }, undefined, delegate)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    await expect(routeSearch(runtime, { query: 'no fallback' }, undefined, delegate)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
     expect(fetchMock).not.toHaveBeenCalled()
     runtime.settingsDocument[GITHUB_COPILOT_SETTINGS_NAMESPACE] = { routeWebSearch: false }
     runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
-    await router.search({ query: 'routing disabled' }, undefined, delegate)
+    await routeSearch(runtime, { query: 'routing disabled' }, undefined, delegate)
     expect(delegate).toHaveBeenCalledOnce()
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -1762,7 +1786,7 @@ describe('session search router Host integration', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     apply(runtime.ctx, { ...config, searchFallback: 'deepseek' })
-    await expect(runtime.ctx.get('githubCopilotSearchRouter')!.search({ query: 'cancelled account' }, undefined, vi.fn())).rejects.toMatchObject({ code: 'WEB_ABORTED' })
+    await expect(routeSearch(runtime, { query: 'cancelled account' }, undefined, vi.fn())).rejects.toMatchObject({ code: 'WEB_ABORTED' })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(runtime.credentialResolve).not.toHaveBeenCalled()
   })
@@ -2400,25 +2424,17 @@ describe('github-copilot apply', () => {
     const withNestedFile = request({
       messages: [{
         id: 'tool-result-1' as Message['id'],
-        role: 'user',
-        content: [{
-          type: 'tool-result',
-          toolCallId: 'call-1' as never,
-          content: [
-            { type: 'text', text: 'Generated report.' },
-            compatibilityFileBlock(attachment),
-          ],
-          isError: false,
-        }],
+        role: 'tool',
+        toolCallId: 'call-1' as never,
+        content: [{ type: 'text', text: 'Generated report.' }, compatibilityFileBlock(attachment)],
         source: { kind: 'tool', callId: 'call-1' as never },
       }],
     })
     const originalMessages = withNestedFile.messages
     const next = vi.fn(() => {
       expect(withNestedFile.messages).toBe(originalMessages)
-      expect(withNestedFile.messages[0]?.content[0]).toMatchObject({
-        type: 'tool-result',
-        content: [{ type: 'text' }, { type: 'file', attachment }],
+      expect(withNestedFile.messages[0]).toMatchObject({
+        role: 'tool', content: [{ type: 'text' }, { type: 'file', attachment }],
       })
       return 'next-value'
     })

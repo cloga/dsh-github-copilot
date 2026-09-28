@@ -201,11 +201,11 @@ describe('Copilot usage Host lifecycle', () => {
       expect(fetcher).not.toHaveBeenCalled()
       expect(await controller.get()).toMatchObject({ state: 'ready' })
       ctx.emit('credentials/record-updated', credentialKey('other', 'record')); await controller.get()
-      ctx.emit('settings/updated', 'unrelated' as SettingsNamespace, {}, {}, 'update'); await controller.get()
+      ctx.emit('settings/document-updated', 'unrelated' as SettingsNamespace, 1); await controller.get()
       expect(fetcher).toHaveBeenCalledTimes(1)
       ctx.emit('credentials/record-updated', credentialKey('llm-pi-ai', 'github-copilot')); await controller.get()
       expect(fetcher).toHaveBeenCalledTimes(2)
-      ctx.emit('settings/updated', 'github-copilot' as SettingsNamespace, {}, {}, 'update')
+      ctx.emit('settings/document-updated', 'github-copilot' as SettingsNamespace, 2)
       await controller.get(); expect(fetcher).toHaveBeenCalledTimes(3)
     } finally { await ctx.fiber.dispose() }
     expect(await controller.get()).toMatchObject({ diagnostic: 'COPILOT_USAGE_DISPOSED' })

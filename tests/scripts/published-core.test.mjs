@@ -3,9 +3,10 @@ import { test } from 'node:test'
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
+import { PUBLISHED_CORE_RELEASES, preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
 
 const release = '0.1.3-alpha.1'
+const latestRelease = '0.2.0-rc.1'
 async function sourceFixture() {
   // Windows runners may expose TEMP through an 8.3 alias or redirected parent.
   // Give the subject a real physical source; explicit link rejection tests below
@@ -61,6 +62,16 @@ test('prepares only plugin inputs and exact Core requirements without executing 
   assert.deepEqual(report.executed, { install: false, build: false, tests: false })
 }))
 
+test('admits and inspects only the exact added official published release', async () => withSource(async ({ root, target }) => {
+  assert.deepEqual(PUBLISHED_CORE_RELEASES, ['0.1.2-rc.1', '0.1.3-alpha.1', latestRelease])
+  const report = await preparePublishedCoreFixture({ root, target, release: latestRelease })
+  assert.equal(report.release, latestRelease)
+  await installedFixture(target, latestRelease)
+  const inspected = await inspectPublishedCoreFixture({ root: target, release: latestRelease })
+  assert.equal(inspected.release, latestRelease)
+  assert.equal(inspected.classIdentity, true)
+}))
+
 test('refuses an unknown release before creating any target', async () => withSource(async ({ root, target, base }) => {
   await assert.rejects(preparePublishedCoreFixture({ root, target, release: 'latest' }), /unsupported published Core/)
   assert.deepEqual(await readdir(base), ['source'])
@@ -105,14 +116,14 @@ async function mockPackage(root, name, version, source = 'export {}', directory 
   await writeFile(join(dir, 'index.js'), source)
   return dir
 }
-async function installedFixture(root) {
+async function installedFixture(root, targetRelease = release) {
   const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
   const names = new Set(['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
     .flatMap(section => Object.keys(pkg[section] ?? {}).filter(name => name.startsWith('@deepseek-ai/dsh-'))))
-  for (const name of names) await mockPackage(root, name, release)
+  for (const name of names) await mockPackage(root, name, targetRelease)
   await mockPackage(root, '@deepseek-ai/cordis', '4.0.2', 'export class Context {}')
-  await mockPackage(root, '@deepseek-ai/dsh-llm', release, 'export class LlmAdapter {}; export default class LlmRuntime {}')
-  await mockPackage(root, '@deepseek-ai/dsh-llm-pi-ai', release,
+  await mockPackage(root, '@deepseek-ai/dsh-llm', targetRelease, 'export class LlmAdapter {}; export default class LlmRuntime {}')
+  await mockPackage(root, '@deepseek-ai/dsh-llm-pi-ai', targetRelease,
     'import {LlmAdapter} from "@deepseek-ai/dsh-llm"; export class PiAiAdapter extends LlmAdapter {prepareCall(){}}; export function Config(){}')
   await mockPackage(root, '@earendil-works/pi-ai', '0.85.1')
 }

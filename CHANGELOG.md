@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.38 (prepared)
+
+- Add official DSH `0.2.0-rc.1` as the current exact compatibility target while retaining the existing baseline pins; use the corresponding public Core packages in development and tagged-source CI.
+- Adapt plugin settings reads/listeners to the current public `SettingsForms` descriptor/event API while retaining legacy Core compatibility. Materialize volatile pi-ai provider profiles through their public getter.
+- Preserve current first-class tool messages, older nested tool results and Core-owned developer history semantics in the plugin's guarded serializers; retain recursive legacy file detection when the Core predicate does not recognize older nested content.
+- Update Remote/Gateway and serialized agent lifecycle regressions to match the published 0.2 contracts, and keep provider routing writes isolated from the Copilot settings namespace.
+- Record the pinned official-first API review and qualification boundaries in `docs/official-first-020-rc1.md`. Local tests do not qualify the packaged Windows Desktop runtime, live OAuth/provider calls, or loaded Desktop activation.
+
 ## 0.4.0-alpha.37 (prepared)
 
 - Recognize both observed uncoded Responses scope-401 messages, including `input item does not belong to this connection` without `ID`, so that request-local rejection does not retire shared OAuth proof or abort neighboring calls (#164).

@@ -34,8 +34,8 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function harness(config: Config | undefined = {}, values: Record<string, string> = {}) {
-  let currentConfig: Config | undefined = config
+function harness(config: Partial<Config> | undefined = {}, values: Record<string, string> = {}) {
+  let currentConfig: Partial<Config> | undefined = config
   const resolve = vi.fn<(ref: string) => Promise<CredentialValue>>(async () => ({ value: 'synthetic-service-key' }))
   let credentials: { resolve: typeof resolve } | undefined = { resolve }
   const snapshot = createLaunchEnvironmentSnapshot([{ source: 'process', values }])
@@ -57,7 +57,7 @@ function harness(config: Config | undefined = {}, values: Record<string, string>
   const canContinue = vi.fn(() => true)
   return {
     ctx: { get } as unknown as Context, owner, append, get, resolve, settingsGet, environmentGet, canContinue,
-    setConfig: (value: Config | undefined) => { currentConfig = value },
+    setConfig: (value: Partial<Config> | undefined) => { currentConfig = value },
     removeCredentials: () => { credentials = undefined },
   }
 }

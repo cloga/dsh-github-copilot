@@ -14,7 +14,7 @@ export function contentHasFileCompat(
   content: readonly unknown[],
   official: ContentHasFile | undefined = (dshLlm as { contentHasFile?: ContentHasFile }).contentHasFile,
 ): boolean {
-  if (official !== undefined) return official(content)
+  if (official?.(content)) return true
   return content.some((block) => {
     if (typeof block !== 'object' || block === null || !('type' in block)) return false
     if (block.type === 'file') return true

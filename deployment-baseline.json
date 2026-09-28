@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.37"
+    "version": "0.4.0-alpha.38"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -19,11 +19,11 @@
     "platforms": ["windows", "linux"],
     "node": ">=22.19.0",
     "dsh": {
-      "release": "0.1.6-alpha.2",
-      "tag": "dsh-v0.1.6-alpha.2",
-      "commit": "ddefc45fbc7f8e46dd73185e68295696d1297887",
-      "developmentRelease": "0.1.2-rc.1",
-      "peerRange": "0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2",
+      "release": "0.2.0-rc.1",
+      "tag": "dsh-v0.2.0-rc.1",
+      "commit": "4878cdabd87d4041bdaff61d04c966883b9fd07a",
+      "developmentRelease": "0.2.0-rc.1",
+      "peerRange": "0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.2.0-rc.1",
       "baselines": [
         {
           "release": "0.1.1-rc.2",
@@ -168,6 +168,31 @@
           "managedProviderValidation": "synthetic-tagged-source-runtime",
           "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
           "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
+        },
+        {
+          "release": "0.2.0-rc.1",
+          "tag": "dsh-v0.2.0-rc.1",
+          "commit": "4878cdabd87d4041bdaff61d04c966883b9fd07a",
+          "source": "https://github.com/deepseek-ai/deepseek-harness",
+          "desktopRelease": "0.2.0-rc.1",
+          "modelsUi": "provider-card",
+          "providerHeaders": "fetch-validated-discovery",
+          "strictModeCompat": "route-switch",
+          "fileContentHelper": "contentHasFile",
+          "agentCreation": "awaited-serial-agent-created",
+          "sessionHistory": "request-header-and-projections-no-new-sync-history",
+          "strictRemoteCodecs": "create-factories-with-legacy-schema-bridge",
+          "roleChildDescriptorVersion": 3,
+          "roleChildCacheVersion": 2,
+          "roleChildHistory": "unknown-legacy-history-fail-closed",
+          "runtimeDependencies": "public-resolution-and-unload",
+          "clientSessionContext": "multiple-session-owner-isolation",
+          "evidenceScope": "unchanged-tagged-source-target",
+          "standaloneNpmArtifacts": "tested",
+          "desktopPackageSet": "not-materialized",
+          "managedProviderValidation": "synthetic-tagged-source-runtime",
+          "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
         }
       ],
       "packages": [
@@ -195,7 +220,7 @@
       "zod": "^4.4.3"
     },
     "sharedPeerDependencies": {
-      "@deepseek-ai/dsh-authorization": "0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2",
+      "@deepseek-ai/dsh-authorization": "0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.2.0-rc.1",
       "@deepseek-ai/schemastery": "^3.18.2"
     },
     "clientExternals": {
@@ -876,12 +901,12 @@
       "id": "dsh-supported-baselines-fail-loud-guard",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/compatibility.ts", "marker": "peerRange: '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2'"}
+        {"file": "src/compatibility.ts", "marker": "peerRange: '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.2.0-rc.1'"}
       ],
       "tests": [
         {"file": "tests/compatibility.spec.ts", "name": "retains the original three compatibility baselines"},
-        {"file": "tests/compatibility.spec.ts", "name": "adds 0.1.6-alpha.2 without dropping earlier baselines or advancing development dependencies"},
-        {"file": "tests/compatibility.spec.ts", "name": "declares exact alpha2 contract targets without claiming live or artifact validation"},
+        {"file": "tests/compatibility.spec.ts", "name": "adds 0.2.0-rc.1 without dropping earlier baselines and develops against the current official release"},
+        {"file": "tests/compatibility.spec.ts", "name": "declares the current and retained exact contract targets without claiming live Desktop validation"},
         {"file": "tests/compatibility.spec.ts", "name": "accepts the supported DSH service contract"},
         {"file": "tests/compatibility.spec.ts", "name": "fails before startup when a required API is absent"}
       ]
@@ -921,7 +946,7 @@
       "tests": [
         {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow while exposing only the account-driven provider"},
         {"file": "tests/single-route.spec.ts", "name": "discovers new IDs and reasoning metadata without a canonical model profile"},
-        {"file": "tests/single-route.spec.ts", "name": "honors an explicit legacy-profile removal without deleting OAuth or rebuilding the route"},
+        {"file": "tests/single-route.spec.ts", "name": "honors explicit legacy-profile removal from settings without deleting OAuth"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not recreate an absent canonical profile during status or startup and auth reconciliation helpers"},
         {"file": "tests/authorization-controller.spec.ts", "name": "keeps absent-profile legacy journal conflicts visible instead of bypassing ownership review"}
       ]

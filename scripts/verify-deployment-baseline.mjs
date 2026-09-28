@@ -184,17 +184,18 @@ assert(
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(
-  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2',
-  'DSH peer range must retain all earlier baselines and append 0.1.6-alpha.2',
+  peerRange === '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.2.0-rc.1',
+  'DSH peer range must retain all earlier baselines and append 0.2.0-rc.1',
 )
 assert(packageJson.engines?.dsh === peerRange, 'top-level engines.dsh must declare the same host compatibility range')
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
-assert(dshBaselines.length === 9, 'exactly nine DSH baselines must be declared')
-assert(new Set(dshBaselines.map(entry => entry.release)).size === 9, 'DSH baseline releases must be unique')
+assert(dshBaselines.length === 10, 'exactly ten DSH baselines must be declared')
+assert(new Set(dshBaselines.map(entry => entry.release)).size === 10, 'DSH baseline releases must be unique')
 const currentDsh = manifest.supportedBaselines.dsh
-assert(currentDsh.release === '0.1.6-alpha.2'
-  && currentDsh.tag === 'dsh-v0.1.6-alpha.2'
-  && currentDsh.commit === 'ddefc45fbc7f8e46dd73185e68295696d1297887', 'current Core target must be the exact official 0.1.6-alpha.2 tag')
+assert(currentDsh.release === '0.2.0-rc.1'
+  && currentDsh.tag === 'dsh-v0.2.0-rc.1'
+  && currentDsh.commit === '4878cdabd87d4041bdaff61d04c966883b9fd07a',
+  'current Core target must be the exact official 0.2.0-rc.1 tag')
 assert(
   dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
     && entry.commit === 'a772dbbde82780bff2b9394427e9f0a24cafa1d5'
@@ -269,7 +270,7 @@ for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   )
 }
 
-assert(manifest.supportedBaselines.dsh.developmentRelease === '0.1.2-rc.1', 'development must use the published rc.1 API baseline')
+assert(manifest.supportedBaselines.dsh.developmentRelease === '0.2.0-rc.1', 'development must use the current official API baseline')
 const declaredPackages = [...manifest.supportedBaselines.dsh.packages].sort()
 const actualDshPeers = Object.keys(packageJson.peerDependencies).filter(name => name.startsWith('@deepseek-ai/dsh-')).sort()
 assert(JSON.stringify(declaredPackages) === JSON.stringify(actualDshPeers), 'Core peer package inventory differs')
@@ -277,8 +278,8 @@ for (const [name, version] of Object.entries(packageJson.devDependencies)) {
   if (name.startsWith('@deepseek-ai/dsh-')) assert(version === manifest.supportedBaselines.dsh.developmentRelease, `${name} must use the exact development Core version`)
 }
 assert(packageJson.dependencies?.['@deepseek-ai/dsh-authorization'] === undefined
-  && packageJson.devDependencies['@deepseek-ai/dsh-authorization'] === '0.1.2-rc.1',
-  'authorization must use the Host peer at runtime and the published rc.1 development baseline')
+  && packageJson.devDependencies['@deepseek-ai/dsh-authorization'] === '0.2.0-rc.1',
+  'authorization must use the Host peer at runtime and the current official development baseline')
 assert(manifest.supportedBaselines.piAi === '0.85.1', 'managed provider evidence targets exact pi-ai 0.85.1')
 const oldCore = dshBaselines.find(entry => entry.release === '0.1.1-rc.2')
 assert(oldCore.evidenceScope === 'historical-regression-only' && oldCore.managedProviderValidation === 'not-verified', 'historical rc.2 must not claim new managed-provider validation')
@@ -383,7 +384,7 @@ assert(alpha016Core?.tag === 'dsh-v0.1.6-alpha.1'
   ]), '0.1.6-alpha.1 must declare exact lifecycle, MCP, PTC, sandbox, attachment, Team and source-runtime evidence')
 
 const alpha0162Core = dshBaselines.find(entry => entry.release === '0.1.6-alpha.2')
-assert(alpha0162Core?.tag === currentDsh.tag && alpha0162Core.commit === currentDsh.commit
+assert(alpha0162Core?.tag === 'dsh-v0.1.6-alpha.2' && alpha0162Core.commit === 'ddefc45fbc7f8e46dd73185e68295696d1297887'
   && alpha0162Core.source === officialCore.source && alpha0162Core.modelsUi === officialCore.modelsUi
   && alpha0162Core.providerHeaders === officialCore.providerHeaders
   && alpha0162Core.strictModeCompat === officialCore.strictModeCompat
@@ -406,6 +407,28 @@ assert(alpha0162Core?.tag === currentDsh.tag && alpha0162Core.commit === current
     ...alpha016Core.runtimeTests.slice(-2),
   ]), '0.1.6-alpha.2 must declare exact codec, child, dependency lifetime, Client owner and bounded source-runtime targets')
 for (const path of alpha0162Core.runtimeTests) await access(resolve(root, path))
+
+const rc020Core = dshBaselines.find(entry => entry.release === '0.2.0-rc.1')
+assert(rc020Core?.tag === currentDsh.tag && rc020Core.commit === currentDsh.commit
+  && rc020Core.source === officialCore.source && rc020Core.desktopRelease === '0.2.0-rc.1'
+  && rc020Core.modelsUi === officialCore.modelsUi
+  && rc020Core.providerHeaders === officialCore.providerHeaders
+  && rc020Core.strictModeCompat === officialCore.strictModeCompat
+  && rc020Core.fileContentHelper === officialCore.fileContentHelper
+  && rc020Core.strictRemoteCodecs === alpha0162Core.strictRemoteCodecs
+  && rc020Core.roleChildDescriptorVersion === alpha0162Core.roleChildDescriptorVersion
+  && rc020Core.roleChildCacheVersion === alpha0162Core.roleChildCacheVersion
+  && rc020Core.roleChildHistory === alpha0162Core.roleChildHistory
+  && rc020Core.runtimeDependencies === alpha0162Core.runtimeDependencies
+  && rc020Core.clientSessionContext === alpha0162Core.clientSessionContext
+  && rc020Core.evidenceScope === 'unchanged-tagged-source-target'
+  && rc020Core.standaloneNpmArtifacts === 'tested'
+  && rc020Core.desktopPackageSet === 'not-materialized'
+  && rc020Core.managedProviderValidation === 'synthetic-tagged-source-runtime'
+  && rc020Core.resolvedProfileDiagnostics === alpha0162Core.resolvedProfileDiagnostics
+  && JSON.stringify(rc020Core.runtimeTests) === JSON.stringify(alpha0162Core.runtimeTests),
+  '0.2.0-rc.1 must declare exact source, package and bounded compatibility evidence without claiming Desktop package-set validation')
+for (const path of rc020Core.runtimeTests) await access(resolve(root, path))
 
 const pluginSourcePaths = (await readdir(resolve(root, 'src'), { recursive: true }))
   .filter(path => path.endsWith('.ts'))
@@ -495,8 +518,8 @@ const subagentClosure = "pnpm install --frozen-lockfile --filter '@deepseek-ai/d
 for (const [path, source] of [['CI', workflow], ['Release', releaseWorkflow]]) {
   assert(source.includes(subagentClosure), `${path} must install the alpha2 native child-descriptor closure`)
 }
-assert(workflow.includes("if: matrix.dsh.release == '0.1.6-alpha.2'\n        working-directory: dsh-upstream\n        run: " + subagentClosure),
-  'CI native child-descriptor closure must be scoped to alpha2')
+assert(workflow.includes("if: matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'\n        working-directory: dsh-upstream\n        run: " + subagentClosure),
+  'CI native child-descriptor closure must cover alpha2 and the current official target')
 for (const command of [
   'a772dbbde82780bff2b9394427e9f0a24cafa1d5',
   'repository: cloga/deepseek-harness',
@@ -508,10 +531,11 @@ for (const command of [
   'fb2c4b9e698e30edb738bca4cf0618587db7d203',
   '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
   'ddefc45fbc7f8e46dd73185e68295696d1297887',
+  '4878cdabd87d4041bdaff61d04c966883b9fd07a',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
-  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2'",
-  "if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2'",
+  "if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'",
+  "if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'",
   'node scripts/verify-tagged-core.mjs prepare',
   'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
@@ -527,8 +551,8 @@ for (const marker of [
   "github.event_name == 'push' && github.ref == 'refs/heads/main'",
   'fetch-depth: 0',
   'scripts/release-policy.mjs --plan',
-  'ddefc45fbc7f8e46dd73185e68295696d1297887',
-  '--release 0.1.6-alpha.2',
+  '4878cdabd87d4041bdaff61d04c966883b9fd07a',
+  '--release 0.2.0-rc.1',
   'node scripts/verify-tagged-core.mjs prepare',
   'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',
@@ -549,7 +573,7 @@ for (const marker of [
 ]) assert(workflow.includes(marker), `CI release gate is missing ${marker}`)
 const orderedReleaseSteps = [
   '- run: pnpm install --frozen-lockfile',
-  '- name: Install 0.1.6 Core pi-ai closure',
+  '- name: Install 0.2.0 Core pi-ai closure',
   '- run: pnpm verify:upstream -- dsh-upstream',
   '- run: pnpm verify:controlled-core -- dsh-upstream',
   '- name: Verify plugin package',

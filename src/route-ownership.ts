@@ -9,9 +9,9 @@ export type RouteMutation =
   | { readonly op: 'unset'; readonly path: string[] }
 
 export interface RouteSettings {
-  get(namespace: string): unknown
   describe(options?: { redactSecrets?: boolean }): Array<{
     ns: string
+    value: unknown
     revision: number
     user?: unknown
     base?: unknown
@@ -140,7 +140,7 @@ export function settingsSnapshot(settings: RouteSettings) {
   if (!route || !marker || !Number.isSafeInteger(route.revision) || !Number.isSafeInteger(marker.revision)) {
     throw new Error('github-copilot: required DSH API "settings.describe revision" is unavailable')
   }
-  const current = profileAt(settings.get('llm-pi-ai'))
+  const current = profileAt(route.value)
   const raw = profileAt(route.user)
   // Redaction is not evidence that a secret-bearing field is absent.
   const secrets = (route.secrets ?? []).filter(secret => secret.set
@@ -148,7 +148,7 @@ export function settingsSnapshot(settings: RouteSettings) {
   const hasSecrets = secrets.length > 0
   const hasOwnedSecrets = secrets.some(secret => secret.path[2] === 'api' || secret.path[2] === 'models')
   return { current, raw, base: profileAt(route.base), hasSecrets, hasOwnedSecrets, routeRevision: route.revision, markerRevision: marker.revision,
-    backup: readBackup(object(settings.get('github-copilot'))?.temporaryRouteBackup) }
+    backup: readBackup(object(marker.value)?.temporaryRouteBackup) }
 }
 
 export function assertOwned(current: Record<string, unknown> | undefined, backup: RouteBackup): 'preimage' | 'postimage' | 'target' {

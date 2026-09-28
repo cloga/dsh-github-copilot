@@ -9,6 +9,7 @@ import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeCopilotUsage, unavailableCopilotUsage } from './copilot-usage-normalize.ts'
 import type { CopilotUsageView, CopilotUsageDiagnostic } from './copilot-usage-types.ts'
+import { onSettingsNamespaceUpdated } from './settings-reader.ts'
 
 export const COPILOT_USAGE_ENDPOINT = 'https://api.github.com/copilot_internal/user'
 const TTL_MS = 60_000
@@ -237,7 +238,7 @@ export default class GitHubCopilotUsageController extends TypertRemoteService {
     ctx.on('credentials/record-updated', key => {
       if (key === GITHUB_COPILOT_CREDENTIAL_KEY) this.source.invalidate()
     })
-    ctx.on('settings/updated', namespace => {
+    onSettingsNamespaceUpdated(ctx, namespace => {
       if (namespace === 'github-copilot' || namespace === 'llm-pi-ai') this.source.invalidate()
     })
     ctx.effect(() => () => this.source.dispose())

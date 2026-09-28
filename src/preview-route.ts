@@ -67,6 +67,17 @@ declare module '@deepseek-ai/cordis' {
 
 function failure(code: string, category = 'AUTH'): LlmError { return new LlmError(code, category) }
 function tokenFingerprint(value: string): string { return createHash('sha256').update(value).digest('hex') }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+function providerProfiles(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined
+  if (typeof value.get === 'function') {
+    const resolved: unknown = value.get()
+    return isRecord(resolved) ? resolved : undefined
+  }
+  return value
+}
 function owned(provider: string): void {
   if (provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) throw failure('COPILOT_PREVIEW_MODEL_MISMATCH', 'UNKNOWN_MODEL')
 }
@@ -205,11 +216,15 @@ function resolvedProfile(provider: ReturnType<typeof createAccountProvider>['pro
   const permitted = new Set(['reasoning', 'cacheRetention', 'transport', 'timeoutMs', 'websocketConnectTimeoutMs',
     'streamIdleTimeoutMs', 'maxRequestImageBytes', 'requestImagePixelBudget', 'requestImageMaxBytes', 'retryPolicy'])
   if (Object.keys(config).some(key => !permitted.has(key))) throw failure('COPILOT_PREVIEW_CONFIG_UNSUPPORTED', 'INVALID_REQUEST')
-  const parsed = PiAiConfig({ providers: { [GITHUB_COPILOT_PREVIEW_PROVIDER_ID]: { ...config, api: 'openai-responses' } } })
-    .providers?.[GITHUB_COPILOT_PREVIEW_PROVIDER_ID]
-  if (parsed === undefined) throw failure('COPILOT_PREVIEW_CONFIG_UNAVAILABLE', 'INVALID_REQUEST')
-  const positive = (value: number | undefined): number => {
-    if (value === undefined || !Number.isFinite(value) || value <= 0) throw failure('COPILOT_PREVIEW_CONFIG_DEFAULTS_UNAVAILABLE', 'INVALID_REQUEST')
+  const profiles = providerProfiles(PiAiConfig({
+    providers: { [GITHUB_COPILOT_PREVIEW_PROVIDER_ID]: { ...config, api: 'openai-responses' } },
+  }).providers)
+  const parsed = profiles?.[GITHUB_COPILOT_PREVIEW_PROVIDER_ID]
+  if (!isRecord(parsed)) throw failure('COPILOT_PREVIEW_CONFIG_UNAVAILABLE', 'INVALID_REQUEST')
+  const positive = (value: unknown): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      throw failure('COPILOT_PREVIEW_CONFIG_DEFAULTS_UNAVAILABLE', 'INVALID_REQUEST')
+    }
     return value
   }
   return Object.freeze({
@@ -217,7 +232,7 @@ function resolvedProfile(provider: ReturnType<typeof createAccountProvider>['pro
     provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, displayName: 'GitHub Copilot', piProvider: provider,
     streamIdleTimeoutMs: positive(parsed.streamIdleTimeoutMs), maxRequestImageBytes: positive(parsed.maxRequestImageBytes),
     requestImagePixelBudget: positive(parsed.requestImagePixelBudget), requestImageMaxBytes: positive(parsed.requestImageMaxBytes),
-    retryPolicy: resolveRetryPolicy(parsed.retryPolicy, 'github-copilot-preview'), configuredMaxTokens: new Map<string, number>(),
+    retryPolicy: resolveRetryPolicy(config.retryPolicy, 'github-copilot-preview'), configuredMaxTokens: new Map<string, number>(),
     // Core alpha2 reads this map for every model. Account descriptors are already
     // validated and rejected entries never enter this provider; older Core ignores it.
     modelErrors: new Map<string, string>(),

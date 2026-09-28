@@ -11,7 +11,7 @@ import { MAX_SSE_EVENT_BYTES } from '../../src/sse.ts'
 import type { InlineConfig } from '../../src/config.ts'
 import type { SearchPlan, SearchPlanCandidate } from '../../src/plan.ts'
 import { markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, Message, StreamChunk, ToolResultMessage } from '@deepseek-ai/dsh-llm'
 
 const encoder = new TextEncoder()
 
@@ -181,14 +181,11 @@ describe('inlineStream', () => {
     ]
     const denial = {
       id: 'u-denial' as Message['id'],
-      role: 'user' as const,
-      content: [{
-        type: 'tool-result' as const,
-        toolCallId: 'call_previous|fc_previous',
-        content: [{ type: 'text' as const, text: '[sandbox: file access denied under full-access] C:\\protected\\file.txt' }],
-        isError: true,
-      }],
-      source: { kind: 'user' as const },
+      role: 'tool' as const,
+      toolCallId: 'call_previous|fc_previous' as ToolResultMessage['toolCallId'],
+      content: [{ type: 'text' as const, text: '[sandbox: file access denied under full-access] C:\\protected\\file.txt' }],
+      isError: true,
+      source: { kind: 'tool' as const, callId: 'call_previous|fc_previous' as ToolResultMessage['source']['callId'] },
     } as Message
     vi.stubGlobal('fetch', vi.fn(async () => new Response(sseBody(stream), { status: 200 })))
     const chunks = await collect(request({ messages: [denial] }))
