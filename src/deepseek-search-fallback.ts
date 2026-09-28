@@ -8,6 +8,18 @@ import { describeSearchBackend, DescribedSearchFallbackError } from './search-ba
 import type { SearchBackend } from './search-backend.ts'
 import { readSettingsNamespace } from './settings-reader.ts'
 
+interface VolatileSetting<T> {
+  get(): T
+}
+
+function isVolatileSetting<T>(value: T | VolatileSetting<T>): value is VolatileSetting<T> {
+  return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'get') === 'function'
+}
+
+function readConfigValue<T>(value: T | VolatileSetting<T>): T {
+  return isVolatileSetting(value) ? value.get() : value
+}
+
 class InvalidFallbackBase extends WebError {
   constructor() {
     super('DeepSeek fallback requires an HTTP(S) API base URL without userinfo, query or fragment', 'WEB_PROVIDER_UNAVAILABLE')
@@ -38,16 +50,22 @@ export async function createDeepSeekSearchFallback(
   const resolveOptions = (signal?: AbortSignal): DeepSeekSearchProviderOptions => {
     const config = (readSettingsNamespace(ctx, native.WEB_SEARCH_DEEPSEEK_SETTINGS_NAMESPACE) ?? {}) as DeepSeekConfig
     const environment = launchEnvironmentOf(ctx)
-    const baseURL = config.baseURL ?? environment.get('DEEPSEEK_SEARCH_BASE_URL')?.value ?? native.DEEPSEEK_DEFAULT_BASE_URL
+    const configuredBaseURL = readConfigValue(config.baseURL)
+    const baseURL = configuredBaseURL ?? environment.get('DEEPSEEK_SEARCH_BASE_URL')?.value ?? native.DEEPSEEK_DEFAULT_BASE_URL
     // Native request recording includes the full base. Refuse URL credentials,
     // query or fragment before auth/logging; never echo or rewrite unsafe input.
     const parsed = URL.canParse(baseURL) ? new URL(baseURL) : undefined
     if (parsed === undefined || !['http:', 'https:'].includes(parsed.protocol)
       || parsed.username.length > 0 || parsed.password.length > 0
       || parsed.href.includes('?') || parsed.href.includes('#')) throw new InvalidFallbackBase()
-    const apiKeyEnv = credentialRef(config.apiKeyEnv ?? 'DEEPSEEK_API_KEY')
+    const configuredApiKey = readConfigValue(config.apiKey)
+    const apiKeyEnv = credentialRef(readConfigValue(config.apiKeyEnv) ?? 'DEEPSEEK_API_KEY')
+    const model = readConfigValue(config.model)
+    const apiVersion = readConfigValue(config.apiVersion)
+    const maxTokens = readConfigValue(config.maxTokens)
+    const maxUses = readConfigValue(config.maxUses)
     return {
-      ...config.apiKey === undefined || config.apiKey.length === 0 ? {} : { apiKey: config.apiKey },
+      ...configuredApiKey === undefined || configuredApiKey.length === 0 ? {} : { apiKey: configuredApiKey },
       apiKeyEnv,
       resolveApiKey: async () => {
         const credentials = ctx.get('credentials')
@@ -56,10 +74,10 @@ export async function createDeepSeekSearchFallback(
         return ambient === undefined || ambient.length === 0 ? undefined : ambient
       },
       baseURL,
-      model: config.model ?? native.DEEPSEEK_DEFAULT_MODEL,
-      apiVersion: config.apiVersion ?? native.DEEPSEEK_DEFAULT_API_VERSION,
-      maxTokens: config.maxTokens ?? native.DEEPSEEK_DEFAULT_MAX_TOKENS,
-      maxUses: config.maxUses ?? native.DEEPSEEK_DEFAULT_MAX_USES,
+      model: model ?? native.DEEPSEEK_DEFAULT_MODEL,
+      apiVersion: apiVersion ?? native.DEEPSEEK_DEFAULT_API_VERSION,
+      maxTokens: maxTokens ?? native.DEEPSEEK_DEFAULT_MAX_TOKENS,
+      maxUses: maxUses ?? native.DEEPSEEK_DEFAULT_MAX_USES,
       recordRequest: request => {
         // The public native provider calls this after awaited auth (including
         // literal keys), synchronously before fetch. Check before recording too:

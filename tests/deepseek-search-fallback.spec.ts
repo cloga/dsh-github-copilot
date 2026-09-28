@@ -13,7 +13,7 @@ import {
   DEEPSEEK_DEFAULT_MODEL,
   WEB_SEARCH_DEEPSEEK_SETTINGS_NAMESPACE,
 } from '@deepseek-ai/dsh-web-search-deepseek'
-import type { Config, DeepSeekSearchLlmRequest } from '@deepseek-ai/dsh-web-search-deepseek'
+import type { DeepSeekSearchLlmRequest } from '@deepseek-ai/dsh-web-search-deepseek'
 import { createDeepSeekSearchFallback } from '../src/deepseek-search-fallback.ts'
 
 // The public provider and launch-environment API are real. Only the IO boundary is
@@ -34,8 +34,12 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function harness(config: Partial<Config> | undefined = {}, values: Record<string, string> = {}) {
-  let currentConfig: Partial<Config> | undefined = config
+function volatile<T>(value: T) {
+  return { get: () => value }
+}
+
+function harness(config: unknown = {}, values: Record<string, string> = {}) {
+  let currentConfig: unknown = config
   const resolve = vi.fn<(ref: string) => Promise<CredentialValue>>(async () => ({ value: 'synthetic-service-key' }))
   let credentials: { resolve: typeof resolve } | undefined = { resolve }
   const snapshot = createLaunchEnvironmentSnapshot([{ source: 'process', values }])
@@ -57,7 +61,7 @@ function harness(config: Partial<Config> | undefined = {}, values: Record<string
   const canContinue = vi.fn(() => true)
   return {
     ctx: { get } as unknown as Context, owner, append, get, resolve, settingsGet, environmentGet, canContinue,
-    setConfig: (value: Partial<Config> | undefined) => { currentConfig = value },
+    setConfig: (value: unknown) => { currentConfig = value },
     removeCredentials: () => { credentials = undefined },
   }
 }
@@ -195,6 +199,32 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
     expect(request.headers.get('anthropic-version')).toBe(DEEPSEEK_DEFAULT_API_VERSION)
     expect(h.environmentGet).not.toHaveBeenCalledWith('DEEPSEEK_BASE_URL')
     expect(h.environmentGet).not.toHaveBeenCalledWith('DEEPSEEK_MODEL')
+  })
+
+  it('reads current Core volatile settings through their public get method', async () => {
+    const h = harness({
+      apiKey: volatile('synthetic-volatile-key'),
+      apiKeyEnv: volatile('VOLATILE_KEY_REF'),
+      baseURL: volatile('https://volatile.invalid/anthropic/v1'),
+      model: volatile('volatile-model'),
+      apiVersion: volatile('volatile-version'),
+      maxTokens: volatile(234),
+      maxUses: volatile(3),
+    })
+    fetchMock.mockResolvedValueOnce(success())
+    const provider = await createDeepSeekSearchFallback(h.ctx, h.owner, h.canContinue)
+
+    await provider.search({ query: 'volatile settings' })
+
+    expect(sent().endpoint).toBe('https://volatile.invalid/anthropic/v1/messages')
+    expect(sent().body).toMatchObject({
+      model: 'volatile-model',
+      max_tokens: 234,
+      tools: [{ max_uses: 3 }],
+    })
+    expect(sent().headers.get('anthropic-version')).toBe('volatile-version')
+    expect(sent().headers.get('x-api-key')).toBe('synthetic-volatile-key')
+    expect(h.resolve).not.toHaveBeenCalled()
   })
 
   it('snapshots each search before pending auth while reading updated settings on the next search', async () => {
