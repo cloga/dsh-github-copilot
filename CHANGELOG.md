@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0-alpha.41 (prepared)
+## 0.4.0-alpha.42 (prepared)
 
 - Add a plugin-owned virtual **Auto** model to the managed GitHub Copilot route, resolving once per Core turn to a real account model while preserving explicit selections and truthful request provenance (#174).
 - Filter image turns by account-verified image capability, keep search independently owned, and preserve native subagent concrete-route inheritance.
