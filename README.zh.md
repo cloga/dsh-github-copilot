@@ -100,10 +100,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 仅对独立的具名 profile，获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.40/dsh-github-copilot-0.4.0-alpha.40.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.41/dsh-github-copilot-0.4.0-alpha.41.tgz
 ```
 
-Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.40`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
+Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.41`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
@@ -114,6 +114,10 @@ Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理�
 3. 复制验证码，打开验证链接，在自己的 GitHub 浏览器会话中完成授权。复制成功／失败均有可访问的反馈；手工复制仍可用。不要把 GitHub token 粘贴到 DSH。
 4. DSH 只在授权进行中轮询。显式 **Start sign-in**（**Sign in with GitHub** 按钮，包括界面切换账号）成功后，无论立即返回还是轮询观察到成功，都只强制执行一次有界发现。验证码和验证链接清除，自动授权区域收起，账号显示 **Signed in、Manage**。手动打开的详情保持展开；取消清除旧验证码。失败仅显示安全的阶段诊断：`COPILOT_AUTHORIZATION_BEGIN_FAILED` 表示授权流程未完成；`COPILOT_ROUTE_REPAIR_FAILED` 表示授权已完成但本地路由修复失败。后者会保留认证，并提示前往 **Manage → Repair model configuration**。这些代码不解释或解决底层登录失败，原始 provider 详情不会显示或记录。
 5. 在 **GitHub Copilot** 分组选择接受的模型（稳定路由 ID 为 `github-copilot-preview`）。正常打开／使用会自动维护元数据，无需手动 **Refresh models**。**Manage** 内保留可选的手动刷新、模型明细与退出登录，移除兼容说明折叠区；需要时仍显示旧配置诊断和显式修复操作，[迁移指南](./docs/single-route-migration.md)继续保留在文档中。错误即使在详情折叠时也会显示并提供 **Retry**；发现或重试均不切换当前／默认模型，也不重放消息。
+
+### Auto 模型路由
+
+托管 GitHub Copilot 分组包含一个虚拟 **Auto** 模型。Auto 在每个 Core turn 只解析一次，从当前认证账号目录选择一个真实模型；同轮的工具步骤、重试和自动 compact 恢复始终使用该真实模型，后续 Chat 或 Goal 新轮次可以重新选择。图片轮次必须有账号元数据验证过的图片模型。完成回复的末尾显示 `Auto · <真实模型>`，同一行 `?` 提供简短原因。搜索继续使用独立的 Provider 内部模型策略；通用原生子代理仍继承 Core 的具体路由，不被重新标成 Auto。首版确定性策略只使用供应方公布的容量，不声称知道模型质量、延迟、价格、健康状态或 GitHub 私有 Auto 算法。详见 [MVP 合同与 mockup](./docs/automatic-model-routing.md)。
 
 只有另一个符合条件的表面仍挂载时，切换才保留共享账号状态 owner。最后一个表面卸载或声明替换没有挂载重叠时停止轮询；以后挂载会先读状态，再按需另行确保元数据。状态读取和详情切换本身仍不访问网络，但打开 Models 可以发现缺失／过期的已登录账号元数据。后台凭据／reset 通知清除 Client 状态并只读查询，不在每次 token 事件强制发现；下次打开／使用时再确保元数据。
 

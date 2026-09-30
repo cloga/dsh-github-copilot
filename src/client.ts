@@ -13,6 +13,7 @@ import type { GitHubCopilotAuthorizationView } from './authorization-controller.
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { installReasoningPresentation } from './reasoning-presentation.ts'
+import { installAutoModelPresentation } from './auto-model-presentation.ts'
 import { WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
@@ -988,8 +989,14 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     uiConversation: scope.get('uiConversation'),
     diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
   }))
+  const autoPresentation = ctx.inject(['uiConversation', 'slots'], scope => installAutoModelPresentation({
+    slots: scope.slots,
+    uiConversation: scope.get('uiConversation'),
+    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
+  }))
   return async () => {
     await usageUi.dispose()
+    await autoPresentation.dispose()
     await presentation.dispose()
     await searchUi.dispose()
     await ui.dispose()
