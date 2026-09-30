@@ -105,11 +105,14 @@ describe('single managed Copilot route with native OAuth', () => {
     vi.stubGlobal('fetch', fetch)
     const h = await runtime()
     expect(fetch).not.toHaveBeenCalled()
-    expect((await h.ctx.llm.listModels(MANAGED)).map(model => [model.provider, model.id])).toEqual([[MANAGED, 'future-account-model']])
+    expect((await h.ctx.llm.listModels(MANAGED)).map(model => [model.provider, model.id])).toEqual([
+      [MANAGED, 'auto'],
+      [MANAGED, 'future-account-model'],
+    ])
     const view = await h.ctx.get('githubCopilotAuthorization')!.ensureModels()
     expect(view.accountModels).toMatchObject({ state: 'ready', models: [{ id: 'future-account-model', api: 'openai-responses' }] })
     expect(h.ctx.llm.listProviders().map(provider => ({ id: provider.id, name: provider.name }))).toEqual([{ id: MANAGED, name: 'GitHub Copilot' }])
-    expect((await h.ctx.llm.listModels(MANAGED)).map(model => model.id)).toEqual(['future-account-model'])
+    expect((await h.ctx.llm.listModels(MANAGED)).map(model => model.id)).toEqual(['auto', 'future-account-model'])
     const model = await h.ctx.llm.resolveModelInfo(MANAGED, 'future-account-model')
     expect(model.reasoning?.efforts.map(effort => effort.id)).toEqual(['low', 'high'])
     expect(fetch).toHaveBeenCalledTimes(1)
@@ -145,9 +148,12 @@ describe('single managed Copilot route with native OAuth', () => {
         capabilities: { supports: { streaming: true, tool_calls: true }, limits: { max_context_window_tokens: 128000, max_output_tokens: 16000 } },
       }] }), { headers: { 'content-type': 'application/json' } }))
       const [models, settings, other] = await Promise.all([listing, ensuring, concurrent])
-      expect(models.map(model => [model.provider, model.id])).toEqual([[MANAGED, 'future-account-model']])
+      expect(models.map(model => [model.provider, model.id])).toEqual([
+        [MANAGED, 'auto'],
+        [MANAGED, 'future-account-model'],
+      ])
       expect(other).toEqual(models)
-      expect(settings.accountModels).toMatchObject({ state: 'ready', models: models.map(model => ({ id: model.id })) })
+      expect(settings.accountModels).toMatchObject({ state: 'ready', models: [{ id: 'future-account-model' }] })
       expect(await Promise.all(refreshed)).toEqual([models])
       for (let attempt = 0; attempt < 3; attempt++) expect(await h.ctx.llm.listModels(MANAGED)).toEqual(models)
       await h.ctx.get('githubCopilotAuthorization')!.ensureModels()

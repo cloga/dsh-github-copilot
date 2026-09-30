@@ -44,7 +44,7 @@ describe('Auto model Host integration', () => {
       model('fixture-strong', 256_000, 'high'),
     ])
     const dispose = installAutoModelRouting(ctx, { loadModels })
-    ctx.emit(scope, 'agent/created', { agent })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
     ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider: PREVIEW, model: AUTO }))
     const signal = new AbortController().signal
     const enter = async (turn: number, text: string) => {
@@ -96,7 +96,7 @@ describe('Auto model Host integration', () => {
     const dispose = installAutoModelRouting(ctx, {
       async loadModels() { return [model('fixture-resolved', 128_000, 'medium')] },
     })
-    ctx.emit(scope, 'agent/created', { agent })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
     const signal = new AbortController().signal
     try {
       const input = [message('Continue.')]
