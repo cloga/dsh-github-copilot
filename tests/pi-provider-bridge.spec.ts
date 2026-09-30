@@ -1,4 +1,5 @@
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai'
+import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { describe, expect, it, vi } from 'vitest'
 import { coreEventStream, coreProviderView } from '../src/pi-provider-bridge.ts'
@@ -22,7 +23,7 @@ describe('published Core simple-stream compatibility view', () => {
       getModels: () => [model], streamSimple: simple,
     }
     const view = coreProviderView(provider)
-    const context = { messages: [] }
+    const context = normalizeContext({ messages: [] })
     const options = { maxTokens: 24 }
     expect(view.streamSimple(model, context, options)).toBe(stream)
     expect(simple).toHaveBeenCalledWith(model, context, options)

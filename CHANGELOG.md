@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.4.0-alpha.38 (prepared)
+## 0.4.0-alpha.39 (prepared)
+
+- Qualify the exact official DSH and signed Windows Desktop `0.2.0-rc.2` peer graph; retain rc.1 as historical evidence.
+- Align the managed native adapter with pi-ai `0.87.1` transcript contexts and preserve truthful estimated input admission.
+- Compose ordered bundle patch arrays in the read-only installation preflight through the public rc.2 API, with malformed/ordering regressions.
+
+## 0.4.0-alpha.38
 
 - Add official DSH `0.2.0-rc.1` as the current exact compatibility target while retaining the existing baseline pins; use the corresponding public Core packages in development and tagged-source CI.
 - Adapt plugin settings reads/listeners to the current public `SettingsForms` descriptor/event API while retaining legacy Core compatibility. Materialize volatile pi-ai provider profiles through their public getter.

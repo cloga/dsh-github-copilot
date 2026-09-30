@@ -70,7 +70,7 @@ if (baseline.perModelApi === 'model-entry') {
 }
 if (baseline.fileContentHelper === 'contentHasFile') {
   const contentMarkers = ['export function contentHasFile', "block.type === 'file'"]
-  if (baseline.release !== '0.2.0-rc.1') {
+  if (!baseline.release.startsWith('0.2.0-')) {
     contentMarkers.push("block.type === 'tool-result' && contentHasFile(block.content)")
   }
   await assertMarkers('packages/llm/llm/src/content.ts', contentMarkers)
@@ -117,7 +117,7 @@ await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',
 ])
 
-if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'].includes(baseline.release)) {
+if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'].includes(baseline.release)) {
   for (const path of ['package.json', 'packages/core/session/package.json', 'packages/llm/llm-pi-ai/package.json']) {
     const metadata = JSON.parse(await readFile(resolve(upstream, path), 'utf8'))
     if (metadata.version !== baseline.release) throw new Error(`DSH target package version differs in ${path}`)
@@ -213,7 +213,7 @@ if (baseline.release === '0.1.6-alpha.1') {
   ])
 }
 
-if (baseline.release === '0.1.6-alpha.2' || baseline.release === '0.2.0-rc.1') {
+if (baseline.release === '0.1.6-alpha.2' || baseline.release.startsWith('0.2.0-')) {
   await assertMarkers('packages/typert/protocol/src/types.ts', ['readonly create: () => TypertSchema'])
   await assertMarkers('packages/typert/registry/src/service.ts', ["typeof codec.create !== 'function'", 'strict codec has no create() factory'])
   await assertMarkers('packages/subagent/subagent/src/descriptor.ts', ['SUBAGENT_DESCRIPTOR_VERSION = 3', 'readonly label: string', 'if (version !== SUBAGENT_DESCRIPTOR_VERSION) return undefined'])

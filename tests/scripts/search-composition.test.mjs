@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { composeEntries, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
+import { bundlePatchPaths, composeEntries, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import { checkSearchComposition, inspectProfileSearchComposition } from '../../scripts/check-search-composition.mjs'
 
 const stock = () => ({ id: 'web', name: '@deepseek-ai/dsh-web', config: { searchProvider: 'existing', fetchProvider: 'http' } })
@@ -53,13 +53,13 @@ for (const [label, entries, code] of [
 const candidatePath = fileURLToPath(new URL('../../cordis.patch.yml', import.meta.url))
 const candidate = () => loadOverlayPatches('test', candidatePath)
 
-function nativeReaders({ user = [], home = [], extra = [], own = true, root = [], base = [stock()], bundles } = {}) {
+function nativeReaders({ user = [], home = [], extra = [], own = true, root = [], base = [stock()], bundles, basePatch = 'base.yml' } = {}) {
   const calls = []
   const api = {
     readProfileManifest(_bin, directory) {
       calls.push(['manifest', directory])
       if (directory === '/profile') return { dsh: { profile: { bundles: bundles ?? (own ? ['base', 'dsh-github-copilot'] : ['base']) } } }
-      if (directory === '/bundles/base') return { name: 'base', dsh: { bundle: { patch: 'base.yml' } } }
+      if (directory === '/bundles/base') return { name: 'base', dsh: { bundle: { patch: basePatch } } }
       if (directory === '/bundles/dsh-github-copilot') return { name: 'dsh-github-copilot', dsh: { bundle: { patch: 'owned.yml' } } }
       throw new Error('unexpected manifest read')
     },
@@ -75,10 +75,12 @@ function nativeReaders({ user = [], home = [], extra = [], own = true, root = []
       const normalized = file.replaceAll('\\', '/')
       if (file === candidatePath) return candidate()
       if (normalized.endsWith('/bundles/base/base.yml')) return [{ insert: base }]
+      if (normalized.endsWith('/bundles/base/extra.yml')) return [{ id: 'web', config: { searchProvider: 'second-patch' } }]
       if (normalized.endsWith('/extra.yml')) return extra
       throw new Error('must not read owned routing overlay or arbitrary input')
     },
     composeEntries,
+    bundlePatchPaths,
   }
   return { api, calls }
 }
@@ -89,6 +91,17 @@ test('uses public read-only readers and replaces the existing owned layer with t
   const result = await inspectProfileSearchComposition(options, api)
   assert.equal(result.supported, true)
   assert.deepEqual(result.reasons, [])
+})
+
+test('composes every official bundle patch in order without dropping later overrides', async () => {
+  const { api, calls } = nativeReaders({ basePatch: ['base.yml', 'extra.yml'] })
+  assert.equal((await inspectProfileSearchComposition(options, api)).supported, true)
+  assert.ok(calls.some(([kind, path]) => kind === 'manifest' && path === '/bundles/base'))
+  const { api: unsafe } = nativeReaders({ basePatch: ['extra.yml', 'base.yml'] })
+  assert.equal((await inspectProfileSearchComposition(options, unsafe)).supported, false)
+  const { api: malformed } = nativeReaders({ basePatch: ['base.yml', 7] })
+  assert.throws(() => bundlePatchPaths('/bundles/base', { patch: ['base.yml', 7] }))
+  await assert.rejects(inspectProfileSearchComposition(options, malformed))
 })
 
 test('includes home and launcher layers instead of ignoring a late web override', async () => {
@@ -206,6 +219,33 @@ test('real public parsers validate candidate layers and preserve every input fil
     assert.equal((await inspectProfileSearchComposition(input)).supported, true)
     assert.deepEqual((await readdir(profileDir)).sort(), ['cordis.patch.yml', 'node_modules', 'package.json'])
   } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('real public bundle manifest loads ordered overlays without modifying the profile', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-preflight-array-'))
+  try {
+    const profileDir = join(root, 'profile')
+    const bundleDir = join(profileDir, 'node_modules/preflight-stock')
+    await mkdir(bundleDir, { recursive: true })
+    const files = new Map([
+      [join(profileDir, 'package.json'), JSON.stringify({ name: 'test-profile', dsh: { profile: { bundles: ['preflight-stock'] } } })],
+      [join(bundleDir, 'package.json'), JSON.stringify({ name: 'preflight-stock', dsh: { bundle: { patch: ['base.yml', 'extra.yml'] } } })],
+      [join(bundleDir, 'base.yml'), JSON.stringify([{ insert: [stock()] }])],
+      [join(bundleDir, 'extra.yml'), JSON.stringify([{ id: 'web', config: { searchProvider: 'second-patch' } }])],
+    ])
+    for (const [file, content] of files) await writeFile(file, content)
+    const input = { profileDir, home: root, installAnchor: fileURLToPath(new URL('../../package.json', import.meta.url)) }
+    assert.equal((await inspectProfileSearchComposition(input)).supported, true)
+    for (const [file, content] of files) assert.equal(await readFile(file, 'utf8'), content)
+    assert.deepEqual((await readdir(profileDir)).sort(), ['node_modules', 'package.json'])
+    const manifestPath = join(bundleDir, 'package.json')
+    const invalid = JSON.stringify({ name: 'preflight-stock', dsh: { bundle: { patch: ['base.yml', 7] } } })
+    await writeFile(manifestPath, invalid)
+    await assert.rejects(inspectProfileSearchComposition(input))
+    assert.equal(await readFile(manifestPath, 'utf8'), invalid)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test('preflight refuses nonempty profile root without initialization, normalization or secret output', async () => {

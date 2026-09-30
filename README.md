@@ -22,9 +22,10 @@ A focused DSH companion for GitHub Copilot sign-in, account-aware model profiles
 | Official DSH `0.1.5-rc.2` | Tag commit [`fb2c4b9`](https://github.com/deepseek-ai/deepseek-harness/commit/fb2c4b9e698e30edb738bca4cf0618587db7d203) | **Settings → Models** provider card |
 | Official DSH `0.1.6-alpha.1` | Tag commit [`0a15e36`](https://github.com/deepseek-ai/deepseek-harness/commit/0a15e36e7f82b6ed45af6fa9759f29b40dcd965d) | **Settings → Models** provider card |
 | Official DSH `0.1.6-alpha.2` | Tag `dsh-v0.1.6-alpha.2`, commit [`ddefc45`](https://github.com/deepseek-ai/deepseek-harness/commit/ddefc45fbc7f8e46dd73185e68295696d1297887) | **Settings → Models** provider card |
-| Official DSH and Windows Desktop `0.2.0-rc.1` (current qualification target) | Tag `dsh-v0.2.0-rc.1`, commit [`4878cd`](https://github.com/deepseek-ai/deepseek-harness/commit/4878cdabd87d4041bdaff61d04c966883b9fd07a) | **Settings → Models** provider card |
+| Official DSH `0.2.0-rc.1` (historical) | Tag `dsh-v0.2.0-rc.1`, commit [`4878cd`](https://github.com/deepseek-ai/deepseek-harness/commit/4878cdabd87d4041bdaff61d04c966883b9fd07a) | **Settings → Models** provider card |
+| Official DSH and Windows Desktop `0.2.0-rc.2` (current qualification target) | Tag `dsh-v0.2.0-rc.2`, commit [`639ed0`](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84) | **Settings → Models** provider card |
 
-The table preserves historical source pins; this release admits and gates **only `0.2.0-rc.1`**. The prior pins are not current support claims. The published-artifact synthetic transport fixture and development dependencies target the exact `0.2.0-rc.1` npm artifacts. Its unchanged tagged-source fixture runs without building or patching Core. These checks do not establish live endpoint, installed Desktop package-set, or loaded-runtime proof. Existing public Host, Client, and Remote seams are retained. Stock Core model-entry `api` support is not a prerequisite for the plugin-owned route. The exact peer and `engines.dsh` declarations are admission checks, not live compatibility proof. No Core patch is installed by this plugin.
+The table preserves historical source pins; this release admits and gates **only `0.2.0-rc.2`**. The prior pins are not current support claims. The published-artifact synthetic transport fixture and development dependencies target exact `0.2.0-rc.2` npm artifacts. Its unchanged tagged-source fixture runs without building or patching Core. The signed Desktop shared-package descriptor was audited for peer ownership, not plugin loading or live endpoints. Existing public Host, Client, and Remote seams are retained. Stock Core model-entry `api` support is not a prerequisite for the plugin-owned route. Exact peer and `engines.dsh` declarations are admission checks, not live compatibility proof. No Core patch is installed by this plugin.
 
 ### Alpha.11 compatibility correction (#105)
 
@@ -62,7 +63,11 @@ Source markers, local rc.1-backed focused tests and fifteen scoped exact-source 
 
 ### Alpha.26 official DSH 0.2.0-rc.1 adaptation
 
-The current source target is official tag `dsh-v0.2.0-rc.1`, commit `4878cdabd87d4041bdaff61d04c966883b9fd07a`; the independently verified Windows Desktop release feed also reports `0.2.0-rc.1` (SHA-512 `hPdqeajEHTXYEUOkOX7q1FflGU9jyOkRVDNSPxIDWhNihWjiVal0gtuT5zvtBRlX29VhqfHL31q4owGNp4ee6A==`). Development dependencies, peer admission and CI target exactly this release; earlier pins are historical evidence only. The unchanged-source runtime fixture covers the plugin's OAuth credential seam, account-owned model discovery and native adapter, reasoning/streaming/tool behavior, Web search, Remote codecs, Session context and strict schema compatibility; the published npm fixture independently checks package/class identity and synthetic transport. Prior Desktop package graphs are retained only for dependency-ownership audit and do not validate the 0.2.0 Desktop package set. Current package-set materialization, Electron loading, live sign-in and profile upgrade are **not** claimed by these tests.
+The historical source target was official tag `dsh-v0.2.0-rc.1`, commit `4878cdabd87d4041bdaff61d04c966883b9fd07a`; the independently verified Windows Desktop release feed also reported `0.2.0-rc.1` (SHA-512 `hPdqeajEHTXYEUOkOX7q1FflGU9jyOkRVDNSPxIDWhNihWjiVal0gtuT5zvtBRlX29VhqfHL31q4owGNp4ee6A==`). Its unchanged-source runtime fixture covered the plugin's OAuth credential seam, account-owned model discovery and native adapter, reasoning/streaming/tool behavior, Web search, Remote codecs, Session context and strict schema compatibility; the published npm fixture independently checked package/class identity and synthetic transport. Those tests did not validate the 0.2.0 Desktop package set, Electron loading, live sign-in or profile upgrade.
+
+### Alpha.39 official DSH 0.2.0-rc.2 adaptation (#170)
+
+Official tag `dsh-v0.2.0-rc.2` at `639ed015397290b3745d163aafe02ffee4aa3f84` is the sole admitted target. Its published adapter now depends on pi-ai `^0.87.1`; this plugin pins `0.87.1`, updates the native transcript-based request estimator and keeps the same public stream instance. The install preflight uses public `bundlePatchPaths` to compose ordered array patches from rc.2 bundles, still rejecting invalid manifests and unsupported routing. Signed Windows Desktop `dsh/desktop-runtime.json` (SHA-256 `29561160fb7825c3968708f5700564f4381a976985fc270ee5dcc42e5a0a3a54`) records 287 shared packages; declared peers match the rc.2 host graph. The [official-first rc.2 review](./docs/official-first-020-rc2.md) records public API decisions and remaining limits. Source, package, and Desktop peer evidence do not prove loaded plugin behavior, Copilot OAuth, or live model calls.
 
 Installation does not reconcile stale profile-local copies of DSH host peers. Before an upgrade, inspect the effective dependency resolution against the Desktop's shipped package versions; an older local `@deepseek-ai/dsh-authorization` can shadow the bundled service, fail Core peer validation and disable authorization-dependent account plugins. This package does not remove or replace such files. Use the separate approved Desktop repair procedure and verify effective module resolution before attributing a startup failure to this plugin. See [the 0.2.0 official-first review](./docs/official-first-020-rc1.md).
 
@@ -80,7 +85,7 @@ The Host reads GitHub's internal quota endpoint using the existing canonical OAu
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.38`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.39`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -88,15 +93,15 @@ Before installing/updating, unpack the **checksum-verified** archive into a temp
 node package/scripts/check-search-composition.mjs --profile-dir /absolute/profile --home /absolute/DSH_HOME --install-anchor /absolute/dsh/package.json
 ```
 
-Include any launcher patch files with repeated `--patch /absolute/file` arguments. Require `supported: true`; otherwise do not install the routing bundle. The preflight rejects custom, disabled, nested or already-isolated web-service layouts, reserved routing collisions, and a nonempty disposable `cordis.yml` root before any mutation. It parses through public Core APIs and never boots plugins, resolves credentials or rewrites configuration. DSH 0.2's normal `composeProfile()` also rewrites that root to `[]`, including on Desktop's resolved-profile path; preserve and resolve any nonempty root before attempting install/startup. **`dsh plugin add` does not automatically run this preflight.** It is a required installer/operator step, not a universal compatibility guarantee. Also check that effective profile dependency resolution does not let a stale profile-local DSH peer shadow the host's bundled `0.2.0-rc.1` service; the plugin installer does not reconcile old host modules.
+Include any launcher patch files with repeated `--patch /absolute/file` arguments. Require `supported: true`; otherwise do not install the routing bundle. The preflight rejects custom, disabled, nested or already-isolated web-service layouts, reserved routing collisions, and a nonempty disposable `cordis.yml` root before any mutation. It parses through public Core APIs and never boots plugins, resolves credentials or rewrites configuration. DSH 0.2's normal `composeProfile()` also rewrites that root to `[]`, including on Desktop's resolved-profile path; preserve and resolve any nonempty root before attempting install/startup. **`dsh plugin add` does not automatically run this preflight.** It is a required installer/operator step, not a universal compatibility guarantee. Also check that effective profile dependency resolution does not let a stale profile-local DSH peer shadow the host's bundled `0.2.0-rc.2` service; the plugin installer does not reconcile old host modules.
 
 For a standalone named profile only, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.38/dsh-github-copilot-0.4.0-alpha.38.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.39/dsh-github-copilot-0.4.0-alpha.39.tgz
 ```
 
-For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.38` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
+For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.39` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
@@ -158,7 +163,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.38`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.39`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -388,9 +393,9 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-Use Node 24 LTS for development and the pinned pnpm version; runtime dependencies require Node >=22.19.0. `pnpm verify` runs the Agent contract check, source and local test typechecking, baseline markers, clean build, Vitest and Node tooling tests, and a real built Host import plus Client/Remote smoke. After packing, run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz` to verify archive exports, media, allowed contents and equality to that build. CI gates only exact DSH `0.2.0-rc.1` on Windows and Linux, using its unchanged source runtime and published npm artifacts; the nine earlier pins are retained historical evidence, not release gates. Release publication depends on this exact-target matrix. This candidate's CI qualification has not executed; see the alpha.25 and alpha.26 evidence limits above.
+Use Node 24 LTS for development and the pinned pnpm version; runtime dependencies require Node >=22.19.0. `pnpm verify` runs the Agent contract check, source and local test typechecking, baseline markers, clean build, Vitest and Node tooling tests, and a real built Host import plus Client/Remote smoke. After packing, run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz` to verify archive exports, media, allowed contents and equality to that build. CI gates only exact DSH `0.2.0-rc.2` on Windows and Linux, using its unchanged source runtime and published npm artifacts; the ten earlier pins are retained historical evidence, not release gates. Release publication depends on this exact-target matrix; local tests alone do not establish CI qualification.
 
-For the optional reasoning UI integration, `pnpm verify:reasoning-ui -- <Core checkout>` runs a synthetic native-renderer, Slot registry and history-assembly fixture against a clean pinned `0.2.0-rc.1` checkout with its Chat dependencies installed. It exclusively creates one temporary test file and removes it only if unchanged. This is local integration/static-render evidence, not a live browser or Copilot API test; the CI definition covers only the current target, without implying this candidate's qualification has run.
+For the optional reasoning UI integration, `pnpm verify:reasoning-ui -- <Core checkout>` runs a synthetic native-renderer, Slot registry and history-assembly fixture against a clean pinned `0.2.0-rc.2` checkout with its Chat dependencies installed. It exclusively creates one temporary test file and removes it only if unchanged. This is local integration/static-render evidence, not a live browser or Copilot API test; the CI definition covers only the current target, without implying this candidate's qualification has run.
 
 ### Agent-driven development
 
@@ -422,8 +427,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.38/dsh-github-copilot-0.4.0-alpha.38.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.38/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.39/dsh-github-copilot-0.4.0-alpha.39.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.39/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -431,7 +436,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.38.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.39.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

@@ -33,14 +33,14 @@ function context(overrides: Record<string, unknown> = {}): Context {
 
 describe('assertDshCompatibility', () => {
   it('admits only the exact current official release', () => {
-    expect(DSH_COMPATIBILITY.release).toBe('0.2.0-rc.1')
-    expect(DSH_COMPATIBILITY.developmentRelease).toBe('0.2.0-rc.1')
-    expect(DSH_COMPATIBILITY.supportedReleases).toEqual(['0.2.0-rc.1'])
-    expect(DSH_COMPATIBILITY.peerRange).toBe('0.2.0-rc.1')
+    expect(DSH_COMPATIBILITY.release).toBe('0.2.0-rc.2')
+    expect(DSH_COMPATIBILITY.developmentRelease).toBe('0.2.0-rc.2')
+    expect(DSH_COMPATIBILITY.supportedReleases).toEqual(['0.2.0-rc.2'])
+    expect(DSH_COMPATIBILITY.peerRange).toBe('0.2.0-rc.2')
     expect(() => assertDshCompatibility(context({ authorization: {} })))
       .toThrow('authorization.describe')
     expect(() => assertDshCompatibility(context({ authorization: {} })))
-      .toThrow('0.2.0-rc.1')
+      .toThrow('0.2.0-rc.2')
   })
 
   it('declares the current and retained exact contract targets without claiming live Desktop validation', () => {
@@ -48,8 +48,8 @@ describe('assertDshCompatibility', () => {
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
     const current = baseline.supportedBaselines.dsh
     expect(current.admittedReleases).toEqual(DSH_COMPATIBILITY.supportedReleases)
-    expect(current.baselines).toHaveLength(10)
-    expect(current).toMatchObject({ release: '0.2.0-rc.1', tag: 'dsh-v0.2.0-rc.1', commit: '4878cdabd87d4041bdaff61d04c966883b9fd07a' })
+    expect(current.baselines).toHaveLength(11)
+    expect(current).toMatchObject({ release: '0.2.0-rc.2', tag: 'dsh-v0.2.0-rc.2', commit: '639ed015397290b3745d163aafe02ffee4aa3f84' })
     expect(current.baselines.at(-1)).toMatchObject({
       release: current.release, tag: current.tag, commit: current.commit,
       source: 'https://github.com/deepseek-ai/deepseek-harness',
@@ -72,7 +72,7 @@ describe('assertDshCompatibility', () => {
     expect(baseline.evidence.doesNotProve).toEqual(expect.arrayContaining(['live-discovery', 'live-model-transport', 'published-release', 'local-upgrade']))
     expect(baseline.package.version).toBe(pkg.version)
     for (const [name, version] of Object.entries(pkg.devDependencies)) {
-      if (name.startsWith('@deepseek-ai/dsh-')) expect(version).toBe('0.2.0-rc.1')
+      if (name.startsWith('@deepseek-ai/dsh-')) expect(version).toBe('0.2.0-rc.2')
     }
     for (const name of current.packages) expect(pkg.peerDependencies[name]).toBe(DSH_COMPATIBILITY.peerRange)
     expect(pkg.engines.dsh).toBe(DSH_COMPATIBILITY.peerRange)

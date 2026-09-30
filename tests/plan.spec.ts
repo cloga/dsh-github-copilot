@@ -68,8 +68,8 @@ describe('Copilot candidate resolution', () => {
   })
 
   it('uses managed account endpoint evidence rather than unsupported canonical model-entry overrides', () => {
-    expect(resolveCandidates(copilotContext('gpt-6-astra', {
-      models: [{ id: 'gpt-6-astra', api: 'openai-responses' }],
+    expect(resolveCandidates(copilotContext('gpt-4.1', {
+      models: [{ id: 'gpt-4.1', api: 'openai-responses' }],
     }), planConfig)).toEqual([])
     const managed = fakeContext({
       agents: { currentInitiator: () => ({ session: { requestHeader: () => ({ config: { provider: 'github-copilot-preview', model: 'future-lab-r17' } }) } }) },

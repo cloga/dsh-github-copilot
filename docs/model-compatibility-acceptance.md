@@ -13,7 +13,7 @@ Follow the [plugin-only boundary](../AGENTS.md#plugin-only-implementation-bounda
 3. **Capabilities stay distinct.** Preserve context, input and output limits separately; do not invent large limits or unsupported reasoning levels. Respect disabled/unconfigured policy, picker eligibility and tool/stream support. Provider metadata does not authorize changing account policy.
 4. **One credential lifecycle.** All plugin-owned routes share the canonical Host-only Copilot OAuth record. Model discovery, refresh and in-flight requests remain bound to the same account generation. Account switches, entitlement removal, disposal and stale callbacks must fail closed without copying credentials or changing other providers.
 5. **Thinking is included.** Preserve public summary deltas and final-only summaries without duplicate text. Validate selected effort and keep native default semantics. Empty or encrypted-only responses must not become fabricated explanations. Native replay, images and file projection retain their owning adapter's behavior; opaque replay is not displayed or rewritten into raw reasoning text.
-6. **pi 0.85.1 compatibility.** Pin and test the requested published SDK version, not just a GitHub release label. Its Copilot GPT-6 catalog protocol must not override contrary provider endpoint evidence. An updated catalog entry is not sufficient grounds to retire a correction if the protocol/capabilities are still wrong.
+6. **Current pi 0.87.1 compatibility.** The original acceptance target was 0.85.1; official DSH rc.2 now depends on `^0.87.1`. Pin and test the exact published SDK version, not just a GitHub release label. Its Copilot GPT-6 catalog protocol must not override contrary provider endpoint evidence. An updated catalog entry is not sufficient grounds to retire a correction if the protocol/capabilities are still wrong.
 
 ## Regression evidence
 
@@ -42,5 +42,6 @@ Follow the [plugin-only boundary](../AGENTS.md#plugin-only-implementation-bounda
 - [Microsoft Copilot API types](https://github.com/microsoft/vscode/blob/main/src/typings/copilot-api.d.ts)
 - [Endpoint-driven Copilot discovery implementation reference](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/plugin/github-copilot/models.ts)
 - [pi v0.85.1 release](https://github.com/earendil-works/pi/releases/tag/v0.85.1)
+- [pi v0.87.1 release](https://github.com/earendil-works/pi/releases/tag/v0.87.1)
 
 These references guide parsing and tests; they are not a guarantee that the upstream discovery schema will never change. Schema drift must be surfaced rather than silently guessed.

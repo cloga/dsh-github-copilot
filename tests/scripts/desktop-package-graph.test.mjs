@@ -9,10 +9,10 @@ import {
 const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'))
 const contracts = await readDesktopSharedPackageContracts()
 
-test('retains old Desktop shared graphs as ownership evidence, not current compatibility claims', () => {
+test('retains historical graphs and audits signed rc.2 Desktop peer ownership', () => {
   const evidence = verifyDesktopPackageGraph(manifest, contracts)
-  assert.deepEqual(evidence.map(item => item.packageCount), [241, 246])
-  assert.ok(evidence.every(item => item.compatibilityChecked === false))
+  assert.deepEqual(evidence.map(item => item.packageCount), [241, 246, 287])
+  assert.deepEqual(evidence.map(item => item.compatibilityChecked), [false, false, true])
 })
 
 test('shared graph gate rejects bundled, optional, incompatible, or unaudited host ownership', () => {
@@ -30,7 +30,7 @@ test('shared graph gate rejects bundled, optional, incompatible, or unaudited ho
   assert.throws(() => verifyDesktopPackageGraph({
     ...manifest,
     peerDependencies: { ...manifest.peerDependencies, '@deepseek-ai/dsh-agent': '0.1.5-rc.2' },
-  }, [currentContract()]), /does not admit host 0\.2\.0-rc\.1/)
+  }, [currentContract()]), /does not admit host 0\.2\.0-rc\.2/)
   assert.throws(() => verifyDesktopPackageGraph({
     ...manifest,
     peerDependencies: { ...manifest.peerDependencies, '@deepseek-ai/schemastery': '^4.0.0' },
@@ -48,10 +48,10 @@ test('shared graph gate rejects bundled, optional, incompatible, or unaudited ho
 function currentContract(overrides = {}) {
   const contract = structuredClone(contracts[0])
   contract.id = 'synthetic-current-desktop-contract'
-  contract.runtimeVersion = '0.2.0-rc.1'
+  contract.runtimeVersion = '0.2.0-rc.2'
   contract.auditedPackages = Object.fromEntries(Object.entries(contract.auditedPackages).map(([name, value]) => [
     name,
-    overrides[name] ?? (name.startsWith('@deepseek-ai/dsh-') ? '0.2.0-rc.1' : value),
+    overrides[name] ?? (name.startsWith('@deepseek-ai/dsh-') ? '0.2.0-rc.2' : value),
   ]))
   return contract
 }

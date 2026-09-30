@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PUBLISHED_CORE_RELEASES, preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
 
-const release = '0.2.0-rc.1'
+const release = '0.2.0-rc.2'
 async function sourceFixture() {
   // Windows runners may expose TEMP through an 8.3 alias or redirected parent.
   // Give the subject a real physical source; explicit link rejection tests below
@@ -16,10 +16,10 @@ async function sourceFixture() {
   await mkdir(join(root, 'tests'), { recursive: true })
   const manifest = { name: 'dsh-github-copilot', version: '0.3.1-alpha.2', type: 'module', private: true,
     scripts: { prepare: 'must-not-execute', preinstall: 'must-not-execute', test: 'must-not-execute' },
-    dependencies: { '@earendil-works/pi-ai': '0.85.1', '@deepseek-ai/dsh-authorization': '0.2.0-rc.1', zod: '^4.4.3' },
-    devDependencies: { '@deepseek-ai/dsh-llm': '0.2.0-rc.1', '@deepseek-ai/dsh-llm-pi-ai': '0.2.0-rc.1', '@deepseek-ai/cordis': '^4.0.2', vitest: '^3.2.0' },
-    peerDependencies: { '@deepseek-ai/dsh-llm': '0.2.0-rc.1', react: '^18.2.0' },
-    optionalDependencies: { '@deepseek-ai/dsh-fs': '0.2.0-rc.1' },
+    dependencies: { '@earendil-works/pi-ai': '0.87.1', '@deepseek-ai/dsh-authorization': '0.2.0-rc.2', zod: '^4.4.3' },
+    devDependencies: { '@deepseek-ai/dsh-llm': '0.2.0-rc.2', '@deepseek-ai/dsh-llm-pi-ai': '0.2.0-rc.2', '@deepseek-ai/cordis': '^4.0.2', vitest: '^3.2.0' },
+    peerDependencies: { '@deepseek-ai/dsh-llm': '0.2.0-rc.2', react: '^18.2.0' },
+    optionalDependencies: { '@deepseek-ai/dsh-fs': '0.2.0-rc.2' },
     pnpm: { overrides: { '@earendil-works/pi-ai': 'must-not-inherit' } }, overrides: { anything: 'must-not-inherit' } }
   await writeFile(join(root, 'package.json'), JSON.stringify(manifest))
   await writeFile(join(root, 'src/index.ts'), 'export const fixture = true\n')
@@ -50,7 +50,7 @@ test('prepares only plugin inputs and exact Core requirements without executing 
       assert.equal(output[section][name], name.startsWith('@deepseek-ai/dsh-') ? release : version)
     }
   }
-  assert.equal(output.dependencies['@earendil-works/pi-ai'], '0.85.1')
+  assert.equal(output.dependencies['@earendil-works/pi-ai'], '0.87.1')
   assert.deepEqual(output.scripts, {})
   assert.equal(output.pnpm, undefined)
   assert.equal(output.overrides, undefined)
@@ -77,7 +77,7 @@ test('refuses an unknown release before creating any target', async () => withSo
 }))
 
 test('does not admit historical published Core versions for this release', async () => withSource(async ({ root, target, base }) => {
-  for (const oldRelease of ['0.1.2-rc.1', '0.1.3-alpha.1', '0.1.6-alpha.2']) {
+  for (const oldRelease of ['0.1.2-rc.1', '0.1.3-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1']) {
     await assert.rejects(preparePublishedCoreFixture({ root, target, release: oldRelease }), /unsupported published Core/)
   }
   assert.deepEqual(await readdir(base), ['source'])
@@ -92,7 +92,7 @@ test('refuses an existing target and preserves its sentinel', async () => withSo
 
 test('refuses source overlap and a Core checkout used as plugin input', async () => withSource(async ({ root, target }) => {
   await assert.rejects(preparePublishedCoreFixture({ root, target: join(root, 'fixture'), release }), /separate/)
-  await writeFile(join(root, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', dependencies: { '@earendil-works/pi-ai': '0.85.1' } }))
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', dependencies: { '@earendil-works/pi-ai': '0.87.1' } }))
   await assert.rejects(preparePublishedCoreFixture({ root, target, release }), /requires this plugin/)
 }))
 
@@ -131,7 +131,7 @@ async function installedFixture(root, targetRelease = release) {
   await mockPackage(root, '@deepseek-ai/dsh-llm', targetRelease, 'export class LlmAdapter {}; export default class LlmRuntime {}')
   await mockPackage(root, '@deepseek-ai/dsh-llm-pi-ai', targetRelease,
     'import {LlmAdapter} from "@deepseek-ai/dsh-llm"; export class PiAiAdapter extends LlmAdapter {prepareCall(){}}; export function Config(){}')
-  await mockPackage(root, '@earendil-works/pi-ai', '0.85.1')
+  await mockPackage(root, '@earendil-works/pi-ai', '0.87.1')
 }
 
 test('inspects real public class identity and paths without claiming route execution', async () => withSource(async ({ root, target }) => {
@@ -140,7 +140,7 @@ test('inspects real public class identity and paths without claiming route execu
   const report = await inspectPublishedCoreFixture({ root: target, release })
   assert.equal(report.classIdentity, true)
   assert.equal(report.release, release)
-  assert.equal(report.ownPi.version, '0.85.1')
+  assert.equal(report.ownPi.version, '0.87.1')
   assert.ok(report.packages.every(entry => entry.entry.startsWith(target)))
   assert.deepEqual(report.executed, { apply: false, modelRequests: false, compatibilityTests: false })
 }))

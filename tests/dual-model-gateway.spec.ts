@@ -87,7 +87,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-describe('dual-model contribution through the installed 0.2.0-rc.1 Client gateway', () => {
+describe('dual-model contribution through the installed 0.2.0-rc.2 Client gateway', () => {
   it('mounts only the fixed namespace and registers the independent strict contribution', async () => {
     const f = await fixture()
     expect(f.registrations).toEqual([contribution])
@@ -245,7 +245,7 @@ describe('dual-model contribution through the installed 0.2.0-rc.1 Client gatewa
       { args: { input: createInput } }, expect.any(AbortSignal))
   })
 
-  it('documents unvalidated 0.2.0-rc.1 error details without claiming Client filtering', async () => {
+  it('documents unvalidated 0.2.0-rc.2 error details without claiming Client filtering', async () => {
     const f = await fixture()
     f.rpcCall.mockResolvedValue({ ok: false, error: {
       code: 'copilot/dual-model', message: 'PRIVATE_MESSAGE',
