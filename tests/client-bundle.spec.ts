@@ -184,8 +184,8 @@ describe('tsdown client artifact', () => {
       on,
       logger: { warn: vi.fn() },
       slots: {
-        spec: () => ({ kind: 'list', scope: 'root' }),
-        register(options: { name: string; id?: string }, render: Render) {
+        spec: (name: string) => ({ kind: name === 'plugins.bundle.config' ? 'keyed' : 'list', scope: 'root' }),
+        register(options: { name: string; id?: string; key?: string }, render: Render) {
           const key = options.name === 'settings.models.footer' && options.id === 'github-copilot-search-routing'
             ? `${options.name}:${options.id}` : options.name
           registrations.set(key, render)
@@ -247,11 +247,16 @@ describe('tsdown client artifact', () => {
     } finally { await fixture.dispose() }
   })
 
-  it('registers web-search routing as a separate Models footer card', async () => {
+  it('registers web-search routing in the built bundle detail page, leaving Models for account controls', async () => {
     const fixture = await surfaceFixture()
     try {
       expect(fixture.registrations.has('settings.models.footer')).toBe(true)
-      expect(fixture.registrations.has('settings.models.footer:github-copilot-search-routing')).toBe(true)
+      expect(fixture.registrations.has('settings.models.footer:github-copilot-search-routing')).toBe(false)
+      const element = fixture.registrations.get('plugins.bundle.config')!({ view: 'page' })
+      expect(element.props.children[0].type).toBe(fixture.client.exports.WebSearchRoutingCard)
+      expect(element.props.children[1].type).toBe(fixture.client.exports.HostedSearchSettingsCard)
+      expect(fixture.registrations.get('plugins.bundle.config')!({ view: 'summary' })).toBeNull()
+      expect(element.props.children[0].props.settings).toBe(fixture.ctx.remote.settings)
     } finally { await fixture.dispose() }
   })
 

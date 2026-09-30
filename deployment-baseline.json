@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.42"
+    "version": "0.4.0-alpha.43"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -356,12 +356,14 @@
         {"file": "src/index.ts", "marker": "ctx.provide('githubCopilotSearchRouter'"},
         {"file": "src/web-search-routing-config.ts", "marker": "WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE"},
         {"file": "src/web-search-routing-card.ts", "marker": "data-dsh-web-search-routing"},
+        {"file": "src/web-search-routing-card.ts", "marker": "data-dsh-copilot-search-options"},
         {"file": "cordis.patch.yml", "marker": "web: github-copilot-original-web"}
       ],
       "tests": [
         {"file": "tests/search-provider-catalog.spec.ts", "name": "lists only actual facade registrations without availability checks, auth or search"},
         {"file": "tests/scripts/search-provider-gateway.test.mjs", "name": "search catalog Remote reaches actual facade registrations and unloads cleanly"},
         {"file": "tests/web-search-routing-card.spec.ts", "name": "loads one actual provider catalog into both selectors without Copilot-specific Auto labels"},
+        {"file": "tests/client-search-inject.spec.ts", "name": "saves only edited hosted-search leaves in the existing namespace without broadening the route allowlist"},
         {"file": "tests/routed-web.spec.ts", "name": "keeps the configured provider for DeepSeek and all other model routes"},
         {"file": "tests/routed-web.spec.ts", "name": "dispatches a router-selected provider by exact registered id"},
         {"file": "tests/routed-web.spec.ts", "name": "retains pre-execute denial and the surrounding execution middleware"},
@@ -369,7 +371,7 @@
         {"file": "tests/inline/apply.spec.ts", "name": "discovers an independent search model absent from the static catalog and keeps proof enabled"},
         {"file": "tests/inline/apply.spec.ts", "name": "rejects independent search when managed proof expires during %s"},
         {"file": "tests/inline/apply.spec.ts", "name": "uses the configured account model in fixed mode even for a different Copilot chat model"},
-        {"file": "tests/client-bundle.spec.ts", "name": "registers web-search routing as a separate Models footer card"},
+        {"file": "tests/client-bundle.spec.ts", "name": "registers web-search routing in the built bundle detail page, leaving Models for account controls"},
         {"file": "tests/routed-web-loader.spec.ts", "name": "loads the built facade and delegate entries without changing official tools"}
       ]
     },
@@ -390,7 +392,7 @@
         {"file": "tests/web-search-routing-card.spec.ts", "name": "never loads account model suggestions to display or save providers"},
         {"file": "tests/web-search-routing-card.spec.ts", "name": "resets a legacy override only through an explicit separate action"},
         {"file": "tests/web-search-routing-card.spec.ts", "name": "explains a real Remote settings-conflict without exposing its raw details"},
-        {"file": "tests/client-search-inject.spec.ts", "name": "keeps real mounted drafts and pending saves through parent rerenders (footer=%s)"},
+        {"file": "tests/client-search-inject.spec.ts", "name": "keeps real mounted drafts and pending saves through parent rerenders (bundle=%s)"},
         {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "real pinned Client namespace lookups require stable capture across render calls"},
         {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "provider-only search routing saves both leaves once without a Copilot namespace or model"},
         {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "stale routing revisions fail CAS and preserve the last successful settings"},
@@ -956,10 +958,13 @@
       "sourceMarkers": [
         {"file": "src/client.ts", "marker": "GitHubCopilotSettingsSection"},
         {"file": "src/client.ts", "marker": "settings.models.footer"},
+        {"file": "src/client.ts", "marker": "plugins.bundle.config"},
         {"file": "src/client.ts", "marker": "settingsSectionActive && !footerActive"}
       ],
       "tests": [
         {"file": "tests/client.spec.ts", "name": "registers a GitHub Copilot settings section on the rc.2 Models surface"},
+        {"file": "tests/client-search-inject.spec.ts", "name": "renders the actual search callback in $seat"},
+        {"file": "tests/client-bundle.spec.ts", "name": "registers web-search routing in the built bundle detail page, leaving Models for account controls"},
         {"file": "tests/client.spec.ts", "name": "registers coordinated provider and fallback seats without starting either controller during registration"},
         {"file": "tests/client.spec.ts", "name": "leaves authorization active when the optional footer contract is incompatible or registration fails"},
         {"file": "tests/client.spec.ts", "name": "mounts one compact account lifecycle instead of separate authorization and discovery owners"},

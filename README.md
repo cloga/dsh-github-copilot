@@ -39,7 +39,7 @@ The first alpha.11 publication attempt stopped before packing: the tagged Sessio
 
 ### Alpha.17 provider-aware web search (#118)
 
-The bundle routes search through a plugin-owned Models-page policy: `auto` prefers eligible native Copilot search and otherwise uses the configured default provider; `fixed` always uses that provider. A separately selected account model lets Volcengine and other non-Copilot chat Sessions use Copilot hosted search. The implementation uses public web-service composition without Core or preset edits. Source and synthetic tests are not proof of live Copilot search, release publication or local activation; see [routing evidence](docs/session-search-routing.md).
+The bundle routes search through a plugin-owned policy configured in plugin details (with a Models-page fallback): `auto` prefers eligible native Copilot search and otherwise uses the configured default provider; `fixed` always uses that provider. A separately selected account model lets Volcengine and other non-Copilot chat Sessions use Copilot hosted search. The implementation uses public web-service composition without Core or preset edits. Source and synthetic tests are not proof of live Copilot search, release publication or local activation; see [routing evidence](docs/session-search-routing.md).
 
 ### Alpha.19 DSH 0.1.6 compatibility adaptation (#125)
 
@@ -53,7 +53,7 @@ The candidate manifest treats `@deepseek-ai/dsh-authorization` and `@deepseek-ai
 
 The built Client intentionally requests React from DSH's browser `ModuleLoader` singleton. React is not a Desktop Host shared package and must not be installed as a required Node profile peer. Alpha.22 declares `dsh.client.external: [\"react\"]`, removes the root React peer, and retains React only as a development dependency. Packed verification now audits every required peer and Client external, confirms the real built Client requests exactly React from the loader, and preserves authorization/schemastery as required Host peers. This fixes the packaged Desktop startup error `requires missing react@^18.2.0` without enabling peer auto-install, bundling another React copy, or weakening Desktop graph validation. Actual packaged Electron loading remains a downstream acceptance gate.
 
-Alpha.24 fixes the Web search card's missing traced Remote dependency. It remains in **Settings → Models** (`settings.models.footer`, list/root), with an old-Core Web search section fallback, not General. The search child waits independently for its routing namespace; account controls and all search safety guards are unchanged. Actual packaged Desktop acceptance is still a separate gate.
+Alpha.24 fixed the Web search card's missing traced Remote dependency. At that time it lived in **Settings → Models** (`settings.models.footer`, list/root), with an old-Core Web search section fallback. It now prefers the plugin's detail page; the search child still waits independently for its routing namespace, without affecting account controls or search safety guards. Actual packaged Desktop acceptance is still a separate gate.
 
 ### Alpha.25 official-first DSH 0.1.6-alpha.2 adaptation
 
@@ -85,7 +85,7 @@ The Host reads GitHub's internal quota endpoint using the existing canonical OAu
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.42`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.43`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -98,10 +98,10 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For a standalone named profile only, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.42/dsh-github-copilot-0.4.0-alpha.42.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.43/dsh-github-copilot-0.4.0-alpha.43.tgz
 ```
 
-For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.42` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
+For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.43` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
@@ -167,7 +167,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.42`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.43`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -267,7 +267,7 @@ Auto-mode native search identity comes from the captured initiating Session's ef
 
 The bundle composes a plugin-owned web-service facade while preserving the original official service and its exact configuration in a named realm. It does not edit Core or agent presets. Native `web_search` consumers keep their argument validation, query/source limits, middleware, timeout and presentation; the same routing also covers direct `ctx.web.search` consumers with proven initiating context.
 
-A separate **Web search** card under **Settings → Models** controls routing across search backends. On older Core versions without the Models footer, it appears as **Settings → Web search**. The companion owns the namespaced policy (`github-copilot-search-routing`); it does not claim a global Core namespace. Removing the companion restores the original web service.
+The **Web search** card under **Plugins → dsh-github-copilot → Details** controls routing across search backends through the public `plugins.bundle.config` slot (keyed by package name). The same page offers expandable Copilot hosted-search options (enablement, route allowlist, citations, tool filtering, proof, deadlines, and legacy fallback). Routing and hosted-search options have independent Save actions and revision-checked writes to their existing namespaces. When the bundle slot is unavailable, routing falls back to **Settings → Models**, or **Settings → Web search** if the Models footer is also unavailable; advanced options remain available through the existing settings section. Only one routing card is registered at a time; leaving the detail page discards unsaved edits. Account sign-in, status, and model refresh remain under **Settings → Models**. No settings values are migrated or rewritten merely by opening the new page. Removing the companion restores the original web service.
 
 The **Search provider** selector offers **Auto — follow Chat** and the actual search providers registered through the routed facade. **Fallback provider** uses the same catalog, with an additional **None — no fallback** choice. These are search backends, not individual models: Copilot is one backend even when different account models can execute its search requests. Ordinary setup needs only these provider choices, not a separate search model.
 
@@ -336,6 +336,8 @@ The plugin does not rewrite `$DSH_HOME/AGENTS.md`. Installers may merge these ru
 ## Settings
 
 The plugin's `github-copilot` settings section controls account-metadata freshness, managed request budgets and hosted search. `enabled` still controls hosted search only:
+
+Search **provider routing** and the `github-copilot` hosted-search options below are edited on the plugin detail page. The advanced form writes only explicitly changed leaves; it never rewrites a saved route allowlist just because another option was saved. Account-metadata and managed-budget options remain in their existing settings section.
 
 | Key | Default | Scope and meaning |
 |---|---:|---|
@@ -431,8 +433,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.42/dsh-github-copilot-0.4.0-alpha.42.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.42/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.43/dsh-github-copilot-0.4.0-alpha.43.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.43/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -440,7 +442,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.42.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.43.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

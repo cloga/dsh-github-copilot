@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.43 (prepared)
+
+- Put Web search routing and Copilot hosted-search options on the plugin bundle's detail page through the public `plugins.bundle.config` slot (#177).
+- Keep sign-in, account status and model refresh in Models; retain the routing card's Models/section fallback if the bundle slot is unavailable.
+- Save routing and hosted-search options independently to their existing namespaces with revision checks, preserving unchanged allowlists and explicit legacy model overrides. No settings, profile or Session is migrated on page open.
+
 ## 0.4.0-alpha.42 (prepared)
 
 - Add a plugin-owned virtual **Auto** model to the managed GitHub Copilot route, resolving once per Core turn to a real account model while preserving explicit selections and truthful request provenance (#174).

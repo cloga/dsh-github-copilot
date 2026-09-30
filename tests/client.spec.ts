@@ -1158,7 +1158,10 @@ describe('GitHub Copilot Models client', () => {
           return () => { if (!active) return; active = false; cleanup?.(); cleanup = undefined }
         },
         register,
-        spec: vi.fn((name: string) => ({ kind: name === 'settings.models.provider-card' ? 'keyed' : 'list', scope: 'root' })),
+        spec: vi.fn((name: string) => ({
+          kind: name === 'settings.models.provider-card' || name === 'plugins.bundle.config' ? 'keyed' : 'list',
+          scope: 'root',
+        })),
       },
       logger: { warn: vi.fn() },
       on: vi.fn(() => vi.fn()),
@@ -1197,6 +1200,23 @@ describe('GitHub Copilot Models client', () => {
     expect(routing).toHaveBeenCalledTimes(1)
     expect(ctx.inject).toHaveBeenCalledWith(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], expect.any(Function))
     expect(first.props).not.toHaveProperty('copilot')
+    await dispose()
+  })
+
+  it('moves search routing between the bundle page and Models fallback as the bundle slot appears and disappears', async () => {
+    const { ctx, register, registrations, injections } = clientContext(['settings.models.footer'])
+    const dispose = await apply(ctx as never)
+    const footer = registrations.get('settings.models.footer:github-copilot-search-routing')!
+    const unmountBundle = injections.get('plugins.bundle.config')?.() as (() => void)
+    expect(register).toHaveBeenCalledWith({
+      name: 'plugins.bundle.config', key: 'dsh-github-copilot',
+    }, expect.any(Function))
+    expect(footer).toHaveBeenCalledOnce()
+    expect(registrations.get('plugins.bundle.config')).toBeDefined()
+    expect(register.mock.calls.filter(([options]) => options.id === 'github-copilot-search-routing')).toHaveLength(1)
+    unmountBundle()
+    expect(registrations.get('plugins.bundle.config')).toHaveBeenCalledOnce()
+    expect(register.mock.calls.filter(([options]) => options.id === 'github-copilot-search-routing')).toHaveLength(2)
     await dispose()
   })
 
