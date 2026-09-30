@@ -41,6 +41,8 @@ function runtime(options: {
   availableModelIds?: readonly string[]
   providerProfile?: unknown
   beginFailure?: unknown
+  beginFailureAt?: 'before-interaction' | 'after-prompt' | 'after-notice' | 'during-commit'
+  duringCommit?: () => void
   authorizationOutcome?: 'authorized' | 'cancelled'
   beforeMutate?: (namespace: string, operations: readonly { op: 'set' | 'unset' }[]) => void
   readFailure?: boolean
@@ -109,15 +111,21 @@ function runtime(options: {
       prompt(prompt: { kind: string; message: string }): Promise<string>
     }
   }) => {
+    if (options.beginFailureAt === 'before-interaction') throw options.beginFailure
     expect(await request.interaction.prompt({
       kind: 'text',
       message: 'GitHub Enterprise URL/domain (blank for github.com)',
     })).toBe('')
+    if (options.beginFailureAt === 'after-prompt') throw options.beginFailure
     request.interaction.notify({
       message: 'Enter this code on GitHub.',
       url: 'https://github.com/login/device',
       code: 'ABCD-EFGH',
     })
+    if (options.beginFailureAt === 'during-commit') {
+      options.duringCommit?.()
+      throw options.beginFailure
+    }
     if (options.beginFailure !== undefined) throw options.beginFailure
     await new Promise<void>((resolve) => { resolveAuthorization = resolve })
     configured = options.authorizationOutcome !== 'cancelled'
@@ -510,8 +518,10 @@ describe('GitHubCopilotAuthorizationController', () => {
         phase: 'error',
         notices: [],
         error: 'COPILOT_AUTHORIZATION_BEGIN_FAILED',
+        authorizationMilestone: 'INTERACTION_NOTICE_OBSERVED',
       })
     })
+
     const observed = JSON.stringify({
       status: await harness.controller.status(),
       errorLogs: vi.mocked(harness.ctx.logger.error).mock.calls,
@@ -522,6 +532,55 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.ctx.logger.error).toHaveBeenCalledExactlyOnceWith(
       'github-copilot: authorization.begin failed (COPILOT_AUTHORIZATION_BEGIN_FAILED)',
     )
+  })
+
+  it.each([
+    ['before-interaction', 'AUTHORIZATION_REQUESTED'],
+    ['after-prompt', 'INTERACTION_PROMPT_OBSERVED'],
+    ['after-notice', 'INTERACTION_NOTICE_OBSERVED'],
+  ] as const)('reports the latest observed milestone for a %s rejection', async (beginFailureAt, authorizationMilestone) => {
+    const harness = runtime({
+      beginFailure: new Error('SYNTHETIC_PRIVATE_AUTHORIZATION_FAILURE'),
+      beginFailureAt,
+    })
+    await harness.controller.start()
+    await vi.waitFor(async () => expect(await harness.controller.status()).toMatchObject({
+      phase: 'error',
+      error: 'COPILOT_AUTHORIZATION_BEGIN_FAILED',
+      authorizationMilestone,
+    }))
+  })
+
+  it('does not misreport a synthetic credential-commit rejection as an observed commit', async () => {
+    const duringCommit = vi.fn()
+    const harness = runtime({
+      beginFailure: new Error('SYNTHETIC_PRIVATE_COMMIT_FAILURE'),
+      beginFailureAt: 'during-commit',
+      duringCommit,
+    })
+    await harness.controller.start()
+    await vi.waitFor(async () => expect(await harness.controller.status()).toMatchObject({
+      phase: 'error',
+      error: 'COPILOT_AUTHORIZATION_BEGIN_FAILED',
+      authorizationMilestone: 'INTERACTION_NOTICE_OBSERVED',
+    }))
+    expect(duringCommit).toHaveBeenCalledOnce()
+  })
+
+  it('clears the ephemeral authorization milestone after cancellation and success', async () => {
+    const cancelled = runtime({ authorizationOutcome: 'cancelled' })
+    await cancelled.controller.start()
+    await expect(cancelled.controller.cancel()).resolves.not.toHaveProperty('authorizationMilestone')
+    await vi.waitFor(async () => expect(await cancelled.controller.status()).not.toHaveProperty('authorizationMilestone'))
+
+    const authorized = runtime()
+    await authorized.controller.start()
+    authorized.authorize()
+    await vi.waitFor(async () => expect(await authorized.controller.status()).toMatchObject({
+      phase: 'signed-in',
+      configured: true,
+    }))
+    expect(await authorized.controller.status()).not.toHaveProperty('authorizationMilestone')
   })
 
   it('does not inspect arbitrary rejected values when sanitizing authorization failures', async () => {

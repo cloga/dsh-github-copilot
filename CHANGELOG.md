@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.44 (prepared)
+
+- Add a fixed, allowlisted latest-observed authorization milestone to failed sign-in diagnostics without inspecting or retaining rejected values, provider responses, credentials, prompts, notices, or nested causes (#178).
+- Clear the ephemeral milestone on cancellation, success, sign-out, and each new attempt; distinguish observed request, prompt, and notice progress from an inferred failure cause.
+- Document the exact rc.2 hot-removal boundary: removing the routing bundle after activation can strand the public Web service isolate until restart, while the native manager already marks existing-package upgrades as restart-required. Do not remove and re-add the package to bypass that boundary.
+
 ## 0.4.0-alpha.43 (prepared)
 
 - Put Web search routing and Copilot hosted-search options on the plugin bundle's detail page through the public `plugins.bundle.config` slot (#177).

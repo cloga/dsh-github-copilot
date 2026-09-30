@@ -71,6 +71,12 @@ export function authorizationViewFrom(value: unknown): GitHubCopilotAuthorizatio
     if (typeof owned.phase !== 'string' || !['signed-out', 'authorizing', 'signed-in', 'error'].includes(owned.phase)
       || typeof owned.configured !== 'boolean' || typeof owned.writable !== 'boolean' || typeof owned.inFlight !== 'boolean') return undefined
     if (owned.error !== undefined && typeof owned.error !== 'string') owned.error = 'COPILOT_AUTHORIZATION_FAILED'
+    const milestone = source.authorizationMilestone
+    if (typeof milestone === 'string' && [
+      'AUTHORIZATION_REQUESTED',
+      'INTERACTION_PROMPT_OBSERVED',
+      'INTERACTION_NOTICE_OBSERVED',
+    ].includes(milestone)) owned.authorizationMilestone = milestone
     const notices = source.notices
     if (!Array.isArray(notices)) return undefined
     owned.notices = notices.map(notice => {
@@ -615,9 +621,15 @@ const compactButtonStyle: CSSProperties = {
   maxWidth: '100%', cursor: 'pointer',
 }
 
-function compactErrorMessage(code: string): string {
+function compactErrorMessage(
+  code: string,
+  milestone?: GitHubCopilotAuthorizationView['authorizationMilestone'],
+): string {
   if (code === 'COPILOT_MODEL_DISCOVERY_FAILED') return 'Could not refresh models. Try again.'
-  if (code === 'COPILOT_AUTHORIZATION_BEGIN_FAILED') return 'GitHub sign-in did not complete. Try again. If it continues, share diagnostic code COPILOT_AUTHORIZATION_BEGIN_FAILED with support.'
+  if (code === 'COPILOT_AUTHORIZATION_BEGIN_FAILED') {
+    const observed = milestone === undefined ? '' : ` Latest observed milestone: ${milestone}.`
+    return `GitHub sign-in did not complete.${observed} Try again. If it continues, share diagnostic code COPILOT_AUTHORIZATION_BEGIN_FAILED with support.`
+  }
   if (code === 'COPILOT_ROUTE_REPAIR_FAILED') return 'GitHub sign-in completed, but model configuration repair failed. Authentication is retained. Open Manage and choose Repair model configuration. If it continues, share diagnostic code COPILOT_ROUTE_REPAIR_FAILED with support.'
   if (code === 'COPILOT_AUTHORIZATION_START_FAILED') return 'Could not confirm sign-in. Retry status to check.'
   if (code === 'COPILOT_AUTHORIZATION_CANCEL_FAILED') return 'Could not confirm cancellation. Retry status to check.'
@@ -681,7 +693,8 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
         { title: view.writable === false ? 'Credentials are read-only' : undefined }) : null,
       actionButton('Manage', () => setManageOpen(open => !open), false, { 'aria-expanded': manageOpen, 'aria-controls': managementId }))),
   state.error === undefined ? null : createElement('p', { role: 'alert', 'data-dsh-github-copilot-account-error': state.error,
-    style: { margin: '8px 0 0', fontSize: '13px', overflowWrap: 'anywhere' } }, compactErrorMessage(state.error)),
+    style: { margin: '8px 0 0', fontSize: '13px', overflowWrap: 'anywhere' } },
+  compactErrorMessage(state.error, view?.authorizationMilestone)),
   authorizing ? createElement('div', { 'data-dsh-github-copilot-auto-authorization': true, style: { marginTop: '8px', overflowWrap: 'anywhere' } },
     notice === undefined ? createElement('p', { role: 'status', 'aria-live': 'polite' }, state.operation === 'cancel' ? 'Cancelling sign-in…' : 'Waiting for GitHub authorization…')
       : createElement(GitHubCopilotAuthorizationNotice, { message: notice.message, url: notice.url, code: notice.code,

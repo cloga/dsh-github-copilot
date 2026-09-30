@@ -125,7 +125,14 @@ export interface GitHubCopilotAuthorizationView {
   readonly route?: GitHubCopilotRouteView
   readonly accountModels?: GitHubCopilotAccountModelsView
   readonly error?: string
+  /** Latest fixed interaction milestone observed during a failed or active attempt; never a failure cause. */
+  readonly authorizationMilestone?: GitHubCopilotAuthorizationMilestone
 }
+
+export type GitHubCopilotAuthorizationMilestone =
+  | 'AUTHORIZATION_REQUESTED'
+  | 'INTERACTION_PROMPT_OBSERVED'
+  | 'INTERACTION_NOTICE_OBSERVED'
 
 interface AuthorizationMethodView {
   readonly id: string
@@ -365,6 +372,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   private failure: string | undefined
   private reconciliationFailed = false
   private attempt: Promise<void> | undefined
+  private authorizationMilestone: GitHubCopilotAuthorizationMilestone | undefined
 
   constructor(ctx: Context) {
     super(ctx, 'githubCopilotAuthorization', { namespace: 'githubCopilot' })
@@ -425,6 +433,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       ...catalog === undefined ? {} : { catalog },
       ...discovered === undefined ? {} : { accountModels: discovered },
       ...this.failure === undefined ? {} : { error: this.failure },
+      ...this.authorizationMilestone === undefined ? {} : { authorizationMilestone: this.authorizationMilestone },
     }
   }
 
@@ -491,6 +500,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     this.notices = []
     this.failure = undefined
     this.reconciliationFailed = false
+    this.authorizationMilestone = 'AUTHORIZATION_REQUESTED'
     let begun: ReturnType<typeof authorization.begin>
     try {
       begun = authorization.begin({
@@ -498,9 +508,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
         method: oauth.id,
         interaction: {
           notify: (notice) => {
+            this.authorizationMilestone = 'INTERACTION_NOTICE_OBSERVED'
             this.notices = [...this.notices, { ...notice }]
           },
           prompt: (prompt) => {
+            this.authorizationMilestone = 'INTERACTION_PROMPT_OBSERVED'
             if (prompt.kind === 'text' && /GitHub Enterprise URL\/domain/i.test(prompt.message)) {
               return Promise.resolve('')
             }
@@ -519,11 +531,13 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
         // durable provider status. Clear them before the profile repair so a
         // completed grant cannot render "Signed in" beside an expired code.
         this.notices = []
+        this.authorizationMilestone = undefined
         await this.ensureProviderProfile()
         if (this.reconciliationFailed) this.failure = 'COPILOT_ROUTE_REPAIR_FAILED'
         return
       }
       this.notices = []
+      this.authorizationMilestone = undefined
     }).catch(() => {
       this.notices = []
       this.failure = 'COPILOT_AUTHORIZATION_BEGIN_FAILED'
@@ -543,6 +557,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       ['describe', 'begin', 'cancel'],
     )
     this.notices = []
+    this.authorizationMilestone = undefined
     authorization.cancel(GITHUB_COPILOT_CREDENTIAL_KEY)
     return this.status()
   }
@@ -566,6 +581,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     this.notices = []
     this.failure = undefined
     this.reconciliationFailed = false
+    this.authorizationMilestone = undefined
     return this.status()
   }
 
