@@ -5,6 +5,7 @@ import type { ChangeEvent, CSSProperties, ReactElement } from 'react'
 import { SearchProviderCatalogSchema } from './search-routing-remote.ts'
 import { normalizeWebSearchRouting } from './search-routing-policy.ts'
 import { nativeOptionStyle, nativeSelectStyle } from './native-select-style.ts'
+import type { InlineConfig } from './config.ts'
 
 const GITHUB_COPILOT_SETTINGS_NAMESPACE = 'github-copilot'
 const WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE = 'github-copilot-search-routing'
@@ -29,6 +30,7 @@ const cardStyle: CSSProperties = {
   borderRadius: '14px', background: 'color-mix(in srgb, currentColor 4%, transparent)',
 }
 const fieldStyle: CSSProperties = { display: 'grid', gap: '6px', minWidth: 0 }
+const optionsRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
 const buttonStyle: CSSProperties = {
   justifySelf: 'start', padding: '9px 16px', borderRadius: '999px', cursor: 'pointer',
   border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
@@ -49,6 +51,168 @@ function saveFailure(error: unknown): string {
   if (code === 'settings-conflict') return 'Search settings changed since you opened this page. Reload settings, then review and save your choices again.'
   if (code === 'settings-rejected') return 'The settings service rejected this change. Reload settings to check whether editing is available, then try again.'
   return 'Could not confirm the save. Reload settings to check saved values before retrying. Your current choices have been kept.'
+}
+
+type SearchOptions = Required<Pick<InlineConfig,
+  'enabled' | 'providers' | 'routeWebSearch' | 'includeSources' | 'stripServerTools'
+  | 'idleTimeoutMs' | 'probe' | 'probeTimeoutMs' | 'searchFallback'>>
+type OptionsDraft = Omit<SearchOptions, 'providers' | 'idleTimeoutMs' | 'probeTimeoutMs'> & {
+  providers: string
+  idleTimeoutMs: string
+  probeTimeoutMs: string
+}
+const searchDefaults: SearchOptions = {
+  enabled: true, providers: [], routeWebSearch: true, includeSources: true,
+  stripServerTools: true, idleTimeoutMs: 300_000, probe: true,
+  probeTimeoutMs: 30_000, searchFallback: 'deepseek',
+}
+const timeoutLimit = 2_147_483_647
+
+function searchOptions(value: unknown): OptionsDraft | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const source = record(value)
+  const options = { ...searchDefaults, ...source }
+  if (typeof options.enabled !== 'boolean' || typeof options.routeWebSearch !== 'boolean'
+    || typeof options.includeSources !== 'boolean' || typeof options.stripServerTools !== 'boolean'
+    || typeof options.probe !== 'boolean' || !Array.isArray(options.providers)
+    || options.providers.some((id: unknown) => typeof id !== 'string')
+    || options.searchFallback !== 'deepseek' && options.searchFallback !== 'none'
+    || ![options.idleTimeoutMs, options.probeTimeoutMs].every(number => typeof number === 'number'
+      && Number.isSafeInteger(number) && number >= 1 && number <= timeoutLimit)) return undefined
+  return {
+    enabled: options.enabled, routeWebSearch: options.routeWebSearch,
+    includeSources: options.includeSources, stripServerTools: options.stripServerTools,
+    probe: options.probe, searchFallback: options.searchFallback,
+    providers: options.providers.join(', '),
+    idleTimeoutMs: String(options.idleTimeoutMs), probeTimeoutMs: String(options.probeTimeoutMs),
+  }
+}
+
+/** Edit only explicit Copilot hosted-search leaves; provider routing remains a separate CAS. */
+export function HostedSearchSettingsCard({ settings }: Pick<SearchRoutingCardProps, 'settings'>): ReactElement {
+  const [draft, setDraft] = useState<OptionsDraft>(() => searchOptions({})!)
+  const [saved, setSaved] = useState<OptionsDraft>()
+  const [revision, setRevision] = useState<number>()
+  const [writable, setWritable] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+  const lifecycle = useRef({ active: false, generation: 0, busy: false })
+  const load = useCallback(async () => {
+    const owner = lifecycle.current
+    if (!owner.active || owner.busy) return
+    const generation = ++owner.generation
+    owner.busy = true
+    setLoading(true); setWritable(false); setMessage('')
+    try {
+      const result = await settings.describe()
+      if (!owner.active || generation !== owner.generation) return
+      if (!result.ok) { setMessage('Could not load Copilot search options. Reload to retry.'); return }
+      const entry = result.value.namespaces.find(item => item.ns === GITHUB_COPILOT_SETTINGS_NAMESPACE)
+      const next = entry && searchOptions(entry.value)
+      const nextRevision = revisionOf(entry?.revision)
+      if (!next || nextRevision === undefined) {
+        setMessage('Copilot search settings are unavailable or invalid. Review the saved configuration.')
+        return
+      }
+      setDraft(next); setSaved(next); setRevision(nextRevision)
+      setWritable(result.value.writable === true)
+      if (!result.value.writable) setMessage('Copilot search settings are read-only in this deployment.')
+    } catch {
+      if (owner.active && generation === owner.generation) setMessage('Could not load Copilot search options. Reload to retry.')
+    } finally {
+      if (owner.active && generation === owner.generation) { owner.busy = false; setLoading(false) }
+    }
+  }, [settings])
+
+  useEffect(() => {
+    const owner = lifecycle.current; owner.active = true; void load()
+    return () => { owner.active = false; owner.generation++; owner.busy = false }
+  }, [load])
+
+  const update = <K extends keyof OptionsDraft>(key: K, value: OptionsDraft[K]): void => {
+    setDraft(current => ({ ...current, [key]: value }))
+    setMessage('')
+  }
+  const disabled = loading || saving || !writable || revision === undefined || saved === undefined
+  const save = async (): Promise<void> => {
+    const owner = lifecycle.current
+    if (disabled || owner.busy || saved === undefined || revision === undefined) return
+    const ops: Array<{ op: 'set'; path: string[]; value: boolean | number | string | string[] }> = []
+    for (const key of ['enabled', 'routeWebSearch', 'includeSources', 'stripServerTools', 'probe', 'searchFallback'] as const) {
+      if (draft[key] !== saved[key]) ops.push({ op: 'set', path: [key], value: draft[key] })
+    }
+    for (const key of ['idleTimeoutMs', 'probeTimeoutMs'] as const) {
+      if (draft[key] === saved[key]) continue
+      const value = Number(draft[key])
+      if (!/^\d+$/.test(draft[key]) || !Number.isSafeInteger(value) || value < 1 || value > timeoutLimit) {
+        setMessage(`${key} must be a whole number between 1 and ${timeoutLimit}.`)
+        return
+      }
+      ops.push({ op: 'set', path: [key], value })
+    }
+    if (draft.providers !== saved.providers) {
+      const providers = draft.providers.split(',').map(id => id.trim())
+      if (providers.some(id => !id) && draft.providers.trim() !== '' || new Set(providers).size !== providers.length) {
+        setMessage('Enter distinct route IDs separated by commas, or leave the allowlist empty.')
+        return
+      }
+      ops.push({ op: 'set', path: ['providers'], value: draft.providers.trim() === '' ? [] : providers })
+    }
+    if (ops.length === 0) { setMessage('No search options changed.'); return }
+    const generation = owner.generation
+    owner.busy = true; setSaving(true); setMessage('')
+    try {
+      const result = await settings.mutate(GITHUB_COPILOT_SETTINGS_NAMESPACE, ops, revision)
+      if (!owner.active || generation !== owner.generation) return
+      if (!result.ok) { setMessage(saveFailure(result.error)); return }
+      const nextRevision = revisionOf(result.value.revision)
+      if (nextRevision === undefined) {
+        setRevision(undefined)
+        setMessage('Save returned no revision. Reload settings before editing again.')
+        return
+      }
+      setRevision(nextRevision); setSaved(draft)
+      setMessage('Saved Copilot search options. Availability is checked when you search.')
+    } catch (error) {
+      if (owner.active && generation === owner.generation) setMessage(saveFailure(error))
+    } finally {
+      if (owner.active && generation === owner.generation) { owner.busy = false; setSaving(false) }
+    }
+  }
+  const toggles = [
+    ['enabled', 'Enable Copilot hosted search'],
+    ['routeWebSearch', 'Route web search through this plugin'],
+    ['includeSources', 'Include citations in inline requests'],
+    ['stripServerTools', 'Remove local variants of hosted-search tools'],
+    ['probe', 'Verify native search capability before use'],
+  ] as const
+  return createElement('details', { 'data-dsh-copilot-search-options': true, style: cardStyle },
+    createElement('summary', { style: { cursor: 'pointer', fontWeight: 600 } }, 'Copilot hosted-search options'),
+    createElement('p', { style: hintStyle }, 'These settings affect Copilot only. Disabling capability verification explicitly trusts the provider protocol. The allowlist restricts routes; it does not choose a search model.'),
+    ...toggles.map(([key, label]) => createElement('label', { key, style: optionsRowStyle },
+      createElement('input', { type: 'checkbox', disabled, checked: draft[key], 'data-dsh-copilot-search-option': key,
+        onChange: (event: ChangeEvent<HTMLInputElement>) => update(key, event.currentTarget.checked) }), label)),
+    createElement('label', { style: fieldStyle }, 'Allowed route IDs (comma-separated; empty follows the initiating route)',
+      createElement('input', { type: 'text', disabled, value: draft.providers, 'data-dsh-copilot-search-option': 'providers',
+        onChange: (event: ChangeEvent<HTMLInputElement>) => update('providers', event.currentTarget.value) })),
+    ...(['idleTimeoutMs', 'probeTimeoutMs'] as const).map(key => createElement('label', { key, style: fieldStyle },
+      key === 'idleTimeoutMs' ? 'Search idle timeout (ms)' : 'Capability probe timeout (ms)',
+      createElement('input', { type: 'number', min: 1, max: timeoutLimit, step: 1, disabled, value: draft[key],
+        'data-dsh-copilot-search-option': key,
+        onChange: (event: ChangeEvent<HTMLInputElement>) => update(key, event.currentTarget.value) }))),
+    createElement('label', { style: fieldStyle }, 'Legacy failure fallback',
+      createElement('select', { disabled, value: draft.searchFallback, style: nativeSelectStyle(disabled),
+        'data-dsh-copilot-search-option': 'searchFallback',
+        onChange: (event: ChangeEvent<HTMLSelectElement>) => update('searchFallback', event.currentTarget.value === 'none' ? 'none' : 'deepseek') },
+      createElement('option', { value: 'deepseek', style: nativeOptionStyle() }, 'Use configured DeepSeek fallback'),
+      createElement('option', { value: 'none', style: nativeOptionStyle() }, 'No legacy failure fallback'))),
+    createElement('div', { style: optionsRowStyle },
+      createElement('button', { type: 'button', style: buttonStyle, disabled, 'data-dsh-copilot-search-options-save': true,
+        onClick: () => { void save() } }, saving ? 'Saving…' : 'Save Copilot search options'),
+      createElement('button', { type: 'button', style: buttonStyle, disabled: loading || saving,
+        onClick: () => { void load() } }, 'Reload options')),
+    createElement('p', { role: 'status', 'aria-live': 'polite', style: hintStyle }, message))
 }
 
 /** Save provider routing independently of account discovery and provider-specific model settings. */

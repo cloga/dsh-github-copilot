@@ -14,8 +14,8 @@ import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { installReasoningPresentation } from './reasoning-presentation.ts'
 import { installAutoModelPresentation } from './auto-model-presentation.ts'
-import { WebSearchRoutingCard } from './web-search-routing-card.ts'
-export { WebSearchRoutingCard } from './web-search-routing-card.ts'
+import { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
+export { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
 import { registerCopilotUsageUi } from './copilot-usage-ui.ts'
 import { externalLinkTarget } from './external-link.ts'
@@ -914,15 +914,29 @@ function registerUi(ctx: ClientContext): () => void {
 /** Optional search settings must never hold account authorization UI in waiting. */
 function registerSearchUi(ctx: ClientContext): () => void {
   let active = true
-  let footerActive = false
+  let bundleActive = false
+  let footerReady = false
   let sectionActive = false
+  let footerSeat: (() => void) | undefined
   let fallback: (() => void) | undefined
   // Keep traced Remote identities stable across parent renders and async saves.
   const settings = ctx.remote.settings
   const routing = ctx.remote.githubCopilotSearchRouting
   const render = () => createElement(WebSearchRoutingCard, { settings, routing })
   const syncFallback = () => {
-    if (active && sectionActive && !footerActive) {
+    if (active && footerReady && !bundleActive && footerSeat === undefined) {
+      try {
+        footerSeat = ctx.slots.register({
+          name: 'settings.models.footer', id: 'github-copilot-search-routing', order: 20,
+        }, render)
+      } catch {
+        ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_FOOTER_UNAVAILABLE')
+      }
+    } else if ((!active || !footerReady || bundleActive) && footerSeat !== undefined) {
+      footerSeat()
+      footerSeat = undefined
+    }
+    if (active && sectionActive && !bundleActive && footerSeat === undefined) {
       fallback ??= ctx.slots.register({
         name: 'settings.section', id: 'github-copilot-search-routing', order: 12, label: 'Web search',
       }, render)
@@ -931,28 +945,46 @@ function registerSearchUi(ctx: ClientContext): () => void {
       fallback = undefined
     }
   }
+  let bundle: () => void = () => {}
+  try {
+    bundle = ctx.slots.inject('plugins.bundle.config', () => {
+      const spec = ctx.slots.spec?.('plugins.bundle.config')
+      if (spec?.kind !== 'keyed' || spec.scope !== 'root') {
+        ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_BUNDLE_UNAVAILABLE')
+        return () => {}
+      }
+      let dispose: () => void
+      try {
+        dispose = ctx.slots.register({
+          name: 'plugins.bundle.config', key: 'dsh-github-copilot',
+        }, ({ view }) => view === 'page'
+          ? createElement('div', null, render(), createElement(HostedSearchSettingsCard, { settings }))
+          : null)
+      } catch {
+        ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_BUNDLE_UNAVAILABLE')
+        return () => {}
+      }
+      bundleActive = true
+      syncFallback()
+      return () => {
+        dispose()
+        bundleActive = false
+        syncFallback()
+      }
+    })
+  } catch {
+    ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_BUNDLE_UNAVAILABLE')
+  }
   let footer: () => void = () => {}
   try {
     footer = ctx.slots.inject('settings.models.footer', () => {
-      try {
-        const spec = ctx.slots.spec?.('settings.models.footer')
-        if (spec?.kind !== 'list' || spec.scope !== 'root') return () => {}
-        const dispose = ctx.slots.register({
-          name: 'settings.models.footer', id: 'github-copilot-search-routing', order: 20,
-        }, render)
-        footerActive = true
+      const spec = ctx.slots.spec?.('settings.models.footer')
+      if (spec?.kind !== 'list' || spec.scope !== 'root') return () => {}
+      footerReady = true
+      syncFallback()
+      return () => {
+        footerReady = false
         syncFallback()
-        let removed = false
-        return () => {
-          if (removed) return
-          removed = true
-          dispose()
-          footerActive = false
-          syncFallback()
-        }
-      } catch {
-        ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_FOOTER_UNAVAILABLE')
-        return () => {}
       }
     })
   } catch { ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_FOOTER_UNAVAILABLE') }
@@ -963,10 +995,11 @@ function registerSearchUi(ctx: ClientContext): () => void {
   })
   return () => {
     active = false
+    bundle()
     footer()
     section()
+    footerSeat?.()
     fallback?.()
-    fallback = undefined
   }
 }
 

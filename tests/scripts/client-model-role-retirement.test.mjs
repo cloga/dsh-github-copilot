@@ -17,10 +17,10 @@ test('Client retains neighboring account, search and usage contributions', () =>
   assert.match(client, /ctx\.inject\(\['remote\.githubCopilot', 'slots'\], registerUi\)/)
   assert.match(client, /ctx\.inject\(\['remote\.settings', 'remote\.githubCopilotSearchRouting', 'slots'\], registerSearchUi\)/)
   assert.match(client, /ctx\.inject\(\['remote\.githubCopilotUsage', 'slots'\], registerCopilotUsageUi\)/)
-  for (const slot of ['settings.models.provider-card', 'settings.models.footer', 'settings.section']) {
+  for (const slot of ['settings.models.provider-card', 'settings.models.footer', 'settings.section', 'plugins.bundle.config']) {
     assert.ok(client.includes(`name: '${slot}'`), `Missing retained slot: ${slot}`)
   }
-  assert.match(client, /export \{ WebSearchRoutingCard \}/)
+  assert.match(client, /export \{ HostedSearchSettingsCard, WebSearchRoutingCard \}/)
   assert.match(client, /export \{ CopilotUsageCard \}/)
 })
 

@@ -46,6 +46,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'root'
       owner: { children?: never }
     }
+    'plugins.bundle.config': {
+      kind: 'keyed'
+      scope: 'root'
+      owner: { readonly view: 'summary' | 'page' }
+    }
   }
 }
 
@@ -81,6 +86,10 @@ declare module '@deepseek-ai/cordis' {
       register(
         options: { name: 'settings.section'; id: string; order?: number; label: string },
         component: (props: SettingsSectionOwnerProps) => ReactNode,
+      ): () => void
+      register(
+        options: { name: 'plugins.bundle.config'; key: string },
+        component: (props: { readonly view: 'summary' | 'page' }) => ReactNode,
       ): () => void
     }
   }

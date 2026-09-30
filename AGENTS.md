@@ -56,8 +56,8 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/index.ts`: authorization bootstrap, dependency-gated Host entry, settings registration, listener, and `ctx.web` provider composition.
 - `src/authorization-controller.ts`: sign-in/status/sign-out and route mutation.
 - `src/copilot-grant.ts`, `src/copilot-auth.ts`: strict grant normalization and narrow pi-ai `CredentialStore` adapter over `llm-pi-ai/github-copilot`.
-- `src/client.ts`: `settings.models.provider-card` account UI, a separate `settings.models.footer` search-routing card, and independently managed optional Chat integration.
-- `src/web-search-routing-config.ts`, `src/web-search-routing-card.ts`: plugin-owned cross-provider live routing settings and the Models-page control surface.
+- `src/client.ts`: `settings.models.provider-card` account UI, a `plugins.bundle.config` search page (routing and independently saved hosted-search options) with Models/footer/section routing fallback, and independently managed optional Chat integration.
+- `src/web-search-routing-config.ts`, `src/web-search-routing-card.ts`: plugin-owned cross-provider live routing settings and the plugin-detail control surface. Hosted-search options edit only changed Copilot settings leaves with a separate namespace revision; the Models fallback retains routing only.
 - `src/reasoning-presentation.ts`: guarded native Chat delegation and historical Copilot provenance; filters temporary view props only, never messages, signatures, replay indexes or usage.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/copilot-usage-host.ts`, `src/copilot-usage-remote.ts`, `src/copilot-usage-card.ts`, `src/copilot-usage-ui.ts`: bounded Host quota snapshots, an independent strict namespace and reversible composer presentation. No real account fetches in tests, private Client store/DOM injection, new credential owner or general model wire.
