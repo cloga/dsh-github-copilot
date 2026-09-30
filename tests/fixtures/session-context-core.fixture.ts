@@ -1,6 +1,6 @@
 /**
- * Tagged-source runtime regression, included only by the Core 0.1.5 alpha runner.
- * Real public Session (V3), AgentRegistry, SessionProjectionRegistry and the public
+ * Tagged-source runtime regression for the pinned Core matrix.
+ * Real public Session, AgentRegistry, SessionProjectionRegistry and the public
  * SessionController constructor install/drive Core's actual modelSelection fold.
  * Sessions are detached: stateOf drives lazy replay, not a live SessionStore
  * event firehose. The runner attests the unchanged tagged checkout and aliases.
@@ -33,13 +33,14 @@ const managedPending: MigrationSelection = {
 }
 const defaultC: MigrationSelection = { provider: 'fixture-default', model: 'fixture-C' }
 const contexts: Context[] = []
+const expectedSessionFormatVersion = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.0-rc.1' ? 4 : 3
 
 beforeAll(() => {
   // Fail rather than silently substitute the installed peer or another baseline.
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'])
     .toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
-  expect(SESSION_FORMAT_VERSION).toBe(3)
+  expect(SESSION_FORMAT_VERSION).toBe(expectedSessionFormatVersion)
 })
 
 afterEach(async () => {
@@ -170,7 +171,7 @@ describe('tagged Core public Session context (actual controller projection)', ()
     expect(f.controller).toBeInstanceOf(SessionController)
     const a = await f.add('projection-A', 'running')
     const empty = await f.add('projection-empty')
-    expect(empty.session.header.version).toBe(3)
+    expect(empty.session.header.version).toBe(expectedSessionFormatVersion)
     expect(empty.session.seq).toBe(0)
     expect(empty.session.requestHeader()).toBeUndefined()
     expect(f.projections.stateOf(empty.session, 'modelSelection')).toEqual({ lastUsed: null, pending: null })

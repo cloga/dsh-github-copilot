@@ -123,7 +123,8 @@ if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.
     if (metadata.version !== baseline.release) throw new Error(`DSH target package version differs in ${path}`)
   }
   await assertMarkers('packages/core/session/src/index.ts', ['requestHeader(): EpochHeader | undefined'])
-  await assertMarkers('packages/core/session/src/types.ts', ['SESSION_FORMAT_VERSION = 3'])
+  const sessionFormatVersion = baseline.sessionFormatVersion ?? 3
+  await assertMarkers('packages/core/session/src/types.ts', [`SESSION_FORMAT_VERSION = ${sessionFormatVersion}`])
   await assertMarkers('packages/core/agent/src/index.ts', ['currentInitiator(): Agent | undefined'])
   await assertMarkers('packages/session/session-projection/src/index.ts', ['stateOf<K extends keyof SessionProjectionStateMap>'])
   await assertMarkers('packages/api/session-controller/src/model-selection-projection.ts', [

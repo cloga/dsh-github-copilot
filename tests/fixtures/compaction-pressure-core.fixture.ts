@@ -27,6 +27,7 @@ const oldSentinel = 'OLD_HISTORY_SENTINEL'
 const currentSentinel = 'CURRENT_REQUEST_SENTINEL'
 const checkpoint = 'RECOVERY_CHECKPOINT'
 const contexts: Context[] = []
+const expectedSessionFormatVersion = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.0-rc.1' ? 4 : 3
 type SummaryMode = 'stop' | 'max-tokens' | 'await-abort'
 
 interface RequestObservation {
@@ -85,7 +86,7 @@ class FixtureAdapter extends LlmAdapter {
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(['0.1.6-alpha.2', '0.2.0-rc.1']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
-  expect(SESSION_FORMAT_VERSION).toBe(3)
+  expect(SESSION_FORMAT_VERSION).toBe(expectedSessionFormatVersion)
 })
 
 afterEach(async () => {
