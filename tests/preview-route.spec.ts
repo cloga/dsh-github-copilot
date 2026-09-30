@@ -15,7 +15,10 @@ import previewPlugin from '../src/preview-route.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
-import { GITHUB_COPILOT_CREDENTIAL_KEY as KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW, GITHUB_COPILOT_PREVIEW_MODEL_ID as MODEL } from '../src/copilot-identity.ts'
+import {
+  GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
+  GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW, GITHUB_COPILOT_PREVIEW_MODEL_ID as MODEL,
+} from '../src/copilot-identity.ts'
 
 interface RecordValue { kind: 'grant'; payload: Record<string, unknown> }
 const contexts: Context[] = []
@@ -193,14 +196,16 @@ describe('plugin-owned account Copilot route', () => {
     expect(service.getView().state).toBe('idle')
     expect(fetch).not.toHaveBeenCalled()
     const models = await harness.ctx.llm.listModels(PREVIEW)
-    expect(models.map(model => [model.provider, model.id])).toEqual(items.slice(0, 4).map(item => [PREVIEW, item.id]))
+    expect(models.map(model => [model.provider, model.id]))
+      .toEqual([[PREVIEW, AUTO], ...items.slice(0, 4).map(item => [PREVIEW, item.id])])
     const discovered = service.getView()
     expect(discovered.models.map(model => [model.id, model.api])).toEqual([
       [MODEL, 'openai-responses'], ['gemini-3.8-flash', 'openai-completions'],
       ['gpt-5.6-sol-fast', 'openai-responses'], ['future-lab-r17', 'anthropic-messages'],
     ])
     expect(discovered.rejected).toContainEqual(expect.objectContaining({ id: 'disabled-lab' }))
-    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id)).toEqual(items.slice(0, 4).map(item => item.id))
+    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id))
+      .toEqual([AUTO, ...items.slice(0, 4).map(item => item.id)])
     await service.refresh()
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(service.getView())).not.toMatch(/synthetic-current-access|synthetic-account-a|accountKey/)
@@ -224,6 +229,16 @@ describe('plugin-owned account Copilot route', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('publishes Auto as a virtual picker entry but refuses unresolved adapter dispatch', async () => {
+    const harness = await runtime()
+    await expect(harness.adapter.resolveModel(PREVIEW, AUTO)).resolves.toMatchObject({
+      provider: PREVIEW, id: AUTO, name: 'Auto', inputModalities: ['text', 'image'],
+    })
+    await expect(harness.adapter.prepareCall(PREVIEW, AUTO)).rejects.toThrow('COPILOT_AUTO_ROUTE_UNRESOLVED')
+    const models = await harness.ctx.llm.listModels(PREVIEW)
+    expect(models[0]).toMatchObject({ provider: PREVIEW, id: AUTO, name: 'Auto' })
+  })
+
   it('does not refresh OAuth or discover for a signed-out catalog', async () => {
     const fetch = vi.fn(async () => { throw new Error('Unexpected OAuth or metadata request') })
     stubFetch(fetch, true)
@@ -245,9 +260,9 @@ describe('plugin-owned account Copilot route', () => {
       stubFetch(fetch, true)
       const harness = await runtime(grant(), { accountModelTtlMs: 1000, accountModelFailureCooldownMs: 2000 })
       const service = harness.ctx.get('githubCopilotPreview')!
-      expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(1)
+      expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(2)
       clock.mockReturnValue(start + 999)
-      expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(1)
+      expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(2)
       expect(fetch).toHaveBeenCalledTimes(1)
       clock.mockReturnValue(start + 1000)
       fetch.mockRejectedValue(new Error('synthetic-current-access private provider body'))
@@ -273,7 +288,7 @@ describe('plugin-owned account Copilot route', () => {
     const fetch = vi.fn(async () => catalogResponse())
     stubFetch(fetch, true)
     const harness = await runtime()
-    expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(1)
+    expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(2)
     const prepared = await harness.adapter.prepareCall(PREVIEW, MODEL)
     harness.replace(grant({ refresh: 'synthetic-account-b', access: 'synthetic-access-b', availableModelIds: ['future-account-b'] }))
     const service = harness.ctx.get('githubCopilotPreview')!
@@ -281,7 +296,8 @@ describe('plugin-owned account Copilot route', () => {
     expect(service.getView().models).toEqual([])
     expect(fetch).toHaveBeenCalledTimes(1)
     fetch.mockImplementation(async () => catalogResponse([catalogItem('future-account-b')]))
-    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => [model.provider, model.id])).toEqual([[PREVIEW, 'future-account-b']])
+    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => [model.provider, model.id]))
+      .toEqual([[PREVIEW, AUTO], [PREVIEW, 'future-account-b']])
     const staleCall = async () => {
       for await (const _chunk of prepared.stream({ provider: PREVIEW, model: MODEL, messages: [] })) { /* Consume the old lease. */ }
     }
@@ -1227,7 +1243,7 @@ describe('plugin-owned account Copilot route', () => {
       throw new Error('unexpected synthetic URL')
     }), true)
     const harness = await runtime(grant({ expires: 0 }))
-    if (entry === 'catalog') expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(1)
+    if (entry === 'catalog') expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(2)
     const result = await call(harness.ctx)
     expect(result.assembler.finish).toEqual({ kind: 'stop' })
     expect(harness.modify).toHaveBeenCalledTimes(1)
@@ -1325,7 +1341,7 @@ describe('plugin-owned account Copilot route', () => {
       releaseToken!()
       const [reply, models] = await Promise.all([request, catalog])
       expect(reply.assembler.finish).toEqual({ kind: 'stop' })
-      expect(models.map(model => model.id)).toEqual([MODEL])
+      expect(models.map(model => model.id)).toEqual([AUTO, MODEL])
       expect(urls.filter(url => url.endsWith('/copilot_internal/v2/token'))).toHaveLength(1)
       expect(urls.filter(url => url.endsWith('/models'))).toHaveLength(3)
       expect(urls.filter(url => url.endsWith('/responses'))).toHaveLength(1)

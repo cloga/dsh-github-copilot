@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DSH Auto model - interaction mockup</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Segoe UI", system-ui, sans-serif; background: #0b0e14; color: #e9edf6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button { font: inherit; cursor: pointer; }
+    .frame { min-height: 100vh; display: grid; grid-template-columns: 258px minmax(0, 1fr); }
+    aside { background: #10141c; border-right: 1px solid #252b39; padding: 28px 18px; }
+    .brand { display: flex; align-items: center; gap: 11px; font-size: 16px; font-weight: 720; padding: 0 10px 32px; }
+    .mark { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: white; background: linear-gradient(145deg, #566cff, #8c61fc); }
+    .section-label { color: #7f899c; font-size: 11px; letter-spacing: .13em; font-weight: 700; padding: 0 12px 12px; }
+    .nav { display: block; color: #a7b0c1; border-radius: 10px; padding: 12px; margin-bottom: 5px; font-size: 14px; }
+    .nav.active { color: #f5f7fd; background: #222b42; }
+    .sidebar-foot { margin-top: 52px; padding: 14px 12px; border-top: 1px solid #242b38; color: #8e9aab; font-size: 12px; line-height: 1.6; }
+    main { min-width: 0; padding: 26px clamp(20px, 5vw, 80px) 32px; }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #9ca7b9; font-size: 13px; }
+    .tag { color: #9fb3ff; border: 1px solid #353e60; background: #202945; border-radius: 99px; padding: 6px 10px; font-size: 11px; }
+    .content { max-width: 860px; margin: 46px auto 0; }
+    .eyebrow { color: #9da7bb; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+    h1 { font-size: clamp(24px, 3vw, 34px); line-height: 1.2; letter-spacing: -.03em; margin: 10px 0 11px; }
+    .intro { color: #a3aec1; font-size: 14px; line-height: 1.7; margin: 0 0 27px; }
+    .tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid #293144; gap: 25px; margin-bottom: 25px; }
+    .tabs button { color: #8d9aaf; background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 12px 3px; font-size: 14px; }
+    .tabs button.active { color: #d8e3ff; border-color: #758cff; }
+    .timeline { display: grid; gap: 16px; min-height: 275px; }
+    .bubble { border: 1px solid #2b3342; background: #171c27; border-radius: 15px; padding: 17px 20px; }
+    .bubble.user { margin-left: 12%; background: #20283a; border-color: #34415f; }
+    .bubble h2 { font-size: 12px; font-weight: 650; margin: 0 0 9px; color: #a5b2c8; }
+    .bubble p { font-size: 14px; line-height: 1.6; margin: 0; }
+    .answer-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-top: 18px; color: #8995a8; font-size: 12px; }
+    .footer-actions, .footer-meta { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .footer-meta { position: relative; }
+    .footer-actions { font-size: 16px; letter-spacing: .06em; }
+    .route { color: #aebbd0; }
+    .explain { font-size: 12px; }
+    .explain summary { display: inline-grid; place-items: center; width: 17px; height: 17px; border: 1px solid #66748a; border-radius: 50%; cursor: pointer; list-style: none; font-size: 11px; line-height: 1; }
+    .explain summary::-webkit-details-marker { display: none; }
+    .explain span { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 2; width: min(320px, 80vw); padding: 10px 12px; border: 1px solid #3e4b65; border-radius: 9px; background: #222b3b; color: #d5deef; line-height: 1.5; box-shadow: 0 8px 24px #0008; }
+    .child-card { border: 1px solid #465477; background: #1b2434; border-radius: 15px; padding: 18px 20px; }
+    .child-card[hidden], .child-override[hidden] { display: none; }
+    .child-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+    .child-heading strong { font-size: 13px; }
+    .child-heading span { font-size: 11px; color: #97a7c1; }
+    .child-card p { font-size: 13px; color: #b7c5d9; line-height: 1.5; margin: 0 0 13px; }
+    .child-override { background: transparent; border: 1px solid #43526e; color: #bcccdf; border-radius: 8px; padding: 6px 9px; font-size: 11px; margin-bottom: 12px; }
+    .composer { margin-top: 26px; border: 1px solid #596fbb; background: #171c29; border-radius: 16px; box-shadow: 0 0 0 4px #28376130; padding: 18px; position: relative; }
+    .input-placeholder { color: #8996ad; font-size: 14px; min-height: 65px; }
+    .toolbar { display: flex; align-items: center; gap: 9px; }
+    .tool { background: #252d3e; color: #c9d5e9; border: 1px solid #394357; border-radius: 9px; padding: 8px 11px; font-size: 12px; }
+    .tool:hover, .option:hover { background: #303b56; }
+    .picker-trigger { background: #263457; border-color: #5367a5; color: #dfe7ff; }
+    .send { margin-left: auto; width: 32px; height: 32px; border: 0; border-radius: 10px; background: #6887ff; color: white; }
+    .menu { display: none; position: absolute; bottom: 59px; left: 18px; width: min(395px, calc(100% - 36px)); max-height: min(540px, 70vh); overflow-y: auto; background: #202634; border: 1px solid #3c465b; border-radius: 16px; box-shadow: 0 20px 55px #000a; padding: 8px; z-index: 5; }
+    .menu.open { display: block; }
+    .menu-title { display: flex; justify-content: space-between; color: #a4b0c5; font-size: 12px; padding: 10px 12px 8px; }
+    .menu-title span:last-child { color: #8f9aad; }
+    .provider-header { display: flex; justify-content: space-between; align-items: center; color: #d5deef; font-size: 12px; font-weight: 700; padding: 13px 12px 5px; }
+    .provider-header span { font-size: 10px; font-weight: 500; color: #93a1b8; }
+    .option { display: flex; align-items: center; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 10px; color: #e9edf6; padding: 12px; gap: 12px; }
+    .option.active { background: #2a3556; }
+    .option .icon { width: 31px; height: 31px; border-radius: 9px; display: grid; place-items: center; background: #394e91; color: #f2f4ff; }
+    .option .model-icon { background: #39404f; }
+    .option .option-text { display: grid; gap: 4px; flex: 1; }
+    .option small { color: #9ba8bd; font-size: 11px; line-height: 1.4; }
+    .check { color: #91a7ff; font-weight: 700; }
+    .divider { border-top: 1px solid #374152; margin: 7px 7px; }
+    .footnote { color: #8290a5; font-size: 12px; line-height: 1.6; margin: 16px 3px 0; }
+    .goal-steps { display: grid; gap: 10px; margin-top: 4px; }
+    .goal-step { border: 1px solid #334057; border-radius: 10px; padding: 10px 12px; color: #b4c0d2; font-size: 12px; }
+    .goal-step.current { border-color: #5b73c0; background: #242e4c; color: #e6eaff; }
+    @media (max-width: 740px) { .frame { grid-template-columns: 1fr; } aside { display: none; } main { padding: 20px; } .content { margin-top: 32px; } .bubble.user { margin-left: 0; } .child-heading { flex-wrap: wrap; } }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <aside>
+      <div class="brand"><span class="mark">✦</span> DeepSeek Harness</div>
+      <div class="section-label">WORKSPACE</div>
+      <div class="nav active">◈ &nbsp; Auto model design</div>
+      <div class="nav">◻ &nbsp; Sessions</div>
+      <div class="nav">◎ &nbsp; Goals</div>
+      <div class="sidebar-foot">Interaction concept only.<br>Not connected to a model or account.</div>
+    </aside>
+    <main>
+      <header class="top"><span>Sessions &nbsp; / &nbsp; Auto model design</span><span class="tag">INTERACTIVE MOCKUP</span></header>
+      <div class="content">
+        <div class="eyebrow">Model routing · MVP concept</div>
+        <h1>Auto within GitHub Copilot. Manual models everywhere else.</h1>
+        <p class="intro">Pick Auto under GitHub Copilot to route between eligible Copilot models. Other providers remain available for manual selection; Auto never crosses provider boundaries. The actual model appears beside the timestamp at the end of each completed answer.</p>
+        <div class="tabs" role="tablist" aria-label="Example scenario">
+          <button id="chatTab" role="tab" aria-selected="true" class="active">Chat turn</button>
+          <button id="goalTab" role="tab" aria-selected="false">Goal rounds</button>
+          <button id="childTab" role="tab" aria-selected="false">Subagent</button>
+        </div>
+        <div class="timeline" aria-live="polite">
+          <div class="bubble user"><h2 id="userLabel">You · new turn</h2><p id="userText">Explain why this function returns an empty result.</p></div>
+          <div class="bubble">
+            <p id="assistantText">I’ll inspect the function and its call site, then explain the condition that produces the empty result.</p>
+            <div id="scenarioSteps" class="goal-steps" hidden></div>
+            <div class="answer-footer">
+              <span class="footer-actions" aria-label="Answer actions">▢ &nbsp; ♡ &nbsp; ⋯</span>
+              <span class="footer-meta"><span>▤ Usage 12.4k tok</span><span>◷ Ran for 18s</span><time datetime="2026-09-30T22:12:00+08:00">22:12</time><span id="realModel" class="route">Auto · Copilot model A</span><details class="explain"><summary aria-label="Why this model" title="Why this model">?</summary><span id="reason">Routing reason: bounded explanation · The model stays fixed through tools and follow-up steps in this turn.</span></details></span>
+            </div>
+          </div>
+          <div class="child-card" id="childCard" hidden>
+            <div class="child-heading"><strong>↳ Subagent · regression investigator</strong><span>Separate session · own turn</span></div>
+            <button class="child-override" id="childOverride" type="button">Preview explicit child override</button>
+            <p>I’ll trace the failing test and check the affected API contract.</p>
+            <div class="answer-footer">
+              <span class="footer-actions" aria-label="Subagent answer actions">▢ &nbsp; ♡ &nbsp; ⋯</span>
+              <span class="footer-meta"><span>▤ Usage 8.2k tok</span><span>◷ Ran for 12s</span><time datetime="2026-09-30T22:13:00+08:00">22:13</time><span id="childModel" class="route">Inherited · Copilot model A</span><details class="explain"><summary aria-label="Why this model" title="Why this model">?</summary><span id="childReason">Native MVP behavior: the child inherits the parent’s resolved concrete model.</span></details></span>
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="menu" id="picker" aria-label="Model picker">
+            <div class="menu-title"><span>Choose a model</span><span>Across providers</span></div>
+            <div class="provider-header">GitHub Copilot <span>Account models</span></div>
+            <button class="option active" data-model="auto"><span class="icon">✦</span><span class="option-text"><strong>Auto</strong><small>Choose one eligible Copilot model per turn. Copilot only.</small></span><span class="check">✓</span></button>
+            <button class="option" data-model="copilot-a"><span class="icon model-icon">A</span><span class="option-text"><strong>Copilot model A</strong><small>Use this specific Copilot model.</small></span><span class="check"></span></button>
+            <button class="option" data-model="copilot-b"><span class="icon model-icon">B</span><span class="option-text"><strong>Copilot model B</strong><small>Use this specific Copilot model.</small></span><span class="check"></span></button>
+            <div class="divider"></div>
+            <div class="provider-header">DeepSeek <span>Manual selection only</span></div>
+            <button class="option" data-model="deepseek-chat"><span class="icon model-icon">D</span><span class="option-text"><strong>DeepSeek Chat</strong><small>Different provider · no Copilot Auto routing.</small></span><span class="check"></span></button>
+          </div>
+          <div class="input-placeholder">Ask a follow-up or continue this goal…</div>
+          <div class="toolbar"><button class="tool" aria-label="Add attachment">＋</button><button class="tool picker-trigger" id="trigger" aria-expanded="false" aria-controls="picker">GitHub Copilot · Auto ⌄</button><button class="send" aria-label="Send" title="Illustration only">↑</button></div>
+        </div>
+        <p class="footnote">Concept only: the answer-footer model label is a proposed addition, not current DSH UI; current DSH shows the route inside the end-of-turn usage details in detailed mode. Copilot model A/B are placeholders, not account models or benchmark rankings. In the plugin-only MVP, native children inherit the parent’s resolved concrete model; independent child Auto is deferred because unchanged Core does not preserve enough Auto intent and override evidence. Selecting through the current native picker also updates the future global default.</p>
+      </div>
+    </main>
+  </div>
+  <script>
+    const picker = document.querySelector('#picker');
+    const trigger = document.querySelector('#trigger');
+    const options = [...document.querySelectorAll('[data-model]')];
+    const models = {
+      'copilot-a': { provider: 'GitHub Copilot', name: 'Copilot model A' },
+      'copilot-b': { provider: 'GitHub Copilot', name: 'Copilot model B' },
+      'deepseek-chat': { provider: 'DeepSeek', name: 'DeepSeek Chat' }
+    };
+    let selected = 'auto';
+    let scenario = 'chat';
+    let childOverridden = false;
+    function render() {
+      for (const tab of ['chat', 'goal', 'child']) {
+        const element = document.querySelector(`#${tab}Tab`);
+        element.classList.toggle('active', scenario === tab);
+        element.setAttribute('aria-selected', String(scenario === tab));
+      }
+      const auto = selected === 'auto';
+      const parentModel = auto ? models['copilot-a'] : models[selected];
+      const real = auto && scenario === 'goal' ? models['copilot-b'] : parentModel;
+      const childModel = auto ? (childOverridden ? models['copilot-b'] : real) : parentModel;
+      trigger.textContent = `${parentModel.provider} · ${auto ? 'Auto' : parentModel.name} ⌄`;
+      document.querySelector('#realModel').textContent = `${auto ? 'Auto' : real.provider} · ${real.name}`;
+      document.querySelector('#userLabel').textContent = scenario === 'goal' ? 'Goal · continuation round 2' : scenario === 'child' ? 'Parent · delegate a task' : 'You · new turn';
+      document.querySelector('#userText').textContent = scenario === 'goal' ? 'Continue the goal: investigate the failing integration test and update the implementation.' : scenario === 'child' ? 'Investigate the regression in a separate subagent while I review the API change.' : 'Explain why this function returns an empty result.';
+      document.querySelector('#assistantText').textContent = scenario === 'goal' ? 'This is a new Goal round. I’ll investigate the failure, make a focused fix and run the relevant test.' : scenario === 'child' ? 'I’ll review the API change while the subagent investigates the regression.' : 'I’ll inspect the function and its call site, then explain the condition that produces the empty result.';
+      document.querySelector('#reason').textContent = auto ? (scenario === 'goal' ? 'Routing reason: broader debugging work · The model stays fixed for every step in round 2.' : scenario === 'child' ? 'Parent selected Auto · the native child inherits this turn’s resolved concrete model.' : 'Routing reason: bounded explanation · The model stays fixed through tools and follow-up steps in this turn.') : `Manual selection · Auto is off for ${parentModel.provider}.`;
+      const steps = document.querySelector('#scenarioSteps');
+      steps.hidden = scenario !== 'goal';
+      steps.innerHTML = scenario === 'goal'
+        ? '<div class="goal-step">Round 1 · inspect the issue</div><div class="goal-step current">Round 2 · debug, fix and run tests (one model throughout)</div>'
+        : '';
+      document.querySelector('#childCard').hidden = scenario !== 'child';
+      document.querySelector('#childModel').textContent = `${auto && !childOverridden ? 'Inherited' : childModel.provider} · ${childModel.name}`;
+      document.querySelector('#childReason').textContent = auto ? childOverridden
+        ? 'Explicit child model overrides Auto. The parent remains on Auto.'
+        : 'Native MVP behavior: the child inherits the parent’s resolved concrete model; independent child Auto is deferred.'
+        : `The child inherits ${parentModel.provider} / ${parentModel.name}; no Auto routing.`;
+      const override = document.querySelector('#childOverride');
+      override.hidden = !auto;
+      override.textContent = childOverridden ? 'Remove child override' : 'Preview explicit child override';
+      for (const option of options) {
+        const active = option.dataset.model === selected;
+        option.classList.toggle('active', active);
+        option.querySelector('.check').textContent = active ? '✓' : '';
+      }
+    }
+    trigger.addEventListener('click', () => {
+      const open = picker.classList.toggle('open');
+      trigger.setAttribute('aria-expanded', String(open));
+    });
+    for (const option of options) option.addEventListener('click', () => {
+      selected = option.dataset.model;
+      childOverridden = false;
+      picker.classList.remove('open');
+      trigger.setAttribute('aria-expanded', 'false');
+      render();
+    });
+    document.querySelector('#chatTab').addEventListener('click', () => { scenario = 'chat'; render(); });
+    document.querySelector('#goalTab').addEventListener('click', () => { scenario = 'goal'; render(); });
+    document.querySelector('#childTab').addEventListener('click', () => { scenario = 'child'; render(); });
+    document.querySelector('#childOverride').addEventListener('click', () => { childOverridden = !childOverridden; render(); });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { picker.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); }
+    });
+    render();
+  </script>
+</body>
+</html>

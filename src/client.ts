@@ -13,6 +13,7 @@ import type { GitHubCopilotAuthorizationView } from './authorization-controller.
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { installReasoningPresentation } from './reasoning-presentation.ts'
+import { installAutoModelPresentation } from './auto-model-presentation.ts'
 import { WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
@@ -982,12 +983,20 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }
   const searchUi = ctx.inject(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
   const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
-  // The optional Chat contribution must not hold authorization activation on older Cores.
-  const presentation = ctx.inject(['uiConversation', 'slots'], scope => installReasoningPresentation({
-    slots: scope.slots,
-    uiConversation: scope.get('uiConversation'),
-    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
-  }))
+  // Optional Chat contributions must not hold authorization activation on older Cores.
+  const presentation = ctx.inject(['uiConversation', 'slots'], scope => {
+    const capabilities = {
+      slots: scope.slots,
+      uiConversation: scope.get('uiConversation'),
+      diagnostic: (code: string) => scope.logger.warn(`[github-copilot] ${code}`),
+    }
+    const reasoning = installReasoningPresentation(capabilities)
+    const auto = installAutoModelPresentation(capabilities)
+    return () => {
+      auto()
+      reasoning()
+    }
+  })
   return async () => {
     await usageUi.dispose()
     await presentation.dispose()

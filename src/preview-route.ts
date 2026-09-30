@@ -11,7 +11,9 @@ import { estimateContextTokens, estimateMessageTokens } from '@earendil-works/pi
 import { createGitHubCopilotCredentialStore, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
-import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import {
+  GITHUB_COPILOT_AUTO_MODEL_ID, GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
+} from './copilot-identity.ts'
 import { abortable } from './http.ts'
 import { accountModelFromDescriptor, copilotPublicHeaders, createAccountProvider } from './preview-provider.ts'
 import type { AccountProviderGuard } from './preview-provider.ts'
@@ -23,6 +25,8 @@ import type { InlineConfig } from './config.ts'
 import { assessRequestBudget, calculateRequestBudget, resolveRequestBudgetPolicy, selectCompactionReasoning } from './request-budget.ts'
 import type { RequestBudgetFailure, RequestBudgetPolicy } from './request-budget.ts'
 import { installCopilotCompactionPressure } from './compaction-pressure.ts'
+import { autoModelInputModalities } from './auto-model-routing.ts'
+import { installAutoModelRouting } from './auto-model-host.ts'
 
 /** Safe request knobs; identities, model tables, endpoints and credentials are not configurable. */
 export type PreviewRouteConfig = Pick<PiAiProviderProfile,
@@ -267,18 +271,31 @@ class PreviewAdapter extends PiAiAdapter {
       if (grant === undefined || snapshot.accountKey !== copilotAccountKey(grant)) return []
       const proof = this.lifetime.proofFor(snapshot)
       if (proof === undefined || tokenFingerprint(grant.access) !== proof.tokenFingerprint || grant.expires <= Date.now()) return []
-      return snapshot.models.map(model => ({ provider, id: model.id, name: model.name, inputModalities: [...model.input] }))
+      const models = snapshot.models.filter(model => model.id !== GITHUB_COPILOT_AUTO_MODEL_ID && model.input.includes('text'))
+      if (models.length === 0) return []
+      return [
+        { provider, id: GITHUB_COPILOT_AUTO_MODEL_ID, name: 'Auto',
+          inputModalities: [...autoModelInputModalities(models)] },
+        ...models.map(model => ({ provider, id: model.id, name: model.name, inputModalities: [...model.input] })),
+      ]
     } catch { return [] }
   }
   override async resolveModel(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo> {
     owned(provider)
     const cached = this.lifetime.source.readSnapshot()
     const snapshot = await this.discoverSnapshot({ signal })
+    if (model === GITHUB_COPILOT_AUTO_MODEL_ID) {
+      const models = snapshot.models.filter(candidate => candidate.id !== GITHUB_COPILOT_AUTO_MODEL_ID
+        && candidate.input.includes('text'))
+      if (models.length === 0) throw failure('COPILOT_AUTO_NO_ELIGIBLE_MODEL', 'UNKNOWN_MODEL')
+      return { provider, id: model, name: 'Auto', inputModalities: [...autoModelInputModalities(models)] }
+    }
     const lease = await this.lease(snapshot, model, signal, cached === snapshot)
     return this.withRecovery(snapshot, signal, () => new PiAiAdapter(this.optionsFor(lease)).resolveModel(provider, model, signal))
   }
   override async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
     owned(provider)
+    if (model === GITHUB_COPILOT_AUTO_MODEL_ID) throw failure('COPILOT_AUTO_ROUTE_UNRESOLVED', 'INVALID_REQUEST')
     const cached = this.lifetime.source.readSnapshot()
     const snapshot = await this.discoverSnapshot({ signal })
     const lease = await this.lease(snapshot, model, signal, cached === snapshot)
@@ -289,6 +306,7 @@ class PreviewAdapter extends PiAiAdapter {
     const owner = this
     return (async function* () {
       owned(options.provider)
+      if (options.model === GITHUB_COPILOT_AUTO_MODEL_ID) throw failure('COPILOT_AUTO_ROUTE_UNRESOLVED', 'INVALID_REQUEST')
       const cached = owner.lifetime.source.readSnapshot()
       const snapshot = await owner.discoverSnapshot({ signal: options.signal })
       const lease = await owner.lease(snapshot, options.model, options.signal, cached === snapshot)
@@ -593,6 +611,9 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
       resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(attachments, hostPath => ctx.get('fs')?.processPathFromHostPath(hostPath), ref),
     }
   }
+  const removeAutoRoute = installAutoModelRouting(ctx, {
+    async loadModels(signal) { return (await discoverSnapshot({ signal })).models },
+  })
   const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID], new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings))
   installCopilotCompactionPressure(ctx, { resolve(request) {
     const snapshot = source.readSnapshot()
@@ -651,7 +672,12 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     lifetime.change(); provenSnapshot = undefined; snapshotProof = undefined; lastValidatedProof = undefined
     void refresh().catch(() => undefined)
   })
-  ctx.effect(() => () => { lifetime.dispose(); removeListener(); registration() })
+  ctx.effect(() => () => {
+    lifetime.dispose()
+    removeListener()
+    removeAutoRoute()
+    registration()
+  })
   void refresh().catch(() => undefined)
 }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.41 (prepared)
+
+- Add a plugin-owned virtual **Auto** model to the managed GitHub Copilot route, resolving once per Core turn to a real account model while preserving explicit selections and truthful request provenance (#174).
+- Filter image turns by account-verified image capability, keep search independently owned, and preserve native subagent concrete-route inheritance.
+- Reuse the existing local request-pressure signal and Core transactional compaction so a smaller-context Auto choice can recover with the same real model and no oversized wire request.
+- Record credential-free Auto decisions for a public turn-tail `Auto · actual model` disclosure with an inline explanation, and correct virtual-Auto model-switch guidance before it reaches the model.
+- Document the plugin-only MVP and interactive multi-provider mockup. The deterministic capacity heuristic does not claim model quality, latency, price, health, or parity with GitHub's private Auto router.
+
 ## 0.4.0-alpha.40 (prepared)
 
 - Sanitize authorization failures into allowlisted begin-stage and post-auth route-repair diagnostics in the existing Remote error field; unknown or legacy arbitrary errors remain generic.

@@ -20,7 +20,11 @@ import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCopilotCompactionPressure } from '../../src/compaction-pressure.ts'
-import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as provider } from '../../src/copilot-identity.ts'
+import { installAutoModelRouting } from '../../src/auto-model-host.ts'
+import type { AccountModelDescriptor } from '../../src/account-model-catalog.ts'
+import {
+  GITHUB_COPILOT_AUTO_MODEL_ID as autoModel, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as provider,
+} from '../../src/copilot-identity.ts'
 
 const contextWindow = 100_000
 const oldSentinel = 'OLD_HISTORY_SENTINEL'
@@ -35,6 +39,26 @@ interface RequestObservation {
   readonly model: string
   readonly text: string
   readonly maxTokens: number | undefined
+}
+
+function autoCandidate(id: string): AccountModelDescriptor {
+  return {
+    id,
+    name: id,
+    api: 'openai-responses',
+    contextWindow,
+    maxTokens: 8192,
+    input: ['text'],
+    reasoning: { advertisedEfforts: ['low', 'medium', 'high'], unmappedEfforts: [] },
+    evidence: {
+      endpoints: ['/responses'],
+      unsupportedEndpointCount: 0,
+      selectedEndpoint: '/responses',
+      apiSource: 'advertised-native',
+      policySource: 'server-enabled',
+      contextWindowSource: 'max_context_window_tokens',
+    },
+  }
 }
 
 function requestText(options: GenerateOptions): string {
@@ -133,7 +157,17 @@ async function fixture(mode: SummaryMode = 'stop') {
   ctx.provide('githubCopilotPreview', { getView: () => ({ provider }) })
   let model = 'fixture-model-A'
   let inputBudgetTokens: number | undefined
-  ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider, model }))
+  let autoLoads = 0
+  const removeAuto = installAutoModelRouting(ctx, {
+    async loadModels() {
+      autoLoads++
+      return [autoCandidate(model)]
+    },
+  })
+  ctx.effect(() => removeAuto)
+  // Exact stand-in for Core's model-selection middleware: the plugin's prepended
+  // listener must observe this resolved virtual route after awaiting next().
+  ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider, model: autoModel }))
   const failures: Array<{ code: string; message: string }> = []
   ctx.on('agent/request-error', async ({ failure }, next) => {
     failures.push({ code: failure.code, message: failure.message })
@@ -173,6 +207,7 @@ async function fixture(mode: SummaryMode = 'stop') {
 
   return {
     ctx, adapter, agent, events, failures, priced, forbiddenFetch, seedCount, originalGeneration, originalTokens,
+    autoLoads: () => autoLoads,
     oldUserSeq: oldUser!.seq,
     enable(budget = 1000, selectedModel = 'fixture-model-B') { inputBudgetTokens = budget; model = selectedModel },
     send,
@@ -197,6 +232,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
 
     expect(f.agent.options.model).toBe('fixture-model-A')
     expect(f.agent.session.requestHeader()?.config.model).toBe('fixture-model-B')
+    expect(f.autoLoads()).toBe(2)
     expect(f.failures).toEqual([{ code: 'CONTEXT_WINDOW_EXCEEDED', message: expect.stringContaining('Copilot local estimated input budget exceeded') }])
     expect(f.priced).toHaveLength(2)
     expect(f.priced[0]?.text).toContain(oldSentinel)
@@ -215,6 +251,11 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     expect(f.ctx.tokenMeter.measure(f.agent.session).totalTokens).toBeLessThan(1000)
 
     const events = f.currentEvents()
+    expect(events.filter(event => event.type === 'github-copilot/auto-model-decision')).toEqual([
+      expect.objectContaining({ data: expect.objectContaining({
+        provider, model: 'fixture-model-B', taskClass: 'fast', reason: 'short-text-turn',
+      }) }),
+    ])
     const transaction = compactionEvents(events)
     expect(transaction.map(event => event.type)).toEqual(['compaction/start', 'compaction/summary', 'compaction/end'])
     expect(transaction[1]).toMatchObject({ type: 'compaction/summary',
