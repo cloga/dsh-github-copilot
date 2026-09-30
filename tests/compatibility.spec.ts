@@ -32,19 +32,11 @@ function context(overrides: Record<string, unknown> = {}): Context {
 }
 
 describe('assertDshCompatibility', () => {
-  it('retains the original three compatibility baselines', () => {
-    expect(DSH_COMPATIBILITY.supportedReleases.slice(0, 3)).toEqual([
-      '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1',
-    ])
-  })
-
-  it('adds 0.2.0-rc.1 without dropping earlier baselines and develops against the current official release', () => {
+  it('admits only the exact current official release', () => {
     expect(DSH_COMPATIBILITY.release).toBe('0.2.0-rc.1')
     expect(DSH_COMPATIBILITY.developmentRelease).toBe('0.2.0-rc.1')
-    expect(DSH_COMPATIBILITY.supportedReleases).toEqual([
-      '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1',
-    ])
-    expect(DSH_COMPATIBILITY.peerRange).toBe('0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.2.0-rc.1')
+    expect(DSH_COMPATIBILITY.supportedReleases).toEqual(['0.2.0-rc.1'])
+    expect(DSH_COMPATIBILITY.peerRange).toBe('0.2.0-rc.1')
     expect(() => assertDshCompatibility(context({ authorization: {} })))
       .toThrow('authorization.describe')
     expect(() => assertDshCompatibility(context({ authorization: {} })))
@@ -55,7 +47,8 @@ describe('assertDshCompatibility', () => {
     const baseline = JSON.parse(readFileSync(new URL('../deployment-baseline.json', import.meta.url), 'utf8'))
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
     const current = baseline.supportedBaselines.dsh
-    expect(current.baselines.map((entry: { release: string }) => entry.release)).toEqual(DSH_COMPATIBILITY.supportedReleases)
+    expect(current.admittedReleases).toEqual(DSH_COMPATIBILITY.supportedReleases)
+    expect(current.baselines).toHaveLength(10)
     expect(current).toMatchObject({ release: '0.2.0-rc.1', tag: 'dsh-v0.2.0-rc.1', commit: '4878cdabd87d4041bdaff61d04c966883b9fd07a' })
     expect(current.baselines.at(-1)).toMatchObject({
       release: current.release, tag: current.tag, commit: current.commit,

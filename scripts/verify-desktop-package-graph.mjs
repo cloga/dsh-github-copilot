@@ -59,6 +59,7 @@ export function verifyDesktopPackageGraph(manifest, contracts) {
   const clientExternals = new Set(rawExternals)
   const declared = [...new Set([...Object.keys(dependencies), ...Object.keys(peers), ...clientExternals])].sort()
   const requiredPeers = new Set(['@deepseek-ai/dsh-authorization', '@deepseek-ai/schemastery'])
+  const currentRuntimeVersion = manifest.engines?.dsh
 
   for (const contract of contracts) {
     if (typeof contract?.id !== 'string' || !/^[a-f0-9]{64}$/u.test(contract.sourceSha256)
@@ -84,7 +85,7 @@ export function verifyDesktopPackageGraph(manifest, contracts) {
       }
       const range = peers[name]
       if (typeof range !== 'string') throw new Error(`${contract.id}: missing shared peer ${name}`)
-      if (!admits(hostVersion, range)) {
+      if (contract.runtimeVersion === currentRuntimeVersion && !admits(hostVersion, range)) {
         throw new Error(`${contract.id}: ${name}@${range} does not admit host ${hostVersion}`)
       }
     }
@@ -113,5 +114,6 @@ export function verifyDesktopPackageGraph(manifest, contracts) {
     id: contract.id,
     sourceSha256: contract.sourceSha256,
     packageCount: contract.packageCount,
+    compatibilityChecked: contract.runtimeVersion === currentRuntimeVersion,
   }))
 }

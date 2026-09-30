@@ -21,6 +21,7 @@ export async function describeRepository(root = repositoryRoot) {
     boundaries: contract.boundaries,
     tasks: contract.tasks,
     scripts: pkg.scripts,
+    admittedReleases: baseline.supportedBaselines.dsh.admittedReleases,
     baselines: baseline.supportedBaselines.dsh.baselines.map(({ release, commit, perModelApi }) => ({
       release, commit, perModelApi,
     })),

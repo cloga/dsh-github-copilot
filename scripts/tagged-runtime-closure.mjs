@@ -13,7 +13,7 @@ export function assertTaggedRuntimeClosure(workflow) {
   }
   const imageOffload = blocks.findIndex(block => /^        run: pnpm install --frozen-lockfile --filter '@deepseek-ai\/dsh-compaction-image-offload\.\.\.'\s*$/m.test(block))
   if (imageOffload < 0 || imageOffload >= prepare) {
-    throw new Error('0.1.6 tagged runtime requires the image-offload dependency closure before preparation')
+    throw new Error('tagged runtime requires the image-offload dependency closure before preparation')
   }
   if (!/^        working-directory: dsh-upstream\s*$/m.test(blocks[imageOffload])) {
     throw new Error('tagged image-offload closure must be installed in the pinned Core checkout')
@@ -27,7 +27,7 @@ export function assertTaggedRuntimeClosure(workflow) {
   }
   const compaction = blocks.findIndex(block => /^        run: pnpm install --frozen-lockfile --filter '@deepseek-ai\/dsh-agent-loop\.\.\.' --filter '@deepseek-ai\/dsh-compaction-basic\.\.\.'\s*$/m.test(block))
   if (compaction < 0 || compaction >= prepare) {
-    throw new Error('alpha2 tagged runtime requires the compaction dependency closure before preparation')
+    throw new Error('tagged runtime requires the compaction dependency closure before preparation')
   }
   if (!/^        working-directory: dsh-upstream\s*$/m.test(blocks[compaction])) {
     throw new Error('tagged compaction closure must be installed in the pinned Core checkout')

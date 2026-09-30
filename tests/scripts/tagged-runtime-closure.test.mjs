@@ -20,7 +20,7 @@ for (const filename of ['ci.yml', 'release.yml']) {
     assert.throws(() => assertTaggedRuntimeClosure(source.replace(compactionCommand, `# ${compactionCommand}`)), /compaction dependency closure before preparation/)
     if (filename === 'ci.yml') {
       const block = source.split(/(?=^      - )/m).find(part => part.includes(compactionCommand))
-      assert.match(block, /^        if: matrix\.dsh\.release == '0\.1\.6-alpha\.2' \|\| matrix\.dsh\.release == '0\.2\.0-rc\.1'\s*$/m)
+      assert.doesNotMatch(block, /^        if:/m)
     }
   })
 }

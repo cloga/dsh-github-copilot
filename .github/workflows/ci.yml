@@ -18,44 +18,20 @@ jobs:
         os:
           - ubuntu-latest
           - windows-latest
-        dsh:
-          - release: 0.1.1-rc.2
-            repository: cloga/deepseek-harness
-            commit: a772dbbde82780bff2b9394427e9f0a24cafa1d5
-          - release: 0.1.2-rc.1
-            repository: deepseek-ai/deepseek-harness
-            commit: a66e4702047846cdaa10c66c9d3df3951f5ea70d
-          - release: 0.1.3-alpha.1
-            repository: deepseek-ai/deepseek-harness
-            commit: d347e703908d0406b7a7ef80e3a0e594d86b2215
-          - release: 0.1.5-alpha.1
-            repository: deepseek-ai/deepseek-harness
-            commit: 5dda764ed3aa172535a7967b06ff95d9cbfe536a
-          - release: 0.1.5-alpha.2
-            repository: deepseek-ai/deepseek-harness
-            commit: b2e3b2a0125854567a4a5fcba75782e42fe84901
-          - release: 0.1.5-rc.1
-            repository: deepseek-ai/deepseek-harness
-            commit: 183f08e9c6dde7e36cd2318eaee70b0da08fb35e
-          - release: 0.1.5-rc.2
-            repository: deepseek-ai/deepseek-harness
-            commit: fb2c4b9e698e30edb738bca4cf0618587db7d203
-          - release: 0.1.6-alpha.1
-            repository: deepseek-ai/deepseek-harness
-            commit: 0a15e36e7f82b6ed45af6fa9759f29b40dcd965d
-          - release: 0.1.6-alpha.2
-            repository: deepseek-ai/deepseek-harness
-            commit: ddefc45fbc7f8e46dd73185e68295696d1297887
-          - release: 0.2.0-rc.1
-            repository: deepseek-ai/deepseek-harness
+        include:
+          - os: ubuntu-latest
+            release: 0.2.0-rc.1
+            commit: 4878cdabd87d4041bdaff61d04c966883b9fd07a
+          - os: windows-latest
+            release: 0.2.0-rc.1
             commit: 4878cdabd87d4041bdaff61d04c966883b9fd07a
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
         with:
-          repository: ${{ matrix.dsh.repository }}
-          ref: ${{ matrix.dsh.commit }}
+          repository: deepseek-ai/deepseek-harness
+          ref: ${{ matrix.commit }}
           path: dsh-upstream
           persist-credentials: false
       - uses: pnpm/action-setup@v6
@@ -68,45 +44,35 @@ jobs:
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
       - name: Install optional Chat verification closure
-        if: matrix.dsh.release != '0.1.1-rc.2'
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-client-ui-chat...'
       - run: pnpm verify:upstream -- dsh-upstream
       - name: Verify reasoning presentation with real Core services
-        if: matrix.dsh.release != '0.1.1-rc.2'
         run: pnpm verify:reasoning-ui -- dsh-upstream
       - name: Verify real Core config integration
         run: pnpm verify:controlled-core -- dsh-upstream
       - name: Install tagged Session and Remote verification closure
-        if: matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-api-session-controller...'
       - name: Install compaction recovery verification closure
-        if: matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop...' --filter '@deepseek-ai/dsh-compaction-basic...'
-      - name: Install alpha2 subagent descriptor verification closure
-        if: matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'
+      - name: Install subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
-      - name: Install 0.1.6 image-offload verification closure
-        if: matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'
+      - name: Install image-offload verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-compaction-image-offload...'
       - name: Install tagged search verification closure
-        if: matrix.dsh.release != '0.1.1-rc.2'
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
-      - name: Prepare unchanged alpha tagged-source runtime verification
-        if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'
+      - name: Prepare exact DSH 0.2.0-rc.1 tagged-source runtime verification
         shell: bash
         run: |
-          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.dsh.release }}"
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.release }}"
       - name: Build plugin Client for pinned Core selector regression
-        if: matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'
         run: pnpm build
-      - name: Exercise actual alpha runtime without building or patching Core
-        if: matrix.dsh.release == '0.1.3-alpha.1' || matrix.dsh.release == '0.1.5-alpha.1' || matrix.dsh.release == '0.1.5-alpha.2' || matrix.dsh.release == '0.1.5-rc.1' || matrix.dsh.release == '0.1.5-rc.2' || matrix.dsh.release == '0.1.6-alpha.1' || matrix.dsh.release == '0.1.6-alpha.2' || matrix.dsh.release == '0.2.0-rc.1'
+      - name: Exercise actual DSH 0.2 runtime without building or patching Core
         shell: bash
         run: |
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts"
@@ -120,14 +86,11 @@ jobs:
           pnpm verify:tarball -- "artifacts/dsh-github-copilot-$version.tgz"
 
   published-adapter:
-    name: Published adapter (${{ matrix.release }}, ${{ matrix.os }})
+    name: Published adapter (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        # 0.1.3-alpha.1 has no standalone npm artifacts; the 0.1.5/0.1.6 targets are source targets.
-        # Every actual alpha runtime is exercised in the unchanged tagged-source job above.
-        release: [0.1.2-rc.1, 0.2.0-rc.1]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -142,7 +105,7 @@ jobs:
       - name: Prepare an isolated plugin fixture for published Core APIs
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release "${{ matrix.release }}"
+          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release 0.2.0-rc.1
       - name: Install unchanged public dependency artifacts
         shell: bash
         run: |
@@ -151,11 +114,11 @@ jobs:
       - name: Verify actual dependency paths and class identities
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release "${{ matrix.release }}"
+          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release 0.2.0-rc.1
       - name: Typecheck and exercise the published native adapter
         shell: bash
         env:
-          DSH_PUBLISHED_CORE_RELEASE: ${{ matrix.release }}
+          DSH_PUBLISHED_CORE_RELEASE: 0.2.0-rc.1
         run: |
           cd "$RUNNER_TEMP/copilot-published-core"
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
