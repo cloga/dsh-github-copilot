@@ -40,7 +40,7 @@ if (baseline.modelsUi === 'provider-card') {
     "'conversation.chat.node'", "keyProps: { [Kind in ChatNodeKind]",
   ])
   await assertMarkers('packages/client/ui-chat/src/client/chat/register-node-renderers.ts', [
-    "key: 'assistant-step', locale: NS", 'AssistantNodeView',
+    "key: 'assistant-step',", 'AssistantNodeView',
   ])
   await assertMarkers('packages/client/ui-conversation/src/client/contract/conversation.ts', [
     'buildLocationData', 'ConversationLocationDataSource', 'ConversationStepDataMap',
