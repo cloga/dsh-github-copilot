@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.40 (prepared)
+
+- Sanitize authorization failures into allowlisted begin-stage and post-auth route-repair diagnostics in the existing Remote error field; unknown or legacy arbitrary errors remain generic.
+- Stop retaining or logging raw authorization errors, including message, URL, response body, token, device code, and nested cause content; render safe stage-specific next steps.
+- Add regressions for cancellation, successful authorization, route-repair failure, nested causes, secret-bearing errors, arbitrary thrown values, and backward-compatible generic Client behavior (#172).
+- Diagnostics identify only where the flow failed; they do not explain or resolve the underlying OAuth failure.
+
 ## 0.4.0-alpha.39 (prepared)
 
 - Qualify the exact official DSH and signed Windows Desktop `0.2.0-rc.2` peer graph; retain rc.1 as historical evidence.
