@@ -58,7 +58,7 @@ export async function planTask(task, root = repositoryRoot) {
     ...area,
     cwd: 'repository root',
     commands: commands.map(argv => ({ argv, executed: false })),
-    delivery: 'Issue -> feature branch -> focused tests -> complete gate -> review -> authorized merge; important updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Ask before profile installation or interrupting restart; report any publication blocker.',
+    delivery: 'Issue -> feature branch -> focused tests -> complete gate -> reviewed merge without a separate approval prompt; important updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Ask before profile installation or interrupting restart; report any publication blocker.',
     boundaries: description.boundaries,
   }
 }

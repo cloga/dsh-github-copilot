@@ -17,14 +17,14 @@
       "scopeException": "separate-explicit-human-request-only"
     },
     "diagnostics": "Repository checks only; no live profile, credential, network or model calls",
-    "approvalRequired": ["merge", "install into a user profile", "sign-out", "worktree checkout"],
+    "approvalRequired": ["install into a user profile", "sign-out", "worktree checkout"],
     "releaseDelivery": {
       "mode": "important-update-follow-through",
       "importantChanges": ["user-visible-feature", "behavior-fix", "compatibility-fix", "security-fix", "stability-fix"],
       "repeatApprovalRequired": false,
       "userRestrictionsTakePrecedence": true,
       "otherChangesRequireExplicitReleaseRequest": true,
-      "requiredConditions": ["authorized-merge", "green-required-ci", "fresh-annotated-tag", "verified-release-assets"],
+      "requiredConditions": ["reviewed-merge", "green-required-ci", "fresh-annotated-tag", "verified-release-assets"],
       "completionEvidence": ["published-release-url", "tag-and-commit", "asset-and-sha256", "npm-version-and-integrity"]
     },
     "attribution": "Assisted-by identifies the actual assisting tool; never infer a co-author from a model provider"

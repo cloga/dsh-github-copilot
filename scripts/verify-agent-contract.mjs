@@ -19,7 +19,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }
   require(implementation.unsupportedCapability === 'report-limitation-and-plugin-local-alternative', 'plugin-only missing capabilities must not trigger Core patches')
   require(implementation.scopeException === 'separate-explicit-human-request-only', 'plugin-only scope must not expand from an inferred compatibility task')
-  require(contract.boundaries?.approvalRequired?.includes('merge'), 'merge approval boundary is missing')
+  require(!contract.boundaries?.approvalRequired?.includes('merge'), 'merge must not require a separate approval')
   require(!contract.boundaries?.approvalRequired?.includes('release'), 'release delivery must not require a second blanket release approval')
   for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {
     require(contract.boundaries?.approvalRequired?.includes(boundary), `${boundary} approval boundary is missing`)
@@ -28,7 +28,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(release?.mode === 'important-update-follow-through' && release.repeatApprovalRequired === false, 'release delivery follow-through is missing')
   require(release.userRestrictionsTakePrecedence === true && release.otherChangesRequireExplicitReleaseRequest === true, 'release delivery must respect user scope and exclude implicit unrelated releases')
   require(JSON.stringify(release.importantChanges) === JSON.stringify(['user-visible-feature', 'behavior-fix', 'compatibility-fix', 'security-fix', 'stability-fix']), 'release delivery change classes differ')
-  require(JSON.stringify(release.requiredConditions) === JSON.stringify(['authorized-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets']), 'release delivery prerequisites differ')
+  require(JSON.stringify(release.requiredConditions) === JSON.stringify(['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets']), 'release delivery prerequisites differ')
   require(JSON.stringify(release.completionEvidence) === JSON.stringify(['published-release-url', 'tag-and-commit', 'asset-and-sha256', 'npm-version-and-integrity']), 'release delivery completion evidence differs')
   const file = async path => {
     require(typeof path === 'string' && !path.startsWith('/') && !path.includes('..') && !path.includes('\\') && !path.includes(':'), 'unsafe relative path')

@@ -38,17 +38,19 @@ test('important updates carry release follow-through without a second approval p
   assert.equal(policy.repeatApprovalRequired, false)
   assert.equal(policy.userRestrictionsTakePrecedence, true)
   assert.equal(policy.otherChangesRequireExplicitReleaseRequest, true)
-  assert.deepEqual(policy.requiredConditions, ['authorized-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets'])
+  assert.deepEqual(policy.requiredConditions, ['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets'])
   assert.deepEqual(policy.completionEvidence, ['published-release-url', 'tag-and-commit', 'asset-and-sha256', 'npm-version-and-integrity'])
   assert.ok(plan.commands.some(command => command.argv[0] === 'node' && command.argv[1] === '--test'
     && command.argv.includes('tests/scripts/npm-distribution.test.mjs')))
   assert.ok(!plan.commands.some(command => command.argv.includes('vitest')
     && command.argv.some(arg => arg.startsWith('tests/scripts/'))))
-  assert.ok(!plan.boundaries.approvalRequired.includes('release'))
-  for (const boundary of ['merge', 'install into a user profile', 'sign-out', 'worktree checkout']) {
+  for (const boundary of ['merge', 'release']) {
+    assert.ok(!plan.boundaries.approvalRequired.includes(boundary))
+  }
+  for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {
     assert.ok(plan.boundaries.approvalRequired.includes(boundary))
   }
-  assert.match(plan.delivery, /important updates continue to verified Release/)
+  assert.match(plan.delivery, /reviewed merge without a separate approval prompt; important updates continue to verified Release/)
   assert.ok(plan.commands.every(command => command.executed === false))
 })
 
@@ -57,17 +59,18 @@ test('contract validation rejects a redundant release prompt or weakened release
   try {
     const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
     await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
-    for (const mutate of [
-      contract => contract.boundaries.approvalRequired.push('release'),
-      contract => { contract.boundaries.releaseDelivery.repeatApprovalRequired = true },
-      contract => { contract.boundaries.releaseDelivery.userRestrictionsTakePrecedence = false },
-      contract => { contract.boundaries.releaseDelivery.requiredConditions = ['authorized-merge'] },
-      contract => { contract.boundaries.releaseDelivery.completionEvidence = [] },
+    for (const [mutate, message] of [
+      [contract => contract.boundaries.approvalRequired.push('release'), /release delivery/],
+      [contract => contract.boundaries.approvalRequired.push('merge'), /merge must not require a separate approval/],
+      [contract => { contract.boundaries.releaseDelivery.repeatApprovalRequired = true }, /release delivery/],
+      [contract => { contract.boundaries.releaseDelivery.userRestrictionsTakePrecedence = false }, /release delivery/],
+      [contract => { contract.boundaries.releaseDelivery.requiredConditions = ['reviewed-merge'] }, /release delivery/],
+      [contract => { contract.boundaries.releaseDelivery.completionEvidence = [] }, /release delivery/],
     ]) {
       const contract = structuredClone(original)
       mutate(contract)
       await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
-      await assert.rejects(verifyAgentContract(root), /release delivery/)
+      await assert.rejects(verifyAgentContract(root), message)
     }
   } finally { await rm(root, { recursive: true, force: true }) }
 })
