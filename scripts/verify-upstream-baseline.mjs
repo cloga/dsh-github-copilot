@@ -69,10 +69,11 @@ if (baseline.perModelApi === 'model-entry') {
   ])
 }
 if (baseline.fileContentHelper === 'contentHasFile') {
-  await assertMarkers('packages/llm/llm/src/content.ts', [
-    'export function contentHasFile',
-    "block.type === 'tool-result' && contentHasFile(block.content)",
-  ])
+  const contentMarkers = ['export function contentHasFile', "block.type === 'file'"]
+  if (baseline.release !== '0.2.0-rc.1') {
+    contentMarkers.push("block.type === 'tool-result' && contentHasFile(block.content)")
+  }
+  await assertMarkers('packages/llm/llm/src/content.ts', contentMarkers)
   await assertMarkers('packages/llm/llm/src/index.ts', [
     'contentHasFile, contentHasImage',
   ])
