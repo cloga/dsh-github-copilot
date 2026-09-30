@@ -40,7 +40,8 @@ function runtime(options: {
   withFlow?: boolean
   availableModelIds?: readonly string[]
   providerProfile?: unknown
-  beginFailure?: Error
+  beginFailure?: unknown
+  authorizationOutcome?: 'authorized' | 'cancelled'
   beforeMutate?: (namespace: string, operations: readonly { op: 'set' | 'unset' }[]) => void
   readFailure?: boolean
 } = {}): Runtime {
@@ -119,9 +120,9 @@ function runtime(options: {
     })
     if (options.beginFailure !== undefined) throw options.beginFailure
     await new Promise<void>((resolve) => { resolveAuthorization = resolve })
-    configured = true
+    configured = options.authorizationOutcome !== 'cancelled'
     resolveAuthorization = undefined
-    return { status: 'authorized' as const }
+    return { status: options.authorizationOutcome ?? 'authorized' }
   })
   const authorization = {
     describe: () => options.withFlow === false ? undefined : ({
@@ -149,6 +150,7 @@ function runtime(options: {
   const ctx = new Context()
   ctx.get = ((name: string) => services.get(name)) as typeof ctx.get
   ctx.logger.error = vi.fn()
+  ctx.logger.warn = vi.fn()
   const controller = new GitHubCopilotAuthorizationController(ctx)
   return {
     ctx,
@@ -457,6 +459,8 @@ describe('GitHubCopilotAuthorizationController', () => {
         notices: [],
       })
     })
+    expect(await harness.controller.status()).not.toHaveProperty('error')
+    expect(harness.ctx.logger.error).not.toHaveBeenCalled()
     // Exercise the same coalesced repair helper directly: the controller's
     // reconcile method may return early while the sign-in attempt is settling.
     await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
@@ -468,26 +472,106 @@ describe('GitHubCopilotAuthorizationController', () => {
   })
 
   it('clears the one-time device code immediately when sign-in is cancelled', async () => {
-    const harness = runtime()
+    const harness = runtime({ authorizationOutcome: 'cancelled' })
     await expect(harness.controller.start()).resolves.toMatchObject({
       phase: 'authorizing',
       notices: [expect.objectContaining({ code: 'ABCD-EFGH' })],
     })
 
     await expect(harness.controller.cancel()).resolves.toMatchObject({ notices: [] })
+    await vi.waitFor(async () => expect(await harness.controller.status()).toMatchObject({
+      phase: 'signed-out', configured: false, inFlight: false, notices: [],
+    }))
+    expect(await harness.controller.status()).not.toHaveProperty('error')
+    expect(harness.ctx.logger.error).not.toHaveBeenCalled()
   })
 
-  it('clears the one-time device code when authorization fails', async () => {
-    const harness = runtime({ beginFailure: new Error('network unavailable') })
+  it('reports only the safe begin-stage diagnostic and never logs rejected values', async () => {
+    const secretValues = [
+      'SYNTHETIC_ACCESS_TOKEN',
+      'https://github.invalid/login/device?secret=SYNTHETIC_URL_SECRET',
+      'SYNTHETIC_PROVIDER_RESPONSE_BODY',
+      'SYNTHETIC_DEVICE_CODE',
+      'SYNTHETIC_NESTED_CAUSE',
+    ]
+    const nested = Object.assign(new Error(secretValues[4]!), { code: 'PRIVATE_NESTED_CODE', status: 401 })
+    const failure = Object.assign(new Error([
+      'provider rejected request',
+      secretValues[0],
+      secretValues[1],
+      secretValues[2],
+      secretValues[3],
+    ].join(' ')), { code: 'ETIMEDOUT', status: 401, cause: nested })
+    const harness = runtime({ beginFailure: failure })
     await harness.controller.start()
 
     await vi.waitFor(async () => {
       expect(await harness.controller.status()).toMatchObject({
         phase: 'error',
         notices: [],
-        error: 'network unavailable',
+        error: 'COPILOT_AUTHORIZATION_BEGIN_FAILED',
       })
     })
+    const observed = JSON.stringify({
+      status: await harness.controller.status(),
+      errorLogs: vi.mocked(harness.ctx.logger.error).mock.calls,
+    })
+    for (const value of secretValues) expect(observed).not.toContain(value)
+    expect(observed).not.toContain('ETIMEDOUT')
+    expect(observed).not.toContain('PRIVATE_NESTED_CODE')
+    expect(harness.ctx.logger.error).toHaveBeenCalledExactlyOnceWith(
+      'github-copilot: authorization.begin failed (COPILOT_AUTHORIZATION_BEGIN_FAILED)',
+    )
+  })
+
+  it('does not inspect arbitrary rejected values when sanitizing authorization failures', async () => {
+    const arbitrary = Object.defineProperties({}, {
+      message: { get() { throw new Error('SYNTHETIC_MESSAGE_GETTER_READ') } },
+      code: { get() { throw new Error('SYNTHETIC_CODE_GETTER_READ') } },
+      cause: { get() { throw new Error('SYNTHETIC_CAUSE_GETTER_READ') } },
+    })
+    const harness = runtime({ beginFailure: arbitrary })
+    await harness.controller.start()
+    await vi.waitFor(async () => expect(await harness.controller.status()).toMatchObject({
+      phase: 'error', error: 'COPILOT_AUTHORIZATION_BEGIN_FAILED',
+    }))
+    const observed = JSON.stringify({
+      status: await harness.controller.status(),
+      errorLogs: vi.mocked(harness.ctx.logger.error).mock.calls,
+    })
+    expect(observed).not.toContain('SYNTHETIC_MESSAGE_GETTER_READ')
+    expect(observed).not.toContain('SYNTHETIC_CODE_GETTER_READ')
+    expect(observed).not.toContain('SYNTHETIC_CAUSE_GETTER_READ')
+  })
+
+  it('reports post-authorization route repair failure without undoing sign-in or leaking its error', async () => {
+    const harness = runtime({
+      providerProfile: {},
+      beforeMutate() { throw new Error('SYNTHETIC_ROUTE_REPAIR_RESPONSE_BODY') },
+    })
+    await harness.controller.start()
+    harness.authorize()
+    await vi.waitFor(async () => expect(await harness.controller.status()).toMatchObject({
+      phase: 'error',
+      configured: true,
+      inFlight: false,
+      notices: [],
+      error: 'COPILOT_ROUTE_REPAIR_FAILED',
+      route: { state: 'needs-repair', diagnosticCode: 'RECONCILIATION_FAILED' },
+    }))
+    const status = await harness.controller.status()
+    expect(status.error).toBe('COPILOT_ROUTE_REPAIR_FAILED')
+    const observed = JSON.stringify({
+      status,
+      errorLogs: vi.mocked(harness.ctx.logger.error).mock.calls,
+      warningLogs: vi.mocked(harness.ctx.logger.warn).mock.calls,
+    })
+    expect(observed).not.toContain('SYNTHETIC_ROUTE_REPAIR_RESPONSE_BODY')
+    expect(harness.deleteRecord).not.toHaveBeenCalled()
+    expect(harness.ctx.logger.error).not.toHaveBeenCalled()
+    expect(harness.ctx.logger.warn).toHaveBeenCalledExactlyOnceWith(
+      'github-copilot: route reconciliation failed; review route status before retrying',
+    )
   })
 
   it('repairs a pre-existing grant with an empty Copilot route', async () => {

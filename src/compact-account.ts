@@ -25,6 +25,17 @@ const failures = {
   cancel: 'COPILOT_AUTHORIZATION_CANCEL_FAILED', signOut: 'COPILOT_SIGN_OUT_FAILED',
   discoverModels: 'COPILOT_MODEL_DISCOVERY_FAILED', reconcile: 'COPILOT_CONFIGURATION_REPAIR_FAILED',
 } as const
+const authorizationFailureCodes = new Set([
+  'COPILOT_AUTHORIZATION_FAILED',
+  'COPILOT_AUTHORIZATION_BEGIN_FAILED',
+  'COPILOT_ROUTE_REPAIR_FAILED',
+])
+
+function safeAuthorizationFailure(error: unknown): string {
+  return typeof error === 'string' && authorizationFailureCodes.has(error)
+    ? error
+    : 'COPILOT_AUTHORIZATION_FAILED'
+}
 
 /** One mounted account's snapshot, bounded freshness check and explicit actions.
  * Initial signed-in status ensures missing/idle/stale/error metadata once or
@@ -75,7 +86,9 @@ export function createCompactAccount(
     const { accountModels, notices, error, ...rest } = decoded
     // Error text may originate in an older Host or undecoded transport: never
     // render it verbatim. Discovery diagnostics use the existing field-safe codec.
-    const failure = error !== undefined || decoded.phase === 'error' ? 'COPILOT_AUTHORIZATION_FAILED' : undefined
+    const failure = error !== undefined || decoded.phase === 'error'
+      ? safeAuthorizationFailure(error)
+      : undefined
     const view: View = { ...rest, notices: decoded.inFlight && !suppressNotice ? notices : [],
       ...decoded.configured && !decoded.inFlight && accountModels !== undefined ? { accountModels } : {},
       ...failure === undefined ? {} : { error: failure },

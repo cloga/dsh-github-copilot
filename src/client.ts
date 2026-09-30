@@ -69,6 +69,7 @@ export function authorizationViewFrom(value: unknown): GitHubCopilotAuthorizatio
     const owned = viewFields(source, ['phase', 'configured', 'writable', 'inFlight', 'error'])
     if (typeof owned.phase !== 'string' || !['signed-out', 'authorizing', 'signed-in', 'error'].includes(owned.phase)
       || typeof owned.configured !== 'boolean' || typeof owned.writable !== 'boolean' || typeof owned.inFlight !== 'boolean') return undefined
+    if (owned.error !== undefined && typeof owned.error !== 'string') owned.error = 'COPILOT_AUTHORIZATION_FAILED'
     const notices = source.notices
     if (!Array.isArray(notices)) return undefined
     owned.notices = notices.map(notice => {
@@ -615,6 +616,8 @@ const compactButtonStyle: CSSProperties = {
 
 function compactErrorMessage(code: string): string {
   if (code === 'COPILOT_MODEL_DISCOVERY_FAILED') return 'Could not refresh models. Try again.'
+  if (code === 'COPILOT_AUTHORIZATION_BEGIN_FAILED') return 'GitHub sign-in did not complete. Try again. If it continues, share diagnostic code COPILOT_AUTHORIZATION_BEGIN_FAILED with support.'
+  if (code === 'COPILOT_ROUTE_REPAIR_FAILED') return 'GitHub sign-in completed, but model configuration repair failed. Authentication is retained. Open Manage and choose Repair model configuration. If it continues, share diagnostic code COPILOT_ROUTE_REPAIR_FAILED with support.'
   if (code === 'COPILOT_AUTHORIZATION_START_FAILED') return 'Could not confirm sign-in. Retry status to check.'
   if (code === 'COPILOT_AUTHORIZATION_CANCEL_FAILED') return 'Could not confirm cancellation. Retry status to check.'
   if (code === 'COPILOT_SIGN_OUT_FAILED') return 'Could not confirm sign-out. Retry status to check.'

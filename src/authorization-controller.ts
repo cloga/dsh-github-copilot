@@ -183,10 +183,6 @@ function service<T extends object>(
   return candidate as T
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 function providerModels(value: unknown): Array<Record<string, unknown>> | undefined {
   if (!Array.isArray(value)) return undefined
   const models: Array<Record<string, unknown>> = []
@@ -495,37 +491,43 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     this.notices = []
     this.failure = undefined
     this.reconciliationFailed = false
-    const running = authorization.begin({
-      key: GITHUB_COPILOT_CREDENTIAL_KEY,
-      method: oauth.id,
-      interaction: {
-        notify: (notice) => {
-          this.notices = [...this.notices, { ...notice }]
+    let begun: ReturnType<typeof authorization.begin>
+    try {
+      begun = authorization.begin({
+        key: GITHUB_COPILOT_CREDENTIAL_KEY,
+        method: oauth.id,
+        interaction: {
+          notify: (notice) => {
+            this.notices = [...this.notices, { ...notice }]
+          },
+          prompt: (prompt) => {
+            if (prompt.kind === 'text' && /GitHub Enterprise URL\/domain/i.test(prompt.message)) {
+              return Promise.resolve('')
+            }
+            return Promise.reject(new Error(
+              'github-copilot: this browser bridge cannot answer the authorization prompt',
+            ))
+          },
         },
-        prompt: (prompt) => {
-          if (prompt.kind === 'text' && /GitHub Enterprise URL\/domain/i.test(prompt.message)) {
-            return Promise.resolve('')
-          }
-          return Promise.reject(new Error(
-            `github-copilot: this browser bridge cannot answer authorization prompt "${prompt.message}"`,
-          ))
-        },
-      },
-    }).then(async (outcome) => {
+      })
+    } catch {
+      begun = Promise.reject(new Error('github-copilot: authorization.begin failed'))
+    }
+    const running = begun.then(async (outcome) => {
       if (outcome.status === 'authorized') {
         // Device-code notices are instructions for an in-flight attempt, not
         // durable provider status. Clear them before the profile repair so a
         // completed grant cannot render "Signed in" beside an expired code.
         this.notices = []
         await this.ensureProviderProfile()
+        if (this.reconciliationFailed) this.failure = 'COPILOT_ROUTE_REPAIR_FAILED'
         return
       }
       this.notices = []
-    }).catch((error: unknown) => {
+    }).catch(() => {
       this.notices = []
-      this.failure = messageOf(error)
-      this.ctx.logger.error('github-copilot: GitHub Copilot authorization failed')
-      this.ctx.logger.error(error)
+      this.failure = 'COPILOT_AUTHORIZATION_BEGIN_FAILED'
+      this.ctx.logger.error('github-copilot: authorization.begin failed (COPILOT_AUTHORIZATION_BEGIN_FAILED)')
     }).finally(() => {
       this.attempt = undefined
     })

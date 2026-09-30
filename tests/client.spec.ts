@@ -885,6 +885,36 @@ describe('GitHub Copilot Models client', () => {
     expect(remote.signOut).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['COPILOT_AUTHORIZATION_BEGIN_FAILED', 'GitHub sign-in did not complete', 'COPILOT_AUTHORIZATION_BEGIN_FAILED'],
+    ['COPILOT_ROUTE_REPAIR_FAILED', 'GitHub sign-in completed, but model configuration repair failed', 'Repair model configuration'],
+    ['legacy raw provider response with token=private', 'GitHub sign-in failed. Try again.', undefined],
+  ] as const)('renders a safe actionable authorization label for %s', async (error, expected, action) => {
+    const configured = error === 'COPILOT_ROUTE_REPAIR_FAILED'
+    const { remote, surfaces, provider } = surfaceFixture({
+      phase: 'error', configured, writable: true, inFlight: false, notices: [], error,
+      ...(configured ? { route: { state: 'needs-repair' as const } } : {}),
+    })
+    surfaces.mount(provider, Symbol('provider'), remote as never)
+    const account = surfaces.getSnapshot()!.account
+    await vi.waitFor(() => expect(account.getSnapshot().error).toBe(
+      error === 'legacy raw provider response with token=private' ? 'COPILOT_AUTHORIZATION_FAILED' : error,
+    ))
+    const effects: React.EffectCallback[] = []
+    vi.mocked(React.useMemo).mockImplementation(factory => factory())
+    vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe, snapshot) => snapshot())
+    vi.mocked(React.useEffect).mockImplementation(setup => { effects.push(setup) })
+    vi.mocked(React.useId).mockReturnValue('fixture-management')
+    vi.mocked(React.useState).mockReturnValue([false, vi.fn()])
+    const tree = GitHubCopilotCompactAccount({ remote: remote as never, account })
+    const elements = descendants(tree)
+    const alert = elements.find(element => element.props['data-dsh-github-copilot-account-error'] !== undefined)
+    expect(alert?.props.children).toContain(expected)
+    if (action !== undefined) expect(alert?.props.children).toContain(action)
+    expect(alert?.props.children).not.toContain('token=private')
+    for (const effect of effects) expect(effect()).toBeUndefined()
+  })
+
   it.each(['provider-first', 'footer-first'] as const)('owns one controller with both mounted seats: %s', order => {
     const { remote, surfaces, provider, footer } = surfaceFixture()
     const p = Symbol('provider'), f = Symbol('footer')

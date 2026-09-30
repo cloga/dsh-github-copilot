@@ -559,6 +559,20 @@ describe('bounded discovery after this account starts sign-in', () => {
     h.api.status.mockResolvedValue(ok(signedIn));await h.account.retryStatus()
     expect(h.api.discoverModels).not.toHaveBeenCalled()
   })
+  it.each([
+    ['COPILOT_AUTHORIZATION_BEGIN_FAILED', 'COPILOT_AUTHORIZATION_BEGIN_FAILED'],
+    ['COPILOT_ROUTE_REPAIR_FAILED', 'COPILOT_ROUTE_REPAIR_FAILED'],
+    ['provider response body with token=private', 'COPILOT_AUTHORIZATION_FAILED'],
+    [{ message: 'private response', code: 'PRIVATE', cause: { message: 'nested private' } }, 'COPILOT_AUTHORIZATION_FAILED'],
+  ])('preserves only allowlisted authorization diagnostic %s', async (input, expected) => {
+    const h = await harness(signedOut)
+    h.api.status.mockResolvedValueOnce(ok({ ...signedOut, phase: 'error', error: input } as never))
+    await h.account.retryStatus()
+    expect(h.account.getSnapshot().error).toBe(expected)
+    expect(h.account.getSnapshot().view?.error).toBe(expected)
+    expect(JSON.stringify(h.account.getSnapshot())).not.toContain('nested private')
+    expect(JSON.stringify(h.account.getSnapshot())).not.toContain('provider response body')
+  })
   it('retains only a confirmed pending Start across explicit retry of a failed authorization poll', async () => {
     vi.useFakeTimers()
     const h=await harness(signedOut)
