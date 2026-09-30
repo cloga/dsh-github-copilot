@@ -6,18 +6,14 @@ import { AutoModelRoutingError, selectAutoModel } from './auto-model-routing.ts'
 import type { AutoModelDecision } from './auto-model-routing.ts'
 import { GITHUB_COPILOT_AUTO_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 
-declare module '@deepseek-ai/dsh-session/types' {
-  interface SessionEventMap {
-    'github-copilot/auto-model-decision': {
-      turn: number
-      step: number
-      provider: typeof GITHUB_COPILOT_PREVIEW_PROVIDER_ID
-      model: string
-      taskClass: AutoModelDecision['taskClass']
-      reason: AutoModelDecision['reason']
-      candidateCount: number
-    }
-  }
+interface AutoModelDecisionEvent {
+  turn: number
+  step: number
+  provider: typeof GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+  model: string
+  taskClass: AutoModelDecision['taskClass']
+  reason: AutoModelDecision['reason']
+  candidateCount: number
 }
 
 export interface AutoModelHostDependencies {
@@ -94,13 +90,17 @@ function actualNotice(agent: Agent, model: string) {
   })
 }
 
+function appendAutoModelDecision(agent: Agent, event: AutoModelDecisionEvent): void {
+  Reflect.apply(agent.session.append, agent.session, ['github-copilot/auto-model-decision', event])
+}
+
 /** Resolve virtual Auto once per Core turn before request/header persistence. */
 export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHostDependencies): () => void {
+  type Dispose = () => void
   const captured = new WeakMap<Agent, CapturedTurn>()
   const routed = new WeakMap<Agent, RoutedTurn>()
   const agentDisposers = new WeakMap<Agent, Dispose>()
   const activeDisposers = new Set<Dispose>()
-  type Dispose = () => void
   const installAgent = (agent: Agent): void => {
     if (agentDisposers.has(agent)) return
     const dispose = agent.ctx.on('agent/pre-step', async ({ messages, turn, step, signal }, next) => {
@@ -133,6 +133,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     agentDisposers.delete(agent)
     captured.delete(agent)
     routed.delete(agent)
+    return undefined
   })
   const removeRequest = ctx.on('agent/request', async ({ agent, turn, step, signal }, next) => {
     const resolved = await next()
@@ -148,7 +149,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       routed.set(agent, state)
     }
     if (!state.recorded) {
-      agent.session.append('github-copilot/auto-model-decision', {
+      appendAutoModelDecision(agent, {
         turn,
         step,
         provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,

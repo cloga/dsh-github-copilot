@@ -149,13 +149,14 @@ export function installAutoModelPresentation(capabilities: {
   readonly diagnostic: (code: string) => void
 }): Dispose {
   const { diagnostic } = capabilities
-  if (!record(capabilities.slots) || !['spec', 'inject', 'register'].every(key => typeof capabilities.slots[key] === 'function')
+  const slotsCandidate = capabilities.slots
+  if (!record(slotsCandidate) || !['spec', 'inject', 'register'].every(key => typeof slotsCandidate[key] === 'function')
     || !record(capabilities.uiConversation) || !record(capabilities.uiConversation.events)
     || typeof capabilities.uiConversation.events.register !== 'function') {
     diagnostic('COPILOT_AUTO_PRESENTATION_UNAVAILABLE')
     return noop
   }
-  const slots = capabilities.slots as unknown as Slots
+  const slots = slotsCandidate as unknown as Slots
   const events = capabilities.uiConversation.events as unknown as ConversationEvents
   let removeDefinition: Dispose = noop
   let removeInjection: Dispose = noop
