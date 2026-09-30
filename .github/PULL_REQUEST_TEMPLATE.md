@@ -35,11 +35,11 @@
 - Classification: important update / documentation-only / internal-only / explicitly release-scoped.
 - Prepared version and release channel:
 - User delivery restrictions, if any:
-- After authorized merge: important updates continue through green required CI, a fresh tag and verified Release without another release prompt.
+- After reviewed merge: important updates continue through green required CI, a fresh tag and verified Release without another release prompt.
 - Published Release URL + tag/commit/assets/SHA-256, or concrete blocker and pending step (update after release):
 
 ## Approval boundary
 
-<!-- Opening this PR does not authorize merge, profile installation, sign-out, worktree checkout or interruption of running Sessions. Important-update publication follows AGENTS.md's standing delivery rule; other releases need an explicit request. -->
+<!-- For requested delivery, merge after required review/CI and branch protection without another approval prompt, unless the user restricted scope. Opening a PR alone does not authorize profile installation, sign-out, worktree checkout or interruption of running Sessions. Important-update publication follows AGENTS.md's standing delivery rule; other releases need an explicit request. -->
 
 Fixes #
