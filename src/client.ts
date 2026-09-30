@@ -983,20 +983,22 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }
   const searchUi = ctx.inject(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
   const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
-  // The optional Chat contribution must not hold authorization activation on older Cores.
-  const presentation = ctx.inject(['uiConversation', 'slots'], scope => installReasoningPresentation({
-    slots: scope.slots,
-    uiConversation: scope.get('uiConversation'),
-    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
-  }))
-  const autoPresentation = ctx.inject(['uiConversation', 'slots'], scope => installAutoModelPresentation({
-    slots: scope.slots,
-    uiConversation: scope.get('uiConversation'),
-    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
-  }))
+  // Optional Chat contributions must not hold authorization activation on older Cores.
+  const presentation = ctx.inject(['uiConversation', 'slots'], scope => {
+    const capabilities = {
+      slots: scope.slots,
+      uiConversation: scope.get('uiConversation'),
+      diagnostic: (code: string) => scope.logger.warn(`[github-copilot] ${code}`),
+    }
+    const reasoning = installReasoningPresentation(capabilities)
+    const auto = installAutoModelPresentation(capabilities)
+    return () => {
+      auto()
+      reasoning()
+    }
+  })
   return async () => {
     await usageUi.dispose()
-    await autoPresentation.dispose()
     await presentation.dispose()
     await searchUi.dispose()
     await ui.dispose()
