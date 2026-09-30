@@ -12,7 +12,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { AgentRegistry, type Agent } from '@deepseek-ai/dsh-agent'
 import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import SessionStore, { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { currentChatRoute, currentSearchInitiator, currentSearchSelection } from '../../src/current-provider.ts'
@@ -59,7 +59,7 @@ function provideDouble(ctx: Context, key: Extract<keyof Context, string>, value:
   ctx.provide(key, value)
 }
 
-function fixture({ mountController = true } = {}) {
+async function fixture({ mountController = true } = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   const forbidden = vi.fn((): never => { throw new Error('session-fixture-forbidden-side-effect') })
@@ -73,6 +73,7 @@ function fixture({ mountController = true } = {}) {
     contexts: { configureHost: registration, registerHost: registration },
   })
   provideDouble(ctx, 'fileUploads', { registerAgentResolver: registration })
+  await ctx.plugin(SessionStore)
   const agents = new AgentRegistry(ctx)
   const created = new Set<string>()
   if (['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
@@ -167,7 +168,7 @@ function requestConfig(selection: MigrationSelection): RequestConfig {
 
 describe('tagged Core public Session context (actual controller projection)', () => {
   it('installs the actual controller fold and applies pending > header > genuinely-empty default', async () => {
-    const f = fixture()
+    const f = await fixture()
     expect(f.controller).toBeInstanceOf(SessionController)
     const a = await f.add('projection-A', 'running')
     const empty = await f.add('projection-empty')
@@ -200,7 +201,7 @@ describe('tagged Core public Session context (actual controller projection)', ()
   })
 
   it('isolates concurrent real initiator A/B contexts from the future global default C', async () => {
-    const f = fixture(), a = await f.add('concurrent-A', 'running'), b = await f.add('concurrent-B', 'running')
+    const f = await fixture(), a = await f.add('concurrent-A', 'running'), b = await f.add('concurrent-B', 'running')
     const empty = await f.add('concurrent-empty')
     recordHeader(a.session, nativeA)
     recordHeader(b.session, otherB)
@@ -232,7 +233,7 @@ describe('tagged Core public Session context (actual controller projection)', ()
   })
 
   it('keeps recorded request context separate from pending future intent and activity claims', async () => {
-    const f = fixture(), a = await f.add('recorded-not-in-flight', 'running')
+    const f = await fixture(), a = await f.add('recorded-not-in-flight', 'running')
     recordHeader(a.session, nativeA)
     a.session.append('model/selection', managedPending)
     a.session.append('turn/start', { turn: 1 })
@@ -250,7 +251,7 @@ describe('tagged Core public Session context (actual controller projection)', ()
   })
 
   it('omits adapter-defaulted effort from future intent but preserves it in the recorded header', async () => {
-    const f = fixture(), a = await f.add('adapter-default', 'running'), b = await f.add('explicit-effort')
+    const f = await fixture(), a = await f.add('adapter-default', 'running'), b = await f.add('explicit-effort')
     const event = recordHeader(a.session, nativeA, true)
     recordHeader(b.session, otherB)
     const header = a.session.requestHeader()
@@ -271,7 +272,7 @@ describe('tagged Core public Session context (actual controller projection)', ()
   })
 
   it('fails closed when the real registry has no modelSelection owner despite a header/default', async () => {
-    const f = fixture({ mountController: false }), a = await f.add('unsupported-projection')
+    const f = await fixture({ mountController: false }), a = await f.add('unsupported-projection')
     await f.add('unsupported-empty')
     recordHeader(a.session, nativeA)
     expect(f.projections.stateOf(a.session, 'modelSelection')).toBeUndefined()
@@ -283,7 +284,7 @@ describe('tagged Core public Session context (actual controller projection)', ()
   })
 
   it('does not claim complete recorded-request evidence for a running genuinely-empty Session', async () => {
-    const f = fixture(), a = await f.add('running-before-first-header', 'running')
+    const f = await fixture(), a = await f.add('running-before-first-header', 'running')
     expect(f.observe()).toMatchObject({ complete: { sessions: false }, sessions: [{ id: a.id,
       selectionSource: 'default', effectiveSelection: defaultC, activeRequestSelection: null }] })
     expect(currentSearchSelection(a)).toBeUndefined()

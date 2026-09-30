@@ -33,7 +33,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
   try {
     ctx.provide('typert', { remotes: { register(value: unknown) { registered.push(value); return async () => {} } },
       contexts: { getClient: () => undefined } })
-    ctx.provide('connection', { rpc: { call: rpc }, registerGenerationSource: () => () => {},
+    ctx.provide('connection', { rpc: { call: rpc, open: vi.fn() }, registerGenerationSource: () => () => {},
       start: () => ({ stop }), generation: { getSnapshot: () => undefined } })
     Gateway.apply(ctx)
     const dispose = await ctx.remote.$mount(remote)
