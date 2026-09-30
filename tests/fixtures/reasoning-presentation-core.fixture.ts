@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Executed inside an exact Core checkout by verify-reasoning-presentation.mjs.
-// Native Markdown resolves local media against window.location on Core 0.1.5.
+// Native Markdown resolves local media against window.location.
 import { Context } from '@deepseek-ai/cordis'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -29,6 +29,9 @@ describe('Copilot reasoning presentation against real Core services', () => {
     const props = {
       node: { kind: 'assistant-step', location: { kind: 'unresolved' }, data: { status: 'settled', step: 1, finalNode: { seq: 2 }, blocks } },
       useTurnData: () => undefined, openFile: () => {}, fileMentions: () => [],
+      useDisclosure: () => ({ expanded: false, setExpanded: () => {}, toggle: () => {} }),
+      usePresentation: (select: (policy: { settledReasoningPreview: boolean }) => unknown) =>
+        select({ settledReasoningPreview: true }),
       renderMessageImages: () => null, t: (key: string) => key === 'message.think' ? 'Think' : key,
     }
     const before = renderToStaticMarkup(createElement(AssistantNodeView, props as never))
