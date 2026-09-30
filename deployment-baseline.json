@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.43"
+    "version": "0.4.0-alpha.44"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -696,7 +696,8 @@
         {"file": "src/client.ts", "marker": "data-dsh-github-copilot-device-code"},
         {"file": "src/external-link.ts", "marker": "externalLinkTarget"},
         {"file": "src/client.ts", "marker": "data-dsh-github-copilot-verification-url"},
-        {"file": "src/authorization-controller.ts", "marker": "GitHubCopilotAuthorizationController"}
+        {"file": "src/authorization-controller.ts", "marker": "GitHubCopilotAuthorizationController"},
+        {"file": "src/authorization-controller.ts", "marker": "INTERACTION_NOTICE_OBSERVED"}
       ],
       "tests": [
         {"file": "tests/client.spec.ts", "name": "exposes a device code only while authorization is in flight"},
@@ -710,7 +711,10 @@
         {"file": "tests/client.spec.ts", "name": "mounts its Remote contribution and registers the rc.1 provider-card seat"},
         {"file": "tests/authorization-controller.spec.ts", "name": "signs in through the built-in flow without recreating a canonical profile"},
         {"file": "tests/authorization-controller.spec.ts", "name": "clears the one-time device code immediately when sign-in is cancelled"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "reports only the safe begin-stage diagnostic and never logs rejected values"}
+        {"file": "tests/authorization-controller.spec.ts", "name": "reports only the safe begin-stage diagnostic and never logs rejected values"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "reports the latest observed milestone for a %s rejection"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not misreport a synthetic credential-commit rejection as an observed commit"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "clears the ephemeral authorization milestone after cancellation and success"}
       ]
     },
     {

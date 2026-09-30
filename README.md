@@ -85,7 +85,7 @@ The Host reads GitHub's internal quota endpoint using the existing canonical OAu
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.43`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.44`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -98,10 +98,10 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For a standalone named profile only, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.43/dsh-github-copilot-0.4.0-alpha.43.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.44/dsh-github-copilot-0.4.0-alpha.44.tgz
 ```
 
-For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.43` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
+For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.44` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
@@ -110,7 +110,7 @@ Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in*
 1. Open **Settings → Models** and find **GitHub Copilot**. Account controls appear in an existing configured canonical `github-copilot` card, suppressing the separate footer controller; otherwise the footer fallback (or old-Core **Settings → GitHub Copilot**) remains usable. An already-signed-in account automatically ensures missing/idle/stale/error/loading metadata once on opening; fresh ready metadata makes no discovery request. No native provider or manual refresh is needed for the normal discovery flow.
 2. Select **Sign in with GitHub**. The authorization area expands automatically with a prominent one-time code, **Open GitHub verification page**, **Copy code**, and **Cancel sign-in**. No extra **Manage** click is needed. Recognized Desktop v1 hosts use their existing same-window external-navigation handoff to the system browser instead of a popup; web hosts retain a new tab. If nothing opens, select and copy the displayed verification address into your browser. The plugin cannot confirm that the system browser opened.
 3. Copy the code, open the verification link, and complete authorization in your own GitHub browser session. Copy success/failure is announced accessibly; manual copying remains available. Never paste a GitHub token into DSH.
-4. DSH polls only while authorization is in flight. Successful explicit **Start sign-in** (the **Sign in with GitHub** button), including a UI account switch, forces exactly one bounded discovery after immediate or polled success. The code and verification link clear, the automatic authorization area closes, and the account shows **Signed in** and **Manage**. Manually opened details stay open; cancellation clears the old code. Failures show only a safe stage diagnostic: `COPILOT_AUTHORIZATION_BEGIN_FAILED` means authorization did not complete; `COPILOT_ROUTE_REPAIR_FAILED` means authorization completed but local route repair failed. The latter retains authentication and directs you to **Manage → Repair model configuration**. These codes do not explain or resolve the underlying sign-in failure; raw provider details are never displayed or logged.
+4. DSH polls only while authorization is in flight. Successful explicit **Start sign-in** (the **Sign in with GitHub** button), including a UI account switch, forces exactly one bounded discovery after immediate or polled success. The code and verification link clear, the automatic authorization area closes, and the account shows **Signed in** and **Manage**. Manually opened details stay open; cancellation clears the old code. Failures show only a safe stage diagnostic: `COPILOT_AUTHORIZATION_BEGIN_FAILED` means authorization did not complete; `COPILOT_ROUTE_REPAIR_FAILED` means authorization completed but local route repair failed. A failed begin can also show a fixed **latest observed milestone** (`AUTHORIZATION_REQUESTED`, `INTERACTION_PROMPT_OBSERVED`, or `INTERACTION_NOTICE_OBSERVED`). It reports only progress observed through the public interaction callbacks, not the failing operation or a credential commit. The latter route-repair code retains authentication and directs you to **Manage → Repair model configuration**. These codes and milestones do not explain or resolve the underlying sign-in failure; raw provider details are never displayed or logged.
 5. Choose an accepted model under **GitHub Copilot** (stable route ID `github-copilot-preview`). Normal opening/use maintains metadata without requiring **Refresh models**. **Manage** contains the optional manual refresh, model details and sign-out. The compatibility disclosure is removed; legacy configuration diagnostics and explicit repair remain available when needed, and the [migration guide](./docs/single-route-migration.md) remains in the documentation. Errors remain visible with **Retry**, including when details are collapsed; neither discovery nor retry changes your current/default model or replays messages.
 
 ### Auto model routing
@@ -167,7 +167,9 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.43`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.44`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
+
+**Desktop hot-upgrade boundary:** exact rc.2 deliberately reports `restart-required` when an installed dependency is upgraded in place. Do not remove and re-add this bundle to force a hot upgrade: removing its patch after activation asks the public Loader to move the official `web` service out of the companion's named isolate, and an isolated remove/re-add regression shows that rc.2 can leave the official fiber active while global Web consumers, the delegate, and routed Web remain pending until process restart. The plugin cannot repair that state after its own bundle has been removed without a Core/private hook or persistent profile mutation, neither of which is allowed. Treat the native manager's restart-required result as authoritative, finish the package transaction, and perform a separately approved Desktop restart before sign-in or search validation.
 
 No `copilot2api` process, external gateway, placeholder API key, pasted GitHub token, or separate `dsh-web-search-provider` installation is required.
 
@@ -433,8 +435,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.43/dsh-github-copilot-0.4.0-alpha.43.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.43/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.44/dsh-github-copilot-0.4.0-alpha.44.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.44/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -442,7 +444,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.43.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.44.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

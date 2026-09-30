@@ -64,6 +64,11 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
     diagnosticCode: z.enum(['ROUTE_READ_FAILED', 'RECONCILIATION_FAILED', 'ROUTE_CONFLICT']).optional(),
   }).strict().optional(),
   error: z.string().optional(),
+  authorizationMilestone: z.enum([
+    'AUTHORIZATION_REQUESTED',
+    'INTERACTION_PROMPT_OBSERVED',
+    'INTERACTION_NOTICE_OBSERVED',
+  ]).optional(),
 }).strict()
 
 const result = strictRemoteCodec(GITHUB_COPILOT_AUTHORIZATION_VIEW_TYPE_SYMBOL, GitHubCopilotAuthorizationViewSchema)
