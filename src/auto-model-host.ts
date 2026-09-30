@@ -125,7 +125,10 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     agentDisposers.set(agent, dispose)
     activeDisposers.add(dispose)
   }
-  const removeCreated = ctx.on('agent/created', ({ agent }) => installAgent(agent))
+  const removeCreated = ctx.on('agent/created', ({ agent }) => {
+    installAgent(agent)
+    return undefined
+  })
   const removeDisposed = ctx.on('agent/disposed', ({ agent }) => {
     const dispose = agentDisposers.get(agent)
     dispose?.()
