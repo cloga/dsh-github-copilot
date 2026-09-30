@@ -886,14 +886,15 @@ describe('GitHub Copilot Models client', () => {
   })
 
   it.each([
-    ['COPILOT_AUTHORIZATION_BEGIN_FAILED', 'GitHub sign-in did not complete', 'COPILOT_AUTHORIZATION_BEGIN_FAILED'],
-    ['COPILOT_ROUTE_REPAIR_FAILED', 'GitHub sign-in completed, but model configuration repair failed', 'Repair model configuration'],
-    ['legacy raw provider response with token=private', 'GitHub sign-in failed. Try again.', undefined],
-  ] as const)('renders a safe actionable authorization label for %s', async (error, expected, action) => {
+    ['COPILOT_AUTHORIZATION_BEGIN_FAILED', 'GitHub sign-in did not complete', 'COPILOT_AUTHORIZATION_BEGIN_FAILED', 'INTERACTION_NOTICE_OBSERVED'],
+    ['COPILOT_ROUTE_REPAIR_FAILED', 'GitHub sign-in completed, but model configuration repair failed', 'Repair model configuration', undefined],
+    ['legacy raw provider response with token=private', 'GitHub sign-in failed. Try again.', undefined, undefined],
+  ] as const)('renders a safe actionable authorization label for %s', async (error, expected, action, authorizationMilestone) => {
     const configured = error === 'COPILOT_ROUTE_REPAIR_FAILED'
     const { remote, surfaces, provider } = surfaceFixture({
       phase: 'error', configured, writable: true, inFlight: false, notices: [], error,
       ...(configured ? { route: { state: 'needs-repair' as const } } : {}),
+      ...authorizationMilestone === undefined ? {} : { authorizationMilestone },
     })
     surfaces.mount(provider, Symbol('provider'), remote as never)
     const account = surfaces.getSnapshot()!.account
@@ -911,6 +912,9 @@ describe('GitHub Copilot Models client', () => {
     const alert = elements.find(element => element.props['data-dsh-github-copilot-account-error'] !== undefined)
     expect(alert?.props.children).toContain(expected)
     if (action !== undefined) expect(alert?.props.children).toContain(action)
+    if (authorizationMilestone !== undefined) {
+      expect(alert?.props.children).toContain(`Latest observed milestone: ${authorizationMilestone}.`)
+    }
     expect(alert?.props.children).not.toContain('token=private')
     for (const effect of effects) expect(effect()).toBeUndefined()
   })
