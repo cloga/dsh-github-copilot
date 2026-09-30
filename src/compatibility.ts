@@ -6,13 +6,12 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import * as dshSettings from '@deepseek-ai/dsh-settings'
 
 export const DSH_COMPATIBILITY = {
-  release: '0.1.6-alpha.2',
-  developmentRelease: '0.1.2-rc.1',
-  peerRange: '0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.1.5-alpha.2 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.6-alpha.1 || 0.1.6-alpha.2',
-  supportedReleases: ['0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2'],
+  release: '0.2.0-rc.1',
+  developmentRelease: '0.2.0-rc.1',
+  peerRange: '0.2.0-rc.1',
+  supportedReleases: ['0.2.0-rc.1'],
   requiredApis: [
     'agentDefaultModel.currentSelection',
     'authorization.describe',
@@ -23,10 +22,8 @@ export const DSH_COMPATIBILITY = {
     'credentials.listRecords',
     'credentials.modifyRecord',
     'credentials.deleteRecord',
-    'settings.get',
     'settings.describe',
     'settings.mutate',
-    'settings.installSection',
     'web.registerSearchProvider',
     'systemPrompt.section',
     'context.on',
@@ -34,10 +31,6 @@ export const DSH_COMPATIBILITY = {
     'context.plugin',
   ],
 } as const
-
-interface LegacySettingsModule {
-  installSettingsSection?: unknown
-}
 
 function method(value: unknown, key: string): boolean {
   return typeof value === 'object'
@@ -65,13 +58,8 @@ export function assertDshCompatibility(ctx: Context): void {
     if (!method(credentials, api)) incompatible(`credentials.${api}`)
   }
   const settings = ctx.get('settings')
-  if (!method(settings, 'get')) incompatible('settings.get')
   if (!method(settings, 'describe')) incompatible('settings.describe')
   if (!method(settings, 'mutate')) incompatible('settings.mutate')
-  const legacyInstaller = (dshSettings as LegacySettingsModule).installSettingsSection
-  if (typeof legacyInstaller !== 'function' && !method(settings, 'installSection')) {
-    incompatible('settings.installSection')
-  }
   if (!method(ctx.get('web'), 'registerSearchProvider')) incompatible('web.registerSearchProvider')
   if (!method((ctx as unknown as Record<string, unknown>)['systemPrompt'], 'section')) incompatible('systemPrompt.section')
   if (typeof (ctx as unknown as Record<string, unknown>)['on'] !== 'function') incompatible('context.on')

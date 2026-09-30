@@ -26,17 +26,20 @@ async function runtime(legacy = false) {
   const grant = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-account', access: 'synthetic-access',
     expires: Date.now() + 3_600_000, availableModelIds: ['future-account-model'] } }
   const documents: Record<string, unknown> = {
-    'llm-pi-ai': CorePiAi.Config({ providers: legacy ? { 'github-copilot': { compat: { supportsStrictMode: false } } } : {} }),
+    'llm-pi-ai': { providers: legacy ? { 'github-copilot': { compat: { supportsStrictMode: false } } } : {} },
     'github-copilot': companionConfig,
   }
   const revisions = new Map<string, number>()
   const watchers = new Map<string, () => void>()
+  let notifySettings: (namespace: string, revision: number) => void = () => undefined
+  notifySettings = (namespace, revision) => ctx.emit('settings/document-updated', namespace as never, revision)
   const mutate = vi.fn(async (ns: string, operations: readonly { op: string; path: string[] }[]) => {
     if (ns !== 'llm-pi-ai' || operations.length !== 1 || operations[0]?.op !== 'unset'
       || operations[0].path.join('.') !== 'providers.github-copilot') throw new Error('Unexpected automatic settings mutation')
-    documents[ns] = CorePiAi.Config({ providers: {} })
+    documents[ns] = { providers: {} }
     revisions.set(ns, (revisions.get(ns) ?? 0) + 1)
     watchers.get(ns)?.()
+    notifySettings(ns, revisions.get(ns)!)
   })
   const deleteRecord = vi.fn()
   const modifyRecord = vi.fn(async (_key: string, change: (record: typeof grant) => Promise<typeof grant | undefined>) => {
@@ -68,7 +71,7 @@ async function runtime(legacy = false) {
   } })
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(AuthorizationService)
-  await ctx.plugin(CorePiAi, documents['llm-pi-ai'] as ReturnType<typeof CorePiAi.Config>)
+  await ctx.plugin(CorePiAi, documents['llm-pi-ai'] as never)
   await ctx.plugin(Companion, companionConfig)
   await vi.waitFor(() => expect(ctx.get('githubCopilotAuthorization')).toBeDefined())
   await ctx.get('githubCopilotPreview')!.refresh()
@@ -155,7 +158,7 @@ describe('single managed Copilot route with native OAuth', () => {
     } finally { remove() }
   })
 
-  it('honors an explicit legacy-profile removal without deleting OAuth or rebuilding the route', async () => {
+  it('honors explicit legacy-profile removal from settings without deleting OAuth', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('No implicit network during migration') }))
     const h = await runtime(true)
     expect(h.ctx.llm.listProviders().map(provider => provider.id)).toContain('github-copilot')
@@ -164,7 +167,8 @@ describe('single managed Copilot route with native OAuth', () => {
     await h.ctx.settings.mutate('llm-pi-ai' as never, [{ op: 'unset', path: ['providers', 'github-copilot'] }])
     await Companion.ensureGitHubCopilotProviderProfile(h.ctx)
     await h.ctx.get('githubCopilotAuthorization')!.reconcile()
-    expect(h.ctx.llm.listProviders().map(provider => provider.id)).toEqual([MANAGED])
+    expect(h.documents['llm-pi-ai']).toEqual({ providers: {} })
+    expect(h.ctx.llm.listProviders().map(provider => provider.id)).toContain(MANAGED)
     expect(h.ctx.authorization.describe(parseCredentialKey(KEY))?.methods.some(method => method.id === 'oauth')).toBe(true)
     expect(h.mutate).toHaveBeenCalledOnce()
     expect(h.deleteRecord).not.toHaveBeenCalled()

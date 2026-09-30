@@ -5,7 +5,7 @@
  * @module dsh-github-copilot/serialize
  */
 
-import type { ContentBlock, GenerateOptions, Message, TextBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, RequestMessage, ToolSchema } from '@deepseek-ai/dsh-llm'
 import { ANTHROPIC_WEB_SEARCH_TOOL_TYPE } from './plan.ts'
 import type { ResponsesWebSearchToolType } from './plan.ts'
 import type { InlineConfig } from './config.ts'
@@ -17,7 +17,7 @@ export interface ResponsesReasoningOptions {
 }
 
 /** Keep Core-owned reasoning provenance and opaque replay state out of this serializer. */
-export function hasResponsesReplayContext(messages: readonly Message[]): boolean {
+export function hasResponsesReplayContext(messages: readonly RequestMessage[]): boolean {
   return messages.some(message => message.role === 'assistant'
     && ((message.source.kind === 'model' && message.source.replayState !== undefined)
       || ('replayState' in message && message.replayState !== undefined)
@@ -63,8 +63,54 @@ export function splitCallId(id: string): { callId: string; itemId: string } {
  * @param content - the message content blocks.
  * @returns the joined text.
  */
-export function flattenText(content: readonly ContentBlock[]): string {
-  return content.filter((block): block is TextBlock => block.type === 'text').map(block => block.text).join('')
+function isTextBlock(value: unknown): value is { readonly type: 'text'; readonly text: string } {
+  return typeof value === 'object' && value !== null && 'type' in value && value.type === 'text'
+    && 'text' in value && typeof value.text === 'string'
+}
+
+export function flattenText(content: readonly unknown[]): string {
+  return content.filter(isTextBlock).map(block => block.text).join('')
+}
+
+interface LegacyToolResult {
+  readonly type: 'tool-result'
+  readonly toolCallId: string
+  readonly isError?: boolean
+  readonly content: readonly unknown[]
+}
+
+function legacyToolResult(value: unknown): value is LegacyToolResult {
+  return typeof value === 'object' && value !== null && 'type' in value && value.type === 'tool-result'
+    && 'toolCallId' in value && typeof value.toolCallId === 'string'
+    && 'content' in value && Array.isArray(value.content)
+}
+
+function legacyToolResults(content: readonly unknown[]): LegacyToolResult[] {
+  const results: LegacyToolResult[] = []
+  for (const block of content) {
+    if (legacyToolResult(block)) results.push(block)
+  }
+  return results
+}
+
+function responsesToolResult(
+  result: { readonly toolCallId: string; readonly isError?: boolean; readonly content: readonly unknown[] },
+  pairedCallIds?: ReadonlySet<string>,
+): unknown[] {
+  const callId = splitCallId(result.toolCallId).callId
+  if (pairedCallIds !== undefined && !pairedCallIds.has(callId)) return []
+  return [{
+    type: 'function_call_output',
+    call_id: callId,
+    output: (result.isError === true ? '[Error] ' : '') + (flattenText(result.content) || '(no output)'),
+  }]
+}
+
+/** Detect a grounded sandbox denial in either current tool-role or retained legacy message layout. */
+export function hasToolResultText(message: RequestMessage, needle: string): boolean {
+  if (message.role === 'tool') return flattenText(message.content).includes(needle)
+  return message.role === 'user' && legacyToolResults(message.content)
+    .some(result => flattenText(result.content).includes(needle))
 }
 
 /**
@@ -73,30 +119,25 @@ export function flattenText(content: readonly ContentBlock[]): string {
  * @returns the wire input items; may be empty for content-free messages.
  * @throws UnsupportedContentError for image or Core-owned reasoning/replay content.
  */
-export function serializeMessage(message: Message, pairedCallIds?: ReadonlySet<string>): unknown[] {
+export function serializeMessage(message: RequestMessage, pairedCallIds?: ReadonlySet<string>): unknown[] {
   if (hasResponsesReplayContext([message])) {
     throw new UnsupportedContentError('Core-owned reasoning or replay context')
+  }
+  if (message.role === 'tool') {
+    return responsesToolResult(message, pairedCallIds)
   }
   if (message.role === 'user') {
     if (message.content.some(block => block.type === 'image')) {
       throw new UnsupportedContentError('image content')
     }
-    const toolResults = message.content
-      .filter(block => block.type === 'tool-result')
-      .filter(result => pairedCallIds === undefined || pairedCallIds.has(splitCallId(result.toolCallId).callId))
-    if (toolResults.length > 0) {
-      return toolResults.map(result => ({
-        type: 'function_call_output',
-        call_id: splitCallId(result.toolCallId).callId,
-        output: (result.isError === true ? '[Error] ' : '') + (flattenText(result.content) || '(no output)'),
-      }))
-    }
-    if (message.content.some(block => block.type === 'tool-result') && flattenText(message.content).length === 0) return []
+    const toolResults = legacyToolResults(message.content)
+    if (toolResults.length > 0) return toolResults.flatMap(result => responsesToolResult(result, pairedCallIds))
     return [{ role: 'user', content: [{ type: 'input_text', text: flattenText(message.content) }] }]
   }
   if (message.role === 'system') {
     return [{ role: 'user', content: [{ type: 'input_text', text: flattenText(message.content) }] }]
   }
+  if (message.role === 'developer') throw new UnsupportedContentError('Core-owned developer tool history')
   const items: unknown[] = []
   for (const block of message.content) {
     const suffix = items.length
@@ -131,13 +172,15 @@ export function serializeMessage(message: Message, pairedCallIds?: ReadonlySet<s
  * when a prior provider/tool failure ended the step before persistence wrote
  * the matching result.
  */
-export function pairedToolCallIds(messages: readonly Message[]): ReadonlySet<string> {
+export function pairedToolCallIds(messages: readonly RequestMessage[]): ReadonlySet<string> {
   const calls = new Set<string>()
   const results = new Set<string>()
   for (const message of messages) {
+    if (message.role === 'tool') results.add(splitCallId(message.toolCallId).callId)
     for (const block of message.content) {
       if (block.type === 'tool-call') calls.add(splitCallId(block.id).callId)
-      if (block.type === 'tool-result') results.add(splitCallId(block.toolCallId).callId)
+      const candidate: unknown = block
+      if (legacyToolResult(candidate)) results.add(splitCallId(candidate.toolCallId).callId)
     }
   }
   return new Set([...calls].filter(callId => results.has(callId)))
@@ -242,12 +285,23 @@ export function anthropicWireTools(tools: readonly ToolSchema[] | undefined, str
  * @returns the Anthropic content items for this message.
  * @throws UnsupportedContentError for image content.
  */
-export function serializeAnthropicMessage(message: Message): unknown[] {
+export function serializeAnthropicMessage(message: RequestMessage): unknown[] {
+  if (message.role === 'tool') {
+    return [{
+      role: 'user',
+      content: [{
+        type: 'tool_result',
+        tool_use_id: splitCallId(message.toolCallId).callId,
+        content: flattenText(message.content) || '(no output)',
+        ...message.isError === true ? { is_error: true } : {},
+      }],
+    }]
+  }
   if (message.role === 'user') {
     if (message.content.some(block => block.type === 'image')) {
       throw new UnsupportedContentError('image content')
     }
-    const results = message.content.filter(block => block.type === 'tool-result')
+    const results = legacyToolResults(message.content)
     if (results.length > 0) {
       return results.map(result => ({
         role: 'user',
@@ -264,6 +318,7 @@ export function serializeAnthropicMessage(message: Message): unknown[] {
   if (message.role === 'system') {
     return [{ role: 'user', content: [{ type: 'text', text: flattenText(message.content) }] }]
   }
+  if (message.role === 'developer') throw new UnsupportedContentError('Core-owned developer tool history')
   const content: unknown[] = []
   for (const block of message.content) {
     if (block.type === 'reasoning') {

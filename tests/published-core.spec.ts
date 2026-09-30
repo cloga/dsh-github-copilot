@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { resolve, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import LlmRuntime, { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
@@ -17,6 +18,7 @@ const ALPHA_015 = '0.1.5-alpha.1'
 const RC_015_1 = '0.1.5-rc.1'
 const RC_015_2 = '0.1.5-rc.2'
 const ALPHA_016 = '0.1.6-alpha.1'
+const RC_020 = '0.2.0-rc.1'
 const alphaPins = new Map([
   [ALPHA, 'd347e703908d0406b7a7ef80e3a0e594d86b2215'],
   [ALPHA_015, '5dda764ed3aa172535a7967b06ff95d9cbfe536a'],
@@ -25,6 +27,7 @@ const alphaPins = new Map([
   [RC_015_2, 'fb2c4b9e698e30edb738bca4cf0618587db7d203'],
   [ALPHA_016, '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d'],
   ['0.1.6-alpha.2', 'ddefc45fbc7f8e46dd73185e68295696d1297887'],
+  [RC_020, '4878cdabd87d4041bdaff61d04c966883b9fd07a'],
 ])
 function packageInfo(name: string): { version: string; path: string } {
   const path = realpathSync(require.resolve(`${name}/package.json`))
@@ -71,6 +74,7 @@ const expectedRelease = process.env.DSH_PUBLISHED_CORE_RELEASE ?? runtimeInfo.ve
 // An explicitly requested alpha or tagged-source run MUST execute the file
 // tests. Wrong installed packages/aliases fail identity checks rather than skip.
 const runAlpha = taggedEvidence || alphaPins.has(expectedRelease) || alphaPins.has(runtimeInfo.version)
+const runLegacyFileProjection = runAlpha && expectedRelease !== RC_020
 const evidenceLabel = taggedEvidence ? 'unchanged tagged-source Core fixture' : 'published unmodified Core fixture'
 const MODEL = 'published-fixture-model'
 const contexts: Context[] = []
@@ -147,7 +151,7 @@ async function generate(ctx: Context, messages: Message[]) {
     tools: [{ name: 'read_fixture', description: 'Synthetic file tool', parameters: { type: 'object', properties: {} } }] }
   const assembler = new BlockAssembler()
   for await (const chunk of prepared.stream(options)) assembler.push(chunk)
-  return { assembler, message: assembler.message({ kind: 'model', provider: PREVIEW, model: MODEL,
+  return { assembler, message: assembler.message({ provider: PREVIEW, model: MODEL,
     ...assembler.replayState === undefined ? {} : { replayState: assembler.replayState } }) }
 }
 
@@ -164,8 +168,8 @@ describe(evidenceLabel, () => {
     expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 
-  it.skipIf(!runAlpha).each(['top-level', 'nested-tool-result'] as const)(
-    'alpha.1 projects %s files before native dispatch while preserving encrypted replay', async placement => {
+  it.skipIf(!runLegacyFileProjection).each(['top-level', 'nested-tool-result'] as const)(
+    'legacy alpha Core projects %s files before native dispatch while preserving encrypted replay', async placement => {
       await assertRelease()
       expect(alphaPins.has(runtimeInfo.version)).toBe(true)
       expect(runtimeInfo.version).toBe(expectedRelease)
@@ -184,7 +188,7 @@ describe(evidenceLabel, () => {
         return nativeResponse(requests.length === 1)
       }))
       const ctx = await runtime()
-      const attachment = Object.freeze({ attachmentId: `sha256:${'b'.repeat(64)}`, name: 'fixture.txt', bytes: 23 })
+      const attachment = Object.freeze({ attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`), name: 'fixture.txt', bytes: 23 })
       const fileHostPath = vi.fn((ref: unknown) => { expect(ref).toEqual(attachment); return 'C:/private-host/fixture.txt' })
       const processPathFromHostPath = vi.fn((path: string) => { expect(path).toBe('C:/private-host/fixture.txt'); return '/execution-world/fixture.txt' })
       await ctx.plugin({ apply(owner: Context) {
@@ -211,8 +215,8 @@ describe(evidenceLabel, () => {
         ? { id: 'synthetic-file-user', role: 'user', source: { kind: 'user' }, content: [file] }
         : { id: 'synthetic-file-tool', role: 'user', source: { kind: 'tool', callId: tool.id },
             content: [{ type: 'tool-result', toolCallId: tool.id, isError: false, content: [file] }] }) as unknown as Message
-      const toolResult: Message = { id: 'synthetic-result' as Message['id'], role: 'user', source: { kind: 'tool', callId: tool.id },
-        content: [{ type: 'tool-result', toolCallId: tool.id, isError: false, content: [{ type: 'text', text: 'Synthetic result.' }] }] }
+      const toolResult: Message = { id: 'synthetic-result' as Message['id'], role: 'tool', source: { kind: 'tool', callId: tool.id },
+        toolCallId: tool.id, isError: false, content: [{ type: 'text', text: 'Synthetic result.' }] }
       const history = placement === 'top-level' ? [first.message, toolResult, fileMessage] : [first.message, fileMessage]
       const second = await generate(ctx, history)
       expect(second.assembler.finish).toEqual({ kind: 'stop' })
@@ -228,8 +232,10 @@ describe(evidenceLabel, () => {
       expect(first.message.source).toBe(replaySource)
       if (placement === 'top-level') expect(fileMessage.content[0]).toBe(file)
       else {
-        const block = fileMessage.content[0]
-        if (block?.type !== 'tool-result') throw new Error('Original nested file fixture was changed')
+        const block: unknown = fileMessage.content[0]
+        if (typeof block !== 'object' || block === null || !('content' in block) || !Array.isArray(block.content)) {
+          throw new Error('Original nested file fixture was changed')
+        }
         expect(block.content[0]).toBe(file)
       }
       expect(second.message.content).toContainEqual({ type: 'text', text: 'Fixture complete.' })

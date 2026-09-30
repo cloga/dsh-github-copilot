@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { prepareTaggedCoreFixture, taggedRendererRuntimeAliases, TAGGED_CORE_RELEASES } from '../../scripts/verify-tagged-core.mjs'
 
-test('admits the exact 0.1.6-alpha.1 source pin while retaining prior tagged baselines', () => {
+test('admits the exact 0.2.0-rc.1 source pin while retaining prior tagged baselines', () => {
   assert.deepEqual(TAGGED_CORE_RELEASES, {
     '0.1.2-rc.1': 'a66e4702047846cdaa10c66c9d3df3951f5ea70d',
     '0.1.3-alpha.1': 'd347e703908d0406b7a7ef80e3a0e594d86b2215',
@@ -17,6 +17,7 @@ test('admits the exact 0.1.6-alpha.1 source pin while retaining prior tagged bas
     '0.1.5-rc.2': 'fb2c4b9e698e30edb738bca4cf0618587db7d203',
     '0.1.6-alpha.1': '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
     '0.1.6-alpha.2': 'ddefc45fbc7f8e46dd73185e68295696d1297887',
+    '0.2.0-rc.1': '4878cdabd87d4041bdaff61d04c966883b9fd07a',
   })
 })
 
@@ -163,7 +164,7 @@ test('maps import-condition mjs vendor exports without aliasing the plugin vendo
   assert.equal(resolver.resolveId('@deepseek-ai/schemastery', join(value.root, 'src/config.ts')), null)
 }))
 
-for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2']) {
+for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1']) {
   test(`selects the actual adapter, Session and Remote regression suite for ${release}`, async () => {
     const value = await fixture(release)
     try {
@@ -174,8 +175,10 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       if (release.startsWith('0.1.6-')) {
         await writeFile(join(value.root, 'tests/tool-schema-compat.spec.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/copilot-usage-selector-core.fixture.ts'), 'export {}')
+      } else if (release === '0.2.0-rc.1') {
+        await writeFile(join(value.root, 'tests/tool-schema-compat.spec.ts'), 'export {}')
       }
-      if (release === '0.1.6-alpha.2') {
+      if (release === '0.1.6-alpha.2' || release === '0.2.0-rc.1') {
         for (const name of ['fixtures/alpha2-contracts-core.fixture.ts', 'fixtures/compaction-pressure-core.fixture.ts', 'remote-codec.spec.ts', 'dual-model-projection.spec.ts']) {
           await writeFile(join(value.root, 'tests', name), 'export {}')
         }
@@ -184,7 +187,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       const config = (await import(pathToFileURL(report.configPath).href)).default
       assert.equal(report.commit, TAGGED_CORE_RELEASES[release])
       assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
-      if (release.startsWith('0.1.6-')) {
+      if (release.startsWith('0.1.6-') || release === '0.2.0-rc.1') {
         const require = createRequire(join(value.core, 'packages/client/ui-renderer/package.json'))
         const names = ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-dom', 'react-dom/client',
           'use-sync-external-store/shim/with-selector']
@@ -200,14 +203,16 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
         'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts',
         ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
+        ...release === '0.2.0-rc.1' ? ['tests/tool-schema-compat.spec.ts'] : [],
         ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
+        ...release === '0.2.0-rc.1' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts'])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })
 }
 
 test('rejects an external selector shim resolving a second React instead of hiding it with Vite dedupe', async () => {
-  const value = await fixture('0.1.6-alpha.2')
+  const value = await fixture('0.2.0-rc.1')
   try {
     const split = join(value.core, 'node_modules/use-sync-external-store/node_modules/react')
     await mkdir(split, { recursive: true })

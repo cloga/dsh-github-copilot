@@ -3,7 +3,7 @@ import { createRequire, findPackageJSON } from 'node:module'
 import { dirname, isAbsolute, join, relative, resolve, sep, extname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.1.2-rc.1', '0.1.3-alpha.1'])
+export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.0-rc.1'])
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
 const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
   'README.md', 'README.zh.md', 'AGENTS.md', 'CONTRIBUTING.md', 'SECURITY.md', 'LICENSE',

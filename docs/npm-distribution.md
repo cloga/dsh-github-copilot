@@ -118,28 +118,37 @@ There is no historical bulk backfill and no silent npm opt-out.
 
 ## Installation preflight still applies
 
-The native Desktop package manager remains the preferred interactive entry
-point when its registry access is permitted and available. After npm publication
-is verified, it accepts the exact `dsh-github-copilot@<version>` npm spec, not a
-Release URL or local tarball in that UI. This UI input restriction is not a
-blanket prohibition on maintaining the same profile through the supported CLI.
-Controlled CLI maintenance is also supported for Desktop-managed profiles under
-the checklist below. Neither entry point replaces the package's required
-`scripts/check-search-composition.mjs` preflight. A package lookup, preflight or
-successful installation is not proof of runtime activation or a model call.
+Desktop profiles must be managed through Desktop's native package manager.
+The reserved `desktop` profile is not supported by DSH CLI plugin commands.
+After npm publication is verified, the native manager accepts the exact
+`dsh-github-copilot@<version>` npm spec, not a Release URL or local tarball.
+The CLI procedure below applies only to standalone named profiles and is not a
+Desktop fallback when registry access is blocked.
 
-## Controlled offline CLI maintenance
+Neither entry point replaces the package's required
+`scripts/check-search-composition.mjs` preflight. The official DSH 0.2
+`composeProfile()` path writes the empty `cordis.yml` root before normal launch,
+including when Desktop supplies an already resolved profile. Therefore the
+preflight refuses a nonempty root as `NONEMPTY_DISPOSABLE_PROFILE_ROOT`; do not
+install or start/restart that profile until the data has been preserved and an
+officially supported migration has been established. A package lookup,
+preflight or successful installation is not proof of runtime activation or a
+model call.
+
+## Controlled offline CLI maintenance for standalone profiles
 
 This path installs this package's prebuilt, verified Release without requiring
 access to a blocked npm registry. It is not permission to bypass organizational registry restrictions:
 use only artifacts obtained through organizationally approved sources and
 already available dependency caches. A registry ban remains in force; offline
 installation does not repair TLS or prove that npm publication is healthy. The
-dual-channel **publication** policy above is unchanged.
+dual-channel **publication** policy above is unchanged. **Do not use this path
+for a Desktop-managed/reserved profile.**
 
 1. Obtain explicit installation approval for the exact version and profile.
-   Resolve the actual DSH CLI, install anchor, `DSH_HOME` and profile directory;
-   do not assume a shell shim points to the Desktop's current installation.
+   Resolve the standalone DSH CLI, install anchor, `DSH_HOME` and profile
+   directory; do not target Desktop's reserved `desktop` profile or assume a
+   shell shim points to the intended installation.
 2. Verify the original Release tarball with an independently trusted SHA-256,
    its package name/version and safe archive layout. Do not substitute a local
    build or repack an existing immutable Release. Extract only the verified
@@ -148,8 +157,8 @@ dual-channel **publication** policy above is unchanged.
    and install anchor, including any extra startup patches. Require
    `supported: true`; unknown, conflicting or unsupported composition is a stop,
    not permission to remove guards or rewrite the profile.
-4. Keep one writer: do not run Desktop package updates and CLI installation
-   concurrently. Take a private backup of installation metadata (package.json,
+4. Keep one writer: do not run concurrent package/profile updates. Take a
+   private backup of installation metadata (package.json,
    lockfile, bundle/patch configuration and relevant package-manager settings),
    record the current version, and retain a verified rollback artifact.
    Do not copy credential stores, `.env` files or browser storage. If ensuring
@@ -184,5 +193,6 @@ dual-channel **publication** policy above is unchanged.
 If installation fails, inspect the actual installed state before retrying or
 rolling back; a failed command is not proof that nothing changed. A rollback
 also needs reviewed, narrowly scoped metadata/dependency restoration. This
-documentation change does not rewrite installed or published historical docs,
-change machine-wide registry policy, or grant blanket approval for future updates.
+procedure does not authorize Desktop profile management, rewrite installed or
+published historical docs, change machine-wide registry policy, or grant blanket
+approval for future updates.

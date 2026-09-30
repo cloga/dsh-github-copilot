@@ -24,7 +24,7 @@ import { abortedFinish, classifyHttpStatus, classifyWireError, errorFinish, pars
 import { abortable } from './http.ts'
 import { mapUsage } from './usage.ts'
 import type { WireUsage } from './usage.ts'
-import { buildWireBody, flattenText, UnsupportedContentError } from './serialize.ts'
+import { buildWireBody, flattenText, hasToolResultText, UnsupportedContentError } from './serialize.ts'
 import type { ResponsesReasoningOptions } from './serialize.ts'
 import { responseIndex, ResponsesReasoningText } from './responses-reasoning-text.ts'
 import { applyRequestAuth, normalizeRequestAuth, providerRequestHeaders } from './copilot-request.ts'
@@ -79,11 +79,7 @@ export function contentHasImageAttachments(request: GenerateOptions): boolean {
  */
 function hasGroundedSandboxEscalation(request: GenerateOptions): boolean {
   const last = request.messages.at(-1)
-  if (last?.role !== 'user') return false
-  return last.content.some(block =>
-    block.type === 'tool-result'
-    && flattenText(block.content).includes(SANDBOX_DENIAL_MARKER),
-  )
+  return last !== undefined && hasToolResultText(last, SANDBOX_DENIAL_MARKER)
 }
 
 /**

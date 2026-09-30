@@ -3,9 +3,9 @@ import { test } from 'node:test'
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
+import { PUBLISHED_CORE_RELEASES, preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
 
-const release = '0.1.3-alpha.1'
+const release = '0.2.0-rc.1'
 async function sourceFixture() {
   // Windows runners may expose TEMP through an 8.3 alias or redirected parent.
   // Give the subject a real physical source; explicit link rejection tests below
@@ -16,10 +16,10 @@ async function sourceFixture() {
   await mkdir(join(root, 'tests'), { recursive: true })
   const manifest = { name: 'dsh-github-copilot', version: '0.3.1-alpha.2', type: 'module', private: true,
     scripts: { prepare: 'must-not-execute', preinstall: 'must-not-execute', test: 'must-not-execute' },
-    dependencies: { '@earendil-works/pi-ai': '0.85.1', '@deepseek-ai/dsh-authorization': '0.1.2-rc.1', zod: '^4.4.3' },
-    devDependencies: { '@deepseek-ai/dsh-llm': '0.1.2-rc.1', '@deepseek-ai/dsh-llm-pi-ai': '0.1.2-rc.1', '@deepseek-ai/cordis': '^4.0.2', vitest: '^3.2.0' },
-    peerDependencies: { '@deepseek-ai/dsh-llm': '0.1.2-rc.1 || 0.1.3-alpha.1', react: '^18.2.0' },
-    optionalDependencies: { '@deepseek-ai/dsh-fs': '0.1.2-rc.1' },
+    dependencies: { '@earendil-works/pi-ai': '0.85.1', '@deepseek-ai/dsh-authorization': '0.2.0-rc.1', zod: '^4.4.3' },
+    devDependencies: { '@deepseek-ai/dsh-llm': '0.2.0-rc.1', '@deepseek-ai/dsh-llm-pi-ai': '0.2.0-rc.1', '@deepseek-ai/cordis': '^4.0.2', vitest: '^3.2.0' },
+    peerDependencies: { '@deepseek-ai/dsh-llm': '0.2.0-rc.1', react: '^18.2.0' },
+    optionalDependencies: { '@deepseek-ai/dsh-fs': '0.2.0-rc.1' },
     pnpm: { overrides: { '@earendil-works/pi-ai': 'must-not-inherit' } }, overrides: { anything: 'must-not-inherit' } }
   await writeFile(join(root, 'package.json'), JSON.stringify(manifest))
   await writeFile(join(root, 'src/index.ts'), 'export const fixture = true\n')
@@ -61,8 +61,25 @@ test('prepares only plugin inputs and exact Core requirements without executing 
   assert.deepEqual(report.executed, { install: false, build: false, tests: false })
 }))
 
+test('admits and inspects only the exact current official published release', async () => withSource(async ({ root, target }) => {
+  assert.deepEqual(PUBLISHED_CORE_RELEASES, [release])
+  const report = await preparePublishedCoreFixture({ root, target, release })
+  assert.equal(report.release, release)
+  await installedFixture(target, release)
+  const inspected = await inspectPublishedCoreFixture({ root: target, release })
+  assert.equal(inspected.release, release)
+  assert.equal(inspected.classIdentity, true)
+}))
+
 test('refuses an unknown release before creating any target', async () => withSource(async ({ root, target, base }) => {
   await assert.rejects(preparePublishedCoreFixture({ root, target, release: 'latest' }), /unsupported published Core/)
+  assert.deepEqual(await readdir(base), ['source'])
+}))
+
+test('does not admit historical published Core versions for this release', async () => withSource(async ({ root, target, base }) => {
+  for (const oldRelease of ['0.1.2-rc.1', '0.1.3-alpha.1', '0.1.6-alpha.2']) {
+    await assert.rejects(preparePublishedCoreFixture({ root, target, release: oldRelease }), /unsupported published Core/)
+  }
   assert.deepEqual(await readdir(base), ['source'])
 }))
 
@@ -105,14 +122,14 @@ async function mockPackage(root, name, version, source = 'export {}', directory 
   await writeFile(join(dir, 'index.js'), source)
   return dir
 }
-async function installedFixture(root) {
+async function installedFixture(root, targetRelease = release) {
   const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
   const names = new Set(['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
     .flatMap(section => Object.keys(pkg[section] ?? {}).filter(name => name.startsWith('@deepseek-ai/dsh-'))))
-  for (const name of names) await mockPackage(root, name, release)
+  for (const name of names) await mockPackage(root, name, targetRelease)
   await mockPackage(root, '@deepseek-ai/cordis', '4.0.2', 'export class Context {}')
-  await mockPackage(root, '@deepseek-ai/dsh-llm', release, 'export class LlmAdapter {}; export default class LlmRuntime {}')
-  await mockPackage(root, '@deepseek-ai/dsh-llm-pi-ai', release,
+  await mockPackage(root, '@deepseek-ai/dsh-llm', targetRelease, 'export class LlmAdapter {}; export default class LlmRuntime {}')
+  await mockPackage(root, '@deepseek-ai/dsh-llm-pi-ai', targetRelease,
     'import {LlmAdapter} from "@deepseek-ai/dsh-llm"; export class PiAiAdapter extends LlmAdapter {prepareCall(){}}; export function Config(){}')
   await mockPackage(root, '@earendil-works/pi-ai', '0.85.1')
 }

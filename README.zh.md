@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.37`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.38`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 Alpha.24 修复 Web search 卡片缺少精确 Remote 依赖声明的问题。卡片仍位于 **Settings → Models**（`settings.models.footer`，list/root），旧 Core 回退到独立 Web search section，而非 General。搜索子 Fiber 独立等待 routing namespace，不影响账号控件和既有搜索安全检查；实际打包 Desktop 验收仍是独立关卡。
 
@@ -25,9 +25,10 @@ Alpha.24 修复 Web search 卡片缺少精确 Remote 依赖声明的问题。卡
 | 官方 DSH `0.1.5-rc.1` | Tag commit [`183f08e`](https://github.com/deepseek-ai/deepseek-harness/commit/183f08e9c6dde7e36cd2318eaee70b0da08fb35e) | **Settings → Models** provider card |
 | 官方 DSH `0.1.5-rc.2` | Tag commit [`fb2c4b9`](https://github.com/deepseek-ai/deepseek-harness/commit/fb2c4b9e698e30edb738bca4cf0618587db7d203) | **Settings → Models** provider card |
 | 官方 DSH `0.1.6-alpha.1` | Tag commit [`0a15e36`](https://github.com/deepseek-ai/deepseek-harness/commit/0a15e36e7f82b6ed45af6fa9759f29b40dcd965d) | **Settings → Models** provider card |
-| 官方 DSH `0.1.6-alpha.2`（当前待验收目标） | Tag `dsh-v0.1.6-alpha.2`，commit [`ddefc45`](https://github.com/deepseek-ai/deepseek-harness/commit/ddefc45fbc7f8e46dd73185e68295696d1297887) | **Settings → Models** provider card |
+| 官方 DSH `0.1.6-alpha.2` | Tag `dsh-v0.1.6-alpha.2`，commit [`ddefc45`](https://github.com/deepseek-ai/deepseek-harness/commit/ddefc45fbc7f8e46dd73185e68295696d1297887) | **Settings → Models** provider card |
+| 官方 DSH 与 Windows Desktop `0.2.0-rc.1`（当前待验收目标） | Tag `dsh-v0.2.0-rc.1`，commit [`4878cd`](https://github.com/deepseek-ai/deepseek-harness/commit/4878cdabd87d4041bdaff61d04c966883b9fd07a) | **Settings → Models** provider card |
 
-上表保留历史源码 pin，不表示账号模型路由在所有基线上都已验收。已发布制品的合成 transport 测试使用 **rc.1 adapter 与 pi `0.85.1`**，开发依赖继续精确固定为 `0.1.2-rc.1`；受控 rc.2 仅为历史回归证据。`0.1.3-alpha.1`、官方 `0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1`、`0.1.5-rc.2`、`0.1.6-alpha.1` 与 `0.1.6-alpha.2` 均作为未修改的标签源码目标，由 CI 使用隔离测试解析器运行，不构建或给 Core 打补丁。对应源码运行检查通过前不宣称兼容性已验收；这些检查不是独立 npm 制品、真实端点、已安装 Desktop 或已加载运行时的证明。已有公开 Host、Client 与 Remote 接口保留。Peer range 与 `engines.dsh` 只声明包准入，不是真实兼容性证明；插件不安装 Core 补丁。
+上表保留历史源码 pin；本版本**仅准入并 gate 精确的 `0.2.0-rc.1`**，旧 pin 不代表当前支持。已发布制品的合成 transport fixture 与开发依赖均精确针对 `0.2.0-rc.1` npm 制品。未修改标签源码 fixture 不构建或给 Core 打补丁。这些检查不证明真实端点、已安装 Desktop package-set 或已加载运行时。已有公开 Host、Client 与 Remote 接口保留。精确 peer 与 `engines.dsh` 只声明包准入，不是真实兼容性证明；插件不安装 Core 补丁。
 
 ### Alpha.11 兼容修复（#105）
 
@@ -57,9 +58,15 @@ Candidate manifest 将 `@deepseek-ai/dsh-authorization` 与 `@deepseek-ai/schema
 
 ### Alpha.25 官方优先的 DSH 0.1.6-alpha.2 适配
 
-Candidate 追加第九个精确目标：`dsh-v0.1.6-alpha.2`，commit `ddefc45fbc7f8e46dd73185e68295696d1297887`。严格 Remote descriptor 提供 alpha.2 所需的 `create()` factory，同时保留旧 Gateway 的 `schema` bridge；两者使用同一个严格 parser，不降级为 `src-json`。执行子代理的 projection 接受原生 `subagent/descriptor` **v3**；rc.1 已经是 v3，旧版 v1 假设属于插件错误，不是本次上游从 v1 升到 v3。插件 projection cache 提升到 **`stateVersion: 2`**，强制从事件重新折叠，不转换历史。未知／v1／v2 descriptor 历史保守拒绝且保持原样；需要继续工作时先审核旧子代理，再显式新建子代理，不能改版本号伪造转换。
+历史基线清单包含 `dsh-v0.1.6-alpha.2`，commit `ddefc45fbc7f8e46dd73185e68295696d1297887`；本版本不再准入此版本。严格 Remote descriptor 提供 alpha.2 所需的 `create()` factory，同时保留旧 Gateway 的 `schema` bridge；两者使用同一个严格 parser，不降级为 `src-json`。执行子代理的 projection 接受原生 `subagent/descriptor` **v3**；rc.1 已经是 v3，旧版 v1 假设属于插件错误，不是本次上游从 v1 升到 v3。插件 projection cache 提升到 **`stateVersion: 2`**，强制从事件重新折叠，不转换历史。未知／v1／v2 descriptor 历史保守拒绝且保持原样；需要继续工作时先审核旧子代理，再显式新建子代理，不能改版本号伪造转换。
 
 源码 marker、本地基于 rc.1 的定向测试，以及十五个限定范围精确源码运行时测试（alpha.2 contracts 8、Remote 1、Session-context 6）已通过。完整本地 `pnpm verify` 通过：1373 个 Vitest 测试、2 个预期跳过、176 个 tooling 测试，以及类型检查、构建和 package smoke；pack/tarball 验证也通过。限定范围运行使用补充 resolver、官方 TypeScript `6.0.3`、声明的 `mime-types@3.0.2` 与 `ws@8.21.0` 和共享 Zod `^4.4.3`，不修改源码或依赖制品，不等于完整 official-root-helper 验收。完整 frozen 依赖安装仍被配置 mirror 对 `node-addon-require-builtin@0.1.6` 返回 HTTP 404 阻塞。**CI 验收尚未执行**；不宣称已发布制品兼容、真实 Desktop 激活、OAuth 或模型调用成功。[官方优先矩阵](./docs/official-first-016-alpha2.md) 记录精确官方源码、支持范围、保留差距与移除条件，不因未验证同等能力就断言官方没有该功能。
+
+### Alpha.26 官方 DSH 0.2.0-rc.1 适配
+
+当前源码目标为官方 tag `dsh-v0.2.0-rc.1`，commit `4878cdabd87d4041bdaff61d04c966883b9fd07a`；独立核实的 Windows Desktop 发布 feed 也报告 `0.2.0-rc.1`（SHA-512 `hPdqeajEHTXYEUOkOX7q1FflGU9jyOkRVDNSPxIDWhNihWjiVal0gtuT5zvtBRlX29VhqfHL31q4owGNp4ee6A==`）。开发依赖、peer 准入与 CI 仅针对此版本，旧 pin 仅作历史证据。未修改源码 fixture 覆盖插件 OAuth 凭据接口、账号模型发现与原生 adapter、reasoning／stream／tool、Web 搜索、Remote codec、Session context 与严格 schema 兼容；另以发布 npm 制品 fixture 验证包／类身份和合成传输。既有 Desktop package graph 仅用于依赖所有权审计，不验证 0.2.0 Desktop package-set。当前 package-set 物化、Electron 加载、真实登录或 profile 升级均**未**由这些测试证明。
+
+安装不会协调旧 profile 内的 DSH Host peer 副本。升级前请检查实际依赖解析，确认 Desktop 解析到随附的 Host 模块版本；旧的 profile-local `@deepseek-ai/dsh-authorization` 可能遮蔽随 Desktop 捆绑的服务，因 Core peer 校验失败而禁用 authorization 及其依赖的账号插件。本包不会删除或替换这些文件。请遵循单独获批的 Desktop 修复流程，并先验证实际模块解析，再将启动故障归因于本插件。详见[0.2.0 官方优先审查](./docs/official-first-020-rc1.md)。
 
 ## 输入框附近的 Copilot 用量
 
@@ -83,15 +90,15 @@ Host 使用现有 canonical OAuth grant 有界读取 GitHub 内部额度端点�
 node package/scripts/check-search-composition.mjs --profile-dir /absolute/profile --home /absolute/DSH_HOME --install-anchor /absolute/dsh/package.json
 ```
 
-若启动时还有额外 patch，用重复的 `--patch /absolute/file` 参数一并提供。必须得到 `supported: true` 才继续安装；自定义、已禁用、嵌套、已有隔离映射的 web 服务或路由保留名称冲突会在修改前拒绝。预检只用 Core 公开解析接口，不启动插件、不读取认证凭据、不改配置。**`dsh plugin add` 不会自动执行这项预检**；这是安装者必做步骤，不是对任意第三方组合的兼容保证。
+若启动时还有额外 patch，用重复的 `--patch /absolute/file` 参数一并提供。必须得到 `supported: true` 才继续安装；自定义、已禁用、嵌套、已有隔离映射的 web 服务、路由保留名称冲突或非空的 disposable `cordis.yml` root 都会在修改前拒绝。预检只用 Core 公开解析接口，不启动插件、不读取认证凭据、不改配置。DSH 0.2 的正常 `composeProfile()` 也会把该 root 重写为 `[]`，包括 Desktop 已解析 profile 的启动路径；如 root 非空，必须先保存数据并解决该问题。**`dsh plugin add` 不会自动执行这项预检**；这是安装者必做步骤，不是对任意第三方组合的兼容保证。还应检查实际依赖解析不会让旧 profile-local DSH peer 遮蔽 Desktop 随附的 `0.2.0-rc.1` 服务；插件安装器不会协调旧 Host 模块。
 
-获准且网络可用时，可通过受支持的 CLI 命令安装：
+仅对独立的具名 profile，获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.37/dsh-github-copilot-0.4.0-alpha.37.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.38/dsh-github-copilot-0.4.0-alpha.38.tgz
 ```
 
-若 registry 被公司封禁或不可用，不要更换网络绕行。Desktop 管理的 profile 可以改用[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用来源获准、校验通过的本地 Release 和已有依赖缓存（`--offline --ignore-scripts`）。预检、备份和授权要求仍然适用。
+Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.38`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
@@ -153,7 +160,7 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。在获准且可用的 registry 网络环境中，优先使用原生 Desktop 包管理器；确认 npm 发布后，它接受 `dsh-github-copilot@0.4.0-alpha.37`，不是 URL 或本地文件。Desktop 管理的 profile 也允许经明确授权的[受控离线 CLI 维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance)：使用已验证的本地 Release 和 `--offline --ignore-scripts`，执行必需的组合预检、私密元数据备份、单写入者控制及安装后差异核验。缓存不足或出现权限拒绝时停止，不绕过公司 registry 封禁，不关闭 TLS 校验；重启仍需单独授权。离线安装成功不表示 npm 联网或发布问题已修好。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.38`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
 不需要运行 `copilot2api`，不需要外部 gateway、placeholder API key、原始 GitHub token 或单独安装 `dsh-web-search-provider`。
 
@@ -392,9 +399,9 @@ pnpm verify
 pnpm pack --pack-destination artifacts
 ```
 
-开发建议使用 Node 24 LTS 和固定的 pnpm 版本；运行时依赖要求 Node >=22.19.0。`pnpm verify` 检查 Agent contract、源码与本地测试类型、baseline marker、干净构建、Vitest 与 Node 工具测试，以及真实构建 Host 导入和 Client/Remote smoke。打包后执行 `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`，检查归档 export、图片、允许的文件以及与本次构建的一致性。CI 定义在 Windows/Linux 上覆盖九个精确 Core 源码与配置 fixture：受控 `0.1.1-rc.2`、`0.1.2-rc.1`、`0.1.3-alpha.1`、官方 `0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1`、`0.1.5-rc.2`、`0.1.6-alpha.1` 与 `0.1.6-alpha.2`；全部七个标签源码目标还需通过未修改的标签源码运行时 fixture。发布必须等待完整矩阵通过；本 candidate 的 CI 验收尚未执行，证据限制见上文 alpha.25 说明。
+开发建议使用 Node 24 LTS 和固定的 pnpm 版本；运行时依赖要求 Node >=22.19.0。`pnpm verify` 检查 Agent contract、源码与本地测试类型、baseline marker、干净构建、Vitest 与 Node 工具测试，以及真实构建 Host 导入和 Client/Remote smoke。打包后执行 `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`，检查归档 export、图片、允许的文件以及与本次构建的一致性。CI 仅在 Windows/Linux 上 gate 精确 DSH `0.2.0-rc.1`，使用未修改源码 runtime 与发布 npm 制品；其余九个 pin 仅为历史证据，不是发布 gate。发布必须等待此精确目标矩阵通过；本 candidate 的 CI 验收尚未执行，证据限制见上文 alpha.25 与 alpha.26 说明。
 
-对于可选的思考显示集成，`pnpm verify:reasoning-ui -- <Core checkout>` 会在已安装 Chat 依赖的干净、精确 pin 的 `0.1.2-rc.1`、`0.1.3-alpha.1`、`0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1`、`0.1.5-rc.2`、`0.1.6-alpha.1` 或 `0.1.6-alpha.2` checkout 中，执行合成的原生渲染器、Slot 注册器与历史组装 fixture。它只会独占创建一个临时测试文件，并仅在文件未被修改时清理。这是本地集成／静态渲染证据，不是真实浏览器或 Copilot API 测试；CI 定义覆盖八个支持该 Chat 接口的基线，不表示本 candidate 已执行验收。
+对于可选的思考显示集成，`pnpm verify:reasoning-ui -- <Core checkout>` 会在已安装 Chat 依赖的干净、精确 pin 的 `0.2.0-rc.1` checkout 中，执行合成的原生渲染器、Slot 注册器与历史组装 fixture。它只会独占创建一个临时测试文件，并仅在文件未被修改时清理。这是本地集成／静态渲染证据，不是真实浏览器或 Copilot API 测试；CI 仅覆盖当前目标，不表示本 candidate 已执行验收。
 
 ### Agent 驱动开发
 
@@ -426,8 +433,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.37/dsh-github-copilot-0.4.0-alpha.37.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.37/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.38/dsh-github-copilot-0.4.0-alpha.38.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.38/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -435,7 +442,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.37.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.38.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

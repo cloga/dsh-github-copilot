@@ -1,4 +1,4 @@
-/** Exact alpha.2 public contracts; no Core edits, disk writes or real credentials. */
+/** Exact role, Remote and search contracts; no Core edits, disk writes or real credentials. */
 import { Context } from '@deepseek-ai/cordis'
 import { SessionId, SessionSeq, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
@@ -16,13 +16,13 @@ import remote from '../../src/remote.ts'
 
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.1.6-alpha.2')
+  expect(['0.1.6-alpha.2', '0.2.0-rc.1']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 const header = { id: SessionId('native-child'), version: SESSION_FORMAT_VERSION, createdAt: 1, isSeeded: false,
   parentSession: SessionId('native-parent'), origin: 'subagent' }
 function event(data: unknown) { return { type: 'subagent/descriptor', seq: SessionSeq(0), time: 1, data } }
 
-describe('exact official alpha.2 role and search contracts', () => {
+describe('exact official role and search contracts', () => {
   it('accepts the real official v3 descriptor and refolds an obsolete cached role projection', async () => {
     const ctx = new Context()
     try {

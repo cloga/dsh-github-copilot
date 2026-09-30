@@ -8,6 +8,8 @@
 import z from '@deepseek-ai/schemastery'
 import { DEFAULT_REQUEST_BUDGET_POLICY } from './request-budget.ts'
 import type { RequestBudgetPolicy } from './request-budget.ts'
+import { WebSearchRoutingConfigSchema } from './web-search-routing-config.ts'
+import type { WebSearchRoutingConfig } from './web-search-routing-config.ts'
 
 /** Plugin configuration. Defaults make the current chat route decide. */
 export interface InlineConfig {
@@ -44,6 +46,8 @@ export interface InlineConfig {
   searchFallback?: 'none' | 'deepseek'
   /** Optional authoritative legacy override; otherwise hosted search resolves bounded account-owned candidates independently of Chat. */
   searchModel?: string
+  /** Provider routing folded into this plugin entry on current Core releases. */
+  searchRouting?: WebSearchRoutingConfig
   /** Internal JSON backup of route leaves temporarily owned by the GPT-6 overlay. */
   temporaryRouteBackup?: string
 }
@@ -68,5 +72,6 @@ export const Config: z<InlineConfig> = z.object({
   routeWebSearch: z.boolean().default(true),
   searchFallback: z.union(['none', 'deepseek']).default('deepseek'),
   searchModel: z.string().hidden(),
+  searchRouting: WebSearchRoutingConfigSchema.default({}),
   temporaryRouteBackup: z.string().hidden(),
 })

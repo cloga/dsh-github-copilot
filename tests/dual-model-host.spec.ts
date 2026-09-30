@@ -57,7 +57,9 @@ async function fixture() {
     agent.ctx = createScope(ctx, agent).ctx
     return agent
   }
-  const publish = (agent: FakeAgent) => { ctx.emit(scopeTarget(agent as unknown as CoreAgent, agent), 'agent/created', { agent: agent as unknown as CoreAgent }) }
+  const publish = (agent: FakeAgent) => ctx.serial(scopeTarget(agent as unknown as CoreAgent, agent), 'agent/created', {
+      agent: agent as unknown as CoreAgent, source: 'startup',
+    })
   const agents = { list: () => [...agentsMap.values()], get: (id: string) => agentsMap.get(id), resume: vi.fn(),
     create: vi.fn(async () => { throw new Error('Retired Host must never create a root') }) }
   ctx.provide('agents', agents)
@@ -77,7 +79,7 @@ async function fixture() {
       const session = Session.create(id as CoreAgent['id'], undefined, { id, version: SESSION_FORMAT_VERSION, createdAt: 2, cwd: FIXTURE_CWD, parentSession: parent.id, origin: 'subagent', isSeeded: false })
       const append = session.append as (type: string, data: unknown) => unknown
       append.call(session, 'subagent/descriptor', { version: 3, mode: 'continuable', provider: 'spawn', label: 'task', agentProvider: spec.request.agentOptions.provider, agentModel: spec.request.agentOptions.model, toolFilter: spec.request.toolFilter })
-      const agent = makeAgent(id, session); bindScopeParent(agent, presetKey); agentsMap.set(id, agent); publish(agent)
+      const agent = makeAgent(id, session); bindScopeParent(agent, presetKey); agentsMap.set(id, agent); await publish(agent)
       return { childId: id, messageId: 'accepted' }
     }) }
   ctx.provide('subagents', subagents)
@@ -97,7 +99,7 @@ async function fixture() {
       { type: 'model/selection', seq: 1, time: 1, data: { provider: PROVIDER, model: 'plan-A' } },
     ], { id, version: SESSION_FORMAT_VERSION, createdAt: 1, cwd: workspace.path, agentPreset: 'default', isSeeded: false }, 0)
     const agent = makeAgent(id, session)
-    bindScopeParent(agent, presetKey); agentsMap.set(id, agent); stored.set(id, { session }); publish(agent)
+    bindScopeParent(agent, presetKey); agentsMap.set(id, agent); stored.set(id, { session }); await publish(agent)
     return { sessionId: id }
   }
   const create = (requestId = 'operation-one') => service.create({ requestId: operationId(requestId), workspaceId: workspace.id, expectedRevision: revision })
@@ -199,7 +201,7 @@ describe('optional dedicated planner/executor Host', () => {
     bindScopeParent(child, await f.presets.standingKeyFor())
     f.agentsMap.set(id, child)
     expect(f.projections.stateOf(session, DUAL_MODEL_PROJECTION)).toMatchObject({ invalid: true, child: null })
-    expect(() => f.publish(child)).not.toThrow()
+    await expect(f.publish(child)).resolves.toBeUndefined()
     expect((await f.execute(child, 'write')).isError).toBe(false)
     expect(f.tools.get(DUAL_MODEL_EXECUTE_TOOL, child)).toBeUndefined()
   })
@@ -215,7 +217,7 @@ describe('optional dedicated planner/executor Host', () => {
     append.call(session, 'subagent/descriptor', { version: 3, mode: 'continuable', provider: 'spawn', label: 'missing model' })
     const child = f.makeAgent(id, session)
     bindScopeParent(child, await f.presets.standingKeyFor())
-    expect(() => f.publish(child)).toThrow('DUAL_MODEL_POLICY_INVALID')
+    await expect(f.publish(child)).rejects.toThrow('DUAL_MODEL_POLICY_INVALID')
     expect((await f.execute(child, 'write')).isError).toBe(true)
   })
   it('fixes the native executor route, records lineage, and prevents executor delegation', async () => {
@@ -238,7 +240,7 @@ describe('optional dedicated planner/executor Host', () => {
     await Promise.resolve()
     f.setConfiguration({ enabled: true, plannerModel: 'future-C', executorModel: 'future-C' })
     const restoredSession = Session.create(original.id, saved, original.session.header, 0), resumed = f.makeAgent(sessionId, restoredSession)
-    bindScopeParent(resumed, await f.presets.standingKeyFor()); f.agentsMap.set(sessionId, resumed); f.publish(resumed)
+    bindScopeParent(resumed, await f.presets.standingKeyFor()); f.agentsMap.set(sessionId, resumed); await f.publish(resumed)
     expect(f.tools.get(DUAL_MODEL_EXECUTE_TOOL, resumed)?.description).toContain('/exec-B')
     expect((await f.execute(resumed, 'write')).isError).toBe(true)
     expect(f.projections.stateOf(restoredSession, DUAL_MODEL_PROJECTION)).toMatchObject({ policy: { executorModel: 'exec-B' } })
@@ -359,7 +361,7 @@ describe('optional dedicated planner/executor Host', () => {
     f.ctx.emit(scopeTarget(child as unknown as CoreAgent, child), 'agent/disposed', { agent: child as unknown as CoreAgent }); f.agentsMap.delete(child.id)
     f.setConfiguration({ enabled: true, plannerModel: 'future-C', executorModel: 'future-C' })
     const resumed = f.makeAgent(child.id, Session.create(child.id, saved, child.session.header, 0))
-    bindScopeParent(resumed, await f.presets.standingKeyFor()); f.agentsMap.set(child.id, resumed); f.publish(resumed)
+    bindScopeParent(resumed, await f.presets.standingKeyFor()); f.agentsMap.set(child.id, resumed); await f.publish(resumed)
     expect((await f.execute(resumed, 'write')).isError).toBe(false)
     expect((await f.execute(resumed, 'workflow')).isError).toBe(true)
     const payload = { agent: resumed as unknown as CoreAgent, turn: 2, step: 1, signal: new AbortController().signal }
@@ -393,7 +395,7 @@ describe('optional dedicated planner/executor Host', () => {
     await Promise.resolve()
     f.ctx.set('sessionProjections', undefined)
     expect((await f.execute(parent, 'write')).isError).toBe(true)
-    expect(() => f.publish(parent)).toThrow('DUAL_MODEL_UNSUPPORTED')
+    await expect(f.publish(parent)).rejects.toThrow('DUAL_MODEL_UNSUPPORTED')
   })
   it('ignores fork-inherited root policy and refuses an own malformed policy', () => {
     const state = dualModelProjection.init({ id: 'fork', parentSession: 'root' }, 10)

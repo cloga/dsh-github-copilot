@@ -5,13 +5,27 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { buildAnthropicWireBody, buildWireBody, flattenText, pairedToolCallIds, serializeMessage, shortHash, splitCallId, wireTools } from '../../src/serialize.ts'
+import { buildAnthropicWireBody, buildWireBody, flattenText, hasToolResultText, pairedToolCallIds, serializeAnthropicMessage, serializeMessage, shortHash, splitCallId, wireTools } from '../../src/serialize.ts'
 import { RESPONSES_WEB_SEARCH_TOOL_TYPE } from '../../src/plan.ts'
-import type { GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, Message, RequestMessage, ToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { markAgentLoopRequest, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 
-function message(role: Message['role'], blocks: unknown[]): Message {
-  return { id: `m-${role}-1` as Message['id'], role, content: blocks as Message['content'], source: { kind: 'user' } as Message['source'] }
+function message(role: Exclude<Message['role'], 'tool'>, blocks: unknown[]): Message {
+  const base = { id: `m-${role}-1` as Message['id'], content: blocks as Message['content'] }
+  if (role === 'assistant') return { ...base, role, source: { kind: 'model', provider: 'test', model: 'test' } }
+  if (role === 'system') return { ...base, role, source: { kind: 'system-prompt' } }
+  return { ...base, role, source: { kind: 'user' } }
+}
+
+function toolMessage(callId: string, text: string, isError = false): ToolResultMessage {
+  return {
+    id: 'm-tool-1' as ToolResultMessage['id'],
+    role: 'tool',
+    source: { kind: 'tool', callId: callId as ToolResultMessage['source']['callId'] },
+    toolCallId: callId as ToolResultMessage['toolCallId'],
+    content: [{ type: 'text', text }],
+    isError,
+  }
 }
 
 describe('shortHash', () => {
@@ -64,6 +78,15 @@ describe('serializeMessage', () => {
       ]
       expect([...pairedToolCallIds(messages)]).toEqual(['call_paired'])
     })
+
+    it('pairs current first-class tool messages with assistant calls', () => {
+      const messages: RequestMessage[] = [
+        message('assistant', [{ type: 'tool-call', id: 'call_paired|fc_1', name: 'bash', arguments: '{}' }]),
+        toolMessage('call_paired|fc_1', 'ok'),
+        toolMessage('call_result_only|fc_2', 'stale'),
+      ]
+      expect([...pairedToolCallIds(messages)]).toEqual(['call_paired'])
+    })
   })
 
   it('serializes tool results as function_call_output', () => {
@@ -74,6 +97,21 @@ describe('serializeMessage', () => {
   it('prefixes error tool results', () => {
     const result = serializeMessage(message('user', [{ type: 'tool-result', toolCallId: 'c|fc_1', content: [{ type: 'text', text: 'boom' }], isError: true }]))
     expect((result[0] as { output: string }).output).toBe('[Error] boom')
+  })
+
+  it('serializes current tool-role results in both supported wire shapes', () => {
+    const result = toolMessage('call_00_abc|fc_1', '42', true)
+    expect(serializeMessage(result)).toEqual([
+      { type: 'function_call_output', call_id: 'call_00_abc', output: '[Error] 42' },
+    ])
+    expect(serializeAnthropicMessage(result)).toEqual([{
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 'call_00_abc', content: '42', is_error: true }],
+    }])
+  })
+
+  it('recognizes a grounded sandbox denial in current tool-role results', () => {
+    expect(hasToolResultText(toolMessage('call_1', '[sandbox: file access denied under /tmp]'), 'file access denied')).toBe(true)
   })
 
   it('serializes assistant text with a stable message id', () => {
@@ -94,13 +132,13 @@ describe('serializeMessage', () => {
     expect(() => serializeMessage(message('assistant', [{ type: 'reasoning', text: '' }])))
       .toThrow(/Core/u)
     const replay = Object.defineProperty({}, 'payload', { get() { throw new Error('Must not read replay payload') } })
-    const input = { ...message('assistant', [{ type: 'text', text: 'Answer' }]), replayState: replay } as Message
+    const input = { ...message('assistant', [{ type: 'text', text: 'Answer' }]), replayState: replay } as unknown as Message
     expect(() => serializeMessage(input)).toThrow(/Core/u)
   })
 
   it('refuses the actual Core source.replayState location without opening its payload', () => {
     const replay = Object.defineProperty({}, 'payload', { get() { throw new Error('Must not read replay payload') } })
-    const input: Message = { ...message('assistant', [{ type: 'text', text: 'Answer' }]),
+    const input: Message = { ...message('assistant', [{ type: 'text', text: 'Answer' }]), role: 'assistant',
       source: { kind: 'model', provider: 'github-copilot', model: 'gpt-6-astra', replayState: replay },
     }
     expect(() => serializeMessage(input)).toThrow(/Core/u)

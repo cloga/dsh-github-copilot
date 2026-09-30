@@ -185,7 +185,10 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
     }, { prepend: true })
     // Sync on rc.2 and valid as a synchronous listener in newer serial dispatch.
     // No cold synchronous log reads: the public pure projection owns replay.
-    ctx.on('agent/created', ({ agent }) => this.restore(agent as unknown as Agent))
+    ctx.on('agent/created', async ({ agent }) => {
+      this.restore(agent as unknown as Agent)
+      return undefined
+    })
     ctx.on('agent/disposed', ({ agent }) => {
       const subject = agent as unknown as Agent
       const overlay = this.overlays.get(subject)

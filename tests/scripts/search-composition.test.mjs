@@ -208,7 +208,7 @@ test('real public parsers validate candidate layers and preserve every input fil
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test('CLI rejects disposable root-only web without initialization, normalization or secret output', async () => {
+test('preflight refuses nonempty profile root without initialization, normalization or secret output', async () => {
   const root = await mkdtemp(join(tmpdir(), 'copilot-preflight-readonly-'))
   try {
     const profileDir = join(root, 'profiles/web')
@@ -229,7 +229,9 @@ test('CLI rejects disposable root-only web without initialization, normalization
       status = error.status
     }
     assert.equal(status, 1)
-    assert.equal(JSON.parse(stdout).supported, false)
+    const result = JSON.parse(stdout)
+    assert.equal(result.supported, false)
+    assert.deepEqual(result.reasons, ['NONEMPTY_DISPOSABLE_PROFILE_ROOT'])
     assert.ok(!stdout.includes('never-print-me'))
     assert.deepEqual((await readdir(profileDir)).sort(), before)
     assert.equal(await readFile(join(profileDir, 'package.json'), 'utf8'), manifest)

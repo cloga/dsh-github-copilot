@@ -111,8 +111,8 @@ export async function inspectProfileSearchComposition({ profileDir, home, instal
   const bin = 'copilot-search-preflight'
   const manifest = readProfileManifest(bin, profileDir)
   const reasons = new Set()
-  // Public CLI prepareProfile rewrites cordis.yml to [] before normal launch.
-  // Never certify rows that only exist in that disposable file, or rewrite it.
+  // Official profile composition overwrites cordis.yml with [] on normal launch,
+  // including the resolved Desktop path. Never certify rows from that file.
   const root = loadOptionalPatches(bin, join(profileDir, 'cordis.yml'))
   if (root?.length) return reportCandidate(new Set(['NONEMPTY_DISPOSABLE_PROFILE_ROOT']))
   const candidate = loadOverlayPatches(bin, fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)))

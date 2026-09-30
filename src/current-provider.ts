@@ -10,15 +10,15 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { builtinProviders, getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import type { BuiltinProvider } from '@earendil-works/pi-ai/providers/all'
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { readCopilotCatalog, isPluginPreviewProvider } from './model-protocol.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import { readSettingsNamespace } from './settings-reader.ts'
 
 /** Settings namespace of the harness's pi-ai LLM adapter (its `providers` dict). */
-const LLM_PI_AI_NAMESPACE = 'llm-pi-ai' as SettingsNamespace
+const LLM_PI_AI_NAMESPACE = 'llm-pi-ai'
 
 /** The resolved chat-route facts this package consumes. */
 export interface CurrentChatRoute {
@@ -186,7 +186,7 @@ export function currentChatRoute(
   if (selection.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
     && !isPluginPreviewProvider(ctx, selection.provider)) return undefined
   const profile = selection.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
-    ? undefined : profileFacts(ctx.get('settings')?.get(LLM_PI_AI_NAMESPACE), selection.provider, selection.model)
+    ? undefined : profileFacts(readSettingsNamespace(ctx, LLM_PI_AI_NAMESPACE), selection.provider, selection.model)
   const catalog = catalogModelFacts(ctx, selection.provider, selection.model)
   return {
     provider: selection.provider,

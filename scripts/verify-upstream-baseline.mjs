@@ -40,7 +40,7 @@ if (baseline.modelsUi === 'provider-card') {
     "'conversation.chat.node'", "keyProps: { [Kind in ChatNodeKind]",
   ])
   await assertMarkers('packages/client/ui-chat/src/client/chat/register-node-renderers.ts', [
-    "key: 'assistant-step', locale: NS", 'AssistantNodeView',
+    "key: 'assistant-step',", 'AssistantNodeView',
   ])
   await assertMarkers('packages/client/ui-conversation/src/client/contract/conversation.ts', [
     'buildLocationData', 'ConversationLocationDataSource', 'ConversationStepDataMap',
@@ -69,10 +69,11 @@ if (baseline.perModelApi === 'model-entry') {
   ])
 }
 if (baseline.fileContentHelper === 'contentHasFile') {
-  await assertMarkers('packages/llm/llm/src/content.ts', [
-    'export function contentHasFile',
-    "block.type === 'tool-result' && contentHasFile(block.content)",
-  ])
+  const contentMarkers = ['export function contentHasFile', "block.type === 'file'"]
+  if (baseline.release !== '0.2.0-rc.1') {
+    contentMarkers.push("block.type === 'tool-result' && contentHasFile(block.content)")
+  }
+  await assertMarkers('packages/llm/llm/src/content.ts', contentMarkers)
   await assertMarkers('packages/llm/llm/src/index.ts', [
     'contentHasFile, contentHasImage',
   ])
@@ -116,13 +117,14 @@ await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',
 ])
 
-if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2'].includes(baseline.release)) {
+if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'].includes(baseline.release)) {
   for (const path of ['package.json', 'packages/core/session/package.json', 'packages/llm/llm-pi-ai/package.json']) {
     const metadata = JSON.parse(await readFile(resolve(upstream, path), 'utf8'))
     if (metadata.version !== baseline.release) throw new Error(`DSH target package version differs in ${path}`)
   }
   await assertMarkers('packages/core/session/src/index.ts', ['requestHeader(): EpochHeader | undefined'])
-  await assertMarkers('packages/core/session/src/types.ts', ['SESSION_FORMAT_VERSION = 3'])
+  const sessionFormatVersion = baseline.sessionFormatVersion ?? 3
+  await assertMarkers('packages/core/session/src/types.ts', [`SESSION_FORMAT_VERSION = ${sessionFormatVersion}`])
   await assertMarkers('packages/core/agent/src/index.ts', ['currentInitiator(): Agent | undefined'])
   await assertMarkers('packages/session/session-projection/src/index.ts', ['stateOf<K extends keyof SessionProjectionStateMap>'])
   await assertMarkers('packages/api/session-controller/src/model-selection-projection.ts', [
@@ -211,7 +213,7 @@ if (baseline.release === '0.1.6-alpha.1') {
   ])
 }
 
-if (baseline.release === '0.1.6-alpha.2') {
+if (baseline.release === '0.1.6-alpha.2' || baseline.release === '0.2.0-rc.1') {
   await assertMarkers('packages/typert/protocol/src/types.ts', ['readonly create: () => TypertSchema'])
   await assertMarkers('packages/typert/registry/src/service.ts', ["typeof codec.create !== 'function'", 'strict codec has no create() factory'])
   await assertMarkers('packages/subagent/subagent/src/descriptor.ts', ['SUBAGENT_DESCRIPTOR_VERSION = 3', 'readonly label: string', 'if (version !== SUBAGENT_DESCRIPTOR_VERSION) return undefined'])

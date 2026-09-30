@@ -1,8 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { SearchPlanCandidate } from './plan.ts'
 import type { ResponsesReasoningOptions } from './serialize.ts'
+import { readSettingsNamespace } from './settings-reader.ts'
 
 const levels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 function object(value: unknown): Record<string, unknown> | undefined {
@@ -21,7 +21,7 @@ export function resolveCopilotResponsesReasoning(
 ): ResponsesReasoningOptions | undefined {
   if (request.provider !== 'github-copilot' || candidate.protocol !== 'openai-responses'
     || candidate.model !== request.model) return unavailable()
-  const section = object(ctx.get('settings')?.get('llm-pi-ai' as SettingsNamespace))
+  const section = object(readSettingsNamespace(ctx, 'llm-pi-ai'))
   const profile = object(object(section?.providers)?.['github-copilot'])
   const effort = request.reasoningEffort ?? profile?.reasoning
   if (effort === undefined) return undefined

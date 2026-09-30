@@ -15,8 +15,8 @@ describe('controlled Core per-model API integration', () => {
           models: [{ id: 'synthetic-config-model' }],
         },
       },
-    })
-    const resolved = resolveProfiles(parsed.providers).get('github-copilot')
+    }).providers.get()
+    const resolved = resolveProfiles(parsed).get('github-copilot')
     expect(resolved?.piProvider.getModels().map(({ id, api, baseUrl, compat }) => ({
       id, api, baseUrl, supportsStrictMode: compat?.supportsStrictMode,
     }))).toEqual([{
@@ -29,12 +29,12 @@ describe('controlled Core per-model API integration', () => {
     const unsupported = Config({ providers: { 'github-copilot': {
       api: 'anthropic-messages', compat: { supportsStrictMode: false },
       models: [{ id: 'synthetic-config-model' }],
-    } } })
-    expect(() => resolveProfiles(unsupported.providers)).toThrow(/supportsStrictMode/)
+    } } }).providers.get()
+    expect(() => resolveProfiles(unsupported)).toThrow(/supportsStrictMode/)
     const supported = Config({ providers: { 'github-copilot': {
       api: 'anthropic-messages', models: [{ id: 'synthetic-config-model' }],
-    } } })
-    const models = resolveProfiles(supported.providers).get('github-copilot')?.piProvider.getModels()
+    } } }).providers.get()
+    const models = resolveProfiles(supported).get('github-copilot')?.piProvider.getModels()
     expect(models?.[0]?.api).toBe('anthropic-messages')
     expect(models?.[0]?.compat?.supportsStrictMode).toBeUndefined()
   })

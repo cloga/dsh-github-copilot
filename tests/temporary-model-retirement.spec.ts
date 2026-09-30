@@ -76,7 +76,9 @@ function runtime(historical: boolean, availableModelIds: string[]) {
     }
     if (name === 'settings') return {
       get: (namespace: string) => settingsDocuments[namespace], mutate,
-      describe: () => Object.entries(settingsDocuments).map(([ns, user]) => ({ ns, user, revision: revisions[ns]! })),
+      describe: () => Object.entries(settingsDocuments).map(([ns, user]) => ({
+        ns, user, value: structuredClone(user), revision: revisions[ns]!,
+      })),
     }
     return undefined
   })
