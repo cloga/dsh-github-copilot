@@ -107,7 +107,7 @@ function candidateViable(entries, baseline) {
 /** Read and compose the proposed normal launch without loadProfile's initialization/normalization writes. */
 export async function inspectProfileSearchComposition({ profileDir, home, installAnchor, patches = [] }, suppliedBoot) {
   const native = suppliedBoot ?? await import(pathToFileURL(createRequire(installAnchor).resolve('@deepseek-ai/dsh-app-boot')).href)
-  const { readProfileManifest, resolveBundleDir, loadOverlayPatches, loadOptionalPatches, composeEntries } = native
+  const { readProfileManifest, resolveBundleDir, bundlePatchPaths, loadOverlayPatches, loadOptionalPatches, composeEntries } = native
   const bin = 'copilot-search-preflight'
   const manifest = readProfileManifest(bin, profileDir)
   const reasons = new Set()
@@ -135,8 +135,8 @@ export async function inspectProfileSearchComposition({ profileDir, home, instal
       addCandidate()
       continue
     }
-    if (typeof bundle.dsh?.bundle?.patch !== 'string') throw new Error('INVALID_BUNDLE_MANIFEST')
-    const layer = loadOverlayPatches(bin, resolve(directory, bundle.dsh.bundle.patch))
+    const layer = bundlePatchPaths(directory, bundle.dsh?.bundle)
+      .flatMap(file => loadOverlayPatches(bin, file))
     layers.push(layer)
     baselineLayers.push(layer)
   }

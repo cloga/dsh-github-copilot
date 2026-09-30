@@ -14,14 +14,15 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
   '0.1.6-alpha.1': '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
   '0.1.6-alpha.2': 'ddefc45fbc7f8e46dd73185e68295696d1297887',
   '0.2.0-rc.1': '4878cdabd87d4041bdaff61d04c966883b9fd07a',
+  '0.2.0-rc.2': '639ed015397290b3745d163aafe02ffee4aa3f84',
 })
 const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
   'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts']
 function runtimeTests(release) {
-  return ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'].includes(release)
+  return ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'].includes(release)
     ? [...tests, ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
         ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
-        ...release === '0.2.0-rc.1' ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
+        ...release.startsWith('0.2.0-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts']
     : tests
 }
@@ -112,7 +113,7 @@ export async function taggedCoreAliases(core, trackedPaths, release) {
 }
 /** Keep the renderer, its external CJS selector shim and ReactDOM on one installed React. */
 export function taggedRendererRuntimeAliases(packages, release) {
-  if (!release.startsWith('0.1.6-') && release !== '0.2.0-rc.1') return []
+  if (!release.startsWith('0.1.6-') && !release.startsWith('0.2.0-')) return []
   const renderer = packages.find(item => item.name === '@deepseek-ai/dsh-client-ui-renderer')
   if (renderer === undefined) throw new Error('tagged selector fixture lacks the public renderer package')
   const require = createRequire(renderer.manifestPath)
@@ -147,7 +148,7 @@ export async function prepareTaggedCoreFixture({ root, core, target, release }, 
   await physicalDirectory(dirname(scratch))
   if (await exists(scratch)) throw new Error('tagged fixture target already exists')
   const plugin = JSON.parse(await readFile(join(pluginRoot, 'package.json'), 'utf8'))
-  if (plugin.name !== 'dsh-github-copilot' || plugin.dependencies?.['@earendil-works/pi-ai'] !== '0.85.1') throw new Error('tagged fixture requires the plugin own pi-ai 0.85.1')
+  if (plugin.name !== 'dsh-github-copilot' || plugin.dependencies?.['@earendil-works/pi-ai'] !== '0.87.1') throw new Error('tagged fixture requires the plugin own pi-ai 0.87.1')
   const commit = git(coreRoot, ['rev-parse', '--verify', 'HEAD']).trim()
   if (commit !== expected) throw new Error('tagged Core commit does not match the exact release pin')
   if (git(coreRoot, ['status', '--porcelain=v1', '--untracked-files=no']).trim()) throw new Error('tagged Core tracked sources must be clean')

@@ -335,13 +335,9 @@ class PreviewAdapter extends PiAiAdapter {
           requestFailure = budgetFailure(calculated)
           throw requestFailure
         }
-        // A previous usage anchor can omit changed system/tool prefixes. Price the
-        // current prefix and every message independently as a second lower bound.
-        const prefix = estimateContextTokens({ messages: [],
-          ...context.systemPrompt === undefined ? {} : { systemPrompt: context.systemPrompt },
-          ...context.tools === undefined ? {} : { tools: context.tools },
-        }).tokens
-        const fresh = context.messages.reduce((tokens, message) => tokens + estimateMessageTokens(message), prefix)
+        // A previous usage anchor can omit changed system/tool prefixes. In the
+        // native transcript they are system messages, so price every message.
+        const fresh = context.messages.reduce((tokens, message) => tokens + estimateMessageTokens(message), 0)
         const estimate = Math.max(estimateContextTokens(context).tokens, fresh)
         const admitted = assessRequestBudget(estimate, calculated.budget)
         if (!admitted.ok) {

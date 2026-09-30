@@ -16,7 +16,7 @@ import remote from '../../src/remote.ts'
 
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.1.6-alpha.2', '0.2.0-rc.1']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 const header = { id: SessionId('native-child'), version: SESSION_FORMAT_VERSION, createdAt: 1, isSeeded: false,
   parentSession: SessionId('native-parent'), origin: 'subagent' }

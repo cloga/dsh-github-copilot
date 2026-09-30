@@ -33,12 +33,12 @@ const managedPending: MigrationSelection = {
 }
 const defaultC: MigrationSelection = { provider: 'fixture-default', model: 'fixture-C' }
 const contexts: Context[] = []
-const expectedSessionFormatVersion = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.0-rc.1' ? 4 : 3
+const expectedSessionFormatVersion = process.env.DSH_PUBLISHED_CORE_RELEASE?.startsWith('0.2.0-') ? 4 : 3
 
 beforeAll(() => {
   // Fail rather than silently substitute the installed peer or another baseline.
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'])
+  expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'])
     .toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(expectedSessionFormatVersion)
 })
@@ -76,7 +76,7 @@ async function fixture({ mountController = true } = {}) {
   await ctx.plugin(SessionStore)
   const agents = new AgentRegistry(ctx)
   const created = new Set<string>()
-  if (['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
+  if (['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
     Reflect.apply(ctx.on, ctx, ['agent/created', async (payload: {
       agent: Agent
       source: string
@@ -132,7 +132,7 @@ async function fixture({ mountController = true } = {}) {
     // public id/session/status/ctx leaves are used by registration and these reads.
     const agent = shell as Agent
     await agents.register(agent)
-    if (['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
+    if (['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
       expect(created.has(agent.id)).toBe(true)
     }
     shells.push(shell)

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.38"
+    "version": "0.4.0-alpha.39"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -19,12 +19,12 @@
     "platforms": ["windows", "linux"],
     "node": ">=22.19.0",
     "dsh": {
-      "release": "0.2.0-rc.1",
-      "tag": "dsh-v0.2.0-rc.1",
-      "commit": "4878cdabd87d4041bdaff61d04c966883b9fd07a",
-      "developmentRelease": "0.2.0-rc.1",
-      "admittedReleases": ["0.2.0-rc.1"],
-      "peerRange": "0.2.0-rc.1",
+      "release": "0.2.0-rc.2",
+      "tag": "dsh-v0.2.0-rc.2",
+      "commit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+      "developmentRelease": "0.2.0-rc.2",
+      "admittedReleases": ["0.2.0-rc.2"],
+      "peerRange": "0.2.0-rc.2",
       "baselines": [
         {
           "release": "0.1.1-rc.2",
@@ -195,6 +195,32 @@
           "managedProviderValidation": "synthetic-tagged-source-runtime",
           "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
           "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
+        },
+        {
+          "release": "0.2.0-rc.2",
+          "tag": "dsh-v0.2.0-rc.2",
+          "commit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+          "source": "https://github.com/deepseek-ai/deepseek-harness",
+          "desktopRelease": "0.2.0-rc.2",
+          "modelsUi": "provider-card",
+          "providerHeaders": "fetch-validated-discovery",
+          "strictModeCompat": "route-switch",
+          "fileContentHelper": "contentHasFile",
+          "agentCreation": "awaited-serial-agent-created",
+          "sessionHistory": "request-header-and-projections-no-new-sync-history",
+          "sessionFormatVersion": 4,
+          "strictRemoteCodecs": "create-factories-with-legacy-schema-bridge",
+          "roleChildDescriptorVersion": 3,
+          "roleChildCacheVersion": 2,
+          "roleChildHistory": "unknown-legacy-history-fail-closed",
+          "runtimeDependencies": "public-resolution-and-unload",
+          "clientSessionContext": "multiple-session-owner-isolation",
+          "evidenceScope": "unchanged-tagged-source-target",
+          "standaloneNpmArtifacts": "tested",
+          "desktopPackageSet": "installed-descriptor-audited",
+          "managedProviderValidation": "synthetic-tagged-source-runtime",
+          "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
         }
       ],
       "packages": [
@@ -216,13 +242,13 @@
         "@deepseek-ai/dsh-web-search-deepseek"
       ]
     },
-    "piAi": "0.85.1",
+    "piAi": "0.87.1",
     "runtimeDependencies": {
-      "@earendil-works/pi-ai": "0.85.1",
+      "@earendil-works/pi-ai": "0.87.1",
       "zod": "^4.4.3"
     },
     "sharedPeerDependencies": {
-      "@deepseek-ai/dsh-authorization": "0.2.0-rc.1",
+      "@deepseek-ai/dsh-authorization": "0.2.0-rc.2",
       "@deepseek-ai/schemastery": "^3.18.2"
     },
     "clientExternals": {
@@ -245,6 +271,12 @@
         "packageCount": 246,
         "scope": "historical-ownership-only-not-current-compatibility",
         "descriptorStatus": "not-materialized"
+      },
+      {
+        "id": "desktop-0.2.0-rc.2-signed-runtime",
+        "sourceSha256": "29561160fb7825c3968708f5700564f4381a976985fc270ee5dcc42e5a0a3a54",
+        "packageCount": 287,
+        "scope": "installed-signed-desktop-peer-ownership-only-not-loaded-plugin"
       }
     ]
   },
@@ -286,7 +318,7 @@
         {"file": "package.json", "marker": "\"external\": ["}
       ],
       "tests": [
-        {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "retains old Desktop shared graphs as ownership evidence, not current compatibility claims"},
+        {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "retains historical graphs and audits signed rc.2 Desktop peer ownership"},
         {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "shared graph gate rejects bundled, optional, incompatible, or unaudited host ownership"},
         {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "client externals stay outside the strict Node peer graph"}
       ]
@@ -905,7 +937,7 @@
       "id": "dsh-supported-baselines-fail-loud-guard",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/compatibility.ts", "marker": "peerRange: '0.2.0-rc.1'"}
+        {"file": "src/compatibility.ts", "marker": "peerRange: '0.2.0-rc.2'"}
       ],
       "tests": [
         {"file": "tests/compatibility.spec.ts", "name": "admits only the exact current official release"},

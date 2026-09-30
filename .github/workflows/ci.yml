@@ -20,11 +20,11 @@ jobs:
           - windows-latest
         include:
           - os: ubuntu-latest
-            release: 0.2.0-rc.1
-            commit: 4878cdabd87d4041bdaff61d04c966883b9fd07a
+            release: 0.2.0-rc.2
+            commit: 639ed015397290b3745d163aafe02ffee4aa3f84
           - os: windows-latest
-            release: 0.2.0-rc.1
-            commit: 4878cdabd87d4041bdaff61d04c966883b9fd07a
+            release: 0.2.0-rc.2
+            commit: 639ed015397290b3745d163aafe02ffee4aa3f84
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -66,7 +66,7 @@ jobs:
       - name: Install tagged search verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
-      - name: Prepare exact DSH 0.2.0-rc.1 tagged-source runtime verification
+      - name: Prepare exact DSH 0.2.0-rc.2 tagged-source runtime verification
         shell: bash
         run: |
           node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.release }}"
@@ -105,7 +105,7 @@ jobs:
       - name: Prepare an isolated plugin fixture for published Core APIs
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release 0.2.0-rc.1
+          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release 0.2.0-rc.2
       - name: Install unchanged public dependency artifacts
         shell: bash
         run: |
@@ -114,11 +114,11 @@ jobs:
       - name: Verify actual dependency paths and class identities
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release 0.2.0-rc.1
+          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release 0.2.0-rc.2
       - name: Typecheck and exercise the published native adapter
         shell: bash
         env:
-          DSH_PUBLISHED_CORE_RELEASE: 0.2.0-rc.1
+          DSH_PUBLISHED_CORE_RELEASE: 0.2.0-rc.2
         run: |
           cd "$RUNNER_TEMP/copilot-published-core"
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit

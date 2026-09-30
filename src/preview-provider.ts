@@ -1,5 +1,5 @@
 import { hasApi, lazyStream } from '@earendil-works/pi-ai'
-import type { Api, Context as PiContext, Model, OAuthAuth, StreamOptions, ThinkingLevelMap } from '@earendil-works/pi-ai'
+import type { Api, Model, OAuthAuth, StreamOptions, ThinkingLevelMap, TranscriptContext } from '@earendil-works/pi-ai'
 import type { AccountModelApi, AccountModelDescriptor } from './account-model-catalog.ts'
 import { coreProviderView } from './pi-provider-bridge.ts'
 import type { CoreCompatibleProvider, SimpleNativeProvider } from './pi-provider-bridge.ts'
@@ -27,7 +27,7 @@ export interface PreviewProviderGuard {
 export interface AccountProviderGuard extends PreviewProviderGuard {
   readonly selectedModelId?: string
   /** Per-dispatch admission after native context conversion, before starting a model wire. */
-  inspectRequest?(model: Model<Api>, context: PiContext, options?: StreamOptions): void
+  inspectRequest?(model: Model<Api>, context: TranscriptContext, options?: StreamOptions): void
   assertEntitled(credential: GitHubCopilotOAuthCredential, modelId: string): void
 }
 

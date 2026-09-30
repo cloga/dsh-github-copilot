@@ -3,7 +3,7 @@ import { createRequire, findPackageJSON } from 'node:module'
 import { dirname, isAbsolute, join, relative, resolve, sep, extname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.0-rc.1'])
+export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.0-rc.2'])
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
 const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
   'README.md', 'README.zh.md', 'AGENTS.md', 'CONTRIBUTING.md', 'SECURITY.md', 'LICENSE',
@@ -45,8 +45,8 @@ async function collectTree(root, path, paths) {
   } else if (info.isFile() && extensions.has(extname(path).toLowerCase())) paths.push(relative(root, path))
 }
 function fixtureManifest(original, release) {
-  if (original.name !== 'dsh-github-copilot' || original.dependencies?.['@earendil-works/pi-ai'] !== '0.85.1') {
-    throw new Error('fixture requires this plugin and its exact own pi-ai 0.85.1 dependency')
+  if (original.name !== 'dsh-github-copilot' || original.dependencies?.['@earendil-works/pi-ai'] !== '0.87.1') {
+    throw new Error('fixture requires this plugin and its exact own pi-ai 0.87.1 dependency')
   }
   const manifest = { ...original, private: true, scripts: {} }
   for (const section of sections) {
@@ -124,7 +124,7 @@ export async function inspectPublishedCoreFixture({ root, release }) {
   const fixture = await physicalDirectory(root)
   const anchor = join(fixture, 'package.json')
   const manifest = JSON.parse(await readFile(anchor, 'utf8'))
-  if (manifest.name !== 'dsh-github-copilot' || manifest.dependencies?.['@earendil-works/pi-ai'] !== '0.85.1') {
+  if (manifest.name !== 'dsh-github-copilot' || manifest.dependencies?.['@earendil-works/pi-ai'] !== '0.87.1') {
     throw new Error('not a prepared plugin fixture')
   }
   const names = [...new Set(sections.flatMap(section => Object.keys(manifest[section] ?? {})))]
@@ -157,7 +157,7 @@ export async function inspectPublishedCoreFixture({ root, release }) {
   }
   const ownPi = await publicPackage(fixture, anchor, '@earendil-works/pi-ai')
   const adapterPi = await publicPackage(fixture, adapter.entry, '@earendil-works/pi-ai')
-  if (ownPi.version !== '0.85.1') throw new Error('fixture changed the plugin own pi version')
+  if (ownPi.version !== '0.87.1') throw new Error('fixture changed the plugin own pi version')
   return { schemaVersion: 1, kind: 'published-core-identity', release, root: fixture, packages, cordis,
     ownPi, adapterPi, classIdentity: true, executed: { apply: false, modelRequests: false, compatibilityTests: false } }
 }

@@ -4,6 +4,7 @@ import '@earendil-works/pi-ai/api/openai-completions'
 import '@earendil-works/pi-ai/api/anthropic-messages'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { lazyStream } from '@earendil-works/pi-ai'
+import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
 import type { Context as PiContext, StreamOptions } from '@earendil-works/pi-ai'
 import * as copilotSdk from '@earendil-works/pi-ai/providers/github-copilot'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -149,12 +150,11 @@ describe('account-driven native provider', () => {
   })
   it('takes protocol and independent input limits from descriptor evidence rather than the local GPT-6 catalog', () => {
     const local = getBuiltinModels('github-copilot').find(model => model.id === 'gpt-6-astra')!
-    expect(local.api).toBe('openai-completions')
-    const converted = accountModelFromDescriptor(descriptor('openai-responses', local.id), baseURL)
-    expect(converted.api).toBe('openai-responses')
+    expect(local.api).toBe('openai-responses')
+    const converted = accountModelFromDescriptor(descriptor('openai-completions', local.id), baseURL)
+    expect(converted.api).toBe('openai-completions')
     expect(converted.contextWindow).toBe(65536)
     expect(converted.maxInputTokens).toBe(32768)
-    expect(local.api).toBe('openai-completions')
   })
   it('does not infer controls from a name or unfamiliar advertised effort labels', () => {
     const converted = accountModelFromDescriptor(descriptor('openai-responses', 'future-lab-r17', ['turbo', 'none', 'off']), baseURL)
@@ -197,7 +197,7 @@ describe('account provider model HTTP authorization observation', () => {
         const options = { apiKey: 'synthetic-account-token', signal: caller.signal, maxRetries: 0,
           ...fetch === undefined ? {} : { fetch },
         }
-        const stream = provider.streamSimple(models[0]!, { messages: [] }, options)
+        const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), options)
         for await (const _event of stream) { /* Drain native events, including the unchanged terminal failure. */ }
         const result = await stream.result()
         await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(1))
@@ -364,7 +364,7 @@ describe('managed Responses replay compatibility', () => {
       body = JSON.parse(String(init?.body)) as Record<string, unknown>
       return nativeEvents(api)
     })
-    const stream = provider.streamSimple(models[0]!, context, {
+    const stream = provider.streamSimple(models[0]!, normalizeContext(context), {
       apiKey: 'synthetic-account-token', maxRetries: 0, fetch, ...options,
     })
     for await (const _event of stream) { /* Consume the real native SDK stream. */ }
