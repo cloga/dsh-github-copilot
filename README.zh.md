@@ -11,7 +11,7 @@
 
 ## 当前体验
 
-- **账号与模型：**在 **设置 → 模型** 的原生 GitHub Copilot 行内完成登录、查看账号发现模型、刷新元数据及账号管理。
+- **账号与模型：**在 **设置 → 模型** 的原生 GitHub Copilot 行内完成登录、查看账号发现模型、刷新元数据及账号管理。可在 **Manage → Model preferences** 中按精确 ID 排除模型，使其同时退出托管 picker 与 Auto 候选池；Core 原生 picker 仍保持平铺。
 - **搜索路由：**在 **插件 → dsh-github-copilot → 详情**选择主搜索 Provider 与兜底 Provider。页面只保留用户真正需要的两项选择，不再把协议探测、超时、白名单或传输开关作为日常配置暴露；同时会在停用／移除／升级前常驻显示 rc.2 生命周期提示。更新后的路由服务尚未激活时，卡片会明确显示 **需要重启生效（Restart required）**，而不是继续展示无法使用的表单。
 - **用量：**符合条件的 Copilot 会话会在输入框旁显示可选的 **Credits / 额度** 控件，展示供应方明确返回的计费周期数据，并如实区分不可用与历史快照。仅额度请求组合 Node 默认证书与系统信任根，无需依赖 Desktop launcher 的环境变量继承，且保持 TLS 验签。
 - **兼容处理：**插件通过 DSH 已发布公开接口提供 Copilot 专用 Tool Schema、Thinking 展示、请求预算及账号模型兼容，不修改 Core，也不维护第二套模型目录。
@@ -20,7 +20,7 @@
 
 截图来自当前构建 Client 的隔离浏览器 fixture，使用合成 Provider。它只证明已发布配置界面的形态，不证明真实凭据、账号权限、搜索成功或当前 Desktop 已加载。
 
-> 当前文档与安装命令对应版本 `0.4.0-alpha.58`。源码、发布制品、已安装版本和实际加载运行时需分别确认；本地升级和中断会话的重启仍需用户批准。
+> 当前文档与安装命令对应版本 `0.4.0-alpha.59`。源码、发布制品、已安装版本和实际加载运行时需分别确认；本地升级和中断会话的重启仍需用户批准。
 
 Web search 路由现在优先显示在插件详情页；宿主不支持详情页插槽时才回退到 **设置 → 模型**或独立 Web search section。搜索子 Fiber 仍独立等待 Remote，不影响账号控件和既有搜索安全检查。
 
@@ -111,10 +111,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 仅对独立的具名 profile，获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.58/dsh-github-copilot-0.4.0-alpha.58.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.59/dsh-github-copilot-0.4.0-alpha.59.tgz
 ```
 
-Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.58`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
+Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.59`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
@@ -124,11 +124,11 @@ Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理�
 2. 点击 **Sign in with GitHub** 后，验证码区域自动展开，提供醒目的一次性验证码、**Open GitHub verification page**、**Copy code** 和 **Cancel sign-in**。不需要再点一次 **Manage**。识别到 Desktop v1 宿主时，通过现有的同窗口外部导航处理交给系统浏览器，不依赖弹出窗口；网页版仍打开新标签页。如果没有打开，可选中并复制界面显示的验证网址到浏览器。插件无法确认系统浏览器是否已打开。
 3. 复制验证码，打开验证链接，在自己的 GitHub 浏览器会话中完成授权。复制成功／失败均有可访问的反馈；手工复制仍可用。不要把 GitHub token 粘贴到 DSH。
 4. DSH 只在授权进行中轮询。显式 **Start sign-in**（**Sign in with GitHub** 按钮，包括界面切换账号）成功后，无论立即返回还是轮询观察到成功，都只强制执行一次有界发现。验证码和验证链接清除，自动授权区域收起，账号显示 **Signed in、Manage**。手动打开的详情保持展开；取消清除旧验证码。失败仅显示安全的阶段诊断：`COPILOT_AUTHORIZATION_BEGIN_FAILED` 表示授权流程未完成；`COPILOT_ROUTE_REPAIR_FAILED` 表示授权已完成但本地路由修复失败。begin 失败还可以显示固定的“最近观察到的里程碑” (`AUTHORIZATION_REQUESTED`、`INTERACTION_PROMPT_OBSERVED` 或 `INTERACTION_NOTICE_OBSERVED`)；它只表示公开 interaction callback 已观察到的进度，不代表失败操作或 credential commit。后者会保留认证，并提示前往 **Manage → Repair model configuration**。这些代码和里程碑不解释或解决底层登录失败，原始 provider 详情不会显示或记录。
-5. 在 **GitHub Copilot** 分组选择接受的模型（稳定路由 ID 为 `github-copilot-preview`）。正常打开／使用会自动维护元数据，无需手动 **Refresh models**。**Manage** 内保留可选的手动刷新、模型明细与退出登录，移除兼容说明折叠区；需要时仍显示旧配置诊断和显式修复操作，[迁移指南](./docs/single-route-migration.md)继续保留在文档中。错误即使在详情折叠时也会显示并提供 **Retry**；发现或重试均不切换当前／默认模型，也不重放消息。
+5. 在 **GitHub Copilot** 分组选择接受的模型（稳定路由 ID 为 `github-copilot-preview`）。正常打开／使用会自动维护元数据，无需手动 **Refresh models**。**Manage** 内包含手动刷新、模型明细、**Model preferences** 与退出登录。模型偏好提供本地搜索和明确的 **Exclude/Restore** 操作；被排除的精确 ID 会退出托管 picker 与所有 Auto 候选，暂时不在账号元数据中的排除 ID 仍可恢复。当前固定托管模型在切换到其他模型前不可排除。排除不会改写历史、切换选择或修改账号权限。
 
 ### Auto 模型路由
 
-托管 GitHub Copilot 分组提供三个平铺的虚拟选择：**Auto · Balance**（均衡）、**Auto · Efficiency**（效率）和 **Auto · Intelligence**（智能）。三档共用当前账号验证过的合格模型池。在应用偏好前，路由会根据候选模型的硬输入预算计算输入余量，剔除无法容纳当前消息的候选。软偏好通过确定性内存种子在候选区间（上段/下段/中段）内分布，避免单一顶配模型跨 Session 被垄断。若所有候选均超限，Auto 会选择输入容量最大的模型并对可压缩历史触发 compaction pressure。Auto 在每个 Core turn 只解析一次；同轮工具步骤、重试和自动 compact 恢复使用同一真实模型，新轮次可重新选择。图片轮次必须有验证过的图片候选。新轮次保留 Core 的真实模型／用量信息，不追加不兼容的插件事件。搜索仍由独立策略管理；原生子代理与 Team 队友继承 Core 的具体模型，不被重新标为 Auto。详见[策略与 mockup](./docs/automatic-model-routing.md)；模型排除与嵌套菜单仍只是提案。
+托管 GitHub Copilot 分组提供三个平铺的虚拟选择：**Auto · Balance**（均衡）、**Auto · Efficiency**（效率）和 **Auto · Intelligence**（智能）。三档先应用精确模型排除，再共用当前账号验证过的合格模型池。在应用偏好前，路由会根据候选模型的硬输入预算计算输入余量，剔除无法容纳当前消息的候选。软偏好通过确定性内存种子在候选区间（上段/下段/中段）内分布，避免单一顶配模型跨 Session 被垄断。若所有候选均超限，Auto 会选择输入容量最大的模型并对可压缩历史触发 compaction pressure；若排除后没有任何合格模型，则 Auto 关闭式失败。Auto 在每个 Core turn 只解析一次；同轮工具步骤、重试和自动 compact 恢复使用同一真实模型，新轮次可重新选择。图片轮次必须有未被排除且已验证的图片候选。新轮次保留 Core 的真实模型／用量信息，不追加不兼容的插件事件。搜索仍由独立策略管理；原生子代理与 Team 队友继承 Core 的具体模型，不被重新标为 Auto。详见[策略与 mockup](./docs/automatic-model-routing.md)。嵌套管理折叠区由插件提供；Core picker 仍保持平铺。
 
 已完成的 Copilot 回复在原生 Usage／时间后显示 **Auto（偏好）**，点信息按钮查看本轮记录的选择原因；只有捕获到明确固定选择才显示**手动**。缺记录显示**选择方式未知**，不借当前 picker 推断历史。不重复模型名、不另设 Model details 按钮：实际模型仍由原生 Usage 显示，其缺失归属行为未改变。新选择记录仅限当前 Host 内存且有容量上限，重启、释放 Agent 或淘汰后会丢失；兼容历史 Auto 记录仍可读取。公开 assistant-actions slot 只允许插件内部换行，不能改变原生固定高度尾栏。
 
@@ -157,7 +157,7 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.58`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.59`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
 **Desktop package 更新与 Web 生命周期边界：**原生 manager 对已安装 package 原位升级返回的 `restart-required` 是权威结果，与移除／重加 plugin bundle 的行为是两个不同问题。涉及服务重编排补丁（`cordis.patch.yml`，如本插件所采用的隔离路由 Web 搜索层）的停用、移除或升级，可能让依赖条目保持 pending，直到完全退出并冷重启 Desktop。若原生 manager 只报告类似 `pending (waiting for service: web)` 的条目，同时本插件已经显示 **Off**，说明请求的停用状态已经落盘；请冷重启 Desktop，不要反复切换或重装插件。其它错误不属于此提示范围，仍需单独排查。
 
@@ -439,8 +439,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.58/dsh-github-copilot-0.4.0-alpha.58.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.58/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.59/dsh-github-copilot-0.4.0-alpha.59.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.59/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -448,7 +448,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.58.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.59.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

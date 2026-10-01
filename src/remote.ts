@@ -23,6 +23,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       reconcile(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       discoverModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       ensureModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      excludeModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      restoreModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       cancel(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       signOut(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -59,6 +61,20 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
     warnings: z.array(z.object({ id: z.string(), code: z.string() }).strict()).max(1024).optional(),
     discoveredAt: z.number().int().nonnegative().optional(),
     error: z.string().optional(),
+  }).strict().optional(),
+  modelPreferences: z.object({
+    state: z.enum(['ready', 'error']),
+    writable: z.boolean(),
+    revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    excludedModelIds: z.array(z.string().min(1).max(512)).max(512),
+    lockedModelIds: z.array(z.string().min(1).max(512)).max(512),
+    unavailableExcludedModelIds: z.array(z.string().min(1).max(512)).max(512),
+    error: z.enum([
+      'COPILOT_MODEL_PREFERENCES_UNAVAILABLE',
+      'COPILOT_MODEL_EXCLUSION_SELECTED',
+      'COPILOT_MODEL_EXCLUSION_CONFLICT',
+      'COPILOT_MODEL_EXCLUSION_SAVE_FAILED',
+    ]).optional(),
   }).strict().optional(),
   route: z.object({
     state: z.enum(['ready', 'needs-repair', 'not-configured', 'conflict', 'error']),
@@ -115,6 +131,20 @@ const contribution: TypertRemoteContribution = {
       method,
       invocation: direct,
       parameters: [],
+      result,
+    })),
+    ...['excludeModel', 'restoreModel'].map(method => ({
+      id: `dsh-github-copilot:githubCopilot.${method}`,
+      service: 'githubCopilotAuthorization',
+      namespace: 'githubCopilot',
+      method,
+      invocation: direct,
+      parameters: [{
+        name: 'modelId',
+        wire: 'modelId',
+        source: 'json' as const,
+        codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelId', z.string().min(1).max(512)),
+      }],
       result,
     })),
     {

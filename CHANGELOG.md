@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.59 (prepared)
+
+- Add exact account-model exclusions under **GitHub Copilot → Manage → Model preferences**, with local search, visible/excluded counts, explicit **Exclude/Restore** actions, and retained rows for excluded IDs temporarily absent from account metadata (#192).
+- Remove excluded IDs from the managed picker, every Auto candidate pool, aggregate Auto modalities, hosted-search route facts, and request-budget admission. Stale picker or direct requests fail with `COPILOT_PREVIEW_MODEL_EXCLUDED`; Auto fails closed when no eligible model remains.
+- Protect the current fixed managed selection using public default and live Session projection/request-header evidence. Exclusion writes use path-level settings CAS and never rewrite history, switch a Session, mutate the account grant, or change Core's flat picker layout.
+
 ## 0.4.0-alpha.58 (prepared)
 
 - Add compact Auto preference and expandable recorded reasons after the native reply time through the public assistant-actions slot; explicit fixed selection shows Manual, absent evidence shows Selection unknown. Remove the separate Model details candidate and repeated model name; actual models stay in native Usage.

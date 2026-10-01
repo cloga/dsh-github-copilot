@@ -28,6 +28,8 @@ import type { RequestBudgetFailure, RequestBudgetPolicy } from './request-budget
 import { installCopilotCompactionPressure } from './compaction-pressure.ts'
 import { autoModelInputModalities } from './auto-model-routing.ts'
 import { installAutoModelRouting } from './auto-model-host.ts'
+import { excludedModelSet } from './model-exclusions.ts'
+import { onSettingsNamespaceUpdated } from './settings-reader.ts'
 
 /** Safe request knobs; identities, model tables, endpoints and credentials are not configurable. */
 export type PreviewRouteConfig = Pick<PiAiProviderProfile,
@@ -35,7 +37,7 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   | 'streamIdleTimeoutMs' | 'maxRequestImageBytes' | 'requestImagePixelBudget' | 'requestImageMaxBytes' | 'retryPolicy'>
   & Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
   & {
-    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
+    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds'>
     readonly requestBudget?: Partial<RequestBudgetPolicy>
     readonly requestBudgetSettings?: () => Partial<RequestBudgetPolicy>
   }
@@ -108,7 +110,8 @@ class PreviewLifetime {
   private active = true
   constructor(readonly credentials: CredentialStore, readonly source: AccountModelSource,
     readonly proofFor: (snapshot: AccountModelSnapshot) => Proof | undefined,
-    private readonly displayProofFor: (snapshot: AccountModelSnapshot) => Proof | undefined) {}
+    private readonly displayProofFor: (snapshot: AccountModelSnapshot) => Proof | undefined,
+    private readonly excluded: (modelId: string) => boolean) {}
   assertActive(): void { if (!this.active) throw failure('COPILOT_PREVIEW_DISPOSED', 'ABORTED') }
   isCurrent(revision: number): boolean { return this.active && revision === this.revision }
   change(): void {
@@ -164,6 +167,7 @@ class PreviewLifetime {
     const combined = signal === undefined ? this.controller.signal : AbortSignal.any([signal, this.controller.signal])
     const grant = await this.read(combined)
     if (grant === undefined) throw failure('COPILOT_PREVIEW_OAUTH_REQUIRED')
+    if (this.excluded(model)) throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
     const descriptor = snapshot.models.find(item => item.id === model)
     if (descriptor === undefined) throw failure('COPILOT_PREVIEW_MODEL_NOT_ENTITLED', 'UNKNOWN_MODEL')
     const proof = this.proofFor(snapshot)
@@ -178,6 +182,7 @@ class PreviewLifetime {
   }
   private entitled(lease: Lease | undefined, grant: GitHubCopilotOAuthCredential, model: string): void {
     this.account(lease, grant)
+    if (this.excluded(model)) throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
     if (lease.descriptor.id !== model) throw failure('COPILOT_PREVIEW_MODEL_MISMATCH', 'UNKNOWN_MODEL')
     if (this.source.readSnapshot() !== lease.snapshot || this.proofFor(lease.snapshot) !== lease.proof) throw failure('COPILOT_PREVIEW_METADATA_STALE')
     // A live enabled entry may precede the grant's ID list, but cannot survive a
@@ -262,6 +267,7 @@ class PreviewAdapter extends PiAiAdapter {
     private readonly discoverSnapshot: (options?: AccountModelLoadOptions) => Promise<AccountModelSnapshot>,
     private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
     private readonly requestBudgetSettings: () => Partial<RequestBudgetPolicy>,
+    private readonly accountModelSettings: () => Pick<InlineConfig, 'excludedModelIds'>,
   ) { super(optionsFor()) }
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     owned(provider)
@@ -275,7 +281,9 @@ class PreviewAdapter extends PiAiAdapter {
       if (grant === undefined || snapshot.accountKey !== copilotAccountKey(grant)) return []
       const proof = this.lifetime.proofFor(snapshot)
       if (proof === undefined || tokenFingerprint(grant.access) !== proof.tokenFingerprint || grant.expires <= Date.now()) return []
-      const models = snapshot.models.filter(model => autoModelPreference(model.id) === undefined && model.input.includes('text'))
+      const excluded = this.excludedModels()
+      const models = snapshot.models.filter(model => autoModelPreference(model.id) === undefined
+        && !excluded.has(model.id) && model.input.includes('text'))
       if (models.length === 0) return []
       return [
         { provider, id: GITHUB_COPILOT_AUTO_MODEL_ID, name: 'Auto · Balance',
@@ -293,8 +301,9 @@ class PreviewAdapter extends PiAiAdapter {
     const cached = this.lifetime.source.readSnapshot()
     const snapshot = await this.discoverSnapshot({ signal })
     if (autoModelPreference(model) !== undefined) {
+      const excluded = this.excludedModels()
       const models = snapshot.models.filter(candidate => autoModelPreference(candidate.id) === undefined
-        && candidate.input.includes('text'))
+        && !excluded.has(candidate.id) && candidate.input.includes('text'))
       if (models.length === 0) throw failure('COPILOT_AUTO_NO_ELIGIBLE_MODEL', 'UNKNOWN_MODEL')
       const name = model === GITHUB_COPILOT_AUTO_MODEL_ID ? 'Auto · Balance'
         : model === GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID ? 'Auto · Efficiency' : 'Auto · Intelligence'
@@ -417,14 +426,19 @@ class PreviewAdapter extends PiAiAdapter {
       }
     })()
   }
+  private excludedModels(): ReadonlySet<string> {
+    return excludedModelSet(this.accountModelSettings().excludedModelIds)
+  }
 }
 
 /** Register one stable account route; attach/status remain network-free. */
 export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings,
     requestBudget, requestBudgetSettings, ...requestConfig } = config
-  const cacheSettings = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs }))
+  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds'>
+    = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs, excludedModelIds: [] }))
   const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
+  const excludedModels = () => excludedModelSet(cacheSettings().excludedModelIds)
   resolveRequestBudgetPolicy(budgetSettings())
   const store = createGitHubCopilotCredentialStore(ctx, GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
   let rejectedAuth: Proof | undefined
@@ -484,7 +498,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     && provenSnapshot === snapshot && snapshotProof?.accountKey === snapshot.accountKey ? snapshotProof : undefined
   const proofFor = (snapshot: AccountModelSnapshot): Proof | undefined => source.readSnapshot() === snapshot
     && snapshotProof !== undefined && snapshotProof.expires > Date.now() ? displayProofFor(snapshot) : undefined
-  const lifetime = new PreviewLifetime(store, source, proofFor, displayProofFor)
+  const lifetime = new PreviewLifetime(store, source, proofFor, displayProofFor, modelId => excludedModels().has(modelId))
   // Empty provider is used only for registry metadata/config validation, never requests.
   const template = resolvedProfile(createAccountProvider([], lifetime.guard(), 'https://api.individual.githubcopilot.com').provider, requestConfig)
   let configured = false
@@ -630,13 +644,27 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     }
   }
   const removeAutoRoute = installAutoModelRouting(ctx, {
-    async loadModels(signal) { return (await discoverSnapshot({ signal })).models },
+    async loadModels(signal) {
+      const excluded = excludedModels()
+      return (await discoverSnapshot({ signal })).models.filter(model => !excluded.has(model.id))
+    },
     budgetPolicy: () => budgetSettings(),
   })
-  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID], new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings))
+  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
+    new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings))
+  let exclusionSignature = JSON.stringify([...excludedModels()])
+  const removeSettings = onSettingsNamespaceUpdated(ctx, namespace => {
+    if (namespace !== 'github-copilot') return
+    const next = JSON.stringify([...excludedModels()])
+    if (next === exclusionSignature) return
+    exclusionSignature = next
+    publishedDirectory = ''
+    registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
+  })
   installCopilotCompactionPressure(ctx, { resolve(request) {
     const snapshot = source.readSnapshot()
     if (snapshot === undefined || proofFor(snapshot) === undefined) return undefined
+    if (excludedModels().has(request.model)) return undefined
     const descriptor = snapshot.models.find(model => model.id === request.model)
     if (descriptor === undefined) return undefined
     const result = calculateRequestBudget(descriptor, request.maxTokens, resolveRequestBudgetPolicy(budgetSettings()))
@@ -663,6 +691,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
         && (snapshotProof === captured || snapshotProof === undefined || snapshotProof.expires > Date.now())
     },
     routeFacts(modelId) {
+      if (excludedModels().has(modelId)) return undefined
       const snapshot = source.readSnapshot()
       const proof = snapshot === undefined ? undefined : proofFor(snapshot)
       const descriptor = snapshot?.models.find(model => model.id === modelId)
@@ -694,6 +723,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   ctx.effect(() => () => {
     lifetime.dispose()
     removeListener()
+    removeSettings()
     removeAutoRoute()
     registration()
   })

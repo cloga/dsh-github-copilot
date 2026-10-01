@@ -44,7 +44,11 @@ describe('managed request and compaction settings', () => {
 
 describe('account model cache settings', () => {
   it('defaults to a day of metadata reuse and five minutes between passive failure retries', () => {
-    expect(Config(base)).toMatchObject({ accountModelTtlMs: 86_400_000, accountModelFailureCooldownMs: 300_000 })
+    expect(Config(base)).toMatchObject({
+      accountModelTtlMs: 86_400_000,
+      accountModelFailureCooldownMs: 300_000,
+      excludedModelIds: [],
+    })
   })
 
   it.each(['accountModelTtlMs', 'accountModelFailureCooldownMs'] as const)('accepts bounded integer durations for %s', key => {
