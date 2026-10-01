@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.53 (prepared)
+
+- Stop writing optional Auto attribution events that official DSH 0.2.0-rc.2 cannot mark ignorable, preventing subsequent Session history reads from failing (#204). Auto routing, durable virtual selection, and Core's actual model provenance are unchanged; new turns omit the plugin-specific attribution footer.
+- Add an explicit source-checkout recovery command using the unchanged official v4 codec. It validates a detached repaired copy and preserves a byte-exact original backup, without replacing live histories or restarting Desktop.
+
 ## 0.4.0-alpha.52 (prepared)
 
 - Place Copilot Auto model attribution after the settled turn clock on the same footer row, and reveal it only on hover or keyboard focus, matching usage and time chrome.

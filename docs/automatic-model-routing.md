@@ -52,7 +52,7 @@ All three virtual preferences use the *same* eligible account models. Account en
 
 For a single candidate every cell selects it; for two candidates a strong turn still selects the higher-capacity one even with Efficiency. Intelligence can use a lighter model for a short turn, and Efficiency can use a higher-capacity model for a demanding turn. These are **capacity preferences**, not measured quality, speed, price or inference-cost preferences. They cannot promise that Intelligence is smarter or Efficiency faster or cheaper. The actual request-budget and compaction checks still apply after selection; no cost or speed metadata is fabricated.
 
-The exact virtual preference stays in the Session's pending selection across turns, while each real request header and transport record the chosen account model. The durable decision event also records the preference; historical events without that field remain Balance for display. Switching to a real model ends automatic routing for subsequent turns.
+The exact virtual preference stays in the Session's pending selection across turns, while each real request header and transport record the chosen account model. Switching to a real model ends automatic routing for subsequent turns. New turns no longer write a separate decision event; compatible historical events without a preference field remain Balance for display.
 
 ## Images
 
@@ -89,6 +89,10 @@ Chat Auto does not own or alter the independent `github-copilot-hosted` search p
 
 ## Attribution and explanation
 
+**Compatibility fix (alpha.53):** new turns omit the plugin-specific Auto footer. Official `0.2.0-rc.2` cannot set an `ignorable` envelope through public `Session.append()`, and its reader rejects unknown required plugin events. The plugin therefore stops writing `github-copilot/auto-model-decision` rather than patching Core, mutating event objects, or borrowing an unrelated event type. Core's actual model/usage provenance and Auto routing remain unchanged. Restore new attribution only when a supported public informational-event or equivalent storage seam has proven cold-read compatibility.
+
+The following presentation remains available for compatible historical decision events; absence of such an event produces no plugin attribution or guessed explanation.
+
 Core already places route and usage details at the end of a completed turn. The MVP follows that interaction pattern rather than adding provider/model tags above the answer.
 
 For a completed Auto response, the attribution sits on the same footer row as Core's usage and clock, after the end time. It stays hidden until the message is hovered or focused, matching that chrome. It is not a separate line above the answer.
@@ -105,7 +109,27 @@ The `?` opens a compact explanation using normalized facts such as:
 - image capability required;
 - number of eligible account models.
 
-The plugin records a credential-free `github-copilot/auto-model-decision` Session event before Core persists the real request header. Historical attribution is derived from that durable decision plus assistant/request provenance, never from the current picker or a later catalog snapshot. Raw prompts, credentials, provider response bodies, and guessed prices are never disclosed.
+Earlier releases recorded a credential-free `github-copilot/auto-model-decision` Session event before Core persisted the real request header. Historical attribution is derived from that durable decision, never from the current picker or a later catalog snapshot. Raw prompts, credentials, provider response bodies, and guessed prices are never disclosed.
+
+### Recovering affected histories
+
+Upgrading prevents new incompatible events but does **not** rewrite existing logs. Repeated restarts cannot repair a stored missing marker.
+
+From a source checkout of this version, with Node 24 LTS and the pinned dependencies installed using `pnpm install --frozen-lockfile`, run:
+
+```powershell
+# Read-only validation; prints counts, affected sequence numbers and hashes, never conversation content.
+node scripts\repair-auto-model-history.mjs 'C:\absolute\path\session.v4.jsonl.zstd'
+
+# Optional: create a NEW private recovery directory outside the live Session directory.
+node scripts\repair-auto-model-history.mjs 'C:\absolute\path\session.v4.jsonl.zstd' --write-copy 'C:\private\new-recovery-directory'
+```
+
+This is an explicit offline maintenance utility, not an installed plugin hook. It reads all concatenated zstd frames, uses the exact published official `0.2.0-rc.2` format catalog for strict whole-history validation, and adds only `ignorable: true` to recognized Auto decision envelopes. It preserves type, sequence, time, data and all other rows. Unknown required events, invalid decisions, torn tails, invalid relationships, non-v4 input and compressed/decoded inputs over 128 MiB fail closed. It never repairs or drops other errors.
+
+Copy mode creates `original.session.v4.jsonl.zstd` (byte-exact backup), `session.v4.jsonl.zstd` (validated repaired copy), and `repair.json` (SHA-256 receipt). It refuses existing destinations and never writes the source. Keep the directory private: both logs contain conversation history. A check/copy can become stale if an active writer appends later.
+
+**Applying a copy requires separate operator approval:** first stop all writers for that Session, verify the fixed plugin will load before resuming, and recheck the live log against `originalSha256`. If it changed, regenerate and validate a fresh copy. Preserve the backup, replace only the exact affected log, verify its hash against `repairedSha256`, then use the normal official history reader to reopen it. Do not replay business requests as a test. If recovery fails, stop writers before restoring the exact original backup. Neither this utility nor the plugin installs itself, replaces a live file, restarts Desktop, clears credentials, or automatically migrates histories.
 
 ## Subagents
 
@@ -150,7 +174,7 @@ The MVP is accepted only when unchanged official Core contract tests prove:
 6. image admission and real candidate filtering agree, including the no-image-candidate failure.
 7. choosing a smaller-context model can trigger the existing local pressure signal, Core compaction, and same-model retry without sending the oversized request.
 8. hosted search remains independent and never receives the virtual Auto ID as a transport model.
-9. the turn-tail attribution is derived from durable decision/provenance data and is hidden for explicit model turns.
+9. no new unknown required attribution event is written; compatible historical attribution is retained, while missing decision events produce no guessed footer.
 10. no Core file, dependency artifact, private registry, shared model catalog, or live history is modified.
 
 Synthetic tests prove composition and contracts only. They do not prove a live account's model availability, provider quality, pricing, OAuth readiness, Desktop activation, or real transport success.

@@ -234,6 +234,8 @@ Never say GPT-6/search works merely because settings, typecheck or a package imp
 
 ## Changing capabilities
 
+Auto history compatibility (alpha.53, #204): official rc.2 `Session.append()` has no public ignorable-envelope option. Do not emit optional `github-copilot/auto-model-decision` events or borrow another event type; retain native real-model provenance and durable Auto selection without a new attribution footer. `scripts/repair-auto-model-history.mjs` is explicit source-checkout maintenance, not a runtime hook: strict pinned official v4 validation, check-only by default, optional detached repaired copy plus byte-exact backup. It never replaces live history. Applying a copy requires separately approved stopped writers and a fresh source-hash check. See `docs/automatic-model-routing.md`.
+
 1. Identify the owning seam using `agent-contract.json`; do not duplicate an upstream owner.
 2. Add or update focused tests before changing deployment claims.
 3. Update both READMEs when user behavior, setup, migration, or boundaries change.
