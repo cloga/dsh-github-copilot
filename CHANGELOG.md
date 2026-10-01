@@ -1,9 +1,15 @@
 # Changelog
 
-## 0.4.0-alpha.47 (prepared)
+## 0.4.0-alpha.48 (prepared)
 
 - Keep the managed Copilot Auto model selected across turns when inherited as a new Session's default; record its durable intent before the first real-model request header and restore the virtual route on later turns (#189).
 - Preserve explicit fixed-model selections, real request headers and per-turn Auto decisions without changing existing Sessions with a recorded concrete route.
+- Supersede unpublished alpha.47 after its immutable pre-created tag failed the protected exact-annotation check; no alpha.47 GitHub Release or npm package was created.
+
+## 0.4.0-alpha.47 (publication blocked)
+
+- Publication stopped after packing and checksum verification because the immutable pre-created tag's annotation did not satisfy the protected exact-message check.
+- The alpha.47 tag remains unchanged and is not reused; its prepared Copilot Auto selection fix is carried by alpha.48.
 
 ## 0.4.0-alpha.46 (prepared)
 
