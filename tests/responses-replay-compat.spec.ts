@@ -3,6 +3,7 @@ import {
   CopilotResponsesReplayError,
   isCopilotInputItemScopeError,
   normalizeCopilotResponsesPayload,
+  ResponsesRetryReplay,
 } from '../src/responses-replay-compat.ts'
 
 const encoder = new TextEncoder()
@@ -60,6 +61,114 @@ describe('Copilot Responses wire replay normalization', () => {
     expect(call.id).toBe('fc-old')
     expect(reasoning.id).toBe('rs-old')
     expect(normalizeCopilotResponsesPayload(normalized)).toBe(normalized)
+  })
+
+  describe('Responses 408 retry replay', () => {
+    const original = { model: 'synthetic-model', input: [
+      { role: 'user', content: 'synthetic user input' },
+      { type: 'reasoning', id: 'rs_prior', encrypted_content: 'opaque' },
+      { type: 'function_call', id: 'fc_prior', call_id: 'call_prior', name: 'check', arguments: '{"value":1}' },
+      { type: 'function_call_output', call_id: 'call_prior', output: 'synthetic tool result' },
+    ], store: false }
+    const referenced = { ...original, input: original.input.map(item => 'id' in item
+      ? { type: 'item_reference', id: item.id } : item) }
+    const context = { messages: [{ role: 'user', content: 'synthetic user input' }] }
+    const normalized = normalizeCopilotResponsesPayload(original)
+    function attempt(cache: ResponsesRetryReplay, source: unknown = context, signal: AbortSignal = new AbortController().signal) {
+      return cache.begin(source, signal)
+    }
+    function reject(cache: ResponsesRetryReplay, payload: unknown, source: unknown = context,
+      signal: AbortSignal = new AbortController().signal) {
+      const call = attempt(cache, source, signal)
+      try { expect(() => call.normalize(payload)).toThrow(CopilotResponsesReplayError) }
+      finally { call.finish() }
+    }
+    it('reuses only the exact normalized bytes after each of two real 408 responses', () => {
+      const cache = new ResponsesRetryReplay()
+      const signal = new AbortController().signal
+      for (const input of [original, referenced, referenced]) {
+        const call = attempt(cache, context, signal)
+        const payload = call.normalize(input)
+        expect(JSON.stringify(payload)).toBe(JSON.stringify(normalized))
+        call.observe(JSON.stringify(payload), 408)
+        call.finish()
+      }
+    })
+    it('refuses changed substantive user/tool input and unmatched references', () => {
+      const cache = new ResponsesRetryReplay()
+      const signal = new AbortController().signal
+      const first = attempt(cache, context, signal)
+      const payload = first.normalize(original)
+      first.observe(JSON.stringify(payload), 408)
+      first.finish()
+      for (const changed of [
+        { ...referenced, input: [{ role: 'user', content: 'changed' }, ...referenced.input.slice(1)] },
+        { ...referenced, input: [...referenced.input.slice(0, -1), { type: 'function_call_output', call_id: 'call_prior', output: 'changed' }] },
+        { ...referenced, input: [{ type: 'item_reference', id: 'other' }, ...referenced.input.slice(1)] },
+        { ...referenced, model: 'other-model' },
+        { ...referenced, previous_response_id: 'unknown' },
+      ]) reject(cache, changed, context, signal)
+    })
+    it('refuses a new step, session, signal, cold resume, stale entry and concurrent requests', () => {
+      const clock = vi.spyOn(Date, 'now')
+      clock.mockReturnValue(1000)
+      const signal = new AbortController()
+      const cache = new ResponsesRetryReplay()
+      const first = attempt(cache, context, signal.signal)
+      first.observe(JSON.stringify(first.normalize(original)), 408)
+      first.finish()
+      reject(cache, referenced, { messages: [{ role: 'user', content: 'new step' }] }, signal.signal)
+      reject(cache, referenced, context, new AbortController().signal)
+      reject(new ResponsesRetryReplay(), referenced, context, signal.signal)
+      clock.mockReturnValue(62_000)
+      reject(cache, referenced, context, signal.signal)
+      clock.mockReturnValue(1000)
+      const pending = attempt(cache, context, signal.signal)
+      pending.observe(JSON.stringify(pending.normalize(original)), 408)
+      pending.finish()
+      const concurrent = attempt(cache, context, signal.signal)
+      const overlapping = attempt(cache, context, signal.signal)
+      expect(() => overlapping.normalize(referenced)).toThrow(CopilotResponsesReplayError)
+      concurrent.finish()
+      overlapping.finish()
+      clock.mockRestore()
+    })
+    it('refuses invalid payloads, non-408 responses, unsent payloads, abort and dispose', () => {
+      const cache = new ResponsesRetryReplay()
+      const controller = new AbortController()
+      const first = attempt(cache, context, controller.signal)
+      first.observe('{"input":[]}', 408)
+      first.finish()
+      reject(cache, referenced, context, controller.signal)
+      const next = attempt(cache, context, controller.signal)
+      next.observe(JSON.stringify(next.normalize(original)), 408)
+      next.finish()
+      const invalid = attempt(cache, context, controller.signal)
+      expect(() => invalid.normalize({ input: [null] })).toThrow(CopilotResponsesReplayError)
+      invalid.finish()
+      const rejected = attempt(cache, context, controller.signal)
+      rejected.observe(JSON.stringify(rejected.normalize(original)), 400)
+      rejected.finish()
+      reject(cache, referenced, context, controller.signal)
+      const last = attempt(cache, context, controller.signal)
+      last.observe(JSON.stringify(last.normalize(original)), 408)
+      last.finish()
+      controller.abort()
+      reject(cache, referenced, context, controller.signal)
+      cache.dispose()
+      reject(cache, referenced)
+    })
+    it('leaves large valid requests native-owned without storing a retry snapshot', () => {
+      const cache = new ResponsesRetryReplay()
+      const signal = new AbortController().signal
+      const large = { ...original, input: [{ role: 'user', content: 'x'.repeat(2 * 1024 * 1024) }, ...original.input.slice(1)] }
+      const first = attempt(cache, context, signal)
+      const payload = first.normalize(large)
+      expect(payload).toEqual(normalizeCopilotResponsesPayload(large))
+      first.observe(JSON.stringify(payload), 408)
+      first.finish()
+      reject(cache, referenced, context, signal)
+    })
   })
 
   it('accepts complete replay forms without optional status and keeps opaque values unchanged', () => {

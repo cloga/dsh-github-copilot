@@ -28,6 +28,7 @@ import type { RequestBudgetFailure, RequestBudgetPolicy } from './request-budget
 import { installCopilotCompactionPressure } from './compaction-pressure.ts'
 import { autoModelInputModalities } from './auto-model-routing.ts'
 import { installAutoModelRouting } from './auto-model-host.ts'
+import { ResponsesRetryReplay } from './responses-replay-compat.ts'
 
 /** Safe request knobs; identities, model tables, endpoints and credentials are not configurable. */
 export type PreviewRouteConfig = Pick<PiAiProviderProfile,
@@ -98,6 +99,7 @@ interface Lease {
   readonly proof: Proof
   readonly revision: number
   readonly signal: AbortSignal
+  readonly retryReplay: ResponsesRetryReplay
   started: boolean
 }
 
@@ -168,7 +170,9 @@ class PreviewLifetime {
     if (descriptor === undefined) throw failure('COPILOT_PREVIEW_MODEL_NOT_ENTITLED', 'UNKNOWN_MODEL')
     const proof = this.proofFor(snapshot)
     if (proof === undefined) throw failure('COPILOT_PREVIEW_METADATA_STALE')
-    const lease: Lease = { snapshot, descriptor, proof, revision: this.revision, signal: combined, started: false }
+    const retryReplay = new ResponsesRetryReplay()
+    combined.addEventListener('abort', () => retryReplay.dispose(), { once: true })
+    const lease: Lease = { snapshot, descriptor, proof, revision: this.revision, signal: combined, retryReplay, started: false }
     this.entitled(lease, grant, model)
     return lease
   }
@@ -198,7 +202,7 @@ class PreviewLifetime {
   guard(lease?: Lease): AccountProviderGuard {
     return {
       signal: lease?.signal ?? this.controller.signal,
-      ...lease === undefined ? {} : { selectedModelId: lease.descriptor.id },
+      ...lease === undefined ? {} : { selectedModelId: lease.descriptor.id, retryReplay: lease.retryReplay },
       assertActive: () => this.assertActive(),
       assertAccount: grant => this.account(lease, grant),
       assertEntitled: (grant, model) => this.entitled(lease, grant, model),

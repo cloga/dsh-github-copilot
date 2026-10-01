@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.58"
+    "version": "0.4.0-alpha.60"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -557,6 +557,7 @@
       ],
       "sourceMarkers": [
         {"file": "src/responses-replay-compat.ts", "marker": "normalizeCopilotResponsesPayload"},
+        {"file": "src/responses-replay-compat.ts", "marker": "ResponsesRetryReplay"},
         {"file": "src/responses-replay-compat.ts", "marker": "isCopilotInputItemScopeError"},
         {"file": "src/responses-replay-compat.ts", "marker": "input item does not belong to this connection"},
         {"file": "src/preview-provider.ts", "marker": "onPayload"},
@@ -564,6 +565,8 @@
       ],
       "tests": [
         {"file": "tests/preview-provider.spec.ts", "name": "normalizes only wire item IDs after native serialization while preserving durable replay and tool pairing"},
+        {"file": "tests/preview-provider.spec.ts", "name": "sends identical normalized bytes on the third Core-style attempt after two HTTP 408s"},
+        {"file": "tests/responses-replay-compat.spec.ts", "name": "refuses a new step, session, signal, cold resume, stale entry and concurrent requests"},
         {"file": "tests/preview-route.spec.ts", "name": "classifies \"$message\" in a $envelope Responses 401 locally and reuses the same credential without discovery or refresh"},
         {"file": "tests/preview-route.spec.ts", "name": "does not abort a parallel native request when another dispatch receives a replay-scope 401: %s"},
         {"file": "tests/preview-route.spec.ts", "name": "does not retain a replay-scope failure across independent dispatches of one native prepared lease: %s"}

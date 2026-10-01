@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.60 (prepared)
+
+- Preserve the exact normalized managed Responses request across a bounded, lease-local Core retry only after the previous request actually received HTTP 408. Retry-only item references must identify the corresponding complete prior items, and all other payload and transcript bytes must agree; changed steps, inputs, models, signals, concurrent requests and cold resumes fail closed (#217).
+- Keep native retry policy, SDK transport, durable replay, credentials, and model selection unchanged. A synthetic native-SDK regression covers two 408 responses followed by a reference-only third attempt; real account acceptance and Desktop installation remain unverified.
+
 ## 0.4.0-alpha.58 (prepared)
 
 - Add compact Auto preference and expandable recorded reasons after the native reply time through the public assistant-actions slot; explicit fixed selection shows Manual, absent evidence shows Selection unknown. Remove the separate Model details candidate and repeated model name; actual models stay in native Usage.
