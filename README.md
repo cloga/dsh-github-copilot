@@ -9,6 +9,17 @@
 
 A focused DSH companion for GitHub Copilot sign-in, account-aware model profiles, Copilot-specific tool compatibility, and provider-hosted search. It reuses DSH's built-in `@deepseek-ai/dsh-llm-pi-ai`; it is not a second Copilot model adapter or catalog.
 
+## Current experience
+
+- **Account and models:** sign in, inspect account-discovered models, refresh metadata, and manage the account from the native GitHub Copilot row under **Settings → Models**.
+- **Search routing:** choose the primary and fallback search providers under **Plugins → dsh-github-copilot → Details**. The page intentionally exposes only those user-facing choices; protocol probes, timeouts, allowlists, and transport switches are not presented as routine UI. If the updated routed service is not active yet, the card reports **Restart required** instead of presenting a broken form.
+- **Usage:** eligible Copilot sessions get an optional **Credits** control beside the composer, with provider-reported billing-cycle data and explicit unavailable/stale states. TLS diagnostics explain how Windows users behind Watt Toolkit/Steam++-style local trust roots can start Desktop with `NODE_USE_SYSTEM_CA=1` without disabling certificate verification.
+- **Compatibility:** the plugin applies Copilot-only tool-schema, reasoning-presentation, request-budget, and account-model compatibility through published DSH APIs. It does not patch Core or maintain a second model catalog.
+
+![Current Web search provider routing on the plugin details page](./docs/images/copilot-search-routing.png)
+
+The screenshot uses the current built Client with synthetic providers in an isolated browser fixture. It demonstrates the shipped configuration surface, not live credentials, account access, search success, or production Desktop activation.
+
 ## Compatibility baselines and qualification targets
 
 | DSH surface | Exact source pin | Models UI seam |
@@ -125,38 +136,7 @@ Concurrent status retries join the compact account's pending read. An obsolete r
 
 The public provider-card slot is additive: it cannot replace Core's **Edit/Delete** controls. The native editor remains available, but normal plugin discovery needs no manual model definitions. Embedding the controls does not merge `github-copilot` with `github-copilot-preview`, remove configuration, rewrite history or change model selection. If controls are missing from both eligible card and fallback, verify the active profile and loaded Host/Client version.
 
-**Timestamp illustration (`0.4.0-alpha.7`):** the retained images show that built Client in isolated Edge with synthetic Remote replies and a provider-shell fixture. They do not prove alpha.8 session/search isolation, the Add warning, or a completed route migration; no visual redesign is claimed beyond the new draft warning. The normal header shows sign-in status, model count, last successful update time and **Manage**; manual **Refresh models** appears only inside **Manage**. The browser fixture covered retained stale counts during refresh, status-only fresh reopen, manual refresh, Retry, credential clearing, forced login discovery and a 375 px viewport, with no external network requests or browser errors. This is not live Core/production authorization evidence; Host 24-hour TTL and cooldown timing are covered separately by unit tests, not these screenshots.
-
 The subdued **Updated … ago** timestamp uses the last successful model snapshot, not the time the page opened. Its tooltip and accessible label provide the complete local date/time and time zone. Display text updates locally as time passes without fetching status or models. Refresh/failure retains the previous successful time while that account's display evidence remains valid; sign-out/account invalidation clears it. Missing or invalid timestamps are hidden; future clock values use an absolute date instead of a misleading age. Manage does not repeat the timestamp.
-
-![Alpha.7 signed-in provider with model count, last successful update time and Manage](./docs/images/copilot-model-freshness.png)
-
-![Alpha.7 provider retains the previous model count and update time while refreshing](./docs/images/copilot-model-refreshing.png)
-
-<details>
-<summary>Historical alpha.5 and alpha.3 illustrations</summary>
-
-The alpha.5 provider PNGs below show the previous built Client in isolated Edge with synthetic Remote/provider-shell fixtures, not the current refresh layout.
-
-![Alpha.5 account controls embedded in one GitHub Copilot provider row; synthetic fixture](./docs/images/copilot-provider-entry.png)
-
-![Alpha.5 embedded authorization controls with a nonfunctional example device code](./docs/images/copilot-provider-authorization.png)
-
-**Historical illustrations (`0.4.0-alpha.3`):** the animation and older screenshots below show the earlier standalone fixture, not the provider-integrated layout. The old animation shows **Sign in → Copy code → Copied → Signed in → Refresh models → Metadata ready**. Actual GitHub authorization is a separate user step and was not recorded.
-
-![Previous alpha.3 isolated account fixture: sign-in, copy feedback, and explicit model refresh](./docs/images/github-copilot-auth-flow.gif)
-
-The previous-version previews were recorded in an isolated, network-disabled browser fixture. They are not proof that the planned package version is published, installed or loaded. Authorization and discovery responses are synthetic; `ABCD-EFGH` is not a usable code. No real sign-in, sign-out, model refresh, credential change, or route migration was performed for recording, and no production cookies or browser storage were reused.
-
-Previous-version device-code illustration:
-
-![Previous alpha.3 isolated account fixture awaiting authorization with a synthetic code and Copy code button](./docs/images/copilot-device-code-copy.png)
-
-Previous-version signed-in illustration (the current UI additionally performs the one bounded discovery after this user's successful Start sign-in):
-
-![Previous alpha.3 isolated account fixture after sign-in, with explicit model refresh and no device code](./docs/images/copilot-auth-card-signed-in.png)
-
-</details>
 
 ### Agent and automation flow
 
@@ -269,11 +249,11 @@ Auto-mode native search identity comes from the captured initiating Session's ef
 - **Legacy canonical inline agent-loop path:** eligible `github-copilot` requests support Responses or Anthropic Messages native-search candidates only while that legacy route remains configured.
 - **Chat Completions models:** remain usable through normal native transport but do not advertise hosted search.
 
-### Session-aware search routing (implementation awaiting release)
+### Session-aware search routing
 
 The bundle composes a plugin-owned web-service facade while preserving the original official service and its exact configuration in a named realm. It does not edit Core or agent presets. Native `web_search` consumers keep their argument validation, query/source limits, middleware, timeout and presentation; the same routing also covers direct `ctx.web.search` consumers with proven initiating context.
 
-The **Web search** card under **Plugins → dsh-github-copilot → Details** controls routing across search backends through the public `plugins.bundle.config` slot (keyed by package name). Routing has its own revision-checked writes. When the bundle slot is unavailable, routing falls back to **Settings → Models**, or **Settings → Web search** if the Models footer is also unavailable; advanced options remain available through the existing settings section. Only one routing card is registered at a time; leaving the detail page discards unsaved edits. Account sign-in, status, and model refresh remain under **Settings → Models**. No settings values are migrated or rewritten merely by opening the new page. Removing the companion restores the original web service.
+The **Web search** card under **Plugins → dsh-github-copilot → Details** controls routing across search backends through the public `plugins.bundle.config` slot (keyed by package name). Routing uses revision-checked writes in the existing `github-copilot` settings namespace. When the bundle slot is unavailable, the routing card falls back to **Settings → Models**, or **Settings → Web search** if the Models footer is also unavailable. Only one routing card is registered at a time; leaving the detail page discards unsaved edits. Account sign-in, status, and model refresh remain under **Settings → Models**. Opening the page does not migrate or rewrite settings, and the removed internal hosted-search tuning form is not part of the user-facing configuration. Removing the companion restores the original web service.
 
 The **Search provider** selector offers **Auto — follow Chat** and the actual search providers registered through the routed facade. **Fallback provider** uses the same catalog, with an additional **None — no fallback** choice. These are search backends, not individual models: Copilot is one backend even when different account models can execute its search requests. Ordinary setup needs only these provider choices, not a separate search model.
 
@@ -343,7 +323,7 @@ The plugin does not rewrite `$DSH_HOME/AGENTS.md`. Installers may merge these ru
 
 The plugin's `github-copilot` settings section controls account-metadata freshness, managed request budgets and hosted search. `enabled` still controls hosted search only:
 
-Search **provider routing** and the `github-copilot` hosted-search options below are edited on the plugin detail page. The advanced form writes only explicitly changed leaves; it never rewrites a saved route allowlist just because another option was saved. Account-metadata and managed-budget options remain in their existing settings section.
+The plugin details page exposes only **Search provider** and **Fallback provider**. Account-metadata, request-budget, and hosted-search safety values remain schema-backed settings for administrators and compatibility tooling; they are not routine user-facing controls.
 
 | Key | Default | Scope and meaning |
 |---|---:|---|
