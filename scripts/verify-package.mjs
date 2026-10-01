@@ -132,8 +132,19 @@ for (const descriptor of authorizationDescriptors) {
     || descriptor.service !== 'githubCopilotAuthorization' || descriptor.namespace !== 'githubCopilot') {
     throw new Error('built Remote descriptor identity must match its exact owned service and namespace')
   }
-  if (descriptor.invocation.kind !== 'direct' || descriptor.parameters.length !== 0) {
-    throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must remain a no-parameter direct call`)
+  const modelPreference = descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel'
+  if (descriptor.invocation.kind !== 'direct'
+    || (modelPreference ? descriptor.parameters.length !== 1 : descriptor.parameters.length !== 0)) {
+    throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} has an unexpected direct-call parameter contract`)
+  }
+  if (modelPreference) {
+    const parameter = descriptor.parameters[0]
+    if (parameter.name !== 'modelId' || parameter.wire !== 'modelId' || parameter.source !== 'json'
+      || parameter.codec.mode !== 'strict'
+      || parameter.codec.schema.parse('gpt-5.4') !== 'gpt-5.4'
+      || parameter.codec.schema.safeParse('').success) {
+      throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must retain the strict exact modelId parameter`)
+    }
   }
   const typeSymbol = descriptor.method === 'migrationStatus'
     ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
