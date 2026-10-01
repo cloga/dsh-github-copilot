@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.56 (prepared)
+
+- Add compact Auto preference and expandable recorded reasons after the native reply time through the public assistant-actions slot; explicit fixed selection shows Manual, absent evidence shows Selection unknown. Remove the separate Model details candidate and repeated model name; actual models stay in native Usage.
+- Keep new selection evidence in a bounded Host-lifetime store with native agent-scoped lookup, not incompatible durable events. Restart, disposal and eviction lose this evidence; compatible historical Auto records remain readable. Native Usage aggregation and its missing-route behavior are unchanged.
+- Preserve plugin-owned credential invalidation and disposal reasons as specific `ABORTED` diagnostics, without changing transport retries, timeouts or partial output.
+- Add offline native-SDK regressions distinguishing HTTP 408, transport termination, missing Responses terminal events, true cancellation and zero-usage measurement limits. These changes do not claim to fix upstream timeouts, disconnects or native context-meter resets.
+
 ## 0.4.0-alpha.55 (prepared)
 
 - Use a quota-only, reusable TLS-verified dispatcher with Node default and system CA roots for the GitHub Copilot usage endpoint (#209). This removes reliance on launcher inheritance of `NODE_USE_SYSTEM_CA` for quota requests, without changing Core, sign-in, model/search transport or global trust.

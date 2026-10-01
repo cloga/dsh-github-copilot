@@ -16,8 +16,8 @@ import {
   GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID, GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
 } from './copilot-identity.ts'
 import { abortable } from './http.ts'
-import { accountModelFromDescriptor, copilotPublicHeaders, createAccountProvider } from './preview-provider.ts'
-import type { AccountProviderGuard } from './preview-provider.ts'
+import { accountModelFromDescriptor, copilotPublicHeaders, createAccountProvider, ManagedWireAbortError } from './preview-provider.ts'
+import type { AccountProviderGuard, ManagedWireAbortCode } from './preview-provider.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS, copilotAccountKey, copilotEntitlementKey, createAccountModelAuth } from './account-model-auth.ts'
 import { createAccountModelSource } from './account-model-source.ts'
 import type { AccountModelLoadOptions, AccountModelSnapshot, AccountModelSource } from './account-model-source.ts'
@@ -71,6 +71,9 @@ declare module '@deepseek-ai/cordis' {
 }
 
 function failure(code: string, category = 'AUTH'): LlmError { return new LlmError(code, category) }
+function abortFailure(signal: AbortSignal): LlmError {
+  return failure(signal.reason instanceof ManagedWireAbortError ? signal.reason.code : 'COPILOT_PREVIEW_ABORTED', 'ABORTED')
+}
 function tokenFingerprint(value: string): string { return createHash('sha256').update(value).digest('hex') }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -112,13 +115,13 @@ class PreviewLifetime {
     this.assertActive()
     this.revision++
     this.source.invalidate()
-    for (const wire of this.wires) wire.abort(failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED', 'ABORTED'))
+    for (const wire of this.wires) wire.abort(new ManagedWireAbortError('COPILOT_PREVIEW_CREDENTIAL_CHANGED'))
   }
   dispose(): void {
     if (!this.active) return
     this.active = false
     this.source.dispose()
-    this.controller.abort(failure('COPILOT_PREVIEW_DISPOSED', 'ABORTED'))
+    this.controller.abort(new ManagedWireAbortError('COPILOT_PREVIEW_DISPOSED'))
     for (const wire of this.wires) wire.abort()
     this.wires.clear()
   }
@@ -134,7 +137,7 @@ class PreviewLifetime {
     try { credential = await abortable(this.credentials.read(GITHUB_COPILOT_PREVIEW_PROVIDER_ID), signal) }
     catch {
       this.assertActive()
-      if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
+      if (signal.aborted) throw abortFailure(signal)
       if (revision === this.revision) invalidateRead()
       throw failure('COPILOT_PREVIEW_CREDENTIAL_READ_FAILED')
     }
@@ -255,7 +258,7 @@ function budgetFailure(result: RequestBudgetFailure): LlmError {
 /** Account-bound admission and purpose defaults; Core owns model conversion and wire/replay. */
 class PreviewAdapter extends PiAiAdapter {
   constructor(private readonly lifetime: PreviewLifetime,
-    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure'>) => PiAiAdapterOptions,
+    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort'>) => PiAiAdapterOptions,
     private readonly discoverSnapshot: (options?: AccountModelLoadOptions) => Promise<AccountModelSnapshot>,
     private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
     private readonly requestBudgetSettings: () => Partial<RequestBudgetPolicy>,
@@ -343,7 +346,7 @@ class PreviewAdapter extends PiAiAdapter {
       owned(options.provider)
       if (options.model !== lease.descriptor.id) throw failure('COPILOT_PREVIEW_MODEL_MISMATCH')
       const signal = AbortSignal.any([lease.signal, ...options.signal === undefined ? [] : [options.signal]])
-      if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
+      if (signal.aborted) throw abortFailure(signal)
       const policy = resolveRequestBudgetPolicy(owner.requestBudgetSettings())
       const model = accountModelFromDescriptor(lease.descriptor, lease.proof.baseURL)
       if (options.reasoningEffort !== undefined) {
@@ -353,8 +356,9 @@ class PreviewAdapter extends PiAiAdapter {
       // SDK lazyStream retains only error text. Keep an owned failure in this exact
       // dispatch closure, never on the shared lease, to restore its structured code.
       let requestFailure: LlmError | undefined
+      let wireAbort: ManagedWireAbortCode | undefined
       const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
-        if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
+        if (signal.aborted) throw abortFailure(signal)
         const calculated = calculateRequestBudget(lease.descriptor, nativeOptions?.maxTokens, policy)
         if (!calculated.ok) {
           requestFailure = budgetFailure(calculated)
@@ -374,6 +378,9 @@ class PreviewAdapter extends PiAiAdapter {
         // Same immutable descriptor/profile generation, but request-local provider
         // callbacks: concurrent compaction and chat cannot share purpose or errors.
         const native = new PiAiAdapter(owner.optionsFor(lease, { inspectRequest,
+          onWireAbort(code) {
+            wireAbort = code
+          },
           onReplayFailure(error) {
             // Only this dispatch's verified wire/payload observer can set this;
             // arbitrary upstream text must never masquerade as a compatibility failure.
@@ -390,8 +397,12 @@ class PreviewAdapter extends PiAiAdapter {
         }
         for await (const chunk of native.stream(request)) {
           if (requestFailure !== undefined) {
-            if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
+            if (signal.aborted) throw abortFailure(signal)
             throw requestFailure
+          }
+          if (chunk.type === 'finish' && wireAbort !== undefined) {
+            if (signal.aborted) throw abortFailure(signal)
+            throw failure(wireAbort, 'ABORTED')
           }
           if (chunk.type === 'finish' && chunk.reason.kind === 'error' && chunk.reason.failure.code === 'UNKNOWN_MODEL') {
             await owner.refreshRejected(lease.snapshot, signal)
@@ -400,7 +411,7 @@ class PreviewAdapter extends PiAiAdapter {
         }
         if (requestFailure !== undefined) throw requestFailure
       } catch (cause) {
-        if (signal.aborted) throw failure('COPILOT_PREVIEW_ABORTED', 'ABORTED')
+        if (signal.aborted) throw abortFailure(signal)
         if (cause instanceof LlmError && cause.code === 'UNKNOWN_MODEL') await owner.refreshRejected(lease.snapshot, signal)
         throw requestFailure ?? cause
       }
@@ -595,7 +606,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     // stream. Never replay a model wire request or retry generic provider errors.
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
-  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure'> = {}): PiAiAdapterOptions => {
+  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort'> = {}): PiAiAdapterOptions => {
     const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...hooks,
       onUnauthorized() {
         // A late response from before sign-in, refresh or disposal cannot retire

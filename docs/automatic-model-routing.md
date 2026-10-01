@@ -37,7 +37,7 @@ Before applying soft preferences, routing checks whether each candidate can acco
 3. **Headroom filtering:** Candidates with insufficient headroom (`estimatedInputTokens > hardInputLimit`) are filtered out. If one or more fitting candidates exist, soft preference selects among the `fitting` subset.
 4. **No-fit and compaction recovery:** If no candidate can fit the current messages:
    - Auto selects the candidate with the **largest input capacity** to give Core compaction maximum headroom.
-   - It records a structured diagnostic in the decision event:
+   - Its in-memory routing decision includes a structured diagnostic (not a new durable event):
      - `fixed-content-cannot-fit`: the latest user turn alone exceeds maximum capacity and cannot be compacted away.
      - `compaction-unavailable`: compaction is disabled or has zero retries configured.
      - `attempted-but-still-oversized`: a compaction summary already exists in history and the turn remains oversized.
@@ -104,28 +104,13 @@ Chat Auto does not own or alter the independent `github-copilot-hosted` search p
 
 ## Attribution and explanation
 
-**Compatibility fix (alpha.54):** new turns omit the plugin-specific Auto footer. Official `0.2.0-rc.2` cannot set an `ignorable` envelope through public `Session.append()`, and its reader rejects unknown required plugin events. The plugin therefore stops writing `github-copilot/auto-model-decision` rather than patching Core, mutating event objects, or borrowing an unrelated event type. Core's actual model/usage provenance and Auto routing remain unchanged. Restore new attribution only when a supported public informational-event or equivalent storage seam has proven cold-read compatibility.
+**Compatibility fix (alpha.54):** new turns omit plugin-specific Auto decision events. Official `0.2.0-rc.2` cannot set an `ignorable` envelope through public `Session.append()`, and its reader rejects unknown required plugin events. The plugin therefore stops writing `github-copilot/auto-model-decision` rather than patching Core, mutating event objects, or borrowing an unrelated event type. Core's actual model/usage provenance and Auto routing remain unchanged. Restore new decision recording only when a supported public informational-event or equivalent storage seam has proven cold-read compatibility.
 
-The following presentation remains available for compatible historical decision events; absence of such an event produces no plugin attribution or guessed explanation.
+Completed Copilot replies show **Auto (preference)** with an information button, **Manual** with captured explicit fixed-selection evidence, or **Selection unknown** when that evidence is absent. The public `conversation.chat.assistant-actions` slot places the plugin's own flex item after native Usage/time using `order: 1`. There is no separate Model details entry or repeated model name. The native parent is a fixed-height, non-wrapping row: the plugin can shrink/wrap its own item but cannot promise whole-row wrapping, and does not modify native ancestors. A turn without a closing message has no assistant-actions anchor.
 
-Core already places route and usage details at the end of a completed turn. The MVP follows that interaction pattern rather than adding provider/model tags above the answer.
+New Auto decisions and matching explicit fixed selections are captured at dispatch in a bounded in-memory store (64 Agents, 128 turns per Agent, first decision per turn). `githubCopilotTurnSelection.get` uses Core's native agent scope and lookup, with its existing Session resolution and ownership checks, rather than a plugin-owned arbitrary-session metadata endpoint. The lookup can use normal Core resume semantics; it is not a new access-control system. The Client reads once for the exact displayed Session/turn, cancels stale responses and never polls. Agent disposal, plugin disposal, eviction or Host restart removes evidence; no new Session event is emitted. Compatible historical Auto events can supply a recorded preference and reason; omitted historical preference is not guessed.
 
-For a completed Auto response, the attribution sits on the same footer row as Core's usage and clock, after the end time. It stays hidden until the message is hovered or focused, matching that chrome. It is not a separate line above the answer. The turn-tail display is:
-
-```text
-[actions] [usage] [time]  Auto · <actual model>  ?
-```
-
-The `?` opens a compact explanation using normalized facts such as:
-
-- short text turn;
-- standard turn;
-- large structured turn;
-- image capability required;
-- number of eligible account models;
-- number of models that can fit turn context (when restricted by input headroom).
-
-Earlier releases recorded a credential-free `github-copilot/auto-model-decision` Session event before Core persisted the real request header. Historical attribution is derived from that durable decision, never from the current picker or a later catalog snapshot. Raw prompts, credentials, provider response bodies, and guessed prices are never disclosed.
+The expandable explanation reports only the actual routing classification, capacity preference and eligible/fitting counts. It is selection evidence, **not proof of execution**. Absence of Auto evidence never implies Manual, and today's picker/request header never fills a historical gap. Native Usage remains the only model/usage display; its existing all-or-nothing missing-route behavior is not fixed here. A metadata-only projection flags incomplete attempts/history without duplicating or allocating tokens. The disclosure never reads message content, replay data or credentials.
 
 ### Recovering affected histories
 

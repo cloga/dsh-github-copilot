@@ -1032,6 +1032,8 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     const capabilities = {
       slots: scope.slots,
       uiConversation: scope.get('uiConversation'),
+      remote: scope.remote,
+      locale: scope.get('locale'),
       diagnostic: (code: string) => scope.logger.warn(`[github-copilot] ${code}`),
     }
     const reasoning = installReasoningPresentation(capabilities)

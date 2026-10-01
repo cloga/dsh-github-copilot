@@ -8,6 +8,11 @@ import { autoModelPreference, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copil
 import type { AutoModelPreference } from './copilot-identity.ts'
 import { DEFAULT_REQUEST_BUDGET_POLICY, resolveRequestBudgetPolicy } from './request-budget.ts'
 import type { RequestBudgetPolicy } from './request-budget.ts'
+import { TurnSelectionStore } from './turn-selection.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context { githubCopilotTurnSelection: { get(agent: Agent, turn: number): ReturnType<TurnSelectionStore['get']> } }
+}
 
 export interface AutoModelHostDependencies {
   loadModels(signal: AbortSignal): Promise<readonly AccountModelDescriptor[]>
@@ -115,6 +120,8 @@ function actualNotice(agent: Agent, model: string) {
 /** Resolve virtual Auto once per Core turn before request/header persistence. */
 export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHostDependencies): () => void {
   type Dispose = () => void
+  const selections = new TurnSelectionStore()
+  ctx.provide('githubCopilotTurnSelection', { get: (agent: Agent, turn: number) => selections.get(agent, turn) })
   const captured = new WeakMap<Agent, CapturedTurn>()
   const routed = new WeakMap<Agent, RoutedTurn>()
   const agentDisposers = new WeakMap<Agent, Dispose>()
@@ -166,6 +173,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     agentDisposers.delete(agent)
     captured.delete(agent)
     routed.delete(agent)
+    selections.remove(agent)
     return undefined
   })
   const removeRequest = ctx.on('agent/request', async ({ agent, turn, signal }, next) => {
@@ -176,6 +184,14 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     const virtual = virtualPreference !== undefined
     if (!virtual && pending === undefined) {
       routed.delete(agent)
+      const projections: unknown = ctx.get('sessionProjections')
+      const selection: unknown = record(projections) && typeof projections.stateOf === 'function'
+        ? projections.stateOf(agent.session, 'modelSelection') : undefined
+      const fixed = record(selection) && record(selection.pending) && selection.pending.provider === resolved.provider
+        && selection.pending.model === resolved.model
+      if (!signal.aborted && (resolved.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID || resolved.provider === 'github-copilot')) {
+        selections.record(agent, turn, { mode: fixed ? 'manual' : 'unknown' })
+      }
       return resolved
     }
     if (resolved.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
@@ -205,6 +221,10 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       // rc.2 append cannot mark plugin events ignorable; keep attribution out of the log.
       state.recorded = true
     }
+    if (!signal.aborted) selections.record(agent, turn, {
+      mode: 'auto', preference: state.decision.preference, reason: state.decision.reason,
+      candidateCount: state.decision.candidateCount, fittingCandidateCount: state.decision.fittingCandidateCount,
+    })
     return { ...resolved, model: state.decision.model.id }
   }, { prepend: true })
   return () => {
@@ -213,5 +233,6 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     removeRequest()
     for (const dispose of activeDisposers) dispose()
     activeDisposers.clear()
+    selections.clear()
   }
 }
