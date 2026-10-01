@@ -60,6 +60,12 @@ export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
+export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup'> & {
+  searchModel: LiveSetting<string | undefined>
+  searchRouting: LiveSetting<WebSearchRoutingConfig>
+  temporaryRouteBackup: LiveSetting<string | undefined>
+}
+
 /** Keep native live references at the boundary; request code consumes plain snapshots. */
 export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
   return {
@@ -74,7 +80,7 @@ export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
 const MAX_TIMEOUT_MS = 2_147_483_647
 
 /** Schema of the plugin's settings section. */
-export const Config = z.object({
+export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   enabled: z.boolean().default(true),
   providers: z.array(z.string()).default([]),
   includeSources: z.boolean().default(true),
