@@ -39,21 +39,29 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     const dispose = await ctx.remote.$mount(remote)
     expect(registered).toEqual([remote])
     expect(remote.descriptors.map(item => item.method)).toEqual([
-      'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut', 'migrationStatus',
+      'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
+      'excludeModel', 'restoreModel', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.result.mode).toBe('strict')
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
-      expect(descriptor.parameters).toEqual([])
+      if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
+        expect(descriptor.parameters).toHaveLength(1)
+        expect(descriptor.parameters[0]?.codec.create().parse('gpt-5.4')).toBe('gpt-5.4')
+        expect(() => descriptor.parameters[0]?.codec.create().parse('')).toThrow()
+      }
+      else expect(descriptor.parameters).toEqual([])
       const expected = descriptor.method === 'migrationStatus' ? migration : view
       expect(descriptor.result.create().parse(expected)).toEqual(expected)
       expect(() => descriptor.result.create().parse({ ...expected, credential: 'synthetic-forbidden' })).toThrow()
       const method = ctx.remote.githubCopilot[descriptor.method]
-      await expect(method()).resolves.toEqual({ ok: true, value: expected })
-      expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilot/${descriptor.method}`, { args: {} }, expect.any(AbortSignal))
+      const parameterized = descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel'
+      await expect(parameterized ? method('gpt-5.4') : method()).resolves.toEqual({ ok: true, value: expected })
+      expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilot/${descriptor.method}`,
+        { args: parameterized ? { modelId: 'gpt-5.4' } : {} }, expect.any(AbortSignal))
     }
-    expect(rpc).toHaveBeenCalledTimes(8)
+    expect(rpc).toHaveBeenCalledTimes(10)
     const catalogDescriptor = remote.descriptors.find(item => item.namespace === 'githubCopilotSearchRouting')!
     expect(catalogDescriptor).toMatchObject({
       id: 'dsh-github-copilot:githubCopilotSearchRouting.providers', service: 'githubCopilotSearchRouting',
@@ -65,7 +73,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
       providers: [{ id: 'synthetic-registered-search', credential: 'synthetic-forbidden' }] })).toThrow()
     await expect(ctx.remote.githubCopilotSearchRouting.providers()).resolves.toEqual({ ok: true, value: catalog })
     expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilotSearchRouting/providers', { args: {} }, expect.any(AbortSignal))
-    expect(rpc).toHaveBeenCalledTimes(9)
+    expect(rpc).toHaveBeenCalledTimes(11)
     for (const method of ['get', 'refresh'] as const) {
       await expect(ctx.remote.githubCopilotUsage[method]()).resolves.toEqual({ ok: true, value: usage })
       expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilotUsage/${method}`, { args: {} }, expect.any(AbortSignal))

@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.4.0-alpha.59 (prepared)
+## 0.4.0-alpha.60 (prepared)
+
+- Add exact account-model exclusions under **GitHub Copilot → Manage → Model preferences**, with local search, visible/excluded counts, explicit **Exclude/Restore** actions, and retained rows for excluded IDs temporarily absent from account metadata (#192).
+- Remove excluded IDs from the managed picker, every Auto candidate pool, aggregate Auto modalities, hosted-search route facts, and request-budget admission. Stale picker or direct requests fail with `COPILOT_PREVIEW_MODEL_EXCLUDED`; Auto fails closed when no eligible model remains.
+- Protect the current fixed managed selection using public default and live Session projection/request-header evidence. Exclusion writes use path-level settings CAS and never rewrite history, switch a Session, mutate the account grant, or change Core's flat picker layout.
+
+## 0.4.0-alpha.59 (released)
 
 - Fix unavailable Web search routing on official rc.2 by exposing the plugin's live routing fields through native Config projection (#216). Retain narrow CAS writes, separate legacy override reset, ordinary safety configuration and live snapshot consumption without remounting.
 - Replace the manually populated settings test double with a disposable native Loader/ConfigEditor/SettingsForms fixture covering projection, save, conflict rejection and restart persistence.
