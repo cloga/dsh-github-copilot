@@ -91,10 +91,10 @@ Chat Auto does not own or alter the independent `github-copilot-hosted` search p
 
 Core already places route and usage details at the end of a completed turn. The MVP follows that interaction pattern rather than adding provider/model tags above the answer.
 
-For a completed Auto response, the proposed turn-tail display is:
+For a completed Auto response, the attribution sits on the same footer row as Core's usage and clock, after the end time. It stays hidden until the message is hovered or focused, matching that chrome. It is not a separate line above the answer.
 
 ```text
-Auto · <actual model>  ?
+[actions] [usage] [time]  Auto · <actual model>  ?
 ```
 
 The `?` opens a compact explanation using normalized facts such as:
