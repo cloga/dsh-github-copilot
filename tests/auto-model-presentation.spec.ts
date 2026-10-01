@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  AUTO_ATTRIBUTION_STYLE, AUTO_MODEL_ATTRIBUTION_KEY, autoModelAttributionDefinition, installAutoModelPresentation,
+  AUTO_MODEL_ATTRIBUTION_KEY, autoModelAttributionDefinition, installAutoModelPresentation,
 } from '../src/auto-model-presentation.ts'
+import { turnModelProvenanceDefinition } from '../src/turn-model-provenance.ts'
 
 function decision(overrides: Record<string, unknown> = {}) {
   return {
@@ -70,14 +71,6 @@ describe('Auto model presentation', () => {
       })
   })
 
-  it('places Auto attribution after the settled clock and reveals it only on hover', () => {
-    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-turn-tail]:has(> [data-copilot-auto-attribution]){flex-direction:row')
-    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-turn-tail]>[data-copilot-auto-attribution]{order:1')
-    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-time-hover-root]>[data-copilot-auto-attribution]{opacity:0')
-    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-time-hover-root]:hover>[data-copilot-auto-attribution]')
-    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-time-hover-root]:focus-within>[data-copilot-auto-attribution]{opacity:1}')
-  })
-
   it('registers only the public turn-tail list slot and conversation definition', () => {
     const removeEntry = vi.fn()
     const removeDefinition = vi.fn()
@@ -93,16 +86,18 @@ describe('Auto model presentation', () => {
       }),
     }
     const diagnostic = vi.fn()
-    const dispose = installAutoModelPresentation({ slots, uiConversation: { events }, diagnostic })
+    const dispose = installAutoModelPresentation({ slots, uiConversation: { events }, diagnostic,
+      remote: { githubCopilotTurnSelection: { get: vi.fn() } } })
     expect(events.register).toHaveBeenCalledWith(autoModelAttributionDefinition)
+    expect(events.register).toHaveBeenCalledWith(turnModelProvenanceDefinition)
     expect(register).toHaveBeenCalledWith(
-      { name: 'conversation.chat.turnTail', id: 'github-copilot-auto-model', order: 20 },
+      { name: 'conversation.chat.assistant-actions', id: 'github-copilot-auto-model', order: 20 },
       expect.any(Function),
     )
     expect(diagnostic).not.toHaveBeenCalled()
     dispose()
     expect(removeEntry).toHaveBeenCalledOnce()
-    expect(removeDefinition).toHaveBeenCalledOnce()
+    expect(removeDefinition).toHaveBeenCalledTimes(2)
     expect(removeInjection).toHaveBeenCalledOnce()
   })
 })

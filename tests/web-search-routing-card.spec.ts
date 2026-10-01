@@ -142,6 +142,32 @@ async function ready(remote = remotes()) {
 }
 
 describe('independent Web search Settings card', () => {
+  it('keeps rc.2 disable, removal, and upgrade restart guidance visible before mutation', async () => {
+    const card = await ready()
+    const tree = card.render()
+    const notice = descendants(tree).find(node => node.props['data-dsh-web-search-lifecycle-notice'] === true)
+    expect(notice?.props.role).toBe('note')
+    expect(text(notice)).toContain('After disabling, removing, or upgrading this plugin')
+    expect(text(notice)).toContain('only pending entries waiting for a service')
+    expect(text(notice)).toContain('this plugin is Off')
+    expect(text(notice)).toContain('restart instead of toggling it repeatedly')
+    expect(text(notice)).toContain('停用、移除或升级本插件后')
+    expect(text(notice)).toContain('等待某项服务的 pending 条目')
+    expect(text(notice)).toContain('本插件已为 Off')
+    expect(text(notice)).not.toContain('service: web')
+    expect(descendants(tree).some(node => node.props['data-dsh-web-search-restart-banner'])).toBe(false)
+  })
+
+  it('retains the lifecycle notice alongside the conditional unready-service alert', async () => {
+    const remote = remotes()
+    remote.routing.providers.mockResolvedValueOnce(ok({ supported: false, providers: [] }))
+    const card = await ready(remote)
+    const tree = card.render()
+    expect(descendants(tree).some(node => node.props['data-dsh-web-search-lifecycle-notice'])).toBe(true)
+    expect(descendants(tree).some(node => node.props['data-dsh-web-search-restart-banner'])).toBe(true)
+    expect(text(tree)).toContain('Search service is not ready')
+  })
+
   it.each(['primary', 'fallback'] as const)('saves Copilot as %s with one routing write and no model prerequisite', async position => {
     const remote = remotes('none'), value = settingsValue('none')
     delete (value.namespaces[0]!.value as Record<string, unknown>).searchModel

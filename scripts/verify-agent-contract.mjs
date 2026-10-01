@@ -29,6 +29,10 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(release.userRestrictionsTakePrecedence === true && release.otherChangesRequireExplicitReleaseRequest === true, 'release delivery must respect user scope and exclude implicit unrelated releases')
   require(JSON.stringify(release.importantChanges) === JSON.stringify(['user-visible-feature', 'behavior-fix', 'compatibility-fix', 'security-fix', 'stability-fix']), 'release delivery change classes differ')
   require(JSON.stringify(release.requiredConditions) === JSON.stringify(['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets']), 'release delivery prerequisites differ')
+  require(release.localGateWhenRegistryBlocked === 'record-environment-blocker-and-require-complete-github-ci', 'blocked local gate must require full GitHub CI')
+  const agentGuide = await readFile(resolve(root, 'AGENTS.md'), 'utf8')
+  require(agentGuide.includes('local validation blocked') && agentGuide.includes('complete required GitHub CI matrix')
+    && agentGuide.includes('Never weaken or skip CI'), 'blocked local gate guidance is missing')
   require(JSON.stringify(release.completionEvidence) === JSON.stringify(['published-release-url', 'tag-and-commit', 'asset-and-sha256', 'npm-version-and-integrity']), 'release delivery completion evidence differs')
   const file = async path => {
     require(typeof path === 'string' && !path.startsWith('/') && !path.includes('..') && !path.includes('\\') && !path.includes(':'), 'unsafe relative path')

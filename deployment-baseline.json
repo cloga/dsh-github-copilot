@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.56"
+    "version": "0.4.0-alpha.58"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -990,8 +990,11 @@
       "sourceMarkers": [
         {"file": "src/preview-route.ts", "marker": "GITHUB_COPILOT_AUTO_MODEL_ID"},
         {"file": "src/auto-model-host.ts", "marker": "keep attribution out of the log"},
-        {"file": "src/auto-model-presentation.ts", "marker": "conversation.chat.turnTail"},
-        {"file": "src/auto-model-presentation.ts", "marker": "data-time-hover-root"},
+        {"file": "src/auto-model-presentation.ts", "marker": "conversation.chat.assistant-actions"},
+        {"file": "src/auto-model-presentation.ts", "marker": "turnModelProvenanceDefinition"},
+        {"file": "src/turn-model-provenance.ts", "marker": "assistant/message"},
+        {"file": "src/turn-selection-card.ts", "marker": "Selection unknown"},
+        {"file": "src/turn-selection-remote.ts", "marker": "lookup: 'agent'"},
         {"file": "docs/automatic-model-routing.md", "marker": "plugin-only"}
       ],
       "tests": [
@@ -1001,7 +1004,8 @@
         {"file": "tests/auto-model-host.spec.ts", "name": "replaces Core virtual-Auto switch guidance with the resolved real route"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "folds a durable decision into turn-scoped credential-free attribution"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "omits attribution when a compatible history contains no optional decision"},
-        {"file": "tests/auto-model-presentation.spec.ts", "name": "places Auto attribution after the settled clock and reveals it only on hover"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "reads exact completed turn evidence once through the public action slot and keeps actual model out of footer"},
+        {"file": "tests/turn-model-provenance.spec.ts", "name": "retains known models around zero-usage failed attempts without reading payloads"},
         {"file": "tests/preview-route.spec.ts", "name": "publishes Auto as a virtual picker entry but refuses unresolved adapter dispatch"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "shrinks durable history and rebuilds the switched model request without sending the oversized original"}
       ]

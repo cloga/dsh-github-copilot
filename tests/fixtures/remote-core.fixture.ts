@@ -40,7 +40,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     expect(registered).toEqual([remote])
     expect(remote.descriptors.map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.result.mode).toBe('strict')

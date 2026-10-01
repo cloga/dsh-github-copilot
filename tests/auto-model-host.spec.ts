@@ -103,6 +103,9 @@ describe('Auto model Host integration', () => {
       const first = await request(1, INTELLIGENCE)
       expect(first.model).toBe('fixture-middle')
       expect(selection.pending?.model).toBe(INTELLIGENCE)
+      expect(ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+        mode: 'auto', preference: 'intelligence', reason: 'short-text-turn', candidateCount: 3,
+      })
       header = { config: first }
       const assembly = { sections: [], contexts: [], tools: [], variables: { provider: PREVIEW, model: first.model } }
       const assembled = await ctx.waterfall(promptScope, 'system-prompt/assemble', assembly, {}, async () => assembly)
@@ -118,6 +121,9 @@ describe('Auto model Host integration', () => {
       await enter(4, 'detail '.repeat(1_000))
       expect((await request(4, 'fixture-fast')).model).toBe('fixture-fast')
       expect(loadModels).toHaveBeenCalledTimes(3)
+      expect(ctx.githubCopilotTurnSelection.get(agent, 4)).toEqual({ mode: 'manual' })
+      expect(ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({ mode: 'auto', preference: 'intelligence' })
+      expect(append.mock.calls.some(([type]) => type === 'github-copilot/auto-model-decision')).toBe(false)
     } finally {
       dispose()
       await ctx.fiber.dispose()
@@ -181,6 +187,8 @@ describe('Auto model Host integration', () => {
       expect(existing.variables).toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
       await enter(4, 'detail '.repeat(1_000))
       await expect(request(4, 'fixture-fast')).resolves.toMatchObject({ model: 'fixture-fast' })
+      expect(ctx.githubCopilotTurnSelection.get(agent, 3)).toEqual({ mode: 'manual' })
+      expect(ctx.githubCopilotTurnSelection.get(agent, 4)).toEqual({ mode: 'unknown' })
       expect(loadModels).toHaveBeenCalledTimes(2)
     } finally {
       dispose()

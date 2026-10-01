@@ -25,6 +25,17 @@ These are isolated public Loader observations using synthetic plugins. The older
 
 The fixture does not exercise the native Desktop package manager, installation behavior, recovery after process restart, or every profile composition. The native manager's `restart-required` result for upgrading an installed package in place is a separate package-update boundary and is not evidence that the hot route lifecycle is repaired.
 
+## Native disable warning guidance
+
+An observed native Desktop disable completed with the plugin shown as **Off**, then reported only:
+
+```text
+web-search-deepseek: pending (waiting for service: web)
+web-fetch-http: pending (waiting for service: web)
+```
+
+The plugin cannot change or reclassify that native result after disable because its Client contribution has already been unloaded. While enabled, the plugin details card therefore warns that disable, removal, and upgrade operations affecting this Web composition require a full Desktop exit and cold restart. When the plugin is already **Off** and the native diagnostic contains only dependent entries pending while waiting for a service, restart Desktop instead of repeatedly toggling or reinstalling the plugin. This guidance does not convert other activation errors, mutation failures, or mixed diagnostics into success.
+
 The test names begin `known-bug characterization` intentionally. They pass only when the pinned rc.2 fixtures continue to exhibit the documented states. A desired recovery acceptance test must instead prove that the consumer and provider stay usable through each supported transition, global `ctx.web` remains available, official/delegate/routed paths remain correctly owned, and teardown removes only the registrations owned by their fibers. Do not reinterpret this characterization test as approval of the current behavior.
 
 ## Bounded public-API finding

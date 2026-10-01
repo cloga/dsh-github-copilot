@@ -12,7 +12,7 @@
 ## 当前体验
 
 - **账号与模型：**在 **设置 → 模型** 的原生 GitHub Copilot 行内完成登录、查看账号发现模型、刷新元数据及账号管理。
-- **搜索路由：**在 **插件 → dsh-github-copilot → 详情**选择主搜索 Provider 与兜底 Provider。页面只保留用户真正需要的两项选择，不再把协议探测、超时、白名单或传输开关作为日常配置暴露。更新后的路由服务尚未激活时，卡片会明确显示 **需要重启生效（Restart required）**，而不是继续展示无法使用的表单。
+- **搜索路由：**在 **插件 → dsh-github-copilot → 详情**选择主搜索 Provider 与兜底 Provider。页面只保留用户真正需要的两项选择，不再把协议探测、超时、白名单或传输开关作为日常配置暴露；同时会在停用／移除／升级前常驻显示 rc.2 生命周期提示。更新后的路由服务尚未激活时，卡片会明确显示 **需要重启生效（Restart required）**，而不是继续展示无法使用的表单。
 - **用量：**符合条件的 Copilot 会话会在输入框旁显示可选的 **Credits / 额度** 控件，展示供应方明确返回的计费周期数据，并如实区分不可用与历史快照。仅额度请求组合 Node 默认证书与系统信任根，无需依赖 Desktop launcher 的环境变量继承，且保持 TLS 验签。
 - **兼容处理：**插件通过 DSH 已发布公开接口提供 Copilot 专用 Tool Schema、Thinking 展示、请求预算及账号模型兼容，不修改 Core，也不维护第二套模型目录。
 
@@ -20,7 +20,7 @@
 
 截图来自当前构建 Client 的隔离浏览器 fixture，使用合成 Provider。它只证明已发布配置界面的形态，不证明真实凭据、账号权限、搜索成功或当前 Desktop 已加载。
 
-> 当前文档与安装命令对应版本 `0.4.0-alpha.56`。源码、发布制品、已安装版本和实际加载运行时需分别确认；本地升级和中断会话的重启仍需用户批准。
+> 当前文档与安装命令对应版本 `0.4.0-alpha.58`。源码、发布制品、已安装版本和实际加载运行时需分别确认；本地升级和中断会话的重启仍需用户批准。
 
 Web search 路由现在优先显示在插件详情页；宿主不支持详情页插槽时才回退到 **设置 → 模型**或独立 Web search section。搜索子 Fiber 仍独立等待 Remote，不影响账号控件和既有搜索安全检查。
 
@@ -113,10 +113,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 仅对独立的具名 profile，获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.56/dsh-github-copilot-0.4.0-alpha.56.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.58/dsh-github-copilot-0.4.0-alpha.58.tgz
 ```
 
-Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.56`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
+Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.58`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
@@ -130,7 +130,9 @@ Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理�
 
 ### Auto 模型路由
 
-托管 GitHub Copilot 分组提供三个平铺的虚拟选择：**Auto · Balance**（均衡）、**Auto · Efficiency**（效率）和 **Auto · Intelligence**（智能）。三档共用当前账号验证过的合格模型池。在应用偏好前，路由会根据候选模型的硬输入预算计算输入余量，剔除无法容纳当前消息的候选。软偏好通过确定性内存种子在候选区间（上段/下段/中段）内分布，避免单一顶配模型跨 Session 被垄断。若所有候选均超限，Auto 会选择输入容量最大的模型并对可压缩历史触发 compaction pressure。Auto 在每个 Core turn 只解析一次；同轮工具步骤、重试和自动 compact 恢复使用同一真实模型，新轮次可重新选择。图片轮次必须有验证过的图片候选。新轮次保留 Core 的真实模型／用量信息，但暂不生成插件专属的 Auto 原因提示：官方 rc.2 无法安全追加这类可选插件事件；兼容历史中的归因仍保留显示。搜索仍由独立策略管理；原生子代理与 Team 队友继承 Core 的具体模型，不被重新标为 Auto。详见[策略与 mockup](./docs/automatic-model-routing.md)；模型排除与嵌套菜单仍只是提案。
+托管 GitHub Copilot 分组提供三个平铺的虚拟选择：**Auto · Balance**（均衡）、**Auto · Efficiency**（效率）和 **Auto · Intelligence**（智能）。三档共用当前账号验证过的合格模型池。在应用偏好前，路由会根据候选模型的硬输入预算计算输入余量，剔除无法容纳当前消息的候选。软偏好通过确定性内存种子在候选区间（上段/下段/中段）内分布，避免单一顶配模型跨 Session 被垄断。若所有候选均超限，Auto 会选择输入容量最大的模型并对可压缩历史触发 compaction pressure。Auto 在每个 Core turn 只解析一次；同轮工具步骤、重试和自动 compact 恢复使用同一真实模型，新轮次可重新选择。图片轮次必须有验证过的图片候选。新轮次保留 Core 的真实模型／用量信息，不追加不兼容的插件事件。搜索仍由独立策略管理；原生子代理与 Team 队友继承 Core 的具体模型，不被重新标为 Auto。详见[策略与 mockup](./docs/automatic-model-routing.md)；模型排除与嵌套菜单仍只是提案。
+
+已完成的 Copilot 回复在原生 Usage／时间后显示 **Auto（偏好）**，点信息按钮查看本轮记录的选择原因；只有捕获到明确固定选择才显示**手动**。缺记录显示**选择方式未知**，不借当前 picker 推断历史。不重复模型名、不另设 Model details 按钮：实际模型仍由原生 Usage 显示，其缺失归属行为未改变。新选择记录仅限当前 Host 内存且有容量上限，重启、释放 Agent 或淘汰后会丢失；兼容历史 Auto 记录仍可读取。公开 assistant-actions slot 只允许插件内部换行，不能改变原生固定高度尾栏。
 
 **历史加载报错包含 `github-copilot/auto-model-decision`：**alpha.54 阻止新问题事件写入，但升级或重启不会修复已有日志。[显式恢复命令](./docs/automatic-model-routing.md#recovering-affected-histories)使用官方 codec 校验独立修复副本，同时保存原始字节备份。替换实际 Session 日志必须另行批准并先停止所有写入者；插件不会自动迁移历史。
 
@@ -157,9 +159,11 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.56`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.58`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
-**Desktop package 更新与 Web 生命周期边界：**原生 manager 对已安装 package 原位升级返回的 `restart-required` 是权威结果，与移除／重加 plugin bundle 的行为是两个不同问题。任何包含服务重编排补丁（`cordis.patch.yml`，如本插件所采用的隔离路由 Web 搜索层）的插件升级均无法通过热重载重新绑定活动组件与 consumer，必须退出应用并冷重启 Desktop 才能完全生效。pinned public Loader characterization 记录了：使用 bundle 的精确 ID 且 provider 已激活时，分阶段首次添加可能在 routed row 启用后仍令全局 `ctx.web` 和 consumer 不可用；另一独立序列从完整冷加载且正常工作的 Web-routing composition 开始，移除后全局 `ctx.web` 与 consumer 不可用，重加／重试 reconciliation 仍未恢复。较早的临时 harness 使用别名 ID 且没有 active provider，因此其最终添加成功并不等同于精确 bundle fixture。这些都是合成 Loader 观察，不是原生 Desktop manager 覆盖，也不证明重启后恢复。不要用移除／重加 bundle 作为热升级绕行；遵循 manager 的升级结果及另行批准的重启要求。详见 [rc.2 生命周期 characterization 与有限的 public API 结论](https://github.com/cloga/dsh-github-copilot/blob/main/docs/web-lifecycle-rc2.md)。
+**Desktop package 更新与 Web 生命周期边界：**原生 manager 对已安装 package 原位升级返回的 `restart-required` 是权威结果，与移除／重加 plugin bundle 的行为是两个不同问题。涉及服务重编排补丁（`cordis.patch.yml`，如本插件所采用的隔离路由 Web 搜索层）的停用、移除或升级，可能让依赖条目保持 pending，直到完全退出并冷重启 Desktop。若原生 manager 只报告类似 `pending (waiting for service: web)` 的条目，同时本插件已经显示 **Off**，说明请求的停用状态已经落盘；请冷重启 Desktop，不要反复切换或重装插件。其它错误不属于此提示范围，仍需单独排查。
+
+pinned public Loader characterization 记录了：使用 bundle 的精确 ID 且 provider 已激活时，分阶段首次添加可能在 routed row 启用后仍令全局 `ctx.web` 和 consumer 不可用；另一独立序列从完整冷加载且正常工作的 Web-routing composition 开始，移除后全局 `ctx.web` 与 consumer 不可用，重加／重试 reconciliation 仍未恢复。较早的临时 harness 使用别名 ID 且没有 active provider，因此其最终添加成功并不等同于精确 bundle fixture。这些是合成 Loader 观察；上述原生 warning 属于运行证据，不代表所有 pending 诊断都可忽略，也不代表 fixture 已证明重启恢复。不要用移除／重加 bundle 作为热升级绕行。详见 [rc.2 生命周期 characterization 与有限的 public API 结论](./docs/web-lifecycle-rc2.md)。
 
 **Host TLS trust 边界：**本插件只为额度请求添加系统信任根，不修改 Desktop 进程级信任、登录、模型、搜索或其他请求。之前带有正确环境变量的 Desktop 启动让额度恢复；后续恢复脚本启动没有继承进程变量，尽管 HKCU 保留 `NODE_USE_SYSTEM_CA=1`，额度仍再次失败；正常手动启动后又恢复。更新后的插件在获准升级和重新加载后消除额度请求对该继承链的依赖；仅发布包不会修改当前 Desktop profile、trust store 或进程。
 
@@ -437,8 +441,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.56/dsh-github-copilot-0.4.0-alpha.56.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.56/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.58/dsh-github-copilot-0.4.0-alpha.58.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.58/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -446,7 +450,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.56.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.58.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

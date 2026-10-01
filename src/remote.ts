@@ -13,6 +13,7 @@ import type { GitHubCopilotMigrationStatus } from './migration-status.ts'
 import dualModelRemote from './dual-model-remote.ts'
 import searchRoutingRemote from './search-routing-remote.ts'
 import copilotUsageRemote from './copilot-usage-remote.ts'
+import turnSelectionRemote from './turn-selection-remote.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
@@ -125,6 +126,7 @@ const contribution: TypertRemoteContribution = {
     ...dualModelRemote.descriptors,
     ...searchRoutingRemote.descriptors,
     ...copilotUsageRemote.descriptors,
+    ...turnSelectionRemote.descriptors,
   ],
 }
 

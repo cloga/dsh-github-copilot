@@ -39,6 +39,7 @@ test('important updates carry release follow-through without a second approval p
   assert.equal(policy.userRestrictionsTakePrecedence, true)
   assert.equal(policy.otherChangesRequireExplicitReleaseRequest, true)
   assert.deepEqual(policy.requiredConditions, ['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets'])
+  assert.equal(policy.localGateWhenRegistryBlocked, 'record-environment-blocker-and-require-complete-github-ci')
   assert.deepEqual(policy.completionEvidence, ['published-release-url', 'tag-and-commit', 'asset-and-sha256', 'npm-version-and-integrity'])
   assert.ok(plan.commands.some(command => command.argv[0] === 'node' && command.argv[1] === '--test'
     && command.argv.includes('tests/scripts/npm-distribution.test.mjs')))
@@ -59,12 +60,14 @@ test('contract validation rejects a redundant release prompt or weakened release
   try {
     const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
     await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    await writeFile(join(root, 'AGENTS.md'), await readFile(join(repositoryRoot, 'AGENTS.md')))
     for (const [mutate, message] of [
       [contract => contract.boundaries.approvalRequired.push('release'), /release delivery/],
       [contract => contract.boundaries.approvalRequired.push('merge'), /merge must not require a separate approval/],
       [contract => { contract.boundaries.releaseDelivery.repeatApprovalRequired = true }, /release delivery/],
       [contract => { contract.boundaries.releaseDelivery.userRestrictionsTakePrecedence = false }, /release delivery/],
       [contract => { contract.boundaries.releaseDelivery.requiredConditions = ['reviewed-merge'] }, /release delivery/],
+      [contract => { contract.boundaries.releaseDelivery.localGateWhenRegistryBlocked = 'skip-ci' }, /blocked local gate/],
       [contract => { contract.boundaries.releaseDelivery.completionEvidence = [] }, /release delivery/],
     ]) {
       const contract = structuredClone(original)
