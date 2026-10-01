@@ -1891,7 +1891,7 @@ describe('plugin-owned account Copilot route', () => {
     const service = harness.ctx.get('githubCopilotPreview')
     await expect(harness.ctx.plugin({ name: 'duplicate-preview-test', inject: ['llm', 'credentials'],
       apply(owner: Context) { previewPlugin.apply(owner) },
-    })).rejects.toThrow(/already registered|DUPLICATE_ADAPTER/)
+    })).rejects.toThrow(/already registered|has been registered|DUPLICATE_ADAPTER/)
     expect(harness.ctx.get('githubCopilotPreview')).toBe(service)
     expect(harness.ctx.llm.listProviders().filter(provider => provider.id === PREVIEW)).toHaveLength(1)
     await expect(harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })).resolves.toBeDefined()
