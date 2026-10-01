@@ -1,11 +1,14 @@
 # Changelog
 
-## 0.4.0-alpha.56 (prepared)
+## 0.4.0-alpha.57 (prepared)
 
 - Add compact Auto preference and expandable recorded reasons after the native reply time through the public assistant-actions slot; explicit fixed selection shows Manual, absent evidence shows Selection unknown. Remove the separate Model details candidate and repeated model name; actual models stay in native Usage.
 - Keep new selection evidence in a bounded Host-lifetime store with native agent-scoped lookup, not incompatible durable events. Restart, disposal and eviction lose this evidence; compatible historical Auto records remain readable. Native Usage aggregation and its missing-route behavior are unchanged.
 - Preserve plugin-owned credential invalidation and disposal reasons as specific `ABORTED` diagnostics, without changing transport retries, timeouts or partial output.
 - Add offline native-SDK regressions distinguishing HTTP 408, transport termination, missing Responses terminal events, true cancellation and zero-usage measurement limits. These changes do not claim to fix upstream timeouts, disconnects or native context-meter resets.
+
+## 0.4.0-alpha.56 (released)
+
 - Pin `undici` to 6.28.1 to resolve the observed 6.29.0 installation failure in the configured package mirror (#212). Keep the lockfile registry-neutral and preserve the quota-only TLS dispatcher; this does not establish full Desktop installation or activation.
 
 ## 0.4.0-alpha.55 (prepared)
