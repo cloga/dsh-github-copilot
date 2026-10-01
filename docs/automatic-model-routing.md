@@ -145,6 +145,8 @@ This is an explicit offline maintenance utility, not an installed plugin hook. I
 
 Copy mode creates `original.session.v4.jsonl.zstd` (byte-exact backup), `session.v4.jsonl.zstd` (validated repaired copy), and `repair.json` (SHA-256 receipt). It refuses existing destinations and never writes the source. Keep the directory private: both logs contain conversation history. A check/copy can become stale if an active writer appends later.
 
+The compressed output keeps the header in its own first zstd frame, as required by Desktop's persistence discovery and reader. The original alpha.54 utility incorrectly combined the header and events into one frame: those copies passed logical event validation but disappeared from Desktop discovery. Use the corrected utility on such a copy; `reframedHeader: true` reports this physical-layout repair even when `changedSeqs` is empty. No logical rows change during reframing, and the current source is backed up separately. A zero `changedSeqs` count alone from the original utility was not proof of Desktop readability.
+
 **Applying a copy requires separate operator approval:** first stop all writers for that Session, verify the fixed plugin will load before resuming, and recheck the live log against `originalSha256`. If it changed, regenerate and validate a fresh copy. Preserve the backup, replace only the exact affected log, verify its hash against `repairedSha256`, then use the normal official history reader to reopen it. Do not replay business requests as a test. If recovery fails, stop writers before restoring the exact original backup. Neither this utility nor the plugin installs itself, replaces a live file, restarts Desktop, clears credentials, or automatically migrates histories.
 
 ## Subagents and Agent Teams

@@ -63,13 +63,16 @@ function decompress(input) {
     total += buffer.length
     offset += engine.bytesWritten
   }
-  return Buffer.concat(chunks, total)
+  return {
+    decoded: Buffer.concat(chunks, total),
+    independentHeader: chunks.length > 0 && chunks[0].indexOf(10) === chunks[0].length - 1,
+  }
 }
 
 /** Produces a detached copy; only the optional event envelope marker may change. */
 export function repairAutoModelHistory(input) {
   if (input.length > maxBytes) throw new Error('AUTO_HISTORY_TOO_LARGE')
-  const decoded = decompress(input)
+  const { decoded, independentHeader } = decompress(input)
   const text = new TextDecoder('utf-8', { fatal: true }).decode(decoded)
   if (!text.endsWith('\n')) throw new Error('AUTO_HISTORY_INCOMPLETE_TAIL')
   const lines = text.slice(0, -1).split('\n')
@@ -86,9 +89,19 @@ export function repairAutoModelHistory(input) {
   }
   // The official reader must accept all events, relationships and surfaces, not only our event.
   const artifact = restore(rows)
-  const output = changedSeqs.length === 0 ? input : zstdCompressSync(Buffer.from(`${lines.join('\n')}\n`))
+  const reframedHeader = !independentHeader
+  if (reframedHeader && !rows.slice(1).some(row => row.type === eventType)) {
+    throw new Error('AUTO_HISTORY_UNRECOGNIZED_FRAME_REPAIR')
+  }
+  // Desktop discovers logs by decoding a first frame containing only the header.
+  const output = changedSeqs.length === 0 && !reframedHeader ? input : Buffer.concat([
+    zstdCompressSync(Buffer.from(`${lines[0]}\n`)),
+    ...(lines.length > 1 ? [zstdCompressSync(Buffer.from(`${lines.slice(1).join('\n')}\n`))] : []),
+  ])
+  const verified = decompress(output)
+  if (!verified.independentHeader) throw new Error('AUTO_HISTORY_INVALID_HEADER_FRAME')
   const roundTrip = new TextDecoder('utf-8', { fatal: true })
-    .decode(decompress(output))
+    .decode(verified.decoded)
   const restored = restore(roundTrip.slice(0, -1).split('\n').map(line => JSON.parse(line)))
   if (JSON.stringify(restored) !== JSON.stringify(artifact)) throw new Error('AUTO_HISTORY_ROUNDTRIP_MISMATCH')
   return {
@@ -97,6 +110,7 @@ export function repairAutoModelHistory(input) {
       format: 4,
       eventCount: artifact.events.length,
       changedSeqs,
+      reframedHeader,
       originalSha256: hash(input),
       repairedSha256: hash(output),
     },
@@ -121,13 +135,14 @@ export async function runCli(args) {
     throw new Error('AUTO_HISTORY_SOURCE_CHANGED')
   }
   if (destination !== undefined) {
-    if (result.report.changedSeqs.length === 0) throw new Error('AUTO_HISTORY_NOTHING_TO_REPAIR')
+    if (result.report.changedSeqs.length === 0 && !result.report.reframedHeader) throw new Error('AUTO_HISTORY_NOTHING_TO_REPAIR')
     // Never overwrite the source, an existing recovery directory, or any existing output.
     await mkdir(destination, { mode: 0o700 })
     await writeFile(join(destination, 'original.session.v4.jsonl.zstd'), input, { flag: 'wx', mode: 0o600 })
     await writeFile(join(destination, 'session.v4.jsonl.zstd'), result.output, { flag: 'wx', mode: 0o600 })
     const written = repairAutoModelHistory(await readFile(join(destination, 'session.v4.jsonl.zstd')))
-    if (written.report.originalSha256 !== result.report.repairedSha256 || written.report.changedSeqs.length !== 0) {
+    if (written.report.originalSha256 !== result.report.repairedSha256
+      || written.report.changedSeqs.length !== 0 || written.report.reframedHeader) {
       throw new Error('AUTO_HISTORY_WRITTEN_COPY_MISMATCH')
     }
     await writeFile(join(destination, 'repair.json'), `${JSON.stringify(result.report, null, 2)}\n`, { flag: 'wx', mode: 0o600 })
