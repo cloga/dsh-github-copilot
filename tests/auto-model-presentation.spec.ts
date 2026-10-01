@@ -38,6 +38,11 @@ describe('Auto model presentation', () => {
     })
     expect(autoModelAttributionDefinition.match(decision({ candidateCount: 0 }))).toBeNull()
     expect(autoModelAttributionDefinition.match({ ...event, type: 'request/header' })).toBeNull()
+    const preferred = decision({ preference: 'intelligence' })
+    const stateWithPreference = autoModelAttributionDefinition.start({ matches: [] }, { event: preferred })
+    expect(autoModelAttributionDefinition.buildLocationData({ state: stateWithPreference, matches: [{ event: preferred }] }, 'turn', null))
+      .toMatchObject({ value: { preference: 'intelligence' } })
+    expect(autoModelAttributionDefinition.match(decision({ preference: 'unsupported' }))).toBeNull()
   })
 
   it('registers only the public turn-tail list slot and conversation definition', () => {

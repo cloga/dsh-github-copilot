@@ -70,4 +70,35 @@ describe('Auto model routing policy', () => {
     const reserved = model('auto', { contextWindow: 1_000_000, maxTokens: 100_000, efforts: ['max'], image: true })
     expect(selectAutoModel([reserved, fast], [message('hi')]).model).toBe(fast)
   })
+
+  it('uses one candidate pool with bounded soft preferences rather than tier filters', () => {
+    const pool = [strong, fast, balanced]
+    const short = [message('Explain this symbol.')]
+    const ordinary = [message('Investigate the behavior in detail. '.repeat(30))]
+    const demanding = [message('Analyze:\n' + 'detail '.repeat(700))]
+    expect(selectAutoModel(pool, short, 'efficiency').model).toBe(fast)
+    expect(selectAutoModel(pool, short, 'balance').model).toBe(fast)
+    expect(selectAutoModel(pool, short, 'intelligence').model).toBe(balanced)
+    expect(selectAutoModel(pool, ordinary, 'efficiency').model).toBe(fast)
+    expect(selectAutoModel(pool, ordinary, 'balance').model).toBe(balanced)
+    expect(selectAutoModel(pool, ordinary, 'intelligence').model).toBe(strong)
+    expect(selectAutoModel(pool, demanding, 'efficiency').model).toBe(balanced)
+    expect(selectAutoModel(pool, demanding, 'balance').model).toBe(strong)
+    expect(selectAutoModel(pool, demanding, 'intelligence').model).toBe(strong)
+    for (const preference of ['efficiency', 'balance', 'intelligence'] as const) {
+      expect(selectAutoModel([strong], short, preference).model).toBe(strong)
+      expect(selectAutoModel([fast, strong], demanding, preference).model).toBe(strong)
+      expect(selectAutoModel(pool, short, preference).candidateCount).toBe(3)
+    }
+  })
+
+  it('applies capability requirements before any preference', () => {
+    const vision = model('fixture-vision', { contextWindow: 128_000, maxTokens: 16_000, image: true })
+    const image = [{ role: 'user', content: [{ type: 'image' }] }]
+    for (const preference of ['efficiency', 'balance', 'intelligence'] as const) {
+      expect(selectAutoModel([fast, strong, vision], image, preference))
+        .toMatchObject({ model: vision, candidateCount: 1 })
+      expect(() => selectAutoModel([fast, strong], image, preference)).toThrow(AutoModelRoutingError)
+    }
+  })
 })

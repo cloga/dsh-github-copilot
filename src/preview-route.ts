@@ -12,7 +12,8 @@ import { createGitHubCopilotCredentialStore, trustedGitHubCopilotBaseUrl } from 
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import {
-  GITHUB_COPILOT_AUTO_MODEL_ID, GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
+  autoModelPreference, GITHUB_COPILOT_AUTO_MODEL_ID, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID,
+  GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID, GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
 } from './copilot-identity.ts'
 import { abortable } from './http.ts'
 import { accountModelFromDescriptor, copilotPublicHeaders, createAccountProvider } from './preview-provider.ts'
@@ -271,10 +272,14 @@ class PreviewAdapter extends PiAiAdapter {
       if (grant === undefined || snapshot.accountKey !== copilotAccountKey(grant)) return []
       const proof = this.lifetime.proofFor(snapshot)
       if (proof === undefined || tokenFingerprint(grant.access) !== proof.tokenFingerprint || grant.expires <= Date.now()) return []
-      const models = snapshot.models.filter(model => model.id !== GITHUB_COPILOT_AUTO_MODEL_ID && model.input.includes('text'))
+      const models = snapshot.models.filter(model => autoModelPreference(model.id) === undefined && model.input.includes('text'))
       if (models.length === 0) return []
       return [
-        { provider, id: GITHUB_COPILOT_AUTO_MODEL_ID, name: 'Auto',
+        { provider, id: GITHUB_COPILOT_AUTO_MODEL_ID, name: 'Auto · Balance',
+          inputModalities: [...autoModelInputModalities(models)] },
+        { provider, id: GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID, name: 'Auto · Efficiency',
+          inputModalities: [...autoModelInputModalities(models)] },
+        { provider, id: GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID, name: 'Auto · Intelligence',
           inputModalities: [...autoModelInputModalities(models)] },
         ...models.map(model => ({ provider, id: model.id, name: model.name, inputModalities: [...model.input] })),
       ]
@@ -284,18 +289,20 @@ class PreviewAdapter extends PiAiAdapter {
     owned(provider)
     const cached = this.lifetime.source.readSnapshot()
     const snapshot = await this.discoverSnapshot({ signal })
-    if (model === GITHUB_COPILOT_AUTO_MODEL_ID) {
-      const models = snapshot.models.filter(candidate => candidate.id !== GITHUB_COPILOT_AUTO_MODEL_ID
+    if (autoModelPreference(model) !== undefined) {
+      const models = snapshot.models.filter(candidate => autoModelPreference(candidate.id) === undefined
         && candidate.input.includes('text'))
       if (models.length === 0) throw failure('COPILOT_AUTO_NO_ELIGIBLE_MODEL', 'UNKNOWN_MODEL')
-      return { provider, id: model, name: 'Auto', inputModalities: [...autoModelInputModalities(models)] }
+      const name = model === GITHUB_COPILOT_AUTO_MODEL_ID ? 'Auto · Balance'
+        : model === GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID ? 'Auto · Efficiency' : 'Auto · Intelligence'
+      return { provider, id: model, name, inputModalities: [...autoModelInputModalities(models)] }
     }
     const lease = await this.lease(snapshot, model, signal, cached === snapshot)
     return this.withRecovery(snapshot, signal, () => new PiAiAdapter(this.optionsFor(lease)).resolveModel(provider, model, signal))
   }
   override async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
     owned(provider)
-    if (model === GITHUB_COPILOT_AUTO_MODEL_ID) throw failure('COPILOT_AUTO_ROUTE_UNRESOLVED', 'INVALID_REQUEST')
+    if (autoModelPreference(model) !== undefined) throw failure('COPILOT_AUTO_ROUTE_UNRESOLVED', 'INVALID_REQUEST')
     const cached = this.lifetime.source.readSnapshot()
     const snapshot = await this.discoverSnapshot({ signal })
     const lease = await this.lease(snapshot, model, signal, cached === snapshot)
@@ -306,7 +313,7 @@ class PreviewAdapter extends PiAiAdapter {
     const owner = this
     return (async function* () {
       owned(options.provider)
-      if (options.model === GITHUB_COPILOT_AUTO_MODEL_ID) throw failure('COPILOT_AUTO_ROUTE_UNRESOLVED', 'INVALID_REQUEST')
+      if (autoModelPreference(options.model) !== undefined) throw failure('COPILOT_AUTO_ROUTE_UNRESOLVED', 'INVALID_REQUEST')
       const cached = owner.lifetime.source.readSnapshot()
       const snapshot = await owner.discoverSnapshot({ signal: options.signal })
       const lease = await owner.lease(snapshot, options.model, options.signal, cached === snapshot)

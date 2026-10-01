@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import type { AutoModelPreference } from './copilot-identity.ts'
 
 export const AUTO_MODEL_ATTRIBUTION_KEY = 'github-copilot-auto-model-attribution'
 const SLOT = 'conversation.chat.turnTail'
@@ -17,6 +18,7 @@ function sequence(value: unknown): value is number {
 export interface AutoModelAttribution {
   readonly provider: string
   readonly model: string
+  readonly preference?: AutoModelPreference
   readonly taskClass: 'fast' | 'balanced' | 'strong'
   readonly reason: 'short-text-turn' | 'standard-turn' | 'large-structured-turn' | 'image-capability'
   readonly candidateCount: number
@@ -32,6 +34,7 @@ function attribution(event: unknown): AttributionState | undefined {
     || !sequence(event.data.turn) || event.data.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID
     || typeof event.data.model !== 'string' || event.data.model.trim() === ''
     || !['fast', 'balanced', 'strong'].includes(String(event.data.taskClass))
+    || event.data.preference !== undefined && !['efficiency', 'balance', 'intelligence'].includes(String(event.data.preference))
     || !['short-text-turn', 'standard-turn', 'large-structured-turn', 'image-capability'].includes(String(event.data.reason))
     || !sequence(event.data.candidateCount) || event.data.candidateCount < 1) return undefined
   return {
@@ -39,6 +42,7 @@ function attribution(event: unknown): AttributionState | undefined {
     value: {
       provider: event.data.provider,
       model: event.data.model,
+      ...event.data.preference === undefined ? {} : { preference: event.data.preference as AutoModelPreference },
       taskClass: event.data.taskClass as AutoModelAttribution['taskClass'],
       reason: event.data.reason as AutoModelAttribution['reason'],
       candidateCount: event.data.candidateCount,
@@ -79,6 +83,7 @@ export const autoModelAttributionDefinition = {
     if (previous?.turn === state.turn && previous.key === AUTO_MODEL_ATTRIBUTION_KEY
       && previous.value.provider === state.value.provider && previous.value.model === state.value.model
       && previous.value.reason === state.value.reason && previous.value.taskClass === state.value.taskClass
+      && previous.value.preference === state.value.preference
       && previous.value.candidateCount === state.value.candidateCount) return previous
     return { kind: 'turn', turn: state.turn, key: AUTO_MODEL_ATTRIBUTION_KEY, value: state.value }
   },
@@ -104,7 +109,7 @@ function reasonText(value: AutoModelAttribution): string {
   const reason = value.reason === 'short-text-turn' ? 'Short text turn'
     : value.reason === 'large-structured-turn' ? 'Large structured turn'
       : value.reason === 'image-capability' ? 'Image-capable model required' : 'Standard turn'
-  return `${reason}; selected from ${value.candidateCount} eligible account model${value.candidateCount === 1 ? '' : 's'}.`
+  return `${reason}; ${value.preference ?? 'balance'} capacity preference; selected from ${value.candidateCount} eligible account model${value.candidateCount === 1 ? '' : 's'}.`
 }
 
 function Attribution(props: Record<string, unknown>): React.ReactElement | null {
@@ -118,7 +123,7 @@ function Attribution(props: Record<string, unknown>): React.ReactElement | null 
     'data-copilot-auto-attribution': '',
     style: { display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-muted, #667085)', fontSize: 12 },
   },
-  React.createElement('span', null, `Auto · ${parsed.model}`),
+  React.createElement('span', null, `Auto${parsed.preference === undefined || parsed.preference === 'balance' ? '' : ` (${parsed.preference})`} · ${parsed.model}`),
   React.createElement('button', {
     type: 'button',
     'aria-label': 'Why this model',
