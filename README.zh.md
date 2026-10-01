@@ -171,7 +171,9 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 
 每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.46`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
-**Desktop 热升级边界：**精确 rc.2 在原有 dependency 上执行原位升级时会明确返回 `restart-required`。不要通过先移除再重新添加本 bundle 来强行热升级：bundle 已激活后移除其 patch，会要求公开 Loader 把官方 `web` service 从 companion 的命名 isolate 移回全局；隔离的移除／重加回归证明，rc.2 可能让官方 fiber 保持 active，却使全局 Web consumers、delegate 与 routed Web 一直 pending，直到进程重启。bundle 被移除后，本插件若不使用 Core/private hook 或持久化 profile 修改就无法修复该状态，而这两种做法都不允许。应把原生 manager 的 restart-required 结果视为权威，完成 package transaction，并在登录或搜索验收前执行另行批准的 Desktop 重启。
+**Desktop package 更新与 Web 生命周期边界：**原生 manager 对已安装 package 原位升级返回的 `restart-required` 是权威结果，与移除／重加 plugin bundle 的行为是两个不同问题。pinned public Loader characterization 记录了：使用 bundle 的精确 ID 且 provider 已激活时，分阶段首次添加可能在 routed row 启用后仍令全局 `ctx.web` 和 consumer 不可用；另一独立序列从完整冷加载且正常工作的 Web-routing composition 开始，移除后全局 `ctx.web` 与 consumer 不可用，重加／重试 reconciliation 仍未恢复。较早的临时 harness 使用别名 ID 且没有 active provider，因此其最终添加成功并不等同于精确 bundle fixture。这些都是合成 Loader 观察，不是原生 Desktop manager 覆盖，也不证明重启后恢复。不要用移除／重加 bundle 作为热升级绕行；遵循 manager 的升级结果及另行批准的重启要求。详见 [rc.2 生命周期 characterization 与有限的 public API 结论](https://github.com/cloga/dsh-github-copilot/blob/main/docs/web-lifecycle-rc2.md)。
+
+**Host TLS trust 诊断：**未发现 Desktop trust 设置。上述生命周期说明记录了一个仅供未来选择的、用户自有 launcher 选项：为全新 Desktop process 启用 Node system CA trust；它会扩大可接受 CA 集合，且尚未证明能修复先前 sign-in 失败。必须先完整退出，以免单实例 handoff，并让 launcher 及其标准 I/O 在 Desktop 生命周期内保持有效。这仅是文档建议；没有创建 launcher，也没有修改全局环境、Desktop profile、快捷方式、trust store 或运行中的进程。
 
 不需要运行 `copilot2api`，不需要外部 gateway、placeholder API key、原始 GitHub token 或单独安装 `dsh-web-search-provider`。
 
