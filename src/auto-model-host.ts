@@ -4,13 +4,15 @@ import { boundContextSummary, createUserMessage, LlmError } from '@deepseek-ai/d
 import type { AccountModelDescriptor } from './account-model-catalog.ts'
 import { AutoModelRoutingError, selectAutoModel } from './auto-model-routing.ts'
 import type { AutoModelDecision } from './auto-model-routing.ts'
-import { GITHUB_COPILOT_AUTO_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import { autoModelPreference, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import type { AutoModelPreference } from './copilot-identity.ts'
 
 interface AutoModelDecisionEvent {
   turn: number
   step: number
   provider: typeof GITHUB_COPILOT_PREVIEW_PROVIDER_ID
   model: string
+  preference: AutoModelPreference
   taskClass: AutoModelDecision['taskClass']
   reason: AutoModelDecision['reason']
   candidateCount: number
@@ -39,8 +41,9 @@ async function decide(
   dependencies: AutoModelHostDependencies,
   signal: AbortSignal,
   messages: readonly unknown[],
+  preference: AutoModelPreference,
 ): Promise<AutoModelDecision> {
-  try { return selectAutoModel(await dependencies.loadModels(signal), messages) }
+  try { return selectAutoModel(await dependencies.loadModels(signal), messages, preference) }
   catch (cause) {
     if (cause instanceof AutoModelRoutingError) throw failure(cause.code)
     throw cause
@@ -51,13 +54,13 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function pendingAuto(ctx: Context, agent: Agent): boolean {
+function pendingAuto(ctx: Context, agent: Agent): string | undefined {
   const candidate: unknown = ctx.get('sessionProjections')
-  if (!record(candidate) || typeof candidate.stateOf !== 'function') return false
+  if (!record(candidate) || typeof candidate.stateOf !== 'function') return undefined
   const state: unknown = candidate.stateOf(agent.session, 'modelSelection')
-  if (!record(state)) return false
-  return record(state.pending) && state.pending.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
-    && state.pending.model === GITHUB_COPILOT_AUTO_MODEL_ID
+  if (!record(state) || !record(state.pending) || state.pending.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) return undefined
+  return typeof state.pending.model === 'string' && autoModelPreference(state.pending.model) !== undefined
+    ? state.pending.model : undefined
 }
 
 function modelSelectionNotice(value: unknown): boolean {
@@ -103,21 +106,24 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     if (agentDisposers.has(agent)) return
     const removeAssembly = agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
       const assembled = await next()
-      if (!pendingAuto(ctx, agent)) return assembled
+      const pending = pendingAuto(ctx, agent)
+      if (pending === undefined) return assembled
       return { ...assembled, variables: {
-        ...assembled.variables, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: GITHUB_COPILOT_AUTO_MODEL_ID,
+        ...assembled.variables, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: pending,
       } }
     }, { prepend: true })
     const removePreStep = agent.ctx.on('agent/pre-step', async ({ messages, turn, step, signal }, next) => {
       const result = await next()
       const entered = result.kind === 'enter' ? result.messages : messages
       captured.set(agent, { turn, messages: entered })
-      if (result.kind !== 'enter' || signal.aborted || !pendingAuto(ctx, agent)) return result
+      const pending = pendingAuto(ctx, agent)
+      const preference = pending === undefined ? undefined : autoModelPreference(pending)
+      if (result.kind !== 'enter' || signal.aborted || preference === undefined) return result
       let state = routed.get(agent)
       if (state?.turn !== turn) {
         state = {
           turn,
-          decision: await decide(dependencies, signal, entered),
+          decision: await decide(dependencies, signal, entered, preference),
           recorded: false,
         }
         routed.set(agent, state)
@@ -146,8 +152,11 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
   })
   const removeRequest = ctx.on('agent/request', async ({ agent, turn, step, signal }, next) => {
     const resolved = await next()
-    const virtual = resolved.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && resolved.model === GITHUB_COPILOT_AUTO_MODEL_ID
-    if (!virtual && !pendingAuto(ctx, agent)) {
+    const pending = pendingAuto(ctx, agent)
+    const virtualPreference = resolved.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+      ? autoModelPreference(resolved.model) : undefined
+    const virtual = virtualPreference !== undefined
+    if (!virtual && pending === undefined) {
       routed.delete(agent)
       return resolved
     }
@@ -159,7 +168,9 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     if (state?.turn !== turn) {
       const input = captured.get(agent)
       if (input?.turn !== turn) throw failure('COPILOT_AUTO_TURN_CONTEXT_UNAVAILABLE')
-      state = { turn, decision: await decide(dependencies, signal, input.messages), recorded: false }
+      const preference = virtualPreference ?? (pending === undefined ? undefined : autoModelPreference(pending))
+      if (preference === undefined) throw failure('COPILOT_AUTO_PREFERENCE_UNAVAILABLE')
+      state = { turn, decision: await decide(dependencies, signal, input.messages, preference), recorded: false }
       routed.set(agent, state)
     }
     if (!state.recorded) {
@@ -168,7 +179,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
         const selection: unknown = projections.stateOf(agent.session, 'modelSelection')
         if (record(selection) && selection.pending === null && agent.session.requestHeader() === undefined) {
           Reflect.apply(agent.session.append, agent.session, ['model/selection', {
-            provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: GITHUB_COPILOT_AUTO_MODEL_ID,
+            provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: resolved.model,
           }])
         }
       }
@@ -177,6 +188,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
         step,
         provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
         model: state.decision.model.id,
+        preference: state.decision.preference,
         taskClass: state.decision.taskClass,
         reason: state.decision.reason,
         candidateCount: state.decision.candidateCount,

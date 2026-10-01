@@ -1,5 +1,6 @@
 import type { AccountModelDescriptor } from './account-model-catalog.ts'
-import { GITHUB_COPILOT_AUTO_MODEL_ID } from './copilot-identity.ts'
+import { autoModelPreference } from './copilot-identity.ts'
+import type { AutoModelPreference } from './copilot-identity.ts'
 
 export type AutoModelClass = 'fast' | 'balanced' | 'strong'
 
@@ -12,6 +13,7 @@ export interface AutoModelFeatures {
 
 export interface AutoModelDecision {
   readonly model: AccountModelDescriptor
+  readonly preference: AutoModelPreference
   readonly taskClass: AutoModelClass
   readonly reason: 'short-text-turn' | 'standard-turn' | 'large-structured-turn' | 'image-capability'
   readonly candidateCount: number
@@ -89,16 +91,22 @@ function reasonFor(features: AutoModelFeatures): AutoModelDecision['reason'] {
 export function selectAutoModel(
   models: readonly AccountModelDescriptor[],
   messages: readonly unknown[],
+  preference: AutoModelPreference = 'balance',
 ): AutoModelDecision {
   const features = classifyAutoModelTurn(messages)
-  const eligible = models.filter(model => model.id !== GITHUB_COPILOT_AUTO_MODEL_ID
+  const eligible = models.filter(model => autoModelPreference(model.id) === undefined
     && model.input.includes('text') && (!features.requiresImage || model.input.includes('image')))
     .toSorted(compareCapacity)
   if (eligible.length === 0) throw new AutoModelRoutingError('COPILOT_AUTO_NO_ELIGIBLE_MODEL')
-  const index = features.taskClass === 'fast' ? 0
-    : features.taskClass === 'strong' ? eligible.length - 1 : Math.floor((eligible.length - 1) / 2)
+  const middle = Math.floor((eligible.length - 1) / 2)
+  const index = features.taskClass === 'fast'
+    ? preference === 'intelligence' ? middle : 0
+    : features.taskClass === 'strong'
+      ? preference === 'efficiency' ? Math.min(eligible.length - 1, Math.max(1, middle)) : eligible.length - 1
+      : preference === 'efficiency' ? 0 : preference === 'intelligence' ? eligible.length - 1 : middle
   return Object.freeze({
     model: eligible[index]!,
+    preference,
     taskClass: features.taskClass,
     reason: reasonFor(features),
     candidateCount: eligible.length,
@@ -106,6 +114,6 @@ export function selectAutoModel(
 }
 
 export function autoModelInputModalities(models: readonly AccountModelDescriptor[]): readonly ('text' | 'image')[] {
-  const eligible = models.filter(model => model.id !== GITHUB_COPILOT_AUTO_MODEL_ID && model.input.includes('text'))
+  const eligible = models.filter(model => autoModelPreference(model.id) === undefined && model.input.includes('text'))
   return eligible.some(model => model.input.includes('image')) ? ['text', 'image'] : ['text']
 }

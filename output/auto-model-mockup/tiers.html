@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Copilot Auto 偏好与模型整理 · 交互原型</title>
+  <style>
+    :root { color-scheme: dark; font: 14px/1.5 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; background: #101116; color: #e9e9ed; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 2px solid #86adff; outline-offset: 2px; }
+    .shell { max-width: 1120px; padding: 32px 24px 64px; margin: auto; }
+    .eyebrow { color: #a7b6db; font-size: 12px; letter-spacing: .12em; font-weight: 700; }
+    h1 { font-size: clamp(25px, 4vw, 38px); letter-spacing: -.025em; margin: 10px 0; }
+    h2 { font-size: 18px; margin: 0 0 8px; }
+    h3 { font-size: 13px; color: #a6adba; margin: 17px 8px 7px; }
+    p { margin: 0; color: #b1b9c9; }
+    .lead { max-width: 790px; line-height: 1.7; margin-bottom: 23px; }
+    .badge { display: inline-block; color: #a9c2ff; background: #1c2b4b; border: 1px solid #40587f; border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 700; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(310px, .9fr); gap: 20px; }
+    .panel { min-width: 0; background: #191b23; border: 1px solid #343844; border-radius: 18px; padding: 22px; box-shadow: 0 15px 45px #0003; }
+    .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    .muted { font-size: 12px; color: #a7afbd; }
+    .composer { border: 1px solid #474f62; background: #20232c; border-radius: 15px; padding: 17px; margin-top: 22px; }
+    .composer textarea { resize: vertical; width: 100%; min-height: 82px; border: 0; background: transparent; color: #f3f3f6; font: inherit; outline: none; }
+    .composer-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pill, .action, .tab { border: 1px solid #4a5262; background: #2b303b; color: #f1f3fa; border-radius: 10px; padding: 9px 12px; }
+    .pill:hover, .action:hover, .tab:hover { background: #39445a; }
+    .primary { background: #355ec5; border-color: #668bfc; }
+    .primary:hover { background: #446fd8; }
+    .picker { margin-top: 12px; padding: 10px; border: 1px solid #576170; border-radius: 15px; background: #242831; max-height: 360px; overflow: auto; }
+    .picker[hidden], [hidden] { display: none !important; }
+    .search { width: 100%; background: #161a22; color: #f0f2f8; border: 1px solid #4b5566; border-radius: 9px; padding: 9px 12px; }
+    .row { display: flex; width: 100%; align-items: center; gap: 12px; padding: 10px; border: 0; border-radius: 10px; background: transparent; color: #f0f1f5; text-align: left; }
+    .row:hover { background: #353b4a; }
+    .row.chosen { background: #35466e; }
+    .row span:first-child { flex: 1; }
+    .row small { display: block; color: #b4bdd0; margin-top: 2px; font-size: 11px; }
+    .row b { color: #b7d0ff; }
+    .empty { padding: 14px; font-size: 12px; color: #b4bdcc; }
+    .sample { margin-top: 22px; border-top: 1px solid #383e4a; padding-top: 18px; }
+    .sample-title { font-size: 12px; color: #adb8d1; margin-bottom: 10px; }
+    .bubble { background: #242a36; border: 1px solid #384357; border-radius: 13px; padding: 13px 15px; margin: 9px 0; }
+    .bubble.reply { background: #202735; }
+    .result { font-size: 12px; color: #c2d1f5; margin-top: 8px; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 13px 0 17px; }
+    .tab.active { background: #364872; border-color: #708ce0; }
+    .model-setting { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #323743; padding: 12px 2px; }
+    .model-setting:last-child { border-bottom: 0; }
+    .model-setting .description { flex: 1; min-width: 0; }
+    .model-setting strong { display: block; font-weight: 600; }
+    .model-setting small { color: #abb3c1; }
+    .switch { padding: 6px 10px; border: 1px solid #707b8a; background: #283b36; color: #c5f4d7; border-radius: 8px; min-width: 68px; }
+    .switch.off { background: #42302f; color: #ffd0c8; }
+    .switch:disabled { opacity: .55; cursor: not-allowed; }
+    .notice { min-height: 34px; color: #f2cb81; font-size: 12px; margin-top: 15px; }
+    .rules { display: grid; gap: 9px; margin-top: 21px; font-size: 12px; color: #adb8ca; }
+    .rules div { border-left: 2px solid #7387ad; padding-left: 10px; }
+    @media (max-width: 780px) { .shell { padding: 20px 14px 40px; } .layout { grid-template-columns: 1fr; } .panel { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <span class="eyebrow">DSH · 交互设计探索</span>
+    <h1>Auto 选偏好，模型由你决定范围。</h1>
+    <p class="lead">采用插件现有公开能力可表达的三条虚拟模型，而不是替换 Core 下拉框。下方为完全离线的交互原型：名称和演示决策不代表账号真实模型能力、质量、速度或价格。<span class="badge">概念原型 · 不会保存设置</span></p>
+    <div class="layout">
+      <section class="panel" aria-label="会话模型选择预览">
+        <div class="panel-head"><div><h2>会话</h2><p class="muted">点开模型按钮，搜索并切换 Auto 偏好或固定模型。</p></div><span class="badge">模拟界面</span></div>
+        <div class="composer">
+          <textarea id="prompt" aria-label="模拟消息" placeholder="输入一条消息，预览下一轮 Auto 路由…">解释这个函数为何返回空结果。</textarea>
+          <div class="composer-bar">
+            <button id="pickerButton" class="pill" type="button" aria-expanded="false" aria-controls="picker"></button>
+            <button id="send" class="pill primary" type="button">模拟发送 ↗</button>
+          </div>
+          <div id="picker" class="picker" hidden>
+            <input id="search" class="search" type="search" aria-label="搜索模型" placeholder="搜索模型…">
+            <div id="choices"></div>
+          </div>
+        </div>
+        <div class="sample">
+          <div class="sample-title">模拟最近一轮 · 请求头记录实际模型，Auto 偏好留在会话选择中</div>
+          <div class="bubble" id="question">解释这个函数为何返回空结果。</div>
+          <div class="bubble reply">这是演示回复。实际模型按经过校验的账号能力与所选偏好决定。<div class="result" id="result" aria-live="polite"></div></div>
+        </div>
+        <div class="rules">
+          <div>“效率 / 均衡 / 智能”只调整同一候选池的选择倾向；智能模式做简单任务也可能选轻量模型，效率模式做复杂任务也可能选大模型。</div>
+          <div>Core 下拉框的搜索、分组和布局由 Core 负责；示意条目的副标题不保证原生菜单可显示。</div>
+        </div>
+      </section>
+      <section class="panel" aria-label="模型偏好设置预览">
+        <div class="panel-head"><div><h2>GitHub Copilot · 模型偏好</h2><p class="muted">仅影响此插件管理的 Copilot 路由，不修改其他 Provider。</p></div></div>
+        <div class="tabs" role="tablist" aria-label="设置分类">
+          <button id="eligibleTab" class="tab active" type="button" role="tab" aria-selected="true">可用模型</button>
+          <button id="excludedTab" class="tab" type="button" role="tab" aria-selected="false">已排除 <span id="hiddenCount">0</span></button>
+        </div>
+        <p class="muted" id="settingsDescription">排除后不再出现在插件提供的模型列表，也不参与三个 Auto 候选池；不会删除账号权限或历史。</p>
+        <input id="settingsSearch" class="search" type="search" aria-label="搜索账号模型" placeholder="筛选此页模型…" style="margin-top: 14px">
+        <div id="settingsList"></div>
+        <div class="notice" id="notice" role="status" aria-live="polite"></div>
+        <div class="rules">
+          <div>当前选中的固定模型不可直接排除：先切换模型再操作；已有其他会话的固定选择不会被自动迁移。</div>
+          <div>若旧会话请求被排除的模型，应明确报错并引导恢复或重新选择，不能悄悄切到另一个模型。</div>
+          <div>保留最后一个合格候选；账号目录变动导致零候选时，Auto 明确失败，不回退到被排除模型。</div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const models = [
+      { id: 'gemini-flash', name: 'Gemini Flash（示意）', capacity: 1 },
+      { id: 'gpt-codex', name: 'GPT Codex（示意）', capacity: 2 },
+      { id: 'claude-sonnet', name: 'Claude Sonnet（示意）', capacity: 3 },
+      { id: 'gpt-astra', name: 'GPT Astra（示意）', capacity: 4 }
+    ];
+    const tiers = [
+      { id: 'auto-efficiency', name: 'Auto · 效率', detail: '倾向较轻容量；复杂任务仍可选大模型', bias: -0.6 },
+      { id: 'auto', name: 'Auto · 均衡', detail: '兼容原 Auto；按任务调整容量倾向', bias: 0 },
+      { id: 'auto-intelligence', name: 'Auto · 智能', detail: '倾向较大容量；简单任务仍可选轻量模型', bias: 0.6 }
+    ];
+    const state = { selected: 'auto', excluded: new Set(), tab: 'eligible', turn: 0 };
+    const $ = selector => document.querySelector(selector);
+    const allowed = () => models.filter(model => !state.excluded.has(model.id));
+    function taskDemand(text) {
+      if (text.length > 350 || text.includes('```')) return { label: '复杂任务示意', target: 4 };
+      if (text.length > 90) return { label: '一般任务示意', target: 2.5 };
+      return { label: '简单任务示意', target: 1 };
+    }
+    function preferredModel(candidates, tier, demand) {
+      const target = demand.target + tier.bias;
+      return [...candidates].sort((left, right) =>
+        Math.abs(left.capacity - target) - Math.abs(right.capacity - target)
+        || left.capacity - right.capacity)[0];
+    }
+    const selectedName = () => tiers.find(tier => tier.id === state.selected)?.name
+      || models.find(model => model.id === state.selected)?.name || '未找到模型';
+    function note(text) { $('#notice').textContent = text; }
+    function element(tag, className, text) {
+      const node = document.createElement(tag);
+      node.className = className;
+      node.textContent = text;
+      return node;
+    }
+    function drawChoices() {
+      const container = $('#choices');
+      container.replaceChildren();
+      const query = $('#search').value.trim().toLocaleLowerCase();
+      const groups = [
+        ['GitHub Copilot · Auto 偏好', tiers],
+        ['GitHub Copilot · 指定模型', allowed()]
+      ];
+      for (const [title, rows] of groups) {
+        const visible = rows.filter(row => row.name.toLocaleLowerCase().includes(query));
+        if (!visible.length) continue;
+        container.append(element('h3', '', title));
+        for (const row of visible) {
+          const button = element('button', `row${state.selected === row.id ? ' chosen' : ''}`, '');
+          button.type = 'button';
+          const label = element('span', '', row.name);
+          if ('detail' in row) label.append(element('small', '', row.detail));
+          button.append(label, element('b', '', state.selected === row.id ? '✓' : ''));
+          button.addEventListener('click', () => {
+            state.selected = row.id;
+            $('#picker').hidden = true;
+            $('#pickerButton').setAttribute('aria-expanded', 'false');
+            note('会话选择已切换；真实产品通过 Core 保存会话选择及未来默认值。');
+            render();
+          });
+          container.append(button);
+        }
+      }
+      if (!container.childElementCount) container.append(element('div', 'empty', '没有匹配的可用模型；可到“已排除”恢复。'));
+    }
+    function drawSettings() {
+      const list = $('#settingsList');
+      list.replaceChildren();
+      const query = $('#settingsSearch').value.trim().toLocaleLowerCase();
+      const rows = models.filter(model => state.excluded.has(model.id) === (state.tab === 'excluded')
+        && model.name.toLocaleLowerCase().includes(query));
+      for (const model of rows) {
+        const item = element('div', 'model-setting', '');
+        const description = element('div', 'description', '');
+        description.append(element('strong', '', model.name), element('small', '',
+          state.excluded.has(model.id) ? '不显示且不参与 Auto；可随时恢复' : '来自示意账号模型目录'));
+        const button = element('button', `switch${state.excluded.has(model.id) ? ' off' : ''}`,
+          state.excluded.has(model.id) ? '恢复' : '排除');
+        button.type = 'button';
+        button.setAttribute('aria-label', `${button.textContent} ${model.name}`);
+        button.disabled = !state.excluded.has(model.id) && state.selected === model.id;
+        button.addEventListener('click', () => {
+          if (state.excluded.has(model.id)) {
+            state.excluded.delete(model.id);
+            note(`已恢复 ${model.name}。`);
+          } else if (allowed().length <= 1) {
+            note('必须保留至少一个合格候选；无法排除最后一个模型。');
+            return;
+          } else {
+            state.excluded.add(model.id);
+            note(`已排除 ${model.name}：Auto 和此插件的模型目录均不再使用。`);
+          }
+          render();
+        });
+        item.append(description, button);
+        list.append(item);
+      }
+      if (!rows.length) list.append(element('div', 'empty',
+        query ? '没有匹配的模型。' : state.tab === 'excluded' ? '没有已排除模型。' : '没有可用模型；到“已排除”恢复。'));
+      $('#hiddenCount').textContent = state.excluded.size;
+      for (const tab of ['eligible', 'excluded']) {
+        $(`#${tab}Tab`).classList.toggle('active', state.tab === tab);
+        $(`#${tab}Tab`).setAttribute('aria-selected', String(state.tab === tab));
+      }
+    }
+    function render() {
+      $('#pickerButton').textContent = `GitHub Copilot · ${selectedName()} ⌄`;
+      drawChoices();
+      drawSettings();
+    }
+    $('#pickerButton').addEventListener('click', () => {
+      $('#picker').hidden = !$('#picker').hidden;
+      $('#pickerButton').setAttribute('aria-expanded', String(!$('#picker').hidden));
+      if (!$('#picker').hidden) $('#search').focus();
+    });
+    $('#search').addEventListener('input', drawChoices);
+    $('#settingsSearch').addEventListener('input', drawSettings);
+    for (const tab of ['eligible', 'excluded']) $(`#${tab}Tab`).addEventListener('click', () => {
+      state.tab = tab;
+      render();
+    });
+    $('#send').addEventListener('click', () => {
+      const text = $('#prompt').value.trim();
+      if (!text) { note('请输入模拟消息。'); $('#prompt').focus(); return; }
+      const candidates = allowed();
+      const tier = tiers.find(item => item.id === state.selected);
+      const demand = taskDemand(text);
+      const chosen = tier ? preferredModel(candidates, tier, demand) : models.find(item => item.id === state.selected);
+      if (!chosen) { note('候选为空；请恢复模型或改选。'); return; }
+      state.turn++;
+      $('#question').textContent = text;
+      $('#result').textContent = `第 ${state.turn} 轮 · ${tier ? `${tier.name} · ${demand.label}` : '手动固定'} · ${chosen.name} · ${candidates.length} 个 Auto 候选（仅示意）`;
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { $('#picker').hidden = true; $('#pickerButton').setAttribute('aria-expanded', 'false'); }
+    });
+    render();
+    $('#send').click();
+  </script>
+</body>
+</html>

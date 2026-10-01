@@ -7,7 +7,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import { installAutoModelRouting } from '../src/auto-model-host.ts'
 import {
-  GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
+  GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
+  GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID as INTELLIGENCE, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
 } from '../src/copilot-identity.ts'
 
 function model(id: string, contextWindow: number, effort: string): AccountModelDescriptor {
@@ -35,6 +36,55 @@ function message(text: string) {
 }
 
 describe('Auto model Host integration', () => {
+  it('persists a virtual preference across turns and yields to an explicit fixed selection', async () => {
+    const ctx = new Context()
+    const selection: { pending: { provider: string; model: string } | null } = { pending: null }
+    let header: { config: { provider: string; model: string } } | undefined
+    const append = vi.fn((type: string, data: { provider: string; model: string }) => {
+      if (type === 'model/selection') selection.pending = data
+    })
+    const agent = { ctx, session: { append, requestHeader: () => header } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const promptScope = scopeTarget(new SystemPrompt(ctx, {}), agent)
+    const loadModels = vi.fn(async () => [
+      model('fixture-fast', 64_000, 'low'), model('fixture-middle', 128_000, 'medium'), model('fixture-strong', 256_000, 'high'),
+    ])
+    ctx.provide('sessionProjections', { stateOf: () => selection } as never)
+    const dispose = installAutoModelRouting(ctx, { loadModels })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+    const signal = new AbortController().signal
+    const enter = async (turn: number, text: string) => {
+      const messages = [message(text)]
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+    }
+    const request = (turn: number, id: string) => ctx.waterfall(scope, 'agent/request',
+      { agent, turn, step: 1, signal }, async () => ({ provider: PREVIEW, model: id }))
+    try {
+      await enter(1, 'Short.')
+      const first = await request(1, INTELLIGENCE)
+      expect(first.model).toBe('fixture-middle')
+      expect(selection.pending?.model).toBe(INTELLIGENCE)
+      header = { config: first }
+      const assembly = { sections: [], contexts: [], tools: [], variables: { provider: PREVIEW, model: first.model } }
+      const assembled = await ctx.waterfall(promptScope, 'system-prompt/assemble', assembly, {}, async () => assembly)
+      expect(assembled.variables).toMatchObject({ provider: PREVIEW, model: INTELLIGENCE })
+      await enter(2, 'detail '.repeat(1_000))
+      expect((await request(2, first.model)).model).toBe('fixture-strong')
+      expect(selection.pending?.model).toBe(INTELLIGENCE)
+      selection.pending = { provider: PREVIEW, model: EFFICIENCY }
+      await enter(3, 'detail '.repeat(1_000))
+      expect((await request(3, EFFICIENCY)).model).toBe('fixture-middle')
+      expect(selection.pending?.model).toBe(EFFICIENCY)
+      selection.pending = { provider: PREVIEW, model: 'fixture-fast' }
+      await enter(4, 'detail '.repeat(1_000))
+      expect((await request(4, 'fixture-fast')).model).toBe('fixture-fast')
+      expect(loadModels).toHaveBeenCalledTimes(3)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
   it('keeps a default Auto selection across turns until a manual model choice', async () => {
     const ctx = new Context()
     const selection: { pending: { provider: string; model: string } | null } = { pending: null }
