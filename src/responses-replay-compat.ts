@@ -137,10 +137,17 @@ export class ResponsesRetryReplay {
             if (payload.input.length !== prior.length) throw error
             let references = 0
             const restored = payload.input.map((item, index) => {
-              if (!isRecord(item) || item.type !== 'item_reference') return item
+              if (!isRecord(item) || !Object.hasOwn(item, 'id')) return item
               const original = prior[index]
-              if (Object.keys(item).length !== 2 || !nonemptyString(item.id)
-                || !isRecord(original) || original.id !== item.id) throw error
+              if (!isRecord(original) || !nonemptyString(item.id) || original.id !== item.id
+                || !['reasoning', 'message', 'function_call'].includes(String(original.type))) throw error
+              if (item.type === 'item_reference') {
+                if (Object.keys(item).length !== 2) throw error
+              } else {
+                if (item.type !== original.type || Object.keys(item).length >= Object.keys(original).length
+                  || Object.entries(item).some(([key, value]) => !Object.hasOwn(original, key)
+                    || cacheBytes(value) !== cacheBytes(original[key]))) throw error
+              }
               references++
               return original
             })

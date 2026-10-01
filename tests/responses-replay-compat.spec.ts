@@ -94,6 +94,28 @@ describe('Copilot Responses wire replay normalization', () => {
         call.finish()
       }
     })
+    it('restores matching incomplete retry items without accepting changed fields', () => {
+      const cache = new ResponsesRetryReplay()
+      const signal = new AbortController().signal
+      const first = attempt(cache, context, signal)
+      const payload = first.normalize(original)
+      first.observe(JSON.stringify(payload), 408)
+      first.finish()
+      const partial = { ...original, input: [
+        original.input[0],
+        { type: 'reasoning', id: 'rs_prior' },
+        { type: 'function_call', id: 'fc_prior', call_id: 'call_prior' },
+        original.input[3],
+      ] }
+      const retry = attempt(cache, context, signal)
+      expect(JSON.stringify(retry.normalize(partial))).toBe(JSON.stringify(payload))
+      retry.observe(JSON.stringify(payload), 408)
+      retry.finish()
+      reject(cache, { ...partial, input: [
+        original.input[0], { type: 'reasoning', id: 'rs_prior', encrypted_content: 'changed' },
+        partial.input[2], original.input[3],
+      ] }, context, signal)
+    })
     it('refuses changed substantive user/tool input and unmatched references', () => {
       const cache = new ResponsesRetryReplay()
       const signal = new AbortController().signal
