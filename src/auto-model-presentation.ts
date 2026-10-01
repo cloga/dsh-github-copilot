@@ -22,6 +22,10 @@ export interface AutoModelAttribution {
   readonly taskClass: 'fast' | 'balanced' | 'strong'
   readonly reason: 'short-text-turn' | 'standard-turn' | 'large-structured-turn' | 'image-capability'
   readonly candidateCount: number
+  readonly fittingCandidateCount?: number
+  readonly estimatedInputTokens?: number
+  readonly selectedInputBudget?: number
+  readonly inputFitDiagnostic?: 'fitting-candidate-selected' | 'compaction-eligible' | 'compaction-unavailable' | 'attempted-but-still-oversized' | 'fixed-content-cannot-fit'
 }
 
 interface AttributionState {
@@ -46,6 +50,10 @@ function attribution(event: unknown): AttributionState | undefined {
       taskClass: event.data.taskClass as AutoModelAttribution['taskClass'],
       reason: event.data.reason as AutoModelAttribution['reason'],
       candidateCount: event.data.candidateCount,
+      ...sequence(event.data.fittingCandidateCount) ? { fittingCandidateCount: event.data.fittingCandidateCount } : {},
+      ...sequence(event.data.estimatedInputTokens) ? { estimatedInputTokens: event.data.estimatedInputTokens } : {},
+      ...sequence(event.data.selectedInputBudget) ? { selectedInputBudget: event.data.selectedInputBudget } : {},
+      ...typeof event.data.inputFitDiagnostic === 'string' ? { inputFitDiagnostic: event.data.inputFitDiagnostic as AutoModelAttribution['inputFitDiagnostic'] } : {},
     },
   }
 }
@@ -84,7 +92,9 @@ export const autoModelAttributionDefinition = {
       && previous.value.provider === state.value.provider && previous.value.model === state.value.model
       && previous.value.reason === state.value.reason && previous.value.taskClass === state.value.taskClass
       && previous.value.preference === state.value.preference
-      && previous.value.candidateCount === state.value.candidateCount) return previous
+      && previous.value.candidateCount === state.value.candidateCount
+      && previous.value.fittingCandidateCount === state.value.fittingCandidateCount
+      && previous.value.inputFitDiagnostic === state.value.inputFitDiagnostic) return previous
     return { kind: 'turn', turn: state.turn, key: AUTO_MODEL_ATTRIBUTION_KEY, value: state.value }
   },
 }
@@ -126,7 +136,10 @@ function reasonText(value: AutoModelAttribution): string {
   const reason = value.reason === 'short-text-turn' ? 'Short text turn'
     : value.reason === 'large-structured-turn' ? 'Large structured turn'
       : value.reason === 'image-capability' ? 'Image-capable model required' : 'Standard turn'
-  return `${reason}; ${value.preference ?? 'balance'} capacity preference; selected from ${value.candidateCount} eligible account model${value.candidateCount === 1 ? '' : 's'}.`
+  const fitInfo = value.fittingCandidateCount !== undefined && value.fittingCandidateCount < value.candidateCount
+    ? `; ${value.fittingCandidateCount} of ${value.candidateCount} models can fit turn context`
+    : ''
+  return `${reason}; ${value.preference ?? 'balance'} capacity preference; selected from ${value.candidateCount} eligible account model${value.candidateCount === 1 ? '' : 's'}${fitInfo}.`
 }
 
 function Attribution(props: Record<string, unknown>): React.ReactElement | null {

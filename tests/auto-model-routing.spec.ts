@@ -101,4 +101,120 @@ describe('Auto model routing policy', () => {
       expect(() => selectAutoModel([fast, strong], image, preference)).toThrow(AutoModelRoutingError)
     }
   })
+
+  it('distributes unrelated balanced/strong Intelligence turns across upper candidates without monopolization', () => {
+    const m1 = model('fixture-fast', { contextWindow: 64_000, maxTokens: 8_000, efforts: ['low'] })
+    const m2 = model('fixture-mid-1', { contextWindow: 128_000, maxTokens: 16_000, efforts: ['medium'] })
+    const m3 = model('fixture-mid-2', { contextWindow: 200_000, maxTokens: 24_000, efforts: ['medium'] })
+    const m4 = model('fixture-strong-1', { contextWindow: 256_000, maxTokens: 32_000, efforts: ['high'] })
+    const m5 = model('fixture-strong-2', { contextWindow: 500_000, maxTokens: 64_000, efforts: ['xhigh'] })
+    const pool5 = [m1, m2, m3, m4, m5]
+    const demanding = [message('Analyze:\n' + 'detail '.repeat(700))]
+
+    const chosen = new Set<string>()
+    for (let i = 0; i < 20; i++) {
+      const decision = selectAutoModel(pool5, demanding, 'intelligence', {
+        sessionId: `session-${i}`,
+        turn: 1,
+      })
+      chosen.add(decision.model.id)
+      // All selected models must be in the upper capacity band (m3, m4, m5)
+      expect([m3.id, m4.id, m5.id]).toContain(decision.model.id)
+    }
+    // Multiple distinct upper-tier models must be selected across different sessions
+    expect(chosen.size).toBeGreaterThan(1)
+  })
+
+  it('freezes model selection across steps and retries within the same turn', () => {
+    const m1 = model('fixture-fast', { contextWindow: 64_000, maxTokens: 8_000, efforts: ['low'] })
+    const m2 = model('fixture-strong-1', { contextWindow: 256_000, maxTokens: 32_000, efforts: ['high'] })
+    const m3 = model('fixture-strong-2', { contextWindow: 500_000, maxTokens: 64_000, efforts: ['xhigh'] })
+    const pool = [m1, m2, m3]
+    const demanding = [message('Analyze:\n' + 'detail '.repeat(700))]
+
+    const first = selectAutoModel(pool, demanding, 'intelligence', { sessionId: 'session-alpha', turn: 2 })
+    const retry = selectAutoModel(pool, demanding, 'intelligence', { sessionId: 'session-alpha', turn: 2 })
+    expect(retry.model.id).toBe(first.model.id)
+    expect(retry.selectedInputBudget).toBe(first.selectedInputBudget)
+  })
+
+  it('picks lighter capacity for simple Intelligence turns and higher capacity for demanding Efficiency turns', () => {
+    const m1 = model('fixture-fast', { contextWindow: 64_000, maxTokens: 8_000, efforts: ['low'] })
+    const m2 = model('fixture-mid-1', { contextWindow: 128_000, maxTokens: 16_000, efforts: ['medium'] })
+    const m3 = model('fixture-mid-2', { contextWindow: 200_000, maxTokens: 24_000, efforts: ['medium'] })
+    const m4 = model('fixture-strong', { contextWindow: 500_000, maxTokens: 64_000, efforts: ['xhigh'] })
+    const pool = [m1, m2, m3, m4]
+    const short = [message('Explain this symbol.')]
+    const demanding = [message('Analyze:\n' + 'detail '.repeat(700))]
+
+    // Simple Intelligence picks lighter/middle, not the highest monster model
+    expect(selectAutoModel(pool, short, 'intelligence').model.id).toBe(m2.id)
+    expect(selectAutoModel(pool, short, 'efficiency').model.id).toBe(m1.id)
+
+    // Demanding Efficiency picks a capable model (task demand dominates over efficiency preference)
+    expect(selectAutoModel(pool, demanding, 'efficiency').model.id).toBe(m2.id)
+  })
+
+  it('preserves single candidate unchanged across all preferences', () => {
+    const single = model('fixture-solo', { contextWindow: 128_000, maxTokens: 16_000, efforts: ['medium'] })
+    const demanding = [message('Analyze:\n' + 'detail '.repeat(700))]
+    for (const preference of ['efficiency', 'balance', 'intelligence'] as const) {
+      const decision = selectAutoModel([single], demanding, preference)
+      expect(decision.model).toBe(single)
+      expect(decision.candidateCount).toBe(1)
+      expect(decision.fittingCandidateCount).toBe(1)
+    }
+  })
+
+  it('eliminates screenshot-style insufficient model and chooses fitting candidate', () => {
+    // Replicates Grok 4.7 screenshot conditions:
+    // Grok: contextWindow 500_000, maxTokens 128_000 -> hardInputLimit = 500_000 - 128_000 - 4_096 = 367_904.
+    const grokStyle = model('fixture-grok-47', { contextWindow: 500_000, maxTokens: 128_000, efforts: ['xhigh'] })
+    // Large context model: contextWindow 1_000_000, maxTokens 64_000 -> hardInputLimit = 931_904.
+    const largeContext = model('fixture-large-context', { contextWindow: 1_000_000, maxTokens: 64_000, efforts: ['high'] })
+
+    // Estimated input: 439,022 tokens (exceeds Grok 367,904 but fits in largeContext 931,904)
+    const screenshotTurn = [message('word '.repeat(439_022))]
+    const decision = selectAutoModel([grokStyle, largeContext], screenshotTurn, 'intelligence')
+
+    expect(decision.model.id).toBe(largeContext.id)
+    expect(decision.candidateCount).toBe(2)
+    expect(decision.fittingCandidateCount).toBe(1)
+    expect(decision.inputFitDiagnostic).toBe('fitting-candidate-selected')
+    expect(decision.selectedInputBudget).toBe(931_904)
+  })
+
+  it('selects largest capacity model and sets diagnostic when no candidate fits', () => {
+    const grokStyle = model('fixture-grok-47', { contextWindow: 500_000, maxTokens: 128_000, efforts: ['xhigh'] })
+    const largeContext = model('fixture-large-context', { contextWindow: 1_000_000, maxTokens: 64_000, efforts: ['high'] })
+    const massiveHistory = [
+      message('prior history block '.repeat(300_000)),
+      message('active user prompt.'),
+    ]
+
+    // 1. Compaction eligible
+    const eligible = selectAutoModel([grokStyle, largeContext], massiveHistory, 'intelligence', {
+      compactionAvailable: true,
+    })
+    expect(eligible.model.id).toBe(largeContext.id)
+    expect(eligible.fittingCandidateCount).toBe(0)
+    expect(eligible.inputFitDiagnostic).toBe('compaction-eligible')
+
+    // 2. Compaction unavailable
+    const unavail = selectAutoModel([grokStyle, largeContext], massiveHistory, 'intelligence', {
+      compactionAvailable: false,
+    })
+    expect(unavail.inputFitDiagnostic).toBe('compaction-unavailable')
+
+    // 3. Compaction already attempted
+    const attempted = selectAutoModel([grokStyle, largeContext], massiveHistory, 'intelligence', {
+      hasCompactionSummary: true,
+    })
+    expect(attempted.inputFitDiagnostic).toBe('attempted-but-still-oversized')
+
+    // 4. Fixed content cannot fit (active user prompt alone exceeds largest capacity)
+    const massiveUserPrompt = [message('huge user message '.repeat(300_000))]
+    const fixed = selectAutoModel([grokStyle, largeContext], massiveUserPrompt, 'intelligence')
+    expect(fixed.inputFitDiagnostic).toBe('fixed-content-cannot-fit')
+  })
 })
