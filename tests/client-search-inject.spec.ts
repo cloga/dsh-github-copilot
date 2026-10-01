@@ -13,17 +13,18 @@ class NamedService extends Service {
   constructor(ctx: Context, name: string) { super(ctx, name) }
 }
 
-async function fixture(footer: boolean, routingAvailable = true, bundle = true, optionsAvailable = false) {
+const copilotNamespace = { ns: 'github-copilot', revision: 7, value: {
+  enabled: true, probe: true, providers: ['github-copilot'], idleTimeoutMs: 300_000,
+  searchRouting: { searchProvider: 'auto', defaultSearchProvider: 'none' },
+}, schema: {}, applies: 'live' as const, secrets: [], autoGenerate: false }
+
+async function fixture(footer: boolean, routingAvailable = true, bundle = true, optionsAvailable = true) {
   const root = new Context()
   const registrations = new Map<string, { name: string; key?: string; render: (props?: { view: string }) => ReactElement | null }>()
   let remoteDisposals = 0
-  const namespace = { ns: 'github-copilot-search-routing', revision: 4, value: { searchProvider: 'auto', defaultSearchProvider: 'none' }, schema: {}, applies: 'live' as const, secrets: [], autoGenerate: false }
-  const copilotNamespace = { ns: 'github-copilot', revision: 7, value: {
-    enabled: true, probe: true, providers: ['github-copilot'], idleTimeoutMs: 300_000,
-  }, schema: {}, applies: 'live' as const, secrets: [], autoGenerate: false }
   const describeSettings = vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true,
-    namespaces: optionsAvailable ? [namespace, copilotNamespace] : [namespace] } }))
-  const mutateSettings = vi.fn(async (ns: string) => ({ ok: true as const, value: { ...namespace, ns, revision: ns === 'github-copilot' ? 8 : 5, autoGenerate: false } }))
+    namespaces: [copilotNamespace] } }))
+  const mutateSettings = vi.fn(async (ns: string) => ({ ok: true as const, value: { ...copilotNamespace, ns, revision: 8, autoGenerate: false } }))
   let settingsRemote!: SettingsRemote
   class SettingsRemote extends NamedService {
     constructor(ctx: Context) { super(ctx, 'remote.settings'); settingsRemote = this }
@@ -120,8 +121,8 @@ describe('search UI traced Remote dependency', () => {
       expect(f.describeSettings).toHaveBeenCalledTimes(1)
       let finish!: () => void
       f.mutateSettings.mockImplementationOnce(() => new Promise(resolve => {
-        finish = () => resolve({ ok: true as const, value: { ns: searchId, revision: 5, autoGenerate: false,
-          value: { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'none' }, schema: {}, applies: 'live' as const, secrets: [] } })
+        finish = () => resolve({ ok: true as const, value: { ns: 'github-copilot', revision: 8, autoGenerate: false,
+          value: { ...copilotNamespace.value, searchRouting: { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'none' } }, schema: {}, applies: 'live' as const, secrets: [] } })
       }))
       const save = container.querySelector<HTMLButtonElement>('[data-dsh-web-search-save]')!
       await act(async () => { save.click() })
@@ -132,10 +133,10 @@ describe('search UI traced Remote dependency', () => {
       expect(container.textContent).toContain('Saved.')
       expect(select.value).toBe('github-copilot-hosted')
       expect(f.describeSettings).toHaveBeenCalledTimes(1)
-      expect(f.mutateSettings).toHaveBeenCalledExactlyOnceWith(searchId, [
-        { op: 'set', path: ['searchProvider'], value: 'github-copilot-hosted' },
-        { op: 'set', path: ['defaultSearchProvider'], value: 'none' },
-      ], 4)
+      expect(f.mutateSettings).toHaveBeenCalledExactlyOnceWith('github-copilot', [
+        { op: 'set', path: ['searchRouting', 'searchProvider'], value: 'github-copilot-hosted' },
+        { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: 'none' },
+      ], 7)
       expect(container.querySelector('input')).toBeNull()
     } finally {
       await act(async () => { mounted.unmount(); await f.root.fiber.dispose() })

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.51 (prepared)
+
+- Fix web search routing settings save by reading and writing `searchRouting` under the existing `github-copilot` settings namespace, avoiding the unexported `installSection` limitation in official `@deepseek-ai/dsh-settings@0.2.0-rc.2` (#195).
+- Coordinate CAS revisions between web search routing and legacy `searchModel` resets within the shared `github-copilot` namespace while preserving unsaved drafts.
+- Remove fake separate namespace and `installSection` mocks from synthetic test fixtures and align contracts.
+
 ## 0.4.0-alpha.50 (prepared)
 
 - Add a visible restart banner in `WebSearchRoutingCard` when the routed search service composition is unready, guiding users to cold-restart Desktop (#196).

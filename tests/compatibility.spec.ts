@@ -18,7 +18,7 @@ function context(overrides: Record<string, unknown> = {}): Context {
       modifyRecord: async () => undefined,
       deleteRecord: async () => undefined,
     },
-    settings: { get: () => undefined, describe: () => [], mutate: async () => undefined, installSection: () => undefined },
+    settings: { get: () => undefined, describe: () => [], mutate: async () => undefined },
     web: { registerSearchProvider: () => undefined },
     ...overrides,
   }

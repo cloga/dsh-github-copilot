@@ -43,7 +43,6 @@ interface FakeRuntime {
   emitAgentDisposed(agent: Agent): void
   credentialListenerCount(): number
   dispose(): void
-  installedSettingsSections: string[]
   /** Commit a change to one settings namespace, as the settings service would. */
   triggerSettingsChange(ns: string): void
 }
@@ -62,17 +61,20 @@ interface FakeSettings {
   settings: unknown
   get: ReturnType<typeof vi.fn>
   mutate: ReturnType<typeof vi.fn>
-  installedSections: string[]
   triggerChange(ns: string): void
 }
 
 function fakeSettings(document: Record<string, unknown>): FakeSettings {
   const watchers = new Map<string, () => void>()
-  const installedSections: string[] = []
+  const globalWatchers = new Set<() => void>()
   const settings = {
     get: vi.fn((ns: unknown) => document[String(ns)]),
     describe: () => Object.entries(document).map(([ns, value]) => ({ ns, revision: 0, user: value, value })),
     mutate: vi.fn(async () => undefined),
+    watch: (callback: () => void) => {
+      globalWatchers.add(callback)
+      return () => { globalWatchers.delete(callback) }
+    },
     register: (ns: unknown, schema: (value: unknown) => unknown, options?: { base?: unknown }) => {
       const namespace = String(ns)
       return {
@@ -97,21 +99,16 @@ function fakeSettings(document: Record<string, unknown>): FakeSettings {
         replace: async () => undefined,
       }
     },
-    installSection: (
-      _owner: Context,
-      ns: unknown,
-      schema: (value: unknown) => unknown,
-      entry: unknown,
-      hooks: { setSource(source: () => unknown): void; onChange(): void },
-    ) => {
-      installedSections.push(String(ns))
-      const scope = settings.register(ns, schema, { base: entry })
-      hooks.setSource(scope.get)
-      hooks.onChange()
-      scope.watch(hooks.onChange)
+  }
+  return {
+    settings,
+    get: settings.get,
+    mutate: settings.mutate,
+    triggerChange: (ns) => {
+      watchers.get(ns)?.()
+      for (const watcher of globalWatchers) watcher()
     },
   }
-  return { settings, get: settings.get, mutate: settings.mutate, installedSections, triggerChange: (ns) => watchers.get(ns)?.() }
 }
 
 /** Mutable synthetic Agent selection; `current: null` means no initiator. */
@@ -245,6 +242,10 @@ function buildRuntime(
       const handler = listeners.get(event)
       return handler === undefined ? next() : handler(payload, next)
     },
+    emit: (event: string, ...args: unknown[]) => {
+      const handler = listeners.get(event) as ((...args: unknown[]) => void) | undefined
+      handler?.(...args)
+    },
     systemPrompt: {
       section: (section: { name: string; text?: () => string }) => {
         sectionNames.push(section.name)
@@ -284,7 +285,6 @@ function buildRuntime(
     },
     credentialListenerCount: () => credentialListeners.size,
     dispose: () => { for (const dispose of disposers.splice(0).reverse()) dispose() },
-    installedSettingsSections: fake.installedSections,
     settingsDocument,
     get promptSection() { return promptSection },
     promptText: async variables => {
@@ -293,7 +293,10 @@ function buildRuntime(
         (input: typeof assembly, context: object, next: () => Promise<typeof assembly>) => Promise<typeof assembly>
       return (await handler(assembly, {}, async () => assembly)).sections[0]?.text ?? ''
     },
-    triggerSettingsChange: (ns) => fake.triggerChange(ns),
+    triggerSettingsChange: (ns) => {
+      fake.triggerChange(ns)
+      ctx.emit('settings/document-updated', ns)
+    },
     ...overrides,
   }
 }
@@ -2147,13 +2150,16 @@ describe('github-copilot apply', () => {
     expect(next).toHaveBeenCalledTimes(2)
   })
 
-  it('uses the settings provider instance API when legacy helpers are absent', () => {
-    const runtime = buildRuntime()
+  it('reads web search routing from the github-copilot namespace without installSection', () => {
+    const runtime = buildRuntime({
+      settingsDocument: {
+        'github-copilot': {
+          searchRouting: { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'none' },
+        },
+      },
+    })
     apply(runtime.ctx, config)
-    expect(runtime.installedSettingsSections).toEqual([
-      GITHUB_COPILOT_SETTINGS_NAMESPACE,
-      WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE,
-    ])
+    expect(runtime.searchProviders.map(p => p.id)).toEqual(['github-copilot-hosted'])
   })
 
   it('registers an llm/stream listener and the prompt section', () => {

@@ -4,6 +4,7 @@ import vm from 'node:vm'
 import { test } from 'node:test'
 import * as cordis from '@deepseek-ai/cordis'
 import { Context } from '@deepseek-ai/cordis'
+import * as dshSettings from '@deepseek-ai/dsh-settings'
 import { SettingsConflictError, SettingsForms } from '@deepseek-ai/dsh-settings'
 import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
 import { Config } from '../../lib/types/config.js'
@@ -12,8 +13,8 @@ import { WebSearchRoutingConfigSchema } from '../../lib/types/web-search-routing
 const ROUTING = 'github-copilot-search-routing'
 const COPILOT = 'github-copilot'
 const ops = [
-  { op: 'set', path: ['searchProvider'], value: 'auto' },
-  { op: 'set', path: ['defaultSearchProvider'], value: 'github-copilot-hosted' },
+  { op: 'set', path: ['searchRouting', 'searchProvider'], value: 'auto' },
+  { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: 'github-copilot-hosted' },
 ]
 
 // The current Core exposes SettingsForms, not the removed SettingsProvider.
@@ -54,17 +55,19 @@ class MemorySettings {
   }
 }
 
-test('published SettingsForms exposes the descriptor and mutation APIs used by the plugin', () => {
+test('published SettingsForms exposes descriptor/mutation APIs without installSection, and module lacks installSettingsSection', () => {
   for (const method of ['describe', 'update', 'mutate']) {
     assert.equal(typeof SettingsForms.prototype[method], 'function', method)
   }
+  assert.equal(typeof SettingsForms.prototype.installSection, 'undefined', 'SettingsForms has no public installSection')
+  assert.equal('installSettingsSection' in dshSettings, false, 'dsh-settings has no installSettingsSection export')
 })
 
 function fixture(t) {
   const ctx = new Context()
   t.after(() => ctx.fiber.dispose())
   const settings = new MemorySettings(ctx)
-  settings.register(ROUTING, WebSearchRoutingConfigSchema, { base: {} })
+  settings.register(COPILOT, Config, { base: { searchModel: '', searchRouting: {} } })
   const view = ns => settings.describe({ redactSecrets: true }).find(entry => entry.ns === ns)
   return { settings, view }
 }
@@ -129,57 +132,66 @@ test('real pinned Client namespace lookups require stable capture across render 
   assert.equal(stableRenderProps().settings, stableRenderProps().settings)
 })
 
-test('provider-only search routing saves both leaves once without a Copilot namespace or model', async t => {
+test('search routing saves both leaves in github-copilot namespace using nested paths', async t => {
   const { settings, view } = fixture(t)
-  const revision = view(ROUTING).revision
-  assert.equal(view(COPILOT), undefined)
-  await settings.mutate(ROUTING, ops, revision)
+  const revision = view(COPILOT).revision
+  await settings.mutate(COPILOT, ops, revision)
   assert.equal(settings.writes.length, 1)
-  assert.equal(view(ROUTING).revision, revision + 1)
-  assert.equal(view(ROUTING).value.searchProvider, 'auto')
-  assert.equal(view(ROUTING).value.defaultSearchProvider, 'github-copilot-hosted')
-  assert.equal(view(COPILOT), undefined)
+  assert.equal(view(COPILOT).revision, revision + 1)
+  assert.equal(view(COPILOT).value.searchRouting.searchProvider, 'auto')
+  assert.equal(view(COPILOT).value.searchRouting.defaultSearchProvider, 'github-copilot-hosted')
 })
 
 test('stale routing revisions fail CAS and preserve the last successful settings', async t => {
   const { settings, view } = fixture(t)
-  const held = view(ROUTING).revision
-  await settings.mutate(ROUTING, ops, held)
-  const saved = view(ROUTING)
-  await assert.rejects(settings.mutate(ROUTING, [
-    { op: 'set', path: ['defaultSearchProvider'], value: 'none' },
+  const held = view(COPILOT).revision
+  await settings.mutate(COPILOT, ops, held)
+  const saved = view(COPILOT)
+  await assert.rejects(settings.mutate(COPILOT, [
+    { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: 'none' },
   ], held), { code: 'SETTINGS_CONFLICT', expected: held, actual: saved.revision })
-  assert.deepEqual(view(ROUTING), saved)
+  assert.deepEqual(view(COPILOT), saved)
   assert.equal(settings.writes.length, 1)
 })
 
-test('hidden legacy searchModel is writable and accepts an explicit empty reset', async t => {
+test('hidden legacy searchModel and searchRouting share namespace revision and coordinate CAS', async t => {
   const { settings, view } = fixture(t)
-  settings.register(COPILOT, Config, { base: {} })
   const serialized = view(COPILOT).schema
   const modelSchema = serialized.refs[serialized.refs[serialized.uid].dict.searchModel]
   assert.equal(modelSchema.meta.hidden, true)
+  
+  // Set legacy searchModel
   await settings.mutate(COPILOT, [{ op: 'set', path: ['searchModel'], value: 'synthetic-responses-model' }], 0)
   const set = view(COPILOT)
   assert.equal(set.value.searchModel, 'synthetic-responses-model')
-  await settings.mutate(COPILOT, [{ op: 'set', path: ['searchModel'], value: '' }], set.revision)
+  assert.equal(set.revision, 1)
+
+  // Mutating routing uses updated revision (1 -> 2)
+  await settings.mutate(COPILOT, ops, set.revision)
+  const routed = view(COPILOT)
+  assert.equal(routed.revision, 2)
+  assert.equal(routed.value.searchRouting.searchProvider, 'auto')
+  assert.equal(routed.value.searchModel, 'synthetic-responses-model')
+
+  // Resetting searchModel uses the coordinated revision (2 -> 3)
+  await settings.mutate(COPILOT, [{ op: 'set', path: ['searchModel'], value: '' }], routed.revision)
   assert.equal(view(COPILOT).value.searchModel, '')
-  assert.equal(view(COPILOT).revision, set.revision + 1)
+  assert.equal(view(COPILOT).revision, 3)
 })
 
 test('pinned generated Client mutate codecs accept routing ops and a flat namespace revision', async t => {
   const { settings, view } = fixture(t)
   const descriptor = await settingsMutateDescriptor()
   for (const parameter of descriptor.parameters) {
-    const value = { ns: ROUTING, ops, expectedRevision: view(ROUTING).revision }[parameter.name]
+    const value = { ns: COPILOT, ops, expectedRevision: view(COPILOT).revision }[parameter.name]
     assert.equal(parameter.codec.mode, 'strict')
     assert.equal(codecSchema(parameter.codec).safeParse(value).success, true, parameter.name)
   }
-  await settings.mutate(ROUTING, ops, view(ROUTING).revision)
+  await settings.mutate(COPILOT, ops, view(COPILOT).revision)
   const schema = codecSchema(descriptor.result)
-  const result = schema.safeParse(view(ROUTING))
+  const result = schema.safeParse(view(COPILOT))
   assert.equal(result.success, true, JSON.stringify(result.error?.issues))
   assert.equal(result.data.revision, 1)
-  assert.equal(result.data.value.defaultSearchProvider, 'github-copilot-hosted')
-  assert.equal(schema.safeParse({ namespaces: [view(ROUTING)] }).success, false)
+  assert.equal(result.data.value.searchRouting.defaultSearchProvider, 'github-copilot-hosted')
+  assert.equal(schema.safeParse({ namespaces: [view(COPILOT)] }).success, false)
 })

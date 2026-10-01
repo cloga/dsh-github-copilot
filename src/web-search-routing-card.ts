@@ -21,7 +21,6 @@ interface Draft {
   provider: string
   legacy: boolean
   routingRevision?: number
-  routingNamespace: string
 }
 interface ModelOverride { model: string; revision?: number }
 const cardStyle: CSSProperties = {
@@ -225,7 +224,6 @@ export function HostedSearchSettingsCard({ settings }: Pick<SearchRoutingCardPro
 export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElement {
   const [draft, setDraft] = useState<Draft>({
     primary: 'auto', provider: DEEPSEEK_SEARCH_PROVIDER, legacy: true,
-    routingNamespace: WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE,
   })
   const [override, setOverride] = useState<ModelOverride>({ model: '' })
   const [providers, setProviders] = useState<readonly string[]>([])
@@ -253,18 +251,21 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
       if (!current()) return
       if (!result.ok) { setMessage('Could not load search settings. Reload settings to retry.'); return }
       const copilot = result.value.namespaces.find(entry => entry.ns === GITHUB_COPILOT_SETTINGS_NAMESPACE)
-      const routing = result.value.namespaces.find(entry => entry.ns === WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE)
+      const legacyRouting = result.value.namespaces.find(entry => entry.ns === WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE)
       const copilotValue = record(copilot?.value)
-      const routingValue = record(routing?.value)
+      const copilotRoutingValue = record(copilotValue.searchRouting)
+      const legacyRoutingValue = record(legacyRouting?.value)
+      const routingValue = Object.keys(copilotRoutingValue).length > 0 ? copilotRoutingValue : legacyRoutingValue
       const normalized = normalizeWebSearchRouting({
         searchProvider: typeof routingValue.searchProvider === 'string' ? routingValue.searchProvider : undefined,
         searchMode: routingValue.searchMode === 'fixed' ? 'fixed' : 'auto',
         defaultSearchProvider: typeof routingValue.defaultSearchProvider === 'string' ? routingValue.defaultSearchProvider : undefined,
       })
+      const copilotRevision = revisionOf(copilot?.revision)
       setDraft({ primary: normalized.primaryProvider, provider: normalized.defaultProvider, legacy: normalized.legacy,
-        routingRevision: revisionOf(routing?.revision), routingNamespace: WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE })
+        routingRevision: copilotRevision })
       setOverride({ model: typeof copilotValue.searchModel === 'string' ? copilotValue.searchModel.trim() : '',
-        revision: revisionOf(copilot?.revision) })
+        revision: copilotRevision })
       const parsed = catalog?.ok ? SearchProviderCatalogSchema.safeParse(catalog.value) : undefined
       const ids = parsed?.success ? parsed.data.providers.map(entry => entry.id) : []
       if (!parsed?.success || !parsed.data.supported || new Set(ids).size !== ids.length || ids.includes('auto') || ids.includes('none')) {
@@ -278,7 +279,7 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
       }
       setProviders(ids.toSorted()); setCatalogReady(true)
       setWritable(result.value.writable === true)
-      if (!routing || revisionOf(routing.revision) === undefined) {
+      if (!copilot || copilotRevision === undefined) {
         setMessage('Web search routing settings are unavailable. Reload after the routing namespace is registered.')
       } else if (!result.value.writable) {
         setMessage('Search settings are read-only in this deployment.')
@@ -310,16 +311,21 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
     const provider = draft.provider, primary = draft.primary
     owner.busy = true; setSaving('routing'); setMessage('')
     try {
-      const result = await props.settings.mutate(draft.routingNamespace, [
-        { op: 'set', path: ['searchProvider'], value: primary },
-        { op: 'set', path: ['defaultSearchProvider'], value: provider },
+      const result = await props.settings.mutate(GITHUB_COPILOT_SETTINGS_NAMESPACE, [
+        { op: 'set', path: ['searchRouting', 'searchProvider'], value: primary },
+        { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: provider },
       ], draft.routingRevision)
       if (!current()) return
       if (!result.ok) { setMessage(saveFailure(result.error)); return }
       const revision = revisionOf(result.value.revision)
+      if (revision === undefined) {
+        setDraft(value => current() ? { ...value, routingRevision: undefined } : value)
+        setMessage('Save returned no revision. Reload settings before editing again.')
+        return
+      }
       setDraft(value => current() ? { ...value, primary, provider, routingRevision: revision, legacy: false } : value)
-      setMessage(revision === undefined ? 'Save returned no revision. Reload settings before editing again.'
-        : 'Saved. New searches use this routing. Search availability is checked when you search.')
+      setOverride(value => current() ? { ...value, revision } : value)
+      setMessage('Saved. New searches use this routing. Search availability is checked when you search.')
     } catch (error) {
       if (current()) setMessage(saveFailure(error))
     } finally {
@@ -342,11 +348,12 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
       if (!result.ok) { setMessage(saveFailure(result.error)); return }
       const revision = revisionOf(result.value.revision)
       if (revision === undefined) {
-        setOverride(value => ({ ...value, revision: undefined }))
+        setOverride(value => current() ? { ...value, revision: undefined } : value)
         setMessage('Save returned no revision. Reload settings before editing again.')
         return
       }
       setOverride({ model: '', revision })
+      setDraft(value => current() ? { ...value, routingRevision: revision } : value)
       setMessage('Copilot model selection is now automatic. Unsaved provider choices have not been applied.')
     } catch (error) {
       if (current()) setMessage(saveFailure(error))

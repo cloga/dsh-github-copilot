@@ -87,16 +87,6 @@ async function mountProfile(
         get: (namespace: unknown) => settingsDocument[String(namespace) as keyof typeof settingsDocument],
         describe: () => Object.entries(settingsDocument).map(([ns, value]) => ({ ns, revision: 0, user: value, value })),
         mutate,
-        installSection: (
-          _owner: Context,
-          _namespace: unknown,
-          _schema: unknown,
-          entry: InlineConfig,
-          hooks: { setSource(source: () => InlineConfig): void; onChange(): void },
-        ) => {
-          hooks.setSource(() => entry)
-          hooks.onChange()
-        },
       })
       profileCtx.provide('web', {
         registerSearchProvider: () => () => undefined,

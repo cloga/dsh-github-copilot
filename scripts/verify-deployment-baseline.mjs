@@ -305,10 +305,11 @@ assert(providerOnlySearch?.required === true
   && providerOnlySearch.evidenceScope === 'pinned-settings-and-client-contracts-plus-synthetic-routing-no-live-save-claim',
   'provider-only search settings must retain bounded Settings/Client evidence, not claim live save acceptance')
 for (const name of [
+  'published SettingsForms exposes descriptor/mutation APIs without installSection, and module lacks installSettingsSection',
   'real pinned Client namespace lookups require stable capture across render calls',
-  'provider-only search routing saves both leaves once without a Copilot namespace or model',
+  'search routing saves both leaves in github-copilot namespace using nested paths',
   'stale routing revisions fail CAS and preserve the last successful settings',
-  'hidden legacy searchModel is writable and accepts an explicit empty reset',
+  'hidden legacy searchModel and searchRouting share namespace revision and coordinate CAS',
   'pinned generated Client mutate codecs accept routing ops and a flat namespace revision',
 ]) {
   assert(providerOnlySearch.tests?.some(entry => entry.file === 'tests/scripts/search-settings-contract.test.mjs' && entry.name === name),
