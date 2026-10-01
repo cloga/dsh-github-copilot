@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Config } from '../src/config.ts'
+import { Config, readInlineConfig } from '../src/config.ts'
 import type { InlineConfig } from '../src/config.ts'
 
 const base: InlineConfig = { enabled: true, providers: [], includeSources: true, stripServerTools: true,
@@ -11,7 +11,7 @@ describe('session search settings', () => {
   })
 
   it('allows disabling fallback or the routing feature and configuring an independent search model', () => {
-    expect(Config({ ...base, routeWebSearch: false, searchFallback: 'none', searchModel: 'gpt-5.6-sol' })).toMatchObject({
+    expect(readInlineConfig(Config({ ...base, routeWebSearch: false, searchFallback: 'none', searchModel: 'gpt-5.6-sol' }))).toMatchObject({
       ...base, routeWebSearch: false, searchFallback: 'none', searchModel: 'gpt-5.6-sol',
     })
   })
@@ -19,6 +19,25 @@ describe('session search settings', () => {
   it('rejects an unrecognized fallback instead of treating it as delegated search', () => {
     const untrusted = { ...base, searchFallback: 'some-global-provider' } as unknown as InlineConfig
     expect(() => Config(untrusted)).toThrow()
+  })
+
+  it('projects only routing, the legacy model override and its ownership journal as live fields', () => {
+    expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
+      .toEqual(['searchModel', 'searchRouting', 'temporaryRouteBackup'])
+    const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
+    expect(parsed.searchModel.get()).toBe('saved-model')
+    expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
+    expect(parsed.searchRouting.get()).toMatchObject({ defaultSearchProvider: 'deepseek-official' })
+    expect(readInlineConfig(parsed)).toMatchObject({ searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
+  })
+
+  it('reads each current snapshot rather than freezing live routing at activation', () => {
+    let routing = { searchProvider: 'auto', defaultSearchProvider: 'deepseek-official' }
+    const live = { ...base, searchRouting: { get: () => routing } }
+    expect(readInlineConfig(live).searchRouting?.searchProvider).toBe('auto')
+    routing = { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'none' }
+    expect(readInlineConfig(live).searchRouting).toEqual(routing)
+    expect(readInlineConfig(base)).toEqual(base)
   })
 })
 
