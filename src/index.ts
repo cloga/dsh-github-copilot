@@ -124,16 +124,6 @@ interface SettingsSectionHooks<T> {
   onChange(): void
 }
 
-interface InstanceSettingsInstaller {
-  installSection<T>(
-    owner: Context,
-    namespace: SettingsNamespace,
-    schema: z<T>,
-    entry: T,
-    hooks: SettingsSectionHooks<T>,
-  ): void
-}
-
 interface LegacySettingsModule {
   installSettingsSection?<T>(
     owner: Context,
@@ -142,13 +132,6 @@ interface LegacySettingsModule {
     entry: T,
     hooks: SettingsSectionHooks<T>,
   ): void
-}
-
-function isInstanceSettingsInstaller(value: unknown): value is InstanceSettingsInstaller {
-  return typeof value === 'object'
-    && value !== null
-    && 'installSection' in value
-    && typeof value.installSection === 'function'
 }
 
 function installSettingsNamespace<T>(
@@ -163,24 +146,25 @@ function installSettingsNamespace<T>(
     legacyInstaller(ctx, namespace, schema, config, hooks)
     return
   }
-  ctx.inject(['settings'], (settingsCtx) => {
-    if (isInstanceSettingsInstaller(settingsCtx.settings)) {
-      settingsCtx.settings.installSection(ctx, namespace, schema, config, hooks)
-      return
-    }
-    const configRecord = typeof config === 'object' && config !== null ? config as Record<string, unknown> : undefined
-    const fallback = namespace === WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE
-      ? configRecord?.searchRouting ?? {}
-      : config
+  ctx.inject(['settings'], () => {
     hooks.setSource(() => {
       const value = readSettingsNamespace(ctx, namespace)
-      return (value ?? fallback) as T
+      if (typeof value !== 'object' || value === null) return config
+      const base = typeof config === 'object' && config !== null ? (config as Record<string, unknown>) : {}
+      const merged = { ...base, ...(value as Record<string, unknown>) }
+      if (typeof schema === 'function') {
+        try {
+          return schema(merged as unknown as T)
+        } catch {
+          return merged as unknown as T
+        }
+      }
+      return merged as unknown as T
     })
-    const watched: ReadonlySet<string> = namespace === WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE
-      ? new Set([namespace, GITHUB_COPILOT_SETTINGS_NAMESPACE])
-      : new Set([namespace])
     const dispose = onSettingsNamespaceUpdated(ctx, changed => {
-      if (watched.has(changed)) hooks.onChange()
+      if (changed === namespace || (namespace === GITHUB_COPILOT_SETTINGS_NAMESPACE && changed === WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE)) {
+        hooks.onChange()
+      }
     })
     ctx.effect(() => dispose)
   })
@@ -230,10 +214,19 @@ function ensureAuthorization(ctx: Context): void {
 function activate(ctx: Context, config: InlineConfig): PromptRouteText {
   assertDshCompatibility(ctx)
   let current: () => InlineConfig = () => config
-  let routingCurrent: () => WebSearchRoutingConfig = () => ({
-    searchMode: 'auto',
-    defaultSearchProvider: 'deepseek-official',
-  })
+  const readRouting = (): WebSearchRoutingConfig => {
+    const rawCopilot = readSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE) as Record<string, unknown> | undefined
+    const rawRouting = rawCopilot?.searchRouting as Partial<WebSearchRoutingConfig> | undefined
+    if (rawRouting && (rawRouting.searchProvider !== undefined || rawRouting.defaultSearchProvider !== undefined || rawRouting.searchMode !== undefined)) {
+      return rawRouting
+    }
+    const legacy = readSettingsNamespace(ctx, WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE) as Partial<WebSearchRoutingConfig> | undefined
+    if (legacy && (legacy.searchProvider !== undefined || legacy.defaultSearchProvider !== undefined || legacy.searchMode !== undefined)) {
+      return legacy
+    }
+    const cfg = current()
+    return cfg.searchRouting ?? {}
+  }
   ctx.plugin(previewPlugin, { accountModelSettings: () => current(), requestBudgetSettings: () => {
     const selected = current()
     return { safetyTokens: selected.requestBudgetSafetyTokens, pressureRatio: selected.requestBudgetPressureRatio,
@@ -636,7 +629,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
   ctx.provide('githubCopilotSearchRouter', {
     search: async (request, signal, delegate, selectProvider, captureSearchProvider) => {
       const cfg = current()
-      const routing = routingCurrent()
+      const routing = readRouting()
       const policy = normalizeWebSearchRouting(routing)
       const owner = currentSearchInitiator(ctx)
       const selection = currentSearchSelection(owner)
@@ -776,12 +769,6 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     // search surface on its next actual request, never one probe per event.
     onChange: invalidatePlans,
   })
-  installSettingsNamespace(ctx, WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE, WebSearchRoutingConfigSchema, {}, {
-    setSource: (source) => {
-      routingCurrent = source
-    },
-    onChange: invalidatePlans,
-  })
 
   // The temporary GPT-6 route writes its ownership backup into this plugin's
   // settings namespace, so reconcile only after that section is installed.
@@ -795,7 +782,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     // Zero-cost gate first: disabled plugins, non-loop requests, purposed
     // calls, provider mismatches, and image-bearing requests never build a
     // plan and never start a probe.
-    if (!active || normalizeWebSearchRouting(routingCurrent()).primaryProvider !== 'auto') return next()
+    if (!active || normalizeWebSearchRouting(readRouting()).primaryProvider !== 'auto') return next()
     const owner = currentSearchInitiator(ctx)
     if (owner !== undefined && disposedOwners.has(owner)) return next()
     const route = currentChatRoute(ctx, request)
@@ -818,7 +805,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     text: () => '',
   })
   return (owner, selection) => {
-    const policy = normalizeWebSearchRouting(routingCurrent())
+    const policy = normalizeWebSearchRouting(readRouting())
     if (!active || owner === undefined || disposedOwners.has(owner) || policy.primaryProvider !== 'auto') return ''
     const route = currentChatRoute(ctx, selection)
     const cfg = current()

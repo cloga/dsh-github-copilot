@@ -57,13 +57,6 @@ async function runtime(legacy = false) {
       get: (ns: string) => documents[ns],
       describe: () => Object.entries(documents).map(([ns, user]) => ({ ns, revision: revisions.get(ns) ?? 0, user, value: user })),
       mutate,
-      installSection(_owner: Context, ns: string, _schema: unknown, entry: unknown,
-        hooks: { setSource(source: () => unknown): void; onChange(): void }) {
-        documents[ns] ??= entry
-        hooks.setSource(() => documents[ns])
-        watchers.set(ns, hooks.onChange)
-        hooks.onChange()
-      },
     } as unknown as Context['settings'])
     owner.provide('systemPrompt', { section: () => () => undefined } as unknown as Context['systemPrompt'])
     owner.provide('web', { registerSearchProvider: () => () => undefined } as unknown as Context['web'])

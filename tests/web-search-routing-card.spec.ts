@@ -23,13 +23,15 @@ function deferred<T>() {
   const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail })
   return { promise, resolve, reject }
 }
-function namespace(ns: string, revision: number, value: Record<string, string> = {}) {
+function namespace(ns: string, revision: number, value: Record<string, unknown> = {}) {
   return { ns, revision, value, schema: {}, applies: 'live' as const, secrets: [] }
 }
 function settingsValue(provider = 'deepseek-official') {
   return { writable: true, hasDocument: true, namespaces: [
-    namespace(ROUTING, 4, { searchMode: 'auto', defaultSearchProvider: provider }),
-    namespace(COPILOT, 7, { searchModel: 'responses-model' }),
+    namespace(COPILOT, 7, {
+      searchModel: 'responses-model',
+      searchRouting: { searchMode: 'auto', defaultSearchProvider: provider },
+    }),
   ] }
 }
 function ok<T>(value: T) { return { ok: true as const, value } }
@@ -142,17 +144,17 @@ async function ready(remote = remotes()) {
 describe('independent Web search Settings card', () => {
   it.each(['primary', 'fallback'] as const)('saves Copilot as %s with one routing write and no model prerequisite', async position => {
     const remote = remotes('none'), value = settingsValue('none')
-    value.namespaces = value.namespaces.filter(entry => entry.ns !== COPILOT)
+    delete (value.namespaces[0]!.value as Record<string, unknown>).searchModel
     remote.settings.describe.mockResolvedValue(ok(value))
     const card = await ready(remote)
     change(card.render(), position === 'primary' ? 'web-search-mode' : 'web-search-provider', HOSTED)
     expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
     expect(descendants(card.render()).some(node => node.props['data-dsh-copilot-search-model'])).toBe(false)
     click(card.render(), 'web-search-save'); await settle()
-    expect(remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(ROUTING, [
-      { op: 'set', path: ['searchProvider'], value: position === 'primary' ? HOSTED : 'auto' },
-      { op: 'set', path: ['defaultSearchProvider'], value: position === 'fallback' ? HOSTED : 'none' },
-    ], 4)
+    expect(remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(COPILOT, [
+      { op: 'set', path: ['searchRouting', 'searchProvider'], value: position === 'primary' ? HOSTED : 'auto' },
+      { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: position === 'fallback' ? HOSTED : 'none' },
+    ], 7)
     expect(remote.copilot.status).not.toHaveBeenCalled()
     expect(text(card.render())).toContain('Saved.')
   })
@@ -161,7 +163,11 @@ describe('independent Web search Settings card', () => {
     const card = await ready(remotes(HOSTED))
     click(card.render(), 'web-search-save'); await settle()
     expect(card.remote.settings.mutate).toHaveBeenCalledTimes(1)
-    expect(card.remote.settings.mutate.mock.calls[0]?.[0]).toBe(ROUTING)
+    expect(card.remote.settings.mutate.mock.calls[0]?.[0]).toBe(COPILOT)
+    expect(card.remote.settings.mutate.mock.calls[0]?.[1]).toEqual([
+      { op: 'set', path: ['searchRouting', 'searchProvider'], value: 'auto' },
+      { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: HOSTED },
+    ])
     expect(text(card.render())).toContain('responses-model')
   })
   it.each([true, false])('themes both provider selects and every option without changing settings (writable=%s)', async writable => {
@@ -183,7 +189,8 @@ describe('independent Web search Settings card', () => {
 
   it('themes saved disabled and unavailable provider options without substituting them', async () => {
     const remote = remotes(), value = settingsValue('retired-provider')
-    value.namespaces[0]!.value.searchProvider = 'none'
+    const routingValue = (value.namespaces[0]!.value as Record<string, unknown>).searchRouting as Record<string, unknown>
+    routingValue.searchProvider = 'none'
     remote.settings.describe.mockResolvedValue(ok(value))
     const card = await ready(remote)
     const primary = field(card.render(), 'web-search-mode'), fallback = field(card.render(), 'web-search-provider')
@@ -233,7 +240,8 @@ describe('independent Web search Settings card', () => {
 
   it('reads legacy fixed and disabled choices without migration writes', async () => {
     const remote = remotes('none'), value = settingsValue('none')
-    value.namespaces[0]!.value.searchMode = 'fixed'
+    const routingValue = (value.namespaces[0]!.value as Record<string, unknown>).searchRouting as Record<string, unknown>
+    routingValue.searchMode = 'fixed'
     remote.settings.describe.mockResolvedValue(ok(value))
     const card = await ready(remote)
     expect(field(card.render(), 'web-search-mode').props.value).toBe('none')
@@ -243,8 +251,9 @@ describe('independent Web search Settings card', () => {
 
   it('uses the new primary over legacy mode and preserves an explicit model override', async () => {
     const remote = remotes('exa'), value = settingsValue('exa')
-    value.namespaces[0]!.value.searchMode = 'auto'
-    value.namespaces[0]!.value.searchProvider = HOSTED
+    const routingValue = (value.namespaces[0]!.value as Record<string, unknown>).searchRouting as Record<string, unknown>
+    routingValue.searchMode = 'auto'
+    routingValue.searchProvider = HOSTED
     remote.settings.describe.mockResolvedValue(ok(value))
     const card = await ready(remote)
     expect(field(card.render(), 'web-search-mode').props.value).toBe(HOSTED)
@@ -275,10 +284,10 @@ describe('independent Web search Settings card', () => {
     change(card.render(), 'web-search-provider', 'exa')
     click(card.render(), 'web-search-save')
     await settle()
-    expect(card.remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(ROUTING, [
-      { op: 'set', path: ['searchProvider'], value: 'custom-provider' },
-      { op: 'set', path: ['defaultSearchProvider'], value: 'exa' },
-    ], 4)
+    expect(card.remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(COPILOT, [
+      { op: 'set', path: ['searchRouting', 'searchProvider'], value: 'custom-provider' },
+      { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: 'exa' },
+    ], 7)
     expect(text(card.render())).toContain('Saved.')
     expect(descendants(card.render()).some(node => node.props['data-dsh-copilot-search-model'])).toBe(false)
   })
@@ -315,7 +324,7 @@ describe('independent Web search Settings card', () => {
     const remote = remotes()
     const value = settingsValue()
     if (kind === 'readonly') value.writable = false
-    else if (kind === 'missing-routing') value.namespaces = value.namespaces.filter(entry => entry.ns !== ROUTING)
+    else if (kind === 'missing-routing') value.namespaces = value.namespaces.filter(entry => entry.ns !== COPILOT)
     else value.namespaces[0]!.revision = undefined as never
     remote.settings.describe.mockResolvedValue(ok(value))
     const card = await ready(remote)
@@ -336,8 +345,12 @@ describe('independent Web search Settings card', () => {
     expect(field(card.render(), 'web-search-mode').props.value).toBe(HOSTED)
     expect(descendants(card.render()).some(node => node.props['data-dsh-copilot-search-override'])).toBe(false)
     click(card.render(), 'web-search-save'); await settle()
-    expect(card.remote.settings.mutate.mock.calls[1]?.[0]).toBe(ROUTING)
-    expect(card.remote.settings.mutate.mock.calls[1]?.[2]).toBe(4)
+    expect(card.remote.settings.mutate.mock.calls[1]?.[0]).toBe(COPILOT)
+    expect(card.remote.settings.mutate.mock.calls[1]?.[1]).toEqual([
+      { op: 'set', path: ['searchRouting', 'searchProvider'], value: HOSTED },
+      { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: HOSTED },
+    ])
+    expect(card.remote.settings.mutate.mock.calls[1]?.[2]).toBe(8)
   })
 
   it.each(['rejected', 'returned'] as const)('retains draft and safe diagnostics after a routing failure: %s', async kind => {
@@ -352,7 +365,7 @@ describe('independent Web search Settings card', () => {
     expect(field(card.render(), 'web-search-provider').props.value).toBe(HOSTED)
     expect(field(card.render(), 'web-search-save').props.disabled).toBe(false)
     click(card.render(), 'web-search-save'); await settle()
-    expect(remote.settings.mutate.mock.calls[1]?.[2]).toBe(4)
+    expect(remote.settings.mutate.mock.calls[1]?.[2]).toBe(7)
     expect(text(card.render())).toContain('Saved.')
   })
 
@@ -368,13 +381,13 @@ describe('independent Web search Settings card', () => {
     expect(text(card.render())).toContain('responses-model')
     expect(text(card.render())).not.toContain('PRIVATE_')
     click(card.render(), 'web-search-save'); await settle()
-    expect(remote.settings.mutate.mock.calls[1]?.[0]).toBe(ROUTING)
+    expect(remote.settings.mutate.mock.calls[1]?.[0]).toBe(COPILOT)
     expect(text(card.render())).toContain('Saved.')
   })
 
   it.each([undefined, -1, 0.5])('requires reload before another routing save when the returned revision is %s', async revision => {
     const remote = remotes(HOSTED)
-    remote.settings.mutate.mockResolvedValueOnce(ok({ ...namespace(ROUTING, 5), revision }) as never)
+    remote.settings.mutate.mockResolvedValueOnce(ok({ ...namespace(COPILOT, 8), revision }) as never)
     const card = await ready(remote)
     change(card.render(), 'web-search-mode', HOSTED)
     click(card.render(), 'web-search-save'); await settle()
@@ -408,12 +421,12 @@ describe('independent Web search Settings card', () => {
     click(card.render(), 'copilot-search-reset'); await settle()
     expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
     click(card.render(), 'web-search-save'); await settle()
-    expect(remote.settings.mutate.mock.calls[1]).toEqual([ROUTING, [
-      { op: 'set', path: ['searchProvider'], value: HOSTED },
-      { op: 'set', path: ['defaultSearchProvider'], value: HOSTED },
-    ], 4])
+    expect(remote.settings.mutate.mock.calls[1]).toEqual([COPILOT, [
+      { op: 'set', path: ['searchRouting', 'searchProvider'], value: HOSTED },
+      { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: HOSTED },
+    ], 7])
     expect(text(card.render())).toContain('responses-model')
-    expect(field(card.render(), 'copilot-search-reset').props.disabled).toBe(true)
+    expect(field(card.render(), 'copilot-search-reset').props.disabled).toBe(false)
   })
 
   it('explains a real Remote settings-conflict without exposing its raw details', async () => {
@@ -458,10 +471,10 @@ describe('independent Web search Settings card', () => {
     change(card.render(), 'web-search-provider', 'none')
     click(card.render(), 'web-search-save')
     await settle()
-    expect(card.remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(ROUTING, [
-      { op: 'set', path: ['searchProvider'], value: 'auto' },
-      { op: 'set', path: ['defaultSearchProvider'], value: 'none' },
-    ], 4)
+    expect(card.remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(COPILOT, [
+      { op: 'set', path: ['searchRouting', 'searchProvider'], value: 'auto' },
+      { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: 'none' },
+    ], 7)
   })
 
   it.each(['unmount', 'replace'] as const)('ignores disposed override resets after %s and blocks duplicate/reset-routing submissions', async disposal => {
@@ -482,7 +495,7 @@ describe('independent Web search Settings card', () => {
       if (disposal === 'unmount') card.unmount()
       else {
         const replacement = remotes(HOSTED), value = settingsValue(HOSTED)
-        value.namespaces[1]!.value.searchModel = 'replacement-model'
+        value.namespaces[0]!.value.searchModel = 'replacement-model'
         replacement.settings.describe.mockResolvedValueOnce(ok(value))
         card.render(replacement); await settle()
       }
@@ -510,8 +523,8 @@ describe('independent Web search Settings card', () => {
     click(tree, 'web-search-save')
     click(tree, 'copilot-search-reset')
     expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
-    expect(remote.settings.mutate.mock.calls[0]?.[0]).toBe(ROUTING)
-    pending.resolve(ok(namespace(ROUTING, 5))); await settle()
+    expect(remote.settings.mutate.mock.calls[0]?.[0]).toBe(COPILOT)
+    pending.resolve(ok(namespace(COPILOT, 8))); await settle()
     expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
     expect(text(card.render())).toContain('responses-model')
     expect(field(card.render(), 'copilot-search-reset').props.disabled).toBe(false)
@@ -525,7 +538,7 @@ describe('independent Web search Settings card', () => {
     click(card.render(), 'web-search-save')
     card.unmount()
     const counts = card.setters.map(setter => setter.mock.calls.length)
-    if (outcome === 'resolve') pending.resolve(ok(namespace(ROUTING, 5)))
+    if (outcome === 'resolve') pending.resolve(ok(namespace(COPILOT, 8)))
     else pending.reject(new Error('PRIVATE_LATE_SAVE'))
     await settle()
     expect(card.setters.map(setter => setter.mock.calls.length)).toEqual(counts)
@@ -574,10 +587,32 @@ describe('independent Web search Settings card', () => {
     if (disposal === 'unmount') card.unmount()
     else { card.render(remotes('new-provider')); await settle() }
     const counts = card.setters.map(setter => setter.mock.calls.length)
-    pending.resolve(ok(namespace(ROUTING, 5)))
+    pending.resolve(ok(namespace(COPILOT, 8)))
     await settle()
     expect(remote.settings.mutate).toHaveBeenCalledTimes(1)
     expect(card.setters.map(setter => setter.mock.calls.length)).toEqual(counts)
     if (disposal === 'replace') expect(field(card.render(), 'web-search-provider').props.value).toBe('new-provider')
+  })
+
+  it('reads legacy separate namespace when searchRouting is absent and saves to copilot namespace', async () => {
+    const remote = remotes()
+    const value = {
+      writable: true,
+      hasDocument: true,
+      namespaces: [
+        namespace(COPILOT, 7, {}),
+        namespace(ROUTING, 3, { searchProvider: 'auto', defaultSearchProvider: 'deepseek-official' }),
+      ],
+    }
+    remote.settings.describe.mockResolvedValueOnce(ok(value))
+    const card = await ready(remote)
+    expect(field(card.render(), 'web-search-mode').props.value).toBe('auto')
+    expect(field(card.render(), 'web-search-provider').props.value).toBe('deepseek-official')
+    click(card.render(), 'web-search-save'); await settle()
+    expect(remote.settings.mutate).toHaveBeenCalledExactlyOnceWith(COPILOT, [
+      { op: 'set', path: ['searchRouting', 'searchProvider'], value: 'auto' },
+      { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: 'deepseek-official' },
+    ], 7)
+    expect(text(card.render())).toContain('Saved.')
   })
 })

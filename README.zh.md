@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.50`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.51`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 Alpha.24 修复了 Web search 卡片缺少精确 Remote 依赖声明的问题。当时卡片位于 **设置 → 模型**（`settings.models.footer`，list/root），旧 Core 回退到独立 Web search section。现在优先显示在插件详情页；搜索子 Fiber 仍独立等待 routing namespace，不影响账号控件和既有搜索安全检查；实际打包 Desktop 验收仍是独立关卡。
 
@@ -100,10 +100,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 仅对独立的具名 profile，获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.50/dsh-github-copilot-0.4.0-alpha.50.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.51/dsh-github-copilot-0.4.0-alpha.51.tgz
 ```
 
-Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.50`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
+Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.51`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
@@ -171,7 +171,7 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.50`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.51`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
 **Desktop package 更新与 Web 生命周期边界：**原生 manager 对已安装 package 原位升级返回的 `restart-required` 是权威结果，与移除／重加 plugin bundle 的行为是两个不同问题。任何包含服务重编排补丁（`cordis.patch.yml`，如本插件所采用的隔离路由 Web 搜索层）的插件升级均无法通过热重载重新绑定活动组件与 consumer，必须退出应用并冷重启 Desktop 才能完全生效。pinned public Loader characterization 记录了：使用 bundle 的精确 ID 且 provider 已激活时，分阶段首次添加可能在 routed row 启用后仍令全局 `ctx.web` 和 consumer 不可用；另一独立序列从完整冷加载且正常工作的 Web-routing composition 开始，移除后全局 `ctx.web` 与 consumer 不可用，重加／重试 reconciliation 仍未恢复。较早的临时 harness 使用别名 ID 且没有 active provider，因此其最终添加成功并不等同于精确 bundle fixture。这些都是合成 Loader 观察，不是原生 Desktop manager 覆盖，也不证明重启后恢复。不要用移除／重加 bundle 作为热升级绕行；遵循 manager 的升级结果及另行批准的重启要求。详见 [rc.2 生命周期 characterization 与有限的 public API 结论](https://github.com/cloga/dsh-github-copilot/blob/main/docs/web-lifecycle-rc2.md)。
 
@@ -281,17 +281,17 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
 
 新版 bundle 通过插件自有的 web 服务外观层分流，将原官方服务及完整配置保留在命名作用域中，不修改 Core 或会话预设。原生 `web_search` 保留参数校验、查询／来源数量限制、执行中间件、超时和结果展示；有可靠发起会话上下文的直接 `ctx.web.search` 调用也使用相同分流规则。
 
-在 **插件 → dsh-github-copilot → 详情**中，**Web search** 卡片通过公开的 `plugins.bundle.config`（按包名索引）设置跨后端搜索路由，并通过独立修订号校验保存。若 bundle slot 不可用，路由卡片回退到 **设置 → 模型**；若 Models footer 也不可用，则回退到 **设置 → Web search**；高级选项仍可通过原设置分区修改。同一时间只注册一处路由卡片，离开详情页会丢弃未保存的草稿。账号登录、状态及模型刷新仍在 **设置 → 模型**。仅打开新页面不会迁移或改写已有设置，卸载本插件后恢复原 web 服务。
+在 **插件 → dsh-github-copilot → 详情**中，**Web search** 卡片通过公开的 `plugins.bundle.config`（按包名索引）设置跨后端搜索路由；搜索路由直接保存在 `github-copilot` 命名空间的 `searchRouting` 路径下，通过嵌套路径一次完成修订号校验写入，无需额外注册第二设置命名空间；同一页面还可展开 Copilot 托管搜索选项（开关、路由白名单、引用、工具过滤、能力证明、超时及旧兜底），两项操作分别保存并协同更新版本号。若 bundle slot 不可用，路由卡片回退到 **设置 → 模型**；若 Models footer 也不可用，则回退到 **设置 → Web search**；高级选项仍可通过原设置分区修改。同一时间只注册一处路由卡片，离开详情页会丢弃未保存的草稿。账号登录、状态及模型刷新仍在 **设置 → 模型**。仅打开新页面不会迁移或改写已有设置，卸载本插件后恢复原 web 服务。
 
 **Search provider** 主选择器提供 **Auto — follow Chat** 和通过路由外观层实际注册的搜索 Provider；**Fallback provider**（兜底后端）使用同一目录，额外提供 **None — no fallback**。选择项代表搜索后端，不代表单个模型：即使多个账号模型可以执行搜索，Copilot 仍然只有一个搜索后端。普通配置只需选择这两个 Provider，不再要求另选搜索模型。
 
-- `github-copilot-search-routing.searchProvider: auto` 跟随发起 Chat 的 Provider。本插件自有 Copilot 别名保留既有 owner 和模型能力检查；其他 Chat Provider 的原始 ID 必须精确匹配已注册的搜索 Provider ID，不猜名字、后缀或模型家族。这是路由约定，不承诺独立注册的后端一定使用相同模型或账号。
+- `searchRouting.searchProvider: auto` 跟随发起 Chat 的 Provider。本插件自有 Copilot 别名保留既有 owner 和模型能力检查；其他 Chat Provider 的原始 ID 必须精确匹配已注册的搜索 Provider ID，不猜名字、后缀或模型家族。这是路由约定，不承诺独立注册的后端一定使用相同模型或账号。
 - 将 `searchProvider` 设为具体 ID，就固定主搜索后端，不再随 Chat 改变。
 - `defaultSearchProvider` 仅在无匹配主后端或主搜索失败时作最终兜底，最多尝试一次；与主后端相同时不重试，成功但结果为空也不触发兜底。`none` 仅关闭兜底，不关闭主搜索。
 - 显式选择 Copilot 或将它作为兜底时，内部按模型 ID 排序，从当前账号路由事实中最多考虑三个符合条件的 Responses 候选。默认要求能力 probe 成功后才发送一次用户的最终查询；元数据本身不是能力证明，最终查询失败也不会跨模型重放。内部选择不改变 Chat 或全局默认模型。其他后端自行管理模型配置（若有）。
 - 已保存的非空 `github-copilot.searchModel` 仍具有优先权；覆盖值无效时不会静默换成其他模型。只读详情提供独立、显式的恢复自动选择操作（`searchModel: ''`）；保存 Provider 路由绝不修改该覆盖值。
 
-旧 `searchMode: auto/fixed` 配置继续兼容读取，不自动写入。旧 fixed 保留原 default 作为主后端；fixed 加 `none` 继续禁用。用户明确保存后，通过一次带修订号校验的 mutation 同时写入两个路由键，不依赖 Copilot 设置命名空间，也不读取账号／模型列表。稳定的 Remote 引用避免外层页面重渲染重置草稿。发生修订冲突时，应重新加载已保存配置并重新应用所需选择；拒绝或未确认的响应不会被报告为成功。保存只证明配置持久化，不证明真实搜索能力。界面会说明保存将采用选中的最终兜底并可能产生 API 费用；旧的 `github-copilot.searchFallback: none` 失败兜底付费限制保留到明确保存新选择为止。已保存但未注册的 ID 保持显示为不可用，不静默替换。
+旧 `searchMode: auto/fixed` 配置继续兼容读取，不自动写入。旧 fixed 保留原 default 作为主后端；fixed 加 `none` 继续禁用。用户明确保存后，通过一次带修订号校验的 mutation 在已有的 `github-copilot` 命名空间中同时写入嵌套路径 `searchRouting.searchProvider` 与 `searchRouting.defaultSearchProvider`，不依赖模型发现或账号凭证，并协同维护修订号以避免与独立重置覆盖值发生虚假冲突。稳定的 Remote 引用避免外层页面重渲染重置草稿。发生修订冲突时，应重新加载已保存配置并重新应用所需选择；拒绝或未确认的响应不会被报告为成功。保存只证明配置持久化，不证明真实搜索能力。界面会说明保存将采用选中的最终兜底并可能产生 API 费用；旧的 `github-copilot.searchFallback: none` 失败兜底付费限制保留到明确保存新选择为止。已保存但未注册的 ID 保持显示为不可用，不静默替换。
 
 `github-copilot.routeWebSearch: false` 仍委托原始 web 服务。其余情况下，取消、卸载及捕获的账号证明失效都不能触发兜底。通用注册后端必须遵守取消信号，但公开接口没有提供其内部鉴权后、网络发送前的检查钩子；历史 Copilot／DeepSeek 直调路径保留更强的自有发送前保护。两条路径都不会用 Copilot 登录替其他 Provider 提供凭据。
 
@@ -451,8 +451,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.50/dsh-github-copilot-0.4.0-alpha.50.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.50/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.51/dsh-github-copilot-0.4.0-alpha.51.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.51/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -460,7 +460,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.50.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.51.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
