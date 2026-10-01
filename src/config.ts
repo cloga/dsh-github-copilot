@@ -10,6 +10,8 @@ import { DEFAULT_REQUEST_BUDGET_POLICY } from './request-budget.ts'
 import type { RequestBudgetPolicy } from './request-budget.ts'
 import { WebSearchRoutingConfigSchema } from './web-search-routing-config.ts'
 import type { WebSearchRoutingConfig } from './web-search-routing-config.ts'
+import { readConfigValue } from './settings-reader.ts'
+import type { LiveSetting } from './settings-reader.ts'
 
 /** Plugin configuration. Defaults make the current chat route decide. */
 export interface InlineConfig {
@@ -52,11 +54,27 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
+export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup'> & {
+  searchModel?: string | LiveSetting<string | undefined>
+  searchRouting?: WebSearchRoutingConfig | LiveSetting<WebSearchRoutingConfig | undefined>
+  temporaryRouteBackup?: string | LiveSetting<string | undefined>
+}
+
+/** Keep native live references at the boundary; request code consumes plain snapshots. */
+export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
+  return {
+    ...config,
+    searchModel: readConfigValue(config.searchModel),
+    searchRouting: readConfigValue(config.searchRouting),
+    temporaryRouteBackup: readConfigValue(config.temporaryRouteBackup),
+  }
+}
+
 /** Longest timer either bound may take; `setTimeout`/`AbortSignal.timeout` refuse more. */
 const MAX_TIMEOUT_MS = 2_147_483_647
 
 /** Schema of the plugin's settings section. */
-export const Config: z<InlineConfig> = z.object({
+export const Config = z.object({
   enabled: z.boolean().default(true),
   providers: z.array(z.string()).default([]),
   includeSources: z.boolean().default(true),
@@ -71,7 +89,7 @@ export const Config: z<InlineConfig> = z.object({
   compactionReasoning: z.union(['prefer-low', 'preserve']).default(DEFAULT_REQUEST_BUDGET_POLICY.compactionReasoning),
   routeWebSearch: z.boolean().default(true),
   searchFallback: z.union(['none', 'deepseek']).default('deepseek'),
-  searchModel: z.string().hidden(),
-  searchRouting: WebSearchRoutingConfigSchema.default({}),
-  temporaryRouteBackup: z.string().hidden(),
+  searchModel: z.string().hidden().volatile(),
+  searchRouting: WebSearchRoutingConfigSchema.default({}).volatile(),
+  temporaryRouteBackup: z.string().hidden().volatile(),
 })

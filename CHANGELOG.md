@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix unavailable Web search routing on official rc.2 by exposing the plugin's live routing fields through native Config projection (#216). Retain narrow CAS writes, separate legacy override reset, ordinary safety configuration and live snapshot consumption without remounting.
+- Replace the manually populated settings test double with a disposable native Loader/ConfigEditor/SettingsForms fixture covering projection, save, conflict rejection and restart persistence. Full dependency-graph validation and release delivery remain pending.
+
 ## 0.4.0-alpha.56 (prepared)
 
 - Pin `undici` to 6.28.1 to resolve the observed 6.29.0 installation failure in the configured package mirror (#212). Keep the lockfile registry-neutral and preserve the quota-only TLS dispatcher; this does not establish full Desktop installation or activation.

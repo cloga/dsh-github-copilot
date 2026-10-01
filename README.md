@@ -20,6 +20,8 @@ A focused DSH companion for GitHub Copilot sign-in, account-aware model profiles
 
 The screenshot uses the current built Client with synthetic providers in an isolated browser fixture. It demonstrates the shipped configuration surface, not live credentials, account access, search success, or production Desktop activation.
 
+On official rc.2, routing is exposed through native live `Config` fields, not a manually registered settings namespace. Saving updates the two routing leaves together without remounting the plugin or changing ordinary safety settings. A legacy search-model override is reset only by its separate explicit action.
+
 ## Compatibility baselines and qualification targets
 
 | DSH surface | Exact source pin | Models UI seam |

@@ -6,19 +6,7 @@ import type { WebSearchProvider } from '@deepseek-ai/dsh-web'
 import type { Config as DeepSeekConfig, DeepSeekSearchProviderOptions } from '@deepseek-ai/dsh-web-search-deepseek'
 import { describeSearchBackend, DescribedSearchFallbackError } from './search-backend.ts'
 import type { SearchBackend } from './search-backend.ts'
-import { readSettingsNamespace } from './settings-reader.ts'
-
-interface VolatileSetting<T> {
-  get(): T
-}
-
-function isVolatileSetting<T>(value: T | VolatileSetting<T>): value is VolatileSetting<T> {
-  return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'get') === 'function'
-}
-
-function readConfigValue<T>(value: T | VolatileSetting<T>): T {
-  return isVolatileSetting(value) ? value.get() : value
-}
+import { readConfigValue, readSettingsNamespace } from './settings-reader.ts'
 
 class InvalidFallbackBase extends WebError {
   constructor() {
