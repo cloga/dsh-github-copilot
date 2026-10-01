@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.57 (prepared)
+
+- Keep plugin-owned rc.2 lifecycle guidance visible before disable, removal, or upgrade, because the plugin UI is unloaded before Desktop can report dependent Web entries pending on a service (#185).
+- Document that an already-Off plugin with only `pending (waiting for service: …)` dependent entries requires a full Desktop restart rather than repeated toggling, without reclassifying other native failures.
+- Include the bounded rc.2 Web lifecycle characterization in the published package.
+
 ## 0.4.0-alpha.56 (prepared)
 
 - Pin `undici` to 6.28.1 to resolve the observed 6.29.0 installation failure in the configured package mirror (#212). Keep the lockfile registry-neutral and preserve the quota-only TLS dispatcher; this does not establish full Desktop installation or activation.
