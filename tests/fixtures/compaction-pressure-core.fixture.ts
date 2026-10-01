@@ -251,11 +251,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     expect(f.ctx.tokenMeter.measure(f.agent.session).totalTokens).toBeLessThan(1000)
 
     const events = f.currentEvents()
-    expect(events.filter(event => event.type === 'github-copilot/auto-model-decision')).toEqual([
-      expect.objectContaining({ data: expect.objectContaining({
-        provider, model: 'fixture-model-B', taskClass: 'fast', reason: 'short-text-turn',
-      }) }),
-    ])
+    expect(events.filter(event => event.type === 'github-copilot/auto-model-decision')).toEqual([])
     const transaction = compactionEvents(events)
     expect(transaction.map(event => event.type)).toEqual(['compaction/start', 'compaction/summary', 'compaction/end'])
     expect(transaction[1]).toMatchObject({ type: 'compaction/summary',

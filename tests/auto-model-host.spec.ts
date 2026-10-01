@@ -3,6 +3,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import { installAutoModelRouting } from '../src/auto-model-host.ts'
@@ -36,6 +38,42 @@ function message(text: string) {
 }
 
 describe('Auto model Host integration', () => {
+  it('cold-reads Auto selection through the official format reader without plugin vocabulary', async () => {
+    const ctx = new Context()
+    const id = SessionId('fixture-auto-cold-read')
+    const session = Session.create(id, [], {
+      version: 4, id, createdAt: 1, isSeeded: false, delegationDepth: 0,
+    })
+    const agent = { ctx, session } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    ctx.provide('sessionProjections', { stateOf: () => ({ pending: null }) } as never)
+    const dispose = installAutoModelRouting(ctx, {
+      async loadModels() { return [model('fixture-real', 128_000, 'medium')] },
+    })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+    const signal = new AbortController().signal
+    try {
+      const messages = [message('Short question.')]
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: AUTO }))).resolves.toMatchObject({ model: 'fixture-real' })
+      const header = JSON.parse(JSON.stringify(session.header))
+      const reader = sessionFormatCatalog.createRestore(sessionFormatCatalog.encodeCurrentHeader(header, 0), {
+        recovery: 'strict', validation: 'current',
+      })
+      for (const event of session.snapshotEvents()) {
+        reader.decodeRow(sessionFormatCatalog.encodeCurrentEvent(JSON.parse(JSON.stringify(event))))
+      }
+      const restored = reader.finish()
+      expect(restored.events.map(event => event.type)).toEqual(['session/end-seed', 'model/selection'])
+      expect(restored.events[1]?.data).toEqual({ provider: PREVIEW, model: AUTO })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('persists a virtual preference across turns and yields to an explicit fixed selection', async () => {
     const ctx = new Context()
     const selection: { pending: { provider: string; model: string } | null } = { pending: null }
@@ -180,10 +218,8 @@ describe('Auto model Host integration', () => {
       await enter(2, 'detail '.repeat(1_000))
       await expect(request(2)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-strong' })
       expect(loadModels).toHaveBeenCalledTimes(2)
-      expect(append.mock.calls.map(call => call[1])).toEqual([
-        expect.objectContaining({ turn: 1, model: 'fixture-fast', reason: 'short-text-turn' }),
-        expect.objectContaining({ turn: 2, model: 'fixture-strong', reason: 'large-structured-turn' }),
-      ])
+      // Optional attribution must not add unknown required events to the durable log.
+      expect(append).not.toHaveBeenCalled()
     } finally {
       dispose()
       await ctx.fiber.dispose()
@@ -233,7 +269,7 @@ describe('Auto model Host integration', () => {
     }
   })
 
-  it('records complete input fit diagnostic and token budget metadata in decision event', async () => {
+  it('keeps input-fit routing without persisting an optional decision event', async () => {
     const ctx = new Context()
     const append = vi.fn()
     const agent = { ctx, session: { id: 'test-session-123', append, requestHeader: () => undefined } } as unknown as Agent
@@ -249,26 +285,12 @@ describe('Auto model Host integration', () => {
       const messages = [message('Explain this symbol.')]
       await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
         async () => ({ kind: 'enter' as const, messages }))
-      await ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+      const resolved = await ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
         async () => ({ provider: PREVIEW, model: AUTO }))
 
-      const decisionEvents = append.mock.calls.filter(([type]) => type === 'github-copilot/auto-model-decision')
-      expect(decisionEvents).toHaveLength(1)
-      const eventData = decisionEvents[0]![1]
-      expect(eventData).toMatchObject({
-        turn: 1,
-        provider: PREVIEW,
-        model: 'fixture-fast',
-        preference: 'balance',
-        taskClass: 'fast',
-        reason: 'short-text-turn',
-        candidateCount: 2,
-        fittingCandidateCount: 2,
-        inputFitDiagnostic: 'fitting-candidate-selected',
-      })
-      expect(typeof eventData.estimatedInputTokens).toBe('number')
-      expect(typeof eventData.selectedInputBudget).toBe('number')
-      expect(eventData.selectedInputBudget).toBeGreaterThan(0)
+      expect(resolved).toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
+      expect(loadModels).toHaveBeenCalledOnce()
+      expect(append).not.toHaveBeenCalled()
     } finally {
       dispose()
       await ctx.fiber.dispose()

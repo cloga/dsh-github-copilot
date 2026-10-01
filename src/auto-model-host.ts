@@ -9,21 +9,6 @@ import type { AutoModelPreference } from './copilot-identity.ts'
 import { DEFAULT_REQUEST_BUDGET_POLICY, resolveRequestBudgetPolicy } from './request-budget.ts'
 import type { RequestBudgetPolicy } from './request-budget.ts'
 
-interface AutoModelDecisionEvent {
-  turn: number
-  step: number
-  provider: typeof GITHUB_COPILOT_PREVIEW_PROVIDER_ID
-  model: string
-  preference: AutoModelPreference
-  taskClass: AutoModelDecision['taskClass']
-  reason: AutoModelDecision['reason']
-  candidateCount: number
-  fittingCandidateCount: number
-  estimatedInputTokens: number
-  selectedInputBudget: number
-  inputFitDiagnostic: AutoModelDecision['inputFitDiagnostic']
-}
-
 export interface AutoModelHostDependencies {
   loadModels(signal: AbortSignal): Promise<readonly AccountModelDescriptor[]>
   budgetPolicy?: () => Partial<RequestBudgetPolicy>
@@ -127,10 +112,6 @@ function actualNotice(agent: Agent, model: string) {
   })
 }
 
-function appendAutoModelDecision(agent: Agent, event: AutoModelDecisionEvent): void {
-  Reflect.apply(agent.session.append, agent.session, ['github-copilot/auto-model-decision', event])
-}
-
 /** Resolve virtual Auto once per Core turn before request/header persistence. */
 export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHostDependencies): () => void {
   type Dispose = () => void
@@ -148,7 +129,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
         ...assembled.variables, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: pending,
       } }
     }, { prepend: true })
-    const removePreStep = agent.ctx.on('agent/pre-step', async ({ messages, turn, step, signal }, next) => {
+    const removePreStep = agent.ctx.on('agent/pre-step', async ({ messages, turn, signal }, next) => {
       const result = await next()
       const entered = result.kind === 'enter' ? result.messages : messages
       captured.set(agent, { turn, messages: entered })
@@ -187,7 +168,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     routed.delete(agent)
     return undefined
   })
-  const removeRequest = ctx.on('agent/request', async ({ agent, turn, step, signal }, next) => {
+  const removeRequest = ctx.on('agent/request', async ({ agent, turn, signal }, next) => {
     const resolved = await next()
     const pending = pendingAuto(ctx, agent)
     const virtualPreference = resolved.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
@@ -221,20 +202,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
           }])
         }
       }
-      appendAutoModelDecision(agent, {
-        turn,
-        step,
-        provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
-        model: state.decision.model.id,
-        preference: state.decision.preference,
-        taskClass: state.decision.taskClass,
-        reason: state.decision.reason,
-        candidateCount: state.decision.candidateCount,
-        fittingCandidateCount: state.decision.fittingCandidateCount,
-        estimatedInputTokens: state.decision.estimatedInputTokens,
-        selectedInputBudget: state.decision.selectedInputBudget,
-        inputFitDiagnostic: state.decision.inputFitDiagnostic,
-      })
+      // rc.2 append cannot mark plugin events ignorable; keep attribution out of the log.
       state.recorded = true
     }
     return { ...resolved, model: state.decision.model.id }

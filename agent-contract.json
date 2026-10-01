@@ -30,6 +30,12 @@
     "attribution": "Assisted-by identifies the actual assisting tool; never infer a co-author from a model provider"
   },
   "tasks": {
+    "history": {
+      "purpose": "Prevent incompatible Auto events and prepare explicit detached history recovery",
+      "read": ["src/auto-model-host.ts", "src/auto-model-presentation.ts", "scripts/repair-auto-model-history.mjs", "docs/automatic-model-routing.md"],
+      "tests": ["tests/auto-model-host.spec.ts", "tests/auto-model-presentation.spec.ts", "tests/scripts/repair-auto-model-history.test.mjs", "tests/fixtures/compaction-pressure-core.fixture.ts"],
+      "risk": "Official rc.2 append cannot mark plugin events ignorable: do not write optional Auto decisions, fake a Core event type, mutate returned events, patch Core or register private vocabulary. Preserve real request provenance and durable Auto selection; missing attribution must not be inferred. Recovery is explicit source-checkout maintenance through the pinned public v4 codec, check-only by default and detached-copy only on request. Never replace live logs automatically. Verify every zstd frame, strict whole-history validity and exact hashes. Only recognized Auto decision envelopes may gain ignorable:true; refuse all other errors. Applying a copy, stopping writers, installing or restarting requires separate operator approval."
+    },
     "usage": {
       "purpose": "Bounded account quota snapshots and an optional Copilot-only composer usage control",
       "read": ["src/copilot-usage-types.ts", "src/copilot-usage-normalize.ts", "src/copilot-usage-host.ts", "src/copilot-usage-remote.ts", "src/copilot-usage-card.ts", "src/copilot-usage-ui.ts", "docs/copilot-usage.md"],

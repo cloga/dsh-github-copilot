@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.53"
+    "version": "0.4.0-alpha.54"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -988,7 +988,7 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/preview-route.ts", "marker": "GITHUB_COPILOT_AUTO_MODEL_ID"},
-        {"file": "src/auto-model-host.ts", "marker": "github-copilot/auto-model-decision"},
+        {"file": "src/auto-model-host.ts", "marker": "keep attribution out of the log"},
         {"file": "src/auto-model-presentation.ts", "marker": "conversation.chat.turnTail"},
         {"file": "src/auto-model-presentation.ts", "marker": "data-time-hover-root"},
         {"file": "docs/automatic-model-routing.md", "marker": "plugin-only"}
@@ -999,6 +999,7 @@
         {"file": "tests/auto-model-host.spec.ts", "name": "resolves after downstream model selection and freezes one decision per turn"},
         {"file": "tests/auto-model-host.spec.ts", "name": "replaces Core virtual-Auto switch guidance with the resolved real route"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "folds a durable decision into turn-scoped credential-free attribution"},
+        {"file": "tests/auto-model-presentation.spec.ts", "name": "omits attribution when a compatible history contains no optional decision"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "places Auto attribution after the settled clock and reveals it only on hover"},
         {"file": "tests/preview-route.spec.ts", "name": "publishes Auto as a virtual picker entry but refuses unresolved adapter dispatch"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "shrinks durable history and rebuilds the switched model request without sending the oversized original"}

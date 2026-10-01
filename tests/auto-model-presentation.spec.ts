@@ -6,6 +6,7 @@ import {
 function decision(overrides: Record<string, unknown> = {}) {
   return {
     type: 'github-copilot/auto-model-decision',
+    ignorable: true,
     data: {
       turn: 3,
       step: 1,
@@ -20,6 +21,13 @@ function decision(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Auto model presentation', () => {
+  it('omits attribution when a compatible history contains no optional decision', () => {
+    expect(autoModelAttributionDefinition.buildLocationData({ matches: [] }, 'turn', null)).toBeNull()
+    expect(autoModelAttributionDefinition.match({
+      type: 'request/header', data: { config: { provider: 'github-copilot-preview', model: 'fixture-model' } },
+    })).toBeNull()
+  })
+
   it('folds a durable decision into turn-scoped credential-free attribution', () => {
     const event = decision()
     expect(autoModelAttributionDefinition.match(event)).toEqual({ id: '3', role: 'start' })
