@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0-alpha.56 (prepared)
+
+- Pin `undici` to 6.28.1 to resolve the observed 6.29.0 installation failure in the configured package mirror (#212). Keep the lockfile registry-neutral and preserve the quota-only TLS dispatcher; this does not establish full Desktop installation or activation.
+
 ## 0.4.0-alpha.55 (prepared)
 
 - Use a quota-only, reusable TLS-verified dispatcher with Node default and system CA roots for the GitHub Copilot usage endpoint (#209). This removes reliance on launcher inheritance of `NODE_USE_SYSTEM_CA` for quota requests, without changing Core, sign-in, model/search transport or global trust.
