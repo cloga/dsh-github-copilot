@@ -26,7 +26,8 @@ const copy = {
     budgetUnknown: 'Budget unavailable',
     close: 'Close usage details', refresh: 'Refresh', refreshing: 'Refreshing…',
     error: 'Could not refresh usage. Try again.', unavailableExplanation: 'Account usage is currently unavailable.',
-    tlsError: 'Could not verify the connection to GitHub. If using an accelerator or proxy like Watt Toolkit, enable system CA trust (set NODE_USE_SYSTEM_CA=1 in environment); TLS verification stays enabled.',
+    tlsError: 'Could not verify the connection to GitHub using Node and system CA trust. Check the Host certificate store or proxy configuration; TLS verification remains enabled.',
+    trustError: 'Could not load system CA trust for the quota request. Check that the Host supports Node system certificates; TLS verification was not bypassed.',
     signedOut: 'Sign in to Copilot in Models to view account usage.',
     lastUpdated: 'Last updated', reset: 'Resets', progress: 'Cycle budget used',
     plan: 'View usage and plan', manual: 'If the browser does not open, copy this address:',
@@ -42,7 +43,8 @@ const copy = {
     budgetUnknown: '额度上限暂不可用',
     close: '关闭用量详情', refresh: '刷新', refreshing: '正在刷新…',
     error: '无法刷新用量，请重试。', unavailableExplanation: '当前无法获取账号用量。',
-    tlsError: '无法验证与 GitHub 的连接。若使用 Watt Toolkit 等加速器或代理，可启用系统证书库（设置环境变量 NODE_USE_SYSTEM_CA=1）；TLS 验证仍保持开启。',
+    tlsError: '使用 Node 和系统证书信任仍无法验证 GitHub 连接。请检查 Host 的证书库或代理配置；TLS 验证保持开启。',
+    trustError: '无法为额度请求加载系统证书信任。请检查 Host 是否支持 Node 系统证书；不会绕过 TLS 验证。',
     signedOut: '请在模型设置中登录 Copilot，以查看账号用量。',
     lastUpdated: '更新于', reset: '重置时间', progress: '本周期已用比例',
     plan: '查看用量与套餐', manual: '若浏览器未打开，请复制此地址：',
@@ -242,7 +244,8 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     failed ? h('p', { role: 'alert', style: muted }, t.error) : null,
     view?.state === 'signed-out' ? h('p', { style: muted }, t.signedOut)
       : !available && !busy && props.remote !== undefined
-        ? h('p', { style: muted }, view?.diagnostic === 'COPILOT_USAGE_TLS' ? t.tlsError : t.unavailableExplanation)
+        ? h('p', { style: muted }, view?.diagnostic === 'COPILOT_USAGE_TLS' ? t.tlsError
+          : view?.diagnostic === 'COPILOT_USAGE_TRUST_UNAVAILABLE' ? t.trustError : t.unavailableExplanation)
         : null,
     available ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 } },
       h('div', { style: { minWidth: 0 } }, h('p', { style: muted }, t.usedLabel),

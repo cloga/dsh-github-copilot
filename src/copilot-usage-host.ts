@@ -1,5 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { getCACertificates } from 'node:tls'
+import { Agent } from 'undici'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from './copilot-usage-remote.ts'
 import { copilotAccountKey } from './account-model-auth.ts'
@@ -27,6 +29,8 @@ interface Dependencies {
   readCredential(): Promise<unknown>
   fetch?: typeof globalThis.fetch
   now?: () => number
+  getCACertificates?: (type: 'default' | 'system') => string[]
+  createDispatcher?: (options: Agent.Options) => Agent
 }
 interface Auth { readonly grant: GitHubCopilotOAuthCredential; readonly key: string }
 class UsageFailure extends Error {
@@ -75,6 +79,7 @@ async function readBody(response: Response, signal: AbortSignal): Promise<unknow
 export class CopilotUsageSource {
   private readonly fetcher: typeof globalThis.fetch
   private readonly now: () => number
+  private dispatcher: Agent | undefined
   private generation = 0
   private disposed = false
   private key: string | undefined
@@ -98,7 +103,13 @@ export class CopilotUsageSource {
     this.nextRefreshAt = 0
     this.failureUntil = 0
   }
-  dispose(): void { this.disposed = true; this.invalidate() }
+  dispose(): Promise<void> {
+    this.disposed = true
+    this.invalidate()
+    const dispatcher = this.dispatcher
+    this.dispatcher = undefined
+    return dispatcher?.destroy() ?? Promise.resolve()
+  }
   get(): Promise<CopilotUsageView> { return this.load(false) }
   refresh(): Promise<CopilotUsageView> { return this.load(true) }
 
@@ -125,6 +136,26 @@ export class CopilotUsageSource {
   }
   private diagnostic(error: unknown): CopilotUsageDiagnostic {
     return error instanceof UsageFailure ? error.diagnostic : 'COPILOT_USAGE_NETWORK'
+  }
+  private quotaDispatcher(): Agent {
+    if (this.dispatcher) return this.dispatcher
+    try {
+      const certificates = this.dependencies.getCACertificates ?? getCACertificates
+      const defaults = certificates('default')
+      const system = certificates('system')
+      if (!Array.isArray(defaults) || !Array.isArray(system) || system.length === 0
+        || [...defaults, ...system].some(ca => typeof ca !== 'string' || ca.length === 0)) {
+        failure('COPILOT_USAGE_TRUST_UNAVAILABLE')
+      }
+      const ca = [...new Set([...defaults, ...system])]
+      this.dispatcher = (this.dependencies.createDispatcher ?? (options => new Agent(options)))({
+        connect: { ca, rejectUnauthorized: true },
+      })
+      if (!this.dispatcher) failure('COPILOT_USAGE_TRUST_UNAVAILABLE')
+      return this.dispatcher
+    } catch {
+      failure('COPILOT_USAGE_TRUST_UNAVAILABLE')
+    }
   }
   private async load(force: boolean): Promise<CopilotUsageView> {
     let generation = this.generation
@@ -165,6 +196,7 @@ export class CopilotUsageSource {
         method: 'GET', redirect: 'error', signal: abort.signal, cache: 'no-store',
         headers: { Authorization: `token ${auth.grant.refresh}`, Accept: 'application/json',
           'X-GitHub-Api-Version': '2025-04-01' },
+        ...(!this.dependencies.fetch && { dispatcher: this.quotaDispatcher() }),
       })
     } catch (error) {
       if (certificateFailure(error)) failure('COPILOT_USAGE_TLS')

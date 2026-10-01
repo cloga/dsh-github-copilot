@@ -2,6 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Agent } from 'undici'
 import GitHubCopilotUsageController, { CopilotUsageSource, COPILOT_USAGE_ENDPOINT } from '../src/copilot-usage-host.ts'
 
 const grant = { type: 'oauth', refresh: 'synthetic-github-token', access: 'synthetic-copilot-token', expires: 1 }
@@ -24,6 +25,69 @@ function fixture() {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 describe('Copilot usage Host lifecycle', () => {
+  it('uses a reusable quota-only dispatcher with deduplicated default and system CAs', async () => {
+    const ca = vi.fn((type: 'default' | 'system') => type === 'default'
+      ? ['default PEM', 'shared PEM'] : ['shared PEM', 'system PEM'])
+    const agent = new Agent()
+    const destroy = vi.spyOn(agent, 'destroy')
+    const createDispatcher = vi.fn(() => agent)
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(quota))
+    const source = new CopilotUsageSource({ readCredential: async () => grant,
+      getCACertificates: ca, createDispatcher })
+    try {
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(await source.get()).toMatchObject({ state: 'ready' })
+      expect(createDispatcher).toHaveBeenCalledOnce()
+      expect(createDispatcher).toHaveBeenCalledWith({ connect: {
+        ca: ['default PEM', 'shared PEM', 'system PEM'], rejectUnauthorized: true,
+      } })
+      expect(ca.mock.calls.map(([type]) => type)).toEqual(['default', 'system'])
+      expect(fetcher).toHaveBeenCalledWith(COPILOT_USAGE_ENDPOINT,
+        expect.objectContaining({ dispatcher: agent, redirect: 'error' }))
+      await source.refresh()
+      expect(createDispatcher).toHaveBeenCalledOnce()
+    } finally { await source.dispose() }
+    expect(destroy).toHaveBeenCalled()
+  })
+  it('creates and disposes the real production dispatcher without changing global trust', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(quota))
+    const source = new CopilotUsageSource({ readCredential: async () => grant,
+      getCACertificates: type => type === 'default' ? ['synthetic default PEM'] : ['synthetic system PEM'] })
+    try {
+      expect(await source.get()).toMatchObject({ state: 'ready' })
+      expect(fetcher.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+        dispatcher: expect.any(Agent), redirect: 'error',
+      }))
+    } finally {
+      await source.dispose()
+    }
+  })
+  it('keeps injected fetchers isolated from system trust and dispatcher construction', async () => {
+    const getCACertificates = vi.fn(() => { throw new Error('must not inspect trust') })
+    const createDispatcher = vi.fn(() => { throw new Error('must not construct dispatcher') })
+    const f = fixture()
+    const source = new CopilotUsageSource({ readCredential: f.readCredential, fetch: f.fetcher,
+      getCACertificates, createDispatcher })
+    expect(await source.get()).toMatchObject({ state: 'ready' })
+    expect(f.fetcher.mock.calls[0]?.[1]).not.toHaveProperty('dispatcher')
+    expect(getCACertificates).not.toHaveBeenCalled()
+    expect(createDispatcher).not.toHaveBeenCalled()
+    await source.dispose()
+  })
+  it.each(['system unavailable', 'system empty', 'dispatcher unavailable'] as const)(
+    'fails visibly when %s without issuing a request or weakening verification', async failed => {
+      const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(quota))
+      const source = new CopilotUsageSource({ readCredential: async () => grant,
+        getCACertificates: type => {
+          if (failed === 'system unavailable' && type === 'system') throw new Error('private OS CA detail')
+          return type === 'default' ? ['default PEM'] : failed === 'system empty' ? [] : ['system PEM']
+        },
+        createDispatcher: () => { throw new Error('private dispatcher detail') } })
+      expect(await source.get()).toMatchObject({ diagnostic: 'COPILOT_USAGE_TRUST_UNAVAILABLE' })
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(JSON.stringify(await source.get())).not.toMatch(/private|PEM/u)
+      await source.dispose()
+    })
   it('is lazy and uses only the existing GitHub grant at the fixed endpoint without refreshing OAuth', async () => {
     const f = fixture()
     expect(f.readCredential).not.toHaveBeenCalled()

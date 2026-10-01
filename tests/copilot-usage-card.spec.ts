@@ -222,18 +222,22 @@ describe('Copilot account usage chip', () => {
     expect(text()).not.toContain('57.75')
   })
 
-  it('displays NODE_USE_SYSTEM_CA guidance on COPILOT_USAGE_TLS diagnostic', async () => {
+  it('explains scoped trust failures without requiring a global environment flag', async () => {
     const tlsView: CopilotUsageView = { state: 'unavailable', billing: 'unknown', budget: 'unknown', diagnostic: 'COPILOT_USAGE_TLS' }
     const enCard = await mount({ remote: remote(tlsView), contextKey: 'a' })
     await click(trigger())
-    expect(text()).toContain('NODE_USE_SYSTEM_CA=1')
-    expect(text()).toContain('Watt Toolkit')
+    expect(text()).toContain('system CA trust')
+    expect(text()).toContain('TLS verification remains enabled')
     await act(async () => { enCard.unmount() })
 
     const zhCard = await mount({ remote: remote(tlsView), contextKey: 'b', locale: 'zh-CN' })
     await click(trigger())
-    expect(zhCard.container.textContent).toContain('NODE_USE_SYSTEM_CA=1')
-    expect(zhCard.container.textContent).toContain('Watt Toolkit')
+    expect(zhCard.container.textContent).toContain('系统证书信任')
+    await act(async () => { zhCard.unmount() })
+    const trustView: CopilotUsageView = { ...tlsView, diagnostic: 'COPILOT_USAGE_TRUST_UNAVAILABLE' }
+    await mount({ remote: remote(trustView), contextKey: 'c' })
+    await click(trigger())
+    expect(text()).toContain('Could not load system CA trust')
   })
 
   it('rejects extra Remote fields and inconsistent balances before rendering them', async () => {
