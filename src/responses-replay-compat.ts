@@ -80,6 +80,119 @@ export function normalizeCopilotResponsesPayload(payload: unknown): unknown {
   }
 }
 
+interface RetrySnapshot {
+  readonly raw: Record<string, unknown>
+  readonly normalized: string
+  readonly context: string
+  readonly signal: AbortSignal
+  readonly sessionId: string
+  readonly modelId: string
+  readonly at: number
+}
+
+const retryLifetimeMs = 60_000
+const maxRetryBytes = 2 * 1024 * 1024
+
+function cacheBytes(value: unknown): string | undefined {
+  let json: string | undefined
+  try { json = JSON.stringify(value) } catch { return undefined }
+  if (json === undefined || Buffer.byteLength(json, 'utf8') > maxRetryBytes) return undefined
+  return json
+}
+
+/** A single lease can admit one HTTP-verified retry at a time; it never reads durable history. */
+export class ResponsesRetryReplay {
+  private snapshot: RetrySnapshot | undefined
+  private active = 0
+  private disposed = false
+
+  dispose(): void { this.disposed = true; this.snapshot = undefined }
+  belongsTo(sessionId: string): boolean { return this.snapshot?.sessionId === sessionId }
+
+  begin(context: unknown, signal?: AbortSignal, sessionId?: string, modelId?: string): ResponsesRetryAttempt {
+    const contextBytes = cacheBytes(context)
+    const overlapping = this.active++ !== 0
+    if (overlapping) this.snapshot = undefined
+    const previous = this.snapshot
+    if (previous !== undefined && (signal !== previous.signal || signal?.aborted
+      || previous.sessionId !== sessionId || previous.modelId !== modelId
+      || previous.context !== contextBytes || Date.now() - previous.at >= retryLifetimeMs)) this.snapshot = undefined
+    const eligible = contextBytes !== undefined && !overlapping && !this.disposed && !signal?.aborted && this.snapshot
+    let candidate: RetrySnapshot | undefined
+    let payloadBytes: string | undefined
+    let finished = false
+    let observed = false
+    return {
+      normalize: payload => {
+        if (this.disposed || signal?.aborted) throw new CopilotResponsesReplayError()
+        const rawBytes = cacheBytes(payload)
+        let normalized: unknown
+        let reused = false
+        try {
+          normalized = normalizeCopilotResponsesPayload(payload)
+        } catch (error) {
+          if (!(error instanceof CopilotResponsesReplayError) || !eligible || !isRecord(payload)
+            || !Array.isArray(payload.input) || !isRecord(eligible.raw) || !Array.isArray(eligible.raw.input)) {
+            this.snapshot = undefined
+            throw error
+          }
+          try {
+            const prior = eligible.raw.input
+            if (payload.input.length !== prior.length) throw error
+            let references = 0
+            const restored = payload.input.map((item, index) => {
+              if (!isRecord(item) || !Object.hasOwn(item, 'id')) return item
+              const original = prior[index]
+              if (!isRecord(original) || !nonemptyString(item.id) || original.id !== item.id
+                || !['reasoning', 'message', 'function_call'].includes(String(original.type))
+                || normalizeItem(original) === original) throw error
+              if (item.type === 'item_reference') {
+                if (Object.keys(item).length !== 2) throw error
+              } else {
+                if (item.type !== original.type || Object.keys(item).length >= Object.keys(original).length
+                  || Object.entries(item).some(([key, value]) => !Object.hasOwn(original, key)
+                    || cacheBytes(value) !== cacheBytes(original[key]))) throw error
+              }
+              references++
+              return original
+            })
+            if (references === 0 || cacheBytes({ ...payload, input: restored }) !== cacheBytes(eligible.raw)) throw error
+          } catch {
+            this.snapshot = undefined
+            throw error
+          }
+          normalized = JSON.parse(eligible.normalized) as unknown
+          reused = true
+        }
+        payloadBytes = cacheBytes(normalized)
+        candidate = signal === undefined || !sessionId || !modelId || contextBytes === undefined || rawBytes === undefined || payloadBytes === undefined
+          ? undefined : { raw: JSON.parse(rawBytes) as Record<string, unknown>, normalized: payloadBytes,
+          context: contextBytes, signal, sessionId, modelId, at: Date.now() }
+        // Keep the full original request, not a reference-only retry, for a subsequent 408.
+        if (reused && eligible) candidate = { ...eligible, at: Date.now() }
+        return normalized
+      },
+      observe: (body, status) => {
+        observed = true
+        this.snapshot = !this.disposed && !signal?.aborted && this.active === 1 && !overlapping && status === 408
+          && candidate !== undefined && body === payloadBytes ? candidate : undefined
+      },
+      finish: () => {
+        if (finished) return
+        finished = true
+        this.active--
+        if (!observed || signal?.aborted || this.disposed || overlapping) this.snapshot = undefined
+      },
+    }
+  }
+}
+
+export interface ResponsesRetryAttempt {
+  normalize(payload: unknown): unknown
+  observe(body: string | undefined, status: number): void
+  finish(): void
+}
+
 // Exact uncoded provider messages observed in real failures. Do not infer scope
 // rejection from arbitrary connection/auth text or expand this into a broad regex.
 const scopeMessages = new Set([
