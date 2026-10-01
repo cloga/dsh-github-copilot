@@ -1750,7 +1750,9 @@ describe('plugin-owned account Copilot route', () => {
     await vi.waitFor(() => expect(wireSignal).toBeDefined())
     await harness.fiber.dispose()
     expect(wireSignal!.aborted).toBe(true)
-    expect((await result).assembler.finish.kind).not.toBe('stop')
+    expect((await result).assembler.finish).toMatchObject({
+      kind: 'aborted', failure: { code: 'ABORTED', message: 'COPILOT_PREVIEW_DISPOSED' },
+    })
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(harness.current()).toBeDefined()
   })
@@ -1768,8 +1770,35 @@ describe('plugin-owned account Copilot route', () => {
     await vi.waitFor(() => expect(wireSignal).toBeDefined())
     harness.replace(grant({ refresh: 'synthetic-account-b', access: 'synthetic-access-b' }))
     expect(wireSignal!.aborted).toBe(true)
-    expect((await result).assembler.finish.kind).not.toBe('stop')
+    expect((await result).assembler.finish).toMatchObject({
+      kind: 'aborted', failure: { code: 'ABORTED', message: 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' },
+    })
     expect(harness.current()?.payload.refresh).toBe('synthetic-account-b')
+  })
+
+  it('preserves buffered partial text before reporting an owned credential abort', async () => {
+    const harness = await runtime()
+    let wireSignal: AbortSignal | undefined
+    stubFetch(vi.fn(async (_input: unknown, init?: RequestInit) => {
+      wireSignal = init?.signal ?? undefined
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode([
+            event('response.output_item.added', { output_index: 0, item: { id: 'synthetic-partial', type: 'message', role: 'assistant', content: [] } }),
+            event('response.output_text.delta', { output_index: 0, delta: 'Partial text stays visible.' }),
+          ].join('')))
+          wireSignal?.addEventListener('abort', () => controller.close(), { once: true })
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } })
+    }))
+    const result = call(harness.ctx)
+    await vi.waitFor(() => expect(wireSignal).toBeDefined())
+    harness.replace(grant({ refresh: 'synthetic-account-b', access: 'synthetic-access-b' }))
+    const { assembler } = await result
+    expect(assembler.blocks()).toContainEqual({ type: 'text', text: 'Partial text stays visible.' })
+    expect(assembler.finish).toMatchObject({
+      kind: 'aborted', failure: { code: 'ABORTED', message: 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' },
+    })
   })
 
   it('allows Core retry middleware to re-dispatch the same prepared adapter snapshot', async () => {
