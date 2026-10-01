@@ -34,6 +34,11 @@ const restartBannerStyle: CSSProperties = {
   background: 'color-mix(in srgb, var(--dsw-alias-color-warning, #e3a300) 12%, transparent)',
   display: 'grid', gap: '4px',
 }
+const lifecycleNoticeStyle: CSSProperties = {
+  ...restartBannerStyle,
+  borderColor: 'color-mix(in srgb, currentColor 22%, transparent)',
+  background: 'color-mix(in srgb, currentColor 6%, transparent)',
+}
 const fieldStyle: CSSProperties = { display: 'grid', gap: '6px', minWidth: 0 }
 const optionsRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
 const buttonStyle: CSSProperties = {
@@ -365,6 +370,11 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
   const providerOptions = () => providers.map(id => createElement('option', { key: id, value: id, style: nativeOptionStyle() }, providerLabel(id)))
   const unavailableOption = (id: string, known: boolean) => known ? null : createElement('option', { value: id, disabled: true, style: nativeOptionStyle(true) }, `${id || '(empty)'} — unavailable`)
   return createElement('section', { style: cardStyle, 'data-dsh-web-search-routing': true, 'aria-busy': loading || saving !== undefined },
+    createElement('div', { role: 'note', style: lifecycleNoticeStyle, 'data-dsh-web-search-lifecycle-notice': true },
+      createElement('strong', { style: { fontWeight: 600 } }, 'Desktop 0.2.0-rc.2 lifecycle note / Desktop 0.2.0-rc.2 生命周期提示'),
+      createElement('span', { style: { opacity: 0.85 } },
+        'After disabling, removing, or upgrading this plugin, fully exit and restart Desktop to complete Web service recomposition. If the native manager shows only pending entries waiting for a service and this plugin is Off, restart instead of toggling it repeatedly. / 停用、移除或升级本插件后，请完全退出并重新启动 Desktop，以完成 Web 服务重编排。若原生管理器仅显示等待某项服务的 pending 条目且本插件已为 Off，请直接重启，不要反复切换。'),
+    ),
     restartRequired ? createElement('div', { role: 'alert', style: restartBannerStyle, 'data-dsh-web-search-restart-banner': true },
       createElement('strong', { style: { fontWeight: 600 } }, 'Restart required to complete update / 检测到更新，请重启 Desktop 完成生效'),
       createElement('span', { style: { opacity: 0.85 } },
