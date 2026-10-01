@@ -99,13 +99,16 @@ interface Lease {
   readonly proof: Proof
   readonly revision: number
   readonly signal: AbortSignal
-  readonly retryReplay: ResponsesRetryReplay
+  readonly retrySignal?: AbortSignal
+  readonly retryReplay?: ResponsesRetryReplay
   started: boolean
 }
 
 class PreviewLifetime {
   readonly controller = new AbortController()
   private readonly wires = new Set<AbortController>()
+  private readonly retryEntries = new Map<AbortSignal, { replay: ResponsesRetryReplay; snapshot: AccountModelSnapshot;
+    proof: Proof; model: string; revision: number; at: number; onAbort: () => void }>()
   revision = 0
   private active = true
   constructor(readonly credentials: CredentialStore, readonly source: AccountModelSource,
@@ -113,15 +116,47 @@ class PreviewLifetime {
     private readonly displayProofFor: (snapshot: AccountModelSnapshot) => Proof | undefined) {}
   assertActive(): void { if (!this.active) throw failure('COPILOT_PREVIEW_DISPOSED', 'ABORTED') }
   isCurrent(revision: number): boolean { return this.active && revision === this.revision }
+  private removeRetry(signal: AbortSignal): void {
+    const entry = this.retryEntries.get(signal)
+    if (entry === undefined) return
+    signal.removeEventListener('abort', entry.onAbort)
+    entry.replay.dispose()
+    this.retryEntries.delete(signal)
+  }
+  private clearRetries(): void {
+    for (const signal of this.retryEntries.keys()) this.removeRetry(signal)
+  }
+  clearSessionRetries(sessionId: string): void {
+    for (const [signal, entry] of this.retryEntries) {
+      if (entry.replay.belongsTo(sessionId)) this.removeRetry(signal)
+    }
+  }
+  private retryFor(signal: AbortSignal, snapshot: AccountModelSnapshot, proof: Proof, model: string): ResponsesRetryReplay {
+    let entry = this.retryEntries.get(signal)
+    if (entry !== undefined && (entry.snapshot !== snapshot || entry.proof !== proof || entry.model !== model
+      || entry.revision !== this.revision || Date.now() - entry.at >= 60_000)) {
+      this.removeRetry(signal)
+      entry = undefined
+    }
+    if (entry !== undefined) return entry.replay
+    if (this.retryEntries.size >= 16) this.removeRetry(this.retryEntries.keys().next().value!)
+    const replay = new ResponsesRetryReplay()
+    const onAbort = () => this.removeRetry(signal)
+    signal.addEventListener('abort', onAbort, { once: true })
+    this.retryEntries.set(signal, { replay, snapshot, proof, model, revision: this.revision, at: Date.now(), onAbort })
+    return replay
+  }
   change(): void {
     this.assertActive()
     this.revision++
+    this.clearRetries()
     this.source.invalidate()
     for (const wire of this.wires) wire.abort(new ManagedWireAbortError('COPILOT_PREVIEW_CREDENTIAL_CHANGED'))
   }
   dispose(): void {
     if (!this.active) return
     this.active = false
+    this.clearRetries()
     this.source.dispose()
     this.controller.abort(new ManagedWireAbortError('COPILOT_PREVIEW_DISPOSED'))
     for (const wire of this.wires) wire.abort()
@@ -170,10 +205,11 @@ class PreviewLifetime {
     if (descriptor === undefined) throw failure('COPILOT_PREVIEW_MODEL_NOT_ENTITLED', 'UNKNOWN_MODEL')
     const proof = this.proofFor(snapshot)
     if (proof === undefined) throw failure('COPILOT_PREVIEW_METADATA_STALE')
-    const retryReplay = new ResponsesRetryReplay()
-    combined.addEventListener('abort', () => retryReplay.dispose(), { once: true })
-    const lease: Lease = { snapshot, descriptor, proof, revision: this.revision, signal: combined, retryReplay, started: false }
+    const lease: Lease = { snapshot, descriptor, proof, revision: this.revision, signal: combined, started: false }
     this.entitled(lease, grant, model)
+    if (signal !== undefined && !signal.aborted) {
+      return { ...lease, retrySignal: signal, retryReplay: this.retryFor(signal, snapshot, proof, model) }
+    }
     return lease
   }
   private account(lease: Lease | undefined, grant: GitHubCopilotOAuthCredential): asserts lease is Lease {
@@ -202,7 +238,8 @@ class PreviewLifetime {
   guard(lease?: Lease): AccountProviderGuard {
     return {
       signal: lease?.signal ?? this.controller.signal,
-      ...lease === undefined ? {} : { selectedModelId: lease.descriptor.id, retryReplay: lease.retryReplay },
+      ...lease === undefined ? {} : { selectedModelId: lease.descriptor.id,
+        retryReplay: lease.retryReplay, retrySignal: lease.retrySignal },
       assertActive: () => this.assertActive(),
       assertAccount: grant => this.account(lease, grant),
       assertEntitled: (grant, model) => this.entitled(lease, grant, model),
@@ -489,6 +526,9 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   const proofFor = (snapshot: AccountModelSnapshot): Proof | undefined => source.readSnapshot() === snapshot
     && snapshotProof !== undefined && snapshotProof.expires > Date.now() ? displayProofFor(snapshot) : undefined
   const lifetime = new PreviewLifetime(store, source, proofFor, displayProofFor)
+  const removeStepListener = ctx.on('session/event', (session, event) => {
+    if (event.type === 'step/start' || event.type === 'turn/end') lifetime.clearSessionRetries(session.id)
+  })
   // Empty provider is used only for registry metadata/config validation, never requests.
   const template = resolvedProfile(createAccountProvider([], lifetime.guard(), 'https://api.individual.githubcopilot.com').provider, requestConfig)
   let configured = false
@@ -697,6 +737,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   })
   ctx.effect(() => () => {
     lifetime.dispose()
+    removeStepListener()
     removeListener()
     removeAutoRoute()
     registration()

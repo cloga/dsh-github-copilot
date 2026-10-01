@@ -353,8 +353,8 @@ describe('managed Responses replay compatibility', () => {
   it('sends identical normalized bytes on the third Core-style attempt after two HTTP 408s', async () => {
     const item = descriptor('openai-responses')
     const retryReplay = new ResponsesRetryReplay()
-    const guard: AccountProviderGuard = { ...accountGuard(item.id), retryReplay }
-    const { provider, models } = createAccountProvider([item], guard, baseURL)
+    const coreSignal = new AbortController().signal
+    const guard: AccountProviderGuard = { ...accountGuard(item.id), retryReplay, retrySignal: coreSignal }
     const context = normalizeContext(replayContext())
     const original = JSON.stringify(context)
     const bodies: string[] = []
@@ -364,8 +364,11 @@ describe('managed Responses replay compatibility', () => {
       return bodies.length < 3 ? new Response('synthetic timeout', { status: 408 }) : nativeEvents('openai-responses')
     })
     for (let attempt = 0; attempt < 3; attempt++) {
+      // Core rc.2 calls prepareCall again for every retry, creating a fresh
+      // adapter/provider; only the bounded request state is shared.
+      const { provider, models } = createAccountProvider([item], guard, baseURL)
       const stream = provider.streamSimple(models[0]!, context, {
-        apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+        apiKey: 'synthetic-account-token', sessionId: 'synthetic-session', maxRetries: 0, fetch,
         onPayload(payload) {
           const originalPayload = payload as Record<string, unknown>
           if (attempt === 0) firstPayload = structuredClone(originalPayload)

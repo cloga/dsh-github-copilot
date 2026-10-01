@@ -74,8 +74,9 @@ describe('Copilot Responses wire replay normalization', () => {
       ? { type: 'item_reference', id: item.id } : item) }
     const context = { messages: [{ role: 'user', content: 'synthetic user input' }] }
     const normalized = normalizeCopilotResponsesPayload(original)
-    function attempt(cache: ResponsesRetryReplay, source: unknown = context, signal: AbortSignal = new AbortController().signal) {
-      return cache.begin(source, signal)
+    function attempt(cache: ResponsesRetryReplay, source: unknown = context, signal: AbortSignal = new AbortController().signal,
+      sessionId = 'synthetic-session', modelId = 'synthetic-model') {
+      return cache.begin(source, signal, sessionId, modelId)
     }
     function reject(cache: ResponsesRetryReplay, payload: unknown, source: unknown = context,
       signal: AbortSignal = new AbortController().signal) {
@@ -142,6 +143,12 @@ describe('Copilot Responses wire replay normalization', () => {
       reject(cache, referenced, { messages: [{ role: 'user', content: 'new step' }] }, signal.signal)
       reject(cache, referenced, context, new AbortController().signal)
       reject(new ResponsesRetryReplay(), referenced, context, signal.signal)
+      const otherSession = attempt(cache, context, signal.signal, 'other-session')
+      expect(() => otherSession.normalize(referenced)).toThrow(CopilotResponsesReplayError)
+      otherSession.finish()
+      const otherModel = attempt(cache, context, signal.signal, 'synthetic-session', 'other-model')
+      expect(() => otherModel.normalize(referenced)).toThrow(CopilotResponsesReplayError)
+      otherModel.finish()
       clock.mockReturnValue(62_000)
       reject(cache, referenced, context, signal.signal)
       clock.mockReturnValue(1000)

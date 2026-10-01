@@ -2,7 +2,7 @@
 
 ## 0.4.0-alpha.60 (prepared)
 
-- Preserve the exact normalized managed Responses request across a bounded, lease-local Core retry only after the previous request actually received HTTP 408. Retry-only item references or incomplete ID-bearing items must identify matching complete prior items without contradictory fields, and all other payload and transcript bytes must agree; changed steps, inputs, models, signals, concurrent requests and cold resumes fail closed (#217).
+- Preserve the exact normalized managed Responses request across Core's freshly prepared retry attempts only after the previous request actually received HTTP 408. Short-lived state is scoped to the original turn signal, Session, model and account proof, and cleared on new step/turn end. Retry-only item references or incomplete ID-bearing items must identify matching complete prior items without contradictory fields, and all other payload and transcript bytes must agree; changed inputs, concurrent requests and cold resumes fail closed (#217).
 - Keep native retry policy, SDK transport, durable replay, credentials, and model selection unchanged. A synthetic native-SDK regression covers two 408 responses followed by a reference-only third attempt; real account acceptance and Desktop installation remain unverified.
 
 ## 0.4.0-alpha.59 (prepared)

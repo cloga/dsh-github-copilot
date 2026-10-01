@@ -40,6 +40,7 @@ export interface PreviewProviderGuard {
 export interface AccountProviderGuard extends PreviewProviderGuard {
   readonly selectedModelId?: string
   readonly retryReplay?: ResponsesRetryReplay
+  readonly retrySignal?: AbortSignal
   /** Per-dispatch admission after native context conversion, before starting a model wire. */
   inspectRequest?(model: Model<Api>, context: TranscriptContext, options?: StreamOptions): void
   assertEntitled(credential: GitHubCopilotOAuthCredential, modelId: string): void
@@ -192,7 +193,8 @@ export function createAccountProvider(
       let unauthorized = false
       const responses = model.api === 'openai-responses'
       let retry: ReturnType<ResponsesRetryReplay['begin']> | undefined
-      try { retry = responses ? guard.retryReplay?.begin(context, guard.signal) : undefined }
+      try { retry = responses ? guard.retryReplay?.begin(context, guard.retrySignal,
+        options?.sessionId, model.id) : undefined }
       catch (error) { lease.release(); throw error }
       const reportReplayFailure = (error: CopilotResponsesReplayError): void => {
         if (lease.signal.aborted || options.signal?.aborted) return

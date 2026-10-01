@@ -85,6 +85,8 @@ interface RetrySnapshot {
   readonly normalized: string
   readonly context: string
   readonly signal: AbortSignal
+  readonly sessionId: string
+  readonly modelId: string
   readonly at: number
 }
 
@@ -105,13 +107,15 @@ export class ResponsesRetryReplay {
   private disposed = false
 
   dispose(): void { this.disposed = true; this.snapshot = undefined }
+  belongsTo(sessionId: string): boolean { return this.snapshot?.sessionId === sessionId }
 
-  begin(context: unknown, signal?: AbortSignal): ResponsesRetryAttempt {
+  begin(context: unknown, signal?: AbortSignal, sessionId?: string, modelId?: string): ResponsesRetryAttempt {
     const contextBytes = cacheBytes(context)
     const overlapping = this.active++ !== 0
     if (overlapping) this.snapshot = undefined
     const previous = this.snapshot
     if (previous !== undefined && (signal !== previous.signal || signal?.aborted
+      || previous.sessionId !== sessionId || previous.modelId !== modelId
       || previous.context !== contextBytes || Date.now() - previous.at >= retryLifetimeMs)) this.snapshot = undefined
     const eligible = contextBytes !== undefined && !overlapping && !this.disposed && !signal?.aborted && this.snapshot
     let candidate: RetrySnapshot | undefined
@@ -140,7 +144,8 @@ export class ResponsesRetryReplay {
               if (!isRecord(item) || !Object.hasOwn(item, 'id')) return item
               const original = prior[index]
               if (!isRecord(original) || !nonemptyString(item.id) || original.id !== item.id
-                || !['reasoning', 'message', 'function_call'].includes(String(original.type))) throw error
+                || !['reasoning', 'message', 'function_call'].includes(String(original.type))
+                || normalizeItem(original) === original) throw error
               if (item.type === 'item_reference') {
                 if (Object.keys(item).length !== 2) throw error
               } else {
@@ -160,9 +165,9 @@ export class ResponsesRetryReplay {
           reused = true
         }
         payloadBytes = cacheBytes(normalized)
-        candidate = signal === undefined || contextBytes === undefined || rawBytes === undefined || payloadBytes === undefined
+        candidate = signal === undefined || !sessionId || !modelId || contextBytes === undefined || rawBytes === undefined || payloadBytes === undefined
           ? undefined : { raw: JSON.parse(rawBytes) as Record<string, unknown>, normalized: payloadBytes,
-          context: contextBytes, signal, at: Date.now() }
+          context: contextBytes, signal, sessionId, modelId, at: Date.now() }
         // Keep the full original request, not a reference-only retry, for a subsequent 408.
         if (reused && eligible) candidate = { ...eligible, at: Date.now() }
         return normalized
