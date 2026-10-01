@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.60 (prepared)
+
+- Preserve the exact normalized managed Responses request across a bounded, lease-local Core retry only after the previous request actually received HTTP 408. Retry-only item references must identify the corresponding complete prior items, and all other payload and transcript bytes must agree; changed steps, inputs, models, signals, concurrent requests and cold resumes fail closed (#217).
+- Keep native retry policy, SDK transport, durable replay, credentials, and model selection unchanged. A synthetic native-SDK regression covers two 408 responses followed by a reference-only third attempt; real account acceptance and Desktop installation remain unverified.
+
 ## 0.4.0-alpha.59 (prepared)
 
 - Fix unavailable Web search routing on official rc.2 by exposing the plugin's live routing fields through native Config projection (#216). Retain narrow CAS writes, separate legacy override reset, ordinary safety configuration and live snapshot consumption without remounting.

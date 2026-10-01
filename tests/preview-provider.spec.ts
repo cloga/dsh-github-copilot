@@ -16,6 +16,7 @@ import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import { BlockAssembler, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW } from '../src/copilot-identity.ts'
+import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
 
 // Preserve the real factory by default; one observer identity test replaces only
 // its returned stream entrypoint, without modifying the installed ESM module.
@@ -349,6 +350,38 @@ describe('managed Responses replay compatibility', () => {
     }, { role: 'toolResult', toolCallId: 'call_check|fc_old_scope', toolName: 'check',
       content: [{ type: 'text', text: 'Done.' }], isError: false, timestamp: 0 }] }
   }
+  it('sends identical normalized bytes on the third Core-style attempt after two HTTP 408s', async () => {
+    const item = descriptor('openai-responses')
+    const retryReplay = new ResponsesRetryReplay()
+    const guard: AccountProviderGuard = { ...accountGuard(item.id), retryReplay }
+    const { provider, models } = createAccountProvider([item], guard, baseURL)
+    const context = normalizeContext(replayContext())
+    const original = JSON.stringify(context)
+    const bodies: string[] = []
+    let firstPayload: Record<string, unknown> | undefined
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      bodies.push(String(init?.body))
+      return bodies.length < 3 ? new Response('synthetic timeout', { status: 408 }) : nativeEvents('openai-responses')
+    })
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const stream = provider.streamSimple(models[0]!, context, {
+        apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+        onPayload(payload) {
+          const originalPayload = payload as Record<string, unknown>
+          if (attempt === 0) firstPayload = structuredClone(originalPayload)
+          if (attempt < 2) return undefined
+          return { ...originalPayload, input: (firstPayload!.input as Record<string, unknown>[]).map(entry =>
+            typeof entry.id === 'string' ? { type: 'item_reference', id: entry.id } : entry) }
+        },
+      })
+      for await (const _event of stream) { /* Drain the native SDK attempt. */ }
+      expect((await stream.result()).stopReason).toBe(attempt < 2 ? 'error' : 'stop')
+    }
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(bodies[0]).toBe(bodies[1])
+    expect(bodies[1]).toBe(bodies[2])
+    expect(JSON.stringify(context)).toBe(original)
+  })
   async function invoke(context: PiContext, options: Partial<StreamOptions> = {}, api: AccountModelApi = 'openai-responses') {
     const item = descriptor(api)
     const release = vi.fn()
