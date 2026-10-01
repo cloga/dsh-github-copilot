@@ -73,7 +73,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
       providers: [{ id: 'synthetic-registered-search', credential: 'synthetic-forbidden' }] })).toThrow()
     await expect(ctx.remote.githubCopilotSearchRouting.providers()).resolves.toEqual({ ok: true, value: catalog })
     expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilotSearchRouting/providers', { args: {} }, expect.any(AbortSignal))
-    expect(rpc).toHaveBeenCalledTimes(9)
+    expect(rpc).toHaveBeenCalledTimes(11)
     for (const method of ['get', 'refresh'] as const) {
       await expect(ctx.remote.githubCopilotUsage[method]()).resolves.toEqual({ ok: true, value: usage })
       expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilotUsage/${method}`, { args: {} }, expect.any(AbortSignal))
