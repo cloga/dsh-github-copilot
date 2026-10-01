@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0-alpha.50 (prepared)
+
+- Add a visible restart banner in `WebSearchRoutingCard` when the routed search service composition is unready, guiding users to cold-restart Desktop (#196).
+- Streamline the plugin details configuration page by removing the internal `HostedSearchSettingsCard` debugging form from `plugins.bundle.config`, leaving only `WebSearchRoutingCard`.
+- Add guidance on `NODE_USE_SYSTEM_CA=1` for Copilot Quota TLS verification when using network accelerators or local proxies like Watt Toolkit (Steam++).
+- Update documentation on cold-restart requirements for `cordis.patch.yml` service recomposition and Windows system CA trust.
+
+## 0.4.0-alpha.49 (prepared)
+
+- Add bounded soft capacity preferences to Copilot Auto model routing (#192).
+
 ## 0.4.0-alpha.48 (prepared)
 
 - Keep the managed Copilot Auto model selected across turns when inherited as a new Session's default; record its durable intent before the first real-model request header and restore the virtual route on later turns (#189).

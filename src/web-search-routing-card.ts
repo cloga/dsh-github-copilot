@@ -29,6 +29,12 @@ const cardStyle: CSSProperties = {
   border: '1px solid color-mix(in srgb, currentColor 20%, transparent)',
   borderRadius: '14px', background: 'color-mix(in srgb, currentColor 4%, transparent)',
 }
+const restartBannerStyle: CSSProperties = {
+  padding: '12px 14px', borderRadius: '10px', fontSize: '13px', lineHeight: 1.5,
+  border: '1px solid color-mix(in srgb, var(--dsw-alias-color-warning, #e3a300) 40%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-alias-color-warning, #e3a300) 12%, transparent)',
+  display: 'grid', gap: '4px',
+}
 const fieldStyle: CSSProperties = { display: 'grid', gap: '6px', minWidth: 0 }
 const optionsRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
 const buttonStyle: CSSProperties = {
@@ -224,6 +230,7 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
   const [override, setOverride] = useState<ModelOverride>({ model: '' })
   const [providers, setProviders] = useState<readonly string[]>([])
   const [catalogReady, setCatalogReady] = useState(false)
+  const [restartRequired, setRestartRequired] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<'routing' | 'override' | undefined>()
   const [writable, setWritable] = useState(false)
@@ -236,7 +243,7 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
     const generation = ++owner.generation
     const current = () => owner.active && owner.generation === generation
     owner.busy = true
-    setLoading(true); setSaving(undefined); setWritable(false); setCatalogReady(false)
+    setLoading(true); setSaving(undefined); setWritable(false); setCatalogReady(false); setRestartRequired(false)
     setMessage(''); setProviders([])
     try {
       const [result, catalog] = await Promise.all([
@@ -261,7 +268,12 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
       const parsed = catalog?.ok ? SearchProviderCatalogSchema.safeParse(catalog.value) : undefined
       const ids = parsed?.success ? parsed.data.providers.map(entry => entry.id) : []
       if (!parsed?.success || !parsed.data.supported || new Set(ids).size !== ids.length || ids.includes('auto') || ids.includes('none')) {
-        setMessage('Search provider list is unavailable. Reload after the routed search service is active.')
+        if (parsed?.success && !parsed.data.supported) {
+          setRestartRequired(true)
+          setMessage('Search service is not ready. Please restart Desktop to apply updates.')
+        } else {
+          setMessage('Search provider list is unavailable. Reload after the routed search service is active.')
+        }
         return
       }
       setProviders(ids.toSorted()); setCatalogReady(true)
@@ -346,6 +358,11 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
   const providerOptions = () => providers.map(id => createElement('option', { key: id, value: id, style: nativeOptionStyle() }, providerLabel(id)))
   const unavailableOption = (id: string, known: boolean) => known ? null : createElement('option', { value: id, disabled: true, style: nativeOptionStyle(true) }, `${id || '(empty)'} — unavailable`)
   return createElement('section', { style: cardStyle, 'data-dsh-web-search-routing': true, 'aria-busy': loading || saving !== undefined },
+    restartRequired ? createElement('div', { role: 'alert', style: restartBannerStyle, 'data-dsh-web-search-restart-banner': true },
+      createElement('strong', { style: { fontWeight: 600 } }, 'Restart required to complete update / 检测到更新，请重启 Desktop 完成生效'),
+      createElement('span', { style: { opacity: 0.85 } },
+        'Web search service composition requires a full application restart to rebind components. / Web 搜索服务组件更新需退出并重新启动 Desktop 以完成重编排。'),
+    ) : null,
     createElement('div', null,
       createElement('h3', { style: { margin: 0, fontSize: '16px' } }, 'Web search'),
       createElement('p', { style: { margin: '5px 0 0', opacity: 0.8, fontSize: '13px', lineHeight: 1.5 } },

@@ -9,7 +9,7 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.49`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.50`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
 
 Alpha.24 修复了 Web search 卡片缺少精确 Remote 依赖声明的问题。当时卡片位于 **设置 → 模型**（`settings.models.footer`，list/root），旧 Core 回退到独立 Web search section。现在优先显示在插件详情页；搜索子 Fiber 仍独立等待 routing namespace，不影响账号控件和既有搜索安全检查；实际打包 Desktop 验收仍是独立关卡。
 
@@ -100,10 +100,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 仅对独立的具名 profile，获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.49/dsh-github-copilot-0.4.0-alpha.49.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.50/dsh-github-copilot-0.4.0-alpha.50.tgz
 ```
 
-Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.49`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
+Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.50`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
@@ -171,9 +171,9 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.49`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.50`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
-**Desktop package 更新与 Web 生命周期边界：**原生 manager 对已安装 package 原位升级返回的 `restart-required` 是权威结果，与移除／重加 plugin bundle 的行为是两个不同问题。pinned public Loader characterization 记录了：使用 bundle 的精确 ID 且 provider 已激活时，分阶段首次添加可能在 routed row 启用后仍令全局 `ctx.web` 和 consumer 不可用；另一独立序列从完整冷加载且正常工作的 Web-routing composition 开始，移除后全局 `ctx.web` 与 consumer 不可用，重加／重试 reconciliation 仍未恢复。较早的临时 harness 使用别名 ID 且没有 active provider，因此其最终添加成功并不等同于精确 bundle fixture。这些都是合成 Loader 观察，不是原生 Desktop manager 覆盖，也不证明重启后恢复。不要用移除／重加 bundle 作为热升级绕行；遵循 manager 的升级结果及另行批准的重启要求。详见 [rc.2 生命周期 characterization 与有限的 public API 结论](https://github.com/cloga/dsh-github-copilot/blob/main/docs/web-lifecycle-rc2.md)。
+**Desktop package 更新与 Web 生命周期边界：**原生 manager 对已安装 package 原位升级返回的 `restart-required` 是权威结果，与移除／重加 plugin bundle 的行为是两个不同问题。任何包含服务重编排补丁（`cordis.patch.yml`，如本插件所采用的隔离路由 Web 搜索层）的插件升级均无法通过热重载重新绑定活动组件与 consumer，必须退出应用并冷重启 Desktop 才能完全生效。pinned public Loader characterization 记录了：使用 bundle 的精确 ID 且 provider 已激活时，分阶段首次添加可能在 routed row 启用后仍令全局 `ctx.web` 和 consumer 不可用；另一独立序列从完整冷加载且正常工作的 Web-routing composition 开始，移除后全局 `ctx.web` 与 consumer 不可用，重加／重试 reconciliation 仍未恢复。较早的临时 harness 使用别名 ID 且没有 active provider，因此其最终添加成功并不等同于精确 bundle fixture。这些都是合成 Loader 观察，不是原生 Desktop manager 覆盖，也不证明重启后恢复。不要用移除／重加 bundle 作为热升级绕行；遵循 manager 的升级结果及另行批准的重启要求。详见 [rc.2 生命周期 characterization 与有限的 public API 结论](https://github.com/cloga/dsh-github-copilot/blob/main/docs/web-lifecycle-rc2.md)。
 
 **Host TLS trust 诊断：**未发现 Desktop trust 设置。上述生命周期说明记录了一个仅供未来选择的、用户自有 launcher 选项：为全新 Desktop process 启用 Node system CA trust；它会扩大可接受 CA 集合，且尚未证明能修复先前 sign-in 失败。必须先完整退出，以免单实例 handoff，并让 launcher 及其标准 I/O 在 Desktop 生命周期内保持有效。这仅是文档建议；没有创建 launcher，也没有修改全局环境、Desktop profile、快捷方式、trust store 或运行中的进程。
 
@@ -281,7 +281,7 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
 
 新版 bundle 通过插件自有的 web 服务外观层分流，将原官方服务及完整配置保留在命名作用域中，不修改 Core 或会话预设。原生 `web_search` 保留参数校验、查询／来源数量限制、执行中间件、超时和结果展示；有可靠发起会话上下文的直接 `ctx.web.search` 调用也使用相同分流规则。
 
-在 **插件 → dsh-github-copilot → 详情**中，**Web search** 卡片通过公开的 `plugins.bundle.config`（按包名索引）设置跨后端搜索路由；同一页面还可展开 Copilot 托管搜索选项（开关、路由白名单、引用、工具过滤、能力证明、超时及旧兜底）。两组设置分别保存，仍通过各自原有命名空间与修订号校验写入。若 bundle slot 不可用，路由卡片回退到 **设置 → 模型**；若 Models footer 也不可用，则回退到 **设置 → Web search**；高级选项仍可通过原设置分区修改。同一时间只注册一处路由卡片，离开详情页会丢弃未保存的草稿。账号登录、状态及模型刷新仍在 **设置 → 模型**。仅打开新页面不会迁移或改写已有设置，卸载本插件后恢复原 web 服务。
+在 **插件 → dsh-github-copilot → 详情**中，**Web search** 卡片通过公开的 `plugins.bundle.config`（按包名索引）设置跨后端搜索路由，并通过独立修订号校验保存。若 bundle slot 不可用，路由卡片回退到 **设置 → 模型**；若 Models footer 也不可用，则回退到 **设置 → Web search**；高级选项仍可通过原设置分区修改。同一时间只注册一处路由卡片，离开详情页会丢弃未保存的草稿。账号登录、状态及模型刷新仍在 **设置 → 模型**。仅打开新页面不会迁移或改写已有设置，卸载本插件后恢复原 web 服务。
 
 **Search provider** 主选择器提供 **Auto — follow Chat** 和通过路由外观层实际注册的搜索 Provider；**Fallback provider**（兜底后端）使用同一目录，额外提供 **None — no fallback**。选择项代表搜索后端，不代表单个模型：即使多个账号模型可以执行搜索，Copilot 仍然只有一个搜索后端。普通配置只需选择这两个 Provider，不再要求另选搜索模型。
 
@@ -383,6 +383,7 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 - **重新登录后出现 `AUTH`／“API key is invalid”：**这个标签并不证明旧会话缓存了旧 Key。托管路由实际收到模型 HTTP 401 后，只撤销与当前请求精确匹配的 Token 证明，但下述严格识别的 Responses 历史引用错误除外；该次请求仍然失败，不自动重发消息、退出登录或切换模型。下一次请求（或模型发现）可通过原生 OAuth 进行一次续期，即使记录的有效期尚未到期，随后重新校验账号模型元数据。连续拒绝受账号级 `accountModelFailureCooldownMs` 限制（默认五分钟，至少一秒），强制发现也不能绕过该恢复冷却。续期后仍被拒绝时，请等待冷却并检查账号／权限状态，不要反复退出登录。迟到的旧响应不能覆盖新登录；403、网络错误和仅含 401 字样的错误不触发恢复。这里只观察原生 HTTP 传输，不声称覆盖 WebSocket，也不代表真实端点验收通过。
 - **`input item ID does not belong to this connection`／`input item does not belong to this connection`：**这是已观测到的两种 Responses 历史引用拒绝文案，不证明 API key 无效。仅在 `github-copilot-preview` 上，插件对实际 HTTP 401 JSON 的有界副本严格识别这两种无错误码的精确文案，并要求外层／内层消息一致，返回带 `COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH` 的 `INVALID_REQUEST`；不撤销共享账号证明、不连带中止其他请求、不续期凭据，也不自动重发。未知、格式错误、过大或存在歧义的错误体继续沿用原生鉴权处理；历史报错记录不会被改写。
 - **托管 Responses 历史兼容处理：**通过 SDK 公开 `onPayload` 回调，只处理完整 assistant 消息、函数调用以及携带加密内容的 reasoning 条目的直接 item ID。保留 `call_id` 配对、加密字节、公开摘要、`phase`、嵌套 ID 和持久化历史。仅含引用、不完整或不支持的带 ID 条目明确报 `COPILOT_RESPONSES_REPLAY_UNSUPPORTED`，不暗中裁剪历史或切换模型。这是 Copilot 特定兼容策略，不是对通用 OpenAI 协议的改写：公开 OpenAI 类型要求部分回放条目具有 ID。原生 SDK／固定 Core 的合成测试只证明请求形态与隔离行为，不证明真实 Copilot 已接受旧会话。Core 自有 `github-copilot`、其他供应方和非 Responses 协议保持不变；安装、激活和旧会话端点验收需分别确认。
+- **用量与额度 TLS 验签失败（`COPILOT_USAGE_TLS` / `UNABLE_TO_VERIFY_LEAF_SIGNATURE`）：**当使用 Watt Toolkit（Steam++）等网络加速器或本地代理时，代理通常会向 Windows 系统证书库安装本地根证书以拦截并代理 GitHub HTTPS 流量。Node.js 默认仅信任内置 Mozilla CA 证书库，因此会出现证书链无法验证的错误。在 Node.js 22.13.0+ / 24+ 环境下，在用户环境变量中设置 `NODE_USE_SYSTEM_CA=1`（或通过 `[Environment]::SetEnvironmentVariable("NODE_USE_SYSTEM_CA", "1", "User")` 固化），或者在 Desktop 启动脚本中添加 `set "NODE_USE_SYSTEM_CA=1"`。该设置让 Node.js 信任 Windows 系统证书库，同时保持严格的 TLS 签名验证。`dsh-doctor.mjs --fix` 及 `dsh-windows-ops` 工具集均已固化该检测与自动修复逻辑。
 - **alpha.36 后仍有历史作用域拒绝：**原先的精确分类漏掉了不含 `ID` 的已观测文案。Alpha.37 只补齐分类与隔离，不进一步改写 payload，也不证明原被拒绝的历史已经可用。不加载 cron 的原生适配器测试已复现并行请求被连带中断，证明的是 Copilot 插件错误处理缺陷，而不是上游拒绝条目的原始原因。`Request aborted` 单独不能确定取消来源；`COPILOT_MODEL_SOURCE_AUTH_FAILED` 是目录发现前认证解析的泛化错误，缓存结果可重复返回而不代表再次认证。判断另一台机器为何正常，需对齐实际加载版本、请求来源和同一历史／模型，不能直接归因于降级插件或卸载 cron。不要暗中丢弃加密 reasoning、重发旧业务或重置凭据。
 - **Canonical 状态为 `not-configured`：**已登录时属于正常单托管路由模式；账号发现就绪与否另行检查，不需要创建原生 profile。
 - **删除对话框一直显示 “Deleting…”：**本次改动不证明该卡住问题已修复。不要重复删除；取得许可停止 Host 后检查持久化设置，按迁移指南判断是否仍需移除。
@@ -450,8 +451,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.49/dsh-github-copilot-0.4.0-alpha.49.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.49/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.50/dsh-github-copilot-0.4.0-alpha.50.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.50/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -459,7 +460,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.49.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.50.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

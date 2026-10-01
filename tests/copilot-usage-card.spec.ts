@@ -222,6 +222,20 @@ describe('Copilot account usage chip', () => {
     expect(text()).not.toContain('57.75')
   })
 
+  it('displays NODE_USE_SYSTEM_CA guidance on COPILOT_USAGE_TLS diagnostic', async () => {
+    const tlsView: CopilotUsageView = { state: 'unavailable', billing: 'unknown', budget: 'unknown', diagnostic: 'COPILOT_USAGE_TLS' }
+    const enCard = await mount({ remote: remote(tlsView), contextKey: 'a' })
+    await click(trigger())
+    expect(text()).toContain('NODE_USE_SYSTEM_CA=1')
+    expect(text()).toContain('Watt Toolkit')
+    await act(async () => { enCard.unmount() })
+
+    const zhCard = await mount({ remote: remote(tlsView), contextKey: 'b', locale: 'zh-CN' })
+    await click(trigger())
+    expect(zhCard.container.textContent).toContain('NODE_USE_SYSTEM_CA=1')
+    expect(zhCard.container.textContent).toContain('Watt Toolkit')
+  })
+
   it('rejects extra Remote fields and inconsistent balances before rendering them', async () => {
     for (const value of [view({ used: 999 }), { ...view(), credential: 'PRIVATE_ACCOUNT_SECRET' }]) {
       const card = await mount({ remote: remote(value), contextKey: 'a' })

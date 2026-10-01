@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { Context, Service } from '@deepseek-ai/cordis'
-import { act } from 'react'
+import { act, createElement } from 'react'
 import type { ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it, vi } from 'vitest'
@@ -17,15 +17,16 @@ async function fixture(footer: boolean, routingAvailable = true, bundle = true, 
   const root = new Context()
   const registrations = new Map<string, { name: string; key?: string; render: (props?: { view: string }) => ReactElement | null }>()
   let remoteDisposals = 0
-  const namespace = { ns: 'github-copilot-search-routing', revision: 4, value: { searchProvider: 'auto', defaultSearchProvider: 'none' }, schema: {}, applies: 'live', secrets: [] }
+  const namespace = { ns: 'github-copilot-search-routing', revision: 4, value: { searchProvider: 'auto', defaultSearchProvider: 'none' }, schema: {}, applies: 'live' as const, secrets: [], autoGenerate: false }
   const copilotNamespace = { ns: 'github-copilot', revision: 7, value: {
     enabled: true, probe: true, providers: ['github-copilot'], idleTimeoutMs: 300_000,
-  }, schema: {}, applies: 'live', secrets: [] }
-  const describeSettings = vi.fn(async () => ({ ok: true, value: { writable: true, hasDocument: true,
+  }, schema: {}, applies: 'live' as const, secrets: [], autoGenerate: false }
+  const describeSettings = vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true,
     namespaces: optionsAvailable ? [namespace, copilotNamespace] : [namespace] } }))
-  const mutateSettings = vi.fn(async (ns: string) => ({ ok: true, value: { ...namespace, ns, revision: ns === 'github-copilot' ? 8 : 5 } }))
+  const mutateSettings = vi.fn(async (ns: string) => ({ ok: true as const, value: { ...namespace, ns, revision: ns === 'github-copilot' ? 8 : 5, autoGenerate: false } }))
+  let settingsRemote!: SettingsRemote
   class SettingsRemote extends NamedService {
-    constructor(ctx: Context) { super(ctx, 'remote.settings') }
+    constructor(ctx: Context) { super(ctx, 'remote.settings'); settingsRemote = this }
     describe = describeSettings
     mutate = mutateSettings
   }
@@ -63,7 +64,7 @@ async function fixture(footer: boolean, routingAvailable = true, bundle = true, 
   if (routingAvailable) await addRouting()
   const client = root.plugin({ inject, apply })
   await client
-  return { root, client, registrations, addRouting, describeSettings, mutateSettings, remoteDisposals: () => remoteDisposals }
+  return { root, client, registrations, addRouting, describeSettings, mutateSettings, settings: settingsRemote, remoteDisposals: () => remoteDisposals }
 }
 
 const searchId = 'github-copilot-search-routing'
@@ -83,14 +84,13 @@ describe('search UI traced Remote dependency', () => {
       if (bundle) expect(f.registrations.has('github-copilot-preview')).toBe(true)
       // The captured faces retain their exact Cordis namespace grants.
       const element = registration.render({ view: 'page' })!
-      const card = bundle ? element.props.children[0] : element
+      const card = element
       expect(card.type).toBe(WebSearchRoutingCard)
       expect(card.props.settings.name).toBe('remote.settings')
       expect(card.props).not.toHaveProperty('copilot')
       expect(card.props.routing.name).toBe('remote.githubCopilotSearchRouting')
-      if (bundle) expect(element.props.children[1].type).toBe(HostedSearchSettingsCard)
       const next = registration.render({ view: 'page' })!
-      const nextCard = bundle ? next.props.children[0] : next
+      const nextCard = next
       expect(nextCard.props.settings).toBe(card.props.settings)
       expect(nextCard.props.routing).toBe(card.props.routing)
       if (bundle) expect(registration.render({ view: 'summary' })).toBeNull()
@@ -117,11 +117,11 @@ describe('search UI traced Remote dependency', () => {
       })
       await act(async () => { mounted.render(render()) })
       expect(select.value).toBe('github-copilot-hosted')
-      expect(f.describeSettings).toHaveBeenCalledTimes(bundle ? 2 : 1)
+      expect(f.describeSettings).toHaveBeenCalledTimes(1)
       let finish!: () => void
       f.mutateSettings.mockImplementationOnce(() => new Promise(resolve => {
-        finish = () => resolve({ ok: true, value: { ns: searchId, revision: 5,
-          value: { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'none' }, schema: {}, applies: 'live', secrets: [] } })
+        finish = () => resolve({ ok: true as const, value: { ns: searchId, revision: 5, autoGenerate: false,
+          value: { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'none' }, schema: {}, applies: 'live' as const, secrets: [] } })
       }))
       const save = container.querySelector<HTMLButtonElement>('[data-dsh-web-search-save]')!
       await act(async () => { save.click() })
@@ -131,13 +131,12 @@ describe('search UI traced Remote dependency', () => {
       await act(async () => { finish() })
       expect(container.textContent).toContain('Saved.')
       expect(select.value).toBe('github-copilot-hosted')
-      expect(f.describeSettings).toHaveBeenCalledTimes(bundle ? 2 : 1)
+      expect(f.describeSettings).toHaveBeenCalledTimes(1)
       expect(f.mutateSettings).toHaveBeenCalledExactlyOnceWith(searchId, [
         { op: 'set', path: ['searchProvider'], value: 'github-copilot-hosted' },
         { op: 'set', path: ['defaultSearchProvider'], value: 'none' },
       ], 4)
-      if (bundle) expect(container.querySelector<HTMLInputElement>('[data-dsh-copilot-search-option="enabled"]')?.disabled).toBe(true)
-      else expect(container.querySelector('input')).toBeNull()
+      expect(container.querySelector('input')).toBeNull()
     } finally {
       await act(async () => { mounted.unmount(); await f.root.fiber.dispose() })
       container.remove()
@@ -153,7 +152,7 @@ describe('search UI traced Remote dependency', () => {
       const routing = f.addRouting()
       await routing
       await vi.waitFor(() => expect(f.registrations.has(searchId)).toBe(true))
-      expect(f.registrations.get(searchId)!.render({ view: 'page' })!.props.children[0].props.routing.name).toBe('remote.githubCopilotSearchRouting')
+      expect(f.registrations.get(searchId)!.render({ view: 'page' })!.props.routing.name).toBe('remote.githubCopilotSearchRouting')
       await routing.dispose()
       await vi.waitFor(() => expect(f.registrations.has(searchId)).toBe(false))
       expect(f.registrations.has('github-copilot-preview')).toBe(true)
@@ -168,7 +167,7 @@ describe('search UI traced Remote dependency', () => {
     const mounted = createRoot(container)
     try {
       await vi.waitFor(() => expect(f.registrations.has(searchId)).toBe(true))
-      await act(async () => { mounted.render(f.registrations.get(searchId)!.render({ view: 'page' })) })
+      await act(async () => { mounted.render(createElement(HostedSearchSettingsCard, { settings: f.settings })) })
       const probe = container.querySelector<HTMLInputElement>('[data-dsh-copilot-search-option="probe"]')!
       expect(probe.checked).toBe(true)
       expect(container.querySelector<HTMLInputElement>('[data-dsh-copilot-search-option="providers"]')!.value).toBe('github-copilot')
@@ -202,7 +201,7 @@ describe('search UI traced Remote dependency', () => {
     const mounted = createRoot(container)
     try {
       await vi.waitFor(() => expect(f.registrations.has(searchId)).toBe(true))
-      await act(async () => { mounted.render(f.registrations.get(searchId)!.render({ view: 'page' })) })
+      await act(async () => { mounted.render(createElement(HostedSearchSettingsCard, { settings: f.settings })) })
       const probe = container.querySelector<HTMLInputElement>('[data-dsh-copilot-search-option="probe"]')!
       await act(async () => { probe.click() })
       await act(async () => { container.querySelector<HTMLButtonElement>('[data-dsh-copilot-search-options-save]')!.click() })
