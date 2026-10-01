@@ -253,10 +253,9 @@ describe('tsdown client artifact', () => {
       expect(fixture.registrations.has('settings.models.footer')).toBe(true)
       expect(fixture.registrations.has('settings.models.footer:github-copilot-search-routing')).toBe(false)
       const element = fixture.registrations.get('plugins.bundle.config')!({ view: 'page' })
-      expect(element.props.children[0].type).toBe(fixture.client.exports.WebSearchRoutingCard)
-      expect(element.props.children[1].type).toBe(fixture.client.exports.HostedSearchSettingsCard)
+      expect(element.type).toBe(fixture.client.exports.WebSearchRoutingCard)
       expect(fixture.registrations.get('plugins.bundle.config')!({ view: 'summary' })).toBeNull()
-      expect(element.props.children[0].props.settings).toBe(fixture.ctx.remote.settings)
+      expect(element.props.settings).toBe(fixture.ctx.remote.settings)
     } finally { await fixture.dispose() }
   })
 

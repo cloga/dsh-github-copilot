@@ -205,7 +205,13 @@ describe('independent Web search Settings card', () => {
       ? { supported: false, providers: [] }
       : { supported: true, providers: [{ id: 'injected', secret: 'PRIVATE_CATALOG_ERROR' }] }) as never)
     const card = await ready(remote)
-    expect(text(card.render())).toContain('Search provider list is unavailable')
+    if (kind === 'unsupported') {
+      expect(text(card.render())).toContain('Search service is not ready')
+      expect(descendants(card.render()).some(node => node.props['data-dsh-web-search-restart-banner'])).toBe(true)
+    } else {
+      expect(text(card.render())).toContain('Search provider list is unavailable')
+      expect(descendants(card.render()).some(node => node.props['data-dsh-web-search-restart-banner'])).toBe(false)
+    }
     expect(text(card.render())).not.toContain('PRIVATE_')
     expect(field(card.render(), 'web-search-save').props.disabled).toBe(true)
     expect(descendants(card.render()).some(node => node.type === 'option' && node.props.value === 'exa')).toBe(false)

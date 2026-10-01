@@ -970,9 +970,7 @@ function registerSearchUi(ctx: ClientContext): () => void {
       try {
         dispose = ctx.slots.register({
           name: 'plugins.bundle.config', key: 'dsh-github-copilot',
-        }, ({ view }) => view === 'page'
-          ? createElement('div', null, render(), createElement(HostedSearchSettingsCard, { settings }))
-          : null)
+        }, ({ view }) => view === 'page' ? render() : null)
       } catch {
         ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_BUNDLE_UNAVAILABLE')
         return () => {}
