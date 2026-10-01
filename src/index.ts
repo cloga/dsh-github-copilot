@@ -7,7 +7,6 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type z from '@deepseek-ai/schemastery'
 import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import GitHubCopilotDualModel from './dual-model-host.ts'
 import SearchRoutingController from './search-routing-host.ts'
@@ -20,15 +19,14 @@ import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
-import * as dshSettings from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, candidatesForRoute, sameCandidates, SearchPlan } from './plan.ts'
 import type { SearchPlanCandidate } from './plan.ts'
 import { probeCandidate } from './probe.ts'
 import { currentChatRoute, currentSearchInitiator, currentSearchSelection } from './current-provider.ts'
 import type { CurrentChatRoute } from './current-provider.ts'
-import { Config } from './config.ts'
-import type { InlineConfig } from './config.ts'
+import { readInlineConfig } from './config.ts'
+import type { InlineConfig, LiveInlineConfig } from './config.ts'
 import {
   NO_DEFAULT_SEARCH_PROVIDER,
   WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE,
@@ -124,49 +122,25 @@ interface SettingsSectionHooks<T> {
   onChange(): void
 }
 
-interface LegacySettingsModule {
-  installSettingsSection?<T>(
-    owner: Context,
-    namespace: SettingsNamespace,
-    schema: z<T>,
-    entry: T,
-    hooks: SettingsSectionHooks<T>,
-  ): void
-}
-
-function installSettingsNamespace<T>(
+function observeSettingsNamespace(
   ctx: Context,
   namespace: SettingsNamespace,
-  schema: z<T>,
-  config: T,
-  hooks: SettingsSectionHooks<T>,
+  config: LiveInlineConfig,
+  hooks: SettingsSectionHooks<InlineConfig>,
 ): void {
-  const legacyInstaller = (dshSettings as LegacySettingsModule).installSettingsSection
-  if (legacyInstaller !== undefined) {
-    legacyInstaller(ctx, namespace, schema, config, hooks)
-    return
-  }
-  ctx.inject(['settings'], () => {
+  ctx.inject(['settings'], scope => {
     hooks.setSource(() => {
-      const value = readSettingsNamespace(ctx, namespace)
-      if (typeof value !== 'object' || value === null) return config
-      const base = typeof config === 'object' && config !== null ? (config as Record<string, unknown>) : {}
-      const merged = { ...base, ...(value as Record<string, unknown>) }
-      if (typeof schema === 'function') {
-        try {
-          return schema(merged as unknown as T)
-        } catch {
-          return merged as unknown as T
-        }
-      }
-      return merged as unknown as T
+      const value = readSettingsNamespace(scope, namespace)
+      const base = readInlineConfig(config)
+      if (typeof value !== 'object' || value === null) return base
+      return { ...base, ...value }
     })
-    const dispose = onSettingsNamespaceUpdated(ctx, changed => {
+    const dispose = onSettingsNamespaceUpdated(scope, changed => {
       if (changed === namespace || (namespace === GITHUB_COPILOT_SETTINGS_NAMESPACE && changed === WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE)) {
         hooks.onChange()
       }
     })
-    ctx.effect(() => dispose)
+    scope.effect(() => dispose)
   })
 }
 
@@ -178,7 +152,7 @@ function installSettingsNamespace<T>(
  *   registrations; both are effect-scoped and unregister on dispose.
  * @param config - the composition entry config, used as the settings base layer.
  */
-export function apply(ctx: Context, config: InlineConfig): void {
+export function apply(ctx: Context, config: LiveInlineConfig): void {
   // Register before dependency-gated activation so every Agent-scoped model
   // selection listener remains downstream. The filter must observe the
   // provider/model variables that model selection adds while unwinding.
@@ -211,9 +185,9 @@ function ensureAuthorization(ctx: Context): void {
 }
 
 /** Activate the integration only after the complete DSH service contract is available. */
-function activate(ctx: Context, config: InlineConfig): PromptRouteText {
+function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
   assertDshCompatibility(ctx)
-  let current: () => InlineConfig = () => config
+  let current: () => InlineConfig = () => readInlineConfig(config)
   const readRouting = (): WebSearchRoutingConfig => {
     const rawCopilot = readSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE) as Record<string, unknown> | undefined
     const rawRouting = rawCopilot?.searchRouting as Partial<WebSearchRoutingConfig> | undefined
@@ -761,7 +735,7 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     },
   })
 
-  installSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, Config, config, {
+  observeSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, config, {
     setSource: (source) => {
       current = source
     },
@@ -770,8 +744,8 @@ function activate(ctx: Context, config: InlineConfig): PromptRouteText {
     onChange: invalidatePlans,
   })
 
-  // The temporary GPT-6 route writes its ownership backup into this plugin's
-  // settings namespace, so reconcile only after that section is installed.
+  // SettingsForms projects the Loader entry's volatile Config fields; it does
+  // not expose a manual namespace registration API.
   void ensureGitHubCopilotProviderProfile(ctx).catch((error: unknown) => {
     ctx.logger.error('github-copilot: failed to repair the GitHub Copilot provider route during startup')
     ctx.logger.error(error)

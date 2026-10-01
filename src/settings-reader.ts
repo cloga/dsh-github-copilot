@@ -1,5 +1,18 @@
 import type { Context } from '@deepseek-ai/cordis'
 
+export interface LiveSetting<T> {
+  get(): T
+}
+
+function isLiveSetting<T>(value: T | LiveSetting<T>): value is LiveSetting<T> {
+  return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'get') === 'function'
+}
+
+/** Capture a native volatile field for one operation, or retain a plain fixture value. */
+export function readConfigValue<T>(value: T | LiveSetting<T>): T {
+  return isLiveSetting(value) ? value.get() : value
+}
+
 interface SettingsFormsView {
   describe(options: { redactSecrets: true }): readonly { ns: string; value: unknown }[]
 }

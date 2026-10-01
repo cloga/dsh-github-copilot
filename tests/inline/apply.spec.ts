@@ -23,8 +23,6 @@ import type { WebFetchProvider, WebSearchProvider } from '@deepseek-ai/dsh-web'
 import type { CaptureSearchProvider } from '../../src/routed-web.ts'
 import { GITHUB_COPILOT_PREVIEW_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../../src/copilot-identity.ts'
 
-vi.mock('@deepseek-ai/dsh-settings', () => ({ installSettingsSection: undefined }))
-
 interface FakeRuntime {
   ctx: Context
   listener: ((request: GenerateOptions, next: () => unknown) => unknown) | undefined
@@ -2167,6 +2165,26 @@ describe('github-copilot apply', () => {
     apply(runtime.ctx, config)
     expect(runtime.listener).toBeTypeOf('function')
     expect(runtime.sectionNames).toContain('tool:github-copilot')
+  })
+
+  it('consumes native live routing snapshots after activation without remounting or probing', () => {
+    const runtime = buildRuntime()
+    let routing = { searchProvider: 'none', defaultSearchProvider: 'none' }
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, searchRouting: { get: () => routing } })
+    const delegated = Symbol('delegated')
+    const next = vi.fn(() => delegated)
+    expect(runtime.listener?.(request(), next)).toBe(delegated)
+    routing = { searchProvider: 'auto', defaultSearchProvider: 'none' }
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
+    expect(runtime.listener?.(request(), next)).not.toBe(delegated)
+    routing = { searchProvider: 'none', defaultSearchProvider: 'none' }
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
+    expect(runtime.listener?.(request(), next)).toBe(delegated)
+    expect(next).toHaveBeenCalledTimes(2)
+    expect(fetchMock).not.toHaveBeenCalled()
+    runtime.dispose()
   })
 
   it('registers the github-copilot-hosted traditional search provider without a fetch provider', () => {
