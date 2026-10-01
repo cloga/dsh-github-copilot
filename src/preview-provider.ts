@@ -246,6 +246,7 @@ export function createAccountProvider(
             yield event
           }
         } finally {
+          if (lease.signal.aborted || options.signal?.aborted) retry?.observe(undefined, 0)
           retry?.finish()
           lease.release()
           if (unauthorized && !guard.signal.aborted && !options.signal?.aborted) {

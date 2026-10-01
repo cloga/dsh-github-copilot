@@ -120,17 +120,19 @@ describe('Copilot Responses wire replay normalization', () => {
     it('refuses changed substantive user/tool input and unmatched references', () => {
       const cache = new ResponsesRetryReplay()
       const signal = new AbortController().signal
-      const first = attempt(cache, context, signal)
-      const payload = first.normalize(original)
-      first.observe(JSON.stringify(payload), 408)
-      first.finish()
       for (const changed of [
         { ...referenced, input: [{ role: 'user', content: 'changed' }, ...referenced.input.slice(1)] },
         { ...referenced, input: [...referenced.input.slice(0, -1), { type: 'function_call_output', call_id: 'call_prior', output: 'changed' }] },
         { ...referenced, input: [{ type: 'item_reference', id: 'other' }, ...referenced.input.slice(1)] },
         { ...referenced, model: 'other-model' },
         { ...referenced, previous_response_id: 'unknown' },
-      ]) reject(cache, changed, context, signal)
+      ]) {
+        const first = attempt(cache, context, signal)
+        const payload = first.normalize(original)
+        first.observe(JSON.stringify(payload), 408)
+        first.finish()
+        reject(cache, changed, context, signal)
+      }
     })
     it('refuses a new step, session, signal, cold resume, stale entry and concurrent requests', () => {
       const clock = vi.spyOn(Date, 'now')
