@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.55 (prepared)
+
+- Use a quota-only, reusable TLS-verified dispatcher with Node default and system CA roots for the GitHub Copilot usage endpoint (#209). This removes reliance on launcher inheritance of `NODE_USE_SYSTEM_CA` for quota requests, without changing Core, sign-in, model/search transport or global trust.
+- Show an explicit unavailable diagnostic if system trust cannot be read or the dispatcher cannot be created; preserve injected fetch isolation and close the dispatcher on disposal.
+
 ## 0.4.0-alpha.54 (prepared)
 
 - Stop writing optional Auto attribution events that official DSH 0.2.0-rc.2 cannot mark ignorable, preventing subsequent Session history reads from failing (#204). Auto routing, durable virtual selection, and Core's actual model provenance are unchanged; new turns omit the plugin-specific attribution footer.
