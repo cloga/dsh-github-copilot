@@ -2087,4 +2087,23 @@ describe('managed Copilot request budgets and compaction policy', () => {
       expect(wire).toHaveBeenCalledTimes(1)
     } finally { release() }
   })
+  it('rejects request truthfully at dispatch time when final system framing pushes near-limit messages over hard budget', async () => {
+    const wire = vi.fn(async () => response())
+    stubFetch(async input => String(input).endsWith('/models') ? catalogResponse([limited(32000)]) : wire(), true)
+    const harness = await runtime()
+    const nearLimitMessage = createUserMessage({ content: [{ type: 'text', text: 'x'.repeat(27500 * 4) }], source: { kind: 'user' } })
+    const result = await generate(harness.ctx, {
+      messages: [nearLimitMessage],
+      maxTokens: 8192,
+      tools: [{ name: 'large_tool', description: 'desc '.repeat(1000), parameters: { type: 'object', properties: {} } }],
+    }, false)
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: {
+        code: 'CONTEXT_WINDOW_EXCEEDED',
+        message: expect.stringContaining('COPILOT_CONTEXT_BUDGET_EXCEEDED'),
+      },
+    })
+    expect(wire).not.toHaveBeenCalled()
+  })
 })

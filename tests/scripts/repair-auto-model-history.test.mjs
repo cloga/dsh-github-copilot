@@ -37,6 +37,20 @@ test('preserves other events and concatenated zstd frames without changing seque
   assert.deepEqual(decode(repairAutoModelHistory(input).output), rows([{ ...decision, ignorable: true }, events[1]]))
 })
 
+test('preserves the complete alpha.53 input-fit diagnostics and refuses partial or invalid fields', () => {
+  const event = { ...decision, data: { ...decision.data,
+    fittingCandidateCount: 0, estimatedInputTokens: 128_001, selectedInputBudget: 128_000,
+    inputFitDiagnostic: 'compaction-eligible',
+  } }
+  assert.deepEqual(decode(repairAutoModelHistory(compress(rows([event]))).output), rows([{ ...event, ignorable: true }]))
+  for (const data of [
+    { ...decision.data, fittingCandidateCount: 1 },
+    { ...event.data, fittingCandidateCount: 3 },
+    { ...event.data, inputFitDiagnostic: 'unknown' },
+    { ...event.data, selectedInputBudget: -1 },
+  ]) assert.throws(() => repairAutoModelHistory(compress(rows([{ ...decision, data }]))))
+})
+
 test('refuses unrelated unknown events, unexpected decision shapes, invalid sequences and torn tails', () => {
   for (const event of [
     { ...decision, type: 'unknown/required' },

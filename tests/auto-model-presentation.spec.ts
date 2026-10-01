@@ -51,6 +51,23 @@ describe('Auto model presentation', () => {
     expect(autoModelAttributionDefinition.buildLocationData({ state: stateWithPreference, matches: [{ event: preferred }] }, 'turn', null))
       .toMatchObject({ value: { preference: 'intelligence' } })
     expect(autoModelAttributionDefinition.match(decision({ preference: 'unsupported' }))).toBeNull()
+
+    const withDiagnostics = decision({
+      fittingCandidateCount: 2,
+      estimatedInputTokens: 50_000,
+      selectedInputBudget: 100_000,
+      inputFitDiagnostic: 'fitting-candidate-selected',
+    })
+    const stateDiag = autoModelAttributionDefinition.start({ matches: [] }, { event: withDiagnostics })
+    expect(autoModelAttributionDefinition.buildLocationData({ state: stateDiag, matches: [{ event: withDiagnostics }] }, 'turn', null))
+      .toMatchObject({
+        value: {
+          fittingCandidateCount: 2,
+          estimatedInputTokens: 50_000,
+          selectedInputBudget: 100_000,
+          inputFitDiagnostic: 'fitting-candidate-selected',
+        },
+      })
   })
 
   it('places Auto attribution after the settled clock and reveals it only on hover', () => {

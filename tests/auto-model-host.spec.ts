@@ -268,4 +268,70 @@ describe('Auto model Host integration', () => {
       await ctx.fiber.dispose()
     }
   })
+
+  it('keeps input-fit routing without persisting an optional decision event', async () => {
+    const ctx = new Context()
+    const append = vi.fn()
+    const agent = { ctx, session: { id: 'test-session-123', append, requestHeader: () => undefined } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const loadModels = vi.fn(async () => [
+      model('fixture-fast', 64_000, 'low'),
+      model('fixture-strong', 256_000, 'high'),
+    ])
+    const dispose = installAutoModelRouting(ctx, { loadModels })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+    const signal = new AbortController().signal
+    try {
+      const messages = [message('Explain this symbol.')]
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      const resolved = await ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: AUTO }))
+
+      expect(resolved).toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
+      expect(loadModels).toHaveBeenCalledOnce()
+      expect(append).not.toHaveBeenCalled()
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('preserves concrete child teammate route without relabeling as Auto', async () => {
+    const ctx = new Context()
+    const append = vi.fn()
+    // Child agent spawned with a concrete model snapshot from parent
+    const childAgent = {
+      ctx,
+      session: { id: 'child-session-456', append, requestHeader: () => ({ config: { provider: PREVIEW, model: 'fixture-concrete' } }) },
+    } as unknown as Agent
+    const scope = scopeTarget(childAgent, childAgent)
+    const promptScope = scopeTarget(new SystemPrompt(ctx, {}), childAgent)
+    const loadModels = vi.fn(async () => [model('fixture-concrete', 128_000, 'medium')])
+    const dispose = installAutoModelRouting(ctx, { loadModels })
+    ctx.emit(scope, 'agent/created', { agent: childAgent, source: 'startup' })
+    const signal = new AbortController().signal
+    try {
+      const messages = [message('Perform teammate work.')]
+      await ctx.waterfall(scope, 'agent/pre-step', { agent: childAgent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+
+      // Child agent request with its concrete model
+      const requested = await ctx.waterfall(scope, 'agent/request', { agent: childAgent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: 'fixture-concrete' }))
+      expect(requested.model).toBe('fixture-concrete')
+
+      // System prompt variables must not be rewritten to Auto
+      const assembly = { sections: [], contexts: [], tools: [], variables: { provider: PREVIEW, model: 'fixture-concrete' } }
+      const assembled = await ctx.waterfall(promptScope, 'system-prompt/assemble', assembly, {}, async () => assembly)
+      expect(assembled.variables.model).toBe('fixture-concrete')
+
+      // No auto-model-decision event emitted for concrete model
+      const decisions = append.mock.calls.filter(([type]) => type === 'github-copilot/auto-model-decision')
+      expect(decisions).toHaveLength(0)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
 })

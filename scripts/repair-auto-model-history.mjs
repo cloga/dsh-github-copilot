@@ -10,6 +10,7 @@ const maxBytes = 128 * 1024 * 1024
 const hash = bytes => createHash('sha256').update(bytes).digest('hex')
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const count = value => Number.isSafeInteger(value) && value >= 0
+const budgetFields = ['fittingCandidateCount', 'estimatedInputTokens', 'selectedInputBudget', 'inputFitDiagnostic']
 
 function assertDecision(event) {
   const data = event.data
@@ -17,7 +18,7 @@ function assertDecision(event) {
     || !count(event.seq) || !count(event.time)
     || event.ignorable !== undefined && event.ignorable !== true
     || !object(data) || !Object.keys(data).every(key =>
-      ['turn', 'step', 'provider', 'model', 'preference', 'taskClass', 'reason', 'candidateCount'].includes(key))
+      ['turn', 'step', 'provider', 'model', 'preference', 'taskClass', 'reason', 'candidateCount', ...budgetFields].includes(key))
     || !count(data.turn) || !count(data.step)
     || data.provider !== 'github-copilot-preview'
     || typeof data.model !== 'string' || data.model.trim() === ''
@@ -26,6 +27,13 @@ function assertDecision(event) {
     || !['short-text-turn', 'standard-turn', 'large-structured-turn', 'image-capability'].includes(data.reason)
     || !count(data.candidateCount) || data.candidateCount < 1) {
     throw new Error('AUTO_HISTORY_UNRECOGNIZED_DECISION')
+  }
+  if (budgetFields.some(key => Object.hasOwn(data, key))
+    && (!count(data.fittingCandidateCount) || data.fittingCandidateCount > data.candidateCount
+      || !count(data.estimatedInputTokens) || !count(data.selectedInputBudget) || data.selectedInputBudget < 1
+      || !['fitting-candidate-selected', 'compaction-eligible', 'compaction-unavailable',
+        'attempted-but-still-oversized', 'fixed-content-cannot-fit'].includes(data.inputFitDiagnostic))) {
+    throw new Error('AUTO_HISTORY_UNRECOGNIZED_BUDGET')
   }
 }
 

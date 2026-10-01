@@ -1,6 +1,6 @@
 # GitHub Copilot Auto model routing MVP
 
-**Tracking:** [#174](https://github.com/cloga/dsh-github-copilot/issues/174), [#192](https://github.com/cloga/dsh-github-copilot/issues/192)
+**Tracking:** [#174](https://github.com/cloga/dsh-github-copilot/issues/174), [#192](https://github.com/cloga/dsh-github-copilot/issues/192), [#199](https://github.com/cloga/dsh-github-copilot/issues/199)
 
 **Target:** official DSH and Windows Desktop `0.2.0-rc.2`
 
@@ -22,35 +22,50 @@ Selecting Auto uses normal Core selection behavior, including saving it as the f
 
 A Goal does not become one indefinitely frozen Auto decision. Each automatic continuation that Core opens as a new turn is classified independently. Tool steps inside that turn do not trigger another decision.
 
-## MVP routing policy
+## Routing policy and input fit
 
 The account `/models` catalog is authoritative for entitlement and hard capabilities: protocol, context and output limits, image input, tool support, reasoning efforts, and server policy. Unknown or incomplete capability metadata fails closed.
 
-The catalog does not provide trustworthy quality, latency, price, or global-health rankings. The MVP therefore does **not** infer model quality from a marketing name, model-ID prefix, provider order, or token price. It does not claim to reproduce GitHub's private Auto algorithm.
+The catalog does not provide trustworthy quality, latency, price, or global-health rankings. The routing policy therefore does **not** infer model quality from a marketing name, model-ID prefix, provider order, or token price. It does not claim to reproduce GitHub's private Auto algorithm.
 
-The initial deterministic policy classifies only the latest user turn:
+### Hard input fit check before preference
 
-| Class | Structural signal | Selection |
-| --- | --- | --- |
-| Fast | short text turn with little structured content | lowest eligible advertised capacity |
-| Balanced | ordinary text turn or image turn | median eligible advertised capacity |
-| Strong | large or highly structured text turn | highest eligible advertised capacity |
+Before applying soft preferences, routing checks whether each candidate can accommodate the estimated input tokens of the current turn:
 
-Capacity ordering is based on account-advertised reasoning range, context window, and output capacity, with model ID used only as a deterministic tie-breaker. Capacity is not presented as a quality, latency, or cost fact. The policy is intentionally replaceable by reviewed benchmark evidence later.
+1. **Input estimate:** `estimateTurnInputTokens` measures current conversation messages using `@earendil-works/pi-ai/utils/estimate` (`estimateMessageTokens` and `estimateContextTokens`).
+2. **Hard candidate budget:** For each candidate model, `calculateRequestBudget` calculates `hardInputLimit` given the model context window, output reservation, and safety allowance.
+3. **Headroom filtering:** Candidates with insufficient headroom (`estimatedInputTokens > hardInputLimit`) are filtered out. If one or more fitting candidates exist, soft preference selects among the `fitting` subset.
+4. **No-fit and compaction recovery:** If no candidate can fit the current messages:
+   - Auto selects the candidate with the **largest input capacity** to give Core compaction maximum headroom.
+   - It records a structured diagnostic in the decision event:
+     - `fixed-content-cannot-fit`: the latest user turn alone exceeds maximum capacity and cannot be compacted away.
+     - `compaction-unavailable`: compaction is disabled or has zero retries configured.
+     - `attempted-but-still-oversized`: a compaction summary already exists in history and the turn remains oversized.
+     - `compaction-eligible`: prior history is compressible and downstream dispatch will trigger compaction pressure.
+5. **Final framing limitation:** At routing time, only messages are estimated; downstream `system-prompt/assemble` injects system prompt instructions and tool schemas. If final framing pushes a near-limit request over the budget, the native provider guard (`inspectRequest`) truthfully rejects the request with `COPILOT_CONTEXT_BUDGET_EXCEEDED` without bypassing safety boundaries.
 
-The MVP makes no additional model call to classify a turn. It does not retry another model after provider output begins, replay tool side effects, or implement wire-time fallback.
+### Soft capacity preferences across candidate bands
 
-### Soft capacity preferences
+All three virtual preferences use the *same* eligible account models. Account entitlement, verified input capability (including image input), and input headroom are hard filters; preference changes where the routing policy lands in the deterministic, advertised-capacity order across candidate bands:
 
-All three virtual preferences use the *same* eligible account models. Account entitlement and verified input capability (including image input) are hard filters; preference only changes where the routing policy lands in the deterministic, advertised-capacity order. It cannot turn an ineligible model into a candidate. The initial measurable matrix, with `low`, `middle = floor((n - 1) / 2)`, and `high = n - 1` indices for `n` eligible models, is:
+- **Intelligence:** Biased toward higher advertised capacity across the upper candidate band.
+- **Efficiency:** Biased toward lower advertised capacity across the lower candidate band, though demanding tasks allow higher capacity.
+- **Balance:** Central candidate band.
+
+To avoid monopolizing a single top candidate (such as Grok 4.7) across all turns and Sessions, band selection uses an in-memory deterministic seed derived from `${sessionId}:${turn}` (or turn content when Session context is absent). This guarantees:
+
+- Selection is **100% frozen** across all steps and retries within the same turn.
+- Unrelated Sessions or turns sample across the candidate band rather than concentrating on one model.
+- No sensitive prompt text or seed hashes are persisted or sent over the network.
+- When only a single candidate is eligible or fitting, it is returned unchanged.
 
 | Latest-turn class | Efficiency | Balance (`auto`) | Intelligence |
 | --- | --- | --- | --- |
-| Fast | low | low | middle |
-| Balanced | low | middle | high |
-| Strong | min(high, max(1, middle)) | high | high |
+| Fast | low band (index 0) | low band (index 0) | middle band |
+| Balanced | lower band | center band | upper band |
+| Strong | center band | upper band | upper band |
 
-For a single candidate every cell selects it; for two candidates a strong turn still selects the higher-capacity one even with Efficiency. Intelligence can use a lighter model for a short turn, and Efficiency can use a higher-capacity model for a demanding turn. These are **capacity preferences**, not measured quality, speed, price or inference-cost preferences. They cannot promise that Intelligence is smarter or Efficiency faster or cheaper. The actual request-budget and compaction checks still apply after selection; no cost or speed metadata is fabricated.
+These are **capacity preferences**, not measured quality, speed, price, or inference-cost preferences. They cannot promise that Intelligence is smarter or Efficiency faster or cheaper. The actual request-budget and compaction checks still apply after selection; no cost or speed metadata is fabricated.
 
 The exact virtual preference stays in the Session's pending selection across turns, while each real request header and transport record the chosen account model. Switching to a real model ends automatic routing for subsequent turns. New turns no longer write a separate decision event; compatible historical events without a preference field remain Balance for display.
 
@@ -89,13 +104,13 @@ Chat Auto does not own or alter the independent `github-copilot-hosted` search p
 
 ## Attribution and explanation
 
-**Compatibility fix (alpha.53):** new turns omit the plugin-specific Auto footer. Official `0.2.0-rc.2` cannot set an `ignorable` envelope through public `Session.append()`, and its reader rejects unknown required plugin events. The plugin therefore stops writing `github-copilot/auto-model-decision` rather than patching Core, mutating event objects, or borrowing an unrelated event type. Core's actual model/usage provenance and Auto routing remain unchanged. Restore new attribution only when a supported public informational-event or equivalent storage seam has proven cold-read compatibility.
+**Compatibility fix (alpha.54):** new turns omit the plugin-specific Auto footer. Official `0.2.0-rc.2` cannot set an `ignorable` envelope through public `Session.append()`, and its reader rejects unknown required plugin events. The plugin therefore stops writing `github-copilot/auto-model-decision` rather than patching Core, mutating event objects, or borrowing an unrelated event type. Core's actual model/usage provenance and Auto routing remain unchanged. Restore new attribution only when a supported public informational-event or equivalent storage seam has proven cold-read compatibility.
 
 The following presentation remains available for compatible historical decision events; absence of such an event produces no plugin attribution or guessed explanation.
 
 Core already places route and usage details at the end of a completed turn. The MVP follows that interaction pattern rather than adding provider/model tags above the answer.
 
-For a completed Auto response, the attribution sits on the same footer row as Core's usage and clock, after the end time. It stays hidden until the message is hovered or focused, matching that chrome. It is not a separate line above the answer.
+For a completed Auto response, the attribution sits on the same footer row as Core's usage and clock, after the end time. It stays hidden until the message is hovered or focused, matching that chrome. It is not a separate line above the answer. The turn-tail display is:
 
 ```text
 [actions] [usage] [time]  Auto · <actual model>  ?
@@ -107,7 +122,8 @@ The `?` opens a compact explanation using normalized facts such as:
 - standard turn;
 - large structured turn;
 - image capability required;
-- number of eligible account models.
+- number of eligible account models;
+- number of models that can fit turn context (when restricted by input headroom).
 
 Earlier releases recorded a credential-free `github-copilot/auto-model-decision` Session event before Core persisted the real request header. Historical attribution is derived from that durable decision, never from the current picker or a later catalog snapshot. Raw prompts, credentials, provider response bodies, and guessed prices are never disclosed.
 
@@ -131,16 +147,16 @@ Copy mode creates `original.session.v4.jsonl.zstd` (byte-exact backup), `session
 
 **Applying a copy requires separate operator approval:** first stop all writers for that Session, verify the fixed plugin will load before resuming, and recheck the live log against `originalSha256`. If it changed, regenerate and validate a fresh copy. Preserve the backup, replace only the exact affected log, verify its hash against `repairedSha256`, then use the normal official history reader to reopen it. Do not replay business requests as a test. If recovery fails, stop writers before restoring the exact original backup. Neither this utility nor the plugin installs itself, replaces a live file, restarts Desktop, clears credentials, or automatically migrates histories.
 
-## Subagents
+## Subagents and Agent Teams
 
 General native subagent Auto inheritance is **not** in the base MVP.
 
-Core currently creates a native child from the parent's effective real request configuration. Continuable descriptors retain the merged provider/model/effort but do not preserve enough public evidence to distinguish inherited Auto intent from an explicit child override that happens to equal the same real model. The plugin must not relabel that concrete child route as Auto or write a fabricated child selection.
+In official DSH 0.2.0-rc.2, `TeamRoster.spawn` calls `ctx.subagents.startContinuable` without `request.agentOptions`. Core's `resolveChildAgentOptions` snapshots the parent's resolved concrete route into the teammate's options and durable descriptor. Public Core evidence cannot distinguish an inherited concrete snapshot from an explicit concrete override. The plugin must not relabel that concrete child route as Auto or write a fabricated child selection.
 
-The MVP therefore preserves native behavior:
+The implementation preserves native behavior:
 
 - a child with an explicit model override uses that model;
-- a child without an override inherits Core's resolved concrete route;
+- a child or Team teammate without an override inherits Core's resolved concrete route;
 - the child UI shows the real model truthfully;
 - no plugin code claims independent child Auto classification.
 
@@ -164,7 +180,7 @@ For an otherwise unselected Session that inherits Auto from the global default, 
 
 ## Acceptance criteria
 
-The MVP is accepted only when unchanged official Core contract tests prove:
+The implementation is accepted only when unchanged official Core contract tests prove:
 
 1. Auto appears only in the managed Copilot provider and explicit real/provider selections remain untouched.
 2. Core's downstream model-selection result is visible to the prepended plugin listener, and the committed request header contains the resolved real model.
@@ -175,7 +191,9 @@ The MVP is accepted only when unchanged official Core contract tests prove:
 7. choosing a smaller-context model can trigger the existing local pressure signal, Core compaction, and same-model retry without sending the oversized request.
 8. hosted search remains independent and never receives the virtual Auto ID as a transport model.
 9. no new unknown required attribution event is written; compatible historical attribution is retained, while missing decision events produce no guessed footer.
-10. no Core file, dependency artifact, private registry, shared model catalog, or live history is modified.
+10. input fit check filters out candidates with insufficient hard input headroom before soft preference.
+11. soft preferences distribute across upper/lower/center candidate bands without monopolizing one top model.
+12. no Core file, dependency artifact, private registry, shared model catalog, or live history is modified.
 
 Synthetic tests prove composition and contracts only. They do not prove a live account's model availability, provider quality, pricing, OAuth readiness, Desktop activation, or real transport success.
 
@@ -185,7 +203,7 @@ Synthetic tests prove composition and contracts only. They do not prove a live a
 - GitHub health signals or GitHub's private Auto service;
 - user-managed exclusions of individual account models and custom picker grouping;
 - cross-provider routing;
-- native subagent Auto inheritance;
+- native subagent and Team Auto inheritance;
 - model fallback after a provider failure;
 - side-effect replay;
 - automatic changes to existing Session selections, settings, or histories.

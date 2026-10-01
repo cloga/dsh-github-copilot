@@ -3,12 +3,15 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createUserMessage, LlmError } from '@deepseek-ai/dsh-llm'
 import type { AccountModelDescriptor } from './account-model-catalog.ts'
 import { AutoModelRoutingError, selectAutoModel } from './auto-model-routing.ts'
-import type { AutoModelDecision } from './auto-model-routing.ts'
+import type { AutoModelDecision, AutoModelRoutingContext } from './auto-model-routing.ts'
 import { autoModelPreference, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import type { AutoModelPreference } from './copilot-identity.ts'
+import { DEFAULT_REQUEST_BUDGET_POLICY, resolveRequestBudgetPolicy } from './request-budget.ts'
+import type { RequestBudgetPolicy } from './request-budget.ts'
 
 export interface AutoModelHostDependencies {
   loadModels(signal: AbortSignal): Promise<readonly AccountModelDescriptor[]>
+  budgetPolicy?: () => Partial<RequestBudgetPolicy>
 }
 
 interface CapturedTurn {
@@ -31,8 +34,9 @@ async function decide(
   signal: AbortSignal,
   messages: readonly unknown[],
   preference: AutoModelPreference,
+  context?: AutoModelRoutingContext,
 ): Promise<AutoModelDecision> {
-  try { return selectAutoModel(await dependencies.loadModels(signal), messages, preference) }
+  try { return selectAutoModel(await dependencies.loadModels(signal), messages, preference, context) }
   catch (cause) {
     if (cause instanceof AutoModelRoutingError) throw failure(cause.code)
     throw cause
@@ -41,6 +45,34 @@ async function decide(
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function buildRoutingContext(
+  ctx: Context,
+  agent: Agent,
+  turn: number,
+  messages: readonly unknown[],
+  budgetPolicyConfig?: Partial<RequestBudgetPolicy>,
+): AutoModelRoutingContext {
+  const sessionId = typeof agent.session?.id === 'string' ? agent.session.id : undefined
+  const compaction: unknown = (ctx as unknown as { get(name: string): unknown }).get('compaction')
+  const compactionConfig = record(compaction) && record(compaction.config) ? compaction.config : undefined
+  const compactionAvailable = compaction !== undefined
+    && compactionConfig?.auto !== false
+    && (typeof compactionConfig?.maxOverflowRetries !== 'number' || compactionConfig.maxOverflowRetries > 0)
+  const hasCompactionSummary = messages.some(m =>
+    record(m) && (record(m.source) && m.source.kind === 'compaction' || typeof m.surfaceOp === 'object'))
+  const requestHeader = typeof agent.session?.requestHeader === 'function' ? agent.session.requestHeader() : undefined
+  const requestedMaxTokens = requestHeader?.config.maxTokens
+  const requestBudgetPolicy = budgetPolicyConfig ? resolveRequestBudgetPolicy(budgetPolicyConfig) : DEFAULT_REQUEST_BUDGET_POLICY
+  return {
+    sessionId,
+    turn,
+    requestedMaxTokens,
+    requestBudgetPolicy,
+    compactionAvailable,
+    hasCompactionSummary,
+  }
 }
 
 function pendingAuto(ctx: Context, agent: Agent): string | undefined {
@@ -106,9 +138,10 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       if (result.kind !== 'enter' || signal.aborted || preference === undefined) return result
       let state = routed.get(agent)
       if (state?.turn !== turn) {
+        const routingContext = buildRoutingContext(ctx, agent, turn, entered, dependencies.budgetPolicy?.())
         state = {
           turn,
-          decision: await decide(dependencies, signal, entered, preference),
+          decision: await decide(dependencies, signal, entered, preference, routingContext),
           recorded: false,
         }
         routed.set(agent, state)
@@ -155,7 +188,8 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       if (input?.turn !== turn) throw failure('COPILOT_AUTO_TURN_CONTEXT_UNAVAILABLE')
       const preference = virtualPreference ?? (pending === undefined ? undefined : autoModelPreference(pending))
       if (preference === undefined) throw failure('COPILOT_AUTO_PREFERENCE_UNAVAILABLE')
-      state = { turn, decision: await decide(dependencies, signal, input.messages, preference), recorded: false }
+      const routingContext = buildRoutingContext(ctx, agent, turn, input.messages, dependencies.budgetPolicy?.())
+      state = { turn, decision: await decide(dependencies, signal, input.messages, preference, routingContext), recorded: false }
       routed.set(agent, state)
     }
     if (!state.recorded) {

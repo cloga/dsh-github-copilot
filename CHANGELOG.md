@@ -1,9 +1,16 @@
 # Changelog
 
-## 0.4.0-alpha.53 (prepared)
+## 0.4.0-alpha.54 (prepared)
 
 - Stop writing optional Auto attribution events that official DSH 0.2.0-rc.2 cannot mark ignorable, preventing subsequent Session history reads from failing (#204). Auto routing, durable virtual selection, and Core's actual model provenance are unchanged; new turns omit the plugin-specific attribution footer.
 - Add an explicit source-checkout recovery command using the unchanged official v4 codec. It validates a detached repaired copy and preserves a byte-exact original backup, without replacing live histories or restarting Desktop.
+
+## 0.4.0-alpha.53 (prepared)
+
+- Fix Auto model concentration and context budget overflow by evaluating input fit as a hard routing condition before preference and distributing soft preferences across candidate bands with deterministic turn seeding (#199).
+- Exclude candidates whose hard input limit cannot admit estimated turn input, preventing `COPILOT_CONTEXT_BUDGET_EXCEEDED` failures.
+- When no candidate fits, route to the largest input capacity model and trigger compaction pressure on compressible history.
+- Distribute soft preferences across upper/lower/center candidate bands via deterministic in-memory hash of `sessionId:turn`, preventing top catalog models from monopolizing all Sessions while freezing selections across retries and steps within the same turn.
 
 ## 0.4.0-alpha.52 (prepared)
 
