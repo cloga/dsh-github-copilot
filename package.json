@@ -61,7 +61,6 @@
     "docs/copilot-compaction.md",
     "docs/copilot-usage.md",
     "docs/automatic-model-routing.md",
-    "docs/web-lifecycle-rc2.md",
     "output/auto-model-mockup/index.html",
     "docs/images/dual-model-provenance.json",
     "scripts/check-search-composition.mjs",
