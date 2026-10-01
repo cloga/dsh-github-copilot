@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.46 (prepared)
+
+- Distinguish known TLS certificate-verification failures from other Copilot quota network errors without revealing provider errors or disabling certificate validation (#186).
+- Keep unavailable quota details readable: omit empty large-value columns and budget placeholders, use an opaque popover background, and bound long values within the dialog.
+
 ## 0.4.0-alpha.45 (prepared)
 
 - Add a fixed, allowlisted latest-observed authorization milestone to failed sign-in diagnostics without inspecting or retaining rejected values, provider responses, credentials, prompts, notices, or nested causes (#178).

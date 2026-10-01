@@ -55,6 +55,18 @@ describe('Copilot usage Host lifecycle', () => {
     await f.source.refresh(); expect(f.fetcher).toHaveBeenCalledTimes(2)
     f.advance(30_001); await f.source.refresh(); expect(f.fetcher).toHaveBeenCalledTimes(3)
   })
+  it('distinguishes known certificate validation failures without leaking fetch errors or changing cooldown', async () => {
+    const f = fixture()
+    f.fetcher.mockRejectedValue(Object.assign(new TypeError('private synthetic proxy URL'), {
+      cause: Object.assign(new Error('private certificate detail'), { code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' }),
+    }))
+    expect(await f.source.get()).toEqual({ state: 'unavailable', billing: 'unknown', budget: 'unknown',
+      diagnostic: 'COPILOT_USAGE_TLS' })
+    await f.source.refresh()
+    expect(f.fetcher).toHaveBeenCalledTimes(1)
+    f.advance(30_001)
+    expect(await f.source.refresh()).toMatchObject({ diagnostic: 'COPILOT_USAGE_TLS' })
+  })
   it.each([401, 403])('revokes old values on HTTP %i', async status => {
     const f = fixture(); await f.source.get(); f.advance(10_001)
     f.fetcher.mockResolvedValue(new Response('private server body', { status }))

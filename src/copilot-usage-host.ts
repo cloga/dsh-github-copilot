@@ -17,6 +17,11 @@ const REFRESH_INTERVAL_MS = 10_000
 const FAILURE_COOLDOWN_MS = 30_000
 const TIMEOUT_MS = 10_000
 const MAX_BODY_BYTES = 262_144
+const CERTIFICATE_FAILURES = new Set([
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'CERT_HAS_EXPIRED', 'ERR_TLS_CERT_ALTNAME_INVALID',
+])
 
 interface Dependencies {
   readCredential(): Promise<unknown>
@@ -28,6 +33,12 @@ class UsageFailure extends Error {
   constructor(readonly diagnostic: CopilotUsageDiagnostic) { super(diagnostic) }
 }
 function failure(diagnostic: CopilotUsageDiagnostic): never { throw new UsageFailure(diagnostic) }
+function certificateFailure(error: unknown): boolean {
+  if (!(error instanceof TypeError) || !('cause' in error)) return false
+  const cause = error.cause
+  return typeof cause === 'object' && cause !== null && 'code' in cause
+    && typeof cause.code === 'string' && CERTIFICATE_FAILURES.has(cause.code)
+}
 
 async function readBody(response: Response, signal: AbortSignal): Promise<unknown> {
   const length = response.headers.get('content-length')
@@ -148,11 +159,17 @@ export class CopilotUsageSource {
   private async fetchQuota(auth: Auth, abort: AbortController): Promise<unknown> {
     // The refresh field is the existing GitHub session token. The Copilot access
     // token and its expiry are unrelated to this GitHub-owned endpoint.
-    const response = await this.fetcher(COPILOT_USAGE_ENDPOINT, {
-      method: 'GET', redirect: 'error', signal: abort.signal, cache: 'no-store',
-      headers: { Authorization: `token ${auth.grant.refresh}`, Accept: 'application/json',
-        'X-GitHub-Api-Version': '2025-04-01' },
-    })
+    let response: Response
+    try {
+      response = await this.fetcher(COPILOT_USAGE_ENDPOINT, {
+        method: 'GET', redirect: 'error', signal: abort.signal, cache: 'no-store',
+        headers: { Authorization: `token ${auth.grant.refresh}`, Accept: 'application/json',
+          'X-GitHub-Api-Version': '2025-04-01' },
+      })
+    } catch (error) {
+      if (certificateFailure(error)) failure('COPILOT_USAGE_TLS')
+      throw error
+    }
     if (response.redirected || (response.status >= 300 && response.status < 400)) {
       void response.body?.cancel().catch(() => undefined)
       failure('COPILOT_USAGE_REDIRECT')
@@ -205,7 +222,7 @@ export class CopilotUsageSource {
         this.invalidate()
         return unavailableCopilotUsage(diagnostic)
       }
-      const staleAllowed = ['COPILOT_USAGE_NETWORK', 'COPILOT_USAGE_TIMEOUT',
+      const staleAllowed = ['COPILOT_USAGE_NETWORK', 'COPILOT_USAGE_TLS', 'COPILOT_USAGE_TIMEOUT',
         'COPILOT_USAGE_HTTP_ERROR', 'COPILOT_USAGE_RATE_LIMITED'].includes(diagnostic)
       if (!staleAllowed) this.cached = undefined
       value = staleAllowed && this.cached

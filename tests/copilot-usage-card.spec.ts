@@ -141,6 +141,17 @@ describe('Copilot account usage chip', () => {
     expect(text()).toContain('Not available')
     expect(text()).not.toMatch(/\b0 used\b/)
   })
+  it('shows a readable unavailable state without empty oversized statistics or a translucent panel', async () => {
+    await mount({ remote: remote({ state: 'unavailable', billing: 'unknown', budget: 'unknown',
+      diagnostic: 'COPILOT_USAGE_TLS' }), contextKey: 'tls' })
+    await click(trigger())
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(dialog.textContent).toContain('Could not verify the connection to GitHub')
+    expect(dialog.textContent).not.toContain('Budget unavailable')
+    expect(dialog.querySelectorAll('strong')).toHaveLength(1)
+    expect(dialog.style.background).toBe(
+      'linear-gradient(var(--dsw-specific-menu, Canvas), var(--dsw-specific-menu, Canvas)), Canvas')
+  })
 
   it('does not round a positive sub-cent credit amount to zero in the compact control', async () => {
     await mount({ remote: remote(view({ used: 0.001, remaining: 0.999, limit: 1, percentUsed: 0.1 })), contextKey: 'a' })
