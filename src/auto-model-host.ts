@@ -51,15 +51,27 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function autoIntent(ctx: Context, agent: Agent): boolean {
+function pendingAuto(ctx: Context, agent: Agent): boolean {
   const candidate: unknown = ctx.get('sessionProjections')
   if (!record(candidate) || typeof candidate.stateOf !== 'function') return false
-  try {
-    const state: unknown = candidate.stateOf(agent.session, 'modelSelection')
-    if (!record(state) || !record(state.pending)) return false
-    return state.pending.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
-      && state.pending.model === GITHUB_COPILOT_AUTO_MODEL_ID
-  } catch { return false }
+  const state: unknown = candidate.stateOf(agent.session, 'modelSelection')
+  if (!record(state)) return false
+  return record(state.pending) && state.pending.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+    && state.pending.model === GITHUB_COPILOT_AUTO_MODEL_ID
+}
+
+function autoIntent(ctx: Context, agent: Agent): boolean {
+  if (pendingAuto(ctx, agent)) return true
+  const candidate: unknown = ctx.get('sessionProjections')
+  if (!record(candidate) || typeof candidate.stateOf !== 'function') return false
+  const state: unknown = candidate.stateOf(agent.session, 'modelSelection')
+  if (!record(state) || state.pending !== null) return false
+  if (agent.session.requestHeader() !== undefined) return false
+  const defaults: unknown = ctx.get('agentDefaultModel')
+  if (!record(defaults) || typeof defaults.currentSelection !== 'function') return false
+  const selected: unknown = defaults.currentSelection()
+  return record(selected) && selected.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+    && selected.model === GITHUB_COPILOT_AUTO_MODEL_ID
 }
 
 function modelSelectionNotice(value: unknown): boolean {
@@ -103,7 +115,14 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
   const activeDisposers = new Set<Dispose>()
   const installAgent = (agent: Agent): void => {
     if (agentDisposers.has(agent)) return
-    const dispose = agent.ctx.on('agent/pre-step', async ({ messages, turn, step, signal }, next) => {
+    const removeAssembly = agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+      const assembled = await next()
+      if (!autoIntent(ctx, agent)) return assembled
+      return { ...assembled, variables: {
+        ...assembled.variables, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: GITHUB_COPILOT_AUTO_MODEL_ID,
+      } }
+    }, { prepend: true })
+    const removePreStep = agent.ctx.on('agent/pre-step', async ({ messages, turn, step, signal }, next) => {
       const result = await next()
       const entered = result.kind === 'enter' ? result.messages : messages
       captured.set(agent, { turn, messages: entered })
@@ -122,6 +141,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       return notice === undefined ? { ...result, messages: filtered }
         : { ...result, messages: [...filtered, notice] }
     }, { prepend: true })
+    const dispose = () => { removeAssembly(); removePreStep() }
     agentDisposers.set(agent, dispose)
     activeDisposers.add(dispose)
   }
@@ -140,7 +160,12 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
   })
   const removeRequest = ctx.on('agent/request', async ({ agent, turn, step, signal }, next) => {
     const resolved = await next()
-    if (resolved.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID || resolved.model !== GITHUB_COPILOT_AUTO_MODEL_ID) {
+    const virtual = resolved.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && resolved.model === GITHUB_COPILOT_AUTO_MODEL_ID
+    if (!virtual && !pendingAuto(ctx, agent)) {
+      routed.delete(agent)
+      return resolved
+    }
+    if (resolved.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
       routed.delete(agent)
       return resolved
     }
@@ -152,6 +177,15 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       routed.set(agent, state)
     }
     if (!state.recorded) {
+      const projections: unknown = ctx.get('sessionProjections')
+      if (virtual && record(projections) && typeof projections.stateOf === 'function') {
+        const selection: unknown = projections.stateOf(agent.session, 'modelSelection')
+        if (record(selection) && selection.pending === null && agent.session.requestHeader() === undefined) {
+          Reflect.apply(agent.session.append, agent.session, ['model/selection', {
+            provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: GITHUB_COPILOT_AUTO_MODEL_ID,
+          }])
+        }
+      }
       appendAutoModelDecision(agent, {
         turn,
         step,

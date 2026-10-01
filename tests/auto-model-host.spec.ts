@@ -2,6 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import { installAutoModelRouting } from '../src/auto-model-host.ts'
@@ -34,6 +35,64 @@ function message(text: string) {
 }
 
 describe('Auto model Host integration', () => {
+  it('keeps a default Auto selection across turns until a manual model choice', async () => {
+    const ctx = new Context()
+    const selection: { pending: { provider: string; model: string } | null } = { pending: null }
+    let header: { config: { provider: string; model: string } } | undefined
+    const append = vi.fn((type: string, data: { provider: string; model: string }) => {
+      if (type === 'model/selection') selection.pending = data
+    })
+    const agent = { ctx, session: { append, requestHeader: () => header } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const promptScope = scopeTarget(new SystemPrompt(ctx, {}), agent)
+    ctx.provide('sessionProjections', { stateOf: () => selection } as never)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: PREVIEW, model: AUTO }) } as never)
+    const loadModels = vi.fn(async () => [
+      model('fixture-fast', 64_000, 'low'),
+      model('fixture-strong', 256_000, 'high'),
+    ])
+    const dispose = installAutoModelRouting(ctx, { loadModels })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+    const signal = new AbortController().signal
+    const enter = (turn: number, text: string) => {
+      const messages = [message(text)]
+      return ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+    }
+    const request = (turn: number, modelId: string) => ctx.waterfall(scope, 'agent/request',
+      { agent, turn, step: 1, signal }, async () => ({ provider: PREVIEW, model: modelId }))
+    try {
+      await enter(1, 'Short question.')
+      const first = await request(1, AUTO)
+      expect(first.model).toBe('fixture-fast')
+      expect(selection.pending).toEqual({ provider: PREVIEW, model: AUTO })
+      expect(append.mock.calls.filter(([type]) => type === 'model/selection')).toHaveLength(1)
+      header = { config: { provider: PREVIEW, model: first.model } }
+
+      const assembly = { sections: [], contexts: [], tools: [], variables: { provider: PREVIEW, model: first.model } }
+      const assembled = await ctx.waterfall(promptScope, 'system-prompt/assemble', assembly, {},
+        async () => assembly)
+      expect(assembled.variables).toMatchObject({ provider: PREVIEW, model: AUTO })
+      await enter(2, 'detail '.repeat(1_000))
+      const second = await request(2, first.model)
+      expect(second.model).toBe('fixture-strong')
+      expect(selection.pending).toEqual({ provider: PREVIEW, model: AUTO })
+      expect(append.mock.calls.filter(([type]) => type === 'model/selection')).toHaveLength(1)
+
+      selection.pending = { provider: PREVIEW, model: 'fixture-fast' }
+      const manualAssembly = { ...assembly, variables: { provider: PREVIEW, model: 'fixture-fast' } }
+      const manual = await ctx.waterfall(promptScope, 'system-prompt/assemble', manualAssembly, {},
+        async () => manualAssembly)
+      expect(manual.variables).toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
+      await enter(3, 'detail '.repeat(1_000))
+      await expect(request(3, 'fixture-fast')).resolves.toMatchObject({ model: 'fixture-fast' })
+      expect(loadModels).toHaveBeenCalledTimes(2)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('resolves after downstream model selection and freezes one decision per turn', async () => {
     const ctx = new Context()
     const append = vi.fn()
