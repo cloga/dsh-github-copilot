@@ -96,7 +96,7 @@ The Host reads GitHub's internal quota endpoint using the existing canonical OAu
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.57`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.58`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -109,10 +109,10 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For a standalone named profile only, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.57/dsh-github-copilot-0.4.0-alpha.57.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.58/dsh-github-copilot-0.4.0-alpha.58.tgz
 ```
 
-For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.57` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
+For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.58` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
@@ -126,7 +126,9 @@ Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in*
 
 ### Auto model routing
 
-The managed GitHub Copilot group includes **Auto · Balance**, **Auto · Efficiency**, and **Auto · Intelligence** as flat virtual picker rows. They share one account-verified eligible pool. Before preference, routing evaluates input headroom against each candidate's hard input budget, filtering out candidates that cannot accommodate current messages. Soft preferences distribute across upper/lower/center candidate bands using deterministic in-memory seeds to avoid monopolizing a single top candidate across Sessions. If no candidate fits, Auto selects the largest input capacity model and triggers compaction pressure on compressible history. Auto resolves once per Core turn to a real model; every tool step, retry and automatic compaction recovery in that turn stays on that model, while a later Chat or Goal turn may choose again. Image turns require an account-verified image-capable candidate. New turns retain Core's actual model/usage details but omit the plugin-specific Auto explanation footer: official rc.2 cannot safely append the optional plugin event. Compatible historical attribution remains visible. Search keeps its independent provider-owned model policy, and subagents / Team teammates continue to inherit Core's concrete route rather than being relabeled as Auto. See the [policy and mockup](./docs/automatic-model-routing.md); model exclusions and a nested picker are still proposals.
+The managed GitHub Copilot group includes **Auto · Balance**, **Auto · Efficiency**, and **Auto · Intelligence** as flat virtual picker rows. They share one account-verified eligible pool. Before preference, routing evaluates input headroom against each candidate's hard input budget, filtering out candidates that cannot accommodate current messages. Soft preferences distribute across upper/lower/center candidate bands using deterministic in-memory seeds to avoid monopolizing a single top candidate across Sessions. If no candidate fits, Auto selects the largest input capacity model and triggers compaction pressure on compressible history. Auto resolves once per Core turn to a real model; every tool step, retry and automatic compaction recovery in that turn stays on that model, while a later Chat or Goal turn may choose again. Image turns require an account-verified image-capable candidate. New turns retain Core's actual model/usage details without adding unsafe plugin events. Search keeps its independent provider-owned model policy, and subagents / Team teammates continue to inherit Core's concrete route rather than being relabeled as Auto. See the [policy and mockup](./docs/automatic-model-routing.md); model exclusions and a nested picker are still proposals.
+
+Completed Copilot replies show **Auto (preference)** and an expandable recorded reason after native Usage/time, or **Manual** only with captured explicit fixed-selection evidence. Missing evidence shows **Selection unknown**, never a guess from today's picker. There is no repeated model name or separate Model details button: actual model display stays in native Usage, whose missing-route behavior is unchanged. New selection records are bounded and Host-local; restart, disposal or eviction loses them. Compatible historical Auto records remain readable. The public assistant-actions slot supports internal wrapping only, not changing the native fixed-height row.
 
 **History loading error mentioning `github-copilot/auto-model-decision`:** alpha.54 prevents new incompatible events; upgrading or restarting does not repair existing logs. The [explicit recovery command](./docs/automatic-model-routing.md#recovering-affected-histories) validates a detached copy with the official codec and retains an exact original backup. Applying it to a live Session requires separate approval and stopped writers; no automatic history migration occurs.
 
@@ -153,7 +155,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.57`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.58`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 **Desktop package-update and Web-lifecycle boundaries:** the native manager's `restart-required` result for an in-place installed-package upgrade is authoritative and distinct from plugin-bundle removal/re-add behavior. Any disable, removal, or upgrade involving service recomposition (`cordis.patch.yml`, such as the isolated routed web search layer) may leave dependent entries pending until Desktop is fully exited and cold-restarted. If the native manager reports only entries such as `pending (waiting for service: web)` while this plugin already shows **Off**, the requested disabled state has been persisted; cold-restart Desktop instead of repeatedly toggling or reinstalling the plugin. Other errors are not covered by this guidance and must still be investigated.
 
@@ -426,8 +428,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.57/dsh-github-copilot-0.4.0-alpha.57.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.57/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.58/dsh-github-copilot-0.4.0-alpha.58.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.58/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -435,7 +437,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.57.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.58.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

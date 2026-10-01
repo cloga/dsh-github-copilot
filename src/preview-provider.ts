@@ -11,6 +11,16 @@ import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { CopilotResponsesReplayError, isCopilotInputItemScopeError, normalizeCopilotResponsesPayload } from './responses-replay-compat.ts'
 
+export type ManagedWireAbortCode = 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' | 'COPILOT_PREVIEW_DISPOSED'
+
+/** Identity, not upstream error text, proves that the plugin revoked this wire. */
+export class ManagedWireAbortError extends Error {
+  constructor(readonly code: ManagedWireAbortCode) {
+    super(code)
+    this.name = 'ManagedWireAbortError'
+  }
+}
+
 /** Per-call authorization/lifetime checks supplied by the owning route. */
 export interface PreviewProviderGuard {
   readonly signal: AbortSignal
@@ -21,6 +31,8 @@ export interface PreviewProviderGuard {
   onUnauthorized?(): void
   /** Dispatch-local, verified replay failure; never inferred from SDK error text. */
   onReplayFailure?(error: CopilotResponsesReplayError): void
+  /** Preserve an owned abort cause before SDK terminal delivery and lease cleanup. */
+  onWireAbort?(code: ManagedWireAbortCode): void
 }
 
 /** Guard for one selected model in an account-bound descriptor snapshot. */
@@ -211,7 +223,15 @@ export function createAccountProvider(
         throw new Error('COPILOT_MANAGED_PROTOCOL_UNSUPPORTED')
       }
       return (async function* () {
-        try { yield* native.streamSimple(model, context, wireOptions) } finally {
+        try {
+          for await (const event of native.streamSimple(model, context, wireOptions)) {
+            if (event.type === 'error' && event.reason === 'aborted'
+              && lease.signal.reason instanceof ManagedWireAbortError) {
+              guard.onWireAbort?.(lease.signal.reason.code)
+            }
+            yield event
+          }
+        } finally {
           lease.release()
           if (unauthorized && !guard.signal.aborted && !options.signal?.aborted) {
             try { guard.onUnauthorized?.() } catch { /* Preserve the native terminal result. */ }
