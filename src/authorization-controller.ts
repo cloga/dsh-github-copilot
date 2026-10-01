@@ -13,6 +13,8 @@ import {
 } from './route-ownership.ts'
 import { temporaryGitHubCopilotModelFromProfile } from './temporary-models.ts'
 import { migrationStatus, type GitHubCopilotMigrationStatus } from './migration-status.ts'
+import { autoModelPreference, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import { normalizeExcludedModelIds } from './model-exclusions.ts'
 
 export { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
@@ -66,6 +68,17 @@ export interface GitHubCopilotAccountModelsView {
   readonly warnings?: readonly { readonly id: string; readonly code: string }[]
   readonly discoveredAt?: number
   readonly error?: string
+}
+
+export interface GitHubCopilotModelPreferencesView {
+  readonly state: 'ready' | 'error'
+  readonly writable: boolean
+  readonly revision?: number
+  readonly excludedModelIds: readonly string[]
+  readonly lockedModelIds: readonly string[]
+  readonly unavailableExcludedModelIds: readonly string[]
+  readonly error?: 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE' | 'COPILOT_MODEL_EXCLUSION_SELECTED'
+    | 'COPILOT_MODEL_EXCLUSION_CONFLICT' | 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
 }
 
 /** Only these owned presentation leaves can cross the Remote boundary. */
@@ -124,9 +137,102 @@ export interface GitHubCopilotAuthorizationView {
   readonly catalog?: GitHubCopilotModelCatalogView
   readonly route?: GitHubCopilotRouteView
   readonly accountModels?: GitHubCopilotAccountModelsView
+  readonly modelPreferences?: GitHubCopilotModelPreferencesView
   readonly error?: string
   /** Latest fixed interaction milestone observed during a failed or active attempt; never a failure cause. */
   readonly authorizationMilestone?: GitHubCopilotAuthorizationMilestone
+}
+
+interface ModelPreferenceSettingsView {
+  describe(options: { redactSecrets: true }): readonly {
+    readonly ns: string
+    readonly revision: number
+    readonly user?: unknown
+    readonly value?: unknown
+  }[]
+  mutate(namespace: string, operations: readonly {
+    readonly op: 'set' | 'unset'
+    readonly path: readonly string[]
+    readonly value?: unknown
+  }[], expectedRevision?: number): Promise<void>
+}
+
+function modelSelection(value: unknown): { readonly provider: string; readonly model: string } | undefined {
+  const selection = object(value)
+  const provider = selection?.provider
+  const model = selection?.model
+  return typeof provider === 'string' && provider.length > 0 && typeof model === 'string' && model.length > 0
+    ? { provider, model } : undefined
+}
+
+function fixedPreviewModel(value: unknown): string | undefined {
+  const selection = modelSelection(value)
+  return selection?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+    && autoModelPreference(selection.model) === undefined ? selection.model : undefined
+}
+
+function selectedFixedModelIds(ctx: Context): readonly string[] | undefined {
+  try {
+    const defaults = service<Record<string, unknown>>(ctx, 'agentDefaultModel', ['currentSelection'])
+    const agents = service<Record<string, unknown>>(ctx, 'agents', ['list'])
+    const projections = service<Record<string, unknown>>(ctx, 'sessionProjections', ['stateOf'])
+    const locked = new Set<string>()
+    const currentSelection = Reflect.get(defaults, 'currentSelection')
+    const defaultValue = typeof currentSelection === 'function'
+      ? Reflect.apply(currentSelection, defaults, []) : undefined
+    if (defaultValue !== null && defaultValue !== undefined && modelSelection(defaultValue) === undefined) return undefined
+    const defaultSelection = fixedPreviewModel(defaultValue)
+    if (defaultSelection !== undefined) locked.add(defaultSelection)
+    const list = Reflect.get(agents, 'list')
+    const rows = typeof list === 'function' ? Reflect.apply(list, agents, []) : undefined
+    if (!Array.isArray(rows) || rows.length > 1024) return undefined
+    const stateOf = Reflect.get(projections, 'stateOf')
+    if (typeof stateOf !== 'function') return undefined
+    for (const candidate of rows) {
+      const agent = object(candidate)
+      const session = object(agent?.session)
+      if (session === undefined) return undefined
+      const state = object(Reflect.apply(stateOf, projections, [session, 'modelSelection']))
+      if (state === undefined || !('pending' in state)) return undefined
+      const pending = state.pending
+      if (pending !== null && modelSelection(pending) === undefined) return undefined
+      let selected = pending === null ? undefined : fixedPreviewModel(pending)
+      if (pending === null) {
+        const requestHeader = session.requestHeader
+        const header = typeof requestHeader === 'function' ? object(Reflect.apply(requestHeader, session, [])) : undefined
+        if (header?.config !== undefined && modelSelection(header.config) === undefined) return undefined
+        selected = fixedPreviewModel(header?.config)
+      }
+      if (selected !== undefined) locked.add(selected)
+    }
+    return [...locked].toSorted()
+  } catch { return undefined }
+}
+
+function modelPreferencesView(
+  ctx: Context,
+  accountModels: GitHubCopilotAccountModelsView | undefined,
+  error?: GitHubCopilotModelPreferencesView['error'],
+): GitHubCopilotModelPreferencesView | undefined {
+  try {
+    const settings = service<ModelPreferenceSettingsView>(ctx, 'settings', ['describe', 'mutate'])
+    const descriptor = settings.describe({ redactSecrets: true }).find(item => item.ns === GITHUB_COPILOT_SETTINGS_NAMESPACE)
+    if (descriptor === undefined || !Number.isSafeInteger(descriptor.revision) || descriptor.revision < 0) return undefined
+    const raw = object(descriptor.value)
+    const excludedModelIds = normalizeExcludedModelIds(raw?.excludedModelIds)
+    const lockedModelIds = selectedFixedModelIds(ctx)
+    if (lockedModelIds === undefined) return undefined
+    const available = new Set(accountModels?.models.map(model => model.id) ?? [])
+    return {
+      state: error === undefined ? 'ready' : 'error',
+      writable: true,
+      revision: descriptor.revision,
+      excludedModelIds,
+      lockedModelIds,
+      unavailableExcludedModelIds: excludedModelIds.filter(id => !available.has(id)),
+      ...error === undefined ? {} : { error },
+    }
+  } catch { return undefined }
 }
 
 export type GitHubCopilotAuthorizationMilestone =
@@ -373,6 +479,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   private reconciliationFailed = false
   private attempt: Promise<void> | undefined
   private authorizationMilestone: GitHubCopilotAuthorizationMilestone | undefined
+  private modelPreferenceFailure: GitHubCopilotModelPreferencesView['error']
 
   constructor(ctx: Context) {
     super(ctx, 'githubCopilotAuthorization', { namespace: 'githubCopilot' })
@@ -419,6 +526,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     const inFlight = authorization.describe(GITHUB_COPILOT_CREDENTIAL_KEY)?.inFlight === true
       || this.attempt !== undefined
     const discovered = accountModelsView(this.ctx)
+    const modelPreferences = modelPreferencesView(this.ctx, discovered, this.modelPreferenceFailure)
     return {
       phase: inFlight
         ? 'authorizing'
@@ -432,9 +540,20 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       route,
       ...catalog === undefined ? {} : { catalog },
       ...discovered === undefined ? {} : { accountModels: discovered },
+      ...modelPreferences === undefined ? {} : { modelPreferences },
       ...this.failure === undefined ? {} : { error: this.failure },
       ...this.authorizationMilestone === undefined ? {} : { authorizationMilestone: this.authorizationMilestone },
     }
+  }
+
+  @Remote
+  async excludeModel(modelId: string): Promise<GitHubCopilotAuthorizationView> {
+    return this.updateModelExclusion(modelId, true)
+  }
+
+  @Remote
+  async restoreModel(modelId: string): Promise<GitHubCopilotAuthorizationView> {
+    return this.updateModelExclusion(modelId, false)
   }
 
   /** Explicit model discovery: may refresh OAuth and GET the account catalog, never changes selection. */
@@ -582,6 +701,45 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     this.failure = undefined
     this.reconciliationFailed = false
     this.authorizationMilestone = undefined
+    return this.status()
+  }
+
+  private async updateModelExclusion(modelId: string, exclude: boolean): Promise<GitHubCopilotAuthorizationView> {
+    let normalized: string
+    try { [normalized] = normalizeExcludedModelIds([modelId]) as [string] }
+    catch {
+      this.modelPreferenceFailure = 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
+      return this.status()
+    }
+    const current = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
+    if (current === undefined || current.revision === undefined) {
+      this.modelPreferenceFailure = 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE'
+      return this.status()
+    }
+    if (exclude && current.lockedModelIds.includes(normalized)) {
+      this.modelPreferenceFailure = 'COPILOT_MODEL_EXCLUSION_SELECTED'
+      return this.status()
+    }
+    const ids = new Set(current.excludedModelIds)
+    if (exclude) ids.add(normalized)
+    else ids.delete(normalized)
+    const next = normalizeExcludedModelIds([...ids])
+    if (next.length === current.excludedModelIds.length
+      && next.every((id, index) => id === current.excludedModelIds[index])) {
+      this.modelPreferenceFailure = undefined
+      return this.status()
+    }
+    try {
+      const settings = service<ModelPreferenceSettingsView>(this.ctx, 'settings', ['describe', 'mutate'])
+      await settings.mutate(GITHUB_COPILOT_SETTINGS_NAMESPACE,
+        [{ op: 'set', path: ['excludedModelIds'], value: next }], current.revision)
+      this.modelPreferenceFailure = undefined
+    } catch (cause) {
+      const record = object(cause)
+      this.modelPreferenceFailure = record?.code === 'SETTINGS_CONFLICT'
+        || cause instanceof Error && /conflict/i.test(cause.message)
+        ? 'COPILOT_MODEL_EXCLUSION_CONFLICT' : 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
+    }
     return this.status()
   }
 

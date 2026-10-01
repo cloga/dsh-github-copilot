@@ -256,6 +256,34 @@ describe('plugin-owned account Copilot route', () => {
     expect(JSON.stringify(service.getView())).not.toMatch(/synthetic-current-access|synthetic-account-a|accountKey/)
   })
 
+  it('hard-filters excluded models from the picker, Auto, route facts, and direct admission', async () => {
+    const settings: PreviewRouteConfig & { excludedModelIds?: string[] } = {
+      accountModelTtlMs: 300_000,
+      accountModelFailureCooldownMs: 0,
+      excludedModelIds: [MODEL],
+    }
+    const fetch = vi.fn(async () => catalogResponse([catalogItem(MODEL), catalogItem('future-visible')]))
+    stubFetch(fetch, true)
+    const harness = await runtime(grant({ availableModelIds: [MODEL, 'future-visible'] }),
+      { accountModelSettings: () => settings })
+    const service = harness.ctx.get('githubCopilotPreview')!
+    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id))
+      .toEqual([...AUTO_IDS, 'future-visible'])
+    expect(service.getView().models.map(model => model.id)).toEqual([MODEL, 'future-visible'])
+    expect(service.routeFacts(MODEL)).toBeUndefined()
+    await expect(harness.adapter.prepareCall(PREVIEW, MODEL))
+      .rejects.toThrow('COPILOT_PREVIEW_MODEL_EXCLUDED')
+
+    settings.excludedModelIds = [MODEL, 'future-visible']
+    expect(await harness.ctx.llm.listModels(PREVIEW)).toEqual([])
+    await expect(harness.adapter.resolveModel(PREVIEW, AUTO))
+      .rejects.toThrow('COPILOT_AUTO_NO_ELIGIBLE_MODEL')
+
+    settings.excludedModelIds = []
+    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id))
+      .toEqual([...AUTO_IDS, MODEL, 'future-visible'])
+  })
+
   it('resolves and prepares a validated account model with the actual Core profile diagnostics contract', async () => {
     const fetch = vi.fn(async () => response())
     stubFetch(fetch)

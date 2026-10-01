@@ -19,6 +19,8 @@ export { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-rou
 export { CopilotUsageCard } from './copilot-usage-card.ts'
 import { registerCopilotUsageUi } from './copilot-usage-ui.ts'
 import { externalLinkTarget } from './external-link.ts'
+import { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
+export { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
 import {
   GITHUB_COPILOT_PROVIDER_ID,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
@@ -529,6 +531,7 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
     unconfigured: 'Sign in with GitHub before refreshing account models.',
     unavailable: 'Account model discovery is unavailable in this profile.',
   }
+
   return createElement('section', { 'data-dsh-github-copilot-account-models': true },
     createElement('p', { role: 'status', 'aria-live': 'polite', 'data-dsh-github-copilot-account-models-state': snapshot.state }, messages[snapshot.state]),
     createElement('p', null, 'Discovery does not prove a successful model call or hosted search. No default model or account policy is changed.'),
@@ -705,6 +708,9 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     createElement('p', { style: { margin: '0 0 10px', fontSize: '13px' } }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
     signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
       { 'data-dsh-github-copilot-refresh-models': true }) : null,
+    signedIn ? createElement(GitHubCopilotModelPreferencesPanel, {
+      remote: props.remote, models, preferences: view?.modelPreferences,
+    }) : null,
     models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Account model metadata is not available yet.')
       : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models }),
     routeStatusMessage(view) === undefined ? null : createElement('p', { role: 'status' }, routeStatusMessage(view)),

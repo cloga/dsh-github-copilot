@@ -36,6 +36,8 @@ export interface InlineConfig {
   accountModelTtlMs?: number
   /** Minimum delay after failed passive discovery; explicit Refresh bypasses it. */
   accountModelFailureCooldownMs?: number
+  /** Exact account model IDs hidden from the managed directory and every Auto candidate pool. */
+  excludedModelIds?: string[]
   /** Estimated managed-route input headroom, separate from truthful catalog capacities. */
   requestBudgetSafetyTokens?: number
   /** Fraction of admissible input used by eligible automatic-compaction requests. */
@@ -90,6 +92,7 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   probeTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(30_000),
   accountModelTtlMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(86_400_000),
   accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
+  excludedModelIds: z.array(z.string()).default([]).hidden(),
   requestBudgetSafetyTokens: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_REQUEST_BUDGET_POLICY.safetyTokens),
   requestBudgetPressureRatio: z.number().step(0.01).min(0.01).max(1).default(DEFAULT_REQUEST_BUDGET_POLICY.pressureRatio),
   compactionReasoning: z.union(['prefer-low', 'preserve']).default(DEFAULT_REQUEST_BUDGET_POLICY.compactionReasoning),

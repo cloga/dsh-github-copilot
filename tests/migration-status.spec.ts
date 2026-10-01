@@ -250,7 +250,14 @@ describe('read-only live migration evidence', () => {
     f.services.set('authorization', { describe: () => undefined })
     f.services.set('credentials', { describeRecord: async () => ({ configured: false, writable: true }) })
     f.services.delete('githubCopilotPreview')
-    expect(await controller.status()).toEqual({ phase: 'signed-out', configured: false, writable: true, inFlight: false, notices: [], route: { state: 'not-configured' } })
+    expect(await controller.status()).toEqual({
+      phase: 'signed-out', configured: false, writable: true, inFlight: false, notices: [],
+      modelPreferences: {
+        state: 'ready', writable: true, revision: 5,
+        excludedModelIds: [], lockedModelIds: [], unavailableExcludedModelIds: [],
+      },
+      route: { state: 'not-configured' },
+    })
     const descriptor = remote.descriptors.find(item => item.method === 'migrationStatus')!
     expect(descriptor).toMatchObject({ id: 'dsh-github-copilot:githubCopilot.migrationStatus', service: 'githubCopilotAuthorization', namespace: 'githubCopilot', invocation: { kind: 'direct' }, parameters: [], result: { mode: 'strict', typeSymbol: 'dsh-github-copilot#GitHubCopilotMigrationStatus' } })
   })

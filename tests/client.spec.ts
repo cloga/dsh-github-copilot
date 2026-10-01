@@ -34,6 +34,7 @@ import {
   previewAssignmentMessage,
   GitHubCopilotAccountModelsPanel,
   GitHubCopilotAccountModelsSummary,
+  GitHubCopilotModelPreferencesPanel,
   formatAccountModelsUpdatedAt,
   GitHubCopilotAccountModelsUpdatedAt,
 } from '../src/client.ts'
@@ -60,7 +61,8 @@ describe('GitHub Copilot Models client', () => {
   }
   function modelRemote(discoverModels: ReturnType<typeof vi.fn> = vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] }))) {
     return { discoverModels, ensureModels: vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] })),
-      status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn() }
+      status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(),
+      excludeModel: vi.fn(), restoreModel: vi.fn() }
   }
   // Tiny deterministic hook host: component state/ref identity and effect cleanup,
   // without mounting a browser or invoking any real Remote implementation.
@@ -818,6 +820,41 @@ describe('GitHub Copilot Models client', () => {
     expect(text).toContain('INPUT_LIMIT_NOT_ENFORCED_BY_CORE')
     expect(text).toContain('REASONING_EFFORTS_UNSUPPORTED')
     expect(text).toContain('not offered')
+  })
+
+  it('renders nested searchable model preferences with selected locks and absent exclusions', async () => {
+    vi.mocked(React.useState).mockImplementation((initial?: unknown) =>
+      [typeof initial === 'function' ? initial() : initial, vi.fn()] as never)
+    vi.mocked(React.useEffect).mockImplementation(() => undefined)
+    const remote = modelRemote()
+    remote.restoreModel.mockResolvedValue(accountResult())
+    const tree = GitHubCopilotModelPreferencesPanel({
+      remote: remote as never,
+      models: { state: 'ready', rejected: [], models: [
+        { id: 'selected', name: 'Selected model', api: 'openai-responses' },
+        { id: 'excluded', name: 'Excluded model', api: 'openai-responses' },
+      ] },
+      preferences: {
+        state: 'ready',
+        writable: true,
+        revision: 4,
+        excludedModelIds: ['excluded', 'temporarily-absent'],
+        lockedModelIds: ['selected'],
+        unavailableExcludedModelIds: ['temporarily-absent'],
+      },
+    })
+    const elements = descendants(tree)
+    expect(elements.find(element => element.type === 'summary')?.props.children)
+      .toBe('Model preferences · 1 visible · 2 excluded')
+    expect(elements.find(element => element.props['data-dsh-github-copilot-model-search'] === true)).toBeDefined()
+    const selected = elements.find(element => element.props['data-model-id'] === 'selected')
+    expect(selected?.props).toMatchObject({ disabled: true, children: 'Exclude' })
+    const restore = elements.find(element => element.props['data-model-id'] === 'temporarily-absent')
+    expect(restore?.props.children).toBe('Restore')
+    await restore?.props.onClick()
+    expect(remote.restoreModel).toHaveBeenCalledWith('temporarily-absent')
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
   })
 
   it('preserves safe warnings from discovery while accepting older responses without them', async () => {
