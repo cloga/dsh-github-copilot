@@ -12,6 +12,7 @@ import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../src/preview-route.ts'
+import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
@@ -136,6 +137,47 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
 
 describe('plugin-owned account Copilot route', () => {
+  it.each(['step/start', 'turn/end'] as const)('clears only the matching Session retry cache on %s across fresh Core preparations', async eventType => {
+    const fetch = vi.fn(async () => new Response('synthetic timeout', { status: 408 }))
+    stubFetch(fetch)
+    const harness = await runtime()
+    const firstSignal = new AbortController()
+    const secondSignal = new AbortController()
+    const begin = vi.spyOn(ResponsesRetryReplay.prototype, 'begin')
+    const dispose = vi.spyOn(ResponsesRetryReplay.prototype, 'dispose')
+    const consume = async (signal: AbortSignal, sessionId: string) => {
+      const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL }, signal)
+      const assembled = new BlockAssembler()
+      for await (const chunk of prepared.stream({ ...prepared.config, messages: [],
+        signal, sessionId: sessionId as GenerateOptions['sessionId'] })) assembled.push(chunk)
+      expect(assembled.finish.kind).toBe('error')
+    }
+    try {
+      await consume(firstSignal.signal, 'synthetic-session-a')
+      await consume(secondSignal.signal, 'synthetic-session-b')
+      expect(begin.mock.instances).toHaveLength(2)
+      const firstCache = begin.mock.instances[0]
+      const secondCache = begin.mock.instances[1]
+      expect(firstCache).not.toBe(secondCache)
+      await consume(firstSignal.signal, 'synthetic-session-a')
+      expect(begin.mock.instances[2]).toBe(firstCache)
+      harness.ctx.emit('session/event', { id: 'synthetic-session-a' } as never, { type: eventType } as never)
+      expect(dispose).toHaveBeenCalledTimes(1)
+      await consume(secondSignal.signal, 'synthetic-session-b')
+      expect(begin.mock.instances[3]).toBe(secondCache)
+      await consume(firstSignal.signal, 'synthetic-session-a')
+      expect(begin.mock.instances[4]).not.toBe(firstCache)
+      secondSignal.abort()
+      expect(dispose).toHaveBeenCalledTimes(2)
+      await harness.fiber.dispose()
+      expect(dispose).toHaveBeenCalledTimes(3)
+    } finally {
+      begin.mockRestore()
+      dispose.mockRestore()
+      firstSignal.abort()
+      secondSignal.abort()
+    }
+  })
   it('does not republish unchanged directories or fetch models during repeated snapshot reads', async () => {
     const harness = await runtime()
     const service = harness.ctx.get('githubCopilotPreview')!

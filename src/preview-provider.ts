@@ -10,6 +10,7 @@ import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { CopilotResponsesReplayError, isCopilotInputItemScopeError, normalizeCopilotResponsesPayload } from './responses-replay-compat.ts'
+import type { ResponsesRetryReplay } from './responses-replay-compat.ts'
 
 export type ManagedWireAbortCode = 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' | 'COPILOT_PREVIEW_DISPOSED'
 
@@ -38,6 +39,8 @@ export interface PreviewProviderGuard {
 /** Guard for one selected model in an account-bound descriptor snapshot. */
 export interface AccountProviderGuard extends PreviewProviderGuard {
   readonly selectedModelId?: string
+  readonly retryReplay?: ResponsesRetryReplay
+  readonly retrySignal?: AbortSignal
   /** Per-dispatch admission after native context conversion, before starting a model wire. */
   inspectRequest?(model: Model<Api>, context: TranscriptContext, options?: StreamOptions): void
   assertEntitled(credential: GitHubCopilotOAuthCredential, modelId: string): void
@@ -189,6 +192,10 @@ export function createAccountProvider(
       // uses API-key auth unless we provide verified Bearer header-owned auth.
       let unauthorized = false
       const responses = model.api === 'openai-responses'
+      let retry: ReturnType<ResponsesRetryReplay['begin']> | undefined
+      try { retry = responses ? guard.retryReplay?.begin(context, guard.retrySignal,
+        options?.sessionId, model.id) : undefined }
+      catch (error) { lease.release(); throw error }
       const reportReplayFailure = (error: CopilotResponsesReplayError): void => {
         if (lease.signal.aborted || options.signal?.aborted) return
         try { guard.onReplayFailure?.(error) } catch { /* Keep native cleanup and terminal delivery intact. */ }
@@ -197,7 +204,10 @@ export function createAccountProvider(
         // Preserve caller callback ordering and undefined-as-no-replacement semantics.
         const replacement = await options.onPayload?.(payload, selectedModel)
         if (lease.signal.aborted || options.signal?.aborted) throw new Error('COPILOT_MANAGED_ABORTED')
-        try { return normalizeCopilotResponsesPayload(replacement === undefined ? payload : replacement) }
+        try {
+          const effective = replacement === undefined ? payload : replacement
+          return retry === undefined ? normalizeCopilotResponsesPayload(effective) : retry.normalize(effective)
+        }
         catch (error) {
           if (error instanceof CopilotResponsesReplayError) reportReplayFailure(error)
           throw error
@@ -205,7 +215,10 @@ export function createAccountProvider(
       } : options.onPayload
       const fetch = options.fetch ?? globalThis.fetch
       const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
-        const response = await fetch(input, init)
+        let response: Response
+        try { response = await fetch(input, init) }
+        catch (error) { retry?.observe(undefined, 0); throw error }
+        retry?.observe(typeof init?.body === 'string' ? init.body : undefined, response.status)
         // A bounded clone identifies only the observed request-scope rejection.
         // Preserve the original Response/status/body for the native SDK.
         if (response.status === 401) {
@@ -219,6 +232,7 @@ export function createAccountProvider(
         ? { ...options, signal: lease.signal, apiKey: undefined, headers, fetch: observeResponse }
         : { ...options, signal: lease.signal, headers, fetch: observeResponse, onPayload }
       if (!hasApi(model, 'openai-responses') && !hasApi(model, 'openai-completions') && !hasApi(model, 'anthropic-messages')) {
+        retry?.finish()
         lease.release()
         throw new Error('COPILOT_MANAGED_PROTOCOL_UNSUPPORTED')
       }
@@ -232,6 +246,8 @@ export function createAccountProvider(
             yield event
           }
         } finally {
+          if (lease.signal.aborted || options.signal?.aborted) retry?.observe(undefined, 0)
+          retry?.finish()
           lease.release()
           if (unauthorized && !guard.signal.aborted && !options.signal?.aborted) {
             try { guard.onUnauthorized?.() } catch { /* Preserve the native terminal result. */ }
