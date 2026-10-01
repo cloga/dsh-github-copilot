@@ -60,20 +60,6 @@ function pendingAuto(ctx: Context, agent: Agent): boolean {
     && state.pending.model === GITHUB_COPILOT_AUTO_MODEL_ID
 }
 
-function autoIntent(ctx: Context, agent: Agent): boolean {
-  if (pendingAuto(ctx, agent)) return true
-  const candidate: unknown = ctx.get('sessionProjections')
-  if (!record(candidate) || typeof candidate.stateOf !== 'function') return false
-  const state: unknown = candidate.stateOf(agent.session, 'modelSelection')
-  if (!record(state) || state.pending !== null) return false
-  if (agent.session.requestHeader() !== undefined) return false
-  const defaults: unknown = ctx.get('agentDefaultModel')
-  if (!record(defaults) || typeof defaults.currentSelection !== 'function') return false
-  const selected: unknown = defaults.currentSelection()
-  return record(selected) && selected.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
-    && selected.model === GITHUB_COPILOT_AUTO_MODEL_ID
-}
-
 function modelSelectionNotice(value: unknown): boolean {
   return record(value) && record(value.source) && value.source.kind === 'model-selection'
 }
@@ -117,7 +103,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     if (agentDisposers.has(agent)) return
     const removeAssembly = agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
       const assembled = await next()
-      if (!autoIntent(ctx, agent)) return assembled
+      if (!pendingAuto(ctx, agent)) return assembled
       return { ...assembled, variables: {
         ...assembled.variables, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: GITHUB_COPILOT_AUTO_MODEL_ID,
       } }
@@ -126,7 +112,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       const result = await next()
       const entered = result.kind === 'enter' ? result.messages : messages
       captured.set(agent, { turn, messages: entered })
-      if (result.kind !== 'enter' || signal.aborted || !autoIntent(ctx, agent)) return result
+      if (result.kind !== 'enter' || signal.aborted || !pendingAuto(ctx, agent)) return result
       let state = routed.get(agent)
       if (state?.turn !== turn) {
         state = {

@@ -86,6 +86,13 @@ describe('Auto model Host integration', () => {
       expect(manual.variables).toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
       await enter(3, 'detail '.repeat(1_000))
       await expect(request(3, 'fixture-fast')).resolves.toMatchObject({ model: 'fixture-fast' })
+      selection.pending = null
+      header = { config: { provider: PREVIEW, model: 'fixture-fast' } }
+      const existing = await ctx.waterfall(promptScope, 'system-prompt/assemble', manualAssembly, {},
+        async () => manualAssembly)
+      expect(existing.variables).toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
+      await enter(4, 'detail '.repeat(1_000))
+      await expect(request(4, 'fixture-fast')).resolves.toMatchObject({ model: 'fixture-fast' })
       expect(loadModels).toHaveBeenCalledTimes(2)
     } finally {
       dispose()
