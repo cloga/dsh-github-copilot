@@ -19,7 +19,47 @@ const decision = {
 }
 const rows = events => [header, ...events]
 const compress = records => zstdCompressSync(Buffer.from(`${records.map(row => JSON.stringify(row)).join('\n')}\n`))
-const decode = bytes => zstdDecompressSync(bytes).toString('utf8').trimEnd().split('\n').map(line => JSON.parse(line))
+const frames = bytes => {
+  const decoded = []
+  let offset = 0
+  while (offset < bytes.length) {
+    const { buffer, engine } = zstdDecompressSync(bytes.subarray(offset), { info: true })
+    decoded.push(buffer)
+    offset += engine.bytesWritten
+  }
+  return decoded
+}
+const decode = bytes => Buffer.concat(frames(bytes)).toString('utf8').trimEnd().split('\n').map(line => JSON.parse(line))
+
+test('keeps exactly one header line in the first zstd frame for Desktop discovery and opens', () => {
+  const input = Buffer.concat([compress([header]), compress([decision])])
+  const result = repairAutoModelHistory(input)
+  assert.equal(frames(result.output)[0].toString(), `${JSON.stringify(header)}\n`)
+  assert.equal(frames(result.output).length, 2)
+  assert.equal(result.report.reframedHeader, false)
+})
+
+test('recovers previously marked single-frame copies without changing any logical row', async () => {
+  const records = rows([{ ...decision, ignorable: true }])
+  const input = compress(records)
+  const result = repairAutoModelHistory(input)
+  assert.deepEqual(result.report.changedSeqs, [])
+  assert.equal(result.report.reframedHeader, true)
+  assert.equal(frames(result.output)[0].toString(), `${JSON.stringify(header)}\n`)
+  assert.deepEqual(decode(result.output), records)
+  assert.deepEqual(repairAutoModelHistory(result.output).output, result.output)
+  assert.equal(repairAutoModelHistory(result.output).report.reframedHeader, false)
+  const directory = await mkdtemp(join(tmpdir(), 'copilot-auto-reframe-'))
+  try {
+    const source = join(directory, 'session.v4.jsonl.zstd')
+    await writeFile(source, input)
+    const report = await runCli([source, '--write-copy', join(directory, 'recovery')])
+    assert.equal(report.reframedHeader, true)
+    assert.deepEqual(await readFile(source), input)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
 
 test('official current reader rejects the original event and accepts only its repaired marker', () => {
   const reader = sessionFormatCatalog.createRestore(header, { recovery: 'strict', validation: 'current' })
