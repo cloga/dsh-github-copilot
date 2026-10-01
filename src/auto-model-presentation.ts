@@ -105,6 +105,23 @@ function sourceOf(props: Record<string, unknown>): Source {
   } catch { return missingSource }
 }
 
+/** Inline footer chrome: after the settled clock, hidden until the message is hovered. */
+export const AUTO_ATTRIBUTION_STYLE = [
+  '[data-turn-tail]:has(> [data-copilot-auto-attribution]){flex-direction:row;flex-wrap:wrap;align-items:center;gap:0 8px}',
+  '[data-turn-tail]>[data-copilot-auto-attribution]{order:1;display:inline-flex;align-items:center;gap:6px;margin:0;padding-left:4px;color:var(--dsw-alias-label-tertiary,var(--text-muted,#667085));font-size:14px;line-height:24px;white-space:nowrap}',
+  '@media (hover:hover){[data-time-hover-root]>[data-copilot-auto-attribution]{opacity:0;transition:opacity 80ms ease}',
+  '[data-time-hover-root]:hover>[data-copilot-auto-attribution],[data-time-hover-root]:focus-within>[data-copilot-auto-attribution]{opacity:1}}',
+].join('')
+const AUTO_ATTRIBUTION_STYLE_ID = 'dsh-copilot-auto-attribution-style'
+
+function ensureAttributionStyle(): void {
+  if (typeof document === 'undefined' || document.getElementById(AUTO_ATTRIBUTION_STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = AUTO_ATTRIBUTION_STYLE_ID
+  style.textContent = AUTO_ATTRIBUTION_STYLE
+  document.head.appendChild(style)
+}
+
 function reasonText(value: AutoModelAttribution): string {
   const reason = value.reason === 'short-text-turn' ? 'Short text turn'
     : value.reason === 'large-structured-turn' ? 'Large structured turn'
@@ -116,12 +133,12 @@ function Attribution(props: Record<string, unknown>): React.ReactElement | null 
   const source = sourceOf(props)
   const value = React.useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot)
   const [open, setOpen] = React.useState(false)
+  React.useEffect(ensureAttributionStyle, [])
   if (!record(value) || typeof value.model !== 'string' || typeof value.provider !== 'string'
     || !sequence(value.candidateCount)) return null
   const parsed = value as unknown as AutoModelAttribution
   return React.createElement('span', {
     'data-copilot-auto-attribution': '',
-    style: { display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-muted, #667085)', fontSize: 12 },
   },
   React.createElement('span', null, `Auto${parsed.preference === undefined || parsed.preference === 'balance' ? '' : ` (${parsed.preference})`} · ${parsed.model}`),
   React.createElement('button', {

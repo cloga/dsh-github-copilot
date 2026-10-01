@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0-alpha.52 (prepared)
+
+- Place Copilot Auto model attribution after the settled turn clock on the same footer row, and reveal it only on hover or keyboard focus, matching usage and time chrome.
+
 ## 0.4.0-alpha.51 (prepared)
 
 - Fix web search routing settings save by reading and writing `searchRouting` under the existing `github-copilot` settings namespace, avoiding the unexported `installSection` limitation in official `@deepseek-ai/dsh-settings@0.2.0-rc.2` (#195).

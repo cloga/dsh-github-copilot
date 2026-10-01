@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  AUTO_MODEL_ATTRIBUTION_KEY, autoModelAttributionDefinition, installAutoModelPresentation,
+  AUTO_ATTRIBUTION_STYLE, AUTO_MODEL_ATTRIBUTION_KEY, autoModelAttributionDefinition, installAutoModelPresentation,
 } from '../src/auto-model-presentation.ts'
 
 function decision(overrides: Record<string, unknown> = {}) {
@@ -43,6 +43,14 @@ describe('Auto model presentation', () => {
     expect(autoModelAttributionDefinition.buildLocationData({ state: stateWithPreference, matches: [{ event: preferred }] }, 'turn', null))
       .toMatchObject({ value: { preference: 'intelligence' } })
     expect(autoModelAttributionDefinition.match(decision({ preference: 'unsupported' }))).toBeNull()
+  })
+
+  it('places Auto attribution after the settled clock and reveals it only on hover', () => {
+    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-turn-tail]:has(> [data-copilot-auto-attribution]){flex-direction:row')
+    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-turn-tail]>[data-copilot-auto-attribution]{order:1')
+    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-time-hover-root]>[data-copilot-auto-attribution]{opacity:0')
+    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-time-hover-root]:hover>[data-copilot-auto-attribution]')
+    expect(AUTO_ATTRIBUTION_STYLE).toContain('[data-time-hover-root]:focus-within>[data-copilot-auto-attribution]{opacity:1}')
   })
 
   it('registers only the public turn-tail list slot and conversation definition', () => {
