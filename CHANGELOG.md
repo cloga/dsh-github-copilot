@@ -1,9 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.0-alpha.59 (prepared)
 
 - Fix unavailable Web search routing on official rc.2 by exposing the plugin's live routing fields through native Config projection (#216). Retain narrow CAS writes, separate legacy override reset, ordinary safety configuration and live snapshot consumption without remounting.
-- Replace the manually populated settings test double with a disposable native Loader/ConfigEditor/SettingsForms fixture covering projection, save, conflict rejection and restart persistence. Full dependency-graph validation and release delivery remain pending.
+- Replace the manually populated settings test double with a disposable native Loader/ConfigEditor/SettingsForms fixture covering projection, save, conflict rejection and restart persistence.
 
 ## 0.4.0-alpha.58 (prepared)
 
