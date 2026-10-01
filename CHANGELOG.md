@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.53 (prepared)
+
+- Fix Auto model concentration and context budget overflow by evaluating input fit as a hard routing condition before preference and distributing soft preferences across candidate bands with deterministic turn seeding (#199).
+- Exclude candidates whose hard input limit cannot admit estimated turn input, preventing `COPILOT_CONTEXT_BUDGET_EXCEEDED` failures.
+- When no candidate fits, route to the largest input capacity model and trigger compaction pressure on compressible history.
+- Distribute soft preferences across upper/lower/center candidate bands via deterministic in-memory hash of `sessionId:turn`, preventing top catalog models from monopolizing all Sessions while freezing selections across retries and steps within the same turn.
+
 ## 0.4.0-alpha.52 (prepared)
 
 - Place Copilot Auto model attribution after the settled turn clock on the same footer row, and reveal it only on hover or keyboard focus, matching usage and time chrome.

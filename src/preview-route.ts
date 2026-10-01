@@ -620,6 +620,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   }
   const removeAutoRoute = installAutoModelRouting(ctx, {
     async loadModels(signal) { return (await discoverSnapshot({ signal })).models },
+    budgetPolicy: () => budgetSettings(),
   })
   const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID], new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings))
   installCopilotCompactionPressure(ctx, { resolve(request) {
