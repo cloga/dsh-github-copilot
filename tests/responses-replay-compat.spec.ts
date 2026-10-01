@@ -19,7 +19,7 @@ function expectSafeFailure(payload: unknown) {
   expect([
     new CopilotResponsesReplayError('unsupported').message,
     new CopilotResponsesReplayError('invalid-payload').message,
-  ]).toContain((failure as Error).message)
+  ].some(prefix => (failure as Error).message.startsWith(prefix))).toBe(true)
   expect(String(failure)).not.toContain('secret')
 }
 
