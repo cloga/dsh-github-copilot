@@ -9,9 +9,20 @@
 
 一个聚焦 GitHub Copilot 登录、通用账号模型发现、Copilot 专用 Tool 兼容与供应方托管搜索的 DSH companion。插件根据供应方返回的端点和能力元数据组装模型，复用公开的 `@deepseek-ai/dsh-llm-pi-ai` adapter 与 pi-ai SDK，不另写一套通用传输／序列化器，也不维护需要逐个添加新模型 ID 的静态目录。
 
-> 下文自动维护账号模型元数据与 provider 集成控件描述目标版本 `0.4.0-alpha.52`；这不代表已有的两条真实路由被合并或移除。版本化 URL 不表示 Release 已发布或本机已加载；仅在该 Release 与校验和可用后使用安装命令。源码、发布制品、已安装版本和实际加载运行时需分别确认，本地升级和中断会话的重启仍需用户批准。
+## 当前体验
 
-Alpha.24 修复了 Web search 卡片缺少精确 Remote 依赖声明的问题。当时卡片位于 **设置 → 模型**（`settings.models.footer`，list/root），旧 Core 回退到独立 Web search section。现在优先显示在插件详情页；搜索子 Fiber 仍独立等待 routing namespace，不影响账号控件和既有搜索安全检查；实际打包 Desktop 验收仍是独立关卡。
+- **账号与模型：**在 **设置 → 模型** 的原生 GitHub Copilot 行内完成登录、查看账号发现模型、刷新元数据及账号管理。
+- **搜索路由：**在 **插件 → dsh-github-copilot → 详情**选择主搜索 Provider 与兜底 Provider。页面只保留用户真正需要的两项选择，不再把协议探测、超时、白名单或传输开关作为日常配置暴露。更新后的路由服务尚未激活时，卡片会明确显示 **需要重启生效（Restart required）**，而不是继续展示无法使用的表单。
+- **用量：**符合条件的 Copilot 会话会在输入框旁显示可选的 **Credits / 额度** 控件，展示供应方明确返回的计费周期数据，并如实区分不可用与历史快照。TLS 诊断会指导使用 Watt Toolkit／Steam++ 等本地信任根的 Windows 用户通过 `NODE_USE_SYSTEM_CA=1` 启动 Desktop，无需关闭证书校验。
+- **兼容处理：**插件通过 DSH 已发布公开接口提供 Copilot 专用 Tool Schema、Thinking 展示、请求预算及账号模型兼容，不修改 Core，也不维护第二套模型目录。
+
+![当前插件详情页的 Web 搜索 Provider 路由](./docs/images/copilot-search-routing.png)
+
+截图来自当前构建 Client 的隔离浏览器 fixture，使用合成 Provider。它只证明已发布配置界面的形态，不证明真实凭据、账号权限、搜索成功或当前 Desktop 已加载。
+
+> 当前文档与安装命令对应版本 `0.4.0-alpha.52`。源码、发布制品、已安装版本和实际加载运行时需分别确认；本地升级和中断会话的重启仍需用户批准。
+
+Web search 路由现在优先显示在插件详情页；宿主不支持详情页插槽时才回退到 **设置 → 模型**或独立 Web search section。搜索子 Fiber 仍独立等待 Remote，不影响账号控件和既有搜索安全检查。
 
 ## 兼容基线与待验收目标
 
@@ -127,38 +138,7 @@ Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理�
 
 公开的 provider-card slot 只能追加内容，不能替换 Core 的 **Edit/Delete**。原生编辑器仍保留，但正常插件发现流程无需手工定义模型。控件嵌入不等于合并 `github-copilot` 与 `github-copilot-preview`，不会删除配置、改写历史或切换模型选择。若已有卡片与 fallback 都缺少控件，请核对活动 profile 与实际加载的 Host/Client 版本。
 
-**时间戳示意（`0.4.0-alpha.7`）：**保留的图片展示该版本实际构建 Client 的隔离 Edge 与合成 Remote／provider-shell fixture，不证明 alpha.8 会话／搜索隔离、新建警告或路由迁移已经完成。除新增 draft 警告外，不声称进行了视觉重设计。默认行显示登录状态、模型数量、上次成功更新时间与 **Manage**，手动 **Refresh models** 只在 **Manage** 内。浏览器 fixture 覆盖刷新时保留旧数量、新鲜缓存重开仅读状态、手动刷新、Retry、凭据清理、登录强制发现及 375 px 窄屏，无外部网络请求或浏览器错误。这不是真实 Core／生产授权证据；Host 24 小时 TTL 与冷却时序由单元测试另行覆盖，不能靠截图证明。
-
 低强调度的 **Updated … ago** 使用上次成功获取模型列表的时间，而不是打开页面的时间。悬停提示和无障碍标签提供本地完整日期、时间及时区；相对时间只在浏览器内更新，不请求状态或模型。读取缓存、刷新中或失败均保留上次成功时间（仅限仍有效的同账号展示证据）；退出／账号失效后清除。没有有效时间戳则不显示；未来时间使用绝对日期，避免错误地显示“几分钟前”。Manage 内不再重复显示时间戳。
-
-![Alpha.7 已登录 provider 显示模型数量、上次成功更新时间与 Manage](./docs/images/copilot-model-freshness.png)
-
-![Alpha.7 刷新过程中保留之前的模型数量和更新时间](./docs/images/copilot-model-refreshing.png)
-
-<details>
-<summary>alpha.5 与 alpha.3 历史示意</summary>
-
-下列 alpha.5 provider PNG 来自旧版实际构建 Client 的隔离 Edge 与合成 Remote／provider-shell fixture，不代表当前刷新布局。
-
-![Alpha.5 单个 GitHub Copilot provider 行内的账号控件，合成测试环境](./docs/images/copilot-provider-entry.png)
-
-![Alpha.5 provider 行内授权区域，展示不可用的示例验证码](./docs/images/copilot-provider-authorization.png)
-
-**历史示意（`0.4.0-alpha.3`）：**下列动图和旧截图来自之前的独立账号 fixture，不是 provider 集成布局。旧动图展示 **登录 → 复制验证码 → 已复制 → 已登录 → 刷新账号模型 → 元数据就绪**；GitHub 真实授权是独立用户步骤，不在录制范围内。
-
-![旧版 alpha.3 隔离账号 fixture：登录、验证码复制反馈与主动刷新模型](./docs/images/github-copilot-auth-flow.gif)
-
-旧预览录制于隔离且禁用网络的浏览器 fixture，不代表计划版本已经发布、安装或加载。授权和模型发现响应均为合成数据；`ABCD-EFGH` 不可用于登录。录制没有执行真实登录、退出、模型刷新、凭据变更或路由迁移，也没有复用生产浏览器的 cookie 或存储状态。
-
-旧版本验证码示意：
-
-![旧版 alpha.3 隔离账号 fixture 等待授权，展示合成验证码与 Copy code 按钮](./docs/images/copilot-device-code-copy.png)
-
-旧版本已登录示意（当前界面另外会在本用户成功 Start sign-in 后执行一次有界发现）：
-
-![旧版 alpha.3 隔离账号 fixture 已登录，保留主动刷新模型入口且无验证码](./docs/images/copilot-auth-card-signed-in.png)
-
-</details>
 
 ### Agent 与自动化流程
 
@@ -277,11 +257,11 @@ Grant 写入或复用前，Host normalizer 只会把 pi-ai 文档化的 `type`�
 - **通过 `ctx.web.search()` 使用 `github-copilot-hosted`：**只支持账号可用且协议经过核实的 OpenAI Responses 候选，包括符合条件的托管账号模型。
 - **Chat Completions 模型：**可走普通原生 SDK transport，但不会因此宣称 hosted search 可用。
 
-### 按会话能力分流搜索（实现待发布）
+### 按会话能力分流搜索
 
 新版 bundle 通过插件自有的 web 服务外观层分流，将原官方服务及完整配置保留在命名作用域中，不修改 Core 或会话预设。原生 `web_search` 保留参数校验、查询／来源数量限制、执行中间件、超时和结果展示；有可靠发起会话上下文的直接 `ctx.web.search` 调用也使用相同分流规则。
 
-在 **插件 → dsh-github-copilot → 详情**中，**Web search** 卡片通过公开的 `plugins.bundle.config`（按包名索引）设置跨后端搜索路由；搜索路由直接保存在 `github-copilot` 命名空间的 `searchRouting` 路径下，通过嵌套路径一次完成修订号校验写入，无需额外注册第二设置命名空间；同一页面还可展开 Copilot 托管搜索选项（开关、路由白名单、引用、工具过滤、能力证明、超时及旧兜底），两项操作分别保存并协同更新版本号。若 bundle slot 不可用，路由卡片回退到 **设置 → 模型**；若 Models footer 也不可用，则回退到 **设置 → Web search**；高级选项仍可通过原设置分区修改。同一时间只注册一处路由卡片，离开详情页会丢弃未保存的草稿。账号登录、状态及模型刷新仍在 **设置 → 模型**。仅打开新页面不会迁移或改写已有设置，卸载本插件后恢复原 web 服务。
+在 **插件 → dsh-github-copilot → 详情**中，**Web search** 卡片通过公开的 `plugins.bundle.config`（按包名索引）设置跨后端搜索路由；搜索路由直接保存在 `github-copilot` 命名空间的 `searchRouting` 路径下，并通过嵌套路径一次完成修订号校验写入。若 bundle slot 不可用，路由卡片回退到 **设置 → 模型**；若 Models footer 也不可用，则回退到 **设置 → Web search**。同一时间只注册一处路由卡片，离开详情页会丢弃未保存的草稿。账号登录、状态及模型刷新仍在 **设置 → 模型**。仅打开页面不会迁移或改写已有设置；已移除的内部托管搜索调参表单不再属于用户配置。卸载本插件后恢复原 web 服务。
 
 **Search provider** 主选择器提供 **Auto — follow Chat** 和通过路由外观层实际注册的搜索 Provider；**Fallback provider**（兜底后端）使用同一目录，额外提供 **None — no fallback**。选择项代表搜索后端，不代表单个模型：即使多个账号模型可以执行搜索，Copilot 仍然只有一个搜索后端。普通配置只需选择这两个 Provider，不再要求另选搜索模型。
 
@@ -346,7 +326,7 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 
 插件 `github-copilot` settings section 控制账号元数据新鲜度、托管请求预算与 hosted search；`enabled` 仍只控制 hosted search：
 
-搜索**后端分流**与下表中的 `github-copilot` 托管搜索选项均可在插件详情页修改。高级表单只写明确更改的设置项；修改其他选项不会重写已保存的路由白名单。账号元数据及托管请求预算参数仍留在原设置分区。
+插件详情页只提供 **Search provider** 与 **Fallback provider**。账号元数据、请求预算及 hosted-search 安全参数仍作为管理员和兼容工具可用的 schema 设置保留，不再作为普通用户的日常配置项展示。
 
 | 键 | 默认值 | 作用范围与含义 |
 |---|---:|---|

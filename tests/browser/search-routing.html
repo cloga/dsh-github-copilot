@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en" translate="no"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Search routing — isolated component verification</title><link rel="icon" href="data:,">
+<title>Plugin details search routing — isolated component verification</title><link rel="icon" href="data:,">
 <style>
 :root{color-scheme:normal;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;background:#111214;color:#ededed}
 /* Synthetic app-theme tokens only; native option colors come from the component. */
 *{box-sizing:border-box}body{--dsw-alias-bg-layer-1:#202124;--dsw-alias-label-primary:#ededed;--dsw-alias-label-secondary:#b8b8b8;--dsw-alias-border-l2:#666;margin:0;padding:32px 20px;min-height:100vh}main{max-width:700px;margin:auto}h1{font-size:22px;margin:0 0 8px;font-weight:600}.fixture-note{font-size:13px;line-height:1.5;color:#bbb;margin:0 0 24px}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #91baff;outline-offset:3px}button:not(:disabled):hover{filter:brightness(1.15)}::selection{background:#355787;color:white}body[data-theme=light]{--dsw-alias-bg-layer-1:#fff;--dsw-alias-label-primary:#242424;--dsw-alias-label-secondary:#595959;--dsw-alias-border-l2:#999;background:#fafafa;color:#242424}body[data-theme=light] .fixture-note{color:#565656}@media(max-width:480px){body{padding:20px 12px}h1{font-size:20px}}
 </style></head>
-<body><main><h1>Search settings</h1><p class="fixture-note">Isolated built component · synthetic providers only. No production services, credentials or searches.</p><div id="app"></div></main>
+<body><main><h1>dsh-github-copilot</h1><p class="fixture-note">Plugin details · isolated built component · synthetic providers only. No production services, credentials or searches.</p><div id="app"></div></main>
 <script src="/react.js"></script><script src="/react-dom.js"></script>
 <script>window.__ModuleLoader__={load:function(entry){window.CopilotUI=entry.factory(function(id){if(id==='react')return window.React;throw new Error('Unexpected client dependency: '+id)})}};</script>
 <script src="/client.js"></script>
@@ -29,8 +29,8 @@ const copilot={status:async()=>{state.statusCalls++;return{ok:true,value:{phase:
 // Model the real traced Remote identity behavior: a fresh face per property read.
 // Invoke the actual built search registration, not a fixture-only component wrapper.
 const registrations=new Map();const remote={$mount:async()=>()=>{},get settings(){return{...settings};},get githubCopilotSearchRouting(){return{...routing};},get githubCopilot(){return{...copilot};}};
-const ctx={remote,logger:{warn:console.warn},slots:{spec:()=>({kind:'list',scope:'root'}),inject:(name,callback)=>name==='settings.models.footer'||name==='settings.section'?callback():()=>{},register:(spec,render)=>{registrations.set(spec.id,render);return()=>registrations.delete(spec.id);}},inject:(deps,callback)=>{const cleanup=deps.includes('remote.settings')?callback(ctx):()=>{};return Object.assign(Promise.resolve(),{dispose:async()=>cleanup()});}};
+const ctx={remote,logger:{warn:console.warn},slots:{spec:name=>name==='plugins.bundle.config'?{kind:'keyed',scope:'root'}:{kind:'list',scope:'root'},inject:(name,callback)=>name==='plugins.bundle.config'?callback():()=>{},register:(spec,render)=>{const key=spec.key||spec.id;registrations.set(key,render);return()=>registrations.delete(key);}},inject:(deps,callback)=>{const cleanup=deps.includes('remote.settings')?callback(ctx):()=>{};return Object.assign(Promise.resolve(),{dispose:async()=>cleanup()});}};
 window.fixture=state;state.setTheme=setTheme;
 const root=ReactDOM.createRoot(document.getElementById('app'));
-window.CopilotUI.apply(ctx).then(dispose=>{state.dispose=dispose;state.render=()=>root.render(registrations.get(ROUTING)());state.render();});
+window.CopilotUI.apply(ctx).then(dispose=>{state.dispose=dispose;state.render=()=>root.render(registrations.get('dsh-github-copilot')({view:'page'}));state.render();});
 </script></body></html>

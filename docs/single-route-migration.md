@@ -14,7 +14,7 @@ Normal discovery needs neither manual model definitions nor routine refresh clic
 
 The alpha.7 last-success timestamp (`snapshot.discoveredAt`) appears once beside the count outside **Manage**: English relative text with a full local date/time/zone tooltip and accessible semantic `time`. Missing/invalid timestamps or no account hide it; future values use absolute text. Pending/error preserves the last success, a successful refresh supplies a new time and sign-out clears it. The display timer is disposed with the timestamp or unmount; it does not alter cache/discovery behavior.
 
-Last same-account metadata may display during TTL refresh/loading/error, never authorize requests. Credential/account/permission invalidation or proof expiry immediately revokes evidence; TTL does not extend tokens. Definitive `UNKNOWN_MODEL` triggers one bounded metadata refresh, with no message replay or model switching; generic HTTP/network errors are not guessed to mean unknown models. New models still require supported account metadata. The README's primary alpha.7 model-freshness/model-refreshing PNGs show the built Client in isolated Edge with synthetic Remote/provider-shell data, not live Core or production authorization. Host TTL/cooldown timing requires unit tests, not screenshots. The provider-entry/authorization PNGs remain historical alpha.5 and older compact-account GIF/PNGs alpha.3.
+Last same-account metadata may display during TTL refresh/loading/error, never authorize requests. Credential/account/permission invalidation or proof expiry immediately revokes evidence; TTL does not extend tokens. Definitive `UNKNOWN_MODEL` triggers one bounded metadata refresh, with no message replay or model switching; generic HTTP/network errors are not guessed to mean unknown models. New models still require supported account metadata. README screenshots are presentation-only synthetic evidence; Host TTL/cooldown timing requires unit tests, not screenshots.
 
 Existing `llm-pi-ai.providers.github-copilot` profiles are not automatically removed. Until you explicitly remove a reviewed legacy profile, both real routes may remain listed. This guide removes that configuration, not merely its display: after removal and catalog refresh, the composer picker and `/model` both list only the managed Copilot group. Discovery failures produce diagnostics; they do not enable a fallback static catalog.
 
@@ -74,7 +74,7 @@ A previously stuck **Deleting…** dialog is not proof the configuration was or 
 
 alpha.7 的上次成功时间（`snapshot.discoveredAt`）只在模型数量旁、**Manage** 外显示一次：相对文字为英文，tooltip 和可访问语义 `time` 提供完整本地日期、时间及时区。缺失／无效／无账号时隐藏，未来时间显示绝对值。等待／失败保留上次成功时间，刷新成功才更新，退出登录清除；时间消失或卸载时清理显示定时器。缓存和发现生命周期不变。
 
-同账号旧元数据可在 TTL 刷新／loading／error 时展示，但不能授权请求。凭据／账号／权限失效或 proof 到期立即撤销证据，TTL 不延长 token。明确 `UNKNOWN_MODEL` 只触发一次有界元数据刷新，不重放消息或切换模型；普通 HTTP／网络错误不能猜成模型不存在。新模型仍需支持的账号元数据。README 首先展示的 alpha.7 model-freshness／model-refreshing PNG 来自实际构建 Client 的隔离 Edge 与合成 Remote／provider-shell 数据，不是真实 Core 或生产授权。Host TTL／冷却时序需单元测试，不能靠截图证明。provider-entry／authorization PNG 仍为 alpha.5 历史示意，旧紧凑账号 GIF／PNG 为 alpha.3。
+同账号旧元数据可在 TTL 刷新／loading／error 时展示，但不能授权请求。凭据／账号／权限失效或 proof 到期立即撤销证据，TTL 不延长 token。明确 `UNKNOWN_MODEL` 只触发一次有界元数据刷新，不重放消息或切换模型；普通 HTTP／网络错误不能猜成模型不存在。新模型仍需支持的账号元数据。README 截图只提供合成展示证据；Host TTL／冷却时序需单元测试，不能靠截图证明。
 
 升级不会自动删除已有 `llm-pi-ai.providers.github-copilot`。只有用户真正移除经过审核的旧配置后，composer 与 `/model` 才都会只列出托管 Copilot 分组，不是仅隐藏第二条路由。始终保留 `llm-pi-ai` 插件、授权服务和唯一 OAuth record `llm-pi-ai/github-copilot`；不要退出登录、删除凭据或卸载授权插件来隐藏分组，也不要用 `models: []` 冒充禁用。
 
