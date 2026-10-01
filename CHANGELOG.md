@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.47 (prepared)
+
+- Keep the managed Copilot Auto model selected across turns when inherited as a new Session's default; record its durable intent before the first real-model request header and restore the virtual route on later turns (#189).
+- Preserve explicit fixed-model selections, real request headers and per-turn Auto decisions without changing existing Sessions with a recorded concrete route.
+
 ## 0.4.0-alpha.46 (prepared)
 
 - Distinguish known TLS certificate-verification failures from other Copilot quota network errors without revealing provider errors or disabling certificate validation (#186).
