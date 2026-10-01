@@ -382,12 +382,17 @@ describe('tsdown client artifact', () => {
 
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
-      'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut', 'migrationStatus',
+      'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
+      'excludeModel', 'restoreModel', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
     ])
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
-      expect(descriptor.parameters).toEqual([])
+      if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
+        expect(descriptor.parameters).toHaveLength(1)
+        expect(descriptor.parameters[0]?.codec.create().parse('gpt-5.4')).toBe('gpt-5.4')
+      }
+      else expect(descriptor.parameters).toEqual([])
       expect(descriptor).toMatchObject({
         id: `dsh-github-copilot:githubCopilot.${descriptor.method}`,
         service: 'githubCopilotAuthorization', namespace: 'githubCopilot',
