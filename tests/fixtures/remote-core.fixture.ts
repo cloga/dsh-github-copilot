@@ -56,10 +56,12 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
       expect(descriptor.result.create().parse(expected)).toEqual(expected)
       expect(() => descriptor.result.create().parse({ ...expected, credential: 'synthetic-forbidden' })).toThrow()
       const method = ctx.remote.githubCopilot[descriptor.method]
-      await expect(method()).resolves.toEqual({ ok: true, value: expected })
-      expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilot/${descriptor.method}`, { args: {} }, expect.any(AbortSignal))
+      const parameterized = descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel'
+      await expect(parameterized ? method('gpt-5.4') : method()).resolves.toEqual({ ok: true, value: expected })
+      expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilot/${descriptor.method}`,
+        { args: parameterized ? { modelId: 'gpt-5.4' } : {} }, expect.any(AbortSignal))
     }
-    expect(rpc).toHaveBeenCalledTimes(8)
+    expect(rpc).toHaveBeenCalledTimes(10)
     const catalogDescriptor = remote.descriptors.find(item => item.namespace === 'githubCopilotSearchRouting')!
     expect(catalogDescriptor).toMatchObject({
       id: 'dsh-github-copilot:githubCopilotSearchRouting.providers', service: 'githubCopilotSearchRouting',

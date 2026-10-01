@@ -390,7 +390,7 @@ describe('tsdown client artifact', () => {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
         expect(descriptor.parameters).toHaveLength(1)
-        expect(descriptor.parameters[0]?.codec.create().parse('gpt-5.4')).toBe('gpt-5.4')
+        expect(descriptor.parameters[0]?.codec.mode).toBe('strict')
       }
       else expect(descriptor.parameters).toEqual([])
       expect(descriptor).toMatchObject({
