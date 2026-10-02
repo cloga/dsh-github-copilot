@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.72 (prepared)
+
+- Retain the mounted account controller and model metadata across exclusion-driven Models rerenders by capturing the native traced Copilot Remote once per UI registration (#240).
+- Avoid redundant account status and model-discovery work on provider/footer/section rerenders; preserve real registration teardown, credential invalidation, selection locks and exclusion CAS.
+- Add regressions with fresh Remote proxies and a blocked second status read, plus exact published-gateway namespace identity evidence. No Core changes or Desktop install/restart.
+
 ## 0.4.0-alpha.71 (prepared)
 
 - Decouple the Auto selection footer from optional conversation projections and wait for its exact Remote namespace (#238).
