@@ -24,9 +24,21 @@ function nonemptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function normalizeItem(item: unknown): Record<string, unknown> {
+function emptyReasoningShell(item: Record<string, unknown>): boolean {
+  return item.type === 'reasoning' && nonemptyString(item.id)
+    && (item.status === undefined || item.status === 'completed')
+    && Array.isArray(item.summary) && item.summary.length === 0
+    && (item.content === undefined || Array.isArray(item.content) && item.content.length === 0)
+    && item.encrypted_content === undefined
+    && Object.keys(item).every(key => ['type', 'id', 'status', 'summary', 'content', 'encrypted_content'].includes(key))
+}
+
+function normalizeItem(item: unknown): Record<string, unknown> | undefined {
   if (!isRecord(item)) throw new CopilotResponsesReplayError('invalid-payload')
   if (item.type === 'item_reference') throw new CopilotResponsesReplayError()
+  // A completed, explicitly empty SDK reasoning signature carries no replay content.
+  // Unknown fields, partial signatures and any opaque/text content remain fail-closed.
+  if (emptyReasoningShell(item)) return undefined
 
   // These are ordinary instructions, not assistant output replay. Native validation owns them.
   if ((item.type === 'message' || item.type === undefined)
@@ -70,7 +82,7 @@ export function normalizeCopilotResponsesPayload(payload: unknown): unknown {
     for (const item of payload.input) {
       const normalized = normalizeItem(item)
       changed ||= normalized !== item
-      input.push(normalized)
+      if (normalized !== undefined) input.push(normalized)
     }
     return changed ? { ...payload, input } : payload
   } catch (error) {
