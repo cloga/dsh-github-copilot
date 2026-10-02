@@ -254,6 +254,8 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     const childId = SessionId('follow-loop-child')
     const siblingId = SessionId('follow-loop-sibling')
     const inputs: string[] = []
+    const errors: unknown[] = []
+    ctx.on('agent/error', ({ error }) => { errors.push(error) })
     const removeAuto = installAutoModelRouting(ctx, {
       parentModelBindings: () => [childId, siblingId].map(childSessionId => ({
         childSessionId, parentSessionId: parent.id,
@@ -267,22 +269,18 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
       inheritedEventCount: SessionLogOffset(0),
       agentOptions: { provider, model: 'fixture-initial', maxTokens: 8192 },
       ...(seed === undefined ? {} : { seed }),
-      setup(agentCtx, agent) {
+      setup(_agentCtx, agent) {
         if (seed !== undefined) return
-        let recorded = false
-        agentCtx.on('session/event', (session, event) => {
-          if (session.id !== agent.session.id || event.type !== 'turn/start' || recorded) return
-          recorded = true
-          Reflect.apply(session.append, session, ['subagent/descriptor', {
-            version: 3, provider: 'spawn', mode: 'continuable', label: 'Native-loop fixture',
-            agentProvider: provider, agentModel: 'fixture-initial',
-          }])
-        })
+        Reflect.apply(agent.session.append, agent.session, ['subagent/descriptor', {
+          version: 3, provider: 'spawn', mode: 'continuable', label: 'Native-loop fixture',
+          agentProvider: provider, agentModel: 'fixture-initial',
+        }])
       },
     })
     const send = async (agent: typeof parent, text: string) => {
       agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
       await agent.whenIdle()
+      if (errors.length > 0) throw new AggregateError(errors, 'Native child turn failed')
       expect(agent.session.requestHeader()).toBeDefined()
     }
     parent.session.append('model/selection', { provider, model: 'fixture-A' })
