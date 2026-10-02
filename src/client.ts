@@ -839,6 +839,8 @@ export function GitHubCopilotSettingsSection(
 
 function registerUi(ctx: ClientContext): () => void {
   const surfaces = createAccountSurfaces()
+  // Native namespace lookups create traced proxies; capture once per registration.
+  const remote = ctx.remote.githubCopilot
   const disposeCredentials = ctx.remote.$on('credentials/reference-updated', () => surfaces.invalidate())
   const disposeReset = ctx.on('connection/reset', () => surfaces.invalidate())
   let active = true
@@ -855,7 +857,7 @@ function registerUi(ctx: ClientContext): () => void {
           id: 'github-copilot',
           order: 11,
           label: 'GitHub Copilot',
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote: ctx.remote.githubCopilot }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote }))
         disposeFallback = () => { surfaces.revoke(seat); dispose() }
       }
       return
@@ -876,7 +878,7 @@ function registerUi(ctx: ClientContext): () => void {
         'GitHub Copilot account models are already managed by the account panel. Saving this additional provider profile enables another model group; it does not connect a second account. Use the account panel instead. This plugin cannot disable the native Save action.')
       }
       return createElement(GitHubCopilotAccountSurface, {
-        surfaces, seat, remote: ctx.remote.githubCopilot, eligible: isGitHubCopilotAccountRow(props),
+        surfaces, seat, remote, eligible: isGitHubCopilotAccountRow(props),
       })
     })
     return () => { surfaces.revoke(seat); dispose() }
@@ -898,7 +900,7 @@ function registerUi(ctx: ClientContext): () => void {
           name: 'settings.models.footer',
           id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
           order: 10,
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote: ctx.remote.githubCopilot }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote }))
       } catch {
         // Do not withdraw working fallback authorization until footer registration succeeds.
         reportFooterUnavailable()

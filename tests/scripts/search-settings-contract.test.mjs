@@ -12,6 +12,7 @@ import { boot, initProfile, readProfilePatches } from '@deepseek-ai/dsh-app-boot
 import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
 import { Config } from '../../lib/types/config.js'
+import copilotRemote from '../../lib/remote.js'
 
 const ROUTING = 'github-copilot-search-routing'
 const COPILOT = 'github-copilot'
@@ -125,11 +126,17 @@ test('real pinned Client namespace lookups require stable capture across render 
   const gateway = await clientPlugin('@deepseek-ai/dsh-api-gateway')
   gateway.apply(ctx)
   await ctx.remote.$mount(await settingsContribution())
+  await ctx.remote.$mount(copilotRemote)
   const oldRenderProps = () => ({ settings: ctx.remote.settings })
   assert.notEqual(oldRenderProps().settings, oldRenderProps().settings)
   const settings = ctx.remote.settings
   const stableRenderProps = () => ({ settings })
   assert.equal(stableRenderProps().settings, stableRenderProps().settings)
+  const oldAccountProps = () => ({ remote: ctx.remote.githubCopilot })
+  assert.notEqual(oldAccountProps().remote, oldAccountProps().remote)
+  const remote = ctx.remote.githubCopilot
+  const stableAccountProps = () => ({ remote })
+  assert.equal(stableAccountProps().remote, stableAccountProps().remote)
 })
 
 test('search routing saves both leaves in github-copilot namespace using nested paths', async t => {
