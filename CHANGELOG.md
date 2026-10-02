@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.70 (prepared)
+
+- Require image-capable Auto candidates for retained historical user/tool images after text-only continuations; honor native image offload markers (#236).
+- Validate actual native-projected image MIME against explicit account format evidence before managed dispatch, with request-local diagnostics and no image rewriting, model switch or additional retry.
+- Document why durable attachment formats and filenames cannot prove outgoing MIME, and retain the original service-side rejection as unverified rather than declaring Grok text-only.
+
 ## 0.4.0-alpha.68 (prepared)
 
 - Add one **Follow parent model** control in plugin settings. Enable once for existing and new supported Copilot subagents and Team mates; no Session IDs or per-child setup (#234).

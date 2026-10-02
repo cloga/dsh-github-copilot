@@ -76,11 +76,13 @@ function latestUserContent(messages: readonly unknown[]): readonly unknown[] {
 
 export function classifyAutoModelTurn(messages: readonly unknown[]): AutoModelFeatures {
   let text = ''
-  let requiresImage = false
+  // Capability requirements cover the entered history; text complexity remains
+  // a property of the latest user turn. Do not inspect tool arguments as content.
+  const requiresImage = messages.some(message => record(message) && Array.isArray(message.content)
+    && message.content.some((block: unknown) => record(block) && block.type === 'image' && block.offloaded !== true))
   for (const block of latestUserContent(messages)) {
     if (!record(block)) continue
     if (block.type === 'text' && typeof block.text === 'string') text += `${block.text}\n`
-    if (block.type === 'image') requiresImage = true
   }
   const codeFenceCount = text.match(/```/gu)?.length ?? 0
   const textLength = text.trim().length

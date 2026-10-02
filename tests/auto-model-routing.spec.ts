@@ -110,6 +110,32 @@ describe('Auto model routing policy', () => {
     expect(selectAutoModel([reserved, fast], [message('hi')]).model).toBe(fast)
   })
 
+  it.each(['user', 'tool'])('retains historical %s image requirements after a text-only continuation', (role) => {
+    const vision = model('fixture-vision', { contextWindow: 128_000, maxTokens: 16_000, image: true })
+    const history = [
+      { role, content: [{ type: 'image', attachment: { mediaType: 'image/webp' } }] },
+      message('Continue.'),
+    ]
+    const before = structuredClone(history)
+    for (const preference of ['efficiency', 'balance', 'intelligence'] as const) {
+      expect(selectAutoModel([fast, strong, vision], history, preference))
+        .toMatchObject({ model: vision, reason: 'image-capability', candidateCount: 1 })
+      expect(() => selectAutoModel([fast, strong], history, preference)).toThrow(AutoModelRoutingError)
+    }
+    expect(history).toEqual(before)
+  })
+
+  it('does not infer image requirements from filenames, tool arguments, or offloaded text', () => {
+    const history = [
+      { role: 'assistant', content: [{ type: 'tool-call', arguments: { type: 'image' } }] },
+      { role: 'tool', content: [{ type: 'text', text: '[image omitted to fit request image limits; photo.webp]' }] },
+      { role: 'tool', content: [{ type: 'image', offloaded: true, attachment: { mediaType: 'image/webp' } }] },
+      message('Continue reviewing photo.png.'),
+    ]
+    expect(classifyAutoModelTurn(history)).toMatchObject({ requiresImage: false, taskClass: 'fast' })
+    expect(selectAutoModel([fast], history).model).toBe(fast)
+  })
+
   it('uses one candidate pool with bounded soft preferences rather than tier filters', () => {
     const pool = [strong, fast, balanced]
     const short = [message('Explain this symbol.')]

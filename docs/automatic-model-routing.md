@@ -24,6 +24,11 @@ A Goal does not become one indefinitely frozen Auto decision. Each automatic con
 
 ## Routing policy and input fit
 
+Image capability requirements cover all entered message content, including historical
+user and tool images, not only the latest user text. Actual projected MIME admission
+uses explicit account format evidence after native conversion; filenames and durable
+MIME are not wire-format proof. See [image compatibility and limits](./image-input-compatibility.md).
+
 The account `/models` catalog is authoritative for entitlement and hard capabilities: protocol, context and output limits, image input, tool support, reasoning efforts, and server policy. Unknown or incomplete capability metadata fails closed.
 
 The catalog does not provide trustworthy quality, latency, price, or global-health rankings. The routing policy therefore does **not** infer model quality from a marketing name, model-ID prefix, provider order, or token price. It does not claim to reproduce GitHub's private Auto algorithm.
