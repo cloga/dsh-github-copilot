@@ -224,3 +224,28 @@ test('native routing edits preserve ordinary config, reject invalid paths and pe
   const restoredFiber = [...restarted.loader.entries()].find(entry => entry.options.id === COPILOT).fiber
   assert.equal(restoredFiber.config.probe, false)
 })
+
+test('native hidden model exclusions are live, revision checked and persistent without replacing the plugin fiber', async t => {
+  const { ctx, settings, view, fiber, start } = await fixture(t)
+  const initial = view(COPILOT)
+  assert.deepEqual(initial.value.excludedModelIds, [])
+  const serialized = initial.schema
+  assert.equal(serialized.refs[serialized.refs[serialized.uid].dict.excludedModelIds].meta.hidden, true)
+  await settings.mutate(COPILOT, [
+    { op: 'set', path: ['excludedModelIds'], value: ['synthetic-model', 'absent-model'] },
+  ], initial.revision)
+  assert.deepEqual(view(COPILOT).value.excludedModelIds, ['synthetic-model', 'absent-model'])
+  assert.equal([...ctx.loader.entries()].find(entry => entry.options.id === COPILOT).fiber, fiber)
+  assert.deepEqual(fiber.config.excludedModelIds.get(), ['synthetic-model', 'absent-model'])
+  await assert.rejects(settings.mutate(COPILOT, [
+    { op: 'set', path: ['excludedModelIds'], value: [] },
+  ], initial.revision), { code: 'SETTINGS_CONFLICT' })
+  await ctx.fiber.dispose()
+  const restarted = await start()
+  const restored = restarted.settings.describe().find(entry => entry.ns === COPILOT)
+  assert.deepEqual(restored.value.excludedModelIds, ['synthetic-model', 'absent-model'])
+  await restarted.settings.mutate(COPILOT, [
+    { op: 'set', path: ['excludedModelIds'], value: [] },
+  ], restored.revision)
+  assert.deepEqual(restarted.settings.describe().find(entry => entry.ns === COPILOT).value.excludedModelIds, [])
+})
