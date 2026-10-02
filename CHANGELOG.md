@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.63 (prepared)
+
+- Restore the completed-reply Auto preference and recorded-reason disclosure on official Desktop by reading ChatNodeStore's public iterable `values()` instead of requiring a JavaScript `Map` (#222). Retain Map support and diagnose an unavailable collection once without querying another turn.
+- Preserve exact Session/turn lookup, stale-response isolation, unknown/manual evidence rules, native Usage model display, and existing selection policy. No history migration or Core changes are required.
+
 ## 0.4.0-alpha.62 (prepared)
 
 - Preserve model preferences through Client authorization decoding and make hidden exclusions a native live Config field, fixing both invisible controls and rejected settings writes (#223).
