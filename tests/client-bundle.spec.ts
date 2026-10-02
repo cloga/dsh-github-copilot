@@ -140,6 +140,14 @@ describe('tsdown client artifact', () => {
     let memoIndex = 0, effectIndex = 0
     const hooks = {
       ...React,
+      useState(initial?: unknown) {
+        const instance = current, index = memoIndex++
+        instance.memos[index] ??= { deps: [], value: typeof initial === 'function' ? initial() : initial }
+        return [instance.memos[index]!.value, (next: unknown) => {
+          const previous = instance.memos[index]!.value
+          instance.memos[index]!.value = typeof next === 'function' ? next(previous) : next
+        }]
+      },
       useMemo<T>(factory: () => T, deps: React.DependencyList): T {
         const index = memoIndex++, previous = current.memos[index]
         if (!previous || deps.some((value, at) => !Object.is(value, previous.deps[at]))) current.memos[index] = { deps, value: factory() }
