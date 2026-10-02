@@ -23,7 +23,7 @@ describe('explicit oversized manual summary recovery', () => {
     ]
     const result = await summarizeOversizedManualInput({
       input: { messages },
-      inputLimit: 1300,
+      inputLimit: 1600,
       estimate: input => JSON.stringify(input).length,
       summarize: async input => {
         calls.push({ messages: input.messages as ReturnType<typeof message>[] })
@@ -43,7 +43,7 @@ describe('explicit oversized manual summary recovery', () => {
     })
     expect(calls.length).toBeGreaterThan(1)
     expect(calls.length).toBeLessThanOrEqual(12)
-    expect(calls.every(call => JSON.stringify(call.messages).length < 1300)).toBe(true)
+    expect(calls.every(call => JSON.stringify(call.messages).length < 1600)).toBe(true)
     expect(calls.some(call => call.messages.some(item => item.role === 'assistant' && item.content[0]?.type === 'tool-call')
       && call.messages.some(item => item.role === 'tool'))).toBe(true)
     expect(result.summary).toEqual([{ type: 'text', text: `checkpoint-${calls.length}` }])
@@ -83,7 +83,7 @@ describe('explicit oversized manual summary recovery', () => {
     let calls = 0
     await expect(summarizeOversizedManualInput({
       input: { messages: [message('user', 'x'.repeat(350)), message('user', 'y'.repeat(350))] },
-      inputLimit: 500,
+      inputLimit: 600,
       estimate: input => JSON.stringify(input).length,
       summarize: async () => {
         calls++
