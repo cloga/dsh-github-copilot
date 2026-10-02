@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.65 (prepared)
+
+- Add explicit native child/direct-parent model-follow bindings, disabled by default. Enrolled children follow fixed selections on their next turn or independently resolve the parent's Auto preference against their own context (#229).
+- Preserve in-flight turn routing, explicit child selections, native histories, defaults, credentials and permissions. Unknown lineage, unsupported children and missing parent evidence fail with named diagnostics rather than guessed models.
+- Record exact-source inheritance research, configuration boundaries and validation limits. Native creation labels are not rewritten, and existing children are never automatically enrolled.
+
 ## 0.4.0-alpha.64 (prepared)
 
 - Omit only explicitly empty completed reasoning shells from managed Responses outgoing payloads, without changing durable history, opaque encrypted content, public summaries or tool call/result pairing (#226).
