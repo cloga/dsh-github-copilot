@@ -20,7 +20,7 @@ interface RecoveryInput<M> {
 }
 
 interface RecoveryResult {
-  readonly summary: readonly ContentBlock[]
+  readonly summary: ContentBlock[]
   readonly provider: string
   readonly model: string
   readonly maxTokens?: number
@@ -121,7 +121,7 @@ export async function summarizeOversizedManualInput<M extends RecoveryMessage, R
   // An unmarked result is deliberately NOT one llm.stream call. Core records
   // the aggregate usage only when every underlying call supplied real usage.
   return {
-    summary: previous.summary, provider: previous.provider, model: previous.model,
+    summary: [...previous.summary], provider: previous.provider, model: previous.model,
     ...previous.maxTokens === undefined ? {} : { maxTokens: previous.maxTokens },
     ...usages.length === calls ? { usage: sumUsage(usages) } : {},
   }
@@ -150,8 +150,13 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
   ) {
     const routed = agent.session.requestHeader()?.config
     const policy = this.config.modelPolicies.find(item => item.provider === routed?.provider && item.model === routed.model)
-    const summaryProvider = policy?.summarizationProvider ?? this.config.summarizationProvider ?? routed?.provider ?? agent.options.provider
-    const summaryModel = policy?.summarizationModel ?? this.config.summarizationModel ?? routed?.model ?? agent.options.model
+    const configuredProvider = policy?.summarizationProvider ?? this.config.summarizationProvider
+    const configuredModel = policy?.summarizationModel ?? this.config.summarizationModel
+    const selected = configuredProvider.length > 0 ? { provider: configuredProvider, model: configuredModel }
+      : routed?.provider && routed.model ? routed
+        : { provider: agent.options.provider, model: agent.options.model }
+    const summaryProvider = selected.provider
+    const summaryModel = selected.model
     if (!this.manual.has(agent) || summaryProvider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID || !summaryModel) {
       return super.summarize(input, agent, signal)
     }
