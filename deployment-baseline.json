@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.61"
+    "version": "0.4.0-alpha.63"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1008,7 +1008,8 @@
         {"file": "tests/auto-model-host.spec.ts", "name": "replaces Core virtual-Auto switch guidance with the resolved real route"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "folds a durable decision into turn-scoped credential-free attribution"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "omits attribution when a compatible history contains no optional decision"},
-        {"file": "tests/turn-selection-card.spec.ts", "name": "reads exact completed turn evidence once through the public action slot and keeps actual model out of footer"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "reads exact completed turn evidence through %s and exposes reasons without repeating the model"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "diagnoses an unavailable node collection without reading another turn"},
         {"file": "tests/turn-model-provenance.spec.ts", "name": "retains known models around zero-usage failed attempts without reading payloads"},
         {"file": "tests/preview-route.spec.ts", "name": "publishes Auto as a virtual picker entry but refuses unresolved adapter dispatch"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "shrinks durable history and rebuilds the switched model request without sending the oversized original"}

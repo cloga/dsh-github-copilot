@@ -124,9 +124,21 @@ function sourceOf(props: Record<string, unknown>, key: string, diagnostic: (code
 
 interface SelectionRemote { get(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }> }
 interface LocaleReader { getLocale(): { active: string }; subscribe(listener: () => void): Dispose }
-function findTurn(snapshot: unknown, messageId: unknown): unknown {
-  if (!record(snapshot) || !(snapshot.nodes instanceof Map) || typeof messageId !== 'string') return undefined
-  for (const node of snapshot.nodes.values()) {
+function iterable(value: unknown): value is Iterable<unknown> {
+  return value !== null && typeof value === 'object' && Symbol.iterator in value && typeof value[Symbol.iterator] === 'function'
+}
+function findTurn(snapshot: unknown, messageId: unknown, diagnostic: (code: string) => void): unknown {
+  if (typeof messageId !== 'string') return undefined
+  if (!record(snapshot) || !record(snapshot.nodes) || typeof snapshot.nodes.values !== 'function') {
+    diagnostic('COPILOT_TURN_SELECTION_CHAT_NODES_UNAVAILABLE')
+    return undefined
+  }
+  const nodes: unknown = snapshot.nodes.values()
+  if (!iterable(nodes)) {
+    diagnostic('COPILOT_TURN_SELECTION_CHAT_NODES_UNAVAILABLE')
+    return undefined
+  }
+  for (const node of nodes) {
     if (!record(node) || node.kind !== 'turn-tail' || !record(node.data) || !record(node.data.closing)) continue
     const closing = node.data.closing
     if (record(closing.finalNode) && closing.finalNode.messageId === messageId && record(node.location)) return node.location.turn
@@ -211,7 +223,7 @@ export function installAutoModelPresentation(capabilities: {
       return null
     }
     const useChat = props.useChat as (selector: (snapshot: unknown) => unknown) => unknown
-    const turn = useChat(snapshot => findTurn(snapshot, props.messageId))
+    const turn = useChat(snapshot => findTurn(snapshot, props.messageId, diagnostic))
     if (!record(turn) || !sequence(turn.turn)) return null
     return React.createElement(Attribution, { ...props, key: `${props.sessionId}:${turn.turn}`, turn, remote, locale, diagnostic })
   }

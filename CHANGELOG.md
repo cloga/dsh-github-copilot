@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.63 (prepared)
+
+- Restore the completed-reply Auto preference and recorded-reason disclosure on official Desktop by reading ChatNodeStore's public iterable `values()` instead of requiring a JavaScript `Map` (#222). Retain Map support and diagnose an unavailable collection once without querying another turn.
+- Preserve exact Session/turn lookup, stale-response isolation, unknown/manual evidence rules, native Usage model display, and existing selection policy. No history migration or Core changes are required.
+
 ## 0.4.0-alpha.61 (prepared)
 
 - Preserve the exact normalized managed Responses request across Core's freshly prepared retry attempts only after the previous request actually received HTTP 408. Short-lived state is scoped to the original turn signal, Session, model and account proof, and cleared on new step/turn end. Retry-only item references or incomplete ID-bearing items must identify matching complete prior items without contradictory fields, and all other payload and transcript bytes must agree; changed inputs, concurrent requests and cold resumes fail closed (#217).
