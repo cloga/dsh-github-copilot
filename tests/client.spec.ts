@@ -930,21 +930,6 @@ describe('GitHub Copilot Models client', () => {
       },
     })
 
-    it('preserves owned model preferences through the actual account decoder without reading extra fields', () => {
-      const preferences = {
-        state: 'ready', writable: true, revision: 3,
-        excludedModelIds: ['excluded'], lockedModelIds: ['selected'],
-        unavailableExcludedModelIds: [],
-      }
-      Object.defineProperty(preferences, 'privateData', { get() { throw new Error('must not read extras') } })
-      const decoded = authorizationViewFrom({ ...accountResult().value, modelPreferences: preferences })
-      expect(decoded?.modelPreferences).toEqual(preferences)
-      expect(decoded?.modelPreferences).not.toBe(preferences)
-      expect(decoded?.modelPreferences?.excludedModelIds).not.toBe(preferences.excludedModelIds)
-      expect(authorizationViewFrom({
-        ...accountResult().value, modelPreferences: { ...preferences, excludedModelIds: [123] },
-      })).toBeUndefined()
-    })
     const elements = descendants(tree)
     expect(elements.find(element => element.type === 'summary')?.props.children)
       .toBe('Model preferences · 1 enabled · 2 excluded')
@@ -957,6 +942,22 @@ describe('GitHub Copilot Models client', () => {
     expect(remote.restoreModel).toHaveBeenCalledWith('temporarily-absent')
     expect(remote.status).not.toHaveBeenCalled()
     expect(remote.discoverModels).not.toHaveBeenCalled()
+  })
+
+  it('preserves owned model preferences through the actual account decoder without reading extra fields', () => {
+    const preferences = {
+      state: 'ready', writable: true, revision: 3,
+      excludedModelIds: ['excluded'], lockedModelIds: ['selected'],
+      unavailableExcludedModelIds: [],
+    }
+    Object.defineProperty(preferences, 'privateData', { get() { throw new Error('must not read extras') } })
+    const decoded = authorizationViewFrom({ ...accountResult().value, modelPreferences: preferences })
+    expect(decoded?.modelPreferences).toEqual(preferences)
+    expect(decoded?.modelPreferences).not.toBe(preferences)
+    expect(decoded?.modelPreferences?.excludedModelIds).not.toBe(preferences.excludedModelIds)
+    expect(authorizationViewFrom({
+      ...accountResult().value, modelPreferences: { ...preferences, excludedModelIds: [123] },
+    })).toBeUndefined()
   })
 
   it('preserves safe warnings from discovery while accepting older responses without them', async () => {
