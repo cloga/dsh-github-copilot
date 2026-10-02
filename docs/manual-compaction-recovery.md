@@ -22,7 +22,16 @@ The hook partitions the *original* span only at balanced boundaries, summarizes 
 
 This path only helps histories with balanced boundaries and intermediate summaries that fit their model's input and output limits. One giant user/tool result, a huge fixed head/tool schema, an incomplete tool pair, provider truncation, or a final checkpoint that is not smaller remain explicit failures. Intermediate model summaries are lossy in the same sense as ordinary Core compaction; review important context before explicitly invoking manual compaction. The conservative UTF-8 bound may reject a request that a provider could accept. The algorithm does not claim provider-exact token measurement or repair of a damaged/unmatched pre-existing compaction bracket.
 
-Select the exported `dsh-github-copilot/manual-compaction-recovery` Host class **instead of** the stock basic compaction plugin in a reviewed Host composition. Keep the existing BasicCompactionConfig, including any modelPolicies and maxTokens; configure a summary route deliberately if the last committed model cannot serve the summary. Do not enable two compaction services or modify a live profile without explicit approval. The normal plugin and all ordinary sessions remain usable without this replacement; the package export alone neither installs it nor changes an existing Session.
+Select the exported `dsh-github-copilot/manual-compaction-recovery` Host class **instead of** the stock basic compaction plugin in a reviewed Host composition. For a composition that normally contains `- name: '@deepseek-ai/dsh-compaction-basic'`, remove that single row and use this row in the same scope:
+
+```yaml
+- name: 'dsh-github-copilot/manual-compaction-recovery'
+  config:
+    auto: true
+    maxTokens: 65536 # example only: preserve the reviewed original cap
+```
+
+Keep the existing BasicCompactionConfig, including any modelPolicies and actual maxTokens; configure a summary route deliberately if the last committed model cannot serve the summary. Do not enable two compaction services or modify a live profile without explicit approval. The normal plugin and all ordinary sessions remain usable without this replacement; the package export alone neither installs it nor changes an existing Session.
 
 ## Acceptance and retirement
 
