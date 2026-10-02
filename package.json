@@ -34,6 +34,10 @@
       "types": "./lib/types/routed-web.d.ts",
       "default": "./lib/routed-web.js"
     },
+    "./manual-compaction-recovery": {
+      "types": "./lib/types/manual-compaction-recovery.d.ts",
+      "default": "./lib/manual-compaction-recovery.js"
+    },
     "./deployment-baseline.json": "./deployment-baseline.json",
     "./package.json": "./package.json"
   },
@@ -60,6 +64,7 @@
     "docs/official-first-020-rc2.md",
     "docs/web-lifecycle-rc2.md",
     "docs/copilot-compaction.md",
+    "docs/manual-compaction-recovery.md",
     "docs/copilot-usage.md",
     "docs/automatic-model-routing.md",
     "docs/image-input-compatibility.md",
@@ -114,6 +119,9 @@
     "@deepseek-ai/cordis": "^4.0.4",
     "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
     "@deepseek-ai/dsh-agent-default-model": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-commands": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction-basic": "0.2.0-rc.2",
     "@deepseek-ai/dsh-api-remotes": "0.2.0-rc.2",
     "@deepseek-ai/dsh-authorization": "0.2.0-rc.2",
     "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2",
@@ -123,6 +131,7 @@
     "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.2",
     "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
     "@deepseek-ai/dsh-llm-pi-ai": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.0-rc.2",
     "@deepseek-ai/dsh-scope": "0.2.0-rc.2",
     "@deepseek-ai/dsh-settings": "0.2.0-rc.2",
     "@deepseek-ai/dsh-typert-protocol": "0.2.0-rc.2",
@@ -162,6 +171,9 @@
     "@deepseek-ai/cordis": "~4.0.4",
     "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
     "@deepseek-ai/dsh-agent-default-model": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-commands": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction-basic": "0.2.0-rc.2",
     "@deepseek-ai/dsh-api-gateway": "0.2.0-rc.2",
     "@deepseek-ai/dsh-api-remotes": "0.2.0-rc.2",
     "@deepseek-ai/dsh-app-boot": "0.2.0-rc.2",

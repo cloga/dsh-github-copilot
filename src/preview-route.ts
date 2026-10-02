@@ -58,6 +58,12 @@ export interface GitHubCopilotPreviewView {
 }
 export interface GitHubCopilotPreview {
   getView(): GitHubCopilotPreviewView
+  /** Synchronous, account-proven capacities for an explicit manual summary; never triggers discovery. */
+  recoveryLimits(modelId: string): {
+    readonly limits: Pick<AccountModelDescriptor, 'contextWindow' | 'maxInputTokens' | 'maxTokens'>
+    readonly policy: Partial<RequestBudgetPolicy>
+    readonly assertCurrent: () => void
+  } | undefined
   /** Host-only current endpoint facts; no discovery and no credential material. */
   routeFacts(modelId: string): { readonly api: string; readonly baseURL: string } | undefined
   /** Capture credential-proof continuity, independent of ordinary metadata cache TTL. */
@@ -731,6 +737,28 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
   }
   ctx.provide('githubCopilotPreview', { getView, refresh,
+    recoveryLimits(modelId) {
+      const snapshot = source.readSnapshot()
+      if (snapshot === undefined || proofFor(snapshot) === undefined || !getView().available
+        || excludedModels().has(modelId)) return undefined
+      const descriptor = snapshot.models.find(model => model.id === modelId)
+      if (descriptor === undefined) return undefined
+      const revision = lifetime.revision
+      const proof = snapshotProof
+      return Object.freeze({
+        limits: Object.freeze({
+          contextWindow: descriptor.contextWindow, maxTokens: descriptor.maxTokens,
+          ...descriptor.maxInputTokens === undefined ? {} : { maxInputTokens: descriptor.maxInputTokens },
+        }),
+        policy: Object.freeze({ ...budgetSettings() }),
+        assertCurrent: () => {
+          if (!lifetime.isCurrent(revision) || snapshotProof !== proof || proofFor(snapshot) === undefined
+            || source.readSnapshot() !== snapshot || excludedModels().has(modelId)) {
+            throw new Error('COPILOT_MANUAL_RECOVERY_ACCOUNT_PROOF_CHANGED')
+          }
+        },
+      })
+    },
     captureSearchProof() {
       const revision = lifetime.revision
       const captured = snapshotProof

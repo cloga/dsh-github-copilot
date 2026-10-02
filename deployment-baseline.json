@@ -234,11 +234,15 @@
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-settings-models",
         "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-commands",
+        "@deepseek-ai/dsh-compaction",
+        "@deepseek-ai/dsh-compaction-basic",
         "@deepseek-ai/dsh-credentials",
         "@deepseek-ai/dsh-launch-environment",
         "@deepseek-ai/dsh-llm",
         "@deepseek-ai/dsh-llm-pi-ai",
         "@deepseek-ai/dsh-scope",
+        "@deepseek-ai/dsh-session",
         "@deepseek-ai/dsh-settings",
         "@deepseek-ai/dsh-typert-protocol",
         "@deepseek-ai/dsh-web",
@@ -439,6 +443,23 @@
         {"file": "tests/preview-route.spec.ts", "name": "refuses an already oversized manual summary without sending or truncating its history"},
         {"file": "tests/preview-route.spec.ts", "name": "keeps output truncation distinct from context overflow and successful summary output"},
         {"file": "tests/preview-route.spec.ts", "name": "isolates concurrent chat success from a rejected compaction admission"}
+      ]
+    },
+    {
+      "id": "opt-in-oversized-manual-compaction",
+      "required": true,
+      "evidenceScope": "synthetic-public-subclass-and-exact-tagged-source-no-live-inference",
+      "sourceMarkers": [
+        {"file": "src/manual-compaction-recovery.ts", "marker": "extends BasicCompactionEngine"},
+        {"file": "src/manual-compaction-recovery.ts", "marker": "COPILOT_MANUAL_RECOVERY_"},
+        {"file": "src/preview-route.ts", "marker": "recoveryLimits(modelId)"},
+        {"file": "docs/manual-compaction-recovery.md", "marker": "separately selected"}
+      ],
+      "tests": [
+        {"file": "tests/manual-compaction-recovery.spec.ts", "name": "reduces an oversized balanced history with bounded complete calls and an unmarked aggregate audit"},
+        {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects an indivisible span before dispatch and leaves recovery to native failure handling"},
+        {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects unmatched tool calls before dispatch instead of splitting a call and result"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "recovers oversized manual history with one native transaction and honest multi-call audit"}
       ]
     },
     {
@@ -1088,6 +1109,7 @@
     "./remote": [],
     "./routed-web": ["default"],
     "./web-delegate": ["name", "inject", "apply"],
+    "./manual-compaction-recovery": ["CopilotManualRecoveryCompactionEngine", "summarizeOversizedManualInput"],
     "./deployment-baseline.json": [],
     "./package.json": []
   }

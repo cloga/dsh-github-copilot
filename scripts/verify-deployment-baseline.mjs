@@ -470,7 +470,7 @@ const index = await read('src/index.ts')
 for (const symbol of manifest.requiredExports?.['.'] ?? []) {
   assert(index.includes(symbol), `root export ${symbol} is missing`)
 }
-const expectedExportSubpaths = ['.', './client', './remote', './routed-web', './web-delegate', './deployment-baseline.json', './package.json']
+const expectedExportSubpaths = ['.', './client', './remote', './routed-web', './web-delegate', './manual-compaction-recovery', './deployment-baseline.json', './package.json']
 const declaredExportSubpaths = Object.keys(manifest.requiredExports ?? {}).sort()
 const packageExportSubpaths = Object.keys(packageJson.exports ?? {}).sort()
 assert(JSON.stringify(declaredExportSubpaths) === JSON.stringify([...expectedExportSubpaths].sort()), 'required export inventory differs')

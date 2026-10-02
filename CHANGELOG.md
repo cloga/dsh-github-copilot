@@ -6,6 +6,10 @@
 - Validate actual native-projected image MIME against explicit account format evidence before managed dispatch, with request-local diagnostics and no image rewriting, model switch or additional retry.
 - Document why durable attachment formats and filenames cannot prove outgoing MIME, and retain the original service-side rejection as unverified rather than declaring Grok text-only.
 
+## 0.4.0-alpha.69 (prepared)
+
+- Add an explicit, opt-in manual compaction engine for compressible already-oversized managed Copilot histories. It uses a bounded public summary hook and native transactional replacement without changing the default compaction service. Include account-proof and failure boundaries in the recovery design.
+
 ## 0.4.0-alpha.68 (prepared)
 
 - Add one **Follow parent model** control in plugin settings. Enable once for existing and new supported Copilot subagents and Team mates; no Session IDs or per-child setup (#234).
