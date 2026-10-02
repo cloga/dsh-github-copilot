@@ -311,7 +311,11 @@ describe('GitHubCopilotAuthorizationController', () => {
       githubCopilotEffectiveSettings: { excludedModelIds: ['inherited-model'] },
       accountModels: [{ id: 'inherited-model', name: 'Inherited', api: 'openai-responses' }],
     })
-    it('retains known exclusions read-only when selection evidence is missing and refuses writes', async () => {
+    await expect(harness.controller.status()).resolves.toMatchObject({
+      modelPreferences: { state: 'ready', excludedModelIds: ['inherited-model'] },
+    })
+  })
+  it('retains known exclusions read-only when selection evidence is missing and refuses writes', async () => {
       const harness = runtime({ configured: true, githubCopilotEffectiveSettings: { excludedModelIds: ['absent'] } })
       harness.services.delete('sessionProjections')
       await expect(harness.controller.status()).resolves.toMatchObject({
@@ -339,10 +343,6 @@ describe('GitHubCopilotAuthorizationController', () => {
       expect(view.accountModels?.models).toHaveLength(1)
       expect(JSON.stringify(view)).not.toContain('PRIVATE_SETTINGS_FAILURE')
     })
-    await expect(harness.controller.status()).resolves.toMatchObject({
-      modelPreferences: { state: 'ready', excludedModelIds: ['inherited-model'] },
-    })
-  })
   it('locks fixed managed models selected by live Session projection or request header', async () => {
     const harness = runtime({
       configured: true,
