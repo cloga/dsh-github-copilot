@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.62"
+    "version": "0.4.0-alpha.64"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -566,7 +566,11 @@
       ],
       "tests": [
         {"file": "tests/preview-provider.spec.ts", "name": "normalizes only wire item IDs after native serialization while preserving durable replay and tool pairing"},
-        {"file": "tests/preview-provider.spec.ts", "name": "sends identical normalized bytes on the third Core-style attempt after two HTTP 408s"},
+        {"file": "tests/preview-provider.spec.ts", "name": "sends identical normalized bytes after two HTTP 408s (empty reasoning: %s)"},
+        {"file": "tests/preview-provider.spec.ts", "name": "omits an empty SDK reasoning signature while preserving opaque reasoning and tool pairing"},
+        {"file": "tests/responses-replay-compat.spec.ts", "name": "omits only explicitly empty completed reasoning shells without changing history or tool pairing"},
+        {"file": "tests/responses-replay-compat.spec.ts", "name": "does not mistake partial, opaque, nonempty or unknown reasoning data for an empty shell"},
+        {"file": "tests/responses-replay-compat.spec.ts", "name": "reuses omitted empty shells only from the exact HTTP-408 snapshot"},
         {"file": "tests/responses-replay-compat.spec.ts", "name": "refuses a new step, session, signal, cold resume, stale entry and concurrent requests"},
         {"file": "tests/preview-route.spec.ts", "name": "clears only the matching Session retry cache on %s across fresh Core preparations"},
         {"file": "tests/preview-route.spec.ts", "name": "classifies \"$message\" in a $envelope Responses 401 locally and reuses the same credential without discovery or refresh"},
@@ -1012,7 +1016,8 @@
         {"file": "tests/auto-model-host.spec.ts", "name": "replaces Core virtual-Auto switch guidance with the resolved real route"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "folds a durable decision into turn-scoped credential-free attribution"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "omits attribution when a compatible history contains no optional decision"},
-        {"file": "tests/turn-selection-card.spec.ts", "name": "reads exact completed turn evidence once through the public action slot and keeps actual model out of footer"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "reads exact completed turn evidence through %s and exposes reasons without repeating the model"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "diagnoses an unavailable node collection without reading another turn"},
         {"file": "tests/turn-model-provenance.spec.ts", "name": "retains known models around zero-usage failed attempts without reading payloads"},
         {"file": "tests/preview-route.spec.ts", "name": "publishes Auto as a virtual picker entry but refuses unresolved adapter dispatch"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "shrinks durable history and rebuilds the switched model request without sending the oversized original"}
