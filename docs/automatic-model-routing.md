@@ -138,16 +138,127 @@ The compressed output keeps the header in its own first zstd frame, as required 
 
 General native subagent Auto inheritance is **not** in the base MVP.
 
-In official DSH 0.2.0-rc.2, `TeamRoster.spawn` calls `ctx.subagents.startContinuable` without `request.agentOptions`. Core's `resolveChildAgentOptions` snapshots the parent's resolved concrete route into the teammate's options and durable descriptor. Public Core evidence cannot distinguish an inherited concrete snapshot from an explicit concrete override. The plugin must not relabel that concrete child route as Auto or write a fabricated child selection.
+In official DSH 0.2.0-rc.2, `TeamRoster.spawn` calls `ctx.subagents.startContinuable` without `request.agentOptions`. Core initializes the child from the parent's latest recorded request route, falling back to the parent's creation options before it has made a request, and records the resulting child options in its descriptor. This is creation-time inheritance, not a live link to the parent's selection. A recorded concrete route alone does not establish whether it came from an inherited selection or an explicit child override, and a resolved route does not prove the parent had no pending Auto intent. The plugin must not relabel a child route as Auto or write fabricated selection history.
 
-The implementation preserves native behavior:
+Without explicit `parentModelFollow` enrollment, the plugin preserves native child routing behavior:
 
 - a child with an explicit model override uses that model;
-- a child or Team teammate without an override inherits Core's resolved concrete route;
+- a new child or Team mate without an override starts with Core's parent-route snapshot and fallback behavior;
+- later parent changes do not retarget an existing child through the native continuation path;
 - the child UI shows the real model truthfully;
 - no plugin code claims independent child Auto classification.
 
-A later plugin-owned delegation entry may carry explicit Auto intent in its own public descriptor and let each child classify independently, but only after cold-resume and override precedence are proven without Core changes.
+## Requested parent-to-child selection inheritance
+
+The desired behavior is for native subagents and Team mates to follow the master's **effective selection on each new child turn**, not only snapshot the route that was effective when the child was created:
+
+- An explicit child model override takes precedence over inheritance.
+- At child creation, an enrolled child starts from the parent's effective selection. On each later child turn, the follow-policy resolver reads its direct parent's current effective selection unless the child has an explicit override.
+- If the parent is fixed to a model, the next child turn follows that provider/model. If the parent is Auto, the child retains Auto intent and independently resolves a model for its own turn; it must not be pinned to the parent's concrete model for that turn.
+- A route is stable within a turn: changing the parent while a child turn is running does not hot-swap an in-flight request. The new parent selection applies when the child begins its next turn.
+- The implementation must retain provenance that distinguishes inherited Auto, inherited fixed selection, and an explicit child override across child creation, message delivery, and cold resume. A concrete model ID alone cannot prove Auto intent.
+
+### Implementation sketch and boundary
+
+This is a requested product direction, not current behavior. A native implementation would carry an explicit inheritance mode and parent/override provenance, then resolve the parent's current effective selection at the start of each new child turn. For Auto, the child must invoke its own per-turn Auto resolution against its own messages and capabilities. Explicit child selection remains authoritative. The resolver must use the live parent's selected/requested model state, not the global default, and must fail visibly when parent evidence is missing rather than guess from a stale concrete child route. The open [Core PR #95](https://github.com/cloga/deepseek-harness/pull/95) proposes creation-time route rules for new children; its design preserves existing children on later messages and does not establish per-turn parent-following or inherited Auto intent.
+
+The plugin has public request-selection middleware seams. The candidate implementation below uses them for explicitly enrolled native `spawn` children, rather than claiming automatic inference of creation-time intent. General transparent enrollment is not implemented. Actual request routes remain authoritative; native Team labels are not rewritten.
+
+### October 2 investigation: routing is possible; automatic enrollment is ambiguous
+
+Tracking: [#229](https://github.com/cloga/dsh-github-copilot/issues/229).
+The target remains unchanged official `0.2.0-rc.2`, commit
+`639ed015397290b3745d163aafe02ffee4aa3f84`, not the proposed Core branch.
+
+| Exact source | Finding |
+| --- | --- |
+| [child-agent.ts](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/subagent/subagent/src/child-agent.ts) | `parentAgentOptionsForDelegation` reads the latest request header before creation options. `resolveChildAgentOptions` merges overrides and discards whether an equal route was explicit. |
+| [continuation.ts](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/subagent/subagent/src/continuation.ts) | Creation snapshots resolved options; cold resume reconstructs them from the descriptor. No next-turn parent-model recapture is performed here. |
+| [descriptor.ts](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/subagent/subagent/src/descriptor.ts) | Descriptor v3 stores resolved route/effort, not follow/override provenance, and rejects unknown fields. |
+| [model-selection.ts](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/core/agent/src/model-selection.ts) | Public `installModelSelection` couples scoped prompt assembly and request routing, clears inherited effort, and supports disposal. Its snapshot boundary is a step, so a follow policy must additionally freeze selection for a whole child turn. |
+| [subagent index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/subagent/subagent/src/index.ts) and [lifecycle.ts](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/subagent/subagent/src/lifecycle.ts) | Public start/end notifications describe published runs; they are not a before-create interceptor exposing original override intent. The activation observer is package-private. |
+
+An isolated Node 24 experiment executed the unchanged child-option resolver,
+descriptor functions, and public selection middleware from that commit. Each
+downloaded file's Git blob SHA was checked against the GitHub contents response
+before execution. TypeScript was stripped with Node's compiler; depth, JSON
+snapshot, message constructors, and the event context were synthetic dependencies.
+Six assertions passed:
+
+1. Omitted overrides and an explicit provider/model equal to the parent produce identical resolved options and identical durable descriptors.
+2. Changing the parent's recorded route changes a newly resolved child, not the previously captured descriptor.
+3. A concrete parent request header takes precedence over Auto creation options.
+4. Before the first parent request, Auto survives the creation-options fallback.
+5. Adding an invented `followParent` descriptor field is rejected by the official reader.
+6. Public model-selection middleware applies a fixed route, forwards virtual Auto on subsequent assembly, clears inherited effort, and removes its listeners on disposal.
+
+These are exact-function experiments, not full Core activation, real Team turns,
+cold-resume integration, or model transport evidence. In particular, forwarding
+an Auto ID does not by itself prove child-specific Auto resolution.
+
+The first result is a counterexample to automatic override detection: two
+different user intentions yield the same observable child state. Comparing
+parent/child model IDs, inspecting only `Agent.options`, or treating a missing
+child picker event as inheritance cannot implement the stated precedence for
+every existing child. Request middleware does not recover the lost information.
+
+### Plugin-only candidate: explicit per-child follow policy
+
+**Implemented in source; full runtime qualification and release are pending.**
+Do not silently enroll all existing children or treat a new setting as proof of
+their original creation intent. `github-copilot.parentModelFollow` defaults to
+an empty array. The standard plugin configuration accepts explicit bindings:
+
+```json
+{
+  "parentModelFollow": [
+    { "childSessionId": "<native-child-session-id>", "parentSessionId": "<direct-parent-session-id>" }
+  ]
+}
+```
+
+These are native DSH Session IDs, not role names, model IDs, or Copilot App
+session handles. A binding authorizes replacement of the child's captured
+creation route. No binding is added by installation or discovery. Existing
+child-owned `model/selection` events take precedence, even for a same-model
+selection; enrollment does not clear them. Remove the binding to return to
+native routing at the next turn. Settings changes during an already captured
+turn do not interrupt or change its route.
+
+- A user explicitly enrolls a child Session through the native plugin configuration and its path-level settings writes, or leaves it under native selection. Bindings live only in this plugin's configuration. Do not add descriptor fields or new Session history events.
+- A pure Host-only projection folds existing child-owned selection events, turn starts, and native descriptor evidence, excluding inherited seed events. A later explicit child selection suspends following from its next turn, including a same-model reselection. Once present, a child-owned selection is not cleared by toggling enrollment.
+- Read the direct parent's pending selected intent first, then its proven effective route. Preserve the exact Auto preference. Do not borrow the global default, another Session, or a stale request header when a newer pending choice exists.
+- Freeze one selection before the child's first prompt assembly in a new turn. Reuse it for every subsequent step/retry/compaction attempt in that turn. Integrate it with the existing per-Agent Auto resolver so Auto evaluates the child's admitted messages and capacity requirements, not the parent's chosen model.
+- Reuse normal managed adapter admission for fixed-model availability and exclusions, and the existing validated candidate pool for Auto. Clear inherited reasoning effort while retaining output caps. Missing parent/selection evidence yields a named `COPILOT_PARENT_MODEL_*` diagnostic, never a guessed model or silent fallback.
+- Restore policy from plugin-owned settings on cold activation and inspect only public projections. Do not call public `session.selectModel` for propagation: it also writes the future global default. Do not convert historical provenance or alter native permissions.
+- Keep scope to verified native `spawn` children and managed Copilot parent routes. Dedicated historical role policies, fork-provider descriptors and externally managed providers are rejected when enrolled. Nested enrollment follows verified direct-parent links until an explicit selection or non-following parent supplies the intent; cycles and missing parents fail visibly.
+- Verify native Team model labels separately: a roster label may describe a creation snapshot rather than the next request. Do not claim accurate live UI simply because request routing changes.
+
+Before release, integration coverage must exercise fixed A to B,
+fixed to Auto and Auto to fixed, each Auto preference, independent sibling contexts,
+parent changes mid-turn, explicit same-model and different-model child overrides,
+fork seed boundaries, cold resume, parent unavailability, exclusions, concurrent
+settings writes, unload, and unchanged default/credential/permission state.
+The current native creation path has no proven automatic-enrollment mechanism
+that preserves original override precedence, so this alternative needs explicit
+per-child user authorization rather than a claim of transparent default inheritance.
+
+Local full validation is blocked: `pnpm exec vitest --version` triggered pnpm's
+dependency reconciliation, which failed with HTTP 404 for
+`https://packagefeedproxy.microsoft.io/npm/@deepseek-ai/dsh-llm/-/dsh-llm-0.2.0-rc.2.tgz`.
+No registry restriction was bypassed. The isolated experiment above does not
+replace the complete repository and exact-Core compatibility gates.
+
+Implemented files are `src/parent-model-follow.ts`, `src/auto-model-host.ts`,
+`src/config.ts` and `src/preview-route.ts`. Nine dependency-free policy tests
+passed with `node --test tests/scripts/parent-model-follow.test.mjs`, and the
+policy module passed a focused TypeScript check. An actual-plugin-source VM
+experiment passed fixed/Auto turn freezing, config removal, explicit child
+override, reinstallation/refolding and no-history-write assertions with synthetic
+Context/LLM/token-estimator dependencies. Focused Vitest Host/config tests were
+added but could not start with the incomplete local dependency installation.
+These limits mean native Team end-to-end behavior, full cold resume, package
+build and release qualification are not yet claimed.
 
 ## Public API implementation
 

@@ -132,7 +132,9 @@ Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理�
 
 ### Auto 模型路由
 
-托管 GitHub Copilot 分组提供三个平铺的虚拟选择：**Auto · Balance**（均衡）、**Auto · Efficiency**（效率）和 **Auto · Intelligence**（智能）。三档先应用精确模型排除，再共用当前账号验证过的合格模型池。在应用偏好前，路由会根据候选模型的硬输入预算计算输入余量，剔除无法容纳当前消息的候选。软偏好通过确定性内存种子在候选区间（上段/下段/中段）内分布，避免单一顶配模型跨 Session 被垄断。若所有候选均超限，Auto 会选择输入容量最大的模型并对可压缩历史触发 compaction pressure；若排除后没有任何合格模型，则 Auto 关闭式失败。Auto 在每个 Core turn 只解析一次；同轮工具步骤、重试和自动 compact 恢复使用同一真实模型，新轮次可重新选择。图片轮次必须有未被排除且已验证的图片候选。新轮次保留 Core 的真实模型／用量信息，不追加不兼容的插件事件。搜索仍由独立策略管理；原生子代理与 Team 队友继承 Core 的具体模型，不被重新标为 Auto。详见[策略与 mockup](./docs/automatic-model-routing.md)。嵌套管理折叠区由插件提供；Core picker 仍保持平铺。
+**源码候选功能，尚未发布：** `github-copilot.parentModelFollow` 可通过 `{ childSessionId, parentSessionId }` 配置明确授权原生 `spawn` 子成员跟随父 Agent。已授权成员在下一轮跟随父 Agent 的固定模型，或继承其准确的 Auto 偏好并按自身上下文独立选模；当前轮次不变，子成员自己的显式选择优先。默认 `[]`，不会自动接管已有成员。参见[配置、限制与验证状态](./docs/automatic-model-routing.md#plugin-only-candidate-explicit-per-child-follow-policy)。原生 Team 的创建时模型标签不会被改写。
+
+托管 GitHub Copilot 分组提供三个平铺的虚拟选择：**Auto · Balance**（均衡）、**Auto · Efficiency**（效率）和 **Auto · Intelligence**（智能）。三档先应用精确模型排除，再共用当前账号验证过的合格模型池。在应用偏好前，路由会根据候选模型的硬输入预算计算输入余量，剔除无法容纳当前消息的候选。软偏好通过确定性内存种子在候选区间（上段/下段/中段）内分布，避免单一顶配模型跨 Session 被垄断。若所有候选均超限，Auto 会选择输入容量最大的模型并对可压缩历史触发 compaction pressure；若排除后没有任何合格模型，则 Auto 关闭式失败。Auto 在每个 Core turn 只解析一次；同轮工具步骤、重试和自动 compact 恢复使用同一真实模型，新轮次可重新选择。图片轮次必须有未被排除且已验证的图片候选。新轮次保留 Core 的真实模型／用量信息，不追加不兼容的插件事件。搜索仍由独立策略管理。目前原生子代理与 Team 队友会以 master 最近记录的请求 route 初始化（master 尚未发出请求时回退到创建配置）；这不是随 master 后续选择自动变化的动态关联，route 快照也不能证明 Auto 意图已继承。每轮跟随 master 固定模型、或让子代理按自身上下文独立执行 Auto 的目标行为及 Core／插件边界，见[设计记录](./docs/automatic-model-routing.md#requested-parent-to-child-selection-inheritance)。嵌套管理折叠区由插件提供；Core picker 仍保持平铺。
 
 已完成的 Copilot 回复在原生 Usage／时间后显示 **Auto（偏好）**，点信息按钮查看本轮记录的选择原因；只有捕获到明确固定选择才显示**手动**。缺记录显示**选择方式未知**，不借当前 picker 推断历史。不重复模型名、不另设 Model details 按钮：实际模型仍由原生 Usage 显示，其缺失归属行为未改变。新选择记录仅限当前 Host 内存且有容量上限，重启、释放 Agent 或淘汰后会丢失；兼容历史 Auto 记录仍可读取。公开 assistant-actions slot 只允许插件内部换行，不能改变原生固定高度尾栏。
 

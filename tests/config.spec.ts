@@ -23,12 +23,26 @@ describe('session search settings', () => {
 
   it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['excludedModelIds', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['excludedModelIds', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
     expect(parsed.searchRouting.get()).toMatchObject({ defaultSearchProvider: 'deepseek-official' })
     expect(readInlineConfig(parsed)).toMatchObject({ searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
+  })
+
+  describe('explicit parent model following', () => {
+    it('defaults to no enrolled children and snapshots live binding values', () => {
+      expect(readInlineConfig(Config(base)).parentModelFollow).toEqual([])
+      const binding = { childSessionId: 'child', parentSessionId: 'parent' }
+      const current = readInlineConfig({ ...base, parentModelFollow: { get: () => ({ 0: binding, length: 1 }) } })
+      expect(current.parentModelFollow).toEqual([binding])
+      binding.parentSessionId = 'changed'
+      expect(current.parentModelFollow?.[0]?.parentSessionId).toBe('parent')
+    })
+    it('rejects empty lineage identities', () => {
+      expect(() => Config({ ...base, parentModelFollow: [{ childSessionId: '', parentSessionId: 'parent' }] })).toThrow()
+    })
   })
 
   it('reads each current snapshot rather than freezing live routing at activation', () => {

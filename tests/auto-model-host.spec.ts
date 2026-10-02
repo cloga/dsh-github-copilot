@@ -1,6 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -8,6 +8,7 @@ import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import { installAutoModelRouting } from '../src/auto-model-host.ts'
+import { foldFollowState, initialFollowState, PARENT_MODEL_FOLLOW_PROJECTION } from '../src/parent-model-follow.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
   GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID as INTELLIGENCE, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
@@ -38,6 +39,82 @@ function message(text: string) {
 }
 
 describe('Auto model Host integration', () => {
+  it('follows fixed and Auto parents at turn boundaries without writing child selections', async () => {
+    const ctx = new Context()
+    const parentCtx = new Context()
+    let turn = 1
+    let binding = true
+    let parentModel = 'fixture-fast'
+    let explicit: { provider: string; model: string } | null = null
+    const append = vi.fn()
+    const agent = { ctx, session: {
+      id: 'child', header: { id: 'child', parentSession: 'parent', origin: 'subagent' },
+      append, requestHeader: () => ({ config: { provider: PREVIEW, model: 'old-model', maxTokens: 100 } }),
+    } } as unknown as Agent
+    const parent = { ctx: parentCtx, session: {
+      id: 'parent', header: { id: 'parent' }, requestHeader: () => ({ config: { provider: PREVIEW, model: 'stale-model' } }),
+    } } as unknown as Agent
+    const removeProjection = vi.fn()
+    const register = vi.fn(() => removeProjection)
+    ctx.provide('sessionProjections', { register, stateOf: (session: { id: string }, key: string) => {
+      if (key === 'modelSelection') return { pending: session.id === 'parent' ? { provider: PREVIEW, model: parentModel } : explicit }
+      if (key !== PARENT_MODEL_FOLLOW_PROJECTION) return undefined
+      if (session.id === 'parent') return initialFollowState()
+      const state = foldFollowState(initialFollowState(), {
+        seq: 0, type: 'subagent/descriptor', data: { version: 3, provider: 'spawn', mode: 'continuable' },
+      })
+      return { ...state, turn, explicit }
+    } } as never)
+    ctx.provide('agents', { get: (id: string) => id === 'parent' ? parent : undefined } as never)
+    const scope = scopeTarget(agent, agent)
+    const promptScope = scopeTarget(new SystemPrompt(ctx, {}), agent)
+    const dispose = installAutoModelRouting(ctx, {
+      parentModelBindings: () => binding ? [{ childSessionId: 'child', parentSessionId: 'parent' }] : [],
+      loadModels: async () => [model('fixture-fast', 64_000, 'low'), model('fixture-strong', 256_000, 'high')],
+    })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+    const signal = new AbortController().signal
+    const assemble = async () => {
+      const assembly = { sections: [], contexts: [], tools: [], variables: { provider: PREVIEW, model: 'old-model' } }
+      return ctx.waterfall(promptScope, 'system-prompt/assemble', assembly, {}, async () => assembly)
+    }
+    const request = async () => {
+      const messages = [message('A child-specific question.')]
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      return ctx.waterfall(scope, 'agent/request', { agent, turn, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: explicit?.model ?? 'old-model', reasoningEffort: ReasoningEffortId('high'), maxTokens: 100 }))
+    }
+    try {
+      expect((await assemble()).variables.model).toBe('fixture-fast')
+      parentModel = 'fixture-strong'
+      expect(await request()).toMatchObject({ model: 'fixture-fast', maxTokens: 100 })
+      turn++
+      expect((await assemble()).variables.model).toBe('fixture-strong')
+      expect((await request()).reasoningEffort).toBeUndefined()
+      parentModel = INTELLIGENCE
+      turn++
+      expect((await assemble()).variables.model).toBe(INTELLIGENCE)
+      const auto = await request()
+      expect(['fixture-fast', 'fixture-strong']).toContain(auto.model)
+      expect(ctx.githubCopilotTurnSelection.get(agent, turn)).toMatchObject({ mode: 'auto', preference: 'intelligence' })
+      binding = false
+      parentModel = 'fixture-fast'
+      expect((await request()).model).toBe(auto.model)
+      turn++
+      expect((await request()).model).toBe('old-model')
+      binding = true
+      explicit = { provider: PREVIEW, model: 'fixture-fast' }
+      turn++
+      expect((await request()).model).toBe('fixture-fast')
+      expect(append).not.toHaveBeenCalled()
+    } finally {
+      dispose()
+      expect(removeProjection).toHaveBeenCalledOnce()
+      await ctx.fiber.dispose()
+      await parentCtx.fiber.dispose()
+    }
+  })
   it('cold-reads Auto selection through the official format reader without plugin vocabulary', async () => {
     const ctx = new Context()
     const id = SessionId('fixture-auto-cold-read')
