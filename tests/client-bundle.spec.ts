@@ -191,6 +191,7 @@ describe('tsdown client artifact', () => {
       remote: { $mount: vi.fn(async () => async () => {}), $on: on, githubCopilot: remote, settings: settingsRemote },
       on,
       logger: { warn: vi.fn() },
+      get: vi.fn(),
       slots: {
         spec: (name: string) => ({ kind: name === 'plugins.bundle.config' ? 'keyed' : 'list', scope: 'root' }),
         register(options: { name: string; id?: string; key?: string }, render: Render) {
