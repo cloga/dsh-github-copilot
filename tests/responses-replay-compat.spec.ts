@@ -25,6 +25,44 @@ function expectSafeFailure(payload: unknown) {
 }
 
 describe('Copilot Responses wire replay normalization', () => {
+  it('omits only explicitly empty completed reasoning shells without changing history or tool pairing', () => {
+    const shell = Object.freeze({ type: 'reasoning', id: 'rs_empty', summary: Object.freeze([]) })
+    const call = Object.freeze({ type: 'function_call', id: 'fc_old', call_id: 'call_stable', name: 'check', arguments: '{}' })
+    const result = Object.freeze({ type: 'function_call_output', call_id: 'call_stable', output: 'result' })
+    const message = Object.freeze({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'answer' }] })
+    const input = Object.freeze([shell, call, result, message])
+    const payload = Object.freeze({ input, store: false })
+    const normalized = normalizeCopilotResponsesPayload(payload)
+    expect(normalized).toEqual({ input: [
+      { type: 'function_call', call_id: 'call_stable', name: 'check', arguments: '{}' },
+      result, message,
+    ], store: false })
+    expect(payload.input).toBe(input)
+    expect(input[0]).toBe(shell)
+    expect(shell.id).toBe('rs_empty')
+    expect(normalizeCopilotResponsesPayload(normalized)).toBe(normalized)
+  })
+
+  it('does not mistake partial, opaque, nonempty or unknown reasoning data for an empty shell', () => {
+    for (const item of [
+      { type: 'reasoning', id: 'rs_partial' },
+      { type: 'reasoning', id: 'rs_partial', summary: [], status: 'in_progress' },
+      { type: 'reasoning', id: 'rs_invalid', summary: [], status: null },
+      { type: 'reasoning', id: 'rs_invalid', summary: null },
+      { type: 'reasoning', id: '', summary: [] },
+      { type: 'reasoning', id: 'rs_summary', summary: [{ type: 'summary_text', text: 'summary' }] },
+      { type: 'reasoning', id: 'rs_text', summary: [], content: [{ type: 'reasoning_text', text: 'text' }] },
+      { type: 'reasoning', id: 'rs_unknown', summary: [], future_data: 'preserve' },
+      { type: 'reasoning', id: 'rs_invalid', summary: [], encrypted_content: null },
+      { type: 'reasoning', id: 'rs_invalid', summary: [], encrypted_content: '' },
+      { type: 'item_reference', id: 'rs_reference' },
+    ]) expect(() => normalize([item])).toThrow(CopilotResponsesReplayError)
+    expect(normalize([{ type: 'reasoning', id: 'rs_opaque', summary: [], encrypted_content: 'opaque' }]).input)
+      .toEqual([{ type: 'reasoning', summary: [], encrypted_content: 'opaque' }])
+    expect(normalize([{ type: 'reasoning', id: 'rs_empty', status: 'completed', summary: [], content: [] }]).input)
+      .toEqual([])
+  })
+
   it('shallow-copies only eligible direct IDs without touching immutable history or nested fields', () => {
     const text = Object.freeze({ type: 'output_text', text: 'answer', id: 'nested-text', annotations: Object.freeze([]) })
     const content = Object.freeze([text])
@@ -94,6 +132,25 @@ describe('Copilot Responses wire replay normalization', () => {
         call.observe(JSON.stringify(payload), 408)
         call.finish()
       }
+    })
+    it('reuses omitted empty shells only from the exact HTTP-408 snapshot', () => {
+      const cache = new ResponsesRetryReplay()
+      const signal = new AbortController().signal
+      const shell = { type: 'reasoning', id: 'rs_empty', summary: [] }
+      const raw = { ...original, input: [shell, ...original.input] }
+      const retryPayload = { ...referenced, input: [{ type: 'item_reference', id: shell.id }, ...referenced.input] }
+      reject(cache, retryPayload, context, signal)
+      for (const input of [raw, retryPayload, retryPayload]) {
+        const call = attempt(cache, context, signal)
+        const payload = call.normalize(input)
+        expect(JSON.stringify(payload)).toBe(JSON.stringify(normalized))
+        call.observe(JSON.stringify(payload), 408)
+        call.finish()
+      }
+      reject(cache, { ...retryPayload, input: [
+        { type: 'reasoning', id: shell.id, summary: [{ type: 'summary_text', text: 'changed' }] },
+        ...referenced.input,
+      ] }, context, signal)
     })
     it('restores matching incomplete retry items without accepting changed fields', () => {
       const cache = new ResponsesRetryReplay()
@@ -243,7 +300,7 @@ describe('Copilot Responses wire replay normalization', () => {
   it.each([
     { type: 'item_reference', id: 'secret-reference' },
     { type: 'item_reference' },
-    { type: 'reasoning', id: 'secret-reasoning', summary: [] },
+    { type: 'reasoning', id: 'secret-reasoning' },
     { type: 'reasoning', id: 'secret', summary: [{ type: 'summary_text', text: 'secret-summary' }] },
     { type: 'reasoning', id: 'secret', encrypted_content: '' },
     { type: 'reasoning', id: 'secret', encrypted_content: '   ' },

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.64 (prepared)
+
+- Omit only explicitly empty completed reasoning shells from managed Responses outgoing payloads, without changing durable history, opaque encrypted content, public summaries or tool call/result pairing (#226).
+- Preserve fail-closed handling for partial, unknown and reference-dependent replay. Existing HTTP-408 retry snapshots may reuse the same omitted shell only when the entire original request and retry scope match; no new retry loop or model switch is introduced.
+
 ## 0.4.0-alpha.63 (prepared)
 
 - Restore the completed-reply Auto preference and recorded-reason disclosure on official Desktop by reading ChatNodeStore's public iterable `values()` instead of requiring a JavaScript `Map` (#222). Retain Map support and diagnose an unavailable collection once without querying another turn.
