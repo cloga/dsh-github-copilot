@@ -38,7 +38,9 @@ const vitestManifest = require.resolve('vitest/package.json')
 const vitestCli = join(dirname(vitestManifest), 'vitest.mjs')
 const fixture = await readFile(join(root, 'tests/fixtures/reasoning-presentation-core.fixture.ts'), 'utf8')
 const modulePath = join(root, 'src/reasoning-presentation.ts').replaceAll('\\', '/')
-const bytes = Buffer.from(fixture.replace("'__COPILOT_REASONING_MODULE__'", JSON.stringify(modulePath)))
+const autoModulePath = join(root, 'src/auto-model-presentation.ts').replaceAll('\\', '/')
+const bytes = Buffer.from(fixture.replace("'__COPILOT_REASONING_MODULE__'", JSON.stringify(modulePath))
+  .replace("'__COPILOT_AUTO_MODULE__'", JSON.stringify(autoModulePath)))
 let identity
 let failure
 try {

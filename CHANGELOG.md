@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.71 (prepared)
+
+- Decouple the Auto selection footer from optional conversation projections and wait for its exact Remote namespace (#238).
+- Use native completed-turn evidence to show retained Auto/Manual records when projection data is unavailable; keep incomplete attribution explicit without guessing historical selections or changing native Usage.
+- Cover cold/incremental native assembly and session-scoped rendering, projection failures, pending dependencies and invalid completion evidence. Live Desktop recovery still requires loaded-version verification.
+
 ## 0.4.0-alpha.70 (prepared)
 
 - Require image-capable Auto candidates for retained historical user/tool images after text-only continuations; honor native image offload markers (#236).
