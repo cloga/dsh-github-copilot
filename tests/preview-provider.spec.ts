@@ -334,13 +334,16 @@ describe('account provider model HTTP authorization observation', () => {
 })
 
 describe('managed Responses replay compatibility', () => {
-  function replayContext(): PiContext {
+  function replayContext(includeEmptyReasoning = false): PiContext {
     return { messages: [{ role: 'user', content: 'Synthetic task', timestamp: 0 }, {
       role: 'assistant', api: 'openai-responses', provider: PREVIEW, model: 'future-lab-r17',
       stopReason: 'toolUse', timestamp: 0,
       usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       content: [
+        ...includeEmptyReasoning ? [{ type: 'thinking' as const, thinking: '', thinkingSignature: JSON.stringify({
+          type: 'reasoning', id: 'rs_empty_scope', summary: [],
+        }) }] : [],
         { type: 'thinking', thinking: 'Public summary.', thinkingSignature: JSON.stringify({
           type: 'reasoning', id: 'rs_old_scope', summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'opaque-old-reasoning',
         }) },
@@ -350,12 +353,12 @@ describe('managed Responses replay compatibility', () => {
     }, { role: 'toolResult', toolCallId: 'call_check|fc_old_scope', toolName: 'check',
       content: [{ type: 'text', text: 'Done.' }], isError: false, timestamp: 0 }] }
   }
-  it('sends identical normalized bytes on the third Core-style attempt after two HTTP 408s', async () => {
+  it.each([false, true])('sends identical normalized bytes after two HTTP 408s (empty reasoning: %s)', async includeEmptyReasoning => {
     const item = descriptor('openai-responses')
     const retryReplay = new ResponsesRetryReplay()
     const coreSignal = new AbortController().signal
     const guard: AccountProviderGuard = { ...accountGuard(item.id), retryReplay, retrySignal: coreSignal }
-    const context = normalizeContext(replayContext())
+    const context = normalizeContext(replayContext(includeEmptyReasoning))
     const original = JSON.stringify(context)
     const bodies: string[] = []
     let firstPayload: Record<string, unknown> | undefined
@@ -425,6 +428,30 @@ describe('managed Responses replay compatibility', () => {
     expect(call.call_id).toBe(output.call_id)
     expect(JSON.parse(String(call.arguments))).toEqual({ id: 'keep-business-id' })
     expect(result.body!.store).toBe(false)
+    expect(result.replayFailure).not.toHaveBeenCalled()
+    expect(result.unauthorized).not.toHaveBeenCalled()
+  })
+  it('omits an empty SDK reasoning signature while preserving opaque reasoning and tool pairing', async () => {
+    const context = replayContext(true)
+    const original = JSON.stringify(context)
+    const onPayload = vi.fn((payload: unknown) => {
+      const input = (payload as { input: Record<string, unknown>[] }).input
+      expect(input.find(item => item.id === 'rs_empty_scope')).toEqual({
+        type: 'reasoning', id: 'rs_empty_scope', summary: [],
+      })
+    })
+    const result = await invoke(context, { onPayload })
+    expect(onPayload).toHaveBeenCalledTimes(1)
+    expect(result.result.stopReason).toBe('stop')
+    expect(result.fetch).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(context)).toBe(original)
+    const input = result.body!.input as Record<string, unknown>[]
+    expect(input.filter(item => item.type === 'reasoning')).toEqual([{
+      type: 'reasoning', summary: [{ type: 'summary_text', text: 'Public summary.' }],
+      encrypted_content: 'opaque-old-reasoning',
+    }])
+    expect(input.find(item => item.type === 'function_call')!.call_id)
+      .toBe(input.find(item => item.type === 'function_call_output')!.call_id)
     expect(result.replayFailure).not.toHaveBeenCalled()
     expect(result.unauthorized).not.toHaveBeenCalled()
   })
