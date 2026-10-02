@@ -47,7 +47,7 @@ function message(text: string) {
 }
 
 describe('Auto model Host integration', () => {
-  it('follows fixed and Auto parents at turn boundaries without writing child selections', async () => {
+  it.each(['bindings', 'switch'])('follows fixed and Auto parents using %s without writing child selections', async mode => {
     const ctx = new Context()
     const parentCtx = new Context()
     let turn = 1
@@ -77,7 +77,8 @@ describe('Auto model Host integration', () => {
     const scope = scopeTarget(agent, agent)
     const promptScope = scopeTarget(new SystemPrompt(ctx, {}), agent)
     const dispose = installAutoModelRouting(ctx, {
-      parentModelBindings: () => binding ? [{ childSessionId: 'child', parentSessionId: 'parent' }] : [],
+      parentModelBindings: () => binding && mode === 'bindings' ? [{ childSessionId: 'child', parentSessionId: 'parent' }] : [],
+      followParentModel: () => binding && mode === 'switch',
       loadModels: async () => [model('fixture-fast', 64_000, 'low'), model('fixture-strong', 256_000, 'high')],
     })
     ctx.emit(scope, 'agent/created', { agent, source: 'startup' })

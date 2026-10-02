@@ -41,6 +41,8 @@ export interface InlineConfig {
   excludedModelIds?: string[]
   /** Explicit native child/direct-parent enrollments; empty preserves native routing. */
   parentModelFollow?: ParentModelBinding[]
+  /** Profile-wide next-turn policy for supported native children. */
+  followParentModel?: boolean
   /** Estimated managed-route input headroom, separate from truthful catalog capacities. */
   requestBudgetSafetyTokens?: number
   /** Fraction of admissible input used by eligible automatic-compaction requests. */
@@ -59,7 +61,8 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'> & {
+  followParentModel?: boolean | LiveSetting<boolean>
   parentModelFollow?: ParentModelBinding[] | LiveSetting<ArrayLike<ParentModelBinding>>
   excludedModelIds?: string[] | LiveSetting<ArrayLike<string>>
   searchModel?: string | LiveSetting<string | undefined>
@@ -67,7 +70,8 @@ export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'> & {
+  followParentModel: LiveSetting<boolean>
   parentModelFollow: LiveSetting<ArrayLike<ParentModelBinding>>
   excludedModelIds: LiveSetting<ArrayLike<string>>
   searchModel: LiveSetting<string | undefined>
@@ -85,6 +89,7 @@ export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
     parentModelFollow: bindings === undefined ? undefined : Array.from(bindings, binding => ({
       childSessionId: binding.childSessionId, parentSessionId: binding.parentSessionId,
     })),
+    followParentModel: readConfigValue(config.followParentModel),
     searchModel: readConfigValue(config.searchModel),
     searchRouting: readConfigValue(config.searchRouting),
     temporaryRouteBackup: readConfigValue(config.temporaryRouteBackup),
@@ -106,9 +111,10 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   accountModelTtlMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(86_400_000),
   accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
   excludedModelIds: z.array(z.string()).default([]).hidden().volatile(),
+  followParentModel: z.boolean().default(false).volatile(),
   parentModelFollow: z.array(z.object({
     childSessionId: z.string().min(1), parentSessionId: z.string().min(1),
-  })).default([]).volatile(),
+  })).default([]).hidden().volatile(),
   requestBudgetSafetyTokens: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_REQUEST_BUDGET_POLICY.safetyTokens),
   requestBudgetPressureRatio: z.number().step(0.01).min(0.01).max(1).default(DEFAULT_REQUEST_BUDGET_POLICY.pressureRatio),
   compactionReasoning: z.union(['prefer-low', 'preserve']).default(DEFAULT_REQUEST_BUDGET_POLICY.compactionReasoning),

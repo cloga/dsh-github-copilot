@@ -142,7 +142,7 @@ General native subagent Auto inheritance is **not** in the base MVP.
 
 In official DSH 0.2.0-rc.2, `TeamRoster.spawn` calls `ctx.subagents.startContinuable` without `request.agentOptions`. Core initializes the child from the parent's latest recorded request route, falling back to the parent's creation options before it has made a request, and records the resulting child options in its descriptor. This is creation-time inheritance, not a live link to the parent's selection. A recorded concrete route alone does not establish whether it came from an inherited selection or an explicit child override, and a resolved route does not prove the parent had no pending Auto intent. The plugin must not relabel a child route as Auto or write fabricated selection history.
 
-Without explicit `parentModelFollow` enrollment, the plugin preserves native child routing behavior:
+With `followParentModel` off and no legacy `parentModelFollow` enrollment, the plugin preserves native child routing behavior:
 
 - a child with an explicit model override uses that model;
 - a new child or Team mate without an override starts with Core's parent-route snapshot and fallback behavior;
@@ -204,9 +204,16 @@ parent/child model IDs, inspecting only `Agent.options`, or treating a missing
 child picker event as inheritance cannot implement the stated precedence for
 every existing child. Request middleware does not recover the lost information.
 
-### Plugin-only candidate: explicit per-child follow policy
+### One-switch policy and legacy per-child bindings
 
-**Opt-in plugin implementation; transparent enrollment remains unsupported.**
+The ordinary UI is now one profile-wide **Follow parent model** switch in the
+plugin configuration page. See [requirements, design and mockup](parent-model-follow.md).
+It defaults to Off and does not ask users to manage child IDs. Explicitly
+enabling this broad policy authorizes replacing creation-time snapshots;
+child-owned manual selection events still win. The per-child binding mechanism
+below remains for alpha.66 compatibility, not as the ordinary user workflow.
+
+**Legacy opt-in bindings; preserved independently of the broad switch.**
 Do not silently enroll all existing children or treat a new setting as proof of
 their original creation intent. `github-copilot.parentModelFollow` defaults to
 an empty array. The standard plugin configuration accepts explicit bindings:

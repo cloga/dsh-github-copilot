@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.68 (prepared)
+
+- Add one **Follow parent model** control in plugin settings. Enable once for existing and new supported Copilot subagents and Team mates; no Session IDs or per-child setup (#234).
+- Preserve active turns, child-owned manual selections and independent child Auto decisions. Keep legacy explicit bindings without hidden migration.
+- Record requirements, implementation plan and a synthetic screenshot of the actual settings component; use narrow settings CAS and preserve unsaved search drafts.
+
 ## 0.4.0-alpha.66 (prepared)
 
 - Add explicit native child/direct-parent model-follow bindings, disabled by default. Enrolled children follow fixed selections on their next turn or independently resolve the parent's Auto preference against their own context (#229).
