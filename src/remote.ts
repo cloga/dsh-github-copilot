@@ -71,6 +71,9 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
     unavailableExcludedModelIds: z.array(z.string().min(1).max(512)).max(512),
     error: z.enum([
       'COPILOT_MODEL_PREFERENCES_UNAVAILABLE',
+      'COPILOT_MODEL_SETTINGS_UNAVAILABLE',
+      'COPILOT_MODEL_SETTINGS_INVALID',
+      'COPILOT_MODEL_SELECTION_UNAVAILABLE',
       'COPILOT_MODEL_EXCLUSION_SELECTED',
       'COPILOT_MODEL_EXCLUSION_CONFLICT',
       'COPILOT_MODEL_EXCLUSION_SAVE_FAILED',

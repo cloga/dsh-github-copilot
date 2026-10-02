@@ -41,7 +41,7 @@ function fixture() {
   })
   const currentSelection = vi.fn((): unknown => fallback)
   const get = vi.fn((): unknown => ({ providers: { 'github-copilot': {} } }))
-  const describeSettings = vi.fn((): unknown => [{ ns: 'llm-pi-ai', revision: 2 }, { ns: 'github-copilot', revision: 5 }])
+  const describeSettings = vi.fn((): unknown => [{ ns: 'llm-pi-ai', revision: 2 }, { ns: 'github-copilot', revision: 5, value: { excludedModelIds: [] } }])
   const listProviders = vi.fn((): unknown => [{ id: 'github-copilot' }, { id: 'github-copilot-preview' }])
   services.set('agents', { list, roots: forbidden })
   services.set('sessionProjections', { stateOf })

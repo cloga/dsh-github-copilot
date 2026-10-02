@@ -79,6 +79,8 @@ export interface GitHubCopilotModelPreferencesView {
   readonly unavailableExcludedModelIds: readonly string[]
   readonly error?: 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE' | 'COPILOT_MODEL_EXCLUSION_SELECTED'
     | 'COPILOT_MODEL_EXCLUSION_CONFLICT' | 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
+    | 'COPILOT_MODEL_SETTINGS_UNAVAILABLE' | 'COPILOT_MODEL_SETTINGS_INVALID'
+    | 'COPILOT_MODEL_SELECTION_UNAVAILABLE'
 }
 
 /** Only these owned presentation leaves can cross the Remote boundary. */
@@ -213,26 +215,37 @@ function modelPreferencesView(
   ctx: Context,
   accountModels: GitHubCopilotAccountModelsView | undefined,
   error?: GitHubCopilotModelPreferencesView['error'],
-): GitHubCopilotModelPreferencesView | undefined {
+): GitHubCopilotModelPreferencesView {
+  const unavailable = (diagnostic: GitHubCopilotModelPreferencesView['error']): GitHubCopilotModelPreferencesView => ({
+    state: 'error', writable: false, excludedModelIds: [], lockedModelIds: [],
+    unavailableExcludedModelIds: [], error: diagnostic,
+  })
+  let settings: ModelPreferenceSettingsView
+  let descriptor: ReturnType<ModelPreferenceSettingsView['describe']>[number] | undefined
   try {
-    const settings = service<ModelPreferenceSettingsView>(ctx, 'settings', ['describe', 'mutate'])
-    const descriptor = settings.describe({ redactSecrets: true }).find(item => item.ns === GITHUB_COPILOT_SETTINGS_NAMESPACE)
-    if (descriptor === undefined || !Number.isSafeInteger(descriptor.revision) || descriptor.revision < 0) return undefined
+    settings = service<ModelPreferenceSettingsView>(ctx, 'settings', ['describe', 'mutate'])
+    descriptor = settings.describe({ redactSecrets: true }).find(item => item.ns === GITHUB_COPILOT_SETTINGS_NAMESPACE)
+  } catch { return unavailable('COPILOT_MODEL_SETTINGS_UNAVAILABLE') }
+  if (descriptor === undefined) return unavailable('COPILOT_MODEL_SETTINGS_UNAVAILABLE')
+  if (!Number.isSafeInteger(descriptor.revision) || descriptor.revision < 0) return unavailable('COPILOT_MODEL_SETTINGS_INVALID')
+  let excludedModelIds: readonly string[]
+  try {
     const raw = object(descriptor.value)
-    const excludedModelIds = normalizeExcludedModelIds(raw?.excludedModelIds)
-    const lockedModelIds = selectedFixedModelIds(ctx)
-    if (lockedModelIds === undefined) return undefined
-    const available = new Set(accountModels?.models.map(model => model.id) ?? [])
-    return {
-      state: error === undefined ? 'ready' : 'error',
-      writable: true,
-      revision: descriptor.revision,
-      excludedModelIds,
-      lockedModelIds,
-      unavailableExcludedModelIds: excludedModelIds.filter(id => !available.has(id)),
-      ...error === undefined ? {} : { error },
-    }
-  } catch { return undefined }
+    if (raw === undefined) return unavailable('COPILOT_MODEL_SETTINGS_INVALID')
+    excludedModelIds = normalizeExcludedModelIds(raw.excludedModelIds)
+  } catch { return unavailable('COPILOT_MODEL_SETTINGS_INVALID') }
+  const lockedModelIds = selectedFixedModelIds(ctx)
+  const diagnostic = lockedModelIds === undefined ? 'COPILOT_MODEL_SELECTION_UNAVAILABLE' : error
+  const available = new Set(accountModels?.models.map(model => model.id) ?? [])
+  return {
+    state: diagnostic === undefined ? 'ready' : 'error',
+    writable: lockedModelIds !== undefined,
+    revision: descriptor.revision,
+    excludedModelIds,
+    lockedModelIds: lockedModelIds ?? [],
+    unavailableExcludedModelIds: excludedModelIds.filter(id => !available.has(id)),
+    ...diagnostic === undefined ? {} : { error: diagnostic },
+  }
 }
 
 export type GitHubCopilotAuthorizationMilestone =
@@ -712,7 +725,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       return this.status()
     }
     const current = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
-    if (current === undefined || current.revision === undefined) {
+    if (!current.writable || current.revision === undefined) {
       this.modelPreferenceFailure = 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE'
       return this.status()
     }

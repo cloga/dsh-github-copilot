@@ -70,7 +70,7 @@ export function createCompactAccount(
   const clearPrivateView = () => {
     copyGeneration++
     if (state.view === undefined) { publish({ copyState: 'idle' }); return }
-    const { accountModels: _models, notices: _notices, ...view } = state.view
+    const { accountModels: _models, modelPreferences: _preferences, notices: _notices, ...view } = state.view
     publish({ view: { ...view, notices: [] }, copyState: 'idle' })
   }
   const resultView = (result: unknown) => {
@@ -83,7 +83,7 @@ export function createCompactAccount(
   }
   const accept = (decoded: View, operation: Operation | 'status') => {
     const previousCode = noticeCode()
-    const { accountModels, notices, error, ...rest } = decoded
+    const { accountModels, modelPreferences, notices, error, ...rest } = decoded
     // Error text may originate in an older Host or undecoded transport: never
     // render it verbatim. Discovery diagnostics use the existing field-safe codec.
     const failure = error !== undefined || decoded.phase === 'error'
@@ -91,6 +91,7 @@ export function createCompactAccount(
       : undefined
     const view: View = { ...rest, notices: decoded.inFlight && !suppressNotice ? notices : [],
       ...decoded.configured && !decoded.inFlight && accountModels !== undefined ? { accountModels } : {},
+      ...decoded.configured && !decoded.inFlight && modelPreferences !== undefined ? { modelPreferences } : {},
       ...failure === undefined ? {} : { error: failure },
     }
     let actionError = failure

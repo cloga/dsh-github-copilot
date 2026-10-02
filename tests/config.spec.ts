@@ -21,9 +21,9 @@ describe('session search settings', () => {
     expect(() => Config(untrusted)).toThrow()
   })
 
-  it('projects only routing, the legacy model override and its ownership journal as live fields', () => {
+  it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['excludedModelIds', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
@@ -63,7 +63,7 @@ describe('managed request and compaction settings', () => {
 
 describe('account model cache settings', () => {
   it('defaults to a day of metadata reuse and five minutes between passive failure retries', () => {
-    expect(Config(base)).toMatchObject({
+    expect(readInlineConfig(Config(base))).toMatchObject({
       accountModelTtlMs: 86_400_000,
       accountModelFailureCooldownMs: 300_000,
       excludedModelIds: [],
