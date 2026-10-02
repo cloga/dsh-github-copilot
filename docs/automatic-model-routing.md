@@ -206,7 +206,7 @@ every existing child. Request middleware does not recover the lost information.
 
 ### Plugin-only candidate: explicit per-child follow policy
 
-**Implemented in source; full runtime qualification and release are pending.**
+**Opt-in plugin implementation; transparent enrollment remains unsupported.**
 Do not silently enroll all existing children or treat a new setting as proof of
 their original creation intent. `github-copilot.parentModelFollow` defaults to
 an empty array. The standard plugin configuration accepts explicit bindings:
@@ -236,11 +236,13 @@ turn do not interrupt or change its route.
 - Keep scope to verified native `spawn` children and managed Copilot parent routes. Dedicated historical role policies, fork-provider descriptors and externally managed providers are rejected when enrolled. Nested enrollment follows verified direct-parent links until an explicit selection or non-following parent supplies the intent; cycles and missing parents fail visibly.
 - Verify native Team model labels separately: a roster label may describe a creation snapshot rather than the next request. Do not claim accurate live UI simply because request routing changes.
 
-Before release, integration coverage must exercise fixed A to B,
-fixed to Auto and Auto to fixed, each Auto preference, independent sibling contexts,
-parent changes mid-turn, explicit same-model and different-model child overrides,
-fork seed boundaries, cold resume, parent unavailability, exclusions, concurrent
-settings writes, unload, and unchanged default/credential/permission state.
+Release gates combine policy, Host/configuration and unchanged-Core regressions:
+fixed A to B, fixed to Auto and Auto to fixed, every Auto preference, independent
+sibling inputs, turn freezing, explicit child overrides, fork seed boundaries,
+strict history reading/refolding, unavailable parents, normal model exclusions,
+live binding changes and disposal. The native AgentLoop fixture reconstructs a
+child from its own strict-reader-validated history and verifies the next turn;
+it does not exercise disk-backed resume or the native Team orchestrator.
 The current native creation path has no proven automatic-enrollment mechanism
 that preserves original override precedence, so this alternative needs explicit
 per-child user authorization rather than a claim of transparent default inheritance.
@@ -257,10 +259,12 @@ passed with `node --test tests/scripts/parent-model-follow.test.mjs`, and the
 policy module passed a focused TypeScript check. An actual-plugin-source VM
 experiment passed fixed/Auto turn freezing, config removal, explicit child
 override, reinstallation/refolding and no-history-write assertions with synthetic
-Context/LLM/token-estimator dependencies. Focused Vitest Host/config tests were
-added but could not start with the incomplete local dependency installation.
-These limits mean native Team end-to-end behavior, full cold resume, package
-build and release qualification are not yet claimed.
+Context/LLM/token-estimator dependencies. Focused Vitest Host/config tests and
+the real Session projection/AgentLoop fixtures run in the required Windows/Linux
+CI matrix; the incomplete local dependency installation cannot run those gates.
+The AgentLoop fixture uses the actual TokenMeter and a synthetic public adapter,
+not a live model endpoint. Native Team end-to-end behavior, disk persistence,
+Desktop activation and transport remain separate, unclaimed evidence layers.
 
 ## Public API implementation
 

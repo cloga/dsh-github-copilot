@@ -4,20 +4,22 @@
  * authenticated account snapshot are synthetic. This exercises durable
  * in-memory Session events, not disk persistence, OAuth or live model transport.
  * The existing runner owns source identity/aliases; no private Core imports,
- * history seeding, prototype changes or replacement compaction implementation.
+ * fabricated history, prototype changes or replacement compaction implementation.
  */
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import LlmRuntime, { LlmAdapter, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import SessionStore, { SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCopilotCompactionPressure } from '../../src/compaction-pressure.ts'
 import { installAutoModelRouting } from '../../src/auto-model-host.ts'
@@ -225,6 +227,103 @@ function compactionEvents(events: readonly SessionEvent[]): SessionEvent[] {
 }
 
 describe('alpha2 stock compaction driven by the Copilot local pressure signal', () => {
+  it('follows parents across real child turns, independent Auto inputs and reconstructed histories', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    const forbidden = vi.fn((): never => { throw new Error('follow-fixture-external-side-effect') })
+    vi.stubGlobal('fetch', forbidden)
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt, {})
+    await ctx.plugin(ToolRuntime, {})
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(TokenMeter)
+    const register = () => () => {}
+    ctx.provide('typert', {
+      lookups: { configure: register, register },
+      contexts: { configureHost: register, registerHost: register },
+    })
+    ctx.provide('fileUploads', { registerAgentResolver: register })
+    ctx.provide('agentDefaultModel', { currentSelection: () => undefined, saveSelection: forbidden })
+    new SessionController(ctx, { nativeOpen: false }, { canOpenPath: () => false, openPath: forbidden })
+    const adapter = new FixtureAdapter('stop')
+    ctx.llm.registerAdapter([provider], adapter)
+    const parent = await ctx.agentLoop.create(SessionId('follow-loop-parent'), { provider, model: 'fixture-A' })
+    const childId = SessionId('follow-loop-child')
+    const siblingId = SessionId('follow-loop-sibling')
+    const inputs: string[] = []
+    const removeAuto = installAutoModelRouting(ctx, {
+      parentModelBindings: () => [childId, siblingId].map(childSessionId => ({
+        childSessionId, parentSessionId: parent.id,
+      })),
+      loadModels: async () => [autoCandidate('fixture-A'), autoCandidate('fixture-B')],
+    })
+    ctx.effect(() => removeAuto)
+    const create = (id: typeof childId, seed?: readonly SessionEvent[]) => ctx.agents.create({
+      sessionId: id, parentAgent: parent,
+      meta: { parentSession: parent.id, origin: 'subagent', delegationDepth: 1, isSeeded: false },
+      inheritedEventCount: SessionLogOffset(0),
+      agentOptions: { provider, model: 'fixture-initial', maxTokens: 8192 },
+      ...(seed === undefined ? {} : { seed }),
+      setup(agentCtx, agent) {
+        if (seed !== undefined) return
+        let recorded = false
+        agentCtx.on('session/event', (session, event) => {
+          if (session.id !== agent.session.id || event.type !== 'turn/start' || recorded) return
+          recorded = true
+          Reflect.apply(session.append, session, ['subagent/descriptor', {
+            version: 3, provider: 'spawn', mode: 'continuable', label: 'Native-loop fixture',
+            agentProvider: provider, agentModel: 'fixture-initial',
+          }])
+        })
+      },
+    })
+    const send = async (agent: typeof parent, text: string) => {
+      agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
+      await agent.whenIdle()
+      expect(agent.session.requestHeader()).toBeDefined()
+    }
+    parent.session.append('model/selection', { provider, model: 'fixture-A' })
+    const child = await create(childId)
+    await send(child.agent, 'CHILD_FIRST')
+    expect(child.agent.session.requestHeader()?.config.model).toBe('fixture-A')
+    parent.session.append('model/selection', { provider, model: 'fixture-B' })
+    await send(child.agent, 'CHILD_SECOND')
+    expect(child.agent.session.requestHeader()?.config.model).toBe('fixture-B')
+    const sibling = await create(siblingId)
+    for (const preference of ['auto', 'auto-efficiency', 'auto-intelligence']) {
+      parent.session.append('model/selection', { provider, model: preference })
+      await Promise.all([send(child.agent, `CHILD_${preference}`), send(sibling.agent, `SIBLING_${preference}`)])
+      const requests = adapter.conversation.slice(-2)
+      expect(requests.every(request => ['fixture-A', 'fixture-B'].includes(request.model))).toBe(true)
+      expect(requests.some(request => request.text.includes(`CHILD_${preference}`) && !request.text.includes('SIBLING_'))).toBe(true)
+      expect(requests.some(request => request.text.includes(`SIBLING_${preference}`) && !request.text.includes('CHILD_'))).toBe(true)
+      inputs.push(...requests.map(request => request.text))
+    }
+    expect(inputs).toHaveLength(6)
+    const header = JSON.parse(JSON.stringify(child.agent.session.header))
+    const reader = sessionFormatCatalog.createRestore(sessionFormatCatalog.encodeCurrentHeader(header, 0), {
+      recovery: 'strict', validation: 'current',
+    })
+    for (const event of child.agent.session.snapshotEvents()) {
+      reader.decodeRow(sessionFormatCatalog.encodeCurrentEvent(JSON.parse(JSON.stringify(event))))
+    }
+    const restored = reader.finish()
+    expect(restored.events.some(event => event.type === 'model/selection')).toBe(false)
+    await child.dispose()
+    parent.session.append('model/selection', { provider, model: 'fixture-A' })
+    const resumed = await create(childId, restored.events)
+    await send(resumed.agent, 'CHILD_RECONSTRUCTED')
+    expect(resumed.agent.session.requestHeader()?.config.model).toBe('fixture-A')
+    resumed.agent.session.append('model/selection', { provider, model: 'fixture-A' })
+    parent.session.append('model/selection', { provider, model: 'fixture-B' })
+    await send(resumed.agent, 'CHILD_EXPLICIT_OVERRIDE')
+    expect(resumed.agent.session.requestHeader()?.config.model).toBe('fixture-A')
+    expect(forbidden).not.toHaveBeenCalled()
+  })
+
   it('prices Core assistant text and reasoning with the unchanged native token meter', async () => {
     const f = await fixture()
     const message = createAssistantMessage({
