@@ -123,4 +123,23 @@ describe('explicit oversized manual summary recovery', () => {
       signal: new AbortController().signal,
     })).rejects.toThrow('summarization truncated at the token cap')
   })
+
+  it('rejects revoked account proof after a completed physical call', async () => {
+    let current = true
+    let calls = 0
+    await expect(summarizeOversizedManualInput({
+      input: { messages: [message('user', 'x'.repeat(400)), message('user', 'y'.repeat(400))] },
+      inputLimit: 600,
+      estimate: input => JSON.stringify(input).length,
+      makeCheckpoint: () => message('user', 'prior'),
+      assertCurrent: () => { if (!current) throw new Error('COPILOT_MANUAL_RECOVERY_ACCOUNT_PROOF_CHANGED') },
+      summarize: async () => {
+        calls++
+        current = false
+        return { summary: [{ type: 'text' as const, text: 'prior' }], provider: 'preview', model: 'fixture' }
+      },
+      signal: new AbortController().signal,
+    })).rejects.toThrow('COPILOT_MANUAL_RECOVERY_ACCOUNT_PROOF_CHANGED')
+    expect(calls).toBe(1)
+  })
 })

@@ -273,7 +273,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     const running = f.ctx.compaction.compactNow(f.agent, abort.signal)
     await f.adapter.summaryStarted.promise
     abort.abort()
-    await expect(running).rejects.toMatchObject({ code: 'cancelled' })
+    await expect(running).rejects.toMatchObject({ name: 'AbortError' })
     expect(compactionEvents(f.events).map(event => event.type)).toEqual(['compaction/start', 'compaction/end'])
     expect(f.agent.session.surface.replaceGeneration).toBe(generation)
     expect(replacements(f.events)).toEqual([])

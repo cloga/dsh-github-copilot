@@ -132,14 +132,16 @@ export async function summarizeOversizedManualInput<M extends RecoveryMessage, R
  * mount both: Cordis compaction is a singleton, not an overridable service.
  */
 export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine {
-  private readonly manual = new WeakSet<Agent>()
+  private readonly manual = new WeakMap<Agent, number>()
 
   override async compactNow(agent: Agent, signal: AbortSignal, sourceCommandId?: CommandId): Promise<CompactionResult | null> {
-    this.manual.add(agent)
+    this.manual.set(agent, (this.manual.get(agent) ?? 0) + 1)
     try {
       return await super.compactNow(agent, signal, sourceCommandId)
     } finally {
-      this.manual.delete(agent)
+      const remaining = this.manual.get(agent)! - 1
+      if (remaining === 0) this.manual.delete(agent)
+      else this.manual.set(agent, remaining)
     }
   }
 
