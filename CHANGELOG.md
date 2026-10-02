@@ -1,8 +1,14 @@
 # Changelog
 
-## 0.4.0-alpha.67 (prepared)
+## 0.4.0-alpha.69 (prepared)
 
 - Add an explicit, opt-in manual compaction engine for compressible already-oversized managed Copilot histories. It uses a bounded public summary hook and native transactional replacement without changing the default compaction service. Include account-proof and failure boundaries in the recovery design.
+
+## 0.4.0-alpha.68 (prepared)
+
+- Add one **Follow parent model** control in plugin settings. Enable once for existing and new supported Copilot subagents and Team mates; no Session IDs or per-child setup (#234).
+- Preserve active turns, child-owned manual selections and independent child Auto decisions. Keep legacy explicit bindings without hidden migration.
+- Record requirements, implementation plan and a synthetic screenshot of the actual settings component; use narrow settings CAS and preserve unsaved search drafts.
 
 ## 0.4.0-alpha.66 (prepared)
 

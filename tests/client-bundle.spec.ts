@@ -140,6 +140,14 @@ describe('tsdown client artifact', () => {
     let memoIndex = 0, effectIndex = 0
     const hooks = {
       ...React,
+      useState(initial?: unknown) {
+        const instance = current, index = memoIndex++
+        instance.memos[index] ??= { deps: [], value: typeof initial === 'function' ? initial() : initial }
+        return [instance.memos[index]!.value, (next: unknown) => {
+          const previous = instance.memos[index]!.value
+          instance.memos[index]!.value = typeof next === 'function' ? next(previous) : next
+        }]
+      },
       useMemo<T>(factory: () => T, deps: React.DependencyList): T {
         const index = memoIndex++, previous = current.memos[index]
         if (!previous || deps.some((value, at) => !Object.is(value, previous.deps[at]))) current.memos[index] = { deps, value: factory() }
@@ -253,7 +261,10 @@ describe('tsdown client artifact', () => {
       expect(fixture.registrations.has('settings.models.footer')).toBe(true)
       expect(fixture.registrations.has('settings.models.footer:github-copilot-search-routing')).toBe(false)
       const element = fixture.registrations.get('plugins.bundle.config')!({ view: 'page' })
-      expect(element.type).toBe(fixture.client.exports.WebSearchRoutingCard)
+      expect(element.type).toBe(fixture.client.exports.CopilotPluginSettingsPage)
+      const page = fixture.instance().render(element)
+      expect(page?.props.children[0].type).toBe(fixture.client.exports.ParentModelFollowCard)
+      expect(page?.props.children[1].type).toBe(fixture.client.exports.WebSearchRoutingCard)
       expect(fixture.registrations.get('plugins.bundle.config')!({ view: 'summary' })).toBeNull()
       expect(element.props.settings).toBe(fixture.ctx.remote.settings)
     } finally { await fixture.dispose() }

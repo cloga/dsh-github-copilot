@@ -4,7 +4,7 @@ import { act, createElement } from 'react'
 import type { ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it, vi } from 'vitest'
-import { apply, HostedSearchSettingsCard, inject, WebSearchRoutingCard } from '../src/client.ts'
+import { apply, CopilotPluginSettingsPage, HostedSearchSettingsCard, inject, WebSearchRoutingCard } from '../src/client.ts'
 
 // Actual Cordis dependency tracing and the actual Client apply/render callback.
 // The mounted test uses real React DOM and Cordis tracing; Remote transport and
@@ -86,7 +86,7 @@ describe('search UI traced Remote dependency', () => {
       // The captured faces retain their exact Cordis namespace grants.
       const element = registration.render({ view: 'page' })!
       const card = element
-      expect(card.type).toBe(WebSearchRoutingCard)
+      expect(card.type).toBe(bundle ? CopilotPluginSettingsPage : WebSearchRoutingCard)
       expect(card.props.settings.name).toBe('remote.settings')
       expect(card.props).not.toHaveProperty('copilot')
       expect(card.props.routing.name).toBe('remote.githubCopilotSearchRouting')
@@ -118,7 +118,7 @@ describe('search UI traced Remote dependency', () => {
       })
       await act(async () => { mounted.render(render()) })
       expect(select.value).toBe('github-copilot-hosted')
-      expect(f.describeSettings).toHaveBeenCalledTimes(1)
+      expect(f.describeSettings).toHaveBeenCalledTimes(bundle ? 2 : 1)
       let finish!: () => void
       f.mutateSettings.mockImplementationOnce(() => new Promise(resolve => {
         finish = () => resolve({ ok: true as const, value: { ns: 'github-copilot', revision: 8, autoGenerate: false,
@@ -132,12 +132,12 @@ describe('search UI traced Remote dependency', () => {
       await act(async () => { finish() })
       expect(container.textContent).toContain('Saved.')
       expect(select.value).toBe('github-copilot-hosted')
-      expect(f.describeSettings).toHaveBeenCalledTimes(1)
+      expect(f.describeSettings).toHaveBeenCalledTimes(bundle ? 2 : 1)
       expect(f.mutateSettings).toHaveBeenCalledExactlyOnceWith('github-copilot', [
         { op: 'set', path: ['searchRouting', 'searchProvider'], value: 'github-copilot-hosted' },
         { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: 'none' },
       ], 7)
-      expect(container.querySelector('input')).toBeNull()
+      expect(container.querySelectorAll('input')).toHaveLength(bundle ? 1 : 0)
     } finally {
       await act(async () => { mounted.unmount(); await f.root.fiber.dispose() })
       container.remove()

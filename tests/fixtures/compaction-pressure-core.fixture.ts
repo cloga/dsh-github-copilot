@@ -400,7 +400,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     expect(replacements(f.events)).toEqual([])
   })
 
-  it('follows parents across real child turns, independent Auto inputs and reconstructed histories', async () => {
+  it.each(['bindings', 'switch'])('follows parents using %s across real turns, independent Auto inputs and reconstructed histories', async mode => {
     const ctx = new Context()
     contexts.push(ctx)
     const forbidden = vi.fn((): never => { throw new Error('follow-fixture-external-side-effect') })
@@ -430,7 +430,8 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     const errors: unknown[] = []
     ctx.on('agent/error', ({ error }) => { errors.push(error) })
     const removeAuto = installAutoModelRouting(ctx, {
-      parentModelBindings: () => [childId, siblingId].map(childSessionId => ({
+      followParentModel: () => mode === 'switch',
+      parentModelBindings: () => mode === 'switch' ? [] : [childId, siblingId].map(childSessionId => ({
         childSessionId, parentSessionId: parent.id,
       })),
       loadModels: async () => [autoCandidate('fixture-A'), autoCandidate('fixture-B')],

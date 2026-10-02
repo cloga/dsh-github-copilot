@@ -38,7 +38,7 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   | 'streamIdleTimeoutMs' | 'maxRequestImageBytes' | 'requestImagePixelBudget' | 'requestImageMaxBytes' | 'retryPolicy'>
   & Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
   & {
-    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow'>
+    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'>
     readonly requestBudget?: Partial<RequestBudgetPolicy>
     readonly requestBudgetSettings?: () => Partial<RequestBudgetPolicy>
   }
@@ -482,7 +482,7 @@ class PreviewAdapter extends PiAiAdapter {
 export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings,
     requestBudget, requestBudgetSettings, ...requestConfig } = config
-  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow'>
+  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'>
     = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs, excludedModelIds: [] }))
   const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
   const excludedModels = () => excludedModelSet(cacheSettings().excludedModelIds)
@@ -700,6 +700,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     },
     budgetPolicy: () => budgetSettings(),
     parentModelBindings: () => cacheSettings().parentModelFollow ?? [],
+    followParentModel: () => cacheSettings().followParentModel === true,
   })
   const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
     new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings))

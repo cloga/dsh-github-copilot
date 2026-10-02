@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.67"
+    "version": "0.4.0-alpha.69"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1021,6 +1021,8 @@
         {"file": "src/auto-model-host.ts", "marker": "keep attribution out of the log"},
         {"file": "src/parent-model-follow.ts", "marker": "resolveParentModel"},
         {"file": "src/config.ts", "marker": "parentModelFollow"},
+        {"file": "src/config.ts", "marker": "followParentModel"},
+        {"file": "src/parent-model-follow-card.ts", "marker": "Follow parent model"},
         {"file": "src/auto-model-host.ts", "marker": "COPILOT_AUTO_TOKEN_METER_UNAVAILABLE"},
         {"file": "src/auto-model-presentation.ts", "marker": "conversation.chat.assistant-actions"},
         {"file": "src/auto-model-presentation.ts", "marker": "turnModelProvenanceDefinition"},
@@ -1030,7 +1032,7 @@
         {"file": "docs/automatic-model-routing.md", "marker": "plugin-only"}
       ],
       "tests": [
-        {"file": "tests/auto-model-host.spec.ts", "name": "follows fixed and Auto parents at turn boundaries without writing child selections"},
+        {"file": "tests/auto-model-host.spec.ts", "name": "follows fixed and Auto parents using %s without writing child selections"},
         {"file": "tests/scripts/parent-model-follow.test.mjs", "name": "explicit same-model and different-model child selections both win"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "classifies only the latest user turn and selects a deterministic capacity tier"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "does not discard a complete Core assistant message when it contains reasoning"},

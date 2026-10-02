@@ -82,18 +82,24 @@ export interface FollowSubject {
   readonly recorded?: FollowSelection
 }
 
+export function supportsParentFollowing(subject: FollowSubject): boolean {
+  return !subject.state.blocked && subject.state.descriptor && subject.origin === 'subagent'
+}
+
 /** Resolve a new turn's intent without changing any Session, setting or descriptor. */
 export function resolveParentModel(
   child: FollowSubject,
   bindings: readonly ParentModelBinding[],
   lookup: (id: string) => FollowSubject | undefined,
+  followAll = false,
 ): FollowSelection | undefined {
   const matches = bindings.filter(binding => binding.childSessionId === child.id)
-  if (matches.length === 0) return undefined
+  const automatic = matches.length === 0
+  if (automatic && (!followAll || !supportsParentFollowing(child))) return undefined
   const fail = (code: string): never => { throw new ParentModelFollowError(`COPILOT_PARENT_MODEL_${code}`) }
-  if (matches.length !== 1) fail('BINDING_INVALID')
-  if (child.state.blocked || !child.state.descriptor || child.origin !== 'subagent') fail('CHILD_UNSUPPORTED')
-  if (!child.parentId || child.parentId !== matches[0]?.parentSessionId) fail('LINEAGE_INVALID')
+  if (!automatic && matches.length !== 1) fail('BINDING_INVALID')
+  if (!supportsParentFollowing(child)) fail('CHILD_UNSUPPORTED')
+  if (!child.parentId || !automatic && child.parentId !== matches[0]?.parentSessionId) fail('LINEAGE_INVALID')
   // Native selection remains authoritative even if it selects the same model.
   if (child.state.explicit !== null) return undefined
   const seen = new Set([child.id])
@@ -104,19 +110,26 @@ export function resolveParentModel(
     seen.add(parentId)
     const parent = lookup(parentId)
     if (!parent) return fail('PARENT_UNAVAILABLE')
-    if (parent.state.blocked) fail('PARENT_UNSUPPORTED')
+    if (parent.state.blocked) {
+      if (automatic) return undefined
+      fail('PARENT_UNSUPPORTED')
+    }
     const parentBindings = bindings.filter(binding => binding.childSessionId === parent.id)
     if (parentBindings.length > 1) fail('BINDING_INVALID')
-    const parentFollows = parentBindings.length === 1 && parent.state.explicit === null
+    const parentFollows = (parentBindings.length === 1 || followAll && supportsParentFollowing(parent))
+      && parent.state.explicit === null
     if (parentFollows) {
       if (!parent.state.descriptor || parent.origin !== 'subagent'
-        || parent.parentId !== parentBindings[0]?.parentSessionId) fail('LINEAGE_INVALID')
+        || parentBindings.length === 1 && parent.parentId !== parentBindings[0]?.parentSessionId) fail('LINEAGE_INVALID')
       current = parent
       continue
     }
     const selection = parent.pending ?? parent.recorded
     if (!selection) return fail('SELECTION_UNAVAILABLE')
-    if (selection.provider !== 'github-copilot-preview') fail('PROVIDER_UNSUPPORTED')
+    if (selection.provider !== 'github-copilot-preview') {
+      if (automatic) return undefined
+      fail('PROVIDER_UNSUPPORTED')
+    }
     return { ...selection }
   }
 }
