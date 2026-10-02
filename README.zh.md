@@ -20,7 +20,7 @@
 
 截图来自当前构建 Client 的隔离浏览器 fixture，使用合成 Provider。它只证明已发布配置界面的形态，不证明真实凭据、账号权限、搜索成功或当前 Desktop 已加载。
 
-> 当前文档与安装命令对应版本 `0.4.0-alpha.68`。源码、发布制品、已安装版本和实际加载运行时需分别确认；本地升级和中断会话的重启仍需用户批准。
+> 当前文档与安装命令对应版本 `0.4.0-alpha.69`。源码、发布制品、已安装版本和实际加载运行时需分别确认；本地升级和中断会话的重启仍需用户批准。
 
 Web search 路由现在优先显示在插件详情页；宿主不支持详情页插槽时才回退到 **设置 → 模型**或独立 Web search section。搜索子 Fiber 仍独立等待 Remote，不影响账号控件和既有搜索安全检查。
 
@@ -113,10 +113,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 仅对独立的具名 profile，获准且网络可用时，可通过受支持的 CLI 命令安装：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.68/dsh-github-copilot-0.4.0-alpha.68.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.69/dsh-github-copilot-0.4.0-alpha.69.tgz
 ```
 
-Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.68`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
+Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.69`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
@@ -167,7 +167,7 @@ Agent 应把浏览器授权视为需要用户完成的 handoff，而不是自行
 5. 确认 **Signed in** 并检查自动发现结果，再请用户选择模型。已登录时打开 Models 会自动确保缺失／过期元数据，新鲜 ready 缓存不发请求。错误可使用 **Retry**，有意强制更新时使用 **Manage → Refresh models**，不作为常规设置步骤。状态读取本身不发现；登录、元数据与真实调用成功是独立证据。
 6. 只有用户明确要求断开账号时才使用 **Sign out**；它会删除 Copilot credential record，但保留 route settings。
 
-每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.68`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
+每个新版本默认同时分发到 GitHub Releases 和 npm，两个渠道使用同一份已验证 tarball。应固定版本并核对所用渠道的证据：Release 的 `SHA256SUMS`；从 npm 安装时另核对 `dist.integrity`。Desktop profile 只能通过原生 Desktop 包管理器安装；获准且 registry 可用时输入 `dsh-github-copilot@0.4.0-alpha.69`，不是 URL 或本地文件。Desktop 保留 `desktop` profile，不能通过 DSH CLI 管理。受控离线 CLI 维护仅适用于独立具名 profile，不得作为 Desktop 安装绕行方案。[双渠道发布与 OIDC 要求](./docs/npm-distribution.md)保持不变。
 
 **Desktop package 更新与 Web 生命周期边界：**原生 manager 对已安装 package 原位升级返回的 `restart-required` 是权威结果，与移除／重加 plugin bundle 的行为是两个不同问题。涉及服务重编排补丁（`cordis.patch.yml`，如本插件所采用的隔离路由 Web 搜索层）的停用、移除或升级，可能让依赖条目保持 pending，直到完全退出并冷重启 Desktop。若原生 manager 只报告类似 `pending (waiting for service: web)` 的条目，同时本插件已经显示 **Off**，说明请求的停用状态已经落盘；请冷重启 Desktop，不要反复切换或重装插件。其它错误不属于此提示范围，仍需单独排查。
 
@@ -325,7 +325,7 @@ Responses 解析器会保留公开的 `reasoning_summary_text`、`reasoning_text
 
 `purpose: 'compaction'` 的摘要调用绕过提前压力阈值，只检查完整硬预算。没有调用方或适配器已解析的思考等级时，`prefer-low` 从已支持的能力中选择 `minimal` 或 `low`；没有此能力则保持供应方默认。显式或已解析的等级优先。摘要请求的输出上限不被偷偷改写，保持 Core 辅助摘要记录一致；也不会将截断输出当成成功 checkpoint。`enabled` 仍仅控制 hosted search。
 
-**这不保证救回已经超限的旧历史。** 手动 compact 仍可能超过硬预算，此时在模型发送前明确拒绝；输出截断保留为独立的原生 `max-tokens` 结果。本次不增加分块摘要、静默删除历史、自动切换模型或新的重试循环。必要时通过官方压缩配置选择合适的摘要模型／输出上限，不反复提交同一个不可能完成的请求。详见[实现与验收边界](./docs/copilot-compaction.md)。
+**仍不保证救回所有已经超限的旧历史。** 默认手动 compact 仍会在模型发送前拒绝超限摘要。另有可单独选择的[手动恢复引擎](./docs/manual-compaction-recovery.md)：仅对可分割且工具调用配对完整的托管 Copilot 历史进行有界中间摘要，最终持久事务仍由 Core 负责。它必须**替换**原有压缩服务而非并列安装；仅安装插件不会启用。不可分割的输入、过大的固定前缀或被截断的输出都不会替换历史；不会自动切换模型或偷偷删除历史。
 
 ## Copilot Tool 兼容
 
@@ -451,8 +451,8 @@ node scripts/agent.mjs attribution "DeepSeek Harness (DSH)"
 `package.json` 声明公开 npm 分发。Release tag 必须严格等于 `v${package.json.version}`。预发布使用 `alpha`、`beta` 或 `rc` 及对应 npm dist-tag，只有稳定版使用 `latest`。Release workflow 执行 frozen install 和完整门禁，只打包一次（重试恢复原始归档），验证 `SHA256SUMS`，发布不可变 GitHub Release，再通过 OIDC 将同一份字节发布到 npm。任一渠道失败都表示交付未完成。首次建包须由获准环境中的维护者完成；staging 要求包已存在，不能代替首次建包。不会批量补发历史版本。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.68/dsh-github-copilot-0.4.0-alpha.68.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.68/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.69/dsh-github-copilot-0.4.0-alpha.69.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.69/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -460,7 +460,7 @@ PowerShell 可以对已下载的同一组文件执行：
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.68.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.69.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
