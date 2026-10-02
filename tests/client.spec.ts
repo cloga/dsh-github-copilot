@@ -1262,6 +1262,7 @@ describe('GitHub Copilot Models client', () => {
         spec: ReturnType<typeof vi.fn>
       }
       logger: { warn: ReturnType<typeof vi.fn> }
+      get: ReturnType<typeof vi.fn>
       on: ReturnType<typeof vi.fn>
       inject: ReturnType<typeof vi.fn>
     }
@@ -1273,7 +1274,7 @@ describe('GitHub Copilot Models client', () => {
         return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
       }
       const cleanup = callback(ctx)
-      if (services.includes('remote.settings')) {
+      if (services.includes('remote.settings') || services.includes('remote.githubCopilotTurnSelection')) {
         return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })
       }
       if (typeof cleanup === 'function') cleanupUi = cleanup as () => void
@@ -1304,10 +1305,11 @@ describe('GitHub Copilot Models client', () => {
         register,
         spec: vi.fn((name: string) => ({
           kind: name === 'settings.models.provider-card' || name === 'plugins.bundle.config' ? 'keyed' : 'list',
-          scope: 'root',
+          scope: name === 'conversation.chat.assistant-actions' ? 'session' : 'root',
         })),
       },
       logger: { warn: vi.fn() },
+      get: vi.fn(),
       on: vi.fn(() => vi.fn()),
       inject,
     }
@@ -1474,12 +1476,23 @@ describe('GitHub Copilot Models client', () => {
     const { ctx, disposeRemote, disposeUi, disposePresentation } = clientContext(['settings.section'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotTurnSelection', 'slots'], expect.any(Function))
     expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotDualModel', 'slots'], expect.any(Function))
     expect(disposePresentation).not.toHaveBeenCalled()
     await dispose()
     expect(disposePresentation).toHaveBeenCalledOnce()
     expect(disposeUi).toHaveBeenCalledOnce()
     expect(disposeRemote).toHaveBeenCalledOnce()
+  })
+
+  it('registers and disposes Auto actions while the optional conversation fiber remains pending', async () => {
+    const { ctx, registrations } = clientContext(['conversation.chat.assistant-actions'])
+    const dispose = await apply(ctx as never)
+    const remove = registrations.get('conversation.chat.assistant-actions')
+    expect(remove).toBeTypeOf('function')
+    expect(remove).not.toHaveBeenCalled()
+    await dispose()
+    expect(remove).toHaveBeenCalledOnce()
   })
 
   it('mounts its Remote contribution and registers the rc.1 provider-card seat', async () => {

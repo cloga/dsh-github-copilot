@@ -13,7 +13,7 @@ import type { GitHubCopilotAuthorizationView } from './authorization-controller.
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { installReasoningPresentation } from './reasoning-presentation.ts'
-import { installAutoModelPresentation } from './auto-model-presentation.ts'
+import { installAutoModelPresentation, installAutoModelProjections } from './auto-model-presentation.ts'
 import { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
 import { ParentModelFollowCard } from './parent-model-follow-card.ts'
 export { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
@@ -1055,6 +1055,12 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }
   const searchUi = ctx.inject(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
   const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
+  const autoUi = ctx.inject(['remote.githubCopilotTurnSelection', 'slots'], scope => installAutoModelPresentation({
+    slots: scope.slots,
+    remote: scope.remote,
+    locale: scope.get('locale'),
+    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
+  }))
   // Optional Chat contributions must not hold authorization activation on older Cores.
   const presentation = ctx.inject(['uiConversation', 'slots'], scope => {
     const capabilities = {
@@ -1065,7 +1071,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       diagnostic: (code: string) => scope.logger.warn(`[github-copilot] ${code}`),
     }
     const reasoning = installReasoningPresentation(capabilities)
-    const auto = installAutoModelPresentation(capabilities)
+    const auto = installAutoModelProjections(capabilities)
     return () => {
       auto()
       reasoning()
@@ -1073,6 +1079,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   })
   return async () => {
     await usageUi.dispose()
+    await autoUi.dispose()
     await presentation.dispose()
     await searchUi.dispose()
     await ui.dispose()

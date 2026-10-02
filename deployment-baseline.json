@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.70"
+    "version": "0.4.0-alpha.71"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1025,6 +1025,7 @@
         {"file": "src/parent-model-follow-card.ts", "marker": "Follow parent model"},
         {"file": "src/auto-model-host.ts", "marker": "COPILOT_AUTO_TOKEN_METER_UNAVAILABLE"},
         {"file": "src/auto-model-presentation.ts", "marker": "conversation.chat.assistant-actions"},
+        {"file": "src/auto-model-presentation.ts", "marker": "installAutoModelProjections"},
         {"file": "src/auto-model-presentation.ts", "marker": "turnModelProvenanceDefinition"},
         {"file": "src/turn-model-provenance.ts", "marker": "assistant/message"},
         {"file": "src/turn-selection-card.ts", "marker": "Selection unknown"},
@@ -1045,6 +1046,9 @@
         {"file": "tests/auto-model-presentation.spec.ts", "name": "omits attribution when a compatible history contains no optional decision"},
         {"file": "tests/turn-selection-card.spec.ts", "name": "reads exact completed turn evidence through %s and exposes reasons without repeating the model"},
         {"file": "tests/turn-selection-card.spec.ts", "name": "diagnoses an unavailable node collection without reading another turn"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "uses native completion independently of optional projections: $expected"},
+        {"file": "tests/client.spec.ts", "name": "registers and disposes Auto actions while the optional conversation fiber remains pending"},
+        {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "renders retained Auto evidence without optional projections through native %s and slots"},
         {"file": "tests/turn-model-provenance.spec.ts", "name": "retains known models around zero-usage failed attempts without reading payloads"},
         {"file": "tests/preview-route.spec.ts", "name": "publishes Auto as a virtual picker entry but refuses unresolved adapter dispatch"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "shrinks durable history and rebuilds the switched model request without sending the oversized original"}

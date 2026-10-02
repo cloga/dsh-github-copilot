@@ -17,6 +17,67 @@ async function mount(selection: TurnSelection, locale = 'en') {
   return container
 }
 const auto = { mode: 'auto', preference: 'intelligence', reason: 'large-structured-turn', candidateCount: 3 } as const
+it.each([
+  { selection: auto, routes: undefined, expected: 'Auto (intelligence)ⓘ' },
+  { selection: { mode: 'manual' } as const, routes: undefined, expected: 'Manualⓘ' },
+  { selection: { mode: 'unknown' } as const, routes: [{ provider: 'github-copilot-preview', model: 'fixture' }], expected: 'Selection unknownⓘ' },
+  { selection: { mode: 'unknown' } as const, routes: [{ provider: 'other', model: 'fixture' }], expected: '' },
+])('uses native completion independently of optional projections: $expected', async ({ selection, routes, expected }) => {
+  let component: ComponentType<Record<string, unknown>> | undefined
+  const get = vi.fn(async () => ({ ok: true, value: selection }))
+  const diagnostic = vi.fn()
+  cleanups.push(installAutoModelPresentation({ diagnostic, remote: { githubCopilotTurnSelection: { get } },
+    slots: {
+      spec: () => ({ kind: 'list', scope: 'session' }), inject: (_: string, setup: () => () => void) => setup(),
+      register: (_: unknown, value: ComponentType<Record<string, unknown>>) => { component = value; return () => {} },
+    },
+  }))
+  expect(component).toBeTypeOf('function')
+  const turn = { turn: 7, data: { source: () => ({ getSnapshot: () => undefined, subscribe: () => () => {} }) } }
+  const snapshot = { nodes: { values: () => [{
+    kind: 'turn-tail', location: { kind: 'turn', turn },
+    data: { turn: 7, seq: 12, closing: { finalNode: { messageId: 'reply' } }, tokenUsage: { routes } },
+  }] } }
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  await act(async () => root.render(createElement(component!, {
+    sessionId: 'session-a', messageId: 'reply', useChat: (select: (value: unknown) => unknown) => select(snapshot),
+  })))
+  expect(container.textContent).toBe(expected)
+  expect(get).toHaveBeenCalledExactlyOnceWith('session-a', 7)
+  expect(diagnostic).toHaveBeenCalledWith('COPILOT_TURN_SELECTION_PROVENANCE_UNAVAILABLE')
+  if (expected) {
+    await act(async () => container.querySelector('button')!.click())
+    expect(container.querySelector('[role=dialog]')?.textContent).toContain('Model attribution is incomplete')
+    expect(container.querySelector('[role=dialog]')?.textContent).toContain('Native Usage is unchanged')
+  }
+})
+it.each([
+  { turn: 8, seq: 12, messageId: 'reply' },
+  { turn: 7, seq: undefined, messageId: 'reply' },
+  { turn: 7, seq: -1, messageId: 'reply' },
+  { turn: 7, seq: 12, messageId: 'another-reply' },
+])('rejects missing or mismatched native completion without optional projections: %j', async data => {
+  let component: ComponentType<Record<string, unknown>> | undefined
+  const get = vi.fn(async () => ({ ok: true, value: auto }))
+  cleanups.push(installAutoModelPresentation({ diagnostic: vi.fn(), remote: { githubCopilotTurnSelection: { get } },
+    slots: {
+      spec: () => ({ kind: 'list', scope: 'session' }), inject: (_: string, setup: () => () => void) => setup(),
+      register: (_: unknown, value: ComponentType<Record<string, unknown>>) => { component = value; return () => {} },
+    },
+  }))
+  const snapshot = { nodes: { values: () => [{
+    kind: 'turn-tail', location: { turn: { turn: 7 } },
+    data: { ...data, closing: { finalNode: { messageId: data.messageId } } },
+  }] } }
+  const container = document.createElement('div')
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  await act(async () => root.render(createElement(component!, {
+    sessionId: 'session-a', messageId: 'reply', useChat: (select: (value: unknown) => unknown) => select(snapshot),
+  })))
+  expect(container.textContent).toBe('')
+  if (data.messageId !== 'reply') expect(get).not.toHaveBeenCalled()
+})
 it('shows only mode, then opens truthful reasons with focus, Escape and outside dismissal', async () => {
   const container = await mount(auto)
   expect(container.textContent).toBe('Auto (intelligence)ⓘ')

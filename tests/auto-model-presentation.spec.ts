@@ -100,4 +100,25 @@ describe('Auto model presentation', () => {
     expect(removeDefinition).toHaveBeenCalledTimes(2)
     expect(removeInjection).toHaveBeenCalledOnce()
   })
+
+  it('cleans partial projection registration without suppressing the independent actions entry', () => {
+    const removeDefinition = vi.fn(), removeEntry = vi.fn(), diagnostic = vi.fn()
+    const register = vi.fn(() => removeEntry)
+    const dispose = installAutoModelPresentation({
+      diagnostic, remote: { githubCopilotTurnSelection: { get: vi.fn() } },
+      uiConversation: { events: { register: vi.fn().mockReturnValueOnce(removeDefinition)
+        .mockImplementationOnce(() => { throw new Error('fixture registration failure') }) } },
+      slots: {
+        spec: () => ({ kind: 'list', scope: 'session' }),
+        inject: (_: string, setup: () => () => void) => setup(), register,
+      },
+    })
+    expect(removeDefinition).toHaveBeenCalledOnce()
+    expect(register).toHaveBeenCalledOnce()
+    expect(diagnostic).toHaveBeenCalledWith('COPILOT_AUTO_PROJECTIONS_FAILED')
+    expect(removeEntry).not.toHaveBeenCalled()
+    dispose()
+    expect(removeEntry).toHaveBeenCalledOnce()
+    expect(removeDefinition).toHaveBeenCalledOnce()
+  })
 })
