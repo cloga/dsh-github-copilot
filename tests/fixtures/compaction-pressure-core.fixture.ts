@@ -22,6 +22,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCopilotCompactionPressure } from '../../src/compaction-pressure.ts'
 import { installAutoModelRouting } from '../../src/auto-model-host.ts'
 import { estimateTurnInputTokens } from '../../src/auto-model-routing.ts'
+import CopilotManualRecoveryCompactionEngine from '../../src/manual-compaction-recovery.ts'
 import type { AccountModelDescriptor } from '../../src/account-model-catalog.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as autoModel, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as provider,
@@ -33,7 +34,7 @@ const currentSentinel = 'CURRENT_REQUEST_SENTINEL'
 const checkpoint = 'RECOVERY_CHECKPOINT'
 const contexts: Context[] = []
 const expectedSessionFormatVersion = process.env.DSH_PUBLISHED_CORE_RELEASE?.startsWith('0.2.0-') ? 4 : 3
-type SummaryMode = 'stop' | 'max-tokens' | 'await-abort'
+type SummaryMode = 'stop' | 'max-tokens' | 'await-abort' | 'reject-overflow'
 
 interface RequestObservation {
   readonly provider: string
@@ -87,6 +88,9 @@ class FixtureAdapter extends LlmAdapter {
     if (summary) {
       this.summaries.push(observeRequest(options))
       this.summaryStarted.resolve()
+      if (this.summaryMode === 'reject-overflow' && Buffer.byteLength(JSON.stringify({
+        messages: options.messages.slice(0, -1), tools: options.tools,
+      }), 'utf8') > 7904) throw new Error('COPILOT_REQUEST_INPUT_LIMIT_EXCEEDED')
       if (this.summaryMode === 'await-abort') {
         const signal = options.signal
         if (signal === undefined) throw new Error('fixture summary requires the Core cancellation signal')
@@ -127,7 +131,7 @@ afterEach(async () => {
   }
 })
 
-async function fixture(mode: SummaryMode = 'stop') {
+async function fixture(mode: SummaryMode = 'stop', recovery = false) {
   const ctx = new Context()
   contexts.push(ctx)
   const forbiddenFetch = vi.fn((): never => { throw new Error('compaction-fixture-network-forbidden') })
@@ -140,14 +144,16 @@ async function fixture(mode: SummaryMode = 'stop') {
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(TokenMeter)
-  await ctx.plugin(BasicCompactionEngine, {
+  const compactionConfig = {
     auto: true,
     thresholdRatio: 1,
     retainTokens: 100,
     maxTokens: 8192,
     compactionRetries: 0,
     maxOverflowRetries: 1,
-  })
+  }
+  if (recovery) await ctx.plugin(CopilotManualRecoveryCompactionEngine, compactionConfig)
+  else await ctx.plugin(BasicCompactionEngine, compactionConfig)
   expect(ctx.compaction).toBeInstanceOf(BasicCompactionEngine)
   expect(ctx.tokenMeter).toBeInstanceOf(TokenMeter)
   const adapter = new FixtureAdapter(mode)
@@ -155,7 +161,14 @@ async function fixture(mode: SummaryMode = 'stop') {
   ctx.systemPrompt.section({ name: 'compaction-fixture', order: 0, complete: true, text: () => 'Fixture system guidance.' })
 
   // Synthetic account ownership only; no discovery, settings or credentials.
-  ctx.provide('githubCopilotPreview', { getView: () => ({ provider }) })
+  ctx.provide('githubCopilotPreview', {
+    getView: () => ({ provider }),
+    recoveryLimits: () => ({
+      limits: { contextWindow, maxInputTokens: 12000, maxTokens: 8192 },
+      policy: { safetyTokens: 0 },
+      assertCurrent: () => {},
+    }),
+  })
   let model = 'fixture-model-A'
   let inputBudgetTokens: number | undefined
   let autoLoads = 0
@@ -192,7 +205,7 @@ async function fixture(mode: SummaryMode = 'stop') {
   const send = (text: string): void => {
     agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
   }
-  send(`${oldSentinel} ${'historical detail '.repeat(1000)}`)
+  send(`${oldSentinel} ${'historical detail '.repeat(recovery ? 100 : 1000)}`)
   await agent.whenIdle()
   expect(adapter.conversation).toHaveLength(1)
   expect(adapter.summaries).toHaveLength(0)
@@ -203,7 +216,7 @@ async function fixture(mode: SummaryMode = 'stop') {
     && event.data.content.some(block => block.type === 'text' && block.text.includes(oldSentinel)))
   expect(oldUser).toBeDefined()
   const originalTokens = ctx.tokenMeter.measure(agent.session).totalTokens
-  expect(originalTokens).toBeGreaterThan(1000)
+  expect(originalTokens).toBeGreaterThan(recovery ? 100 : 1000)
   expect(originalTokens).toBeLessThan(contextWindow)
 
   return {
@@ -225,6 +238,28 @@ function compactionEvents(events: readonly SessionEvent[]): SessionEvent[] {
 }
 
 describe('alpha2 stock compaction driven by the Copilot local pressure signal', () => {
+  it('recovers oversized manual history with one native transaction and honest multi-call audit', async () => {
+    const f = await fixture('reject-overflow', true)
+    for (let turn = 0; turn < 6; turn++) {
+      f.send(`HISTORICAL_TURN_${turn} ${'historical detail '.repeat(100)}`)
+      await f.agent.whenIdle()
+    }
+    const before = f.agent.session.surface.replaceGeneration
+    const result = await f.ctx.compaction.compactNow(f.agent, new AbortController().signal)
+    expect(result).not.toBeNull()
+    expect(f.adapter.summaries.length).toBeGreaterThan(1)
+    expect(f.adapter.summaries.every(request => request.model === 'fixture-model-A')).toBe(true)
+    expect(f.events.filter(event => event.type === 'compaction/start' || event.type === 'compaction/end')).toMatchObject([
+      { type: 'compaction/start', data: { turn: null } },
+      { type: 'compaction/end' },
+    ])
+    const summary = f.events.find(event => event.type === 'compaction/summary')
+    expect(summary).toMatchObject({ data: { provider, model: 'fixture-model-A', maxTokens: 8192 } })
+    expect(summary?.data).not.toHaveProperty('llmStreamCall')
+    expect(f.agent.session.surface.replaceGeneration).toBeGreaterThan(before)
+    expect(f.forbiddenFetch).not.toHaveBeenCalled()
+  })
+
   it('prices Core assistant text and reasoning with the unchanged native token meter', async () => {
     const f = await fixture()
     const message = createAssistantMessage({
