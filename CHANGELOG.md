@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.65 (prepared)
+
+- Fix Auto input undercount by using Core's public TokenMeter instead of passing Core messages to pi-ai's incompatible estimator and swallowing its errors (#230). Include assistant reasoning/tool history and retain native current-surface/tool-envelope measurement as a conservative floor.
+- Fail Auto explicitly when native measurement is missing or invalid; fixed model selection remains available. Recognize native compact-checkpoint provenance without changing messages or same-turn routing.
+- This is a preventive input-fit fix, not recovery of already oversized manual summaries. The independent summary-input overflow investigation remains open in #228; no chunking, alternate summarizer, history deletion, or extra retry loop is introduced.
+
 ## 0.4.0-alpha.64 (prepared)
 
 - Omit only explicitly empty completed reasoning shells from managed Responses outgoing payloads, without changing durable history, opaque encrypted content, public summaries or tool call/result pairing (#226).

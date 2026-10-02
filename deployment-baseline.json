@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.64"
+    "version": "0.4.0-alpha.65"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -998,6 +998,7 @@
       "sourceMarkers": [
         {"file": "src/preview-route.ts", "marker": "GITHUB_COPILOT_AUTO_MODEL_ID"},
         {"file": "src/auto-model-host.ts", "marker": "keep attribution out of the log"},
+        {"file": "src/auto-model-host.ts", "marker": "COPILOT_AUTO_TOKEN_METER_UNAVAILABLE"},
         {"file": "src/auto-model-presentation.ts", "marker": "conversation.chat.assistant-actions"},
         {"file": "src/auto-model-presentation.ts", "marker": "turnModelProvenanceDefinition"},
         {"file": "src/turn-model-provenance.ts", "marker": "assistant/message"},
@@ -1007,6 +1008,9 @@
       ],
       "tests": [
         {"file": "tests/auto-model-routing.spec.ts", "name": "classifies only the latest user turn and selects a deterministic capacity tier"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "does not discard a complete Core assistant message when it contains reasoning"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "retains the native current-surface and tool-envelope measurement as an input floor"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "prices Core assistant text and reasoning with the unchanged native token meter"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "requires account-verified image capability for image turns"},
         {"file": "tests/auto-model-host.spec.ts", "name": "resolves after downstream model selection and freezes one decision per turn"},
         {"file": "tests/auto-model-host.spec.ts", "name": "replaces Core virtual-Auto switch guidance with the resolved real route"},

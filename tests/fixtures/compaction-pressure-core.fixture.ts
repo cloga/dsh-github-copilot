@@ -10,7 +10,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
-import LlmRuntime, { LlmAdapter, createUserMessage } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { LlmAdapter, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -21,6 +21,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCopilotCompactionPressure } from '../../src/compaction-pressure.ts'
 import { installAutoModelRouting } from '../../src/auto-model-host.ts'
+import { estimateTurnInputTokens } from '../../src/auto-model-routing.ts'
 import type { AccountModelDescriptor } from '../../src/account-model-catalog.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as autoModel, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as provider,
@@ -224,6 +225,23 @@ function compactionEvents(events: readonly SessionEvent[]): SessionEvent[] {
 }
 
 describe('alpha2 stock compaction driven by the Copilot local pressure signal', () => {
+  it('prices Core assistant text and reasoning with the unchanged native token meter', async () => {
+    const f = await fixture()
+    const message = createAssistantMessage({
+      source: { provider, model: 'fixture-model-A' },
+      content: [
+        { type: 'text', text: 'x'.repeat(400_000) },
+        { type: 'reasoning', text: 'r'.repeat(400_000) },
+      ],
+    })
+    const estimate = vi.fn((input: unknown) => {
+      expect(input).toBe(message)
+      return f.ctx.tokenMeter.estimateMessage(message)
+    })
+    expect(estimateTurnInputTokens([message], estimate)).toBe(200_012)
+    expect(estimate).toHaveBeenCalledExactlyOnceWith(message)
+  })
+
   it('shrinks durable history and rebuilds the switched model request without sending the oversized original', async () => {
     const f = await fixture()
     f.enable()
