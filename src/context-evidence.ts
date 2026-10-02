@@ -14,6 +14,13 @@ export const ContextEvidenceSchema = z.object({
   reason: z.enum(['none', 'failed-zero', 'compaction', 'selection', 'unknown']),
 }).strict()
 export type ContextEvidence = z.infer<typeof ContextEvidenceSchema>
+// Core augments its own Zod copy; keep strict schemas owned by this plugin.
+type ContextEvidenceDefinition = Omit<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE>, 'stateSchema' | 'wire'> & {
+  stateSchema: typeof ContextEvidenceSchema & Pick<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE>['stateSchema'], 'parse'>
+  wire: Omit<NonNullable<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE>['wire']>, 'viewSchema'> & {
+    viewSchema: typeof ContextEvidenceSchema & Pick<NonNullable<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE>['wire']>['viewSchema'], 'parse'>
+  }
+}
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap { githubCopilotContextEvidence: ContextEvidence }
   interface SessionProjectionStateMap { githubCopilotContextEvidence: ContextEvidence }
@@ -102,7 +109,7 @@ export const contextEvidenceDefinition = {
   init: initialContextEvidence,
   apply: foldContextEvidence,
   wire: { viewSchema: ContextEvidenceSchema, view: (state: ContextEvidence) => state },
-} satisfies ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE>
+} satisfies ContextEvidenceDefinition
 
 export function installContextEvidence(ctx: Context): void {
   ctx.inject(['sessionProjections'], scope => {
