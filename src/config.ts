@@ -12,6 +12,7 @@ import { WebSearchRoutingConfigSchema } from './web-search-routing-config.ts'
 import type { WebSearchRoutingConfig } from './web-search-routing-config.ts'
 import { readConfigValue } from './settings-reader.ts'
 import type { LiveSetting } from './settings-reader.ts'
+import type { ParentModelBinding } from './parent-model-follow.ts'
 
 /** Plugin configuration. Defaults make the current chat route decide. */
 export interface InlineConfig {
@@ -38,6 +39,8 @@ export interface InlineConfig {
   accountModelFailureCooldownMs?: number
   /** Exact account model IDs hidden from the managed directory and every Auto candidate pool. */
   excludedModelIds?: string[]
+  /** Explicit native child/direct-parent enrollments; empty preserves native routing. */
+  parentModelFollow?: ParentModelBinding[]
   /** Estimated managed-route input headroom, separate from truthful catalog capacities. */
   requestBudgetSafetyTokens?: number
   /** Fraction of admissible input used by eligible automatic-compaction requests. */
@@ -56,14 +59,16 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow'> & {
+  parentModelFollow?: ParentModelBinding[] | LiveSetting<ArrayLike<ParentModelBinding>>
   excludedModelIds?: string[] | LiveSetting<ArrayLike<string>>
   searchModel?: string | LiveSetting<string | undefined>
   searchRouting?: WebSearchRoutingConfig | LiveSetting<WebSearchRoutingConfig | undefined>
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow'> & {
+  parentModelFollow: LiveSetting<ArrayLike<ParentModelBinding>>
   excludedModelIds: LiveSetting<ArrayLike<string>>
   searchModel: LiveSetting<string | undefined>
   searchRouting: LiveSetting<WebSearchRoutingConfig>
@@ -73,9 +78,13 @@ export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRou
 /** Keep native live references at the boundary; request code consumes plain snapshots. */
 export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
   const exclusions = readConfigValue<ArrayLike<string> | undefined>(config.excludedModelIds)
+  const bindings = readConfigValue<ArrayLike<ParentModelBinding> | undefined>(config.parentModelFollow)
   return {
     ...config,
     excludedModelIds: exclusions === undefined ? undefined : Array.from(exclusions),
+    parentModelFollow: bindings === undefined ? undefined : Array.from(bindings, binding => ({
+      childSessionId: binding.childSessionId, parentSessionId: binding.parentSessionId,
+    })),
     searchModel: readConfigValue(config.searchModel),
     searchRouting: readConfigValue(config.searchRouting),
     temporaryRouteBackup: readConfigValue(config.temporaryRouteBackup),
@@ -97,6 +106,9 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   accountModelTtlMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(86_400_000),
   accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
   excludedModelIds: z.array(z.string()).default([]).hidden().volatile(),
+  parentModelFollow: z.array(z.object({
+    childSessionId: z.string().min(1), parentSessionId: z.string().min(1),
+  })).default([]).volatile(),
   requestBudgetSafetyTokens: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_REQUEST_BUDGET_POLICY.safetyTokens),
   requestBudgetPressureRatio: z.number().step(0.01).min(0.01).max(1).default(DEFAULT_REQUEST_BUDGET_POLICY.pressureRatio),
   compactionReasoning: z.union(['prefer-low', 'preserve']).default(DEFAULT_REQUEST_BUDGET_POLICY.compactionReasoning),
