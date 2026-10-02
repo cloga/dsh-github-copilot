@@ -66,6 +66,23 @@ function buildRoutingContext(
   messages: readonly unknown[],
   budgetPolicyConfig?: Partial<RequestBudgetPolicy>,
 ): AutoModelRoutingContext {
+  const meter: unknown = (ctx as unknown as { get(name: string): unknown }).get('tokenMeter')
+  if (!record(meter) || typeof meter.estimateMessage !== 'function' || typeof meter.measure !== 'function') {
+    throw failure('COPILOT_AUTO_TOKEN_METER_UNAVAILABLE')
+  }
+  const measured: unknown = meter.measure(agent.session)
+  if (!record(measured) || typeof measured.totalTokens !== 'number'
+    || !Number.isSafeInteger(measured.totalTokens) || measured.totalTokens < 0) {
+    throw failure('COPILOT_AUTO_TOKEN_ESTIMATE_INVALID')
+  }
+  const estimate = meter.estimateMessage.bind(meter)
+  const estimateMessage = (message: unknown): number => {
+    const value: unknown = estimate(message)
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+      throw failure('COPILOT_AUTO_TOKEN_ESTIMATE_INVALID')
+    }
+    return value
+  }
   const sessionId = typeof agent.session?.id === 'string' ? agent.session.id : undefined
   const compaction: unknown = (ctx as unknown as { get(name: string): unknown }).get('compaction')
   const compactionConfig = record(compaction) && record(compaction.config) ? compaction.config : undefined
@@ -73,11 +90,14 @@ function buildRoutingContext(
     && compactionConfig?.auto !== false
     && (typeof compactionConfig?.maxOverflowRetries !== 'number' || compactionConfig.maxOverflowRetries > 0)
   const hasCompactionSummary = messages.some(m =>
-    record(m) && (record(m.source) && m.source.kind === 'compaction' || typeof m.surfaceOp === 'object'))
+    record(m) && (record(m.source) && (m.source.kind === 'compaction' || m.source.kind === 'compact-checkpoint')
+      || typeof m.surfaceOp === 'object'))
   const requestHeader = typeof agent.session?.requestHeader === 'function' ? agent.session.requestHeader() : undefined
   const requestedMaxTokens = requestHeader?.config.maxTokens
   const requestBudgetPolicy = budgetPolicyConfig ? resolveRequestBudgetPolicy(budgetPolicyConfig) : DEFAULT_REQUEST_BUDGET_POLICY
   return {
+    estimateMessage,
+    inputTokenFloor: measured.totalTokens,
     sessionId,
     turn,
     requestedMaxTokens,

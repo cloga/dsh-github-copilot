@@ -32,7 +32,7 @@ The catalog does not provide trustworthy quality, latency, price, or global-heal
 
 Before applying soft preferences, routing checks whether each candidate can accommodate the estimated input tokens of the current turn:
 
-1. **Input estimate:** `estimateTurnInputTokens` measures current conversation messages using `@earendil-works/pi-ai/utils/estimate` (`estimateMessageTokens` and `estimateContextTokens`).
+1. **Input estimate:** `estimateTurnInputTokens` prices every entered Core message through the public native `tokenMeter.estimateMessage()`. Core reasoning, tool calls and tool results must not be passed to pi-ai's differently shaped message estimator or silently omitted on exceptions. The Host also retains `tokenMeter.measure(session).totalTokens` as a conservative floor for the current surface, native usage accounting and known tool envelope. Missing native measurement fails Auto with `COPILOT_AUTO_TOKEN_METER_UNAVAILABLE`; invalid numeric estimates fail with `COPILOT_AUTO_TOKEN_ESTIMATE_INVALID`. Explicit real-model selection does not require this Auto seam.
 2. **Hard candidate budget:** For each candidate model, `calculateRequestBudget` calculates `hardInputLimit` given the model context window, output reservation, and safety allowance.
 3. **Headroom filtering:** Candidates with insufficient headroom (`estimatedInputTokens > hardInputLimit`) are filtered out. If one or more fitting candidates exist, soft preference selects among the `fitting` subset.
 4. **No-fit and compaction recovery:** If no candidate can fit the current messages:
@@ -42,7 +42,7 @@ Before applying soft preferences, routing checks whether each candidate can acco
      - `compaction-unavailable`: compaction is disabled or has zero retries configured.
      - `attempted-but-still-oversized`: a compaction summary already exists in history and the turn remains oversized.
      - `compaction-eligible`: prior history is compressible and downstream dispatch will trigger compaction pressure.
-5. **Final framing limitation:** At routing time, only messages are estimated; downstream `system-prompt/assemble` injects system prompt instructions and tool schemas. If final framing pushes a near-limit request over the budget, the native provider guard (`inspectRequest`) truthfully rejects the request with `COPILOT_CONTEXT_BUDGET_EXCEEDED` without bypassing safety boundaries.
+5. **Final framing limitation:** The fresh entered-message estimate and current native envelope floor are not the final candidate-specific serialized request. Later framing, changed tools and native attachment projection can still exceed a candidate's budget. The native provider guard (`inspectRequest`) remains authoritative and truthfully rejects such a request with `COPILOT_CONTEXT_BUDGET_EXCEEDED` without bypassing safety boundaries.
 
 ### Soft capacity preferences across candidate bands
 
@@ -91,7 +91,7 @@ The resolved real model enters the existing managed-route request-budget path. I
 3. retries the same turn with the same resolved real model;
 4. keeps the ordinary bounded overflow retry policy.
 
-The guarantee is limited to compressible history. A fixed prompt, current attachment, or indivisible content block that cannot fit after compaction remains an explicit error. See [Copilot compaction](./copilot-compaction.md).
+The guarantee is limited to history whose summary request itself fits. Correcting the Auto estimate does not recover a session when every eligible model is too small for the existing summary input. A fixed prompt, current attachment, or indivisible content block that cannot fit after compaction remains an explicit error. See [Copilot compaction](./copilot-compaction.md).
 
 ## Search ownership
 

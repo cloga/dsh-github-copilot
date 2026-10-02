@@ -1,9 +1,16 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import {
-  AutoModelRoutingError, autoModelInputModalities, classifyAutoModelTurn, selectAutoModel,
+  AutoModelRoutingError, autoModelInputModalities, classifyAutoModelTurn, estimateTurnInputTokens,
+  selectAutoModel as selectWithMeasurement,
 } from '../src/auto-model-routing.ts'
+
+const estimateMessage = (message: unknown): number => Math.ceil(JSON.stringify(message).length / 4)
+
+function selectAutoModel(...[models, messages, preference, context]: Parameters<typeof selectWithMeasurement>) {
+  return selectWithMeasurement(models, messages, preference, { estimateMessage, ...context })
+}
 
 function model(id: string, options: {
   contextWindow: number
@@ -41,6 +48,38 @@ describe('Auto model routing policy', () => {
   const fast = model('fixture-fast', { contextWindow: 64_000, maxTokens: 8_000, efforts: ['low'] })
   const balanced = model('fixture-balanced', { contextWindow: 128_000, maxTokens: 16_000, efforts: ['medium'] })
   const strong = model('fixture-strong', { contextWindow: 256_000, maxTokens: 32_000, efforts: ['high', 'xhigh'] })
+
+  it('does not discard a complete Core assistant message when it contains reasoning', () => {
+    const history = [
+      { role: 'assistant', content: [
+        { type: 'text', text: 'x'.repeat(400_000) },
+        { type: 'reasoning', text: 'r'.repeat(400_000) },
+      ] },
+      message('Continue.'),
+    ]
+    expect(estimateTurnInputTokens(history, estimateMessage)).toBeGreaterThanOrEqual(200_000)
+    expect(selectAutoModel([fast, strong], history, 'efficiency').model.id).toBe(strong.id)
+  })
+
+  it('prices every Core message through the supplied native estimator without swallowing failures', () => {
+    const history = [message('One.'), message('Two.')]
+    const estimate = vi.fn().mockReturnValueOnce(40).mockReturnValueOnce(60)
+    expect(estimateTurnInputTokens(history, estimate)).toBe(100)
+    expect(estimate.mock.calls).toEqual(history.map(item => [item]))
+    expect(() => estimateTurnInputTokens(history, () => { throw new Error('native-estimator-failed') }))
+      .toThrow('native-estimator-failed')
+    expect(() => estimateTurnInputTokens(history)).toThrow('COPILOT_AUTO_TOKEN_METER_UNAVAILABLE')
+    for (const value of [NaN, Infinity, -1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => estimateTurnInputTokens(history, () => value)).toThrow('COPILOT_AUTO_TOKEN_ESTIMATE_INVALID')
+    }
+  })
+
+  it('retains the native current-surface and tool-envelope measurement as an input floor', () => {
+    expect(selectAutoModel([fast, strong], [message('Continue.')], 'efficiency', { inputTokenFloor: 100_000 }))
+      .toMatchObject({ model: strong, estimatedInputTokens: 100_000, fittingCandidateCount: 1 })
+    expect(() => selectAutoModel([fast], [], 'balance', { inputTokenFloor: NaN }))
+      .toThrow('COPILOT_AUTO_TOKEN_ESTIMATE_INVALID')
+  })
 
   it('classifies only the latest user turn and selects a deterministic capacity tier', () => {
     expect(classifyAutoModelTurn([message('old '.repeat(2_000)), message('Explain this symbol.')]))

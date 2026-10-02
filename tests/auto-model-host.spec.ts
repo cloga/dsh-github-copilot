@@ -7,12 +7,20 @@ import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
-import { installAutoModelRouting } from '../src/auto-model-host.ts'
 import { foldFollowState, initialFollowState, PARENT_MODEL_FOLLOW_PROJECTION } from '../src/parent-model-follow.ts'
+import { installAutoModelRouting as installRouting } from '../src/auto-model-host.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
   GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID as INTELLIGENCE, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
 } from '../src/copilot-identity.ts'
+
+function installAutoModelRouting(...[ctx, dependencies]: Parameters<typeof installRouting>) {
+  ctx.provide('tokenMeter', {
+    estimateMessage: (message: unknown) => Math.ceil(JSON.stringify(message).length / 4),
+    measure: () => ({ totalTokens: 0 }),
+  })
+  return installRouting(ctx, dependencies)
+}
 
 function model(id: string, contextWindow: number, effort: string): AccountModelDescriptor {
   return {
@@ -115,6 +123,54 @@ describe('Auto model Host integration', () => {
       await parentCtx.fiber.dispose()
     }
   })
+  it('requires the public token meter for Auto without blocking a manually selected model', async () => {
+    const ctx = new Context()
+    const agent = { ctx, session: { requestHeader: () => undefined } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const loadModels = vi.fn(async () => [model('fixture-real', 128_000, 'medium')])
+    const dispose = installRouting(ctx, { loadModels })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+    const signal = new AbortController().signal
+    const messages = [message('Continue.')]
+    try {
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: AUTO }))).rejects.toThrow('COPILOT_AUTO_TOKEN_METER_UNAVAILABLE')
+      expect(loadModels).not.toHaveBeenCalled()
+      await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 2, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: 'fixture-real' }))).resolves.toMatchObject({ model: 'fixture-real' })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it.each([undefined, { totalTokens: NaN }, { totalTokens: -1 }])(
+    'rejects invalid native measurement %j before account discovery',
+    async measured => {
+      const ctx = new Context()
+      ctx.provide('tokenMeter', { measure: () => measured, estimateMessage: () => 10 })
+      const agent = { ctx, session: { requestHeader: () => undefined } } as unknown as Agent
+      const scope = scopeTarget(agent, agent)
+      const loadModels = vi.fn(async () => [model('fixture-real', 128_000, 'medium')])
+      const dispose = installRouting(ctx, { loadModels })
+      ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+      const signal = new AbortController().signal
+      const messages = [message('Continue.')]
+      try {
+        await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+          async () => ({ kind: 'enter' as const, messages }))
+        await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+          async () => ({ provider: PREVIEW, model: AUTO }))).rejects.toThrow('COPILOT_AUTO_TOKEN_ESTIMATE_INVALID')
+        expect(loadModels).not.toHaveBeenCalled()
+      } finally {
+        dispose()
+        await ctx.fiber.dispose()
+      }
+    },
+  )
+
   it('cold-reads Auto selection through the official format reader without plugin vocabulary', async () => {
     const ctx = new Context()
     const id = SessionId('fixture-auto-cold-read')
