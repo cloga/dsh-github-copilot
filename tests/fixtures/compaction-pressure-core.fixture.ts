@@ -260,6 +260,23 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     expect(f.forbiddenFetch).not.toHaveBeenCalled()
   })
 
+  it('closes a cancelled oversized manual transaction without replacing its source', async () => {
+    const f = await fixture('await-abort', true)
+    for (let turn = 0; turn < 6; turn++) {
+      f.send(`HISTORICAL_TURN_${turn} ${'historical detail '.repeat(100)}`)
+      await f.agent.whenIdle()
+    }
+    const generation = f.agent.session.surface.replaceGeneration
+    const abort = new AbortController()
+    const running = f.ctx.compaction.compactNow(f.agent, abort.signal)
+    await f.adapter.summaryStarted.promise
+    abort.abort()
+    await expect(running).rejects.toMatchObject({ code: 'cancelled' })
+    expect(compactionEvents(f.events).map(event => event.type)).toEqual(['compaction/start', 'compaction/end'])
+    expect(f.agent.session.surface.replaceGeneration).toBe(generation)
+    expect(replacements(f.events)).toEqual([])
+  })
+
   it('prices Core assistant text and reasoning with the unchanged native token meter', async () => {
     const f = await fixture()
     const message = createAssistantMessage({

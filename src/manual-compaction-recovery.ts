@@ -163,7 +163,8 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
     if (!budget.ok) throw recoverError(budget.code)
     // Reserve space for the Core-added summary directive and estimator
     // variance. The provider's final native guard remains authoritative.
-    const inputLimit = budget.budget.hardInputLimit - 4096
+    const toolHistoryBytes = Buffer.byteLength(JSON.stringify(agent.session.toolHistory()), 'utf8')
+    const inputLimit = budget.budget.hardInputLimit - 4096 - toolHistoryBytes
     if (inputLimit <= 0) throw recoverError('FIXED_PREFIX')
     const operationSignal = signal ?? new AbortController().signal
     const estimate = (candidate: RecoveryInput<Message>): number =>
