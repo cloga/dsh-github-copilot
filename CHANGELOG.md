@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0-alpha.67 (prepared)
+
+- Add an explicit, opt-in manual compaction engine for compressible already-oversized managed Copilot histories. It uses a bounded public summary hook and native transactional replacement without changing the default compaction service. Include account-proof and failure boundaries in the recovery design.
+
 ## 0.4.0-alpha.66 (prepared)
 
 - Add explicit native child/direct-parent model-follow bindings, disabled by default. Enrolled children follow fixed selections on their next turn or independently resolve the parent's Auto preference against their own context (#229).

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.66"
+    "version": "0.4.0-alpha.67"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1103,6 +1103,7 @@
     "./remote": [],
     "./routed-web": ["default"],
     "./web-delegate": ["name", "inject", "apply"],
+    "./manual-compaction-recovery": ["CopilotManualRecoveryCompactionEngine", "summarizeOversizedManualInput"],
     "./deployment-baseline.json": [],
     "./package.json": []
   }
