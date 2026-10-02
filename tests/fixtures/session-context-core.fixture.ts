@@ -18,6 +18,7 @@ import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installAutoModelRouting } from '../../src/auto-model-host.ts'
+import { COPILOT_CONTEXT_EVIDENCE, ContextEvidenceSchema, installContextEvidence } from '../../src/context-evidence.ts'
 import { currentChatRoute, currentSearchInitiator, currentSearchSelection } from '../../src/current-provider.ts'
 import { migrationStatus, type MigrationSelection } from '../../src/migration-status.ts'
 
@@ -173,6 +174,26 @@ function requestConfig(selection: MigrationSelection): RequestConfig {
 }
 
 describe('tagged Core public Session context (actual controller projection)', () => {
+  it('cold-folds native model selections independently without replacing the controller projection', async () => {
+    const f = await fixture()
+    const agent = await f.add('context-evidence-selection')
+    agent.session.append('model/selection', managedPending)
+    const nativeSelection = f.projections.stateOf(agent.session, 'modelSelection')
+    const fiber = f.ctx.plugin({ apply: installContextEvidence })
+    await fiber
+    expect(ContextEvidenceSchema.parse(
+      f.projections.snapshot(agent.session, [COPILOT_CONTEXT_EVIDENCE]).values[COPILOT_CONTEXT_EVIDENCE],
+    ).route).toEqual({ provider: managedPending.provider, model: managedPending.model })
+    expect(f.projections.stateOf(agent.session, 'modelSelection')).toEqual(nativeSelection)
+    agent.session.append('model/selection', { provider: otherB.provider, model: otherB.model })
+    expect(f.projections.stateOf(agent.session, COPILOT_CONTEXT_EVIDENCE)?.route)
+      .toEqual({ provider: otherB.provider, model: otherB.model })
+    await fiber.dispose()
+    expect(f.projections.snapshot(agent.session).values).not.toHaveProperty(COPILOT_CONTEXT_EVIDENCE)
+    expect(f.projections.stateOf(agent.session, 'modelSelection')).toBeDefined()
+    expect(f.forbidden).not.toHaveBeenCalled()
+  })
+
   it('folds enrolled child turns through the native projection registry before request admission', async () => {
     const f = await fixture()
     const parent = await f.add('follow-parent')
