@@ -1,4 +1,3 @@
-import { estimateContextTokens, estimateMessageTokens } from '@earendil-works/pi-ai/utils/estimate'
 import type { AccountModelDescriptor } from './account-model-catalog.ts'
 import { autoModelPreference } from './copilot-identity.ts'
 import type { AutoModelPreference } from './copilot-identity.ts'
@@ -34,6 +33,8 @@ export interface AutoModelDecision {
 }
 
 export interface AutoModelRoutingContext {
+  readonly estimateMessage?: (message: unknown) => number
+  readonly inputTokenFloor?: number
   readonly sessionId?: string
   readonly turn?: number
   readonly requestedMaxTokens?: number
@@ -44,7 +45,8 @@ export interface AutoModelRoutingContext {
 }
 
 export class AutoModelRoutingError extends Error {
-  constructor(readonly code: 'COPILOT_AUTO_NO_ELIGIBLE_MODEL') {
+  constructor(readonly code: 'COPILOT_AUTO_NO_ELIGIBLE_MODEL'
+    | 'COPILOT_AUTO_TOKEN_METER_UNAVAILABLE' | 'COPILOT_AUTO_TOKEN_ESTIMATE_INVALID') {
     super(code)
     this.name = 'AutoModelRoutingError'
   }
@@ -108,54 +110,26 @@ function reasonFor(features: AutoModelFeatures): AutoModelDecision['reason'] {
   return 'standard-turn'
 }
 
-export function estimateTurnInputTokens(messages: readonly unknown[]): number {
-  let fresh = 0
-  for (const message of messages) {
-    if (typeof message === 'object' && message !== null) {
-      try {
-        fresh += estimateMessageTokens(message as never)
-      } catch {
-        // Fallback for non-standard message objects
-      }
-    }
+function validTokenEstimate(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new AutoModelRoutingError('COPILOT_AUTO_TOKEN_ESTIMATE_INVALID')
   }
-  let contextTokens = 0
-  try {
-    contextTokens = estimateContextTokens(messages as never).tokens
-  } catch {
-    // Fallback
-  }
-  const estimated = Math.max(fresh, contextTokens)
-  if (estimated > 0) return estimated
-  let charCount = 0
-  for (const message of messages) {
-    if (record(message) && Array.isArray(message.content)) {
-      for (const block of message.content) {
-        if (record(block) && typeof block.text === 'string') charCount += block.text.length
-      }
-    }
-  }
-  return charCount > 0 ? Math.ceil(charCount / 4) : 0
+  return value
 }
 
-function latestUserTurnTokens(messages: readonly unknown[]): number {
+export function estimateTurnInputTokens(
+  messages: readonly unknown[],
+  estimateMessage?: (message: unknown) => number,
+): number {
+  if (estimateMessage === undefined) throw new AutoModelRoutingError('COPILOT_AUTO_TOKEN_METER_UNAVAILABLE')
+  return messages.reduce<number>((sum, message) =>
+    validTokenEstimate(sum + validTokenEstimate(estimateMessage(message))), 0)
+}
+
+function latestUserTurnTokens(messages: readonly unknown[], estimateMessage: (message: unknown) => number): number {
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]
-    if (userMessage(message)) {
-      try {
-        const est = estimateMessageTokens(message as never)
-        if (est > 0) return est
-      } catch {
-        // Fallback below
-      }
-      if (Array.isArray(message.content)) {
-        let chars = 0
-        for (const block of message.content) {
-          if (record(block) && typeof block.text === 'string') chars += block.text.length
-        }
-        if (chars > 0) return Math.ceil(chars / 4)
-      }
-    }
+    if (userMessage(message)) return validTokenEstimate(estimateMessage(message))
   }
   return 0
 }
@@ -298,7 +272,11 @@ export function selectAutoModel(
     .toSorted(compareCapacity)
   if (eligible.length === 0) throw new AutoModelRoutingError('COPILOT_AUTO_NO_ELIGIBLE_MODEL')
 
-  const estimatedInputTokens = estimateTurnInputTokens(messages)
+  const estimateMessage = context?.estimateMessage
+  if (estimateMessage === undefined) throw new AutoModelRoutingError('COPILOT_AUTO_TOKEN_METER_UNAVAILABLE')
+  const estimatedInputTokens = Math.max(
+    estimateTurnInputTokens(messages, estimateMessage), validTokenEstimate(context?.inputTokenFloor ?? 0),
+  )
   const requestedMaxTokens = context?.requestedMaxTokens
   const policy = context?.requestBudgetPolicy ?? DEFAULT_REQUEST_BUDGET_POLICY
 
@@ -331,7 +309,7 @@ export function selectAutoModel(
     selectedModel = maxModel
     selectedInputBudget = maxLimit
 
-    const latestUserTokens = latestUserTurnTokens(messages)
+    const latestUserTokens = latestUserTurnTokens(messages, estimateMessage)
     if (latestUserTokens > maxLimit) {
       inputFitDiagnostic = 'fixed-content-cannot-fit'
     } else if (context?.compactionAvailable === false) {
@@ -360,4 +338,3 @@ export function autoModelInputModalities(models: readonly AccountModelDescriptor
   const eligible = models.filter(model => autoModelPreference(model.id) === undefined && model.input.includes('text'))
   return eligible.some(model => model.input.includes('image')) ? ['text', 'image'] : ['text']
 }
-
