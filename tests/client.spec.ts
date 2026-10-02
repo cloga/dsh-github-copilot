@@ -1274,7 +1274,8 @@ describe('GitHub Copilot Models client', () => {
         return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
       }
       const cleanup = callback(ctx)
-      if (services.includes('remote.settings') || services.includes('remote.githubCopilotTurnSelection')) {
+      if (services.includes('remote.settings') || services.includes('remote.githubCopilotTurnSelection')
+        || services.length === 1 && services[0] === 'slots') {
         return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })
       }
       if (typeof cleanup === 'function') cleanupUi = cleanup as () => void
@@ -1309,7 +1310,7 @@ describe('GitHub Copilot Models client', () => {
         })),
       },
       logger: { warn: vi.fn() },
-      get: vi.fn(),
+      get: vi.fn((name: string) => name === 'slots' ? ctx.slots : undefined),
       on: vi.fn(() => vi.fn()),
       inject,
     }

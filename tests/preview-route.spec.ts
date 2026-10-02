@@ -137,6 +137,33 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
 
 describe('plugin-owned account Copilot route', () => {
+  it('does not let native SDK failed zero usage reset context evidence or fabricate settled usage', async () => {
+    stubFetch(async () => new Response('synthetic unavailable', { status: 503 }))
+    const harness = await runtime()
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    const assembler = new BlockAssembler()
+    const chunks: StreamChunk[] = []
+    for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) {
+      chunks.push(chunk)
+      assembler.push(chunk)
+    }
+    expect(chunks.some(chunk => chunk.type === 'usage')).toBe(false)
+    expect(assembler.finish.kind).toBe('error')
+    expect(assembler.usage).toBeUndefined()
+  })
+  it('preserves native successful zero usage rather than treating it as failure', async () => {
+    stubFetch(async () => {
+      const successful = response()
+      return new Response((await successful.text()).replace(
+        '"input_tokens":1,"output_tokens":2,"total_tokens":3',
+        '"input_tokens":0,"output_tokens":0,"total_tokens":0',
+      ), { headers: successful.headers })
+    })
+    const harness = await runtime()
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish.kind).toBe('stop')
+    expect(result.assembler.usage).toMatchObject({ inputTokens: 0, outputTokens: 0 })
+  })
   it.each(['step/start', 'turn/end'] as const)('clears only the matching Session retry cache on %s across fresh Core preparations', async eventType => {
     const fetch = vi.fn(async () => new Response('synthetic timeout', { status: 408 }))
     stubFetch(fetch)
