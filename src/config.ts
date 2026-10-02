@@ -57,14 +57,14 @@ export interface InlineConfig {
 }
 
 export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds'> & {
-  excludedModelIds?: string[] | LiveSetting<string[]>
+  excludedModelIds?: string[] | LiveSetting<ArrayLike<string>>
   searchModel?: string | LiveSetting<string | undefined>
   searchRouting?: WebSearchRoutingConfig | LiveSetting<WebSearchRoutingConfig | undefined>
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
 export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds'> & {
-  excludedModelIds: LiveSetting<string[]>
+  excludedModelIds: LiveSetting<ArrayLike<string>>
   searchModel: LiveSetting<string | undefined>
   searchRouting: LiveSetting<WebSearchRoutingConfig>
   temporaryRouteBackup: LiveSetting<string | undefined>
@@ -72,9 +72,10 @@ export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRou
 
 /** Keep native live references at the boundary; request code consumes plain snapshots. */
 export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
+  const exclusions = readConfigValue<ArrayLike<string> | undefined>(config.excludedModelIds)
   return {
     ...config,
-    excludedModelIds: readConfigValue(config.excludedModelIds),
+    excludedModelIds: exclusions === undefined ? undefined : Array.from(exclusions),
     searchModel: readConfigValue(config.searchModel),
     searchRouting: readConfigValue(config.searchRouting),
     temporaryRouteBackup: readConfigValue(config.temporaryRouteBackup),
