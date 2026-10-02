@@ -81,6 +81,13 @@ fabricating a capability correction.
 - `pnpm install --frozen-lockfile --ignore-scripts --fetch-retries=0 --fetch-timeout=20000`
   failed: the configured enterprise registry returned HTTP 404 for
   `@deepseek-ai/dsh-util-crypto@0.2.0-rc.2`. Full local validation is blocked.
-- Native route integration tests are added but require the complete dependency
-  closure. Required CI, build, package verification, release and live acceptance
-  remain pending; no installed or published fix is claimed.
+- [CI run 36966798814](https://github.com/cloga/dsh-github-copilot/actions/runs/36966798814)
+  passed on Windows and Linux using unchanged official rc.2 dependencies:
+  the published-adapter fixture, tagged-source native runtime, full `pnpm verify`,
+  `pnpm pack --pack-destination artifacts`, and exact tarball verification.
+  The full gate includes 1990 passing Vitest tests (2 expected skips) and
+  310 passing tooling tests. Native MIME admission preserves Core's streamed
+  `finish(error)` contract and sends zero model requests for the mismatch case.
+- This authorized CI path mitigates the local registry blocker without changing
+  dependencies or bypassing local registry policy. Publication and live
+  acceptance remain separate; no installed or published fix is claimed here.
