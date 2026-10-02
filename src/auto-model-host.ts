@@ -9,6 +9,12 @@ import type { AutoModelPreference } from './copilot-identity.ts'
 import { DEFAULT_REQUEST_BUDGET_POLICY, resolveRequestBudgetPolicy } from './request-budget.ts'
 import type { RequestBudgetPolicy } from './request-budget.ts'
 import { TurnSelectionStore } from './turn-selection.ts'
+import { z } from 'zod'
+import {
+  PARENT_MODEL_FOLLOW_PROJECTION, initialFollowState, foldFollowState, followSelection,
+  resolveParentModel, ParentModelFollowError,
+} from './parent-model-follow.ts'
+import type { ParentModelBinding, FollowSelection, FollowSubject } from './parent-model-follow.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context { githubCopilotTurnSelection: { get(agent: Agent, turn: number): ReturnType<TurnSelectionStore['get']> } }
@@ -17,6 +23,7 @@ declare module '@deepseek-ai/cordis' {
 export interface AutoModelHostDependencies {
   loadModels(signal: AbortSignal): Promise<readonly AccountModelDescriptor[]>
   budgetPolicy?: () => Partial<RequestBudgetPolicy>
+  parentModelBindings?: () => readonly ParentModelBinding[]
 }
 
 interface CapturedTurn {
@@ -146,10 +153,90 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
   const routed = new WeakMap<Agent, RoutedTurn>()
   const agentDisposers = new WeakMap<Agent, Dispose>()
   const activeDisposers = new Set<Dispose>()
+  const followed = new WeakMap<Agent, { turn: number; selection: FollowSelection | undefined }>()
+  const selectionSchema = z.object({ provider: z.string().min(1), model: z.string().min(1) }).strict()
+  const followSchema = z.object({
+    inherited: z.number().int().nonnegative(), turn: z.number().int().nonnegative().nullable(), started: z.boolean(),
+    explicit: selectionSchema.nullable(), descriptor: z.boolean(), blocked: z.boolean(),
+  }).strict()
+  let removeFollowProjection: Dispose | undefined
+  const followIntent = (agent: Agent): FollowSelection | undefined => {
+    const previous = followed.get(agent)
+    if (previous) {
+      const registry: unknown = ctx.get('sessionProjections')
+      if (!record(registry) || typeof registry.stateOf !== 'function') throw failure('COPILOT_PARENT_MODEL_PROJECTIONS_UNAVAILABLE')
+      const state = followSchema.safeParse(registry.stateOf(agent.session, PARENT_MODEL_FOLLOW_PROJECTION))
+      if (!state.success) throw failure('COPILOT_PARENT_MODEL_TURN_UNAVAILABLE')
+      if (state.data.turn === previous.turn) return previous.selection
+    }
+    const bindings = dependencies.parentModelBindings?.() ?? []
+    if (!bindings.some(binding => binding.childSessionId === agent.session.id)) return undefined
+    const projections: unknown = ctx.get('sessionProjections')
+    if (!record(projections) || typeof projections.register !== 'function' || typeof projections.stateOf !== 'function') {
+      throw failure('COPILOT_PARENT_MODEL_PROJECTIONS_UNAVAILABLE')
+    }
+    const stateOf = projections.stateOf
+    if (!removeFollowProjection) {
+      const remove: unknown = projections.register({
+        key: PARENT_MODEL_FOLLOW_PROJECTION, stateVersion: 1, stateSchema: followSchema,
+        init: (_header: unknown, inherited = 0) => initialFollowState(inherited),
+        apply: foldFollowState,
+      })
+      if (typeof remove !== 'function') throw failure('COPILOT_PARENT_MODEL_PROJECTIONS_UNAVAILABLE')
+      removeFollowProjection = () => { remove() }
+    }
+    const readSubject = (value: unknown): FollowSubject | undefined => {
+      if (!record(value) || !record(value.session)) return undefined
+      const session = value.session
+      if (typeof session.id !== 'string' || !record(session.header) || typeof session.requestHeader !== 'function') return undefined
+      const parsed = followSchema.safeParse(Reflect.apply(stateOf, projections, [session, PARENT_MODEL_FOLLOW_PROJECTION]))
+      const selection: unknown = Reflect.apply(stateOf, projections, [session, 'modelSelection'])
+      if (!parsed.success || !record(selection) || !Object.hasOwn(selection, 'pending')) {
+        throw failure('COPILOT_PARENT_MODEL_SELECTION_UNAVAILABLE')
+      }
+      const pending = selection.pending === null ? null : followSelection(selection.pending)
+      if (pending === undefined) throw failure('COPILOT_PARENT_MODEL_SELECTION_UNAVAILABLE')
+      const header: unknown = session.requestHeader()
+      return {
+        id: session.id,
+        parentId: typeof session.header.parentSession === 'string' ? session.header.parentSession : undefined,
+        origin: typeof session.header.origin === 'string' ? session.header.origin : undefined,
+        state: parsed.data, pending, recorded: record(header) ? followSelection(header.config) : undefined,
+      }
+    }
+    const child = readSubject(agent)
+    if (!child || child.state.turn === null) throw failure('COPILOT_PARENT_MODEL_TURN_UNAVAILABLE')
+    // Late enrollment/activation cannot retarget an already admitted turn.
+    if (child.state.started) {
+      followed.set(agent, { turn: child.state.turn, selection: undefined })
+      return undefined
+    }
+    const agents: unknown = ctx.get('agents')
+    try {
+      const selection = resolveParentModel(child, bindings, id => {
+        if (!record(agents) || typeof agents.get !== 'function') return undefined
+        return readSubject(agents.get(id))
+      })
+      followed.set(agent, { turn: child.state.turn, selection })
+      return selection
+    } catch (cause) {
+      if (cause instanceof ParentModelFollowError) throw failure(cause.code)
+      throw cause
+    }
+  }
+  const effectiveAuto = (agent: Agent): string | undefined => {
+    const inherited = followIntent(agent)
+    if (inherited !== undefined) return autoModelPreference(inherited.model) !== undefined ? inherited.model : undefined
+    return pendingAuto(ctx, agent)
+  }
   const installAgent = (agent: Agent): void => {
     if (agentDisposers.has(agent)) return
     const removeAssembly = agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+      const inherited = followIntent(agent)
       const assembled = await next()
+      if (inherited !== undefined) return { ...assembled, variables: {
+        ...assembled.variables, provider: inherited.provider, model: inherited.model,
+      } }
       const pending = pendingAuto(ctx, agent)
       if (pending === undefined) return assembled
       return { ...assembled, variables: {
@@ -160,8 +247,14 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       const result = await next()
       const entered = result.kind === 'enter' ? result.messages : messages
       captured.set(agent, { turn, messages: entered })
-      const pending = pendingAuto(ctx, agent)
+      const pending = effectiveAuto(agent)
       const preference = pending === undefined ? undefined : autoModelPreference(pending)
+      const inherited = followIntent(agent)
+      if (result.kind === 'enter' && !signal.aborted && inherited !== undefined && preference === undefined) {
+        const filtered = result.messages.filter(message => !modelSelectionNotice(message))
+        const notice = actualNotice(agent, inherited.model)
+        return { ...result, messages: notice === undefined ? filtered : [...filtered, notice] }
+      }
       if (result.kind !== 'enter' || signal.aborted || preference === undefined) return result
       let state = routed.get(agent)
       if (state?.turn !== turn) {
@@ -193,12 +286,17 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     agentDisposers.delete(agent)
     captured.delete(agent)
     routed.delete(agent)
+    followed.delete(agent)
     selections.remove(agent)
     return undefined
   })
   const removeRequest = ctx.on('agent/request', async ({ agent, turn, signal }, next) => {
-    const resolved = await next()
-    const pending = pendingAuto(ctx, agent)
+    installAgent(agent)
+    const native = await next()
+    const inherited = followIntent(agent)
+    const { reasoningEffort: _nativeEffort, ...withoutEffort } = native
+    const resolved = inherited === undefined ? native : { ...withoutEffort, ...inherited }
+    const pending = effectiveAuto(agent)
     const virtualPreference = resolved.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
       ? autoModelPreference(resolved.model) : undefined
     const virtual = virtualPreference !== undefined
@@ -230,7 +328,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     }
     if (!state.recorded) {
       const projections: unknown = ctx.get('sessionProjections')
-      if (virtual && record(projections) && typeof projections.stateOf === 'function') {
+      if (inherited === undefined && virtual && record(projections) && typeof projections.stateOf === 'function') {
         const selection: unknown = projections.stateOf(agent.session, 'modelSelection')
         if (record(selection) && selection.pending === null && agent.session.requestHeader() === undefined) {
           Reflect.apply(agent.session.append, agent.session, ['model/selection', {
@@ -251,6 +349,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     removeCreated()
     removeDisposed()
     removeRequest()
+    removeFollowProjection?.()
     for (const dispose of activeDisposers) dispose()
     activeDisposers.clear()
     selections.clear()

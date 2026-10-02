@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.66 (prepared)
+
+- Add explicit native child/direct-parent model-follow bindings, disabled by default. Enrolled children follow fixed selections on their next turn or independently resolve the parent's Auto preference against their own context (#229).
+- Preserve in-flight turn routing, explicit child selections, native histories, defaults, credentials and permissions. Unknown lineage, unsupported children and missing parent evidence fail with named diagnostics rather than guessed models.
+- Record exact-source inheritance research, configuration boundaries and validation limits. Native creation labels are not rewritten, and existing children are never automatically enrolled.
+
 ## 0.4.0-alpha.65 (prepared)
 
 - Fix Auto input undercount by using Core's public TokenMeter instead of passing Core messages to pi-ai's incompatible estimator and swallowing its errors (#230). Include assistant reasoning/tool history and retain native current-surface/tool-envelope measurement as a conservative floor.
