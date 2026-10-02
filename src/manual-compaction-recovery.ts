@@ -110,7 +110,8 @@ export async function summarizeOversizedManualInput<M extends RecoveryMessage, R
     assertCurrent?.()
     if (previous !== undefined && (result.provider !== previous.provider || result.model !== previous.model
       || result.maxTokens !== previous.maxTokens)) throw recoverError('ROUTE_CHANGED')
-    if (result.summary.length === 0 || !result.summary.some(block => block.type === 'text' && block.text.trim())) {
+    if (result.summary.length === 0 || result.summary.some(block => block.type !== 'text')
+      || !result.summary.some(block => block.type === 'text' && block.text.trim())) {
       throw recoverError('EMPTY_SUMMARY')
     }
     if (result.usage !== undefined) usages.push(result.usage)
