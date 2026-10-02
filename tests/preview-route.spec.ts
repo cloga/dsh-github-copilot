@@ -1744,12 +1744,13 @@ describe('plugin-owned account Copilot route', () => {
         imageHostPath: () => undefined,
       } as unknown as Context['attachments'])
     } })
-    const pending = call(harness.ctx, { model: item.id, messages: [createUserMessage({
+    const result = await call(harness.ctx, { model: item.id, messages: [createUserMessage({
       content: [{ type: 'image', attachment }], source: { kind: 'user' },
     })] })
-    if (supported) expect((await pending).assembler.finish).toEqual({ kind: 'stop' })
-    else await expect(pending).rejects.toMatchObject({
-      message: 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED', code: 'INVALID_REQUEST',
+    if (supported) expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    else expect(result.assembler.finish).toEqual({
+      kind: 'error',
+      failure: { message: 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED', code: 'INVALID_REQUEST' },
     })
     expect(wires).toBe(supported ? 1 : 0)
     expect(attachment.mediaType).toBe('image/webp')
