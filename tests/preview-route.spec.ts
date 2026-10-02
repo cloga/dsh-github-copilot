@@ -1718,6 +1718,44 @@ describe('plugin-owned account Copilot route', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it.each([true, false])('admits projected MIME rather than durable MIME before wire: %s', async supported => {
+    const item = catalogItem('fixture-image-model', '/responses', { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: true },
+      limits: { max_context_window_tokens: 128000, max_output_tokens: 8000,
+        vision: { supported_media_types: [supported ? 'image/png' : 'image/jpeg'] } },
+    } })
+    let wires = 0
+    stubFetch(async input => {
+      if (String(input).endsWith('/models')) return catalogResponse([item])
+      wires++
+      return response()
+    }, true)
+    const harness = await runtime(grant({ availableModelIds: [] }))
+    const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
+    type ImageRef = Extract<Message['content'][number], { type: 'image' }>['attachment']
+    const attachment: ImageRef = { attachmentId: 'synthetic-projected-image' as ImageRef['attachmentId'],
+      mediaType: 'image/webp', bytes: 100, width: 1, height: 1 }
+    await harness.ctx.plugin({ apply(owner: Context) {
+      owner.provide('attachments', {
+        imageLimits: { maxImageBytes: 1_000_000, maxImagesPerMessage: 4, maxMessageImageBytes: 4_000_000,
+          maxImagePixels: 1_000_000, maxImageDimension: 4096, mediaTypes: ['image/png', 'image/webp'] },
+        readImageRequest: async () => ({ variantId: 'synthetic-projected-version', attachment,
+          data, mediaType: 'image/png', bytes: data.length, width: 1, height: 1, depth: 'uchar', space: 'srgb', hasAlpha: true }),
+        imageHostPath: () => undefined,
+      } as unknown as Context['attachments'])
+    } })
+    const result = await call(harness.ctx, { model: item.id, messages: [createUserMessage({
+      content: [{ type: 'image', attachment }], source: { kind: 'user' },
+    })] })
+    if (supported) expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    else expect(result.assembler.finish).toEqual({
+      kind: 'error',
+      failure: { message: 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED', code: 'INVALID_REQUEST' },
+    })
+    expect(wires).toBe(supported ? 1 : 0)
+    expect(attachment.mediaType).toBe('image/webp')
+  })
+
   it.each([true, false])('uses native attachment projection and execution-world mapping when available: %s', async mapped => {
     const harness = await runtime()
     const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')

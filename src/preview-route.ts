@@ -31,6 +31,7 @@ import { installAutoModelRouting } from './auto-model-host.ts'
 import { ResponsesRetryReplay } from './responses-replay-compat.ts'
 import { excludedModelSet } from './model-exclusions.ts'
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
+import { imageInputFailure } from './image-input-admission.ts'
 
 /** Safe request knobs; identities, model tables, endpoints and credentials are not configurable. */
 export type PreviewRouteConfig = Pick<PiAiProviderProfile,
@@ -415,6 +416,11 @@ class PreviewAdapter extends PiAiAdapter {
       let wireAbort: ManagedWireAbortCode | undefined
       const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
         if (signal.aborted) throw abortFailure(signal)
+        const imageFailure = imageInputFailure(lease.descriptor, context.messages)
+        if (imageFailure !== undefined) {
+          requestFailure = new LlmError(imageFailure, 'INVALID_REQUEST')
+          throw requestFailure
+        }
         const calculated = calculateRequestBudget(lease.descriptor, nativeOptions?.maxTokens, policy)
         if (!calculated.ok) {
           requestFailure = budgetFailure(calculated)
