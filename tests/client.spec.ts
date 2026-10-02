@@ -1349,6 +1349,46 @@ describe('GitHub Copilot Models client', () => {
     await dispose()
   })
 
+  it.each(['settings.models.provider-card', 'settings.models.footer', 'settings.section'])(
+    'retains account metadata without redundant reads on exclusion-driven %s renders', async slot => {
+      const { ctx, register } = clientContext([slot])
+      const fixture = preferencesFixture()
+      const view = { ...accountResult(fixture.models).value, modelPreferences: fixture.preferences }
+      const status = vi.fn().mockResolvedValue({ ok: true, value: view })
+      const ensureModels = vi.fn(), discoverModels = vi.fn()
+      const namespace = vi.fn(() => ({ status, ensureModels, discoverModels }))
+      Object.defineProperty(ctx.remote, 'githubCopilot', { get: namespace })
+      const dispose = await apply(ctx as never)
+      const render = register.mock.calls.find(([options]) => options.name === slot)?.[1] as (props: object) => ReactElement
+      const props = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, settingsNs: 'llm-pi-ai' }, configured: true }
+      const first = render(props)
+      const token = Symbol('mounted-account')
+      const surfaces: ReturnType<typeof createAccountSurfaces> = first.props.surfaces
+      const unmount = surfaces.mount(first.props.seat, token, first.props.remote)
+      await Promise.resolve()
+      await Promise.resolve()
+      const account = surfaces.getSnapshot()!.account
+      expect(account.getSnapshot().checking).toBe(false)
+      expect(account.getSnapshot().view?.accountModels).toEqual(view.accountModels)
+      // Any second status read would block for as long as the Host takes.
+      status.mockImplementation(() => new Promise(() => {}))
+      for (let i = 0; i < 5; i++) {
+        const next = render(props)
+        expect(next.props.remote).toBe(first.props.remote)
+        expect(next.props.seat).toBe(first.props.seat)
+        surfaces.mount(next.props.seat, token, next.props.remote)
+        expect(surfaces.getSnapshot()!.account).toBe(account)
+        expect(account.getSnapshot().checking).toBe(false)
+        expect(account.getSnapshot().view?.modelPreferences).toEqual(view.modelPreferences)
+      }
+      expect(namespace).toHaveBeenCalledTimes(1)
+      expect(status).toHaveBeenCalledTimes(1)
+      expect(ensureModels).not.toHaveBeenCalled()
+      expect(discoverModels).not.toHaveBeenCalled()
+      unmount()
+      await dispose()
+    })
+
   it('moves search routing between the bundle page and Models fallback as the bundle slot appears and disappears', async () => {
     const { ctx, register, registrations, injections } = clientContext(['settings.models.footer'])
     const dispose = await apply(ctx as never)
