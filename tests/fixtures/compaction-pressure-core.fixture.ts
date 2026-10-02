@@ -12,22 +12,26 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import LlmRuntime, { LlmAdapter, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
-import ToolRuntime from '@deepseek-ai/dsh-tools'
+import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
+import * as PiEstimate from '@earendil-works/pi-ai/utils/estimate'
+import '@earendil-works/pi-ai/api/openai-responses'
 import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCopilotCompactionPressure } from '../../src/compaction-pressure.ts'
 import { installAutoModelRouting } from '../../src/auto-model-host.ts'
 import { estimateTurnInputTokens } from '../../src/auto-model-routing.ts'
 import CopilotManualRecoveryCompactionEngine from '../../src/manual-compaction-recovery.ts'
+import previewPlugin from '../../src/preview-route.ts'
 import type { AccountModelDescriptor } from '../../src/account-model-catalog.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as autoModel, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as provider,
+  GITHUB_COPILOT_CREDENTIAL_KEY,
 } from '../../src/copilot-identity.ts'
 
 const contextWindow = 100_000
@@ -37,6 +41,11 @@ const checkpoint = 'RECOVERY_CHECKPOINT'
 const contexts: Context[] = []
 const expectedSessionFormatVersion = process.env.DSH_PUBLISHED_CORE_RELEASE?.startsWith('0.2.0-') ? 4 : 3
 type SummaryMode = 'stop' | 'max-tokens' | 'await-abort' | 'reject-overflow'
+
+vi.mock('@earendil-works/pi-ai/utils/estimate', async importOriginal => {
+  const actual = await importOriginal<typeof PiEstimate>()
+  return { ...actual, estimateContextTokens: vi.fn(actual.estimateContextTokens) }
+})
 
 interface RequestObservation {
   readonly provider: string
@@ -75,6 +84,7 @@ function observeRequest(options: GenerateOptions): RequestObservation {
 
 /** Model double at the public adapter seam; every compaction decision remains Core-owned. */
 class FixtureAdapter extends LlmAdapter {
+  nextUsage?: TokenUsage
   readonly conversation: RequestObservation[] = []
   readonly summaries: RequestObservation[] = []
   readonly summaryStarted = Promise.withResolvers<void>()
@@ -91,8 +101,8 @@ class FixtureAdapter extends LlmAdapter {
       this.summaries.push(observeRequest(options))
       this.summaryStarted.resolve()
       if (this.summaryMode === 'reject-overflow' && Buffer.byteLength(JSON.stringify({
-        messages: options.messages.slice(0, -1), tools: options.tools,
-      }), 'utf8') > 7904) throw new Error('COPILOT_REQUEST_INPUT_LIMIT_EXCEEDED')
+        messages: options.messages, tools: options.tools,
+      }), 'utf8') > 12000) throw new Error('COPILOT_REQUEST_INPUT_LIMIT_EXCEEDED')
       if (this.summaryMode === 'await-abort') {
         const signal = options.signal
         if (signal === undefined) throw new Error('fixture summary requires the Core cancellation signal')
@@ -110,12 +120,16 @@ class FixtureAdapter extends LlmAdapter {
     const text = summary ? (this.summaryMode === 'max-tokens' ? 'PARTIAL_CHECKPOINT' : checkpoint) : 'CONVERSATION_REPLY'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+    if (!summary && this.nextUsage !== undefined) {
+      yield { type: 'usage', usage: this.nextUsage }
+      this.nextUsage = undefined
+    }
     yield { type: 'finish', reason: { kind: summary && this.summaryMode === 'max-tokens' ? 'max-tokens' : 'stop' } }
   }
 }
 
 beforeAll(() => {
-  expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
+  expect(['tagged-source-runtime', 'installed-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
   expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(expectedSessionFormatVersion)
 })
@@ -133,7 +147,7 @@ afterEach(async () => {
   }
 })
 
-async function fixture(mode: SummaryMode = 'stop', recovery = false) {
+async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmission = false, recoveryEngine = recovery) {
   const ctx = new Context()
   contexts.push(ctx)
   const forbiddenFetch = vi.fn((): never => { throw new Error('compaction-fixture-network-forbidden') })
@@ -154,16 +168,28 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false) {
     compactionRetries: 0,
     maxOverflowRetries: 1,
   }
-  if (recovery) await ctx.plugin(CopilotManualRecoveryCompactionEngine, compactionConfig)
+  if (recoveryEngine) await ctx.plugin(CopilotManualRecoveryCompactionEngine, compactionConfig)
   else await ctx.plugin(BasicCompactionEngine, compactionConfig)
   expect(ctx.compaction).toBeInstanceOf(BasicCompactionEngine)
   expect(ctx.tokenMeter).toBeInstanceOf(TokenMeter)
   const adapter = new FixtureAdapter(mode)
-  ctx.llm.registerAdapter([provider], adapter)
-  ctx.systemPrompt.section({ name: 'compaction-fixture', order: 0, complete: true, text: () => 'Fixture system guidance.' })
+  const removeAdapter = ctx.llm.registerAdapter([provider], adapter)
+  ctx.systemPrompt.section({ name: 'compaction-fixture', order: 0, complete: true,
+    text: () => nativeAdmission
+      ? `NATIVE_SYSTEM_SENTINEL ${'Preserve engineering constraints. '.repeat(20)}`
+      : 'Fixture system guidance.' })
+  if (nativeAdmission) {
+    ctx.tools.register(defineTool({
+      name: 'native_fixture_tool',
+      description: `NATIVE_TOOL_SENTINEL ${'Read the requested source before editing. '.repeat(10)}`,
+      parameters: { path: { type: 'string', description: 'Exact repository-relative path.' } },
+      output: { schema: { type: 'string' }, render: (_args, text) => [{ type: 'text', text }] },
+      execute: async () => { throw new Error('Summary must not execute tools') },
+    }))
+  }
 
   // Synthetic account ownership only; no discovery, settings or credentials.
-  ctx.provide('githubCopilotPreview', {
+  if (!nativeAdmission) ctx.provide('githubCopilotPreview', {
     getView: () => ({ provider }),
     recoveryLimits: () => ({
       limits: { contextWindow, maxInputTokens: 12000, maxTokens: 8192 },
@@ -174,7 +200,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false) {
   let model = 'fixture-model-A'
   let inputBudgetTokens: number | undefined
   let autoLoads = 0
-  const removeAuto = installAutoModelRouting(ctx, {
+  const removeAuto = nativeAdmission ? () => {} : installAutoModelRouting(ctx, {
     async loadModels() {
       autoLoads++
       return [autoCandidate(model)]
@@ -183,7 +209,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false) {
   ctx.effect(() => removeAuto)
   // Exact stand-in for Core's model-selection middleware: the plugin's prepended
   // listener must observe this resolved virtual route after awaiting next().
-  ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider, model: autoModel }))
+  if (!nativeAdmission) ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider, model: autoModel }))
   const failures: Array<{ code: string; message: string }> = []
   ctx.on('agent/request-error', async ({ failure }, next) => {
     failures.push({ code: failure.code, message: failure.message })
@@ -209,7 +235,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false) {
   }
   send(`${oldSentinel} ${'historical detail '.repeat(recovery ? 100 : 1000)}`)
   await agent.whenIdle()
-  expect(adapter.conversation).toHaveLength(1)
+  expect(adapter.conversation, JSON.stringify(events.at(-1)?.data)).toHaveLength(1)
   expect(adapter.summaries).toHaveLength(0)
   expect(events.at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
   const seedCount = events.length
@@ -222,7 +248,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false) {
   expect(originalTokens).toBeLessThan(contextWindow)
 
   return {
-    ctx, adapter, agent, events, failures, priced, forbiddenFetch, seedCount, originalGeneration, originalTokens,
+    ctx, adapter, agent, events, failures, priced, forbiddenFetch, seedCount, originalGeneration, originalTokens, removeAdapter,
     autoLoads: () => autoLoads,
     oldUserSeq: oldUser!.seq,
     enable(budget = 1000, selectedModel = 'fixture-model-B') { inputBudgetTokens = budget; model = selectedModel },
@@ -240,6 +266,101 @@ function compactionEvents(events: readonly SessionEvent[]): SessionEvent[] {
 }
 
 describe('alpha2 stock compaction driven by the Copilot local pressure signal', () => {
+  it.each([false, true])('uses real managed admission with full native summary input and large prior usage, recovery=%s', async recoveryEngine => {
+    const f = await fixture('stop', true, true, recoveryEngine)
+    for (let turn = 0; turn < 26; turn++) {
+      if (turn === 25) f.adapter.nextUsage = { inputTokens: 508198, outputTokens: 10, totalTokens: 508208 }
+      f.send(`NATIVE_HISTORY_${turn} ${'historical engineering detail '.repeat(70)}`)
+      await f.agent.whenIdle()
+    }
+    expect(f.ctx.tokenMeter.measure(f.agent.session).totalTokens).toBeGreaterThanOrEqual(508198)
+    const generation = f.agent.session.surface.replaceGeneration
+    const source = JSON.stringify(f.events)
+    const sourceLength = f.events.length
+    f.removeAdapter()
+    const grant = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-refresh',
+      access: 'synthetic-access', expires: Date.now() + 3_600_000, availableModelIds: ['fixture-model-A'] } }
+    f.ctx.provide('credentials', {
+      readRecord: async (key: string) => { expect(key).toBe(GITHUB_COPILOT_CREDENTIAL_KEY); return grant },
+      modifyRecord: async () => { throw new Error('Fresh synthetic grant must not refresh') },
+      listRecords: async () => [{ key: GITHUB_COPILOT_CREDENTIAL_KEY, kind: 'grant' }],
+      deleteRecord: async () => { throw new Error('Synthetic grant must not be deleted') },
+    })
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', async (url: unknown, init?: RequestInit) => {
+      if (String(url).endsWith('/models')) return new Response(JSON.stringify({ data: [{
+        id: 'fixture-model-A', name: 'Fixture model', model_picker_enabled: true,
+        policy: { state: 'enabled' }, supported_endpoints: ['/responses'],
+        capabilities: { supports: { streaming: true, tool_calls: true },
+          limits: { max_context_window_tokens: contextWindow, max_prompt_tokens: 12000, max_output_tokens: 8192 } },
+      }] }), { headers: { 'content-type': 'application/json' } })
+      expect(String(url)).toMatch(/\/responses$/)
+      expect(f.agent.session.surface.replaceGeneration).toBe(generation)
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      const output = { type: 'message', id: `synthetic-summary-${bodies.length}`, role: 'assistant',
+        content: [{ type: 'output_text', text: checkpoint }] }
+      const event = (type: string, data: Record<string, unknown>) => `data: ${JSON.stringify({ type, ...data })}\n\n`
+      return new Response([
+        event('response.created', { response: { id: `synthetic-response-${bodies.length}` } }),
+        event('response.output_item.added', { output_index: 0, item: output }),
+        event('response.output_text.delta', { output_index: 0, delta: checkpoint }),
+        event('response.output_item.done', { output_index: 0, item: output }),
+        event('response.completed', { response: { status: 'completed', output: [output],
+          usage: { input_tokens: 42, output_tokens: 10, total_tokens: 52 } } }),
+      ].join(''), { headers: { 'content-type': 'text/event-stream' } })
+    })
+    await f.ctx.plugin(previewPlugin, { requestBudget: { safetyTokens: 0 } })
+    await f.ctx.githubCopilotPreview.refresh()
+    await f.ctx.githubCopilotPreview.discover()
+    expect(f.ctx.githubCopilotPreview.recoveryLimits('fixture-model-A'), JSON.stringify(f.ctx.githubCopilotPreview.getView())).toBeDefined()
+    const estimates = vi.mocked(PiEstimate.estimateContextTokens)
+    estimates.mockClear()
+    const operation = f.ctx.compaction.compactNow(f.agent, new AbortController().signal)
+    if (recoveryEngine) {
+      expect(await operation).not.toBeNull()
+      expect(bodies.length).toBeGreaterThan(1)
+      expect(bodies.length).toBeLessThanOrEqual(16)
+      expect(f.agent.session.surface.replaceGeneration).toBeGreaterThan(generation)
+      const summary = f.events.slice(sourceLength).find(event => event.type === 'compaction/summary')
+      expect(summary).toMatchObject({ data: { usage: {
+        inputTokens: bodies.length * 42, outputTokens: bodies.length * 10, totalTokens: bodies.length * 52,
+      } } })
+      expect(summary?.data).not.toHaveProperty('llmStreamCall')
+      expect(estimates.mock.results.every(result => result.type === 'return' && result.value.tokens <= 12000)).toBe(true)
+    } else {
+      await expect(operation).rejects.toMatchObject({ cause: { code: 'CONTEXT_WINDOW_EXCEEDED' } })
+      expect(bodies).toHaveLength(0)
+      expect(f.agent.session.surface.replaceGeneration).toBe(generation)
+      expect(estimates.mock.results.some(result => result.type === 'return' && result.value.tokens > 12000)).toBe(true)
+    }
+    expect(JSON.stringify(f.events.slice(0, sourceLength))).toBe(source)
+    expect(estimates).toHaveBeenCalled()
+    expect(estimates.mock.calls.some(([context]) => context.messages.some(message => message.role === 'assistant'))).toBe(true)
+    for (const [context] of estimates.mock.calls) {
+      const serialized = JSON.stringify(context)
+      expect(serialized).toContain('NATIVE_SYSTEM_SENTINEL')
+      expect(serialized).toContain('NATIVE_TOOL_SENTINEL')
+      expect(serialized).toContain('You are now acting as a compaction engine')
+      expect(serialized).toContain('## Critical Context')
+      for (const message of context.messages) {
+        if (message.role === 'user') expect(message.timestamp).toBe(0)
+        if (message.role === 'assistant') {
+          expect(message.timestamp).toBe(0)
+          expect(message.usage.totalTokens).toBe(0)
+        }
+      }
+    }
+    for (const result of estimates.mock.results) {
+      expect(result.type).toBe('return')
+      if (result.type === 'return') expect(result.value.usageTokens).toBe(0)
+    }
+    for (const body of bodies) {
+      expect(body.max_output_tokens).toBe(8192)
+      expect(JSON.stringify(body)).toContain('NATIVE_TOOL_SENTINEL')
+      expect(JSON.stringify(body)).toContain('## Critical Context')
+    }
+  })
+
   it('recovers oversized manual history with one native transaction and honest multi-call audit', async () => {
     const f = await fixture('reject-overflow', true)
     for (let turn = 0; turn < 6; turn++) {
