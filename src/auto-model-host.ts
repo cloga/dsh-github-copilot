@@ -24,6 +24,7 @@ export interface AutoModelHostDependencies {
   loadModels(signal: AbortSignal): Promise<readonly AccountModelDescriptor[]>
   budgetPolicy?: () => Partial<RequestBudgetPolicy>
   parentModelBindings?: () => readonly ParentModelBinding[]
+  followParentModel?: () => boolean
 }
 
 interface CapturedTurn {
@@ -170,7 +171,9 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       if (state.data.turn === previous.turn) return previous.selection
     }
     const bindings = dependencies.parentModelBindings?.() ?? []
-    if (!bindings.some(binding => binding.childSessionId === agent.session.id)) return undefined
+    const followAll = dependencies.followParentModel?.() === true
+    if (!bindings.some(binding => binding.childSessionId === agent.session.id)
+      && (!followAll || agent.session.header.origin !== 'subagent')) return undefined
     const projections: unknown = ctx.get('sessionProjections')
     if (!record(projections) || typeof projections.register !== 'function' || typeof projections.stateOf !== 'function') {
       throw failure('COPILOT_PARENT_MODEL_PROJECTIONS_UNAVAILABLE')
@@ -216,7 +219,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       const selection = resolveParentModel(child, bindings, id => {
         if (!record(agents) || typeof agents.get !== 'function') return undefined
         return readSubject(agents.get(id))
-      })
+      }, followAll)
       followed.set(agent, { turn: child.state.turn, selection })
       return selection
     } catch (cause) {

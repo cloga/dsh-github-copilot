@@ -15,7 +15,9 @@ import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './rem
 import { installReasoningPresentation } from './reasoning-presentation.ts'
 import { installAutoModelPresentation } from './auto-model-presentation.ts'
 import { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
+import { ParentModelFollowCard } from './parent-model-follow-card.ts'
 export { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
+export { ParentModelFollowCard } from './parent-model-follow-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
 import { registerCopilotUsageUi } from './copilot-usage-ui.ts'
 import { externalLinkTarget } from './external-link.ts'
@@ -940,6 +942,16 @@ function registerUi(ctx: ClientContext): () => void {
   }
 }
 
+export function CopilotPluginSettingsPage(props: {
+  settings: ClientContext['remote']['settings']
+  routing: ClientContext['remote']['githubCopilotSearchRouting']
+}) {
+  const [revision, setRevision] = useState<{ previous: number; next: number }>()
+  return createElement('div', null,
+    createElement(ParentModelFollowCard, { settings: props.settings, onSaved: setRevision }),
+    createElement(WebSearchRoutingCard, { ...props, settingsRevision: revision }))
+}
+
 /** Optional search settings must never hold account authorization UI in waiting. */
 function registerSearchUi(ctx: ClientContext): () => void {
   let active = true
@@ -986,7 +998,7 @@ function registerSearchUi(ctx: ClientContext): () => void {
       try {
         dispose = ctx.slots.register({
           name: 'plugins.bundle.config', key: 'dsh-github-copilot',
-        }, ({ view }) => view === 'page' ? render() : null)
+        }, ({ view }) => view === 'page' ? createElement(CopilotPluginSettingsPage, { settings, routing }) : null)
       } catch {
         ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_BUNDLE_UNAVAILABLE')
         return () => {}

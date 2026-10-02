@@ -15,6 +15,28 @@ const bindings = [{ childSessionId: 'child', parentSessionId: 'parent' }]
 test('native children are unchanged without explicit enrollment', () => {
   assert.equal(resolveParentModel(child(), [], () => { throw new Error('must not lookup') }), undefined)
 })
+test('one switch follows existing and new children without stored bindings', () => {
+  for (const model of ['model-a', 'auto', 'auto-efficiency', 'auto-intelligence']) {
+    assert.deepEqual(resolveParentModel(child(), [], () => parent(model), true), route(model))
+  }
+  const explicit = { ...child(), state: { ...state(), explicit: route('own-model') } }
+  assert.equal(resolveParentModel(explicit, [], () => parent('auto'), true), undefined)
+})
+test('broad policy leaves roots, unsupported children and other providers native', () => {
+  for (const value of [parent('x'), { ...child(), state: initialFollowState() },
+    { ...child(), state: { ...state(), blocked: true } }]) {
+    assert.equal(resolveParentModel(value, [], () => parent('auto'), true), undefined)
+  }
+  assert.equal(resolveParentModel(child(), [], () => ({
+    ...parent('x'), pending: { provider: 'other', model: 'x' },
+  }), true), undefined)
+  assert.throws(() => resolveParentModel(child(), [], () => undefined, true), /PARENT_UNAVAILABLE/)
+})
+test('broad policy traverses native nested children without generating bindings', () => {
+  const p = { ...child(), id: 'parent', parentId: 'root' }
+  assert.deepEqual(resolveParentModel(child(), [], id => id === 'parent'
+    ? p : { ...parent('auto'), id: 'root' }, true), route('auto'))
+})
 test('fixed and every Auto preference preserve the parent selection intent', () => {
   for (const model of ['model-a', 'model-b', 'auto', 'auto-efficiency', 'auto-intelligence']) {
     assert.deepEqual(resolveParentModel(child(), bindings, () => parent(model)), route(model))

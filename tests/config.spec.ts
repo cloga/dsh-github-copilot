@@ -23,7 +23,7 @@ describe('session search settings', () => {
 
   it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['excludedModelIds', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['excludedModelIds', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
@@ -34,6 +34,12 @@ describe('session search settings', () => {
   describe('explicit parent model following', () => {
     it('defaults to no enrolled children and snapshots live binding values', () => {
       expect(readInlineConfig(Config(base)).parentModelFollow).toEqual([])
+      expect(readInlineConfig(Config(base)).followParentModel).toBe(false)
+      let enabled = false
+      const live = { ...base, followParentModel: { get: () => enabled } }
+      expect(readInlineConfig(live).followParentModel).toBe(false)
+      enabled = true
+      expect(readInlineConfig(live).followParentModel).toBe(true)
       const binding = { childSessionId: 'child', parentSessionId: 'parent' }
       const current = readInlineConfig({ ...base, parentModelFollow: { get: () => ({ 0: binding, length: 1 }) } })
       expect(current.parentModelFollow).toEqual([binding])
