@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.4.0-alpha.61 (prepared)
+## 0.4.0-alpha.62 (prepared)
+
+- Preserve model preferences through Client authorization decoding and make hidden exclusions a native live Config field, fixing both invisible controls and rejected settings writes (#223).
+- Add All/Enabled/Excluded filtering, searchable model rows, explicit selected-model locks, status-only Retry and named read-only diagnostics. Keep discovery details separate and reject stale action results after account changes or unmount.
+- Add shared-account-to-Manage regression coverage and unchanged native SettingsForms CAS/fiber/persistence evidence. No Core, credentials, histories or native picker layout are changed.
+
+## 0.4.0-alpha.61 (released)
 
 - Preserve the exact normalized managed Responses request across Core's freshly prepared retry attempts only after the previous request actually received HTTP 408. Short-lived state is scoped to the original turn signal, Session, model and account proof, and cleared on new step/turn end. Retry-only item references or incomplete ID-bearing items must identify matching complete prior items without contradictory fields, and all other payload and transcript bytes must agree; changed inputs, concurrent requests and cold resumes fail closed (#217).
 - Keep native retry policy, SDK transport, durable replay, credentials, and model selection unchanged. A synthetic native-SDK regression covers two 408 responses followed by a reference-only third attempt; real account acceptance and Desktop installation remain unverified.

@@ -105,6 +105,14 @@ export function authorizationViewFrom(value: unknown): GitHubCopilotAuthorizatio
     if (route !== undefined) owned.route = viewFields(route, ['state', 'diagnosticCode'])
     const accountModels = source.accountModels
     if (accountModels !== undefined) owned.accountModels = accountModelsSnapshot(accountModels)
+    if (source.modelPreferences !== undefined) {
+      const fields = viewRecord(source.modelPreferences)
+      const next = viewFields(fields, ['state', 'writable', 'revision', 'error'])
+      for (const key of ['excludedModelIds', 'lockedModelIds', 'unavailableExcludedModelIds']) {
+        next[key] = viewStrings(fields[key])
+      }
+      owned.modelPreferences = next
+    }
     const parsed = GitHubCopilotAuthorizationViewSchema.safeParse(owned)
     return parsed.success ? parsed.data : undefined
   } catch {
@@ -705,14 +713,16 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     actionButton(state.operation === 'cancel' ? 'Cancelling…' : 'Cancel sign-in', account.cancel, state.operation === 'cancel')) : null,
   manageOpen ? createElement('div', { id: managementId, role: 'region', 'aria-label': 'GitHub Copilot account management',
     style: { marginTop: '12px', paddingTop: '12px', borderTop: '1px solid color-mix(in srgb, currentColor 18%, transparent)', overflowWrap: 'anywhere' } },
-    createElement('p', { style: { margin: '0 0 10px', fontSize: '13px' } }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
-    signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
-      { 'data-dsh-github-copilot-refresh-models': true }) : null,
     signedIn ? createElement(GitHubCopilotModelPreferencesPanel, {
       remote: props.remote, models, preferences: view?.modelPreferences,
     }) : null,
-    models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Account model metadata is not available yet.')
-      : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models }),
+    createElement('details', { style: { marginBlock: '16px' } },
+      createElement('summary', null, 'Discovery details'),
+      createElement('p', { style: { fontSize: '13px' } }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
+      models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Account model metadata is not available yet.')
+        : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models })),
+    signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
+      { 'data-dsh-github-copilot-refresh-models': true }) : null,
     routeStatusMessage(view) === undefined ? null : createElement('p', { role: 'status' }, routeStatusMessage(view)),
     view?.route?.state === 'needs-repair' && signedIn ? actionButton('Repair model configuration', account.reconcile, pendingAction) : null,
     signedIn ? actionButton(state.operation === 'signOut' ? 'Signing out…' : 'Sign out', account.signOut, pendingAction || view?.writable === false) : null,

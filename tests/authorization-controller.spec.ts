@@ -315,6 +315,34 @@ describe('GitHubCopilotAuthorizationController', () => {
       modelPreferences: { state: 'ready', excludedModelIds: ['inherited-model'] },
     })
   })
+  it('retains known exclusions read-only when selection evidence is missing and refuses writes', async () => {
+      const harness = runtime({ configured: true, githubCopilotEffectiveSettings: { excludedModelIds: ['absent'] } })
+      harness.services.delete('sessionProjections')
+      await expect(harness.controller.status()).resolves.toMatchObject({
+        modelPreferences: { state: 'error', writable: false, revision: 0, excludedModelIds: ['absent'],
+          error: 'COPILOT_MODEL_SELECTION_UNAVAILABLE' },
+      })
+      await harness.controller.excludeModel('new')
+      await harness.controller.restoreModel('absent')
+      expect(harness.mutate).not.toHaveBeenCalled()
+    })
+    it.each([undefined, { excludedModelIds: [123] }])('reports invalid settings without treating them as no exclusions: %j', async value => {
+      const harness = runtime({ configured: true })
+      harness.settingsDocument['github-copilot'] = value
+      await expect(harness.controller.status()).resolves.toMatchObject({
+        modelPreferences: { state: 'error', writable: false, error: 'COPILOT_MODEL_SETTINGS_INVALID' },
+      })
+      await harness.controller.excludeModel('new')
+      expect(harness.mutate).not.toHaveBeenCalled()
+    })
+    it('classifies missing settings without leaking an exception or hiding account models', async () => {
+      const harness = runtime({ configured: true, accountModels: [{ id: 'available', name: 'Available', api: 'openai-responses' }] })
+      harness.describeSettings.mockImplementation(() => { throw new Error('PRIVATE_SETTINGS_FAILURE') })
+      const view = await harness.controller.status()
+      expect(view.modelPreferences).toMatchObject({ writable: false, error: 'COPILOT_MODEL_SETTINGS_UNAVAILABLE' })
+      expect(view.accountModels?.models).toHaveLength(1)
+      expect(JSON.stringify(view)).not.toContain('PRIVATE_SETTINGS_FAILURE')
+    })
   it('locks fixed managed models selected by live Session projection or request header', async () => {
     const harness = runtime({
       configured: true,
