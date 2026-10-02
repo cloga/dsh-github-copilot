@@ -31,6 +31,12 @@
     "attribution": "Assisted-by identifies the actual assisting tool; never infer a co-author from a model provider"
   },
   "tasks": {
+    "context": {
+      "purpose": "Managed failed-zero usage protection and separate historical context evidence",
+      "read": ["src/context-usage-guard.ts", "src/context-evidence.ts", "src/context-evidence-ui.ts", "src/preview-route.ts", "docs/copilot-usage.md"],
+      "tests": ["tests/context-usage-guard.spec.ts", "tests/context-evidence.spec.ts", "tests/context-evidence-ui.spec.ts", "tests/context-evidence-runtime.spec.ts", "tests/preview-route.spec.ts", "tests/client.spec.ts", "tests/client-no-model-roles.spec.ts", "tests/fixtures/session-context-core.fixture.ts"],
+      "risk": "Suppress only terminal all-zero managed failure/cancellation samples; preserve successful zero, nonzero usage, content ordering and native finish/error semantics. Historical input-plus-cache samples are not current occupancy, capacity, percentages, billing or compaction authority. Use a plugin-owned strict public projection and additive session-scoped composer slot. Revoke samples on model changes, compaction, surface replacement, invalid metadata or conflicting attribution. No canonical-adapter takeover, private Core projection replacement, DOM injection, history rewrite, new retries, credential access or live calls for evidence."
+    },
     "history": {
       "purpose": "Prevent incompatible Auto events and prepare explicit detached history recovery",
       "read": ["src/auto-model-host.ts", "src/auto-model-presentation.ts", "src/turn-model-provenance.ts", "src/turn-selection.ts", "src/turn-selection-remote.ts", "src/turn-selection-card.ts", "scripts/repair-auto-model-history.mjs", "docs/automatic-model-routing.md"],

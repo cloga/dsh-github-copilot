@@ -18,6 +18,18 @@ Detailed amounts are rounded to two decimal places for display; a positive amoun
 
 Provider or Session changes, unmounting and missing supported runtime seams revoke the presentation's ownership. Optional capability failure must not disable sign-in, Models, search or ordinary chat. The installed/loaded Client determines the exact dock placement; the standalone design mockup is not proof of native placement.
 
+## Historical context evidence
+
+Official rc.2 can replace the native context-pressure sample with the adapter's all-zero usage on a failed attempt. The message breakdown is a separate heuristic projection, so a native `0%` reading can coexist with substantial message tokens. Neither that zero nor the breakdown proves the current exact occupancy.
+
+The managed route delays one terminal all-zero usage chunk. An adjacent error or aborted finish discards that sample while preserving the finish; a thrown error or truncated stream also cannot certify that zero. Successful stop, max-tokens and tool-calls finishes preserve reported zero usage. Nonzero samples, billing counts, content ordering and failure semantics remain unchanged. This guard applies only to `github-copilot-preview`, not the Core-owned canonical adapter. It adds no retry, compaction, trimming or model switch.
+
+The separate, strict `githubCopilotContextEvidence` session projection reads only routing and numeric usage from ordinary durable events. It keeps the last applicable input-plus-cache sample when a failed all-zero attempt is replayed. Model changes, compaction, surface replacement, conflicting source attribution and invalid metadata revoke the sample. It never reads message content or opaque replay, registers under a Core key, changes the native pressure projection, or rewrites durable history.
+
+An additive composer disclosure identifies missing or unreliable context evidence for the current open Copilot Session. Any retained count is explicitly a **historical input sample, not current occupancy**; no capacity or percentage is inferred. The native context ring and account Credits control remain separate and unchanged. Missing public projection/slot/runtime seams produce named diagnostics rather than guessed counts. Old histories can therefore still show native `0%`; the disclosure explains the uncertainty instead of claiming an in-place native-meter repair.
+
+Local synthetic tests establish guarded-stream, historical-fold and presentation behavior only. Exact published-adapter and public-registry acceptance, complete CI, publication and loaded Desktop state must be verified separately. No live provider call or Session restart is needed for these tests.
+
 ## Account data boundary
 
 The Host uses the existing `llm-pi-ai/github-copilot` OAuth grant through public credential APIs. GitHub's `copilot_internal/user` endpoint uses the GitHub grant, not a second sign-in or a newly pasted token. Access-token renewal remains owned by pi-ai; quota inspection must not introduce a refresh implementation or credential persistence.

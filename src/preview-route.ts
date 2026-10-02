@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { guardContextUsage } from './context-usage-guard.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { Config as PiAiConfig, PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { PiAiAdapterOptions, PiAiProviderProfile, ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
@@ -398,7 +399,7 @@ class PreviewAdapter extends PiAiAdapter {
   }
   private guardedStream(lease: Lease, options: GenerateOptions): AsyncIterable<StreamChunk> {
     const owner = this
-    return (async function* () {
+    return guardContextUsage((async function* () {
       owner.lifetime.start(lease)
       owned(options.provider)
       if (options.model !== lease.descriptor.id) throw failure('COPILOT_PREVIEW_MODEL_MISMATCH')
@@ -477,7 +478,7 @@ class PreviewAdapter extends PiAiAdapter {
         if (cause instanceof LlmError && cause.code === 'UNKNOWN_MODEL') await owner.refreshRejected(lease.snapshot, signal)
         throw requestFailure ?? cause
       }
-    })()
+    })())
   }
   private excludedModels(): ReadonlySet<string> {
     return excludedModelSet(this.accountModelSettings().excludedModelIds)

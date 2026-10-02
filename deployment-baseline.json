@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.72"
+    "version": "0.4.0-alpha.73"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -288,6 +288,25 @@
     ]
   },
   "capabilities": [
+    {
+      "id": "historical-context-evidence",
+      "required": true,
+      "evidenceScope": "synthetic-stream-replay-and-additive-ui-not-current-occupancy-or-live-desktop",
+      "sourceMarkers": [
+        {"file": "src/preview-route.ts", "marker": "guardContextUsage"},
+        {"file": "src/index.ts", "marker": "installContextEvidence(ctx)"},
+        {"file": "src/client.ts", "marker": "registerContextEvidenceUi"},
+        {"file": "src/context-evidence.ts", "marker": "githubCopilotContextEvidence"},
+        {"file": "docs/copilot-usage.md", "marker": "historical input sample, not current occupancy"}
+      ],
+      "tests": [
+        {"file": "tests/context-usage-guard.spec.ts", "name": "does not report failed zero usage on %s"},
+        {"file": "tests/context-evidence.spec.ts", "name": "replays failed zero samples without discarding the last valid input sample"},
+        {"file": "tests/context-evidence-ui.spec.ts", "name": "labels counts as historical rather than current occupancy in %s"},
+        {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "cold-folds native model selections independently without replacing the controller projection"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not let native SDK failed zero usage reset context evidence or fabricate settled usage"}
+      ]
+    },
     {
       "id": "account-quota-composer-usage",
       "required": true,

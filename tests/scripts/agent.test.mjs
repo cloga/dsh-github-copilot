@@ -163,7 +163,10 @@ test('CLI unknown input returns one JSON error with exit 2', () => {
 test('agent contract references actual files and verification gates', async () => {
   const result = await verifyAgentContract()
   assert.equal(result.ok, true)
-  assert.equal(result.taskCount, 10)
+  assert.equal(result.taskCount, 11)
+  const context = await planTask('context')
+  assert.ok(context.read.includes('src/context-evidence.ts'))
+  assert.ok(context.tests.includes('tests/context-evidence-runtime.spec.ts'))
   const history = await planTask('history')
   assert.ok(history.read.includes('scripts/repair-auto-model-history.mjs'))
   assert.ok(history.tests.includes('tests/scripts/repair-auto-model-history.test.mjs'))

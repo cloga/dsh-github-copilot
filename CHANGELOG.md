@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.73 (prepared)
+
+- Prevent managed Copilot failure/cancellation terminal zero-usage samples from resetting native context pressure; preserve successful zero and real nonzero usage (#242).
+- Add a strict plugin-owned historical context projection and an additive composer disclosure for replayed failed-zero readings. Last input-plus-cache samples are historical evidence, never current occupancy or inferred percentages.
+- Revoke old samples on route changes, compaction, surface replacement and invalid attribution. Keep the Core meter, account Credits, durable history, retries and compaction ownership unchanged.
+
 ## 0.4.0-alpha.72 (prepared)
 
 - Retain the mounted account controller and model metadata across exclusion-driven Models rerenders by capturing the native traced Copilot Remote once per UI registration (#240).
