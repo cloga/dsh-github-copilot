@@ -100,7 +100,7 @@ export function resolveParentModel(
   let current = child
   while (true) {
     const parentId = current.parentId
-    if (!parentId || seen.has(parentId)) fail('LINEAGE_INVALID')
+    if (!parentId || seen.has(parentId)) return fail('LINEAGE_INVALID')
     seen.add(parentId)
     const parent = lookup(parentId)
     if (!parent) return fail('PARENT_UNAVAILABLE')
