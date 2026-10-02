@@ -16,6 +16,9 @@ import { assistantDefinition } from '../../ui-chat/src/client/conversation-nodes
 import { turnTailDefinition } from '../../ui-chat/src/client/conversation-nodes/turn-tail.ts'
 import { chatViewDefinition } from '../../ui-chat/src/client/conversation-nodes/chat-snapshot-builder.ts'
 
+// Two source checkouts must share the renderer's React, as the loaded Client does.
+vi.mock('__COPILOT_REACT_MODULE__', async () => import('react'))
+
 const event = (seq: number, type: string, data: object) => ({
   type: 'event' as const, event: { seq, time: 1700000000000 + seq, type, data, surfaceOp: 'append' as const },
 })

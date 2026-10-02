@@ -34,13 +34,18 @@ if (suffix === '..' || suffix.startsWith(`..${sep}`) || isAbsolute(suffix) || pa
   throw new Error('reasoning presentation fixture refuses a symlink or junction ancestor')
 }
 const require = createRequire(join(core, 'package.json'))
+const pluginRequire = createRequire(join(root, 'package.json'))
+if (pluginRequire('react/package.json').version !== require('react/package.json').version) {
+  throw new Error('reasoning presentation fixture requires matching plugin and Core React versions')
+}
 const vitestManifest = require.resolve('vitest/package.json')
 const vitestCli = join(dirname(vitestManifest), 'vitest.mjs')
 const fixture = await readFile(join(root, 'tests/fixtures/reasoning-presentation-core.fixture.ts'), 'utf8')
 const modulePath = join(root, 'src/reasoning-presentation.ts').replaceAll('\\', '/')
 const autoModulePath = join(root, 'src/auto-model-presentation.ts').replaceAll('\\', '/')
 const bytes = Buffer.from(fixture.replace("'__COPILOT_REASONING_MODULE__'", JSON.stringify(modulePath))
-  .replace("'__COPILOT_AUTO_MODULE__'", JSON.stringify(autoModulePath)))
+  .replace("'__COPILOT_AUTO_MODULE__'", JSON.stringify(autoModulePath))
+  .replace("'__COPILOT_REACT_MODULE__'", JSON.stringify(pluginRequire.resolve('react').replaceAll('\\', '/'))))
 let identity
 let failure
 try {
