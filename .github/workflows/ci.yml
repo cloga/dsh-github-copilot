@@ -11,6 +11,25 @@ permissions:
   contents: read
 
 jobs:
+  prepare-reviewed-lock:
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'fix-background-compaction-244' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Generate candidate lock for local review only
+        run: pnpm install --lockfile-only --ignore-scripts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: background-compaction-candidate-lock
+          path: pnpm-lock.yaml
+
   verify:
     strategy:
       fail-fast: false
@@ -57,6 +76,9 @@ jobs:
       - name: Install compaction recovery verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop...' --filter '@deepseek-ai/dsh-compaction-basic...'
+      - name: Install background compaction jobs verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-jobs-local...' --filter '@deepseek-ai/dsh-commands...'
       - name: Install subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'

@@ -1,4 +1,5 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Context } from '@deepseek-ai/cordis'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import type { ContentBlock, Message, TokenUsage, ToolSchema } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -7,6 +8,7 @@ import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { calculateRequestBudget, resolveRequestBudgetPolicy } from './request-budget.ts'
 import type {} from './preview-route.ts'
+import { installBackgroundCompaction } from './background-compaction.ts'
 
 interface RecoveryMessage {
   readonly role: string
@@ -134,6 +136,13 @@ export async function summarizeOversizedManualInput<M extends RecoveryMessage, R
  */
 export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine {
   private readonly manual = new WeakMap<Agent, number>()
+
+  constructor(ctx: Context, config: ConstructorParameters<typeof BasicCompactionEngine>[1] = {}) {
+    super(ctx, config)
+    ctx.inject(['commands', 'jobs'], scope => {
+      installBackgroundCompaction(scope, (agent, signal) => this.compactNow(agent, signal))
+    })
+  }
 
   override async compactNow(agent: Agent, signal: AbortSignal, sourceCommandId?: CommandId): Promise<CompactionResult | null> {
     this.manual.set(agent, (this.manual.get(agent) ?? 0) + 1)
