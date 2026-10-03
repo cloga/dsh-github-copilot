@@ -27,6 +27,33 @@ function end(seq: number, step: number): SessionEvent<'step/end'> {
   return { seq: SessionSeq(seq), time: seq, type: 'step/end', data: { turn: 228, step } }
 }
 describe('missing turn usage on unchanged official accounting', () => {
+  it.each(['aborted', 'error'] as const)('retains native whole-turn accounting for a sampled %s attempt after successful steps', kind => {
+    const zero = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+    const events: SessionEvent[] = [
+      { seq: SessionSeq(1), time: 1, type: 'turn/start', data: { turn: 228 } },
+      start(2, 1), reply(3, 1), end(4, 1), start(5, 2),
+      { seq: SessionSeq(6), time: 6, type: 'assistant/attempt', data: {
+        turn: 228, step: 2, stream: [
+          { type: 'chunk', time: 6, chunk: { type: 'usage', usage: zero } },
+          { type: 'chunk', time: 6, chunk: {
+            type: 'finish', reason: { kind, failure: { code: 'ABORTED', message: 'synthetic' } },
+          } },
+        ],
+      } },
+      end(7, 2),
+      { seq: SessionSeq(8), time: 8, type: 'turn/end', data: { turn: 228, reason: { kind: 'completed' } } },
+    ]
+    const original = JSON.stringify(events)
+    const tokenUsage = deriveTurnTokenUsage(events)
+    expect(tokenUsage).toMatchObject({
+      uncachedInputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens,
+      cacheReadTokens: usage.cacheReadTokens, cacheWriteTokens: usage.cacheWriteTokens,
+    })
+    const evidence = definition.buildLocationData({ matches: events.map(event => ({ event })) }, 'turn', null)?.value
+    expect(evidence?.unreportedAttempts).toBe(0)
+    expect(turnUsageDiagnostic(228, { turn: 228, seq: 8, tokenUsage }, evidence, true)).toBeUndefined()
+    expect(JSON.stringify(events)).toBe(original)
+  })
   it('associates a recorded 408 with its missing sample and exact retry without restoring the native total', () => {
     const retryId = 'synthetic-retry' as RetryId
     const failure = { code: 'HTTP_ERROR' as const, message: `${REQUEST_BODY_TIMEOUT_MARKER} Synthetic bounded guidance.` }

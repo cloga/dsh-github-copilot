@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import { isZeroContextUsage } from './context-usage-guard.ts'
+import { isZeroContextUsage } from './context-usage.ts'
 
 export const COPILOT_CONTEXT_EVIDENCE = 'githubCopilotContextEvidence'
 const count = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)

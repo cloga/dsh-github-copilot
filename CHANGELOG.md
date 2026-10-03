@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.87 (prepared)
+
+- Remove managed terminal-zero usage filtering so native failure/cancellation samples remain available to Core's shared turn and cumulative accounting (#270).
+- Retain unreliable failed-zero classification only in the independent historical context disclosure. Native zero pressure remains a known limitation, not a reason to remove shared usage or invent supplier receipts.
+- Add native Responses zero/Anthropic nonzero cancellation and unchanged Core whole-turn regressions. Preserve errors, cancellation, retry and old histories; genuinely missing usage/lifecycle and timeout limitations remain explicit.
+
 ## 0.4.0-alpha.86 (prepared)
 
 - Enable bounded semantic Auto assessment by default for locally unknown tasks at the user's explicit request (#267). Preserve existing explicit false settings and document the opt-out.

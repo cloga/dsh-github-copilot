@@ -22,13 +22,13 @@ Provider or Session changes, unmounting and missing supported runtime seams revo
 
 Official rc.2 can replace the native context-pressure sample with the adapter's all-zero usage on a failed attempt. The message breakdown is a separate heuristic projection, so a native `0%` reading can coexist with substantial message tokens. Neither that zero nor the breakdown proves the current exact occupancy.
 
-The managed route delays one terminal all-zero usage chunk. An adjacent error or aborted finish discards that sample while preserving the finish; a thrown error or truncated stream also cannot certify that zero. Successful stop, max-tokens and tool-calls finishes preserve reported zero usage. Nonzero samples, billing counts, content ordering and failure semantics remain unchanged. This guard applies only to `github-copilot-preview`, not the Core-owned canonical adapter. It adds no retry, compaction, trimming or model switch.
+The managed route preserves native usage chunks immediately, including all-zero samples before error or aborted finishes. Usage is shared accounting evidence, not a context-only signal. The former terminal-zero filter was removed in alpha.87 (#270): dropping a sample to protect context pressure also made Core's whole-turn accounting unavailable. Numeric zero alone cannot distinguish the SDK's default from an explicit supplier report, so the plugin neither deletes it nor certifies it as a billing receipt. Native context pressure may consequently show zero after failure; the separate disclosure explains uncertainty instead of modifying Core's meter. No retry, compaction, trimming or model switch is added.
 
 The separate, strict `githubCopilotContextEvidence` session projection reads only routing and numeric usage from ordinary durable events. It keeps the last applicable input-plus-cache sample when a failed all-zero attempt is replayed. Model changes, compaction, surface replacement, conflicting source attribution and invalid metadata revoke the sample. It never reads message content or opaque replay, registers under a Core key, changes the native pressure projection, or rewrites durable history.
 
 An additive composer disclosure identifies missing or unreliable context evidence for the current open Copilot Session. Any retained count is explicitly a **historical input sample, not current occupancy**; no capacity or percentage is inferred. The native context ring and account Credits control remain separate and unchanged. Missing public projection/slot/runtime seams produce named diagnostics rather than guessed counts. Old histories can therefore still show native `0%`; the disclosure explains the uncertainty instead of claiming an in-place native-meter repair.
 
-Local synthetic tests establish guarded-stream, historical-fold and presentation behavior only. Exact published-adapter and public-registry acceptance, complete CI, publication and loaded Desktop state must be verified separately. No live provider call or Session restart is needed for these tests.
+Local synthetic tests establish native-stream preservation, historical-fold and presentation behavior only. Exact published-adapter and public-registry acceptance, complete CI, publication and loaded Desktop state must be verified separately. No live provider call or Session restart is needed for these tests.
 
 ## Missing completed-turn Usage
 
@@ -37,6 +37,12 @@ Local synthetic tests establish guarded-stream, historical-fold and presentation
 One observed completed turn contained 57 successful assistant messages with reported usage and one failed `assistant/attempt` without a usage sample. That attempt recorded the plugin's exact local estimated-input-budget diagnostic: 796299 estimated tokens exceeded a 781113-token input budget, before provider dispatch. Native compaction recovered and the subsequent steps completed. No conversation content, credentials or opaque replay is needed to explain this observation; the exact loaded plugin bytes were not independently attested.
 
 Official rc.2 `deriveTurnTokenUsage` requires complete lifecycle and exact usage for every attempt. One attempt without a sample makes its whole-turn result unavailable, so `TurnTailNodeView` omits native Usage. This is Core's existing fail-closed accounting rule triggered by our preventive pressure path, not evidence that all requests had no usage and not a regression in single-model exclusion saves.
+
+### Cancelled and failed terminal samples (#270)
+
+Cancellation does not inherently disable official rc.2 turn accounting: a complete lifecycle with a valid sampled aborted attempt remains eligible. Before alpha.87, the managed terminal-zero filter removed such samples. For example, a successful 120-token step followed by a zero-sampled cancelled step retained Session cumulative counts but lost the entire turn total after filtering. The route now forwards native samples unchanged; historical context evidence still treats failed zero as unreliable, independently of accounting.
+
+This is not a promise that every cancelled turn has complete or exact supplier usage. Responses may end before the supplier's final receipt and the SDK may emit its initialized zero. Missing lifecycle, unsampled attempts, pre-dispatch budget failures and native/plugin timeout interruption remain distinct limitations. No prior history is rewritten and no missing sample, partial total or billing amount is invented. Existing native usage already emitted before an error must not be removed for context-only diagnostics.
 
 ### Plugin-local explanation
 

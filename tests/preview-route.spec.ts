@@ -327,7 +327,7 @@ describe('plugin-owned account Copilot route', () => {
         targetCategory: 'versatile', selectedCategory: 'versatile', method: 'only-candidate' },
     })
   })
-  it('does not let native SDK failed zero usage reset context evidence or fabricate settled usage', async () => {
+  it('forwards native SDK failed zero usage without changing the shared accounting stream', async () => {
     stubFetch(async () => new Response('synthetic unavailable', { status: 503 }))
     const harness = await runtime()
     const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
@@ -337,9 +337,49 @@ describe('plugin-owned account Copilot route', () => {
       chunks.push(chunk)
       assembler.push(chunk)
     }
-    expect(chunks.some(chunk => chunk.type === 'usage')).toBe(false)
+    expect(chunks.filter(chunk => chunk.type === 'usage')).toEqual([
+      { type: 'usage', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+    ])
     expect(assembler.finish.kind).toBe('error')
-    expect(assembler.usage).toBeUndefined()
+    expect(assembler.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
+  })
+  it.each([
+    ['/responses', 0], ['/v1/messages', 100],
+  ] as const)('preserves native cancellation usage on %s (%s input tokens)', async (endpoint, tokens) => {
+    const id = 'synthetic-cancel-model'
+    const stop = new AbortController()
+    const items = [catalogItem(id, endpoint, { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: false },
+      limits: { max_context_window_tokens: 64000, max_prompt_tokens: 48000, max_output_tokens: 8000 },
+    } })]
+    stubFetch(async (input, init) => {
+      if (String(input).endsWith('/models')) return catalogResponse(items)
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          const packet = (type: string, data: Record<string, unknown>) =>
+            `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`
+          controller.enqueue(new TextEncoder().encode(endpoint === '/responses'
+            ? event('response.created', { response: { id: 'resp_synthetic' } })
+            : packet('message_start', { message: { id: 'msg_synthetic', type: 'message',
+              role: 'assistant', model: id, content: [], stop_reason: null,
+              usage: { input_tokens: tokens, output_tokens: 0 } } })))
+          init?.signal?.addEventListener('abort', () => controller.error(new Error('synthetic cancellation')), { once: true })
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } })
+    }, true)
+    const harness = await runtime(grant({ availableModelIds: [] }))
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: id })
+    const timer = setTimeout(() => stop.abort(), 100)
+    const chunks: StreamChunk[] = []
+    try {
+      for await (const chunk of prepared.stream({ ...prepared.config, signal: stop.signal,
+        messages: [createUserMessage({ content: [{ type: 'text', text: 'synthetic' }], source: { kind: 'user' } })],
+      })) chunks.push(chunk)
+    } finally { clearTimeout(timer) }
+    expect(chunks.filter(chunk => chunk.type === 'usage')).toEqual([
+      { type: 'usage', usage: { inputTokens: tokens, outputTokens: 0, totalTokens: tokens } },
+    ])
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'aborted' } })
   })
   it('preserves native successful zero usage rather than treating it as failure', async () => {
     stubFetch(async () => {
