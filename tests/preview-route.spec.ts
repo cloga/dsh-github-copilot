@@ -13,6 +13,7 @@ import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../src/preview-route.ts'
 import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
+import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
@@ -112,12 +113,18 @@ describe('managed request-body timeout guidance', () => {
     const payload = { message: 'Timed out reading request body. Try again, or use a smaller request size.',
       code: 'user_request_timeout', private: 'SECRET_PROVIDER_BODY' }
     let body = ''
-    const fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
       body = typeof init?.body === 'string' ? init.body : ''
       return new Response(JSON.stringify(payload), { status: 408 })
     })
     stubFetch(fetch)
     const harness = await runtime()
+    const observer = vi.spyOn(timeoutDiagnostics, 'requestBodyTimeoutDiagnostic').mockResolvedValueOnce(undefined)
+    let baseline: Awaited<ReturnType<typeof call>>
+    try { baseline = await call(harness.ctx) }
+    finally { observer.mockRestore() }
+    if (baseline.assembler.finish.kind !== 'error') throw new Error('fixture requires native terminal failure')
+    const native = baseline.assembler.finish.failure
     const result = await call(harness.ctx)
     expect(result.assembler.finish.kind).toBe('error')
     if (result.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal failure')
@@ -125,13 +132,13 @@ describe('managed request-body timeout guidance', () => {
     expect(first.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
     expect(first.message).toContain(`Request body: ${Buffer.byteLength(body, 'utf8')} UTF-8 bytes`)
     expect(first.message).not.toContain('SECRET_PROVIDER_BODY')
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect({ ...first, message: undefined }).toEqual({ ...native, message: undefined })
+    expect(fetch).toHaveBeenCalledTimes(2)
     fetch.mockImplementation(async () => new Response('synthetic generic timeout', { status: 408 }))
     const generic = await call(harness.ctx)
     if (generic.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal failure')
-    expect(generic.assembler.finish.failure.code).toBe(first.code)
     expect(generic.assembler.finish.failure.message).not.toContain('COPILOT_REQUEST_BODY_TIMEOUT')
-    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch).toHaveBeenCalledTimes(3)
   })
 
   it('does not leak a timeout diagnostic between concurrent prepared and direct dispatches', async () => {
