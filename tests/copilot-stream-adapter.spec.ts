@@ -7,6 +7,7 @@ import { normalizeAccountModelCatalog } from '../src/account-model-catalog.ts'
 import { CopilotStreamIdleError } from '../src/copilot-stream-liveness.ts'
 
 const providerId = 'github-copilot-preview'
+const idleMs = 1000
 const item = normalizeAccountModelCatalog({ data: [{
   id: 'synthetic-liveness-model', name: 'Synthetic liveness model', model_picker_enabled: true,
   policy: { state: 'enabled' }, supported_endpoints: ['/responses'],
@@ -43,7 +44,7 @@ async function run(mode: 'baseline' | 'late-output' | 'heartbeat-only' | 'stall'
           controller.close()
           signal?.removeEventListener('abort', abort)
         }
-      }, 50)
+      }, idleMs / 10)
     },
     cancel() { clearInterval(timer) },
   }), { headers: { 'content-type': 'text/event-stream' } }))
@@ -54,11 +55,11 @@ async function run(mode: 'baseline' | 'late-output' | 'heartbeat-only' | 'stall'
       signal: AbortSignal.any([caller.signal, ...options?.signal ? [options.signal] : []]),
       release() {},
     }),
-    ...mode === 'baseline' ? {} : { streamIdleTimeoutMs: 500, onStreamIdleTimeout: timeout },
+    ...mode === 'baseline' ? {} : { streamIdleTimeoutMs: idleMs, onStreamIdleTimeout: timeout },
   }, 'https://api.individual.githubcopilot.com')
   const profile = {
     provider: providerId, displayName: 'Synthetic liveness route', piProvider: provider,
-    streamIdleTimeoutMs: mode === 'baseline' ? 500 : 1000,
+    streamIdleTimeoutMs: mode === 'baseline' ? idleMs : idleMs * 2,
     maxRequestImageBytes: 20_971_520, requestImagePixelBudget: 4_194_304, requestImageMaxBytes: 1_048_576,
     retryPolicy: resolveRetryPolicy(undefined, 'fixture'),
     configuredMaxTokens: new Map<string, number>(), modelErrors: new Map<string, string>(),
@@ -97,6 +98,7 @@ describe('byte-aware idle handling through the unchanged native adapter', () => 
     const result = await run('late-output')
     expect(result.error).toBeUndefined()
     expect(result.chunks).toContainEqual({ type: 'text-delta', index: 0, text: 'Late output' })
+    expect(result.bytes).toBe(14)
     expect(result.timeout).not.toHaveBeenCalled()
     expect(result.fetch).toHaveBeenCalledTimes(1)
   })
