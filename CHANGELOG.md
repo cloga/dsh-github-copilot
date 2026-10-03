@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.76 (prepared)
+
+- Fix fresh master/lead Auto footer reads rejected by the native Client gateway when an ambient agent context reduced the explicit two-argument call to one (#249). Preserve native Host lookup and strict codecs; do not substitute the ambient Session.
+- Distinguish failed selection reads from successfully read missing evidence. Add a bounded, explicit same-turn Retry without rerunning inference or leaking raw errors.
+- Reproduce the old descriptor failure and verify bound/unbound calls through the unchanged pinned Client gateway.
+
 ## 0.4.0-alpha.75 (prepared)
 
 - Add safe, actionable managed `COPILOT_REQUEST_BODY_TIMEOUT` guidance for the exact observed HTTP 408 request-body timeout, including final JSON UTF-8 bytes when observable (#246).

@@ -109,6 +109,30 @@ Chat Auto does not own or alter the independent `github-copilot-hosted` search p
 
 ## Attribution and explanation
 
+**Fresh master/lead selection reads (alpha.76, #249):** the footer explicitly
+calls `get(viewedSessionId, turn)`. Its old Remote descriptor also declared an
+automatic `agent` scope projection. The unchanged rc.2 Client gateway prefers
+that projection when a Client context has an agent identity, removes the ID
+parameter from its expected arguments, and rejects this two-argument call with
+`expected 1 argument(s), got 2` before sending RPC. Existing root-context mocks
+did not exercise this behavior. This is a reproducible new-reply display failure,
+not evidence of missing historical decisions or an Auto routing failure.
+
+The descriptor now exposes only the direct two-argument Client call. Its native
+Host `agent` lookup, strict Session ID/turn/result codecs and method identity
+are unchanged. The viewed Session is never replaced by an ambient current
+Session. Native gateway regression runs the old descriptor to reproduce the
+rejection, then checks the fixed descriptor with both bound and unbound contexts.
+Host access checks are not bypassed: native child lookup restrictions remain a
+separate limitation, not the explanation for the reported master/lead case.
+
+Pending reads show **Loading selection…**; failed or invalid reads show
+**Selection unavailable** and an explicit **Retry**. Retry reads the same
+Session/turn, does not rerun inference, and never exposes a raw error response.
+Only a successful read with no retained decision shows **Selection unknown**.
+Compatible historical attribution can still supply an independently known Auto
+decision. This change does not persist decisions or recover evicted evidence.
+
 **Completed-turn fallback (alpha.71, #238):** a new Desktop Session was observed without the Auto label despite alpha.70 reporting all three components running. That status does not attest every optional Client dependency fiber. The reproducible defect is that the actions entry waited for `uiConversation` registration, and then required its optional provenance projection even when the Host retained the exact turn's selection. The original live Client trigger has not been established from console evidence.
 
 The actions entry now waits only for the selection Remote namespace and public slots. Historical attribution/provenance definitions register independently. A native `turn-tail` matching the displayed closing message, turn and valid completion sequence is independent completion evidence: a retained Auto/Manual selection can render without the optional projection. Native `tokenUsage.routes` can establish Copilot ownership for **Selection unknown** when projection data is absent. Missing projection evidence remains visibly incomplete; it never becomes guessed Manual, a guessed preference, or a reconstructed historical selection. Invalid/mismatched completion stays hidden. Projection failure cannot unregister the independent actions entry.
