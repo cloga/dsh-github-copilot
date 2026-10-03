@@ -89,7 +89,7 @@ export async function taggedCoreAliases(core, trackedPaths, release) {
     const name = manifest.name
     if (typeof name !== 'string' || !name.startsWith('@deepseek-ai/')) continue
     const isDsh = name.startsWith('@deepseek-ai/dsh-')
-    const isCordis = name === '@deepseek-ai/cordis'
+    const isCordis = ['@deepseek-ai/cordis', '@deepseek-ai/cordis-plugin-loader', '@deepseek-ai/cordis-plugin-group'].includes(name)
     const isVendor = path.startsWith('vendor/')
     if (!isDsh && !isVendor) continue
     if (isDsh && manifest.version !== release) throw new Error(`tagged package release differs: ${name}`)

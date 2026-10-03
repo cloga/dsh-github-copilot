@@ -86,8 +86,8 @@ describe('Copilot compaction pressure', () => {
   })
 
   it.each([{}, { composedPreset: () => 'bound' },
-    { composedPreset: () => null, serviceFor: () => undefined },
-    { composedPreset: () => '', serviceFor: () => undefined },
+    { composedPreset: () => null, serviceFor: (): undefined => undefined },
+    { composedPreset: () => '', serviceFor: (): undefined => undefined },
   ])('reports unsupported preset lookup without measuring or guessing: %j', async presets => {
     const h = fixture()
     h.services.set('agentPresets', presets)

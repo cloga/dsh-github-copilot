@@ -52,6 +52,8 @@ async function fixture(release = '0.1.3-alpha.1') {
     ['packages/attachment/attachment', '@deepseek-ai/dsh-attachment', release],
     ['packages/client/ui-renderer', '@deepseek-ai/dsh-client-ui-renderer', release],
     ['vendor/cordis', '@deepseek-ai/cordis', '4.0.2'],
+    ['vendor/loader', '@deepseek-ai/cordis-plugin-loader', '1.0.0'],
+    ['vendor/group', '@deepseek-ai/cordis-plugin-group', '1.0.0'],
     ['vendor/cosmokit', '@deepseek-ai/cosmokit', '1.8.3'],
   ]) {
     await source(`${dir}/package.json`, JSON.stringify({ name, version, type: 'module', exports: {
@@ -140,6 +142,10 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   assert.equal(projection.replacement, join(value.core, 'packages/compaction/compaction-image-offload/src/projection.ts'))
   assert.equal(config.resolve.alias.some(alias => alias.find.test('@earendil-works/pi-ai')), false)
   assert.equal(config.resolve.alias.some(alias => alias.find.test('@deepseek-ai/cosmokit')), false)
+  for (const name of ['loader', 'group']) {
+    const alias = config.resolve.alias.find(item => item.find.test(`@deepseek-ai/cordis-plugin-${name}`))
+    assert.equal(alias.replacement, join(value.core, `vendor/${name}/src/index.ts`))
+  }
   const guard = config.plugins.find(plugin => plugin.name === 'tagged-core-public-import-guard')
   const vendor = '@deepseek-ai/cosmokit'
   assert.equal(guard.resolveId(vendor, join(value.core, 'vendor/cordis/src/index.ts')), join(value.core, 'vendor/cosmokit/src/index.ts'))
