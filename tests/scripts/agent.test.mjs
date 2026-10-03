@@ -31,6 +31,14 @@ test('plans only known task IDs with unexecuted argument arrays', async () => {
   assert.ok((await planTask('tooling')).commands.some(command => command.argv[1] === 'test:scripts'))
 })
 
+test('context diagnostics preserve shared usage and include native whole-turn evidence', async () => {
+  const plan = await planTask('context')
+  assert.ok(plan.commands.some(command => command.argv.includes('tests/fixtures/turn-usage-core.fixture.ts')))
+  const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+  assert.ok(contract.tasks.context.risk.includes('Never filter or delay shared native usage'))
+  await verifyAgentContract()
+})
+
 test('important updates carry release follow-through without a second approval prompt', async () => {
   const plan = await planTask('release')
   const policy = plan.boundaries.releaseDelivery

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.86"
+    "version": "0.4.0-alpha.87"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -317,18 +317,20 @@
       "required": true,
       "evidenceScope": "synthetic-stream-replay-and-additive-ui-not-current-occupancy-or-live-desktop",
       "sourceMarkers": [
-        {"file": "src/preview-route.ts", "marker": "guardContextUsage"},
+        {"file": "src/context-usage.ts", "marker": "isZeroContextUsage"},
         {"file": "src/index.ts", "marker": "installContextEvidence(ctx)"},
         {"file": "src/client.ts", "marker": "registerContextEvidenceUi"},
         {"file": "src/context-evidence.ts", "marker": "githubCopilotContextEvidence"},
         {"file": "docs/copilot-usage.md", "marker": "historical input sample, not current occupancy"}
       ],
       "tests": [
-        {"file": "tests/context-usage-guard.spec.ts", "name": "does not report failed zero usage on %s"},
+        {"file": "tests/context-usage.spec.ts", "name": "classifies zero only for separate historical evidence without changing the sample"},
         {"file": "tests/context-evidence.spec.ts", "name": "replays failed zero samples without discarding the last valid input sample"},
         {"file": "tests/context-evidence-ui.spec.ts", "name": "labels counts as historical rather than current occupancy in %s"},
         {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "cold-folds native model selections independently without replacing the controller projection"},
-        {"file": "tests/preview-route.spec.ts", "name": "does not let native SDK failed zero usage reset context evidence or fabricate settled usage"}
+        {"file": "tests/preview-route.spec.ts", "name": "forwards native SDK failed zero usage without changing the shared accounting stream"},
+        {"file": "tests/preview-route.spec.ts", "name": "preserves native cancellation usage on %s (%s input tokens)"},
+        {"file": "tests/fixtures/turn-usage-core.fixture.ts", "name": "retains native whole-turn accounting for a sampled %s attempt after successful steps"}
       ]
     },
     {
