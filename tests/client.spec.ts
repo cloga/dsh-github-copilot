@@ -89,13 +89,13 @@ describe('GitHub Copilot Models client', () => {
     const { models, preferences } = preferencesFixture()
     const remote = modelRemote()
     const write = deferred<ReturnType<typeof accountResult>>()
-    remote.excludeModel.mockReturnValue(write.promise)
+    remote.setModelExcluded.mockReturnValue(write.promise)
     const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never, models, preferences }))
     let elements = descendants(panel.render())
     const action = elements.find(element => element.props['data-model-id'] === 'enabled')!
     const pending = action.props.onClick()
     await action.props.onClick()
-    expect(remote.excludeModel).toHaveBeenCalledOnce()
+    expect(remote.setModelExcluded).toHaveBeenCalledExactlyOnceWith('enabled', true)
     write.reject(new Error('PRIVATE_HOST_FAILURE'))
     await pending
     elements = descendants(panel.render())
@@ -125,6 +125,20 @@ describe('GitHub Copilot Models client', () => {
     expect(descendants(panel.render()).filter(element => element.props['data-model-id'])).toHaveLength(0)
   })
 
+  it('updates one row from the narrow preferences result without account status or discovery', async () => {
+    const { models, preferences } = preferencesFixture()
+    const remote = modelRemote()
+    remote.setModelExcluded.mockResolvedValue({ ok: true, value: { ...preferences,
+      revision: 2, excludedModelIds: ['absent', 'enabled', 'excluded'] } })
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never, models, preferences }))
+    await descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')!.props.onClick()
+    expect(descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')?.props.children).toBe('Restore')
+    expect(remote.setModelExcluded).toHaveBeenCalledExactlyOnceWith('enabled', true)
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.ensureModels).not.toHaveBeenCalled()
+  })
+
   function descendants(root: unknown): ReactElement[] {
     if (Array.isArray(root)) return root.flatMap(descendants)
     if (!isValidElement(root)) return []
@@ -147,7 +161,7 @@ describe('GitHub Copilot Models client', () => {
   function modelRemote(discoverModels: ReturnType<typeof vi.fn> = vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] }))) {
     return { discoverModels, ensureModels: vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] })),
       status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(),
-      excludeModel: vi.fn(), restoreModel: vi.fn() }
+      excludeModel: vi.fn(), restoreModel: vi.fn(), setModelExcluded: vi.fn() }
   }
   // Tiny deterministic hook host: component state/ref identity and effect cleanup,
   // without mounting a browser or invoking any real Remote implementation.
@@ -913,7 +927,7 @@ describe('GitHub Copilot Models client', () => {
     vi.mocked(React.useEffect).mockImplementation(() => undefined)
     vi.mocked(React.useRef).mockImplementation(initial => ({ current: initial }))
     const remote = modelRemote()
-    remote.restoreModel.mockResolvedValue(accountResult())
+    remote.setModelExcluded.mockResolvedValue({ ok: true, value: preferencesFixture().preferences })
     const tree = GitHubCopilotModelPreferencesPanel({
       remote: remote as never,
       models: { state: 'ready', rejected: [], models: [
@@ -935,11 +949,11 @@ describe('GitHub Copilot Models client', () => {
       .toBe('Model preferences · 1 enabled · 2 excluded')
     expect(elements.find(element => element.props['data-dsh-github-copilot-model-search'] === true)).toBeDefined()
     const selected = elements.find(element => element.props['data-model-id'] === 'selected')
-    expect(selected?.props).toMatchObject({ disabled: true, children: 'Exclude' })
+    expect(selected?.props).toMatchObject({ disabled: false, children: 'Exclude' })
     const restore = elements.find(element => element.props['data-model-id'] === 'temporarily-absent')
     expect(restore?.props.children).toBe('Restore')
     await restore?.props.onClick()
-    expect(remote.restoreModel).toHaveBeenCalledWith('temporarily-absent')
+    expect(remote.setModelExcluded).toHaveBeenCalledWith('temporarily-absent', false)
     expect(remote.status).not.toHaveBeenCalled()
     expect(remote.discoverModels).not.toHaveBeenCalled()
   })

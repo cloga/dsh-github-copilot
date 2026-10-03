@@ -30,7 +30,7 @@ import { installCopilotCompactionPressure } from './compaction-pressure.ts'
 import { autoModelInputModalities } from './auto-model-routing.ts'
 import { installAutoModelRouting } from './auto-model-host.ts'
 import { ResponsesRetryReplay } from './responses-replay-compat.ts'
-import { excludedModelSet } from './model-exclusions.ts'
+import { excludedModelSet, ModelExclusionTurns } from './model-exclusions.ts'
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
 import { imageInputFailure } from './image-input-admission.ts'
 
@@ -126,7 +126,8 @@ class PreviewLifetime {
   constructor(readonly credentials: CredentialStore, readonly source: AccountModelSource,
     readonly proofFor: (snapshot: AccountModelSnapshot) => Proof | undefined,
     private readonly displayProofFor: (snapshot: AccountModelSnapshot) => Proof | undefined,
-    private readonly excluded: (modelId: string) => boolean) {}
+    private readonly excluded: (modelId: string) => boolean,
+    private readonly turns: ModelExclusionTurns) {}
   assertActive(): void { if (!this.active) throw failure('COPILOT_PREVIEW_DISPOSED', 'ABORTED') }
   isCurrent(revision: number): boolean { return this.active && revision === this.revision }
   private removeRetry(signal: AbortSignal): void {
@@ -214,12 +215,13 @@ class PreviewLifetime {
     const combined = signal === undefined ? this.controller.signal : AbortSignal.any([signal, this.controller.signal])
     const grant = await this.read(combined)
     if (grant === undefined) throw failure('COPILOT_PREVIEW_OAUTH_REQUIRED')
-    if (this.excluded(model)) throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
+    const turnAdmitted = this.turns.permits(signal, model)
+    if (!turnAdmitted && this.excluded(model)) throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
     const descriptor = snapshot.models.find(item => item.id === model)
     if (descriptor === undefined) throw failure('COPILOT_PREVIEW_MODEL_NOT_ENTITLED', 'UNKNOWN_MODEL')
     const proof = this.proofFor(snapshot)
     if (proof === undefined) throw failure('COPILOT_PREVIEW_METADATA_STALE')
-    const lease: Lease = { snapshot, descriptor, proof, revision: this.revision, signal: combined, started: false }
+    const lease: Lease = { snapshot, descriptor, proof, revision: this.revision, signal: combined, retrySignal: signal, started: false }
     this.entitled(lease, grant, model)
     if (signal !== undefined && !signal.aborted) {
       return { ...lease, retrySignal: signal, retryReplay: this.retryFor(signal, snapshot, proof, model) }
@@ -232,7 +234,7 @@ class PreviewLifetime {
   }
   private entitled(lease: Lease | undefined, grant: GitHubCopilotOAuthCredential, model: string): void {
     this.account(lease, grant)
-    if (this.excluded(model)) throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
+    if (!this.turns.permits(lease.retrySignal, model) && !lease.started && this.excluded(model)) throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
     if (lease.descriptor.id !== model) throw failure('COPILOT_PREVIEW_MODEL_MISMATCH', 'UNKNOWN_MODEL')
     if (this.source.readSnapshot() !== lease.snapshot || this.proofFor(lease.snapshot) !== lease.proof) throw failure('COPILOT_PREVIEW_METADATA_STALE')
     // A live enabled entry may precede the grant's ID list, but cannot survive a
@@ -248,6 +250,7 @@ class PreviewLifetime {
   start(lease: Lease): void {
     this.assertActive()
     if (!lease.started && lease.revision !== this.revision) throw failure('COPILOT_PREVIEW_PREPARED_CALL_INVALIDATED', 'ABORTED')
+    if (!this.turns.permits(lease.retrySignal, lease.descriptor.id) && this.excluded(lease.descriptor.id)) throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
     lease.started = true
   }
   guard(lease?: Lease): AccountProviderGuard {
@@ -574,9 +577,11 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     && provenSnapshot === snapshot && snapshotProof?.accountKey === snapshot.accountKey ? snapshotProof : undefined
   const proofFor = (snapshot: AccountModelSnapshot): Proof | undefined => source.readSnapshot() === snapshot
     && snapshotProof !== undefined && snapshotProof.expires > Date.now() ? displayProofFor(snapshot) : undefined
-  const lifetime = new PreviewLifetime(store, source, proofFor, displayProofFor, modelId => excludedModels().has(modelId))
+  const exclusionTurns = new ModelExclusionTurns()
+  const lifetime = new PreviewLifetime(store, source, proofFor, displayProofFor, modelId => excludedModels().has(modelId), exclusionTurns)
   const removeStepListener = ctx.on('session/event', (session, event) => {
     if (event.type === 'step/start' || event.type === 'turn/end') lifetime.clearSessionRetries(session.id)
+    if (event.type === 'turn/end') exclusionTurns.end(session)
   })
   // Empty provider is used only for registry metadata/config validation, never requests.
   const template = resolvedProfile(createAccountProvider([], lifetime.guard(), 'https://api.individual.githubcopilot.com').provider, requestConfig)
@@ -740,6 +745,11 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     budgetPolicy: () => budgetSettings(),
     parentModelBindings: () => cacheSettings().parentModelFollow ?? [],
     followParentModel: () => cacheSettings().followParentModel === true,
+    admitModel(agent, turn, model, signal) {
+      if (!exclusionTurns.admit(agent.session, turn, model, signal, excludedModels())) {
+        throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
+      }
+    },
   })
   const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
     new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings))
