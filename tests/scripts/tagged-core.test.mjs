@@ -192,6 +192,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       }
       if (release === '0.2.0-rc.2') {
         await writeFile(join(value.root, 'tests/fixtures/scoped-compaction-core.fixture.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/fixtures/model-exclusions-core.fixture.ts'), 'export {}')
       }
       const report = await prepareTaggedCoreFixture(value, value)
       const config = (await import(pathToFileURL(report.configPath).href)).default
@@ -216,7 +217,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         ...release.startsWith('0.2.0-') ? ['tests/tool-schema-compat.spec.ts'] : [],
         ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         ...release.startsWith('0.2.0-') ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
-        ...release === '0.2.0-rc.2' ? ['tests/fixtures/scoped-compaction-core.fixture.ts'] : [],
+        ...release === '0.2.0-rc.2' ? ['tests/fixtures/scoped-compaction-core.fixture.ts', 'tests/fixtures/model-exclusions-core.fixture.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts'])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })
