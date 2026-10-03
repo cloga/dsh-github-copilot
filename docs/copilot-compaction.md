@@ -91,6 +91,10 @@ Current scoped-recovery evidence additionally targets unchanged official `639ed0
 
 ## Verification boundary
 
+Managed HTTP/SSE liveness is separate from compaction and HTTP 408. Core's idle watchdog measures translated assistant chunks, not heartbeat bytes. The plugin observes actual nonempty bytes without parsing or fabricating output: the default byte-idle limit stays five minutes, while native semantic silence is bounded to ten minutes. Consumer think time does not count; endless heartbeats still fail. Caller cancellation and native retry ownership remain unchanged. Explicit WebSocket/auto transport and `chatStreamLiveness: false` retain native-only timing.
+
+`github-copilot.chatMaxRequestImageBytes` exposes the existing native image projection budget with its unchanged 20971520-byte default. An explicit smaller budget can reduce outgoing image payloads by offloading older images into mapped read-only paths; original history is retained, but outgoing image visibility changes. This is not a total request cap, automatic compaction, or a supplier size limit. No live budget reduction is performed by installation or by a 408. Fixed text/tool prefixes and network/service faults may still cause upload timeouts.
+
 Pure arithmetic and policy tests, public-middleware fixtures, and the real published native adapter/SDK with synthetic transport cover separate layers. Required cases include independent/combined bounds, changed prefixes, explicit/default output and effort, metadata/credential invalidation, direct/prepared parity, concurrent calls, cancellation, output truncation and oversized manual input. Existing full plugin gates and exact-Core compatibility fixtures remain required; source inventory is not their execution result.
 
 No live model inference, local Desktop installation, activation or restart is implied by unit tests or publication. Preserve immutable GitHub/npm byte identity and coordinate Desktop/Ops pins separately after release verification.

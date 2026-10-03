@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.79"
+    "version": "0.4.0-alpha.80"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -551,6 +551,8 @@
         {"file": "src/preview-route.ts", "marker": "createAccountModelSource"},
         {"file": "src/preview-provider.ts", "marker": "native.streamSimple"},
         {"file": "src/request-body-timeout.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
+        {"file": "src/copilot-stream-liveness.ts", "marker": "COPILOT_STREAM_IDLE_TIMEOUT"},
+        {"file": "src/preview-route.ts", "marker": "Math.min(idle * 2, 2_147_483_647)"},
         {"file": "src/response-error-body.ts", "marker": "readResponseErrorJson"},
         {"file": "src/pi-provider-bridge.ts", "marker": "PiStreamPublicCompatibility"}
       ],
@@ -566,6 +568,12 @@
         {"file": "tests/preview-route.spec.ts", "name": "enriches only a verified 408 while preserving native failure classification and retry ownership"},
         {"file": "tests/preview-provider.spec.ts", "name": "observes verified %s timeout without changing bytes, Response, native retries or credential ownership"},
         {"file": "tests/request-body-timeout.spec.ts", "name": "bounds stalled response observation and gives cancellation priority"},
+        {"file": "tests/copilot-stream-liveness.spec.ts", "name": "does not count consumer think time as provider idle"},
+        {"file": "tests/copilot-stream-adapter.spec.ts", "name": "reproduces native semantic timeout despite ongoing SSE bytes"},
+        {"file": "tests/copilot-stream-adapter.spec.ts", "name": "allows real late output after the original semantic-idle boundary"},
+        {"file": "tests/copilot-stream-adapter.spec.ts", "name": "retains a native hard semantic deadline for an endless heartbeat stream"},
+        {"file": "tests/preview-route.spec.ts", "name": "restores byte-idle failures as TIMEOUT without adding a native wire attempt"},
+        {"file": "tests/preview-route.spec.ts", "name": "excludes actual Core consumer think time despite eager SDK event forwarding"},
         {"file": "tests/pi-provider-bridge.spec.ts", "name": "preserves the stream object rather than copying or replacing its private queue"},
         {"file": "tests/pi-provider-bridge.spec.ts", "name": "passes the checked simple input through and rejects unsupported advanced entry without I/O"}
       ]

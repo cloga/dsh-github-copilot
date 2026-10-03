@@ -203,7 +203,7 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     const cfg = current()
     return cfg.searchRouting ?? {}
   }
-  ctx.plugin(previewPlugin, { accountModelSettings: () => current(), requestBudgetSettings: () => {
+  ctx.plugin(previewPlugin, { accountModelSettings: () => current(), chatRequestSettings: () => current(), requestBudgetSettings: () => {
     const selected = current()
     return { safetyTokens: selected.requestBudgetSafetyTokens, pressureRatio: selected.requestBudgetPressureRatio,
       compactionReasoning: selected.compactionReasoning }

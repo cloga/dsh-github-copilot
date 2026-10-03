@@ -73,6 +73,7 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/traditional-search.ts`: `github-copilot-hosted` `ctx.web` provider.
 - `src/serialize.ts`, `src/sse.ts`, `src/failure.ts`: protocol conversion and bounded error handling.
 - `src/response-error-body.ts`, `src/request-body-timeout.ts`: bounded clone-only HTTP error evidence and safe managed upload-timeout guidance. Exact verified `408/user_request_timeout` preserves native failure classification/retry metadata; final JSON bytes are not tokens or a payload limit. Never infer overflow, auto-compact, trim history, switch models or add retries from a 408.
+- `src/copilot-stream-liveness.ts`: request-local HTTP/SSE byte-idle observation, paired with the public native adapter's bounded assistant-chunk deadline. Default five-minute byte idle and ten-minute semantic silence; no fake assistant output, private watchdog access, new retry or Core patch. Consumer think time is excluded; explicit WebSocket/auto stays native-only. `chatStreamLiveness: false` restores native-only timing. `chatMaxRequestImageBytes` retains Core's 20 MiB default; smaller explicit settings authorize only native image offload, not hidden history trimming or a guessed supplier limit. Synthetic heartbeat evidence is not production heartbeat proof.
 - `tests/`: unit and integration evidence; mirror the source area being changed.
 - `deployment-baseline.json`: declared machine-readable compatibility and capability evidence inventory.
 - `scripts/verify-deployment-baseline.mjs`: invariant drift gate.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.80 (prepared)
+
+- Observe real HTTP/SSE byte progress on managed requests, retaining the original five-minute byte-idle bound while allowing at most ten minutes without a native assistant chunk (#253).
+- Preserve native SDK parsing, exact stream bytes, caller cancellation and retry ownership; endless heartbeats remain bounded and explicit WebSocket/auto transport keeps native behavior.
+- Add separate managed-chat timeout/opt-out settings and a configurable native image-request budget with the unchanged 20 MiB default. No hidden history trimming, automatic model switch, extra retry or claim to cure HTTP 408.
+- Reproduce heartbeat-only semantic timeouts and verify real late output, actual byte stalls and cleanup through unchanged native adapters.
+
 ## 0.4.0-alpha.79 (prepared)
 
 - Bind retained turn selection reads through the public `TypertRemoteService` and `@Remote get`, fixing the Host registration missing from the alpha.76 Client-only correction (#254).

@@ -12,6 +12,7 @@ import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { CopilotResponsesReplayError, isCopilotInputItemScopeError, normalizeCopilotResponsesPayload } from './responses-replay-compat.ts'
 import type { ResponsesRetryReplay } from './responses-replay-compat.ts'
 import { requestBodyTimeoutDiagnostic } from './request-body-timeout.ts'
+import { CopilotStreamIdleError, CopilotStreamLiveness } from './copilot-stream-liveness.ts'
 
 export type ManagedWireAbortCode = 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' | 'COPILOT_PREVIEW_DISPOSED'
 
@@ -37,6 +38,10 @@ export interface PreviewProviderGuard {
   onWireAbort?(code: ManagedWireAbortCode): void
   /** Request-local safe guidance from a verified HTTP response; undefined clears prior evidence. */
   onRequestBodyTimeout?(diagnostic: string | undefined): void
+  /** Optional HTTP byte-idle bound paired with a separate native semantic deadline. */
+  readonly streamIdleTimeoutMs?: number
+  onStreamLiveness?(control: Pick<CopilotStreamLiveness, 'pause' | 'resume'>): void
+  onStreamIdleTimeout?(error: CopilotStreamIdleError): void
 }
 
 /** Guard for one selected model in an account-bound descriptor snapshot. */
@@ -183,6 +188,25 @@ export function createAccountProvider(
         lease.release()
         throw new Error('COPILOT_MANAGED_OAUTH_REQUIRED')
       }
+      let liveness: CopilotStreamLiveness | undefined
+      try {
+        if (guard.streamIdleTimeoutMs !== undefined) {
+          liveness = new CopilotStreamLiveness(guard.streamIdleTimeoutMs, lease.signal)
+          guard.onStreamLiveness?.(liveness)
+        }
+      } catch (error) {
+        liveness?.dispose()
+        lease.release()
+        throw error
+      }
+      let idleReported = false
+      const reportIdleFailure = (): void => {
+        if (!idleReported && liveness?.signal.reason instanceof CopilotStreamIdleError
+          && !lease.signal.aborted && !options.signal?.aborted) {
+          idleReported = true
+          guard.onStreamIdleTimeout?.(liveness.signal.reason)
+        }
+      }
       const headers: Record<string, string | null> = {}
       for (const [name, value] of Object.entries(options.headers ?? {})) {
         if (name.toLowerCase() !== 'authorization' && name.toLowerCase() !== 'x-api-key') headers[name] = value
@@ -198,7 +222,7 @@ export function createAccountProvider(
       let retry: ReturnType<ResponsesRetryReplay['begin']> | undefined
       try { retry = responses ? guard.retryReplay?.begin(context, guard.retrySignal,
         options?.sessionId, model.id) : undefined }
-      catch (error) { lease.release(); throw error }
+      catch (error) { liveness?.dispose(); lease.release(); throw error }
       const reportReplayFailure = (error: CopilotResponsesReplayError): void => {
         if (lease.signal.aborted || options.signal?.aborted) return
         try { guard.onReplayFailure?.(error) } catch { /* Keep native cleanup and terminal delivery intact. */ }
@@ -219,6 +243,7 @@ export function createAccountProvider(
       const fetch = options.fetch ?? globalThis.fetch
       const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
         guard.onRequestBodyTimeout?.(undefined)
+        liveness?.beginRequest(typeof init?.body === 'string' ? init.body : undefined)
         let response: Response
         try { response = await fetch(input, init) }
         catch (error) { retry?.observe(undefined, 0); throw error }
@@ -235,19 +260,21 @@ export function createAccountProvider(
             reportReplayFailure(new CopilotResponsesReplayError('scope-mismatch'))
           } else unauthorized = true
         }
-        return response
+        return liveness?.observe(response) ?? response
       }
       const wireOptions = model.api === 'anthropic-messages'
-        ? { ...options, signal: lease.signal, apiKey: undefined, headers, fetch: observeResponse }
-        : { ...options, signal: lease.signal, headers, fetch: observeResponse, onPayload }
+        ? { ...options, signal: liveness?.signal ?? lease.signal, apiKey: undefined, headers, fetch: observeResponse }
+        : { ...options, signal: liveness?.signal ?? lease.signal, headers, fetch: observeResponse, onPayload }
       if (!hasApi(model, 'openai-responses') && !hasApi(model, 'openai-completions') && !hasApi(model, 'anthropic-messages')) {
         retry?.finish()
+        liveness?.dispose()
         lease.release()
         throw new Error('COPILOT_MANAGED_PROTOCOL_UNSUPPORTED')
       }
       return (async function* () {
         try {
           for await (const event of native.streamSimple(model, context, wireOptions)) {
+            reportIdleFailure()
             if (event.type === 'error' && event.reason === 'aborted'
               && lease.signal.reason instanceof ManagedWireAbortError) {
               guard.onWireAbort?.(lease.signal.reason.code)
@@ -255,6 +282,8 @@ export function createAccountProvider(
             yield event
           }
         } finally {
+          reportIdleFailure()
+          liveness?.dispose()
           if (lease.signal.aborted || options.signal?.aborted) retry?.observe(undefined, 0)
           retry?.finish()
           lease.release()
