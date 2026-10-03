@@ -2,7 +2,7 @@
 import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
 import { SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import { deriveTurnTokenUsage } from '@deepseek-ai/dsh-token-meter/turn-usage'
+import { deriveTurnTokenUsage } from '@deepseek-ai/dsh-token-meter/client'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { turnUsageEvidenceDefinition as definition, turnUsageDiagnostic } from '../../src/turn-usage-evidence.ts'
 

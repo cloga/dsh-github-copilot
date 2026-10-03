@@ -37,8 +37,9 @@ async function mount({ provider = 'github-copilot-preview', tokenUsage, hasEvide
   document.body.append(container)
   const root = createRoot(container)
   cleanups.push(() => root.unmount())
-  if (!Entry) throw new Error('Missing fixture entry')
-  await act(async () => root.render(createElement(Entry, {
+  const entry = Entry
+  if (!entry) throw new Error('Missing fixture entry')
+  await act(async () => root.render(createElement(entry, {
     sessionId: 'fixture-session', messageId: 'reply', useChat: (selector: (value: unknown) => unknown) => selector(snapshot),
   })))
   return { container, get, diagnostic }
