@@ -57,12 +57,13 @@ investigation, bounded explicit continuations of those difficult tasks, and
 isolated fenced mechanical transformations. Other tasks remain uncertain rather
 than guessing from length; insufficient local evidence does not mean the
 conversation lacks context.
-An optional `github-copilot.autoSemanticAssessment: true` experiment makes one
+Default-enabled `github-copilot.autoSemanticAssessment` makes one
 bounded auxiliary native-adapter call to a concrete, non-excluded supplier
 Lightweight model only for locally unknown demand. It prioritizes the current
 and preceding user requests without removing omitted-context safeguards. It
 adds latency and supplier charges not included in native
-chat Usage. It is off by default pending labeled-corpus calibration.
+chat Usage. Set it to `false` to opt out; existing explicit false is preserved.
+This user-authorized default rollout does not claim labeled-corpus calibration.
 
 | Task demand | Efficiency | Balance (`auto`) | Intelligence |
 | --- | --- | --- | --- |

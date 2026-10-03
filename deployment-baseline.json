@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.85"
+    "version": "0.4.0-alpha.86"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1124,7 +1124,8 @@
         {"file": "tests/auto-task-assessment.spec.ts", "name": "preserves valid bounded rows and prioritizes the current user and nearest task over verbose output"},
         {"file": "tests/auto-selection-explanation.spec.ts", "name": "distinguishes local rule coverage from absent conversation context in both languages"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "preserves caller cancellation instead of using a success-shaped fallback"},
-        {"file": "tests/preview-route.spec.ts", "name": "assesses Auto through one concrete public native adapter call and freezes the captured reason across retries"},
+        {"file": "tests/config.spec.ts", "name": "defaults semantic Auto assessment on while preserving explicit opt-out"},
+        {"file": "tests/preview-route.spec.ts", "name": "assesses Auto with setting %s and freezes the captured reason across retries"},
         {"file": "tests/turn-selection-card.spec.ts", "name": "explains a captured task/category decision with progressive details (%s)"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "does not discard a complete Core assistant message when it contains reasoning"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "retains the native current-surface and tool-envelope measurement as an input floor"},

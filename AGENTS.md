@@ -248,12 +248,14 @@ names, effort or context capacity as a quality category. Hard eligibility/input
 fit precede task/preference policy; unknown category and uncertain task evidence
 remain explicit. Keep suitable previous-model continuity and equal-weight
 tie-breaking within the first available category. Capture actual reasons once
-per turn without durable decision events or changing Usage. The optional
-`autoSemanticAssessment` experiment is off by default: one bounded concrete
+per turn without durable decision events or changing Usage.
+`autoSemanticAssessment` is default-on by explicit user rollout request (#267),
+only for locally unknown demand; preserve explicit false opt-out. One bounded concrete
 native-adapter request, no tools/Auto recursion/new retry, explicit failures and
 omitted-context conservatism. Extra supplier charges are separate from Chat
-Usage. Require labeled-corpus calibration before enabling by default; synthetic
-tests do not prove GitHub-private routing equivalence. See `docs/auto-task-routing.md`.
+Usage. Default rollout is not labeled-corpus calibration; require that evaluation
+before claiming calibrated performance. Synthetic tests do not prove GitHub-private
+routing equivalence. See `docs/auto-task-routing.md`.
 
 The turn selection Host endpoint must use `TurnSelectionController`, extending
 public `TypertRemoteService` with `@Remote get`. A plain `ctx.provide` object

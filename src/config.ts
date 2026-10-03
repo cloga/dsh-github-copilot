@@ -48,7 +48,7 @@ export interface InlineConfig {
   parentModelFollow?: ParentModelBinding[]
   /** Profile-wide next-turn policy for supported native children. */
   followParentModel?: boolean
-  /** Optional extra bounded inference for task assessment; uncalibrated experiment, off by default. */
+  /** Default-on bounded task assessment; explicit false opts out of auxiliary inference. */
   autoSemanticAssessment?: boolean
   /** Estimated managed-route input headroom, separate from truthful catalog capacities. */
   requestBudgetSafetyTokens?: number
@@ -122,7 +122,7 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
   excludedModelIds: z.array(z.string()).default([]).hidden().volatile(),
   followParentModel: z.boolean().default(false).volatile(),
-  autoSemanticAssessment: z.boolean().default(false),
+  autoSemanticAssessment: z.boolean().default(true),
   parentModelFollow: z.array(z.object({
     childSessionId: z.string().min(1), parentSessionId: z.string().min(1),
   })).default([]).hidden().volatile(),

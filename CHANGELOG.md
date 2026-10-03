@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.86 (prepared)
+
+- Enable bounded semantic Auto assessment by default for locally unknown tasks at the user's explicit request (#267). Preserve existing explicit false settings and document the opt-out.
+- Apply the same default to unset managed-route settings, while retaining local known-task short-circuiting, one auxiliary call per admitted turn, strict output, timeout/cancellation/account guards and omitted-context protection.
+- Disclose additional supplier charges outside native Chat Usage. Default rollout does not claim labeled-corpus calibration, change native history or perform profile installation/restart.
+
 ## 0.4.0-alpha.84 (prepared)
 
 - Add bounded numeric composition of the actual final request for verified Copilot `408 / user_request_timeout`, distinguishing conversation, tool definitions, protocol-owned system/instructions and residual framing (#263).

@@ -286,7 +286,7 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
 
 describe('plugin-owned account Copilot route', () => {
-  it('assesses Auto through one concrete public native adapter call and freezes the captured reason across retries', async () => {
+  it.each([undefined, true, false, 'no-settings'] as const)('assesses Auto with setting %s and freezes the captured reason across retries', async enabled => {
     const modelCalls = vi.fn(async (_input: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>
       expect(body.model).toBe('classifier-fixture')
@@ -299,7 +299,9 @@ describe('plugin-owned account Copilot route', () => {
         catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
       ]) : modelCalls(input, init), true)
     const harness = await runtime(grant({ availableModelIds: [] }), {
-      accountModelSettings: () => ({ autoSemanticAssessment: true, excludedModelIds: [] }),
+      ...(enabled === 'no-settings' ? {} : {
+        accountModelSettings: () => ({ autoSemanticAssessment: enabled, excludedModelIds: [] }),
+      }),
     })
     const agent = { ctx: harness.ctx, session: {
       id: 'assessment-session', header: { id: 'assessment-session' }, requestHeader: () => undefined,
@@ -317,9 +319,11 @@ describe('plugin-owned account Copilot route', () => {
     expect(await request()).toMatchObject({ model: 'answer-fixture' })
     await enter()
     expect(await request()).toMatchObject({ model: 'answer-fixture' })
-    expect(modelCalls).toHaveBeenCalledOnce()
+    expect(modelCalls).toHaveBeenCalledTimes(enabled === false ? 0 : 1)
     expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
-      mode: 'auto', explanation: { assessment: { demand: 'routine', source: 'semantic' },
+      mode: 'auto', explanation: { assessment: enabled === false
+        ? { demand: 'unknown', source: 'local', diagnostic: 'disabled' }
+        : { demand: 'routine', source: 'semantic' },
         targetCategory: 'versatile', selectedCategory: 'versatile', method: 'only-candidate' },
     })
   })

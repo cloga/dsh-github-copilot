@@ -748,7 +748,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     budgetPolicy: () => budgetSettings(),
     parentModelBindings: () => cacheSettings().parentModelFollow ?? [],
     followParentModel: () => cacheSettings().followParentModel === true,
-    semanticAssessment: () => cacheSettings().autoSemanticAssessment === true,
+    semanticAssessment: () => cacheSettings().autoSemanticAssessment ?? true,
     assessmentDiagnostic: code => ctx.logger.warn(code),
     async classifyTask(input, signal) {
       const snapshot = await discoverSnapshot({ signal })

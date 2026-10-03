@@ -109,7 +109,7 @@ The Host reads GitHub's internal quota endpoint using the existing canonical OAu
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.85`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.86`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -122,10 +122,10 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For a standalone named profile only, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.85/dsh-github-copilot-0.4.0-alpha.85.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.86/dsh-github-copilot-0.4.0-alpha.86.tgz
 ```
 
-For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.85` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
+For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.86` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
@@ -147,7 +147,7 @@ The managed GitHub Copilot group includes **Auto · Balance**, **Auto · Efficie
 
 Local rules also recognize isolated fenced JSON/CSV conversions and line sorting as routine, and exact continuations of a recent explicit difficult task as complex. New tasks break continuation inheritance. `uncertain` means demand is unresolved; insufficient local evidence is not proof that the conversation has no context.
 
-The optional `github-copilot.autoSemanticAssessment: true` experiment recognizes contextual tasks with one bounded auxiliary model call **only when local demand is unknown**; it is **off by default** until calibrated. Its bounded input prioritizes current and preceding user requests without dismissing omitted context. It adds latency and supplier charges not included in native chat Usage. Failure or omitted assessment context never means the task is simple; it retains conservative local evidence. This is a local routing approximation, not GitHub's private Auto service.
+Semantic assessment is **enabled by default**, using one bounded auxiliary model call **only when local demand is unknown**. Set `github-copilot.autoSemanticAssessment: false` to opt out; existing explicit false settings remain respected and are not migrated. Its bounded input prioritizes current and preceding user requests without dismissing omitted context. It adds latency and supplier charges not included in native chat Usage. Failure or omitted assessment context never means the task is simple; it retains conservative local evidence. This user-authorized rollout is not labeled-corpus calibration or GitHub's private Auto service.
 
 Completed Copilot replies show **Auto (preference)** and an expandable recorded reason after native Usage/time, or **Manual** only with captured explicit fixed-selection evidence. A successful read with no retained evidence shows **Selection unknown**, never a guess from today's picker. Failed reads instead show **Selection unavailable → Retry**; retry only reads the same turn's record, not another model request. Explicit Session/turn arguments remain stable inside a session-bound Chat, avoiding the former native gateway argument-count failure on fresh master/lead replies. There is no repeated model name or separate Model details button: actual model display stays in native Usage, whose missing-route behavior is unchanged. New selection records are bounded and Host-local; restart, disposal or eviction loses them. Compatible historical Auto records remain readable. The public assistant-actions slot supports internal wrapping only, not changing the native fixed-height row.
 
@@ -186,7 +186,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.85`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.86`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 **Desktop package-update and Web-lifecycle boundaries:** the native manager's `restart-required` result for an in-place installed-package upgrade is authoritative and distinct from plugin-bundle removal/re-add behavior. Any disable, removal, or upgrade involving service recomposition (`cordis.patch.yml`, such as the isolated routed web search layer) may leave dependent entries pending until Desktop is fully exited and cold-restarted. If the native manager reports only entries such as `pending (waiting for service: web)` while this plugin already shows **Off**, the requested disabled state has been persisted; cold-restart Desktop instead of repeatedly toggling or reinstalling the plugin. Other errors are not covered by this guidance and must still be investigated.
 
@@ -468,8 +468,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.85/dsh-github-copilot-0.4.0-alpha.85.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.85/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.86/dsh-github-copilot-0.4.0-alpha.86.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.86/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -477,7 +477,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.85.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.86.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
