@@ -4,10 +4,13 @@ import test from 'node:test'
 
 const doc = path => readFile(new URL(`../../${path}`, import.meta.url), 'utf8')
 
-test('installation guidance reserves Desktop profiles for the native package manager', async () => {
+test('installation guidance distinguishes qualified Desktop CLI capability from profile safety', async () => {
   const text = await doc('docs/npm-distribution.md')
-  assert.match(text, /Desktop profiles must be managed through Desktop's native package manager/)
-  assert.match(text, /reserved `desktop` profile is not supported by DSH CLI plugin commands/)
+  assert.match(text, /Generic\/global CLI entry points must not be assumed to manage the reserved/)
+  assert.match(text, /manageDesktopProfile: true/)
+  assert.match(text, /@deepseek-ai\/dsh-desktop-host@0\.2\.0-rc\.2/)
+  assert.match(text, /CLI support does \*\*not\*\* override composition safety/)
+  assert.match(text, /no add, root rewrite or[\s\S]*restart followed/)
   assert.match(text, /## Controlled offline CLI maintenance for standalone profiles/)
   assert.match(text, /Do not use this path[\s\S]*Desktop-managed\/reserved profile/)
   assert.match(text, /composeProfile\(\)[\s\S]*writes the empty `cordis\.yml` root/)
@@ -16,10 +19,11 @@ test('installation guidance reserves Desktop profiles for the native package man
   assert.match(text, /cache is incomplete[\s\S]*stop/i)
 })
 
-test('both user guides limit offline CLI procedures to standalone profiles', async () => {
+test('both user guides link the distinct Desktop entry and standalone procedure', async () => {
   for (const path of ['README.md', 'README.zh.md']) {
     const text = await doc(path)
     assert.ok(text.includes('./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles'), path)
+    assert.ok(text.includes('./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2'), path)
     assert.match(text, /Desktop.{0,80}(native package manager|原生包管理器)/i)
   }
   const all = (await Promise.all(['README.md', 'README.zh.md', 'docs/npm-distribution.md'].map(doc))).join('\n')

@@ -4,8 +4,8 @@ Refs #43. This change supersedes the original Release-only distribution decision
 at the user's request; that closed issue did not originally request npm.
 
 Every new version is distributed through both an immutable GitHub Release and
-the public npm registry. The name `dsh-github-copilot` remains provisional until
-an authorized maintainer verifies availability or ownership. Never publish an
+the public npm registry. The `dsh-github-copilot` package bootstrap is complete;
+subsequent versions use the configured Trusted Publisher. Never publish an
 empty placeholder package, reuse historical alpha.17, change immutable assets,
 or describe a local archive as a published package.
 
@@ -118,12 +118,12 @@ There is no historical bulk backfill and no silent npm opt-out.
 
 ## Installation preflight still applies
 
-Desktop profiles must be managed through Desktop's native package manager.
-The reserved `desktop` profile is not supported by DSH CLI plugin commands.
-After npm publication is verified, the native manager accepts the exact
+Desktop's native package manager accepts the exact verified
 `dsh-github-copilot@<version>` npm spec, not a Release URL or local tarball.
-The CLI procedure below applies only to standalone named profiles and is not a
-Desktop fallback when registry access is blocked.
+Generic/global CLI entry points must not be assumed to manage the reserved
+`desktop` profile. Official rc.2's Desktop-bundled entry is a distinct supported
+capability; qualify it as described below. Registry restrictions remain in force
+for both paths.
 
 Neither entry point replaces the package's required
 `scripts/check-search-composition.mjs` preflight. The official DSH 0.2
@@ -135,6 +135,41 @@ officially supported migration has been established. A package lookup,
 preflight or successful installation is not proof of runtime activation or a
 model call.
 
+### Desktop-bundled CLI on official rc.2
+
+Read-only inspection of the installed official
+`@deepseek-ai/dsh-desktop-host@0.2.0-rc.2` public entry
+`lib/cli.js` confirms that `runDesktopCli(runtimeDir, supportDir)` invokes
+`runCli` with `manageDesktopProfile: true` and Desktop's bundled pnpm via its
+Electron Node executable. This supersedes the earlier blanket statement that
+no CLI can manage Desktop's reserved profile; it does not grant the same
+capability to a generic/global `dsh` executable or future unverified release.
+
+On Windows, resolve the intended Desktop installation and its
+`resources\runtime\cli\bin\dsh.cmd`, then verify the owning package version and
+public entry before using it. Do not rely on PATH. With an independently
+verified archive, explicit installation approval and `supported: true`
+preflight, the qualified entry supports the normal plugin command:
+
+```powershell
+& '<verified Desktop installation>\resources\runtime\cli\bin\dsh.cmd' plugin --profile desktop add '<absolute path to verified release.tgz>'
+```
+
+This is an entry-point example, not permission to run it or a universal offline
+guarantee. Dependencies still need an approved registry or complete authorized
+cache; never silently change registry, disable TLS or patch Core/peer packages.
+Use one writer, back up non-secret installation metadata and read back package,
+bundle, patch and effective shared-peer resolution. An installer must not
+assume that every older/native manager reconciles bundle metadata identically.
+
+CLI support does **not** override composition safety. An alpha.88 packaged
+preflight against one Desktop profile returned
+`supported: false`, `NONEMPTY_DISPOSABLE_PROFILE_ROOT`; no add, root rewrite or
+restart followed that observation. Preserve and review a nonempty root before
+any separately approved repair; an install request is not blanket permission
+to discard configuration. Installed-on-disk remains distinct from loaded
+runtime, and stopping/restarting a Host requires separate restart approval.
+
 ## Controlled offline CLI maintenance for standalone profiles
 
 This path installs this package's prebuilt, verified Release without requiring
@@ -143,7 +178,8 @@ use only artifacts obtained through organizationally approved sources and
 already available dependency caches. A registry ban remains in force; offline
 installation does not repair TLS or prove that npm publication is healthy. The
 dual-channel **publication** policy above is unchanged. **Do not use this path
-for a Desktop-managed/reserved profile.**
+unchanged for a Desktop-managed/reserved profile**; Desktop requires its own
+qualified bundled entry and the same independent safety/approval checks above.
 
 1. Obtain explicit installation approval for the exact version and profile.
    Resolve the standalone DSH CLI, install anchor, `DSH_HOME` and profile

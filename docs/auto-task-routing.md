@@ -3,6 +3,41 @@
 Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
 [evidence refinement #262](https://github.com/cloga/dsh-github-copilot/issues/262).
 
+**Current contract:** published `0.4.0-alpha.88`, targeting official DSH/Windows
+Desktop `0.2.0-rc.2`. Default semantic enablement arrived in alpha.86; bounded
+auxiliary timing/output evidence arrived in alpha.88. Neither publication nor
+these explanations prove the version loaded in a particular Host.
+
+## Using Auto
+
+Choose **Auto · Balance**, **Auto · Efficiency**, or **Auto · Intelligence**
+under the managed **GitHub Copilot** provider in DSH's ordinary picker. This is
+the plugin's DSH routing policy, not Copilot App's Auto or GitHub's private
+router. Selecting a real model exits Auto. Every step/retry in an admitted
+turn keeps its chosen model; the next turn can choose differently.
+
+Semantic assessment is already enabled for locally unknown tasks. To opt out,
+set `autoSemanticAssessment: false` in the plugin's `github-copilot` settings
+namespace; it is not an extra switch on the Web search card. This changes
+subsequent assessments, not an already-admitted turn. Local known-task rules
+still work when auxiliary inference is disabled.
+
+Open the reply's selection explanation for the captured decision. Evidence is
+Host-lifetime and bounded; after restart or eviction it can be unavailable.
+Do not infer an old decision from the current picker.
+
+| Reading | Meaning |
+|---|---|
+| `uncertain` / unknown demand | The available evidence does not establish task demand; it is not a failed answer or a claim that the conversation is empty. |
+| `insufficient-evidence` | A local rule or classifier could not justify a demand category. Longer context alone does not guarantee classification. |
+| Semantic timeout | No validated result within the 8-second end-to-end budget. Demand remains unknown; Efficiency/Balance target Versatile, Intelligence targets Powerful, subject to eligibility and category fallback. |
+| Missing auxiliary milestone | That milestone was not observed before assessment settled, not proof the supplier never sent data. |
+| Selection unknown/unavailable | Captured selection evidence is absent or could not be read, distinct from unknown task demand. |
+
+There is no assessment retry or automatic deadline extension. Caller cancellation
+aborts the turn rather than invoking fallback. Auxiliary calls can add latency
+and supplier charges outside native answer Usage.
+
 ## Requirements
 
 Auto must explain why the initiating turn chose its actual route, not display a
@@ -78,9 +113,7 @@ instead of falling back. Credential, metadata and account revocation remain
 fatal through existing lease/admission guards. Extra calls incur supplier
 charges and latency, separate from native chat Usage and without inferred cost.
 
-## Category policy and continuity
-
-### Auxiliary latency evidence and bounded output (#272)
+## Auxiliary latency evidence and bounded output (#272)
 
 The assessment still has one **8-second end-to-end deadline**, including account
 discovery/preparation and the native call. It does not retry on timeout or try a
@@ -121,6 +154,8 @@ cross-turn assessment cache, cooldown, adaptive deadline or extra probe is
 introduced without reviewing real observations. Existing local evidence,
 omitted-context downshift protection, cancellation, account/proof revocation,
 same-turn single-flight, eligibility and category policy remain unchanged.
+
+## Category policy and continuity
 
 | Task demand | Efficiency | Balance | Intelligence |
 | --- | --- | --- | --- |

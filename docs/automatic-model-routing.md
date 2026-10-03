@@ -1,10 +1,16 @@
-# GitHub Copilot Auto model routing MVP
+# GitHub Copilot Auto model routing
 
 **Tracking:** [#174](https://github.com/cloga/dsh-github-copilot/issues/174), [#192](https://github.com/cloga/dsh-github-copilot/issues/192), [#199](https://github.com/cloga/dsh-github-copilot/issues/199), [#258](https://github.com/cloga/dsh-github-copilot/issues/258)
 
 **Target:** official DSH and Windows Desktop `0.2.0-rc.2`
 
 **Boundary:** plugin-only; no Core source, artifact, registry, prototype, or history patch
+
+**Current behavior:** published alpha.88. Start with [task assessment and
+captured reasons](./auto-task-routing.md), [parent following](./parent-model-follow.md)
+or [model exclusions](#model-exclusions-and-richer-picker-boundary). The dated
+investigations below preserve earlier evidence and limitations; they do not
+supersede the current one-switch following and exclusion behavior.
 
 **Interactive mockup:** [`output/auto-model-mockup/index.html`](../output/auto-model-mockup/index.html)
 
@@ -64,6 +70,11 @@ and preceding user requests without removing omitted-context safeguards. It
 adds latency and supplier charges not included in native
 chat Usage. Set it to `false` to opt out; existing explicit false is preserved.
 This user-authorized default rollout does not claim labeled-corpus calibration.
+Alpha.88 bounds the output to 128 tokens and retains the 8-second end-to-end
+deadline. Reasoning is requested off only with matching supplier and prepared-model
+support. Timeout leaves demand unknown and uses preference/category fallback,
+without another classifier call. Captured auxiliary milestones are not network
+dispatch timing, billing or a measured speedup.
 
 | Task demand | Efficiency | Balance (`auto`) | Intelligence |
 | --- | --- | --- | --- |
@@ -184,7 +195,7 @@ Completed Copilot replies show **Auto (preference)** with an information button,
 
 New Auto decisions and matching explicit fixed selections are captured at dispatch in a bounded in-memory store (64 Agents, 128 turns per Agent, first decision per turn). `githubCopilotTurnSelection.get` uses Core's native agent scope and lookup, with its existing Session resolution and ownership checks, rather than a plugin-owned arbitrary-session metadata endpoint. The lookup can use normal Core resume semantics; it is not a new access-control system. The Client reads once for the exact displayed Session/turn, cancels stale responses and never polls. Agent disposal, plugin disposal, eviction or Host restart removes evidence; no new Session event is emitted. Compatible historical Auto events can supply a recorded preference and reason; omitted historical preference is not guessed.
 
-The expandable explanation reports only the actual routing classification, capacity preference and eligible/fitting counts. It is selection evidence, **not proof of execution**. Absence of Auto evidence never implies Manual, and today's picker/request header never fills a historical gap. Native Usage remains the only model/usage display; its existing all-or-nothing missing-route behavior is not fixed here. A metadata-only projection flags incomplete attempts/history without duplicating or allocating tokens. The disclosure never reads message content, replay data or credentials.
+The expandable explanation reports captured task assessment, supplier category preference, eligible/fitting counts, fallback/continuity and optional auxiliary milestones. It is selection evidence, **not proof of execution**. Absence of Auto evidence never implies Manual, and today's picker/request header never fills a historical gap. Native Usage remains the only model/usage display; the explanation does not replace its all-or-nothing accounting. Since alpha.87, context diagnostics no longer filter shared terminal-zero usage; genuinely missing samples/lifecycle can still leave a turn incomplete. See [cancelled and failed samples](./copilot-usage.md#cancelled-and-failed-terminal-samples-270). A metadata-only projection flags incomplete attempts/history without duplicating or allocating tokens. The disclosure never reads message content, replay data or credentials.
 
 ### Recovering affected histories
 
@@ -385,21 +396,25 @@ Synthetic tests prove composition and contracts only. They do not prove a live a
 
 - benchmark-backed quality/latency/cost ranking;
 - GitHub health signals or GitHub's private Auto service;
-- user-managed exclusions of individual account models and custom picker grouping;
+- custom nested picker grouping (exact managed model exclusions are implemented);
 - cross-provider routing;
-- native subagent and Team Auto inheritance;
+- upstream native rules/settings UI and unsupported lineage following (the plugin's opt-in supported-child policy is implemented);
 - model fallback after a provider failure;
 - side-effect replay;
 - automatic changes to existing Session selections, settings, or histories.
 
 ## Model exclusions and richer picker boundary
 
-**Tracking:** [#192](https://github.com/cloga/dsh-github-copilot/issues/192). **Interactive proposal:** [`output/auto-model-mockup/tiers.html`](../output/auto-model-mockup/tiers.html). This is a local, synthetic UI exercise, not a claim of current Core picker behavior. The three virtual preferences, capacity matrix, and plugin-owned model exclusions are implemented. The mockup's nested Core picker is not.
+**Tracking:** [#192](https://github.com/cloga/dsh-github-copilot/issues/192). **Interactive proposal:** [`output/auto-model-mockup/tiers.html`](../output/auto-model-mockup/tiers.html). This is a local, synthetic UI exercise, not a claim of current Core picker behavior. The three virtual preferences, supplier-category routing, hard input-fit checks and plugin-owned model exclusions are implemented. The mockup's capacity quality scores and nested Core picker are not.
 
 The attached Copilot example uses one Auto switch with a nested Efficiency / Balance / Intelligence menu. The supported DSH model picker is owned by Core and receives a flat provider directory from `PreviewAdapter.listModels()`; the plugin's Models provider-card and bundle-config slots cannot restructure that picker. The plugin advertises three rows under **GitHub Copilot**, with the existing `auto` ID as Balance for previously selected Sessions and defaults. A nested switch like the screenshot requires a separately reviewed public Core UI seam and is not a dependency of the plugin-only preferences.
 
 Exclusions are a separate **hard filter**, not a fourth preference. All three preferences share account entitlement and turn-required verified capabilities, then remove the exact IDs stored in `github-copilot.excludedModelIds`. The mockup uses illustrative capacity scores and simulated responses, not live evaluation of model quality, cost, or latency.
 
-The model-management surface is the nested **GitHub Copilot → Manage → Model preferences** disclosure in the plugin's own settings UI, not a replacement of Core's picker. It offers local search, visible/excluded counts, **Exclude** and **Restore**, a selected-model lock reason, and retained restore rows for exact IDs temporarily absent from current account metadata. Writes are revision-checked path mutations. The plugin does not mutate pi-ai's catalog, the account grant, Core settings, or another provider's models. Its advertised directory, every Auto candidate set, aggregate Auto modalities, hosted-search route facts and managed admission remove excluded IDs. A stale picker row or direct request fails with `COPILOT_PREVIEW_MODEL_EXCLUDED`. Existing Session history is never rewritten or silently moved. The current fixed managed model cannot be excluded until another model is selected. If exclusions leave no eligible candidate, Auto fails closed with `COPILOT_AUTO_NO_ELIGIBLE_MODEL`. Account change or unavailable metadata never re-enables or guesses models.
+The model-management surface is **Settings → Models → GitHub Copilot → Manage → Model preferences**, not a replacement of Core's picker. It offers local search, visible/excluded counts, **Exclude** and **Restore**, and retained restore rows for exact IDs temporarily absent from account metadata. Selected models can also be excluded: no Session/default scan or automatic selection write is required. The legacy `lockedModelIds` result remains empty.
+
+Each row save uses `setModelExcluded(modelId, excluded)` and a narrow strict result after path-level native CAS persistence. It does not read credentials, discover models or enumerate Sessions. Unknown/missing preference settings make rows read-only with named diagnostics; Retry reads status, not discovery. The hidden volatile `excludedModelIds` Config leaf retains persisted exclusions through native Settings projection and restart.
+
+The plugin does not mutate pi-ai's catalog, the account grant, Core provider settings or another provider's models. Its directory, Auto candidate sets/modalities, hosted-search route facts and new managed admission remove excluded IDs. An already-admitted turn retains its exact Session/turn/model and request-signal authorization for subsequent steps/retries; `turn/end` clears it. New turns, unbound/direct calls and stale picker rows fail with `COPILOT_PREVIEW_MODEL_EXCLUDED`. Independent account/proof/cancellation guards still apply. A fixed excluded selection is not silently changed; explicitly restore it or select another eligible model before the next turn. If exclusions leave no eligible candidate, Auto fails with `COPILOT_AUTO_NO_ELIGIBLE_MODEL`. Existing selections/history remain unmodified.
 
 The native picker still owns provider groups and text search. It remains flat: the three virtual rows are listed first and excluded Copilot models are omitted from the plugin-owned directory. Custom section headers inside a provider, nested Auto menus, hiding other providers' models, and replacing Core search/layout are **not** available through the current additive slots. Focused regressions cover directory refresh, selected-model exclusion, stale direct requests, concurrent settings conflicts, Auto/image eligibility and zero-candidate failures against unchanged pinned Core. The prototype's invented model capacity order and response remain illustrative only.

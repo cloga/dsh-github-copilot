@@ -17,6 +17,8 @@ Auto 会检查历史用户消息和工具结果中的图片块，不再只看最
 Core 管理。详见[图片兼容性与限制](./docs/image-input-compatibility.md)。
 
 - **账号与模型：**在 **设置 → 模型** 的原生 GitHub Copilot 行内完成登录、查看账号发现模型、刷新元数据及账号管理。可在 **Manage → Model preferences** 中按精确 ID 排除模型，使其同时退出托管 picker 与 Auto 候选池；Core 原生 picker 仍保持平铺。
+- **DSH Auto：**在托管 Copilot picker 选择 **Auto · Balance**、**Auto · Efficiency** 或 **Auto · Intelligence**。路由依据供应方分类和任务上下文，不按模型名或文本长度猜排名；同一轮及其工具步骤／重试使用同一个实际模型。本地规则无法判定的任务默认启用有界语义判断；8 秒超时后需求保持未知，按所选偏好兜底，不换 classifier 或新增重试。回复的选择说明显示捕获的原因及可选辅助耗时节点。详见[Auto 行为与限制](./docs/auto-task-routing.md)。
+- **子代理模型：**插件详情中的 **Follow parent model** 是按 profile 生效、默认关闭的开关，仅覆盖受支持的原生子会话。固定父模型在子会话下一轮跟随；Auto 父模型保留偏好，由每个子会话判断自己的任务。子会话自己的显式选择优先，已准入的轮次不变。详见[跟随与边界](./docs/parent-model-follow.md)。
 - **搜索路由：**在 **插件 → dsh-github-copilot → 详情**选择主搜索 Provider 与兜底 Provider。页面只保留用户真正需要的两项选择，不再把协议探测、超时、白名单或传输开关作为日常配置暴露；同时会在停用／移除／升级前常驻显示 rc.2 生命周期提示。更新后的路由服务尚未激活时，卡片会明确显示 **需要重启生效（Restart required）**，而不是继续展示无法使用的表单。
 - **用量：**符合条件的 Copilot 会话会在输入框旁显示可选的 **Credits / 额度** 控件，展示供应方明确返回的计费周期数据，并如实区分不可用与历史快照。仅额度请求组合 Node 默认证书与系统信任根，无需依赖 Desktop launcher 的环境变量继承，且保持 TLS 验签。
 - **上下文证据：**托管请求完整保留原生用量，包括失败或取消时的终止零值，避免上下文诊断删除共享统计证据。独立的输入框提示可识别不可信的失败零值，并显示仍适用的最后历史输入采样（含缓存）；它不是当前占用率，不替换原生 `0%` 表盘，也不改写历史。详见[上下文证据边界](./docs/copilot-usage.md#historical-context-evidence)。
@@ -32,6 +34,19 @@ Core 管理。详见[图片兼容性与限制](./docs/image-input-compatibility.
 Web search 路由现在优先显示在插件详情页；宿主不支持详情页插槽时才回退到 **设置 → 模型**或独立 Web search section。搜索子 Fiber 仍独立等待 Remote，不影响账号控件和既有搜索安全检查。
 
 官方 rc.2 通过原生可实时修改的 `Config` 字段提供路由设置，而不是手工注册设置 namespace。保存会一次更新两个路由叶子，不重新挂载插件，也不修改普通安全设置。旧搜索模型覆盖值仍只能通过独立的显式操作重置。
+
+### 按任务查阅文档
+
+| 任务 | 指南 |
+|---|---|
+| 选择 Auto，理解 uncertain 或语义判断超时 | [任务判断与选择原因](./docs/auto-task-routing.md)、[路由、排除与原生边界](./docs/automatic-model-routing.md) |
+| 让受支持的子代理跟随父模型 | [单开关父模型跟随](./docs/parent-model-follow.md) |
+| 配置主搜索和兜底 Provider | [会话感知搜索路由](./docs/session-search-routing.md) |
+| 区分 Credits、历史上下文及缺失／取消的 Turn Usage | [用量语义与限制](./docs/copilot-usage.md) |
+| 处理大请求、图片或手动恢复 | [请求预算](./docs/copilot-compaction.md)、[图片兼容](./docs/image-input-compatibility.md)、[可选手动恢复](./docs/manual-compaction-recovery.md) |
+| 升级或显式移除旧路由 | [安装](#安装与登录)、[Desktop 生命周期](./docs/web-lifecycle-rc2.md)、[单路由迁移](./docs/single-route-migration.md) |
+
+这些指南描述已发布 alpha.88 的能力，不代表某个 Desktop Host 已加载该版本。GitHub/npm 发布、profile 安装和运行时加载需分别确认。
 
 ## 兼容基线与待验收目标
 
@@ -54,6 +69,8 @@ Web search 路由现在优先显示在插件详情页；宿主不支持详情页
 | 官方 DSH 与 Windows Desktop `0.2.0-rc.2`（当前待验收目标） | Tag `dsh-v0.2.0-rc.2`，commit [`639ed0`](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84) | **Settings → Models** provider card |
 
 上表保留历史源码 pin；本版本**仅准入并 gate 精确的 `0.2.0-rc.2`**，旧 pin 不代表当前支持。已发布制品的合成 transport fixture 与开发依赖均精确针对 `0.2.0-rc.2` npm 制品。未修改标签源码 fixture 不构建或给 Core 打补丁。已审计签名 Desktop 的共享包清单，证明 peer 所有权而非插件已加载或真实端点。已有公开 Host、Client 与 Remote 接口保留。精确 peer 与 `engines.dsh` 只声明包准入，不是真实兼容性证明；插件不安装 Core 补丁。
+
+以下版本说明是历史验收记录，不是当前安装指南，也不表示旧 DSH pin 仍受支持。原有本地／CI 证据限制仅针对当时记录的评估，后续发布不追溯修改这些事实；当前能力指南见上方导航。
 
 ### Alpha.11 兼容修复（#105）
 
@@ -127,7 +144,7 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.88/dsh-github-copilot-0.4.0-alpha.88.tgz
 ```
 
-Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.88`。Desktop 保留 `desktop` profile，CLI 不负责管理。若 registry 被公司封禁或不可用，不要更换网络绕行或使用离线 CLI；请停止。[受控离线 CLI 流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)仅适用于独立具名 profile，不适用于 Desktop。
+Desktop profile 可通过 Desktop 原生包管理器安装 `dsh-github-copilot@0.4.0-alpha.88`，仅使用获准的 registry 访问。官方 rc.2 **Desktop 随附的专属 CLI**也启用了保留 profile 的插件管理；它不同于全局／普通 `dsh` shim。核实实际安装入口并通过相同预检后，另行获准的维护操作可用其支持的 plugin 命令安装已校验 Release 归档。详见[Desktop CLI 能力核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)。这不是绕过包源政策或清空非空 profile root 的许可；[独立 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)不能直接等同于 Desktop 入口。
 
 随后打开上表对应的 Models UI，找到 **GitHub Copilot**，点击 **Sign in** 并完成 GitHub device-code 流程。安装会修改指定 profile；是否立即激活取决于该 profile 的常规 reload/restart 策略。
 
@@ -208,6 +225,8 @@ pinned public Loader characterization 记录了：使用 bundle 的精确 ID 且
 - 保留 canonical `github-copilot` profile 的有意缺失；仅对已有旧配置修复 `compat.supportsStrictMode: false`，并按已核实的历史所有权记录恢复旧 override，不自动删除用户配置。
 - 有界拉取账号 `/models` 元数据，校验端点、权限、工具／流式能力和限额，为 `github-copilot-preview` 提供账号绑定的不可变模型快照；新 ID 不要求新的代码表。
 - 托管路由与尚未迁移的旧 canonical 路由共用唯一 Host OAuth 生命周期；取消失效账号的发现和请求，绝不复制 credential 到 Client。
+- 通过公开的逐轮路由与 projection 提供托管 Auto 偏好、捕获的选择原因、模型排除及可选的父模型跟随。
+- 独立提供账号额度和历史上下文／Turn Usage 诊断，不替换原生计量或过滤共享 usage。
 - 保留公开 Thinking 摘要和合法的思考强度选择，原生回放及文件投影仍交给既有 adapter。
 - 通过受限的 inline agent-loop interception 与 Responses-only `ctx.web` provider 直连供应方 hosted search。
 
@@ -217,7 +236,7 @@ DSH Core 继续负责模型选择、sandbox、工具、附件与其它 provider�
 
 自 `0.4.0-alpha.34` 起，**模型分工（Model roles）**、旧版 **Copilot · Model roles** 设置入口、规划／执行模型选择器和新建专用会话按钮已退役（#158）。今后使用普通 Session 与 Core 自己的模型选择／subagent；插件不新增替代角色页面，也不自动映射模型。
 
-父模型 → subagent 模型规则及其原生设置 UI 属于另一个仍待交付的 [Core PR #95](https://github.com/cloga/deepseek-harness/pull/95)。移除本插件 UI 不代表旧版或当前安装的 Core 已具有规则功能，也不依赖该 PR 先发布。
+Model roles 退役不影响本插件另行提供的 [Follow parent model](./docs/parent-model-follow.md) 开关及受支持的普通子会话。这项插件内策略不同于 [cloga/deepseek-harness#95](https://github.com/cloga/deepseek-harness/pull/95) 提议的原生规则／设置 UI，不表示上游界面已安装，也不依赖该 PR 先发布。
 
 已有专用会话的历史和创建时捕获的策略继续由兼容运行时支持，不转换历史、不自动换模型。旧设置不删除、不迁移。旧 Remote 客户端尝试保存设置或创建新专用根会话会收到 `DUAL_MODEL_RETIRED`；已经创建且请求身份完全匹配的会话仍可恢复查询。详见[退役与兼容边界](./docs/dual-model.md)。源码修改、发布和当前运行时生效是不同阶段。
 
@@ -239,7 +258,7 @@ Chat 选择器和 `/model` 的冷启动 `listModels()` 会确保共享托管 sou
 
 每个 live Agent Session 返回 `effectiveSelection` 和 `selectionSource`：优先 pending 模型 projection，其次已记录的 request-header config；只有 projection 已知、确实没有 pending／header 的空会话才使用当前默认值。running Agent 另报 `activeRequestSelection`，它只是最近记录的请求 header，**不证明正在执行 LLM 调用**。路由标记区分有效原生配置 `nativeConfigured` 与实际 native／managed 注册；不返回凭据内容或完整配置／历史。
 
-该调用不执行授权 status 或模型发现，不访问凭据／网络，也不修改 settings／Session；不新增常规 UI 或全局当前模型／搜索状态卡片。原有七个授权 Remote 及其 codec 不变，第八个 Remote 使用独立 `GitHubCopilotMigrationStatus` codec。
+该调用不执行授权 status 或模型发现，不访问凭据／网络，也不修改 settings／Session；不新增常规 UI 或全局当前模型／搜索状态卡片。保留已有授权／模型偏好 descriptor 身份；迁移使用独立 `GitHubCopilotMigrationStatus` codec，与授权结果及窄范围模型偏好结果分开。
 
 **边界：**`historyScope: live-agents-only` 不检查未加载的存储历史，操作者必须确认知悉旧对话以后可能需要显式重选模型。构建身份及结构能力的自报告不等于完整 Desktop／Core 字节核验；这也不是跨 namespace 原子快照，CAS 前必须立即复查。`cloga/dsh-windows-ops` 中计划的 `tools/migrate-copilot-managed-route.ps1` 是发布后独立的**仅配置**维护命令：v1 不写 Session／默认模型选择、不读冷历史、不安装插件、不重启 DSH，也不验收完整 Desktop 基线。该命令发布／安装及真实迁移是否完成须另外证明，本文不作已完成声明。
 
@@ -249,7 +268,7 @@ Chat 选择器和 `/model` 的冷启动 `listModels()` 会确保共享托管 sou
 
 通用发现不再把账号模型与本地 pi 静态目录取交集，也不会用 GPT、Gemini、Claude 等名称前缀猜协议。供应方 `/models` 中的 `supported_endpoints` 决定可选接口：`/responses`、`/chat/completions` 和 `/v1/messages`。仅当供应方也公布该接口时，才可保留原生 pi 的协议选择；否则从已公布且支持的接口中选择。缺失接口、只有尚不支持的 WebSocket 接口或能力数据不完整时，模型会进入明确的拒绝诊断，而不是回退到猜测值。
 
-因此，GPT-6 Astra、Gemini 3.8 Flash、GPT-5.6 Sol Fast 及其它新 ID 只要具备完整、可支持的账号元数据，就走同一条发现路径，不需要为每个新 ID 再写补丁。反过来，本地 catalog 收录了模型也不能覆盖供应方公布的协议或权限。pi-ai `0.85.1` 的适配包括检查这种差异，而不是把升级版本号或同名 ID 当作正确性证明。
+因此，GPT-6 Astra、Gemini 3.8 Flash、GPT-5.6 Sol Fast 及其它新 ID 只要具备完整、可支持的账号元数据，就走同一条发现路径，不需要为每个新 ID 再写补丁。反过来，本地 catalog 收录了模型也不能覆盖供应方公布的协议或权限。当前精确固定 pi-ai `0.87.1`；适配仍须检查这种差异，而不是把升级版本号或同名 ID 当作正确性证明。
 
 **只改插件，不改 Core（plugin-only）：**本项目的修复必须留在插件内，使用已发布的公开 API。禁止修改 Core 源码、已安装二进制、`node_modules`、私有运行时注册表或共享上游模型目录；也不能把新增 Core export 或等待上游 Core PR 合并作为交付前提。允许只读查阅 Core，以及针对未改动的固定版本进行隔离验证。现有 API 无法满足需求时，应说明限制并采用经过测试的插件内替代方案，而不是转去改 Core。权威规则及机器检查见 [AGENTS.md](./AGENTS.md#plugin-only-implementation-boundary)。
 
@@ -369,12 +388,15 @@ Copilot Session 如需更宽的文件或命令权限，必须在调用前选择�
 
 ## 设置
 
-插件 `github-copilot` settings section 控制账号元数据新鲜度、托管请求预算与 hosted search；`enabled` 仍只控制 hosted search：
+插件 `github-copilot` settings section 控制托管路由、账号元数据新鲜度、请求预算与 hosted search；`enabled` 仍只控制 hosted search：
 
-插件详情页只提供 **Search provider** 与 **Fallback provider**。账号元数据、请求预算及 hosted-search 安全参数仍作为管理员和兼容工具可用的 schema 设置保留，不再作为普通用户的日常配置项展示。
+插件详情页提供 **Follow parent model**，以及仅含 **Search provider** 和 **Fallback provider** 的 Web search 区域。精确模型排除另在 **设置 → 模型 → GitHub Copilot → Manage → Model preferences**。语义判断关闭选项、账号元数据、请求预算及 hosted-search 安全参数仍作为 schema 设置保留，不是搜索卡片新增的日常控件。
 
 | 键 | 默认值 | 作用范围与含义 |
 |---|---:|---|
+| `autoSemanticAssessment` | `true` | 仅对本地规则无法判定的 Auto 任务执行一次有界辅助判断；显式 `false` 跳过，已判定的任务不调用。产生原生回答 Usage 之外的供应方费用。 |
+| `followParentModel` | `false` | 按 profile 为受支持原生子会话跟随父模型；子会话显式选择优先。旧 `parentModelFollow` 绑定独立保留。 |
+| `excludedModelIds` | `[]` | 通过 Model preferences 保存的精确托管模型排除。可排除当前选择；保留已准入轮次，拒绝新轮次／直接请求，不偷偷替换固定选择。 |
 | `accountModelTtlMs` | `86400000` | 最大账号元数据复用窗口，毫秒（24 小时）；不延长凭据或 proof 有效期。 |
 | `accountModelFailureCooldownMs` | `300000` | 非强制发现的失败冷却，毫秒（5 分钟）；不设周期重试。 |
 | `chatStreamIdleTimeoutMs` | `300000` | 托管聊天字节空闲间隔；启用 liveness 时，原生助手 chunk 静默上限为此间隔的两倍（最高 2147483647 毫秒）。与 hosted search 分开。 |

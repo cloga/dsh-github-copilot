@@ -17,6 +17,8 @@ network dispatch; omitted account MIME lists remain unverified, not guessed.
 Core still owns image conversion and history. See [image compatibility limits](./docs/image-input-compatibility.md).
 
 - **Account and models:** sign in, inspect account-discovered models, refresh metadata, and manage the account from the native GitHub Copilot row under **Settings → Models**. **Manage → Model preferences** can exclude exact models from both the managed picker and Auto without changing Core's flat picker.
+- **DSH Auto:** select **Auto · Balance**, **Auto · Efficiency**, or **Auto · Intelligence** in the managed Copilot picker. Routing uses supplier categories and contextual task evidence, not model-name or prompt-length rankings; one actual model is held for each turn and its steps/retries. Locally unknown tasks use default-enabled bounded semantic assessment. Its 8-second timeout leaves demand unknown and falls back to the selected preference, not another classifier or retry. The reply's selection disclosure shows captured reasons and optional auxiliary timing milestones. [Auto behavior and limits](./docs/auto-task-routing.md).
+- **Subagent models:** **Follow parent model** under plugin details is a profile-wide, default-Off switch for supported native children. Fixed parents are followed on each child's next turn; Auto parents retain their preference while each child assesses its own task. Child-owned explicit selections win and admitted turns do not change. [Following and exclusions](./docs/parent-model-follow.md).
 - **Search routing:** choose the primary and fallback search providers under **Plugins → dsh-github-copilot → Details**. The page intentionally exposes only those user-facing choices; protocol probes, timeouts, allowlists, and transport switches are not presented as routine UI. It also keeps the rc.2 lifecycle warning visible before disable/remove/upgrade actions. If the updated routed service is not active yet, the card reports **Restart required** instead of presenting a broken form.
 - **Usage:** eligible Copilot sessions get an optional **Credits** control beside the composer, with provider-reported billing-cycle data and explicit unavailable/stale states. The quota request alone combines Node default and OS trust roots without disabling certificate verification or relying on Desktop launcher environment inheritance.
 - **Context evidence:** managed requests preserve native usage, including terminal zero on failure/cancellation, so context diagnostics cannot remove shared accounting evidence. A separate composer disclosure recognizes unreliable failed-zero samples and shows the last applicable historical input-plus-cache reading; it is not current occupancy, replaces no native `0%` meter and rewrites no history. See [context evidence boundaries](./docs/copilot-usage.md#historical-context-evidence).
@@ -28,6 +30,19 @@ Core still owns image conversion and history. See [image compatibility limits](.
 The screenshot uses the current built Client with synthetic providers in an isolated browser fixture. It demonstrates the shipped configuration surface, not live credentials, account access, search success, or production Desktop activation.
 
 On official rc.2, routing is exposed through native live `Config` fields, not a manually registered settings namespace. Saving updates the two routing leaves together without remounting the plugin or changing ordinary safety settings. A legacy search-model override is reset only by its separate explicit action.
+
+### Documentation by task
+
+| Task | Guide |
+|---|---|
+| Choose Auto and understand uncertainty or assessment timeout | [Task assessment and selection reasons](./docs/auto-task-routing.md), [routing, exclusions and native boundaries](./docs/automatic-model-routing.md) |
+| Follow a parent model in supported subagents | [One-switch parent following](./docs/parent-model-follow.md) |
+| Configure primary/fallback hosted search | [Session-aware search routing](./docs/session-search-routing.md) |
+| Interpret Credits, historical context or missing/cancelled Turn Usage | [Usage quantities and limitations](./docs/copilot-usage.md) |
+| Handle large requests, images or manual recovery | [Request budgets](./docs/copilot-compaction.md), [image compatibility](./docs/image-input-compatibility.md), [opt-in manual recovery](./docs/manual-compaction-recovery.md) |
+| Upgrade or explicitly remove a legacy route | [Install](#install-and-sign-in), [Desktop lifecycle](./docs/web-lifecycle-rc2.md), [single-route migration](./docs/single-route-migration.md) |
+
+These guides describe published alpha.88 behavior, not proof that a particular Desktop Host has loaded it. GitHub/npm publication, profile installation and loaded runtime are separate states.
 
 ## Compatibility baselines and qualification targets
 
@@ -50,6 +65,8 @@ Managed HTTP/SSE chat now distinguishes **byte idle** from **assistant-output si
 | Official DSH and Windows Desktop `0.2.0-rc.2` (current qualification target) | Tag `dsh-v0.2.0-rc.2`, commit [`639ed0`](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84) | **Settings → Models** provider card |
 
 The table preserves historical source pins; this release admits and gates **only `0.2.0-rc.2`**. The prior pins are not current support claims. The published-artifact synthetic transport fixture and development dependencies target exact `0.2.0-rc.2` npm artifacts. Its unchanged tagged-source fixture runs without building or patching Core. The signed Desktop shared-package descriptor was audited for peer ownership, not plugin loading or live endpoints. Existing public Host, Client, and Remote seams are retained. Stock Core model-entry `api` support is not a prerequisite for the plugin-owned route. Exact peer and `engines.dsh` declarations are admission checks, not live compatibility proof. No Core patch is installed by this plugin.
+
+The versioned notes below are historical qualification records, not the current installation guide or a claim that earlier DSH pins remain supported. Original local/CI evidence limits apply to those recorded evaluations; later releases do not retroactively change them. Current capability guides are linked above.
 
 ### Alpha.11 compatibility correction (#105)
 
@@ -125,7 +142,7 @@ For a standalone named profile only, the supported CLI command is:
 dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.88/dsh-github-copilot-0.4.0-alpha.88.tgz
 ```
 
-For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.88` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
+For Desktop profiles, Desktop's native package manager accepts `dsh-github-copilot@0.4.0-alpha.88` when registry access is permitted. The official rc.2 **Desktop-bundled** CLI also enables reserved-profile plugin management; this is not the generic/global `dsh` shim. After verifying that exact installed entry and passing the same preflight, a separately authorized operator can use its supported plugin command with a verified Release archive. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2). Do not treat this as a registry-policy bypass or permission to clear a nonempty profile root. The [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not automatically interchangeable with Desktop's entry point.
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
@@ -204,7 +221,9 @@ No `copilot2api` process, external gateway, placeholder API key, pasted GitHub t
 - Account controls embedded in an existing canonical Models provider card, with a shared-state footer/old-Core section fallback, Client-safe Remote descriptors, and Host authorization controller.
 - Strict normalization of pi-ai's provider-owned Copilot OAuth grant.
 - Preservation of intentional canonical-route absence, compatibility repair of existing legacy profiles, and restoration of verified old overrides. It never automatically removes user profiles or replaces Core's model list from another pi catalog.
-- A data-driven account-model route using pi `0.85.1`, authenticated Copilot metadata, and the published native DSH adapter. New model IDs do not require a model-specific code patch when their advertised protocol and capabilities are supported.
+- A data-driven account-model route using pi `0.87.1`, authenticated Copilot metadata, and the published native DSH adapter. New model IDs do not require a model-specific code patch when their advertised protocol and capabilities are supported.
+- Managed Auto preferences, captured turn-selection reasons, model exclusions and opt-in parent following through public per-turn routing and projections.
+- Separate account quota and historical context/Turn Usage diagnostics, without replacing native accounting or filtering shared usage.
 - Direct provider-hosted search through inline agent-loop interception and a Responses-only `ctx.web` provider.
 
 DSH Core continues to own model selection, sandboxing, tools, attachments, and other providers. `@deepseek-ai/dsh-llm-pi-ai` owns the Copilot adapter, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport. Credentials remain Host-only.
@@ -213,7 +232,7 @@ DSH Core continues to own model selection, sandboxing, tools, attachments, and o
 
 Since `0.4.0-alpha.34`, **Model roles**, its legacy **Copilot · Model roles** fallback, the planning/execution selectors and the dedicated-session creation button are retired (#158). Use ordinary Sessions and Core-owned model selection/subagents; this plugin adds no replacement role UI or automatic model mapping.
 
-Parent-model → subagent-model rules and their native settings UI are separate, still-pending work in [Core PR #95](https://github.com/cloga/deepseek-harness/pull/95). Removing this plugin UI does not make those rules available on older or currently installed Core versions, and does not depend on that PR shipping.
+Retirement of Model roles does not retire the plugin's separate [Follow parent model](./docs/parent-model-follow.md) switch for supported ordinary children. That plugin-local policy is not the native rules/settings UI proposed in [cloga/deepseek-harness#95](https://github.com/cloga/deepseek-harness/pull/95), does not claim that upstream UI is installed, and does not depend on that PR shipping.
 
 Existing dedicated histories and captured policies remain supported through the retained compatibility runtime, without conversion or model substitution. Saved legacy settings are not deleted or migrated. Legacy Remote clients receive `DUAL_MODEL_RETIRED` for settings writes and new roots; recovery of an already-created matching request remains available. See [retirement and compatibility boundaries](./docs/dual-model.md). Publication and runtime activation are separate from this source change.
 
@@ -235,7 +254,7 @@ No-argument Remote `githubCopilot.migrationStatus()` provides fresh live evidenc
 
 For each live Agent Session it reports `effectiveSelection` and `selectionSource`: pending model projection first, then recorded request-header config, then the current default only for a genuinely empty Session with known projection state. Running Agents also have a separate `activeRequestSelection`: the latest recorded request header, **not proof of an in-flight LLM call**. Route flags distinguish effective native configuration (`nativeConfigured`) from actual native/managed registration. No credential data or full settings/history is returned.
 
-The call does not invoke authorization status or model discovery, access credentials/network, or mutate settings/Sessions. It adds no normal UI or global current-model/search-status card. The seven ordinary authorization Remotes and their codec are unchanged; this eighth Remote has its own `GitHubCopilotMigrationStatus` codec.
+The call does not invoke authorization status or model discovery, access credentials/network, or mutate settings/Sessions. It adds no normal UI or global current-model/search-status card. Existing authorization/model-preference descriptor identities are preserved; migration uses its own `GitHubCopilotMigrationStatus` codec, separate from the authorization and narrow model-preferences results.
 
 **Limits:** `historyScope: live-agents-only` excludes cold stored histories; the operator must acknowledge that those conversations may need explicit model selection later. Build identity and structural capability self-reports do not attest all Desktop/Core bytes. This is not an atomic cross-namespace snapshot; recheck evidence immediately before CAS. The planned `tools/migrate-copilot-managed-route.ps1` in `cloga/dsh-windows-ops` is a separate, post-release **config-only** maintenance command: v1 does not write Session/default selections, inspect cold history, install the plugin, restart DSH, or certify a full Desktop baseline. Its publication/installation and any live migration remain separate evidence, not a claim made by this document.
 
@@ -366,12 +385,15 @@ The plugin does not rewrite `$DSH_HOME/AGENTS.md`. Installers may merge these ru
 
 ## Settings
 
-The plugin's `github-copilot` settings section controls account-metadata freshness, managed request budgets and hosted search. `enabled` still controls hosted search only:
+The plugin's `github-copilot` settings section controls managed routing, account-metadata freshness, request budgets and hosted search. `enabled` still controls hosted search only:
 
-The plugin details page exposes only **Search provider** and **Fallback provider**. Account-metadata, request-budget, and hosted-search safety values remain schema-backed settings for administrators and compatibility tooling; they are not routine user-facing controls.
+The plugin details page provides **Follow parent model**, plus a Web search section exposing only **Search provider** and **Fallback provider**. Exact model exclusions live separately under **Settings → Models → GitHub Copilot → Manage → Model preferences**. Semantic assessment's opt-out, account-metadata, request-budget and hosted-search safety values remain schema-backed settings, not additional routine controls on the search card.
 
 | Key | Default | Scope and meaning |
 |---|---:|---|
+| `autoSemanticAssessment` | `true` | For locally unknown Auto tasks, allow one bounded auxiliary classification. Explicit `false` skips it; known local tasks do not invoke it. Adds supplier charges outside native answer Usage. |
+| `followParentModel` | `false` | Profile-wide following for supported native children; explicit child selections win. Legacy `parentModelFollow` bindings remain independently active. |
+| `excludedModelIds` | `[]` | Exact managed model exclusions saved through Model preferences. Selected models can be excluded; preserve the already-admitted turn, reject new-turn/direct admission, and never silently switch a fixed selection. |
 | `accountModelTtlMs` | `86400000` | Maximum account-metadata reuse window in milliseconds (24h); does not extend credentials or proof validity. |
 | `accountModelFailureCooldownMs` | `300000` | Failure cooldown in milliseconds (5min) for non-forcing discovery; no periodic retries. |
 | `chatStreamIdleTimeoutMs` | `300000` | Managed chat byte-idle interval; native assistant-chunk silence is bounded to twice this interval when liveness is enabled (maximum 2147483647 ms). Separate from hosted search. |
