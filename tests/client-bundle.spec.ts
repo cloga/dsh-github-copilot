@@ -469,12 +469,18 @@ describe('tsdown client artifact', () => {
     expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotUsage/get', { args: {} }, expect.any(AbortSignal))
 
     const selectionDescriptor = contributions[0]!.descriptors.find(descriptor => descriptor.namespace === 'githubCopilotTurnSelection')!
+    expect(selectionDescriptor).not.toHaveProperty('scope')
     expect(selectionDescriptor).toMatchObject({
-      scope: { context: 'agent', wire: 'agentId' },
+      invocation: { kind: 'direct' },
       parameters: [{ source: 'lookup', lookup: 'agent' }, { source: 'json' }],
     })
     if (selectionDescriptor.result.mode !== 'strict') throw new Error('expected independent strict selection codec')
     expect(selectionDescriptor.result.create().parse({ mode: 'manual' })).toEqual({ mode: 'manual' })
+    rpcCall.mockResolvedValueOnce({ ok: true, value: { mode: 'manual' } })
+    await expect(ctx.remote.githubCopilotTurnSelection.get('explicit-master', 7))
+      .resolves.toEqual({ ok: true, value: { mode: 'manual' } })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotTurnSelection/get',
+      { args: { agentId: 'explicit-master', turn: 7 } }, expect.any(AbortSignal))
 
     const statusDescriptor = contributions[0]!.descriptors.find(
       descriptor => descriptor.method === 'status',

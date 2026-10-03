@@ -3,7 +3,49 @@ import { Context } from '@deepseek-ai/cordis'
 import * as Gateway from '@deepseek-ai/dsh-api-gateway/client'
 import { it, expect, vi } from 'vitest'
 import remote from '../../src/remote.ts'
+import selectionRemote from '../../src/turn-selection-remote.ts'
 import { name, version } from '#package.json' with { type: 'json' }
+
+it('keeps explicit master selection reads independent of ambient Client agent scope', async () => {
+  expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
+  const ctx = new Context()
+  let bound: string | undefined = 'ambient-other-session'
+  const selection = { mode: 'auto', preference: 'balance', reason: 'standard-turn', candidateCount: 2 }
+  const identity = vi.fn(() => bound)
+  const rpc = vi.fn(async () => ({ ok: true, value: selection }))
+  try {
+    ctx.provide('typert', {
+      remotes: { register: () => () => {} },
+      contexts: { getClient: () => ({ identity }) },
+    })
+    ctx.provide('connection', { rpc: { call: rpc, open: vi.fn() },
+      registerGenerationSource: () => () => {}, start: () => ({ stop: () => {} }),
+      generation: { getSnapshot: () => undefined } })
+    Gateway.apply(ctx)
+    // Reproduce the old descriptor's failure using the actual native gateway.
+    const legacy = { ...selectionRemote, descriptors: selectionRemote.descriptors.map(descriptor => ({
+      ...descriptor, scope: { context: 'agent' as const, wire: 'agentId' },
+    })) }
+    const removeLegacy = await ctx.remote.$mount(legacy)
+    await expect(ctx.remote.githubCopilotTurnSelection.get('viewed-master', 7))
+      .rejects.toThrow('expected 1 argument(s), got 2')
+    expect(rpc).not.toHaveBeenCalled()
+    await removeLegacy()
+
+    const remove = await ctx.remote.$mount(selectionRemote)
+    for (const ambient of ['ambient-other-session', undefined]) {
+      bound = ambient
+      await expect(ctx.remote.githubCopilotTurnSelection.get('viewed-master', 7))
+        .resolves.toEqual({ ok: true, value: selection })
+      expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilotTurnSelection/get',
+        { args: { agentId: 'viewed-master', turn: 7 } }, expect.any(AbortSignal))
+    }
+    const descriptor = selectionRemote.descriptors[0]!
+    expect(descriptor.scope).toBeUndefined()
+    expect(descriptor.parameters[0]).toMatchObject({ source: 'lookup', lookup: 'agent', wire: 'agentId' })
+    await remove()
+  } finally { await ctx.fiber.dispose() }
+})
 
 it('mounts authorization, role and search-catalog Remotes on the exact target Client gateway', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')

@@ -103,18 +103,18 @@ if (remote.descriptors.length !== 17 || JSON.stringify(methods) !== JSON.stringi
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
   || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get'])) {
-  throw new Error('built Remote entry must retain ten authorization/model-preference/migration controls, three model-role methods, one search catalog, two quota methods and one scoped selection lookup')
+  throw new Error('built Remote entry must retain ten authorization/model-preference/migration controls, three model-role methods, one search catalog, two quota methods and one explicit selection lookup')
 }
 const selection = selectionDescriptors[0]
 if (selection.id !== 'dsh-github-copilot:githubCopilotTurnSelection.get'
   || selection.service !== 'githubCopilotTurnSelection' || selection.invocation.kind !== 'direct'
-  || selection.scope?.context !== 'agent' || selection.scope.wire !== 'agentId'
+  || selection.scope !== undefined
   || selection.parameters.length !== 2 || selection.parameters[0].source !== 'lookup'
   || selection.parameters[0].lookup !== 'agent' || selection.parameters[0].wire !== 'agentId'
   || selection.parameters[0].codec.typeSymbol !== '@deepseek-ai/dsh-session/types#SessionId'
   || selection.parameters[1].source !== 'json' || selection.parameters[1].wire !== 'turn'
   || selection.result.mode !== 'strict' || selection.result.typeSymbol !== 'dsh-github-copilot#TurnSelection') {
-  throw new Error('turn selection Remote must retain native agent scope and lookup')
+  throw new Error('turn selection Remote must retain explicit Session arguments and native agent lookup without ambient scope projection')
 }
 selection.result.schema.parse({ mode: 'manual' })
 if (selection.result.schema.safeParse({ mode: 'manual', model: 'invented' }).success

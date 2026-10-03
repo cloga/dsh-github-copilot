@@ -2,8 +2,9 @@ import { createElement as h, useEffect, useId, useLayoutEffect, useRef, useState
 import type { ReactElement } from 'react'
 import type { TurnSelection } from './turn-selection.ts'
 
-export function TurnSelectionCard({ selection, locale = 'en', incomplete = false }: {
+export function TurnSelectionCard({ selection, locale = 'en', incomplete = false, readState = 'ready', retry }: {
   selection: TurnSelection; locale?: string; incomplete?: boolean
+  readState?: 'loading' | 'ready' | 'failed'; retry?: () => void
 }): ReactElement {
   const zh = locale.startsWith('zh')
   const id = useId()
@@ -48,8 +49,12 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
   const button = { font: 'inherit', color: 'inherit', background: 'transparent', border: '1px solid var(--dsw-alias-border-main, GrayText)', borderRadius: 6, cursor: 'pointer' }
   return h('span', { style: { order: 1, display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 4,
     minWidth: 0, maxWidth: '100%', fontSize: 'var(--dsh-content-font-size-secondary, 13px)', color: 'var(--dsw-alias-label-tertiary, GrayText)' } },
-  h('span', { title: selection.mode === 'unknown' ? zh ? '本轮选择记录未保留；不从当前选择推断历史。' : 'No retained selection evidence; the current picker is not historical evidence.' : undefined }, label),
-  selection.mode === 'auto' || incomplete ? h('button', { ref: trigger, type: 'button', style: { ...button, width: 24, height: 24, flexShrink: 0 },
+  h('span', { role: readState === 'ready' ? undefined : 'status',
+    title: readState === 'ready' && selection.mode === 'unknown' ? zh ? '本轮选择记录未保留；不从当前选择推断历史。' : 'No retained selection evidence; the current picker is not historical evidence.' : undefined },
+  readState === 'loading' ? zh ? '正在读取选择记录…' : 'Loading selection…'
+    : readState === 'failed' ? zh ? '选择记录读取失败' : 'Selection unavailable' : label),
+  readState === 'failed' && retry ? h('button', { type: 'button', style: button, onClick: retry }, zh ? '重试' : 'Retry') : null,
+  readState === 'ready' && (selection.mode === 'auto' || incomplete) ? h('button', { ref: trigger, type: 'button', style: { ...button, width: 24, height: 24, flexShrink: 0 },
     'aria-label': zh ? '本轮选择记录' : 'Turn selection evidence', 'aria-expanded': open, 'aria-controls': open ? id : undefined,
     'aria-haspopup': 'dialog', onClick: () => setOpen(value => !value) }, 'ⓘ') : null,
   open ? h('div', { ref: panel, id, popover: 'manual', role: 'dialog', 'aria-label': zh ? '本轮选择记录' : 'Turn selection evidence',

@@ -132,8 +132,12 @@ it('ignores stale Session responses and diagnoses errors without inferring manua
   await act(async () => root.render(createElement(component!, { ...props, sessionId: 'old' })))
   await act(async () => root.render(createElement(component!, { ...props, sessionId: 'new' })))
   await act(async () => resolveOld({ ok: true, value: auto }))
-  expect(container.textContent).toBe('Selection unknown')
+  expect(container.textContent).toBe('Selection unavailableRetry')
   expect(diagnostic).toHaveBeenCalledWith('COPILOT_TURN_SELECTION_READ_FAILED')
+  get.mockImplementation(() => Promise.resolve({ ok: true, value: auto }))
+  await act(async () => container.querySelector('button')!.click())
+  expect(get).toHaveBeenLastCalledWith('new', 1)
+  expect(container.textContent).toBe('Auto (intelligence)ⓘ')
 })
 it.each(['map', 'native-store'] as const)('reads exact completed turn evidence through %s and exposes reasons without repeating the model', async storeKind => {
   let component: ComponentType<Record<string, unknown>> | undefined

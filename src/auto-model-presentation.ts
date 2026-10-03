@@ -148,20 +148,26 @@ function findTail(snapshot: unknown, messageId: unknown, diagnostic: (code: stri
 
 function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote; locale?: LocaleReader; diagnostic: (code: string) => void }): React.ReactElement | null {
   const [live, setLive] = React.useState<TurnSelection>({ mode: 'unknown' })
+  const [readState, setReadState] = React.useState<'loading' | 'ready' | 'failed'>('loading')
+  const [readAttempt, setReadAttempt] = React.useState(0)
   const turn = record(props.turn) && sequence(props.turn.turn) ? props.turn.turn : undefined
   const sessionId = typeof props.sessionId === 'string' ? props.sessionId : undefined
   React.useEffect(() => {
     setLive({ mode: 'unknown' })
-    if (turn === undefined || sessionId === undefined || props.remote === undefined) return
+    if (turn === undefined || sessionId === undefined || props.remote === undefined) {
+      setReadState('failed')
+      return
+    }
+    setReadState('loading')
     let active = true
     void props.remote.get(sessionId, turn).then(result => {
       if (!active) return
       const parsed = result.ok ? TurnSelectionSchema.safeParse(result.value) : undefined
-      if (parsed?.success) setLive(parsed.data)
-      else props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED')
-    }, () => { if (active) props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED') })
+      if (parsed?.success) { setLive(parsed.data); setReadState('ready') }
+      else { setReadState('failed'); props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED') }
+    }, () => { if (active) { setReadState('failed'); props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED') } })
     return () => { active = false }
-  }, [props.remote, sessionId, turn, props.diagnostic])
+  }, [props.remote, sessionId, turn, props.diagnostic, readAttempt])
   const language = React.useSyncExternalStore(
     props.locale ? listener => props.locale!.subscribe(listener) : () => noop,
     () => props.locale?.getLocale().active ?? 'en', () => 'en',
@@ -187,7 +193,9 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
     mode: 'auto', preference: parsed.preference, reason: parsed.reason,
     candidateCount: parsed.candidateCount, fittingCandidateCount: parsed.fittingCandidateCount,
   } : { mode: 'unknown' }
-  return React.createElement(TurnSelectionCard, { selection, locale: language, incomplete: evidence?.incomplete ?? true })
+  return React.createElement(TurnSelectionCard, { selection, locale: language, incomplete: evidence?.incomplete ?? true,
+    readState: selection.mode === 'unknown' ? readState : 'ready',
+    retry: props.remote === undefined ? undefined : () => setReadAttempt(value => value + 1) })
 }
 
 interface Slots {
