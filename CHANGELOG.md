@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.79 (prepared)
+
+- Bind retained turn selection reads through the public `TypertRemoteService` and `@Remote get`, fixing the Host registration missing from the alpha.76 Client-only correction (#254).
+- Cover actual Client-to-Host calls in source-discovery and strict modes, including Auto/Manual, missing evidence, missing/denied identities and unload; preserve lookup checks and the existing bounded decision store.
+
 ## 0.4.0-alpha.77 (prepared)
 
 - Resolve automatic compaction pressure and Auto recovery availability from the initiating Agent's preset through the existing public service lookup (#248), including Desktop's isolated compaction groups.

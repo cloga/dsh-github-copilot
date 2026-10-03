@@ -109,6 +109,30 @@ Chat Auto does not own or alter the independent `github-copilot-hosted` search p
 
 ## Attribution and explanation
 
+**Host binding follow-up (alpha.79, #254):** alpha.76 fixed Client argument
+projection, but the Host still provided selection reads as an ordinary
+`ctx.provide(..., { get })` object. That is not a Typert Remote service.
+The native strict Host gateway rejects it with `gateway/binding-invalid`
+before reading the store; source-mode discovery cannot expose the endpoint
+without a Remote binding and method marker. A fresh master reply can therefore
+show **Selection unavailable** even after the Client fix.
+
+`TurnSelectionController` now extends the published `TypertRemoteService` and
+marks `get` with `@Remote`, following the other plugin Host controllers. It wraps
+the same bounded `TurnSelectionStore`, with unchanged explicit Session/turn
+arguments, native Agent lookup/access checks, missing-evidence semantics and
+disposal. It does not append history, grant child access, infer a selection or
+alter Auto routing.
+
+Regression coverage crosses the actual Client gateway, in-process native Host
+connection and actual Host gateway in both source-discovery and strict modes.
+It reproduces the old registration failure and checks Auto, Manual, missing
+records, missing/denied identities, removal and service unload. An isolated
+process also exercised the unchanged rc.2 public modules bundled in the installed
+Desktop; this is contract evidence, not a query of the running Host or live
+model transport. The previous Client-only mock transport was insufficient
+evidence for Host reachability.
+
 **Fresh master/lead selection reads (alpha.76, #249):** the footer explicitly
 calls `get(viewedSessionId, turn)`. Its old Remote descriptor also declared an
 automatic `agent` scope projection. The unchanged rc.2 Client gateway prefers

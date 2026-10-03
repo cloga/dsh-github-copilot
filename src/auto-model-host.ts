@@ -10,6 +10,7 @@ import type { AutoModelPreference } from './copilot-identity.ts'
 import { DEFAULT_REQUEST_BUDGET_POLICY, resolveRequestBudgetPolicy } from './request-budget.ts'
 import type { RequestBudgetPolicy } from './request-budget.ts'
 import { TurnSelectionStore } from './turn-selection.ts'
+import { TurnSelectionController } from './turn-selection-host.ts'
 import { z } from 'zod'
 import {
   PARENT_MODEL_FOLLOW_PROJECTION, initialFollowState, foldFollowState, followSelection,
@@ -150,7 +151,7 @@ function actualNotice(agent: Agent, model: string) {
 export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHostDependencies): () => void {
   type Dispose = () => void
   const selections = new TurnSelectionStore()
-  ctx.provide('githubCopilotTurnSelection', { get: (agent: Agent, turn: number) => selections.get(agent, turn) })
+  new TurnSelectionController(ctx, selections)
   const captured = new WeakMap<Agent, CapturedTurn>()
   const routed = new WeakMap<Agent, RoutedTurn>()
   const agentDisposers = new WeakMap<Agent, Dispose>()

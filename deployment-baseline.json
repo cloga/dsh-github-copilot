@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.77"
+    "version": "0.4.0-alpha.79"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1062,6 +1062,7 @@
         {"file": "src/turn-model-provenance.ts", "marker": "assistant/message"},
         {"file": "src/turn-selection-card.ts", "marker": "Selection unknown"},
         {"file": "src/turn-selection-remote.ts", "marker": "lookup: 'agent'"},
+        {"file": "src/turn-selection-host.ts", "marker": "extends TypertRemoteService"},
         {"file": "src/turn-selection-card.ts", "marker": "Selection unavailable"},
         {"file": "docs/automatic-model-routing.md", "marker": "plugin-only"}
       ],
