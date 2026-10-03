@@ -134,9 +134,9 @@ Desktop profile 请在完成同样的预检后，使用 Desktop 原生包管理�
 2. 点击 **Sign in with GitHub** 后，验证码区域自动展开，提供醒目的一次性验证码、**Open GitHub verification page**、**Copy code** 和 **Cancel sign-in**。不需要再点一次 **Manage**。识别到 Desktop v1 宿主时，通过现有的同窗口外部导航处理交给系统浏览器，不依赖弹出窗口；网页版仍打开新标签页。如果没有打开，可选中并复制界面显示的验证网址到浏览器。插件无法确认系统浏览器是否已打开。
 3. 复制验证码，打开验证链接，在自己的 GitHub 浏览器会话中完成授权。复制成功／失败均有可访问的反馈；手工复制仍可用。不要把 GitHub token 粘贴到 DSH。
 4. DSH 只在授权进行中轮询。显式 **Start sign-in**（**Sign in with GitHub** 按钮，包括界面切换账号）成功后，无论立即返回还是轮询观察到成功，都只强制执行一次有界发现。验证码和验证链接清除，自动授权区域收起，账号显示 **Signed in、Manage**。手动打开的详情保持展开；取消清除旧验证码。失败仅显示安全的阶段诊断：`COPILOT_AUTHORIZATION_BEGIN_FAILED` 表示授权流程未完成；`COPILOT_ROUTE_REPAIR_FAILED` 表示授权已完成但本地路由修复失败。begin 失败还可以显示固定的“最近观察到的里程碑” (`AUTHORIZATION_REQUESTED`、`INTERACTION_PROMPT_OBSERVED` 或 `INTERACTION_NOTICE_OBSERVED`)；它只表示公开 interaction callback 已观察到的进度，不代表失败操作或 credential commit。后者会保留认证，并提示前往 **Manage → Repair model configuration**。这些代码和里程碑不解释或解决底层登录失败，原始 provider 详情不会显示或记录。
-5. 在 **GitHub Copilot** 分组选择接受的模型（稳定路由 ID 为 `github-copilot-preview`）。正常打开／使用会自动维护元数据，无需手动 **Refresh models**。**Manage → Model preferences** 提供搜索、**All / Enabled / Excluded** 筛选，以及立即保存的 **Exclude/Restore** 操作；被排除的精确 ID 会退出托管 picker 与所有 Auto 候选，暂时不在账号元数据中的排除 ID 仍可恢复。排除触发父级重绘时，保留已挂载的账号控制器及元数据，不重新启动状态检查或模型发现。被实时会话或未来默认设置选中的固定模型，在对应选择改变前不可排除。排除不会改写历史、切换选择或修改账号权限。发现说明及能力警告收纳在独立的 **Discovery details** 中。
+5. 在 **GitHub Copilot** 分组选择接受的模型（稳定路由 ID 为 `github-copilot-preview`）。正常打开／使用会自动维护元数据，无需手动 **Refresh models**。**Manage → Model preferences** 提供搜索、**All / Enabled / Excluded** 筛选，以及逐个立即保存的 **Exclude/Restore** 操作；被排除的精确 ID 会退出托管 picker 与新 turn 的 Auto 候选，暂时不在账号元数据中的排除 ID 仍可恢复。已经选中的模型也可以排除：已准入的原生 turn 在后续工具步骤及重试中保留原模型，新 turn 不得再使用它。固定选择不会自动替换，需要在下一 turn 前另选模型。排除触发父级重绘时，保留已挂载的账号控制器及元数据，不重新启动状态检查或模型发现。排除不会改写历史、切换选择或修改账号权限。发现说明及能力警告收纳在独立的 **Discovery details** 中。
 
-偏好读取失败时，已有账号模型仍以只读列表显示，未知排除状态不会伪装成已启用。明确的诊断码区分设置不可用、设置无效与选择证据不完整；**Retry** 仅重读 Host 状态，不刷新 OAuth 或发现模型。保存失败保留最后确认的状态。排除设置使用原生动态隐藏 Config 字段及路径级 CAS，保存无需重新挂载插件。账号模型发现成功不等于偏好设置或模型调用已正常工作。
+偏好读取失败时，已有账号模型仍以只读列表显示，未知排除状态不会伪装成已启用。明确的诊断码区分设置不可用与设置无效；**Retry** 仅重读 Host 状态，不刷新 OAuth 或发现模型。保存失败保留最后确认的状态。单次保存仅返回严格校验的模型偏好，不扫描会话、不读取凭据或完整账号状态。排除设置使用原生动态隐藏 Config 字段及路径级 CAS，保存无需重新挂载插件。原生配置队列、文件锁及 Loader 同步仍可能延迟确认；实际持久化完成前不会显示保存成功。账号模型发现成功不等于偏好设置或模型调用已正常工作。
 
 ### Auto 模型路由
 

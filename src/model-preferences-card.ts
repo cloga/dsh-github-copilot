@@ -2,7 +2,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { createElement, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
-import { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
+import { GitHubCopilotAuthorizationViewSchema, GitHubCopilotModelPreferencesViewSchema } from './remote.ts'
 
 const controlStyle: CSSProperties = {
   color: 'inherit', background: 'transparent', font: 'inherit', fontSize: '14px',
@@ -53,7 +53,6 @@ export function GitHubCopilotModelPreferencesPanel(props: {
   const available = models?.models ?? []
   const settingsKnown = preferences !== undefined && preferences.revision !== undefined
   const excluded = new Set(preferences?.excludedModelIds ?? [])
-  const locked = new Set(preferences?.lockedModelIds ?? [])
   const diagnostic = error ?? preferences?.error
     ?? (preferences === undefined ? 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE' : undefined)
   const writable = preferences?.writable === true && settingsKnown
@@ -76,8 +75,17 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     const current = () => scope.generation === generation
     setBusyModel(modelId ?? ''); setError(undefined); setErrorModel(modelId)
     try {
-      const result = modelId === undefined ? await props.remote.status()
-        : restore ? await props.remote.restoreModel(modelId) : await props.remote.excludeModel(modelId)
+      if (modelId !== undefined) {
+        const result = await props.remote.setModelExcluded(modelId, !restore)
+        if (!current()) return
+        if (!result.ok) { setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return }
+        const parsed = GitHubCopilotModelPreferencesViewSchema.safeParse(result.value)
+        if (!parsed.success) { setError('COPILOT_MODEL_PREFERENCES_UNAVAILABLE'); return }
+        setPreferences(parsed.data)
+        setError(parsed.data.error)
+        return
+      }
+      const result = await props.remote.status()
       if (!current()) return
       if (!result.ok) { setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return }
       const parsed = GitHubCopilotAuthorizationViewSchema.safeParse(result.value)
@@ -100,7 +108,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     createElement('summary', null, settingsKnown
       ? `Model preferences · ${visibleCount} enabled · ${excluded.size} excluded` : 'Model preferences · Read-only'),
     createElement('p', { style: { fontSize: '14px', marginBlock: '12px' } },
-      'Excluded models disappear from the managed picker and are never considered by Auto. Restoring a model does not select it.'),
+      'Excluded models disappear from the managed picker and cannot start a new turn, including Auto. An admitted turn keeps its model. Fixed selections are not changed; select another model before the next turn. Restoring a model does not select it.'),
     diagnostic === undefined ? null : createElement('div', { role: 'alert',
       'data-dsh-github-copilot-model-preferences-error': true, style: { fontSize: '14px', marginBlock: '12px' } },
       createElement('p', null, preferenceMessage(diagnostic)),
@@ -132,8 +140,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       : createElement('ul', { 'aria-label': 'Account models', style: { listStyle: 'none', padding: 0, margin: 0 } },
         filtered.map(model => {
           const isExcluded = excluded.has(model.id)
-          const isLocked = locked.has(model.id)
-          const disabled = !writable || busyModel !== undefined || !isExcluded && isLocked
+          const disabled = !writable || busyModel !== undefined
           return createElement('li', { key: model.id, style: { display: 'flex', gap: '12px', alignItems: 'center',
             paddingBlock: '12px', borderBottom: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
             createElement('span', { style: { flex: 1, minWidth: 0, overflowWrap: 'anywhere', fontSize: '14px' } },
@@ -142,7 +149,6 @@ export function GitHubCopilotModelPreferencesPanel(props: {
               createElement('code', null, model.id),
               createElement('span', null, !settingsKnown ? ' · Exclusion status unknown' : isExcluded ? ' · Excluded' : ' · Enabled'),
               model.available ? null : createElement('span', null, ' · Temporarily absent from account metadata'),
-              !isExcluded && isLocked ? createElement('span', null, ' · Selected by a session or the default. Select another fixed model there before excluding.') : null,
               errorModel === model.id && error !== undefined
                 ? createElement('span', { role: 'status', style: { display: 'block', marginTop: '6px' } }, preferenceMessage(error)) : null),
             createElement('button', {
@@ -150,7 +156,6 @@ export function GitHubCopilotModelPreferencesPanel(props: {
               disabled,
               'aria-label': `${isExcluded ? 'Restore' : 'Exclude'} ${model.name}`,
               onClick: () => update(model.id, isExcluded),
-              title: !isExcluded && isLocked ? 'Select another fixed model before excluding this one.' : undefined,
               'data-dsh-github-copilot-model-action': isExcluded ? 'restore' : 'exclude',
               'data-model-id': model.id,
             }, busyModel === model.id ? 'Saving…' : isExcluded ? 'Restore' : 'Exclude'))

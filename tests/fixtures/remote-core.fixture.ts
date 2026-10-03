@@ -168,10 +168,10 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     expect(registered).toEqual([remote])
     expect(remote.descriptors.map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'migrationStatus',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
     ])
-    for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot')) {
+    for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot' && item.method !== 'setModelExcluded')) {
       expect(descriptor.result.mode).toBe('strict')
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
@@ -230,6 +230,17 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
         expect(codec.create().parse).toBeTypeOf('function')
       }
     }
+    const preferenceDescriptor = remote.descriptors.find(item => item.method === 'setModelExcluded')!
+    const preferences = { state: 'ready', writable: true, revision: 1,
+      excludedModelIds: ['gpt-5.4'], lockedModelIds: [], unavailableExcludedModelIds: [] }
+    expect(preferenceDescriptor.result.create().parse(preferences)).toEqual(preferences)
+    expect(() => preferenceDescriptor.result.create().parse({ ...preferences, credential: 'forbidden' })).toThrow()
+    expect(preferenceDescriptor.parameters[1]?.codec.create().parse(false)).toBe(false)
+    expect(() => preferenceDescriptor.parameters[1]?.codec.create().parse('false')).toThrow()
+    rpc.mockResolvedValueOnce({ ok: true, value: preferences })
+    await expect(ctx.remote.githubCopilot.setModelExcluded('gpt-5.4', true)).resolves.toEqual({ ok: true, value: preferences })
+    expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilot/setModelExcluded',
+      { args: { modelId: 'gpt-5.4', excluded: true } }, expect.any(AbortSignal))
     await dispose()
     expect(ctx.get('remote.githubCopilot')).toBeUndefined()
     expect(ctx.get('remote.githubCopilotDualModel')).toBeUndefined()

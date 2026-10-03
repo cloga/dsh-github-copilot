@@ -395,7 +395,7 @@ describe('tsdown client artifact', () => {
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'migrationStatus',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
     ])
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
@@ -403,6 +403,10 @@ describe('tsdown client artifact', () => {
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
         expect(descriptor.parameters).toHaveLength(1)
         expect(descriptor.parameters[0]?.codec.mode).toBe('strict')
+      }
+      else if (descriptor.method === 'setModelExcluded') {
+        expect(descriptor.parameters).toHaveLength(2)
+        expect(descriptor.parameters.every(parameter => parameter.codec.mode === 'strict')).toBe(true)
       }
       else expect(descriptor.parameters).toEqual([])
       expect(descriptor).toMatchObject({
@@ -413,6 +417,7 @@ describe('tsdown client artifact', () => {
         mode: 'strict',
         typeSymbol: descriptor.method === 'migrationStatus'
           ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
+          : descriptor.method === 'setModelExcluded' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
           : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })
     }

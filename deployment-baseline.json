@@ -223,7 +223,7 @@
           "desktopPackageSet": "installed-descriptor-audited",
           "managedProviderValidation": "synthetic-tagged-source-runtime",
           "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
-          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
         }
       ],
       "packages": [
@@ -549,6 +549,8 @@
         {"file": "src/preview-route.ts", "marker": "modelErrors: new Map<string, string>()"},
         {"file": "src/preview-route.ts", "marker": "ctx.llm.registerAdapter"},
         {"file": "src/preview-route.ts", "marker": "createAccountModelSource"},
+        {"file": "src/model-exclusions.ts", "marker": "class ModelExclusionTurns"},
+        {"file": "src/remote.ts", "marker": "githubCopilot.setModelExcluded"},
         {"file": "src/preview-provider.ts", "marker": "native.streamSimple"},
         {"file": "src/request-body-timeout.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
         {"file": "src/response-error-body.ts", "marker": "readResponseErrorJson"},
@@ -562,6 +564,8 @@
         {"file": "tests/inline/apply.spec.ts", "name": "delegates Anthropic in-band system authority before probing at position %s"},
         {"file": "tests/preview-route.spec.ts", "name": "discovers mixed and unseen account models without model-name routing rules"},
         {"file": "tests/preview-route.spec.ts", "name": "uses unmodified stock LlmRuntime preparation and leaves canonical model registration alone"},
+        {"file": "tests/fixtures/model-exclusions-core.fixture.ts", "name": "keeps native tool steps in an admitted turn after exclusion and enforces exclusion on the next turn (%s)"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "answers a narrow single-model save without reading credentials or enumerating sessions"},
         {"file": "tests/preview-route.spec.ts", "name": "replays opaque reasoning and tool-call identities through the native adapter on a second turn"},
         {"file": "tests/preview-route.spec.ts", "name": "enriches only a verified 408 while preserving native failure classification and retry ownership"},
         {"file": "tests/preview-provider.spec.ts", "name": "observes verified %s timeout without changing bytes, Response, native retries or credential ownership"},

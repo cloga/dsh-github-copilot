@@ -27,6 +27,7 @@ export interface AutoModelHostDependencies {
   budgetPolicy?: () => Partial<RequestBudgetPolicy>
   parentModelBindings?: () => readonly ParentModelBinding[]
   followParentModel?: () => boolean
+  admitModel?: (agent: Agent, turn: number, model: string, signal: AbortSignal) => void
 }
 
 interface CapturedTurn {
@@ -313,6 +314,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       const fixed = record(selection) && record(selection.pending) && selection.pending.provider === resolved.provider
         && selection.pending.model === resolved.model
       if (!signal.aborted && (resolved.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID || resolved.provider === 'github-copilot')) {
+        if (resolved.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) dependencies.admitModel?.(agent, turn, resolved.model, signal)
         selections.record(agent, turn, { mode: fixed ? 'manual' : 'unknown' })
       }
       return resolved
@@ -344,10 +346,13 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       // rc.2 append cannot mark plugin events ignorable; keep attribution out of the log.
       state.recorded = true
     }
-    if (!signal.aborted) selections.record(agent, turn, {
-      mode: 'auto', preference: state.decision.preference, reason: state.decision.reason,
-      candidateCount: state.decision.candidateCount, fittingCandidateCount: state.decision.fittingCandidateCount,
-    })
+    if (!signal.aborted) {
+      dependencies.admitModel?.(agent, turn, state.decision.model.id, signal)
+      selections.record(agent, turn, {
+        mode: 'auto', preference: state.decision.preference, reason: state.decision.reason,
+        candidateCount: state.decision.candidateCount, fittingCandidateCount: state.decision.fittingCandidateCount,
+      })
+    }
     return { ...resolved, model: state.decision.model.id }
   }, { prepend: true })
   return () => {
