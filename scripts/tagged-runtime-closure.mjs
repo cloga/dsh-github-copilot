@@ -32,5 +32,12 @@ export function assertTaggedRuntimeClosure(workflow) {
   if (!/^        working-directory: dsh-upstream\s*$/m.test(blocks[compaction])) {
     throw new Error('tagged compaction closure must be installed in the pinned Core checkout')
   }
+  const jobs = blocks.findIndex(block => /^        run: pnpm install --frozen-lockfile --filter '@deepseek-ai\/dsh-jobs-local\.\.\.' --filter '@deepseek-ai\/dsh-commands\.\.\.'\s*$/m.test(block))
+  if (jobs < 0 || jobs >= prepare) {
+    throw new Error('tagged runtime requires the background jobs dependency closure before preparation')
+  }
+  if (!/^        working-directory: dsh-upstream\s*$/m.test(blocks[jobs]) || /^        if:/m.test(blocks[jobs])) {
+    throw new Error('tagged background jobs closure must run unconditionally in the pinned Core checkout')
+  }
   return true
 }

@@ -7,6 +7,7 @@ const command = "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-api-s
 const imageOffloadCommand = "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-compaction-image-offload...'"
 const searchCommand = "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'"
 const compactionCommand = "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop...' --filter '@deepseek-ai/dsh-compaction-basic...'"
+const jobsCommand = "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-jobs-local...' --filter '@deepseek-ai/dsh-commands...'"
 for (const filename of ['ci.yml', 'release.yml']) {
   test(`${filename} prepares the Session/Remote runtime dependency closure`, async () => {
     const source = await readFile(new URL(`../../.github/workflows/${filename}`, import.meta.url), 'utf8')
@@ -18,6 +19,7 @@ for (const filename of ['ci.yml', 'release.yml']) {
     assert.throws(() => assertTaggedRuntimeClosure(source.replace(searchCommand, 'echo omitted-search')), /search dependency closure before preparation/)
     assert.throws(() => assertTaggedRuntimeClosure(source.replace(compactionCommand, 'echo omitted-compaction')), /compaction dependency closure before preparation/)
     assert.throws(() => assertTaggedRuntimeClosure(source.replace(compactionCommand, `# ${compactionCommand}`)), /compaction dependency closure before preparation/)
+    assert.throws(() => assertTaggedRuntimeClosure(source.replace(jobsCommand, 'echo omitted-jobs')), /background jobs dependency closure before preparation/)
     if (filename === 'ci.yml') {
       const block = source.split(/(?=^      - )/m).find(part => part.includes(compactionCommand))
       assert.doesNotMatch(block, /^        if:/m)
@@ -28,7 +30,11 @@ for (const filename of ['ci.yml', 'release.yml']) {
 test('wrong installation anchor or ordering cannot satisfy the gate', () => {
   const install = `      - name: Install test closure\n        working-directory: dsh-upstream\n        run: ${command}\n      - name: Install image-offload closure\n        working-directory: dsh-upstream\n        run: ${imageOffloadCommand}\n      - name: Install search closure\n        working-directory: dsh-upstream\n        run: ${searchCommand}\n      - name: Install compaction closure\n        working-directory: dsh-upstream\n        run: ${compactionCommand}\n`
   const prepare = '      - name: Prepare runtime\n        run: |\n          node scripts/verify-tagged-core.mjs prepare --root .\n'
-  assert.equal(assertTaggedRuntimeClosure(install + prepare), true)
+  const jobsStep = `      - name: Install jobs closure\n        working-directory: dsh-upstream\n        run: ${jobsCommand}\n`
+  assert.equal(assertTaggedRuntimeClosure(install + jobsStep + prepare), true)
+  assert.throws(() => assertTaggedRuntimeClosure(install + prepare + jobsStep), /background jobs dependency closure before preparation/)
+  assert.throws(() => assertTaggedRuntimeClosure(install + jobsStep.replace('working-directory: dsh-upstream', 'working-directory: .') + prepare), /background jobs closure must run unconditionally/)
+  assert.throws(() => assertTaggedRuntimeClosure(install + jobsStep.replace('        run:', '        if: false\n        run:') + prepare), /background jobs closure must run unconditionally/)
   assert.throws(() => assertTaggedRuntimeClosure(prepare + install), /before preparation/)
   assert.throws(() => assertTaggedRuntimeClosure(install.replace('working-directory: dsh-upstream', 'working-directory: .') + prepare), /pinned Core checkout/)
   const compactionStep = `      - name: Install compaction closure\n        working-directory: dsh-upstream\n        run: ${compactionCommand}\n`
