@@ -98,12 +98,12 @@ const catalogDescriptors = remote.descriptors.filter(descriptor => descriptor.na
 const usageDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
 const selectionDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotTurnSelection')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 17 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 18 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
   || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get'])) {
-  throw new Error('built Remote entry must retain ten authorization/model-preference/migration controls, three model-role methods, one search catalog, two quota methods and one explicit selection lookup')
+  throw new Error('built Remote entry must retain ten legacy authorization/model-preference/migration controls, one narrow exclusion control, three model-role methods, one search catalog, two quota methods and one explicit selection lookup')
 }
 const selection = selectionDescriptors[0]
 if (selection.id !== 'dsh-github-copilot:githubCopilotTurnSelection.get'
@@ -146,9 +146,10 @@ for (const descriptor of authorizationDescriptors) {
     || descriptor.service !== 'githubCopilotAuthorization' || descriptor.namespace !== 'githubCopilot') {
     throw new Error('built Remote descriptor identity must match its exact owned service and namespace')
   }
-  const modelPreference = descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel'
+  const narrowPreference = descriptor.method === 'setModelExcluded'
+  const modelPreference = narrowPreference || descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel'
   if (descriptor.invocation.kind !== 'direct'
-    || (modelPreference ? descriptor.parameters.length !== 1 : descriptor.parameters.length !== 0)) {
+    || descriptor.parameters.length !== (narrowPreference ? 2 : modelPreference ? 1 : 0)) {
     throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} has an unexpected direct-call parameter contract`)
   }
   if (modelPreference) {
@@ -162,6 +163,7 @@ for (const descriptor of authorizationDescriptors) {
   }
   const typeSymbol = descriptor.method === 'migrationStatus'
     ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
+    : narrowPreference ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
     : 'dsh-github-copilot#GitHubCopilotAuthorizationView'
   if (
     descriptor.result.mode !== 'strict'
@@ -169,6 +171,23 @@ for (const descriptor of authorizationDescriptors) {
     || typeof descriptor.result.schema?.parse !== 'function'
   ) {
     throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must expose its own exact strict result codec`)
+  }
+  if (narrowPreference) {
+    const parameter = descriptor.parameters[1]
+    if (parameter.name !== 'excluded' || parameter.wire !== 'excluded' || parameter.source !== 'json'
+      || parameter.codec.mode !== 'strict'
+      || parameter.codec.typeSymbol !== 'dsh-github-copilot#GitHubCopilotModelExcluded'
+      || parameter.codec.schema.parse(true) !== true || parameter.codec.schema.parse(false) !== false
+      || parameter.codec.schema.safeParse('false').success) {
+      throw new Error('narrow exclusion Remote must retain its strict boolean argument')
+    }
+    const preferences = { state: 'ready', writable: true, revision: 1,
+      excludedModelIds: ['gpt-5.4'], lockedModelIds: [], unavailableExcludedModelIds: [] }
+    descriptor.result.schema.parse(preferences)
+    if (descriptor.result.schema.safeParse({ ...preferences, credentials: 'private' }).success
+      || descriptor.result.schema.safeParse({ ...preferences, revision: -1 }).success) {
+      throw new Error('narrow exclusion Remote accepts private fields or invalid revision')
+    }
   }
 }
 if ('DualModelCard' in clientExports) throw new Error('built Client must not export the retired model-role settings card')
