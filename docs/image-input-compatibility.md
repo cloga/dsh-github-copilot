@@ -1,93 +1,64 @@
-# Image input compatibility investigation and implementation
+# Image input compatibility
 
-Tracking: [#236](https://github.com/cloga/dsh-github-copilot/issues/236).
-Baseline: official DSH / Windows Desktop 0.2.0-rc.2. Plugin-only.
+Target: official DSH / Windows Desktop `0.2.0-rc.2`. Plugin-only.
 
-## Evidence and limits
+## Current behavior
 
-A failed Auto continuation selected a vision-capable model and received an
-image-media-type validation error. Read-only local inspection found historical
-`read_image` tool results, including genuine WebP attachments whose display
-names ended in `.png`. No conversation bodies, attachment bytes, account data or
-opaque replay references are included here.
+Auto checks actual typed image blocks in **all entered messages**, including
+historical user/tool content after a text-only continuation. It does not inspect
+tool arguments or infer images from filenames/textual offload placeholders.
+Core's `offloaded: true` marker means projected text, not image bytes.
 
-This does not establish that the model lacks vision, that WebP is universally
-unsupported, or that the historical attachment's encoding was sent unchanged.
-[AWS's Grok 4.7 model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html)
-documents image input, but is not evidence of GitHub Copilot endpoint format
-acceptance. Do not exclude a model by name to conceal this error.
+The picker advertises aggregate image input only with an eligible account image
+model. Auto filters text-only candidates before task preferences; no eligible
+image model fails explicitly rather than sending content to an unverified route.
 
-Two distinct gaps were identified:
+For fixed and Auto managed calls, the account-bound public `inspectRequest`
+hook checks the native transcript's **projected MIME** before wire dispatch:
 
-1. Auto classified image requirements from only the latest user message.
-   Historical user and tool image blocks were missed after a text-only continuation.
-2. Account discovery retains `visionMediaTypes`, but dispatch did not check
-   the native projected image MIME against that explicit account evidence.
+| Diagnostic | Meaning |
+|---|---|
+| `COPILOT_IMAGE_INPUT_UNSUPPORTED` | Current account model does not admit image input |
+| `COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE` | Actual projected MIME evidence is unavailable |
+| `COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED` | Explicit account MIME restrictions reject that projection |
 
-Official rc.2 `llm-pi-ai/src/context.ts` prepares request images through the public
-attachment service before provider dispatch. `attachment-local/src/request-image.ts`
-can re-encode them. Source filename, durable attachment MIME, and projected
-request MIME are therefore different evidence layers.
+Omitted account MIME lists preserve existing verified vision behavior but do
+not prove universal format acceptance. The plugin neither invents a list nor
+converts images itself. Native error/finish behavior, historical attachments,
+turn freezing and existing cancellation/retry policy stay unchanged.
 
-## Implementation plan and delivered code
+## Evidence layers and recovery limits
 
-1. Add regressions for historical user/tool images followed by text-only
-   continuation, all three Auto preferences, and no eligible vision model.
-2. Scan typed content blocks in all messages supplied to Auto by the existing
-   pre-step hook. Keep latest-user text complexity, account eligibility and
-   turn-frozen selection. Do not recursively interpret tool arguments, file
-   names or textual offload placeholders as image blocks. Honor Core's explicit
-   `offloaded: true` marker, which projects the image to text rather than bytes.
-3. At the existing account-bound `inspectRequest` hook, validate the native
-   transcript's actual image `mimeType` after Core projection and before wire.
-   Restore failures as request-local `INVALID_REQUEST` errors:
-   `COPILOT_IMAGE_INPUT_UNSUPPORTED`, `COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE`,
-   or `COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED`.
-4. Honor explicit account MIME restrictions. If the account omits its MIME list,
-   preserve existing vision behavior; absence is neither proof of universal
-   format support nor permission to invent an allowlist.
-5. Cover a synthetic native projection that changes durable WebP into PNG:
-   advertised PNG is admitted; JPEG-only evidence rejects before model fetch.
-   Keep original attachments unchanged.
+Source filename, durable attachment MIME and outgoing projected MIME are
+different facts. Native rc.2 prepares images through public attachment services
+and may re-encode them. A `.png` display name can belong to durable WebP; that
+alone does not establish what the provider received.
 
-These changes apply to historical image eligibility at the next Auto decision
-and actual projected MIME admission for both fixed and Auto managed requests.
-They do not introduce image conversion, history repair, model-name rules,
-same-turn reselection, fallback wires, retry loops, or Core patches.
+Do not exclude a model by name to conceal a format failure. A supplier/model
+card's general vision claim is not GitHub endpoint format proof. Exact-format
+Auto filtering from durable MIME can reject a model whose native projection
+would be accepted; candidate-specific projection would require another public
+contract and reviewed tests.
 
-## Deferred capability and acceptance
+The current fix diagnoses explicit incompatibility, not every provider 400.
+When advertised restrictions and outgoing projection agree but the endpoint
+rejects it, retain the native error. Do not invent capability corrections,
+reselect mid-turn, add a fallback wire or replay the request automatically.
+An explicit smaller [native image budget](./copilot-compaction.md) changes
+outgoing visibility through Core offload; it is not a supplier JSON threshold.
 
-Do not implement Auto MIME filtering from durable attachments: that can reject
-a model even when native projection produces a format it accepts. Exact-format
-candidate selection or conversion requires a public, candidate-specific
-projection contract and its own tests. The current fix diagnoses explicit
-incompatibility; it does not rescue every image request.
+## Verification
 
-The original service-side 400 is not proven fixed. Confirm its account-advertised
-limits and exact outgoing MIME without recording image bytes or credentials
-before attributing its root cause. If advertised compatibility and actual bytes
-agree but the endpoint rejects them, preserve the native error rather than
-fabricating a capability correction.
+Historical tool-image continuation first reproduced the old missed-image
+requirement. Regressions now cover all Auto preferences, historical user/tool
+images, no vision candidate and native WebP-to-PNG projection against explicit
+PNG/JPEG restrictions. A mismatch emits native `finish(error)` with zero model
+requests.
 
-## Validation status
-
-- A pre-fix Node regression reproduced `requiresImage: false` for a historical
-  tool image followed by a text-only continuation.
-- Focused Auto/admission tests: 23 passed with pinned Vitest 3.2.7 and isolated
-  unchanged rc.2 public message helper source. This is supplemental evidence,
-  not the complete native integration/full gate.
-- Strict targeted TypeScript check passed:
-  `node node_modules\typescript\bin\tsc --noEmit --strict --skipLibCheck --target es2023 --module nodenext --moduleResolution nodenext --allowImportingTsExtensions src\auto-model-routing.ts src\image-input-admission.ts`.
-- `pnpm install --frozen-lockfile --ignore-scripts --fetch-retries=0 --fetch-timeout=20000`
-  failed: the configured enterprise registry returned HTTP 404 for
-  `@deepseek-ai/dsh-util-crypto@0.2.0-rc.2`. Full local validation is blocked.
-- [CI run 36966798814](https://github.com/cloga/dsh-github-copilot/actions/runs/36966798814)
-  passed on Windows and Linux using unchanged official rc.2 dependencies:
-  the published-adapter fixture, tagged-source native runtime, full `pnpm verify`,
-  `pnpm pack --pack-destination artifacts`, and exact tarball verification.
-  The full gate includes 1990 passing Vitest tests (2 expected skips) and
-  310 passing tooling tests. Native MIME admission preserves Core's streamed
-  `finish(error)` contract and sends zero model requests for the mismatch case.
-- This authorized CI path mitigates the local registry blocker without changing
-  dependencies or bypassing local registry policy. Publication and live
-  acceptance remain separate; no installed or published fix is claimed here.
+The [delivery CI](https://github.com/cloga/dsh-github-copilot/actions/runs/36966798814)
+passed exact unchanged rc.2 Windows/Linux source and published-adapter fixtures,
+full verification and archive gates. Local synthetic transport demonstrates
+admission/ownership, not live endpoint acceptance or a particular Desktop's
+loaded version. The original [investigation #236](https://github.com/cloga/dsh-github-copilot/issues/236)
+retains the bounded observation and delivery evidence; old local registry
+failures are not a permanent unsupported/shipping-pending claim.

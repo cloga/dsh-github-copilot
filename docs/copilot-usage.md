@@ -86,15 +86,13 @@ The internal client observes per-turn `copilot_usage.total_nano_aiu`, but existe
 
 Synthetic tests cover parsing, lifecycle, failure states, strict transport and UI. They do not establish production quota permissions, billing latency, live OAuth/model transport, installed Desktop bytes or loaded plugin state. No real account calls are made merely to generate test evidence.
 
-## Session selector correction (alpha.33)
+## Current Session and responsive presentation
 
-Alpha.32 called `useSession()` without the selector required by the public Core hook. A registration can therefore exist while the Slot renderer has retired its crashed entry; installed-version receipts and signed-out absence tests are not proof that the control renders in an eligible Session.
-
-The correction consumes the existing `useSession(selector)` contract and selects only a boolean for the current, open, non-removed Session. It does not introduce a compatibility shim, copy Session data, patch Core, substitute model selection, or alter quota requests. The exact official alpha.1/alpha.2 contract is `SnapshotSelectorHook<T>` in `packages/client/store/src/contract.ts`, with the `bindSnapshotSelector` implementation in `packages/client/ui-renderer/src/client/bind.ts`. Model projection remains the public `useProjection('modelSelection')` reader, whose key-only overload is supported.
-
-Validation must include positive rendering with actual selector-hook behavior for both canonical and managed Copilot routes, reactive provider/Session changes and disposal. A null/hidden signed-out surface alone is insufficient. Synthetic quota results prove rendering and lifecycle only, not live account permissions or balances. Current-runtime activation must be checked separately after an explicitly authorized upgrade; reloading alpha.32 does not fix its source call.
-
-## Responsive statistics presentation (alpha.35)
+The control uses public `useSession(selector)` for only the current open,
+non-removed Session, with public `useProjection('modelSelection')`. Acceptance
+must include positive rendering on canonical and managed routes, reactive
+provider/Session changes and disposal. A registered or hidden signed-out entry
+alone proves neither rendering nor live account permission.
 
 The unavailable Session credits section is omitted rather than permanently displaying a placeholder. Reset metadata is optional and independent from validated quota amounts: missing, malformed, zero or elapsed values are ignored. Select a supplier-reported next reset later than the snapshot observation, preferring the snapshot timestamp before valid UTC account, account or limited-user dates; never invent the next billing date. Invalid optional date metadata does not discard otherwise valid account amounts. The Client also hides reset rows without a known observation time or a later reset.
 
@@ -102,7 +100,7 @@ The compact control uses the native secondary font-size and line-height tokens, 
 
 The host owns placement of the existing public dock entries. On a shared-row host, the usage entry follows the native statistics group and can appear immediately after Cache hit; on an older stacked host, it retains that host's placement. The plugin neither relocates native DOM nor overrides native statistics styles, and it does not require a modified Core to activate. A separately authorized Desktop Client layout task owns wrapping and actual assembled native-statistics geometry checks.
 
-Official `0.1.6-alpha.2` already provides the shared dock row in [`InputBar.module.css`](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css) and an intrinsic native statistics group in [`StatsPills.module.css`](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/client/ui-chat/src/client/chat/StatsPills.module.css). Reuse that official presentation primitive rather than inventing another statistics Slot or copying its token calculations. Wide/narrow layout and popup acceptance must use actual native components alongside the released Client; standalone plugin tests or a synthetic sibling label are not proof of native Cache hit alignment.
+Official rc.2 retains the shared dock row in [`InputBar.module.css`](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css) and intrinsic native statistics group in [`StatsPills.module.css`](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/client/ui-chat/src/client/chat/StatsPills.module.css). Reuse that official presentation primitive rather than inventing another statistics Slot or copying its token calculations. Wide/narrow layout and popup acceptance must use actual native components alongside the released Client; standalone plugin tests or a synthetic sibling label are not proof of native Cache hit alignment.
 
 ## Official-first retirement
 
