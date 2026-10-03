@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.84"
+    "version": "0.4.0-alpha.85"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -294,16 +294,21 @@
       "sourceMarkers": [
         {"file": "src/turn-usage-evidence.ts", "marker": "github-copilot-turn-usage-evidence"},
         {"file": "src/turn-usage-evidence.ts", "marker": "tail.tokenUsage !== undefined"},
-        {"file": "src/turn-usage-notice.ts", "marker": "Turn Usage unavailable"},
+        {"file": "src/turn-usage-notice.ts", "marker": "Turn Usage incomplete"},
+        {"file": "src/turn-usage-evidence.ts", "marker": "stateVersion: 2"},
+        {"file": "src/request-body-timeout-marker.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
         {"file": "src/auto-model-presentation.ts", "marker": "turnUsageEvidenceDefinition"},
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/turn-usage-core.fixture.ts"}
       ],
       "tests": [
         {"file": "tests/turn-usage-evidence.spec.ts", "name": "explains a recovered local block alongside reported successful steps without summing tokens"},
         {"file": "tests/turn-usage-evidence.spec.ts", "name": "does not label generic overflow, provider errors or ambiguous streams as pre-dispatch"},
+        {"file": "tests/turn-usage-evidence.spec.ts", "name": "retains same-attempt timeout coordinates and proven same-step retry completion without filling usage"},
+        {"file": "tests/turn-usage-evidence.spec.ts", "name": "keeps incomplete, reordered, interrupted and cross-step retry evidence uncertain"},
         {"file": "tests/turn-usage-notice.spec.ts", "name": "keeps the fixed-height footer compact and opens a bounded nonmodal explanation"},
         {"file": "tests/turn-usage-integration.spec.ts", "name": "explains native missing usage even when the independent selection Remote fails"},
         {"file": "tests/fixtures/turn-usage-core.fixture.ts", "name": "reproduces the finish-only local block and explains it without changing native accounting"},
+        {"file": "tests/fixtures/turn-usage-core.fixture.ts", "name": "associates a recorded 408 with its missing sample and exact retry without restoring the native total"},
         {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "explains missing turn Usage through native assembly and scoped actions (%s)"}
       ]
     },
@@ -571,7 +576,7 @@
         {"file": "src/model-exclusions.ts", "marker": "class ModelExclusionTurns"},
         {"file": "src/remote.ts", "marker": "githubCopilot.setModelExcluded"},
         {"file": "src/preview-provider.ts", "marker": "native.streamSimple"},
-        {"file": "src/request-body-timeout.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
+        {"file": "src/request-body-timeout-marker.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
         {"file": "src/request-body-evidence.ts", "marker": "REQUEST_BODY_EVIDENCE_LIMITS"},
         {"file": "src/copilot-stream-liveness.ts", "marker": "COPILOT_STREAM_IDLE_TIMEOUT"},
         {"file": "src/preview-route.ts", "marker": "Math.min(idle * 2, 2_147_483_647)"},

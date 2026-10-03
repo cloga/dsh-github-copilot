@@ -86,7 +86,7 @@ describe('Copilot reasoning presentation against real Core services', () => {
       }, props => createElement(props.SessionProvider, { session: 'fixture-session' as never },
         props.renderSlot('conversation.chat.assistant-actions', { messageId: 'usage-fixture-reply' as never })))
       await act(async () => root.render(ctx.slots.renderSlot('root', {})))
-      const trigger = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Turn Usage unavailable')
+      const trigger = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Turn Usage incomplete')
       if (!trigger) throw new Error('Missing native fixture Usage explanation')
       await act(async () => trigger.click())
       expect(container.querySelector('[role=dialog]')?.textContent).toContain('1 local input-budget block')

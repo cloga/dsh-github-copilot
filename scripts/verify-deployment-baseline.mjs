@@ -324,7 +324,8 @@ const metadata = manifest.capabilities?.find(capability => capability.id === 'ac
 assert(metadata?.activation === 'validated-account-endpoints-and-capabilities', 'managed models must follow account endpoint and capability evidence')
 const publicAdapter = manifest.capabilities?.find(capability => capability.id === 'public-adapter-account-model-route')
 assert(publicAdapter?.activation === 'published-adapter-and-native-sdk', 'managed route must reuse the public adapter and native SDK')
-assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/request-body-timeout.ts' && item.marker === 'COPILOT_REQUEST_BODY_TIMEOUT'),
+assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/request-body-timeout-marker.ts' && item.marker === 'COPILOT_REQUEST_BODY_TIMEOUT')
+  && (await read('src/request-body-timeout.ts')).includes('REQUEST_BODY_TIMEOUT_MARKER'),
   'managed request-body timeout guidance must retain explicit source evidence')
 assert(publicAdapter.tests.some(item => item.file === 'tests/request-body-timeout.spec.ts'),
   'managed request-body timeout observation must retain bounded/cancellation regression evidence')

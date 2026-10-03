@@ -1,4 +1,5 @@
 import { readResponseErrorJson } from './response-error-body.ts'
+import { REQUEST_BODY_TIMEOUT_MARKER } from './request-body-timeout-marker.ts'
 import { formatRequestBodyEvidence, requestBodyEvidence } from './request-body-evidence.ts'
 import type { RequestBodyDispatchEvidence } from './request-body-evidence.ts'
 
@@ -23,5 +24,5 @@ export async function requestBodyTimeoutDiagnostic(
     : `Request body: ${Buffer.byteLength(body, 'utf8')} UTF-8 bytes (not context tokens).`
   const composition = formatRequestBodyEvidence(dispatch === undefined ? { state: 'unavailable' }
     : requestBodyEvidence(body, dispatch.protocol), dispatch?.responseHeadersMs)
-  return `COPILOT_REQUEST_BODY_TIMEOUT: Copilot returned HTTP 408 / user_request_timeout while reading the request body; this is not context-window overflow. ${size} ${composition} Native retry policy is unchanged. If retries exhaust, use these numbers to choose an explicit attachment/image-offload budget change or native compaction for compressible history; tool definitions and opaque replay may remain. Also check network/proxy health and GitHub service status. Composition alone does not establish a cause or supplier size limit. A larger client timeout does not change this server timeout. No history was trimmed or model switched.`
+  return `${REQUEST_BODY_TIMEOUT_MARKER} ${size} ${composition} Native retry policy is unchanged. If retries exhaust, use these numbers to choose an explicit attachment/image-offload budget change or native compaction for compressible history; tool definitions and opaque replay may remain. Also check network/proxy health and GitHub service status. Composition alone does not establish a cause or supplier size limit. A larger client timeout does not change this server timeout. No history was trimmed or model switched.`
 }

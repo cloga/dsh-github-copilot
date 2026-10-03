@@ -1,12 +1,30 @@
+import { REQUEST_BODY_TIMEOUT_MARKER } from './request-body-timeout-marker.ts'
+
 export const TURN_USAGE_EVIDENCE_KEY = 'github-copilot-turn-usage-evidence'
+
+export interface TimeoutUsageDetail {
+  readonly step?: number
+  readonly seq?: number
+  readonly recovered: boolean
+}
 
 export interface TurnUsageEvidence {
   readonly ended: boolean
   readonly hasStart: boolean
   readonly localPreDispatchBlocks: number
   readonly unreportedAttempts: number
+  readonly requestBodyTimeouts?: number
+  readonly timeoutDetails?: readonly TimeoutUsageDetail[]
 }
-interface State { readonly turn: number; readonly value: TurnUsageEvidence }
+interface PendingRetry {
+  readonly index: number
+  readonly step: number
+  readonly seq: number
+  readonly phase: 'failed' | 'scheduled' | 'started'
+  readonly retryId?: string
+  readonly retry?: number
+}
+interface State { readonly turn: number; readonly value: TurnUsageEvidence; readonly pending?: PendingRetry }
 interface Match { readonly event: unknown }
 interface Context { readonly state?: State; readonly matches: readonly Match[] }
 interface LocationData {
@@ -24,12 +42,39 @@ function count(value: unknown): value is number {
 export function isTurnUsageEvidence(value: unknown): value is TurnUsageEvidence {
   return record(value) && typeof value.ended === 'boolean' && typeof value.hasStart === 'boolean'
     && count(value.localPreDispatchBlocks) && count(value.unreportedAttempts)
+    && (value.requestBodyTimeouts === undefined || count(value.requestBodyTimeouts)
+      && value.requestBodyTimeouts <= value.unreportedAttempts)
+    && (value.timeoutDetails === undefined || Array.isArray(value.timeoutDetails) && value.timeoutDetails.length <= 8
+      && count(value.requestBodyTimeouts) && value.timeoutDetails.length <= value.requestBodyTimeouts
+      && value.timeoutDetails.every(detail => record(detail) && typeof detail.recovered === 'boolean'
+        && (detail.step === undefined || count(detail.step)) && (detail.seq === undefined || count(detail.seq))
+        && (!detail.recovered || count(detail.step) && count(detail.seq))))
 }
-function coordinates(event: unknown): { turn: number; type: string; data: Record<string, unknown> } | undefined {
+function coordinates(event: unknown): { turn: number; type: string; data: Record<string, unknown>; seq?: number } | undefined {
   if (!record(event) || typeof event.type !== 'string' || !record(event.data) || !count(event.data.turn)
-    || !['turn/start', 'turn/end', 'assistant/message', 'assistant/attempt'].includes(event.type)) return undefined
+    || !['turn/start', 'turn/end', 'step/start', 'step/end', 'llm/retry', 'llm/retry-started',
+      'assistant/message', 'assistant/attempt'].includes(event.type)) return undefined
   if (event.type === 'assistant/message' && event.surfaceOp !== 'append') return undefined
-  return { turn: event.data.turn, type: event.type, data: event.data }
+  return { turn: event.data.turn, type: event.type, data: event.data, ...(count(event.seq) ? { seq: event.seq } : {}) }
+}
+function finishReason(data: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!Array.isArray(data.stream)) return undefined
+  let result: Record<string, unknown> | undefined
+  for (const entry of data.stream) {
+    if (record(entry) && entry.type === 'chunk' && record(entry.chunk) && entry.chunk.type === 'finish') {
+      // Multiple finish chunks are ambiguous, not evidence of a successful retry.
+      if (result !== undefined || !record(entry.chunk.reason)) return undefined
+      result = entry.chunk.reason
+    }
+  }
+  return result
+}
+function requestBodyTimeout(data: Record<string, unknown>): boolean {
+  const reason = finishReason(data)
+  if (reason?.kind !== 'error' || !record(reason.failure)) return false
+  const { code, message } = reason.failure
+  return typeof code === 'string' && code !== 'ABORTED' && typeof message === 'string' && message.length <= 8192
+    && (message === REQUEST_BODY_TIMEOUT_MARKER || message.startsWith(`${REQUEST_BODY_TIMEOUT_MARKER} `))
 }
 function unreported(type: string, data: Record<string, unknown>): boolean {
   if (type === 'assistant/message' && data.usage !== undefined) return false
@@ -55,13 +100,49 @@ function fold(state: State | undefined, event: unknown): State | undefined {
   const value = state?.value ?? { ended: false, hasStart: false, localPreDispatchBlocks: 0, unreportedAttempts: 0 }
   const missing = (parsed.type === 'assistant/message' || parsed.type === 'assistant/attempt') && unreported(parsed.type, parsed.data)
   const local = missing && parsed.type === 'assistant/attempt' && localBlock(parsed.data)
+  const timeout = missing && requestBodyTimeout(parsed.data)
+  let details = value.timeoutDetails
+  let pending = state?.pending
+  if (pending !== undefined) {
+    const same = parsed.data.step === pending.step && parsed.seq !== undefined && parsed.seq > pending.seq
+    if (same && parsed.seq !== undefined && parsed.type === 'llm/retry' && pending.phase === 'failed'
+      && typeof parsed.data.retryId === 'string' && parsed.data.retryId.length > 0 && parsed.data.retryId.length <= 256
+      && count(parsed.data.retry) && parsed.data.retry > 0) {
+      pending = { ...pending, seq: parsed.seq, phase: 'scheduled', retryId: parsed.data.retryId, retry: parsed.data.retry }
+    } else if (same && parsed.seq !== undefined && parsed.type === 'llm/retry-started' && pending.phase === 'scheduled'
+      && parsed.data.retryId === pending.retryId && parsed.data.retry === pending.retry) {
+      pending = { ...pending, seq: parsed.seq, phase: 'started' }
+    } else {
+      if (same && parsed.type === 'assistant/message' && pending.phase === 'started'
+        && finishReason(parsed.data)?.kind === 'stop') {
+        details = details?.map((detail, index) => index === pending?.index ? { ...detail, recovered: true } : detail)
+      }
+      pending = undefined
+    }
+  }
+  if (timeout && (details?.length ?? 0) < 8) {
+    const index = details?.length ?? 0
+    details = [...details ?? [], {
+      ...(count(parsed.data.step) ? { step: parsed.data.step } : {}),
+      ...(parsed.seq !== undefined ? { seq: parsed.seq } : {}),
+      recovered: false,
+    }]
+    if (parsed.type === 'assistant/attempt' && count(parsed.data.step) && parsed.seq !== undefined) {
+      pending = { index, step: parsed.data.step, seq: parsed.seq, phase: 'failed' }
+    }
+  }
   return {
     turn: parsed.turn,
+    ...(pending !== undefined ? { pending } : {}),
     value: {
       ended: value.ended || parsed.type === 'turn/end',
       hasStart: value.hasStart || parsed.type === 'turn/start',
       localPreDispatchBlocks: Math.min(Number.MAX_SAFE_INTEGER, value.localPreDispatchBlocks + (local ? 1 : 0)),
       unreportedAttempts: Math.min(Number.MAX_SAFE_INTEGER, value.unreportedAttempts + (missing && !local ? 1 : 0)),
+      ...(timeout || value.requestBodyTimeouts !== undefined ? {
+        requestBodyTimeouts: Math.min(Number.MAX_SAFE_INTEGER, (value.requestBodyTimeouts ?? 0) + (timeout ? 1 : 0)),
+        timeoutDetails: details,
+      } : {}),
     },
   }
 }
@@ -70,6 +151,8 @@ export interface TurnUsageDiagnostic {
   readonly localPreDispatchBlocks: number
   readonly unreportedAttempts: number
   readonly incompleteHistory: boolean
+  readonly requestBodyTimeouts?: number
+  readonly timeoutDetails?: readonly TimeoutUsageDetail[]
 }
 
 /** Native completed-tail evidence gates the notice; native totals are never replaced. */
@@ -84,12 +167,16 @@ export function turnUsageDiagnostic(
     localPreDispatchBlocks: parsed?.localPreDispatchBlocks ?? 0,
     unreportedAttempts: parsed?.unreportedAttempts ?? 0,
     incompleteHistory: parsed?.hasStart !== true,
+    ...(parsed?.requestBodyTimeouts !== undefined ? {
+      requestBodyTimeouts: parsed.requestBodyTimeouts, timeoutDetails: parsed.timeoutDetails,
+    } : {}),
   }
 }
 
-/** Diagnostic event counts only, not a competing usage total or billing projection. */
+/** Bounded diagnostic evidence, not a competing usage total or billing projection. */
 export const turnUsageEvidenceDefinition = {
   kind: TURN_USAGE_EVIDENCE_KEY,
+  stateVersion: 2,
   match(event: unknown): { id: string; role: 'start' | 'update' } | null {
     const parsed = coordinates(event)
     return parsed ? { id: String(parsed.turn), role: parsed.type === 'turn/start' ? 'start' : 'update' } : null
@@ -109,7 +196,9 @@ export const turnUsageEvidenceDefinition = {
     const value = state.value
     if (previous?.turn === state.turn && previous.value.ended === value.ended
       && previous.value.hasStart === value.hasStart && previous.value.localPreDispatchBlocks === value.localPreDispatchBlocks
-      && previous.value.unreportedAttempts === value.unreportedAttempts) return previous
+      && previous.value.unreportedAttempts === value.unreportedAttempts
+      && previous.value.requestBodyTimeouts === value.requestBodyTimeouts
+      && JSON.stringify(previous.value.timeoutDetails) === JSON.stringify(value.timeoutDetails)) return previous
     return { kind: 'turn', turn: state.turn, key: TURN_USAGE_EVIDENCE_KEY, value }
   },
 }
