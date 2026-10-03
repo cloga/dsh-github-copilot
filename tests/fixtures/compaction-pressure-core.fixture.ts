@@ -150,7 +150,7 @@ describe('native background compaction lifetime', () => {
       expect(admitted?.result.text).toContain('started, not completed')
       await f.adapter.summaryStarted.promise
       const job = f.ctx.jobs.list(f.agent.id).find(item => item.kind === 'copilot-compaction')!
-      expect(job.owner).toBe(f.agent.id)
+        expect(job.owner).toBe(f.agent.id)
       caller.abort()
       await vi.advanceTimersByTimeAsync(305_000)
       expect(f.ctx.jobs.get(job.id, f.agent.id).status).toBe('running')
@@ -168,20 +168,24 @@ describe('native background compaction lifetime', () => {
     } finally { vi.useRealTimers() }
   })
 
-  it.each(['cancel', 'unload'] as const)('drains native recovery without replacing history on %s', async action => {
+  it.each(['cancel', 'unload', 'owner-disposal'] as const)('drains native recovery without replacing history on %s', async action => {
     const f = await fixture('await-abort', true, false, true, true)
     const admitted = await f.ctx.commands.execute(f.agent, '/copilot-compact', [], new AbortController().signal)
     expect(admitted?.result.text).toContain('started')
     await f.adapter.summaryStarted.promise
     const job = f.ctx.jobs.list(f.agent.id).find(item => item.kind === 'copilot-compaction')!
+    const settled = f.ctx.jobs.wait(job.id, 1000, f.agent.id)
     if (action === 'cancel') {
       const cancelled = await f.ctx.commands.execute(f.agent, '/copilot-compact cancel', [], new AbortController().signal)
       expect(cancelled?.result.text).toContain('requested')
-    } else {
+    } else if (action === 'unload') {
       await f.engineMount.dispose()
       expect(f.ctx.commands.list(f.agent).some(command => command.name === 'copilot-compact')).toBe(false)
+    } else {
+      await f.ownerHandle!.dispose()
     }
-    expect((await f.ctx.jobs.wait(job.id, 1000, f.agent.id)).status).toBe('killed')
+    // Owner teardown cancels native maintenance before jobs receive agent/disposed.
+    expect((await settled).status).toBe(action === 'owner-disposal' ? 'failed' : 'killed')
     expect(f.agent.session.surface.replaceGeneration).toBe(f.originalGeneration)
     expect(f.events.filter(event => event.type === 'compaction/summary')).toHaveLength(0)
     expect(f.events.filter(event => event.type === 'compaction/start')).toHaveLength(1)
@@ -296,7 +300,10 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   // Consume the post-commit public event feed, not synchronous Session-history
   // APIs or manufactured baseline-specific assistant/chunk seed records.
   ctx.on('session/event', (session, event) => { if (session.id === id) events.push(event) })
-  const agent = await ctx.agentLoop.create(id, { provider, model, maxTokens: 8192 })
+  const ownerHandle = background
+    ? await ctx.agents.create({ sessionId: id, agentOptions: { provider, model, maxTokens: 8192 } })
+    : undefined
+  const agent = ownerHandle?.agent ?? await ctx.agentLoop.create(id, { provider, model, maxTokens: 8192 })
   const send = (text: string): void => {
     agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
   }
@@ -315,7 +322,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   expect(originalTokens).toBeLessThan(contextWindow)
 
   return {
-    ctx, adapter, agent, events, failures, priced, forbiddenFetch, seedCount, originalGeneration, originalTokens, removeAdapter, engineMount,
+    ctx, adapter, agent, events, failures, priced, forbiddenFetch, seedCount, originalGeneration, originalTokens, removeAdapter, engineMount, ownerHandle,
     autoLoads: () => autoLoads,
     oldUserSeq: oldUser!.seq,
     enable(budget = 1000, selectedModel = 'fixture-model-B') { inputBudgetTokens = budget; model = selectedModel },

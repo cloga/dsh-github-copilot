@@ -122,7 +122,6 @@
     "@deepseek-ai/dsh-commands": "0.2.0-rc.2",
     "@deepseek-ai/dsh-compaction": "0.2.0-rc.2",
     "@deepseek-ai/dsh-compaction-basic": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-jobs": "0.2.0-rc.2",
     "@deepseek-ai/dsh-api-remotes": "0.2.0-rc.2",
     "@deepseek-ai/dsh-authorization": "0.2.0-rc.2",
     "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2",
@@ -141,9 +140,6 @@
     "@deepseek-ai/schemastery": "^3.18.4"
   },
   "peerDependenciesMeta": {
-    "@deepseek-ai/dsh-jobs": {
-      "optional": true
-    },
     "@deepseek-ai/dsh-web-search-deepseek": {
       "optional": true
     },

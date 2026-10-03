@@ -113,4 +113,26 @@ describe('background manual compaction admission', () => {
     expect(f.registry.start).not.toHaveBeenCalled()
     await f.controller.dispose()
   })
+
+  it('fails explicitly when admission is unavailable', async () => {
+    const f = fixture()
+    f.registry.start.mockImplementationOnce(() => { throw new Error('raw internal error') })
+    const result = f.controller.execute(f.owner, '', new AbortController().signal)
+    expect(result.kind).toBe('error')
+    expect(result.text).toContain('COPILOT_BACKGROUND_COMPACTION_ADMISSION_FAILED')
+    expect(result.text).not.toContain('raw internal')
+    expect(f.warn).toHaveBeenCalledWith('COPILOT_BACKGROUND_COMPACTION_ADMISSION_FAILED')
+    expect(f.compact).not.toHaveBeenCalled()
+    await f.controller.dispose()
+  })
+
+  it('cancels producer work if its settlement observer fails', async () => {
+    const f = fixture()
+    f.registry.wait.mockRejectedValueOnce(new Error('observer unavailable'))
+    f.controller.execute(f.owner, '', new AbortController().signal)
+    await [...f.jobs.values()][0]!.hooks.done
+    expect(f.warn).toHaveBeenCalledWith('COPILOT_BACKGROUND_COMPACTION_OBSERVER_FAILED')
+    expect(f.controller.execute(f.owner, 'status', new AbortController().signal).text).toContain('killed')
+    await f.controller.dispose()
+  })
 })
