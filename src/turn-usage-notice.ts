@@ -13,7 +13,9 @@ export function TurnUsageNotice({ diagnostic, locale = 'en' }: {
   const trigger = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const close = useRef<HTMLButtonElement>(null)
-  const label = zh ? '本轮 Usage 不可用' : 'Turn Usage unavailable'
+  const label = zh ? '本轮用量统计不完整' : 'Turn Usage incomplete'
+  const timeouts = diagnostic.requestBodyTimeouts ?? 0
+  const unknown = diagnostic.unreportedAttempts - timeouts
   useLayoutEffect(() => {
     if (!open) return
     panel.current?.showPopover?.()
@@ -67,14 +69,26 @@ export function TurnUsageNotice({ diagnostic, locale = 'en' }: {
   },
   h('strong', null, label),
   h('p', null, zh
-    ? '原生统计无法证明本轮所有尝试的完整总量。部分步骤有用量，不代表整轮总量已知。'
-    : 'Native accounting cannot prove a complete total for every attempt in this turn. Reported usage on some steps is not a complete turn total.'),
+    ? '本轮没有可确认的完整用量总计。回复成功，也不代表每次尝试都记录了用量。'
+    : 'A complete usage total is unavailable for this turn. A successful reply does not mean every attempt reported usage.'),
   diagnostic.localPreDispatchBlocks > 0 ? h('p', null, zh
     ? `记录中有 ${diagnostic.localPreDispatchBlocks} 次插件发出前的本地输入预算拦截，未记录供应商用量。后续压缩恢复不会补齐这些尝试的用量。`
     : `The history records ${diagnostic.localPreDispatchBlocks} local input-budget ${diagnostic.localPreDispatchBlocks === 1 ? 'block' : 'blocks'} before provider dispatch, with no reported provider usage. Subsequent compaction recovery does not fill in those attempts' usage.`) : null,
-  diagnostic.unreportedAttempts > 0 ? h('p', null, zh
-    ? `另有 ${diagnostic.unreportedAttempts} 次完成或失败记录未带用量样本；不能据此判断请求是否发出或计费。`
-    : `${diagnostic.unreportedAttempts} other ${diagnostic.unreportedAttempts === 1 ? 'settlement has' : 'settlements have'} no reported usage sample; this does not establish whether a request was sent or billed.`) : null,
+  timeouts > 0 ? h('p', null, zh
+    ? `${timeouts} 次缺失用量的记录带有已记录的 HTTP 408 请求体读取超时诊断；这不是上下文窗口溢出，也不能据此判断是否计费。`
+    : `${timeouts} ${timeouts === 1 ? 'attempt without usage has' : 'attempts without usage have'} a recorded HTTP 408 request-body timeout diagnosis. This is not context-window overflow and does not establish billing.`) : null,
+  diagnostic.timeoutDetails?.length ? h('ul', { style: { paddingInlineStart: 20 } },
+    ...diagnostic.timeoutDetails.map((detail, index) => h('li', { key: index },
+      zh
+        ? `${detail.step === undefined ? '步骤未知' : `步骤 ${detail.step}`} · ${detail.seq === undefined ? '记录编号未知' : `记录 ${detail.seq}`}：${detail.recovered ? '已记录同一步骤重试成功；但失败尝试的用量仍缺失。' : '没有足够证据确认这次尝试后重试成功。'}`
+        : `${detail.step === undefined ? 'Step unknown' : `Step ${detail.step}`} · ${detail.seq === undefined ? 'Record unknown' : `record ${detail.seq}`}: ${detail.recovered ? 'A same-step retry completed successfully; the failed attempt’s usage is still missing.' : 'A successful retry after this attempt is not established.'}`)),
+  ) : null,
+  timeouts > (diagnostic.timeoutDetails?.length ?? 0) ? h('p', null, zh
+    ? '这里只展示最多 8 条超时记录的定位信息；计数包含其余记录。'
+    : 'Details are limited to 8 timeout records; the count includes the remaining records.') : null,
+  unknown > 0 ? h('p', null, zh
+    ? `另有 ${unknown} 次完成或失败记录未带用量样本，原因未知；不能据此判断请求是否发出或计费。`
+    : `${unknown} other ${unknown === 1 ? 'settlement has' : 'settlements have'} no reported usage sample and an unknown cause; this does not establish whether a request was sent or billed.`) : null,
   diagnostic.incompleteHistory ? h('p', null, zh
     ? '本页未保留完整轮次证据；以上记录可能不完整。'
     : 'Complete turn evidence is not retained on this page; these records may be incomplete.') : null,

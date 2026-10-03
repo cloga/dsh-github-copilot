@@ -45,7 +45,7 @@ async function mount({ provider = 'github-copilot-preview', tokenUsage, hasEvide
   return { container, get, diagnostic }
 }
 function usageButton(container: HTMLElement): HTMLButtonElement {
-  const button = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Turn Usage unavailable')
+  const button = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Turn Usage incomplete')
   if (!button) throw new Error('Missing fixture diagnostic trigger')
   return button
 }
@@ -58,7 +58,7 @@ it('explains native missing usage even when the independent selection Remote fai
 })
 it('does not duplicate complete native usage or expose a diagnostic on other providers', async () => {
   for (const options of [{ tokenUsage: { totalTokens: 32601 } }, { provider: 'other', hasEvidence: false }, { seq: -1 }]) {
-    expect((await mount(options)).container.textContent).not.toContain('Turn Usage unavailable')
+    expect((await mount(options)).container.textContent).not.toContain('Turn Usage incomplete')
   }
 })
 it('distinguishes unavailable historical projection from a known local block', async () => {
@@ -71,6 +71,6 @@ it('distinguishes unavailable historical projection from a known local block', a
 })
 it('localizes evidence without reading the current picker or repeating model names', async () => {
   const { container } = await mount({ locale: 'zh-CN' })
-  expect(container.textContent).toContain('本轮 Usage 不可用')
+  expect(container.textContent).toContain('本轮用量统计不完整')
   expect(container.textContent).not.toContain('fixture')
 })
