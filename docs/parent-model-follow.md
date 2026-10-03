@@ -1,123 +1,83 @@
-# One-switch parent model following
+# Follow a parent model
 
-**Status:** implemented in the published alpha.88 line for official DSH/Windows
-Desktop `0.2.0-rc.2`, through plugin-owned public routing. This is separate from
-retired Model roles and any upstream native rules UI. Publication is not proof
-of installation or loaded runtime.
+Implemented for official DSH / Windows Desktop `0.2.0-rc.2` through plugin-owned
+public routing. This is separate from retired Model roles and upstream native
+rules/settings UI.
 
 ## Enable and use
 
 Open **Plugins → dsh-github-copilot → Details**, enable **Follow parent model**
-and save. It defaults to Off and applies to the current profile; no child IDs
-are required for ordinary use.
+and Save. Default Off; applies to the current profile without child IDs.
 
-A supported child follows a fixed managed parent on its next turn. With an
-Auto parent, it follows the exact Auto preference and chooses using its own
-context, not necessarily the parent's last concrete model. A child's own
-explicit selection wins. Existing running/admitted turns remain unchanged.
-Roots, forks, other-provider parents and dedicated legacy policies are outside
-the broad switch. Missing eligible parent evidence is an explicit failure,
-not permission to guess another route.
+| Parent/child state | Next supported child turn |
+|---|---|
+| Fixed managed Copilot parent | Follow its effective fixed selection |
+| Auto parent | Inherit the exact preference; choose using the child's own context |
+| Child-owned explicit selection | Keep the child's selection, even if it equals the parent |
+| Already admitted turn | Keep the captured route through steps/retries |
+| Root, fork, other-provider parent or dedicated legacy policy | Keep native/legacy ownership |
+| Eligible parent evidence missing | Named error, not a guessed route |
 
-Turning Off does not remove legacy `parentModelFollow` bindings; the page
-reports them separately. No settings/history migration, descriptor rewrite
-or global default change is performed.
+![Current switch and search section from the published Client](images/copilot-search-routing.png)
 
-## Requirement and decision
+Actual built components, synthetic settings, isolated browser; presentation
+evidence only, not installation, a real Team turn or model transport.
 
-Users change a master model and expect its subagents and Team mates to follow.
-They must not manage Session IDs, bind each child, or visit a roster to enable
-the same policy repeatedly. Alpha.66's explicit bindings were a technical
-foundation, not an adequate ordinary user experience.
+Turning Off disables broad following on later turns. It does not remove legacy
+`parentModelFollow` bindings, restore a former creation snapshot or clear explicit
+child selections. Native Team labels can still describe creation-time models;
+the plugin does not rewrite them.
 
-The **Follow parent model** switch lives on the existing plugin configuration
-page, above the separate Web search section. Save once for the current DSH
-profile. Default Off; no automatic migration or live profile changes on upgrade.
+## Save behavior
 
-Enabling authorizes replacing supported children's creation-time route snapshots,
-including snapshots that originally came from an explicit creation argument.
-That provenance cannot be recovered from native descriptors. Child-owned
-`model/selection` events, whether older or newly written, remain authoritative.
-Turning the switch off/on never erases an explicit child selection.
+Loading, read-only and failed states disable mutation instead of pretending to
+save. Unsaved changes enable Save; success applies from each child's next turn.
+An uncertain save requires Reload before retry. No roster, Session ID form,
+model picker, login or discovery prerequisite belongs in this ordinary control.
 
-## User-facing mockup
+The Client reads public Settings and writes only `['followParentModel']` via
+native CAS. Unrelated revision changes are allowed only if this leaf is
+unchanged. Successful saves coordinate the mounted search card's expected
+revision without losing unsaved routing choices. Conflicts are not blindly retried.
 
-This is the intended settings layout, not a screenshot of a live account.
+## Routing and provenance boundaries
 
-![Actual switch component rendered with synthetic settings](images/parent-model-follow.png)
+The Host uses public parent lineage, v3 native spawn descriptors and the existing
+selection resolver, not model-ID matching or the global default. Supported
+native children/Team mates of managed Copilot parents participate. Missing cold
+parent evidence cannot be replaced by a stale creation route.
 
-The image renders the actual component in an isolated browser fixture. It proves
-layout only, not a live account, installed plugin or successful model transport.
+Policy is captured before first assembly of a child turn and frozen through
+steps, retries and compaction. Late enabling affects the next turn. Nested
+following traverses verified direct-parent links; cycles fail explicitly.
+Auto evaluates the child's messages and capabilities, not the parent's last
+concrete model. Managed availability/exclusions and account/proof/cancellation
+guards remain independent.
 
-```text
-GitHub Copilot · Plugin settings
+Official child options and descriptor snapshots cannot distinguish omitted
+creation override from an explicit equal provider/model override. Enabling this
+policy authorizes replacement of creation-time snapshots; it does not claim
+to recover that original intent. Child-owned later `model/selection` evidence
+still wins. No descriptor/history/default write, automatic migration,
+`session.selectModel` propagation or Core patch is introduced.
 
-Subagent models
-Follow parent model                                [ Off ]
-Apply to existing and new supported subagents and Team mates.
+Legacy bindings remain separately active even with the broad switch Off.
+They use native child/direct-parent Session IDs, require matching lineage and
+retain stricter diagnostics. Ordinary users need no enrollment. See
+[Auto/native child boundaries](./automatic-model-routing.md#requested-parent-to-child-selection-inheritance).
 
-Fixed parent model → children follow on their next turn.
-Auto parent → each child chooses using its own context.
-Running turns stay unchanged. A child's own manual selection wins.
+## Evidence and limitations
 
-[ Save ]  [ Reload ]
+Policy, Client CAS/config and Host turn-boundary regressions cover fixed/Auto
+changes, every preference, independent child contexts, explicit selections,
+forks, missing parents, exclusions, turn freezing, disposal and refolding.
+The unchanged rc.2 AgentLoop fixture uses strict histories, real projections
+and synthetic adapter responses, not a paid endpoint or full Team orchestrator.
+Disk-backed resume, live Team UI and loaded Desktop state remain distinct
+acceptance layers.
 
-──────────────────────────────────────────────────────────
-Web search
-[ Existing search provider and fallback controls unchanged ]
-```
-
-On: the switch is checked, with the same short explanation. Unsaved change:
-Save is enabled and status says "Unsaved change." Saving: controls disabled,
-"Saving…" announced. Success: "Saved. Applies from each child's next turn."
-Read-only/loading/failure states disable mutation rather than pretend to save.
-An uncertain save requires Reload before retrying. No Session table, ID fields,
-discovery action, model picker or account-login dependency belongs here.
-
-The component inherits the page's system font, native controls and currentColor
-theme. Labels wrap on narrow windows; all actions work with keyboard and have
-visible native focus. There is no separate mobile composition or custom artwork.
-
-## Implemented contract
-
-1. Add live boolean `github-copilot.followParentModel`, default false. Retain
-   legacy `parentModelFollow` bindings unchanged, hidden from ordinary settings.
-   Off disables the broad policy; existing explicit bindings remain active.
-   If bindings exist, show a short read-only compatibility notice rather than
-   falsely promise that Off disables them.
-2. Extend the existing Host projection/resolver. Use actual `parentSession`
-   lineage and supported v3 spawn descriptors, not model-ID matching or global
-   defaults. Roots, fork descriptors, dedicated historical policies and
-   non-Copilot parents stay native under the broad policy. Missing eligible
-   parent evidence fails with a named diagnostic. Explicit bindings keep their
-   existing stricter diagnostics.
-3. Capture policy at the first assembly of a child turn. Preserve the same
-   selection for subsequent steps/retries, including changes to the switch.
-   Activation after an admitted step defers until the next turn. Follow exact
-   Auto preference through verified nested lineage, resolving per-child context.
-   No new history events, descriptor changes, session.selectModel calls,
-   credentials/default writes or Core implementation changes.
-4. Add one Client component using existing public Settings Remote describe and
-   path-level CAS mutation of `['followParentModel']`. Before saving, read the
-   current namespace: permit unrelated revision changes only if this leaf is
-   unchanged. Never blindly retry a conflict. A successful policy save passes
-   its exact previous/next revisions to the mounted search card; advance only
-   matching revision evidence without discarding unsaved search drafts.
-5. Add pure policy, Host turn-boundary, configuration, Client state/CAS and
-   unchanged native AgentLoop regressions. Visually inspect the actual component
-   at desktop/narrow widths using synthetic settings only.
-6. Run required Windows/Linux CI, package gates, reviewed merge and verified
-   GitHub/npm publication. Installation/restart is a separate user-authorized task.
-
-## Scope and evidence
-
-This is a profile-wide policy for supported native children whose effective
-parent route is `github-copilot-preview`; it is not cross-provider routing.
-Native Team creation labels are not rewritten. Current public APIs expose live
-parents; an unavailable cold parent cannot supply a guessed selection.
-Disabling broad following returns to native persisted routing on a later turn,
-not restoration of an old creation snapshot. Strict histories remain unchanged.
-
-The one-switch policy supersedes the ordinary per-child enrollment experience
-in [automatic model routing](automatic-model-routing.md); that document retains
-the exact-source investigation and alpha.66 compatibility background.
+The page uses actual native controls, wrapping labels and system theme; current
+documentation captures check desktop and narrow layouts. The earlier
+[one-switch design #234](https://github.com/cloga/dsh-github-copilot/issues/234)
+and [lineage investigation #229](https://github.com/cloga/dsh-github-copilot/issues/229)
+remain historical references, not pending ordinary-user setup steps.

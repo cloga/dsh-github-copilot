@@ -1,5 +1,9 @@
 # Official-first review: DSH 0.2.0-rc.1
 
+> **Historical review:** this preserves the earlier evaluation, not current
+> support or delivery readiness. Use the [rc.2 review](./official-first-020-rc2.md)
+> and current README for the supported host.
+
 ## Target and evidence boundary
 
 Candidate plugin **`0.4.0-alpha.38`** adds official Core **`0.2.0-rc.1`**, tag commit [`4878cdabd87d4041bdaff61d04c966883b9fd07a`](https://github.com/deepseek-ai/deepseek-harness/commit/4878cdabd87d4041bdaff61d04c966883b9fd07a), as the current target while retaining every earlier compatibility pin. The independently observed Windows Desktop feed also identifies `0.2.0-rc.1`; its Desktop package set is not materialized in this checkout. Source/API qualification, npm package fixtures, and Desktop installation/runtime qualification are separate evidence.

@@ -1,5 +1,9 @@
 # Official-first review: DSH 0.1.6-alpha.2
 
+> **Historical review:** this preserves the earlier evaluation, not current
+> support or delivery readiness. Use the [rc.2 review](./official-first-020-rc2.md)
+> and current README for the supported host.
+
 ## Target and evidence boundary
 
 Candidate plugin **`0.4.0-alpha.25`** adds the ninth exact target: official **`dsh-v0.1.6-alpha.2`**, commit **`ddefc45fbc7f8e46dd73185e68295696d1297887`**. All eight earlier pins remain, including the historical controlled Desktop baseline; development dependencies remain exactly `0.1.2-rc.1`. This review inspected the unchanged official source checkout read-only. Every official source link below is pinned to that commit, not a moving branch. The [official release notes](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.2) were also reviewed: runtime dependency resolution/unload and multiple coexisting Client Sessions make lifecycle and ownership checks mandatory; native subagent sidebar support is not frozen planner/executor policy parity. Native vision-input and Messages API fixes remain the adapter's responsibility, and the companion must not duplicate or override them. The new Plugin Manager owns persistent installation; this adaptation adds no dynamic-plugin replacement or installer. These notes plus source contracts are not published-artifact or installed-runtime qualification.
