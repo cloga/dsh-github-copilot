@@ -17,6 +17,8 @@ import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import { BlockAssembler, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW } from '../src/copilot-identity.ts'
 import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
+import { requestBodyEvidence } from '../src/request-body-evidence.ts'
+import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
 
 // Preserve the real factory by default; one observer identity test replaces only
 // its returned stream entrypoint, without modifying the installed ESM module.
@@ -361,6 +363,52 @@ describe('account provider model HTTP authorization observation', () => {
 
 describe('managed upload-timeout observation', () => {
   it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'captures final %s callback bytes and dispatch-local header time before clone observation', async api => {
+      const item = descriptor(api)
+      const diagnostic = vi.fn()
+      const { provider, models } = createAccountProvider([item], {
+        ...accountGuard(item.id), onRequestBodyTimeout: diagnostic,
+      }, baseURL)
+      let clock = 100
+      const timer = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+      const observer = vi.spyOn(timeoutDiagnostics, 'requestBodyTimeoutDiagnostic')
+      const image = api === 'anthropic-messages'
+        ? { type: 'image', source: { type: 'base64', data: 'AAAA', media_type: 'image/png' } }
+        : api === 'openai-responses' ? { type: 'input_image', image_url: 'data:image/png;base64,AAAA' }
+          : { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }
+      const conversation = [{ role: 'user', content: [{ type: 'text', text: 'PRIVATE_CALLBACK 中文' }, image] },
+        ...api === 'openai-responses' ? [{ type: 'reasoning', encrypted_content: 'PRIVATE_OPAQUE', summary: [] }]
+          : api === 'anthropic-messages' ? [{ role: 'assistant', content: [{ type: 'redacted_thinking', data: 'PRIVATE_OPAQUE' }] }] : []]
+      let finalBody = ''
+      const response = new Response(JSON.stringify({ code: 'user_request_timeout',
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' }), { status: 408 })
+      try {
+        const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+          finalBody = String(init?.body)
+          clock = 175
+          return response
+        })
+        const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+          apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+          onPayload(payload) {
+            if (typeof payload !== 'object' || payload === null) throw new Error('EXPECTED_NATIVE_PAYLOAD')
+            return { ...payload, [api === 'openai-responses' ? 'input' : 'messages']: conversation,
+              tools: [{ type: 'function', name: 'private_tool', parameters: { type: 'object' } }] }
+          },
+        })
+        for await (const _event of stream) { /* Native error remains SDK-owned. */ }
+        expect((await stream.result()).stopReason).toBe('error')
+        expect(observer.mock.lastCall?.[3]).toEqual({ protocol: api, responseHeadersMs: 75 })
+        expect(diagnostic.mock.lastCall?.[0]).toContain('75 ms (round trip, not upload duration)')
+        expect(diagnostic.mock.lastCall?.[0]).toContain(`image blocks ${Buffer.byteLength(JSON.stringify(image))}`)
+        expect(diagnostic.mock.lastCall?.[0]).toContain(`opaque replay ${api === 'openai-completions' ? 0 : Buffer.byteLength(JSON.stringify('PRIVATE_OPAQUE'))}`)
+        expect(diagnostic.mock.lastCall?.[0]).not.toContain('PRIVATE')
+        expect(observer.mock.lastCall?.[1]).toBe(finalBody)
+        expect(response.bodyUsed).toBe(true)
+        expect(fetch).toHaveBeenCalledTimes(1)
+      } finally { timer.mockRestore(); observer.mockRestore() }
+    })
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
     'observes verified %s timeout without changing bytes, Response, native retries or credential ownership', async api => {
       const item = descriptor(api)
       const onRequestBodyTimeout = vi.fn()
@@ -387,6 +435,10 @@ describe('managed upload-timeout observation', () => {
         `Request body: ${Buffer.byteLength(requestBody!, 'utf8')} UTF-8 bytes`,
       )
       expect(onUnauthorized).not.toHaveBeenCalled()
+      const evidence = requestBodyEvidence(requestBody, api)
+      if (evidence.state !== 'complete') throw new Error('fixture requires complete wire composition')
+      expect(onRequestBodyTimeout.mock.lastCall?.[0]).toContain(`conversation ${evidence.conversationBytes}`)
+      expect(onRequestBodyTimeout.mock.lastCall?.[0]).toMatch(/Fetch-to-response-headers: \d+ ms \(round trip, not upload duration\)/u)
       // Native SDK consumed the original, not a synthetic replacement response.
       expect(response.bodyUsed).toBe(true)
     },

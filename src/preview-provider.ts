@@ -245,12 +245,15 @@ export function createAccountProvider(
         guard.onRequestBodyTimeout?.(undefined)
         liveness?.beginRequest(typeof init?.body === 'string' ? init.body : undefined)
         let response: Response
+        const startedAt = performance.now()
         try { response = await fetch(input, init) }
         catch (error) { retry?.observe(undefined, 0); throw error }
+        const responseHeadersMs = performance.now() - startedAt
         retry?.observe(typeof init?.body === 'string' ? init.body : undefined, response.status)
         if (response.status === 408 && guard.onRequestBodyTimeout !== undefined) {
           const diagnostic = await requestBodyTimeoutDiagnostic(response,
-            typeof init?.body === 'string' ? init.body : undefined, lease.signal)
+            typeof init?.body === 'string' ? init.body : undefined, lease.signal,
+            { protocol: entry.api, responseHeadersMs })
           if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout(diagnostic)
         }
         // A bounded clone identifies only the observed request-scope rejection.
