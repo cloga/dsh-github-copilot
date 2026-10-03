@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.74 (prepared)
+
+- Add `/copilot-compact [status|cancel]` to the explicitly selected recovery engine when native commands/jobs are available (#244).
+- Acknowledge a Session-owned background job promptly instead of holding Desktop's unary command request past its response-header timeout. Preserve native `/compact`, maintenance locks and compaction transactions.
+- Deduplicate active starts, cancel and drain on teardown, and collect native settlement without waking the model or resuming a Goal. Admission is not completion; failed summaries retain their native diagnostics.
+
 ## 0.4.0-alpha.73 (prepared)
 
 - Prevent managed Copilot failure/cancellation terminal zero-usage samples from resetting native context pressure; preserve successful zero and real nonzero usage (#242).

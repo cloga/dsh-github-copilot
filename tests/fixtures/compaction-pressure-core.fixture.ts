@@ -11,6 +11,8 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
+import Commands from '@deepseek-ai/dsh-commands'
+import LocalJobs from '@deepseek-ai/dsh-jobs-local'
 import LlmRuntime, { LlmAdapter, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
@@ -40,7 +42,7 @@ const currentSentinel = 'CURRENT_REQUEST_SENTINEL'
 const checkpoint = 'RECOVERY_CHECKPOINT'
 const contexts: Context[] = []
 const expectedSessionFormatVersion = process.env.DSH_PUBLISHED_CORE_RELEASE?.startsWith('0.2.0-') ? 4 : 3
-type SummaryMode = 'stop' | 'max-tokens' | 'await-abort' | 'reject-overflow'
+type SummaryMode = 'stop' | 'max-tokens' | 'await-abort' | 'reject-overflow' | 'slow'
 
 vi.mock('@earendil-works/pi-ai/utils/estimate', async importOriginal => {
   const actual = await importOriginal<typeof PiEstimate>()
@@ -100,6 +102,12 @@ class FixtureAdapter extends LlmAdapter {
     if (summary) {
       this.summaries.push(observeRequest(options))
       this.summaryStarted.resolve()
+      if (this.summaryMode === 'slow') {
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, 360_000)
+          options.signal?.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
+        })
+      }
       if (this.summaryMode === 'reject-overflow' && Buffer.byteLength(JSON.stringify({
         messages: options.messages, tools: options.tools,
       }), 'utf8') > 12000) throw new Error('COPILOT_REQUEST_INPUT_LIMIT_EXCEEDED')
@@ -128,6 +136,63 @@ class FixtureAdapter extends LlmAdapter {
   }
 }
 
+describe('native background compaction lifetime', () => {
+  it('commits beyond the carrier deadline without a model wakeup and keeps status owner-scoped', async () => {
+    const f = await fixture('slow', true, false, true, true)
+    const settlements: boolean[] = []
+    f.ctx.jobs.events.subscribe({ owner: f.agent.id }, event => {
+      if (event.type === 'settled') settlements.push(event.awaited)
+    })
+    vi.useFakeTimers()
+    try {
+      const caller = new AbortController()
+      const admitted = await f.ctx.commands.execute(f.agent, '/copilot-compact', [], caller.signal)
+      expect(admitted?.result.text).toContain('started, not completed')
+      await f.adapter.summaryStarted.promise
+      const job = f.ctx.jobs.list(f.agent.id).find(item => item.kind === 'copilot-compaction')!
+        expect(job.owner).toBe(f.agent.id)
+      caller.abort()
+      await vi.advanceTimersByTimeAsync(305_000)
+      expect(f.ctx.jobs.get(job.id, f.agent.id).status).toBe('running')
+      expect(f.agent.session.surface.replaceGeneration).toBe(f.originalGeneration)
+      const duplicate = await f.ctx.commands.execute(f.agent, '/copilot-compact', [], new AbortController().signal)
+      expect(duplicate?.result.text).toContain('already running')
+      await vi.advanceTimersByTimeAsync(55_000)
+      expect(f.ctx.jobs.get(job.id, f.agent.id).status).toBe('completed')
+      expect(settlements).toEqual([true])
+      expect(f.agent.session.surface.replaceGeneration).toBeGreaterThan(f.originalGeneration)
+      expect(f.events.filter(event => event.type === 'compaction/summary')).toHaveLength(1)
+      expect(f.adapter.conversation).toHaveLength(1)
+      expect(f.agent.status).toBe('idle')
+      expect(f.forbiddenFetch).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each(['cancel', 'unload', 'owner-disposal'] as const)('drains native recovery without replacing history on %s', async action => {
+    const f = await fixture('await-abort', true, false, true, true)
+    const admitted = await f.ctx.commands.execute(f.agent, '/copilot-compact', [], new AbortController().signal)
+    expect(admitted?.result.text).toContain('started')
+    await f.adapter.summaryStarted.promise
+    const job = f.ctx.jobs.list(f.agent.id).find(item => item.kind === 'copilot-compaction')!
+    const settled = f.ctx.jobs.wait(job.id, 1000, f.agent.id)
+    if (action === 'cancel') {
+      const cancelled = await f.ctx.commands.execute(f.agent, '/copilot-compact cancel', [], new AbortController().signal)
+      expect(cancelled?.result.text).toContain('requested')
+    } else if (action === 'unload') {
+      await f.engineMount.dispose()
+      expect(f.ctx.commands.list(f.agent).some(command => command.name === 'copilot-compact')).toBe(false)
+    } else {
+      await f.ownerHandle!.dispose()
+    }
+    // Owner teardown cancels native maintenance before jobs receive agent/disposed.
+    expect((await settled).status).toBe(action === 'owner-disposal' ? 'failed' : 'killed')
+    expect(f.agent.session.surface.replaceGeneration).toBe(f.originalGeneration)
+    expect(f.events.filter(event => event.type === 'compaction/summary')).toHaveLength(0)
+    expect(f.events.filter(event => event.type === 'compaction/start')).toHaveLength(1)
+    expect(f.events.filter(event => event.type === 'compaction/end')).toHaveLength(1)
+  })
+})
+
 beforeAll(() => {
   expect(['tagged-source-runtime', 'installed-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
   expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
@@ -147,7 +212,7 @@ afterEach(async () => {
   }
 })
 
-async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmission = false, recoveryEngine = recovery) {
+async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmission = false, recoveryEngine = recovery, background = false) {
   const ctx = new Context()
   contexts.push(ctx)
   const forbiddenFetch = vi.fn((): never => { throw new Error('compaction-fixture-network-forbidden') })
@@ -160,6 +225,10 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(TokenMeter)
+  if (background) {
+    await ctx.plugin(Commands)
+    await ctx.plugin(LocalJobs)
+  }
   const compactionConfig = {
     auto: true,
     thresholdRatio: 1,
@@ -168,8 +237,10 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
     compactionRetries: 0,
     maxOverflowRetries: 1,
   }
-  if (recoveryEngine) await ctx.plugin(CopilotManualRecoveryCompactionEngine, compactionConfig)
-  else await ctx.plugin(BasicCompactionEngine, compactionConfig)
+  const engineMount = recoveryEngine
+    ? ctx.plugin(CopilotManualRecoveryCompactionEngine, compactionConfig)
+    : ctx.plugin(BasicCompactionEngine, compactionConfig)
+  await engineMount
   expect(ctx.compaction).toBeInstanceOf(BasicCompactionEngine)
   expect(ctx.tokenMeter).toBeInstanceOf(TokenMeter)
   const adapter = new FixtureAdapter(mode)
@@ -229,7 +300,10 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   // Consume the post-commit public event feed, not synchronous Session-history
   // APIs or manufactured baseline-specific assistant/chunk seed records.
   ctx.on('session/event', (session, event) => { if (session.id === id) events.push(event) })
-  const agent = await ctx.agentLoop.create(id, { provider, model, maxTokens: 8192 })
+  const ownerHandle = background
+    ? await ctx.agents.create({ sessionId: id, agentOptions: { provider, model, maxTokens: 8192 } })
+    : undefined
+  const agent = ownerHandle?.agent ?? await ctx.agentLoop.create(id, { provider, model, maxTokens: 8192 })
   const send = (text: string): void => {
     agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
   }
@@ -248,7 +322,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   expect(originalTokens).toBeLessThan(contextWindow)
 
   return {
-    ctx, adapter, agent, events, failures, priced, forbiddenFetch, seedCount, originalGeneration, originalTokens, removeAdapter,
+    ctx, adapter, agent, events, failures, priced, forbiddenFetch, seedCount, originalGeneration, originalTokens, removeAdapter, engineMount, ownerHandle,
     autoLoads: () => autoLoads,
     oldUserSeq: oldUser!.seq,
     enable(budget = 1000, selectedModel = 'fixture-model-B') { inputBudgetTokens = budget; model = selectedModel },

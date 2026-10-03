@@ -14,7 +14,25 @@ Recovery must leave the original Session surface intact until a smaller *complet
 
 The plugin's account service supplies a current descriptor and a revocable proof without starting discovery or reading credentials into the Client. The summary budget uses `min(maxInputTokens, contextWindow - configuredOutputCap) - safetyTokens`; an additional 4096-token allowance covers Core's appended directive and estimation variance. Each candidate request is conservatively bounded by serialized UTF-8 size including system, tools, prior intermediate checkpoint and current messages. Native managed-route admission remains the final authority. A call that still exceeds that guard fails; it is never retried with a hidden wire rewrite.
 
-The hook partitions the *original* span only at balanced boundaries, summarizes each part through `super.summarize`, and supplies the previous completed intermediate checkpoint as context for the next call. Thus the last completed summary contains all processed parts in chronological order. Default maximum: 16 calls (hard maximum 32); each carries the native cancellation signal and checks account proof before and after dispatch. The original surface is not modified between calls. Core checks for a smaller replacement and current source after the final result; any failure closes the native marker without a replacement. No background job starts this process.
+The hook partitions the *original* span only at balanced boundaries, summarizes each part through `super.summarize`, and supplies the previous completed intermediate checkpoint as context for the next call. Thus the last completed summary contains all processed parts in chronological order. Default maximum: 16 calls (hard maximum 32); each carries the native cancellation signal and checks account proof before and after dispatch. The original surface is not modified between calls. Core checks for a smaller replacement and current source after the final result; any failure closes the native marker without a replacement. Only an explicit manual command starts this process.
+
+## Background command for Desktop
+
+With this engine selected and the public `commands` and `jobs` services available in its scope, use:
+
+```text
+/copilot-compact
+/copilot-compact status
+/copilot-compact cancel
+```
+
+The jobs package is a development-only type dependency: the plugin imports no jobs runtime implementation, and the engine's public declaration does not expose its types. Runtime access is through the optionally injected Host service; no jobs package is bundled, installed as a new peer, or registered by this plugin.
+
+The first command acknowledges **job admission**, not a completed summary. The existing native `/compact` command remains unchanged. Desktop rc.2 forwards unary command requests through Node `fetch`; a long synchronous compact can exceed the default 300-second response-header wait and lose its caller connection. The background command returns promptly and transfers work to a Session-owned native job with its own cancellation controller. A later HTTP disconnect does not cancel admitted work.
+
+Status and cancellation apply only to the invoking Agent's latest job. Duplicate starts return the current running job rather than starting another transaction. The selected engine still acquires Core's maintenance lock and owns the only native transaction; another active turn or compaction can cause the admitted job to fail. Job status distinguishes running, completed, failed and cancelled work. Failure details are sanitized; consult the native compaction/end record for the underlying summary/transaction diagnostic. Provider timeout, truncation, capacity and account-proof failures remain failures.
+
+The plugin collects the job's native settlement with `jobs.wait`, so the ordinary job reporter does not wake the model or resume its Goal. It never calls followup or inject. Explicit cancellation, owner disposal and plugin/Host teardown cancel and drain the producer. Owner teardown can fail native maintenance before the job receives cancellation; that outcome remains failed rather than being relabeled successful or cancelled. Jobs are process-local: status does not survive a Host restart, and the plugin does not silently restart interrupted work. Durable Core compaction events remain the outcome evidence. Merely installing the main plugin does not select this engine or make this command available; missing commands/jobs services leave the background entry unavailable without changing ordinary compaction.
 
 **Audit:** each physical call goes through Core's public `llm.stream` seam with its actual route/cap. The final native summary event is intentionally *unmarked* (`llmStreamCall` absent), not a fabricated claim of one call. It records summed provider-reported usage only when **every** underlying call supplied usage; optional counters are included only if present on every call. The native event format has no per-call array or durable per-call transcript in a single summary event; do not infer individual request accounting from that aggregate. This is a real observability limit of the unchanged public contract.
 

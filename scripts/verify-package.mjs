@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import vm from 'node:vm'
@@ -75,6 +75,20 @@ for (const symbol of baseline.requiredExports['.']) {
 }
 if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
   throw new Error('built Host must export apply and inject')
+}
+
+const recovery = await import(pathToFileURL(resolve(root, 'lib/manual-compaction-recovery.js')).href)
+if (typeof recovery.default !== 'function') throw new Error('built recovery engine must remain independently importable')
+for (const file of (await readdir(resolve(root, 'lib'))).filter(file => file.endsWith('.js'))) {
+  if ((await readFile(resolve(root, 'lib', file), 'utf8')).includes('@deepseek-ai/dsh-jobs')) {
+    throw new Error('jobs must remain a type-only development dependency, not a bundled runtime import')
+  }
+}
+const recoveryTypes = await readFile(resolve(root, 'lib/types/manual-compaction-recovery.d.ts'), 'utf8')
+if (/dsh-jobs|background-compaction/u.test(recoveryTypes)
+  || packageJson.devDependencies?.['@deepseek-ai/dsh-jobs'] === undefined
+  || ['dependencies', 'optionalDependencies', 'peerDependencies'].some(field => packageJson[field]?.['@deepseek-ai/dsh-jobs'] !== undefined)) {
+  throw new Error('recovery public declarations and deployment must not require the jobs type dependency')
 }
 
 const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)).default

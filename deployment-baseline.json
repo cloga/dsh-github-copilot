@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.73"
+    "version": "0.4.0-alpha.74"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -471,6 +471,8 @@
       "sourceMarkers": [
         {"file": "src/manual-compaction-recovery.ts", "marker": "extends BasicCompactionEngine"},
         {"file": "src/manual-compaction-recovery.ts", "marker": "COPILOT_MANUAL_RECOVERY_"},
+        {"file": "src/background-compaction.ts", "marker": "copilot-compact"},
+        {"file": "src/background-compaction.ts", "marker": "this.jobs.wait(jobId"},
         {"file": "src/preview-route.ts", "marker": "recoveryLimits(modelId)"},
         {"file": "docs/manual-compaction-recovery.md", "marker": "separately selected"}
       ],
@@ -478,6 +480,8 @@
         {"file": "tests/manual-compaction-recovery.spec.ts", "name": "reduces an oversized balanced history with bounded complete calls and an unmarked aggregate audit"},
         {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects an indivisible span before dispatch and leaves recovery to native failure handling"},
         {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects unmatched tool calls before dispatch instead of splitting a call and result"},
+        {"file": "tests/background-compaction.spec.ts", "name": "acknowledges before completion and outlives a five-minute caller deadline"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "commits beyond the carrier deadline without a model wakeup and keeps status owner-scoped"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "recovers oversized manual history with one native transaction and honest multi-call audit"}
       ]
     },
