@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createUserMessage, LlmError } from '@deepseek-ai/dsh-llm'
 import type { AccountModelDescriptor } from './account-model-catalog.ts'
+import { agentCompaction } from './agent-compaction.ts'
 import { AutoModelRoutingError, selectAutoModel } from './auto-model-routing.ts'
 import type { AutoModelDecision, AutoModelRoutingContext } from './auto-model-routing.ts'
 import { autoModelPreference, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
@@ -85,7 +86,7 @@ function buildRoutingContext(
     return value
   }
   const sessionId = typeof agent.session?.id === 'string' ? agent.session.id : undefined
-  const compaction: unknown = (ctx as unknown as { get(name: string): unknown }).get('compaction')
+  const compaction = agentCompaction(agent)
   const compactionConfig = record(compaction) && record(compaction.config) ? compaction.config : undefined
   const compactionAvailable = compaction !== undefined
     && compactionConfig?.auto !== false
