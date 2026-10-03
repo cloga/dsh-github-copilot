@@ -8,7 +8,7 @@ import type {
 } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 import { strictRemoteCodec } from './remote-codec.ts'
-import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
+import type { GitHubCopilotAuthorizationView, GitHubCopilotModelPreferencesView } from './authorization-controller.ts'
 import type { GitHubCopilotMigrationStatus } from './migration-status.ts'
 import dualModelRemote from './dual-model-remote.ts'
 import searchRoutingRemote from './search-routing-remote.ts'
@@ -25,6 +25,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       ensureModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       excludeModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       restoreModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      setModelExcluded(modelId: string, excluded: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       cancel(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       signOut(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -92,6 +93,7 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
 }).strict()
 
 const result = strictRemoteCodec(GITHUB_COPILOT_AUTHORIZATION_VIEW_TYPE_SYMBOL, GitHubCopilotAuthorizationViewSchema)
+export const GitHubCopilotModelPreferencesViewSchema = GitHubCopilotAuthorizationViewSchema.shape.modelPreferences.unwrap()
 
 export const GITHUB_COPILOT_MIGRATION_STATUS_TYPE_SYMBOL
   = 'dsh-github-copilot#GitHubCopilotMigrationStatus'
@@ -150,6 +152,18 @@ const contribution: TypertRemoteContribution = {
       }],
       result,
     })),
+    {
+      id: 'dsh-github-copilot:githubCopilot.setModelExcluded',
+      service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'setModelExcluded',
+      invocation: direct,
+      parameters: [
+        { name: 'modelId', wire: 'modelId', source: 'json',
+          codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelId', z.string().min(1).max(512)) },
+        { name: 'excluded', wire: 'excluded', source: 'json',
+          codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelExcluded', z.boolean()) },
+      ],
+      result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelPreferencesView', GitHubCopilotModelPreferencesViewSchema),
+    },
     {
       id: 'dsh-github-copilot:githubCopilot.migrationStatus',
       service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'migrationStatus',
