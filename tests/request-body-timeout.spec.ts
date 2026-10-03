@@ -1,10 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
 import { requestBodyTimeoutDiagnostic } from '../src/request-body-timeout.ts'
+import * as bodyEvidence from '../src/request-body-evidence.ts'
 
 const error = { code: 'user_request_timeout',
   message: 'Timed out reading request body. Try again, or use a smaller request size.' }
 
 describe('verified request-body timeout diagnostics', () => {
+  it('analyzes only verified failures and reports honest header timing without leaking final payload', async () => {
+    const observer = vi.spyOn(bodyEvidence, 'requestBodyEvidence')
+    try {
+      const body = '{"input":[{"role":"user","content":[{"type":"input_image","file_id":"SECRET"}]}],"tools":[]}'
+      expect(await requestBodyTimeoutDiagnostic(new Response('{}', { status: 408 }), body,
+        undefined, { protocol: 'openai-responses', responseHeadersMs: 125.4 })).toBeUndefined()
+      expect(observer).not.toHaveBeenCalled()
+      const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408 }),
+        body, undefined, { protocol: 'openai-responses', responseHeadersMs: 125.4 })
+      expect(observer).toHaveBeenCalledExactlyOnceWith(body, 'openai-responses')
+      expect(text).toContain('Composition (wire UTF-8 bytes)')
+      expect(text).toContain('125 ms (round trip, not upload duration)')
+      expect(text).not.toContain('SECRET')
+    } finally { observer.mockRestore() }
+  })
   it.each([error, { error }])('recognizes the observed structured 408 without leaking body text', async body => {
     const response = new Response(JSON.stringify({ ...body, private: 'SECRET_RESPONSE' }), { status: 408 })
     const text = await requestBodyTimeoutDiagnostic(response, '{"input":"中文"}')
@@ -31,6 +47,18 @@ describe('verified request-body timeout diagnostics', () => {
   it('reports unknown request bytes honestly without serializing arbitrary bodies', async () => {
     const response = new Response(JSON.stringify(error), { status: 408 })
     expect(await requestBodyTimeoutDiagnostic(response)).toContain('Request body size unavailable')
+  })
+  it('reports bounded composition failure explicitly without changing a verified native error', async () => {
+    for (const body of [undefined, '{"input":"plain"}', 'invalid']) {
+      const response = new Response(JSON.stringify(error), { status: 408 })
+      const text = await requestBodyTimeoutDiagnostic(response, body, undefined,
+        { protocol: 'openai-responses', responseHeadersMs: 75 })
+      expect(text).toContain('Composition unavailable')
+      expect(text).toContain('no partial totals inferred')
+      expect(text).toContain('75 ms')
+      expect(text).toContain('Native retry policy is unchanged')
+      expect(await response.json()).toEqual(error)
+    }
   })
 
   it('does not infer a diagnostic from malformed or oversized bodies', async () => {

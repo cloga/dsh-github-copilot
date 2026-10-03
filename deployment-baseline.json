@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.83"
+    "version": "0.4.0-alpha.84"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -572,6 +572,7 @@
         {"file": "src/remote.ts", "marker": "githubCopilot.setModelExcluded"},
         {"file": "src/preview-provider.ts", "marker": "native.streamSimple"},
         {"file": "src/request-body-timeout.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
+        {"file": "src/request-body-evidence.ts", "marker": "REQUEST_BODY_EVIDENCE_LIMITS"},
         {"file": "src/copilot-stream-liveness.ts", "marker": "COPILOT_STREAM_IDLE_TIMEOUT"},
         {"file": "src/preview-route.ts", "marker": "Math.min(idle * 2, 2_147_483_647)"},
         {"file": "src/response-error-body.ts", "marker": "readResponseErrorJson"},
@@ -591,6 +592,8 @@
         {"file": "tests/preview-route.spec.ts", "name": "enriches only a verified 408 while preserving native failure classification and retry ownership"},
         {"file": "tests/preview-provider.spec.ts", "name": "observes verified %s timeout without changing bytes, Response, native retries or credential ownership"},
         {"file": "tests/request-body-timeout.spec.ts", "name": "bounds stalled response observation and gives cancellation priority"},
+        {"file": "tests/request-body-evidence.spec.ts", "name": "measures a nine MiB native-style inline image without exposing or decoding it"},
+        {"file": "tests/preview-provider.spec.ts", "name": "captures final %s callback bytes and dispatch-local header time before clone observation"},
         {"file": "tests/copilot-stream-liveness.spec.ts", "name": "does not count consumer think time as provider idle"},
         {"file": "tests/copilot-stream-adapter.spec.ts", "name": "reproduces native semantic timeout despite ongoing SSE bytes"},
         {"file": "tests/copilot-stream-adapter.spec.ts", "name": "allows real late output after the original semantic-idle boundary"},

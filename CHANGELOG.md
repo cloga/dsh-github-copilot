@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.84 (prepared)
+
+- Add bounded numeric composition of the actual final request for verified Copilot `408 / user_request_timeout`, distinguishing conversation, tool definitions, protocol-owned system/instructions and residual framing (#263).
+- Within conversation, count structural image blocks and opaque replay as disjoint wire-byte subsets without decoding or reporting their content. Missing, unsupported, malformed and work-limited evidence remains explicit.
+- Capture per-dispatch fetch-to-response-header elapsed time before clone observation, honestly labeled as round trip rather than upload duration. Preserve native payload/response bytes, failure classification, retry, cancellation and credentials; no automatic settings change, trimming, compaction or model switch. Diagnostics guide explicit mitigation, not a claim to cure recurring 408.
+
 ## 0.4.0-alpha.83 (prepared)
 
 - Reduce avoidable Auto uncertainty through bounded difficult-task continuation and isolated fenced mechanical-transform recognition (#262); preserve unknown for new, incomplete and ambiguous work.

@@ -213,6 +213,8 @@ describe('managed request-body timeout guidance', () => {
     const first = result.assembler.finish.failure
     expect(first.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
     expect(first.message).toContain(`Request body: ${Buffer.byteLength(body, 'utf8')} UTF-8 bytes`)
+    expect(first.message).toContain('Composition (wire UTF-8 bytes)')
+    expect(first.message).toMatch(/Fetch-to-response-headers: \d+ ms/u)
     expect(first.message).not.toContain('SECRET_PROVIDER_BODY')
     expect({ ...first, message: undefined }).toEqual({ ...native, message: undefined })
     expect(fetch).toHaveBeenCalledTimes(2)
@@ -225,8 +227,10 @@ describe('managed request-body timeout guidance', () => {
 
   it('does not leak a timeout diagnostic between concurrent prepared and direct dispatches', async () => {
     let calls = 0
-    const fetch = vi.fn(async () => {
+    let failedBodyBytes = 0
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
       calls++
+      if (calls === 1) failedBodyBytes = Buffer.byteLength(String(init?.body))
       return calls === 1
         ? new Response(JSON.stringify({ code: 'user_request_timeout',
           message: 'Timed out reading request body. Try again, or use a smaller request size.' }), { status: 408 })
@@ -243,7 +247,11 @@ describe('managed request-body timeout guidance', () => {
     const endings = [result.assembler.finish, ...chunks.filter(chunk => chunk.type === 'finish').map(chunk => chunk.reason)]
     expect(endings.filter(reason => reason.kind === 'error')).toHaveLength(1)
     expect(endings.filter(reason => reason.kind === 'stop')).toHaveLength(1)
-    for (const reason of endings) if (reason.kind === 'error') expect(reason.failure.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+    for (const reason of endings) if (reason.kind === 'error') {
+      expect(reason.failure.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+      expect(reason.failure.message).toContain(`Request body: ${failedBodyBytes} UTF-8 bytes`)
+      expect(reason.failure.message).toContain('Composition (wire UTF-8 bytes)')
+    }
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 })
