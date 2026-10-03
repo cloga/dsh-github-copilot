@@ -30,6 +30,24 @@ An additive composer disclosure identifies missing or unreliable context evidenc
 
 Local synthetic tests establish guarded-stream, historical-fold and presentation behavior only. Exact published-adapter and public-registry acceptance, complete CI, publication and loaded Desktop state must be verified separately. No live provider call or Session restart is needed for these tests.
 
+## Missing completed-turn Usage
+
+### Observed plugin/Core integration gap (#259)
+
+One observed completed turn contained 57 successful assistant messages with reported usage and one failed `assistant/attempt` without a usage sample. That attempt recorded the plugin's exact local estimated-input-budget diagnostic: 796299 estimated tokens exceeded a 781113-token input budget, before provider dispatch. Native compaction recovered and the subsequent steps completed. No conversation content, credentials or opaque replay is needed to explain this observation; the exact loaded plugin bytes were not independently attested.
+
+Official rc.2 `deriveTurnTokenUsage` requires complete lifecycle and exact usage for every attempt. One attempt without a sample makes its whole-turn result unavailable, so `TurnTailNodeView` omits native Usage. This is Core's existing fail-closed accounting rule triggered by our preventive pressure path, not evidence that all requests had no usage and not a regression in single-model exclusion saves.
+
+### Plugin-local explanation
+
+A plugin-owned public conversation definition retains only bounded counts of settlements without reported samples and finish-only attempts with the exact recorded local diagnostic. On a completed Copilot reply whose native tail has no `tokenUsage`, the additive assistant-actions control opens **Turn Usage unavailable**. It uses the incumbent nonmodal popover pattern rather than expanding the native fixed-height footer.
+
+The explanation distinguishes recorded local budget blocks, other settlements without samples, and missing turn-start/projection evidence. Generic provider overflow is never labeled pre-dispatch. Invalid reported samples and missing lifecycle boundaries can also make native accounting unavailable; if no cause is established, the explanation remains unknown rather than reimplementing the native validator. Projection and selection Remote failures remain independent, with named diagnostics; Retry only rereads selection evidence, never inference or accounting.
+
+The control is historical evidence, not current context occupancy, account credits, dispatch attestation or a supplier receipt. It adds no token sum or fabricated zero usage, changes no native projection key, reads no opaque replay, and rewrites no history. Native complete Usage suppresses the explanation. Ordinary pressure protection, compaction transactions, errors, cancellation and retry remain unchanged. Removing the plugin removes the explanation without a data migration.
+
+Synthetic unit/UI tests and exact unchanged Core accounting/registry fixtures prove these boundaries, not live provider receipts or loaded Desktop behavior. A native representation for unbilled pre-dispatch attempts may eventually remove the gap, but would require a separately requested upstream scope; it is not a prerequisite for this plugin-local explanation. Retire the companion diagnostic when native public presentation communicates the same uncertainty and the supported-version acceptance is verified.
+
 ## Account data boundary
 
 The Host uses the existing `llm-pi-ai/github-copilot` OAuth grant through public credential APIs. GitHub's `copilot_internal/user` endpoint uses the GitHub grant, not a second sign-in or a newly pasted token. Access-token renewal remains owned by pi-ai; quota inspection must not introduce a refresh implementation or credential persistence.

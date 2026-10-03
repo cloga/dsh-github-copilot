@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.82 (prepared)
+
+- Explain missing native Turn Usage on completed Copilot replies through a plugin-owned read-only conversation projection and a compact, keyboard-accessible footer disclosure (#259).
+- Distinguish the exact recorded local pre-dispatch input-budget block, other settlements without usage, and incomplete history. A recovered turn can contain reported successful steps without a provable whole-turn total.
+- Preserve native Usage when complete; do not fabricate zero usage, aggregate partial totals, change history or replace compaction/retry ownership. Record the observed plugin/Core integration gap and its limits.
+
 ## 0.4.0-alpha.81 (prepared)
 
 - Route Auto through current supplier Powerful/Versatile/Lightweight categories and contextual task evidence instead of advertised-capacity bands (#258). Preserve hard input/image/exclusion/account admission and native no-fit recovery.

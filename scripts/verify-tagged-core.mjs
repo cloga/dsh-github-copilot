@@ -23,7 +23,7 @@ function runtimeTests(release) {
     ? [...tests, ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
         ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         ...release.startsWith('0.2.0-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
-        ...release === '0.2.0-rc.2' ? ['tests/fixtures/scoped-compaction-core.fixture.ts', 'tests/fixtures/model-exclusions-core.fixture.ts', 'tests/copilot-stream-liveness.spec.ts', 'tests/copilot-stream-adapter.spec.ts'] : [],
+        ...release === '0.2.0-rc.2' ? ['tests/fixtures/scoped-compaction-core.fixture.ts', 'tests/fixtures/model-exclusions-core.fixture.ts', 'tests/fixtures/turn-usage-core.fixture.ts', 'tests/copilot-stream-liveness.spec.ts', 'tests/copilot-stream-adapter.spec.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts']
     : tests
 }
