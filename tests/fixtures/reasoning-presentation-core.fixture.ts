@@ -29,6 +29,75 @@ const reply = (provider = 'github-copilot') => event(2, 'assistant/message', {
 const prefix = [event(0, 'turn/start', { turn: 1 }), event(1, 'step/start', { turn: 1, step: 1 })]
 
 describe('Copilot reasoning presentation against real Core services', () => {
+  it.each(['replace', 'append'] as const)('explains missing turn Usage through native assembly and scoped actions (%s)', async mode => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+    const ctx = new Context()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    try {
+      await ctx.plugin(SlotRegistry)
+      const events = new ConversationEventRegistry(ctx)
+      const views = new ConversationViewRegistry(ctx)
+      events.register(assistantDefinition)
+      events.register(turnTailDefinition)
+      views.register(chatViewDefinition)
+      ctx.slots.install(createSlotRenderer())
+      const remove = installAutoModelPresentation({
+        slots: ctx.slots, uiConversation: { events }, diagnostic: vi.fn(),
+        remote: { githubCopilotTurnSelection: { get: async () => ({ ok: true, value: { mode: 'manual' } }) } },
+      })
+      const assembler = new ConversationNodeAssembler(events, views)
+      assembler.activateTarget('chat')
+      const records = [
+        ...prefix,
+        event(2, 'assistant/attempt', { turn: 1, step: 1, stream: [{ type: 'chunk', time: 2, chunk: {
+          type: 'finish', reason: { kind: 'error', failure: {
+            code: 'CONTEXT_WINDOW_EXCEEDED',
+            message: 'Copilot local estimated input budget exceeded (796299 estimated tokens > 781113 budget tokens); requesting stock compaction before provider dispatch.',
+          } },
+        } }] }),
+        event(3, 'assistant/message', {
+          turn: 1, step: 1, stream: [], usage: { inputTokens: 3, outputTokens: 113, totalTokens: 32601 },
+          message: { id: 'usage-fixture-reply', role: 'assistant',
+            source: { kind: 'model', provider: 'github-copilot-preview', model: 'fixture-model' },
+            content: [{ type: 'text', text: 'Synthetic recovered completion.' }] },
+        }),
+        event(4, 'step/end', { turn: 1, step: 1 }),
+        event(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+      ]
+      const original = JSON.stringify(records)
+      if (mode === 'replace') assembler.replaceWindow(records as never, false)
+      else {
+        assembler.replaceWindow([], false)
+        assembler.flush()
+        for (const record of records) { assembler.append(record as never); assembler.flush() }
+      }
+      assembler.flush()
+      const snapshot = assembler.snapshot('chat')
+      const binding = { key: 'fixture-session', ctx, props: { sessionId: 'fixture-session' }, keyedHooks: {},
+        hooks: { chat: { getSnapshot: () => snapshot, subscribe: () => () => {} } } }
+      const source = { getSnapshot: () => binding, subscribe: () => () => {} }
+      ctx.slots.installScope('session', { current: source, bindingSource: () => source, renderArea: (_, props) => props.children })
+      ctx.slots.register({
+        name: 'root', children: { 'conversation.chat.assistant-actions': { kind: 'list', scope: 'session' } },
+      }, props => createElement(props.SessionProvider, { session: 'fixture-session' as never },
+        props.renderSlot('conversation.chat.assistant-actions', { messageId: 'usage-fixture-reply' as never })))
+      await act(async () => root.render(ctx.slots.renderSlot('root', {})))
+      const trigger = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Turn Usage unavailable')
+      if (!trigger) throw new Error('Missing native fixture Usage explanation')
+      await act(async () => trigger.click())
+      expect(container.querySelector('[role=dialog]')?.textContent).toContain('1 local input-budget block')
+      expect(container.querySelector('[role=dialog]')?.textContent).not.toContain('32601')
+      expect(JSON.stringify(records)).toBe(original)
+      await act(async () => remove())
+      expect(container.textContent).toBe('')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+      await ctx.fiber.dispose()
+    }
+  })
   it.each(['replace', 'append'] as const)('renders retained Auto evidence without optional projections through native %s and slots', async mode => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     const ctx = new Context()

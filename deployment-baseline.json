@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.81"
+    "version": "0.4.0-alpha.82"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -288,6 +288,25 @@
     ]
   },
   "capabilities": [
+    {
+      "id": "missing-turn-usage-explanation",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/turn-usage-evidence.ts", "marker": "github-copilot-turn-usage-evidence"},
+        {"file": "src/turn-usage-evidence.ts", "marker": "tail.tokenUsage !== undefined"},
+        {"file": "src/turn-usage-notice.ts", "marker": "Turn Usage unavailable"},
+        {"file": "src/auto-model-presentation.ts", "marker": "turnUsageEvidenceDefinition"},
+        {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/turn-usage-core.fixture.ts"}
+      ],
+      "tests": [
+        {"file": "tests/turn-usage-evidence.spec.ts", "name": "explains a recovered local block alongside reported successful steps without summing tokens"},
+        {"file": "tests/turn-usage-evidence.spec.ts", "name": "does not label generic overflow, provider errors or ambiguous streams as pre-dispatch"},
+        {"file": "tests/turn-usage-notice.spec.ts", "name": "keeps the fixed-height footer compact and opens a bounded nonmodal explanation"},
+        {"file": "tests/turn-usage-integration.spec.ts", "name": "explains native missing usage even when the independent selection Remote fails"},
+        {"file": "tests/fixtures/turn-usage-core.fixture.ts", "name": "reproduces the finish-only local block and explains it without changing native accounting"},
+        {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "explains missing turn Usage through native assembly and scoped actions (%s)"}
+      ]
+    },
     {
       "id": "historical-context-evidence",
       "required": true,

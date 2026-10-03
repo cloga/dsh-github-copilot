@@ -41,6 +41,10 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(Array.isArray(contract.entrypoints) && contract.entrypoints.includes('AGENTS.md'), 'authoritative entrypoint is missing')
   for (const path of contract.entrypoints) await file(path)
   require(contract.tasks && Object.keys(contract.tasks).length > 0, 'task directory is missing')
+  require(contract.tasks.history?.read?.includes('src/turn-usage-evidence.ts')
+    && contract.tasks.history?.tests?.includes('tests/fixtures/turn-usage-core.fixture.ts')
+    && contract.tasks.history?.risk?.includes('No fabricated zero usage, partial token totals'),
+  'missing Turn Usage explanation must preserve native accounting and exact-source evidence')
   for (const [name, task] of Object.entries(contract.tasks)) {
     require(/^[a-z]+$/.test(name), 'invalid task id')
     require(typeof task.purpose === 'string' && typeof task.risk === 'string', `${name} needs purpose and risk`)

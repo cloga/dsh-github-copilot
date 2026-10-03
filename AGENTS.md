@@ -240,6 +240,8 @@ Never say GPT-6/search works merely because settings, typecheck or a package imp
 
 ## Changing capabilities
 
+Completed-turn Usage diagnostics (#259) are read-only plugin conversation data and an additive assistant-actions explanation. Official rc.2 hides its total if any attempt lacks complete accounting; the plugin's finish-only pre-dispatch pressure block can trigger this rule even after recovery. Never fabricate zero usage or replace it with successful-step partial totals. Identify local interception only from its exact recorded finish-only diagnostic, keep other missing samples and paged evidence uncertain, and suppress the explanation whenever native `tokenUsage` exists. Preserve native accounting, history, pressure and recovery; see `docs/copilot-usage.md`.
+
 Auto task routing (#258) uses current `model_picker_category` facts, never model
 names, effort or context capacity as a quality category. Hard eligibility/input
 fit precede task/preference policy; unknown category and uncertain task evidence
