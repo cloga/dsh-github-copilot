@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import { foldFollowState, initialFollowState, PARENT_MODEL_FOLLOW_PROJECTION } from '../src/parent-model-follow.ts'
 import { installAutoModelRouting as installRouting } from '../src/auto-model-host.ts'
+import * as routing from '../src/auto-model-routing.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
   GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID as INTELLIGENCE, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
@@ -47,6 +48,34 @@ function message(text: string) {
 }
 
 describe('Auto model Host integration', () => {
+  it.each([true, false, undefined])('uses owning preset recovery availability (%s) for Auto diagnostics', async auto => {
+    const ctx = new Context()
+    const agent = { ctx, session: { requestHeader: () => undefined } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const serviceFor = vi.fn(() => auto === undefined ? undefined : { config: { auto, maxOverflowRetries: 1 } })
+    ctx.provide('agentPresets', { composedPreset: () => 'isolated', serviceFor })
+    ctx.provide('compaction', { config: { auto: !auto, maxOverflowRetries: 1 } } as never)
+    const selected = vi.spyOn(routing, 'selectAutoModel')
+    const dispose = installAutoModelRouting(ctx, {
+      loadModels: async () => [model('fixture-real', 128_000, 'medium')],
+    })
+    const signal = new AbortController().signal
+    const messages = [message('Continue.')]
+    try {
+      await ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      await ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: AUTO }))
+      expect(serviceFor).toHaveBeenCalledExactlyOnceWith(agent, 'compaction')
+      expect(selected.mock.calls.at(-1)?.[3]?.compactionAvailable).toBe(auto === true)
+    } finally {
+      selected.mockRestore()
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it.each(['bindings', 'switch'])('follows fixed and Auto parents using %s without writing child selections', async mode => {
     const ctx = new Context()
     const parentCtx = new Context()

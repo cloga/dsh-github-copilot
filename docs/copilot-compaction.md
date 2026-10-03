@@ -39,6 +39,10 @@ Only then does it emit one terminal local pressure error before dispatch. Offici
 
 Disabled auto recovery or zero retries are respected. Missing/mismatching optional capabilities delegate unchanged and can produce one bounded unavailability diagnostic; the hard native guard remains. Cancellation before iteration wins over pressure. There is no polling, automatic metadata refresh from the pressure listener, or whole-Session dump.
 
+On official `0.2.0-rc.2`, Desktop presets may isolate `compaction` inside a child group, invisible to both the global plugin context and a plain `agent.ctx.get('compaction')`. The plugin uses the public `agentPresets.composedPreset()` and `serviceFor(agent, 'compaction')` methods to resolve the initiating Agent's current preset engine. A bound preset with no engine remains unavailable; it never borrows another scope's policy. Only an Agent without a bound preset uses its own context lookup. The lookup is repeated rather than caching a replaced engine. Auto's recovery-availability diagnostic uses the same helper.
+
+This fixes scope wiring, not a new automatic command: native pressure and `agent/request-error` still invoke the selected engine. Neither `/compact` nor `/copilot-compact` is called by this listener. If the optional manual recovery engine is selected, its automatic path remains the native single-summary path; segmented recovery stays manual-only. Ordinary timeout/transport failures do not become context overflow.
+
 ## Summary purpose policy
 
 Official `GenerateOptions.purpose` permits adapter-specific generation policy. For `purpose: 'compaction'`, `prefer-low` selects supported `minimal`, otherwise supported `low`, only when no effort was supplied or materialized by Core/the configured native profile. Explicit and resolved defaults win; unsupported low controls preserve the provider default. `preserve` disables this purpose default. Normal conversations and other purposes keep their existing reasoning behavior.
@@ -82,6 +86,8 @@ Exact target: official `ddefc45fbc7f8e46dd73185e68295696d1297887` (`0.1.6-alpha.
 - [Summary owner](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/packages/compaction/compaction-basic/src/summarizer.ts): request prefix, purpose, output cap and truncated-output refusal.
 
 Support is partial: official transactional compaction is reused, while independent Copilot input admission and summary-purpose default policy remain companion-owned. Retire the corresponding companion component only after official behavior covers both input/output constraints, correct request identity, cancellation, purpose handling and equivalent regression/unchanged-runtime acceptance. Do not remove official recovery or falsify contextWindow to reduce the diff.
+
+Current scoped-recovery evidence additionally targets unchanged official `639ed015397290b3745d163aafe02ffee4aa3f84` (`0.2.0-rc.2`): [public Agent preset service lookup](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/preset/agent-preset-registry/src/index.ts). Native service lookup is complete and reused; plugin pressure still needs the account input budget. Retire this helper when the official request-budget path supplies equivalent preset-owned admission and recovery evidence.
 
 ## Verification boundary
 

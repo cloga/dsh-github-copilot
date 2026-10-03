@@ -238,6 +238,8 @@ Never say GPT-6/search works merely because settings, typecheck or a package imp
 
 ## Changing capabilities
 
+Automatic pressure and Auto recovery availability resolve the initiating Agent's bound preset through public `agentPresets.composedPreset()` / `serviceFor(agent, 'compaction')`. A bound preset without an engine must not borrow global recovery. Only non-preset Agents use their own `agent.ctx.get('compaction')`; never scan Core's private registry or cache an engine across preset replacement. Native transactions, cancellation, retry policy and manual-only segmented recovery remain unchanged.
+
 Selection footer Remote calls carry an explicit viewed Session ID and turn.
 Do not add an automatic Client `scope` projection: rc.2 prefers the scoped
 variant and removes the ID argument, breaking the footer's two-argument call.

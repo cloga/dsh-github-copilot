@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.77 (prepared)
+
+- Resolve automatic compaction pressure and Auto recovery availability from the initiating Agent's preset through the existing public service lookup (#248), including Desktop's isolated compaction groups.
+- Never borrow global recovery when a bound preset has no engine; preserve disabled/zero-retry policy, native transactions, cancellation, and manual-only segmented recovery. No new command, timeout reclassification, Core change, or automatic model switch.
+- Cover concurrent enabled/disabled/absent preset engines with unchanged official rc.2 AgentLoop, durable summary/rebuilt-request and cancellation evidence; add the frozen preset dependency closure to both required CI and release gates.
+
 ## 0.4.0-alpha.76 (prepared)
 
 - Fix fresh master/lead Auto footer reads rejected by the native Client gateway when an ambient agent context reduced the explicit two-argument call to one (#249). Preserve native Host lookup and strict codecs; do not substitute the ambient Session.

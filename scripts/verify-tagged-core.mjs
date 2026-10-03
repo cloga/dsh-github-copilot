@@ -23,6 +23,7 @@ function runtimeTests(release) {
     ? [...tests, ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
         ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         ...release.startsWith('0.2.0-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
+        ...release === '0.2.0-rc.2' ? ['tests/fixtures/scoped-compaction-core.fixture.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts']
     : tests
 }
@@ -88,7 +89,7 @@ export async function taggedCoreAliases(core, trackedPaths, release) {
     const name = manifest.name
     if (typeof name !== 'string' || !name.startsWith('@deepseek-ai/')) continue
     const isDsh = name.startsWith('@deepseek-ai/dsh-')
-    const isCordis = name === '@deepseek-ai/cordis'
+    const isCordis = ['@deepseek-ai/cordis', '@deepseek-ai/cordis-plugin-loader', '@deepseek-ai/cordis-plugin-group'].includes(name)
     const isVendor = path.startsWith('vendor/')
     if (!isDsh && !isVendor) continue
     if (isDsh && manifest.version !== release) throw new Error(`tagged package release differs: ${name}`)

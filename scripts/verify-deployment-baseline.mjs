@@ -454,7 +454,10 @@ assert(rc0202Core?.tag === currentDsh.tag && rc0202Core.commit === currentDsh.co
   && rc0202Core.evidenceScope === 'unchanged-tagged-source-target'
   && rc0202Core.standaloneNpmArtifacts === 'tested'
   && rc0202Core.desktopPackageSet === 'installed-descriptor-audited'
-  && JSON.stringify(rc0202Core.runtimeTests) === JSON.stringify(rc020Core.runtimeTests),
+  && JSON.stringify(rc0202Core.runtimeTests) === JSON.stringify([
+    ...rc020Core.runtimeTests.slice(0, -2), 'tests/fixtures/scoped-compaction-core.fixture.ts',
+    ...rc020Core.runtimeTests.slice(-2),
+  ]),
   '0.2.0-rc.2 must retain bounded source, npm and signed Desktop peer evidence')
 for (const path of rc0202Core.runtimeTests) await access(resolve(root, path))
 

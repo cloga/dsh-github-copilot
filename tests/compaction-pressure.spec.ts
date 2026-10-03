@@ -10,7 +10,8 @@ type Middleware = (request: GenerateOptions, next: () => AsyncIterable<StreamChu
 function fixture() {
   const config: LlmCallConfig = { provider, model: 'account-model', maxTokens: 8192 }
   const session = { id: 'session-a', requestHeader: vi.fn(() => ({ config })), append: vi.fn() }
-  const owner = { session, options: { provider: 'old-provider', model: 'old-model' } }
+  const owner = { ctx: { get: (key: string): unknown => services.get(key) },
+    session, options: { provider: 'old-provider', model: 'old-model' } }
   const measure = vi.fn(() => ({ totalTokens: 900 }))
   const compactIfNeeded = vi.fn()
   const compaction = { config: { auto: true, maxOverflowRetries: 1, modelPolicies: [] as object[] }, compactIfNeeded }
@@ -50,6 +51,79 @@ function fixture() {
 const delegated = [{ type: 'finish', reason: { kind: 'stop' } }]
 
 describe('Copilot compaction pressure', () => {
+  it('reads the exact Agent preset instead of an unrelated global engine', async () => {
+    const h = fixture()
+    const serviceFor = vi.fn(() => h.compaction)
+    const composedPreset = vi.fn(() => 'isolated')
+    h.services.set('agentPresets', { composedPreset, serviceFor })
+    h.services.set('compaction', { config: { auto: false } })
+    expect(await h.run()).not.toEqual(delegated)
+    expect(composedPreset).toHaveBeenCalledExactlyOnceWith(h.owner.ctx)
+    expect(serviceFor).toHaveBeenCalledExactlyOnceWith(h.owner, 'compaction')
+    h.compaction.config.auto = false
+    expect(await h.run()).toEqual(delegated)
+  })
+
+  it('does not substitute a global engine when the bound preset has none', async () => {
+    const h = fixture()
+    h.services.set('agentPresets', { composedPreset: () => 'empty', serviceFor: () => undefined })
+    expect(await h.run()).toEqual(delegated)
+    expect(h.measure).not.toHaveBeenCalled()
+    expect(h.warn).toHaveBeenCalledOnce()
+  })
+
+  it('uses owner-visible services for non-preset Agents without borrowing the registration scope', async () => {
+    const h = fixture()
+    const serviceFor = vi.fn()
+    h.services.set('agentPresets', { composedPreset: () => undefined, serviceFor })
+    h.owner.ctx.get = key => key === 'agentPresets' ? h.services.get(key) : undefined
+    expect(await h.run()).toEqual(delegated)
+    expect(serviceFor).not.toHaveBeenCalled()
+    expect(h.measure).not.toHaveBeenCalled()
+    h.owner.ctx.get = key => key === 'compaction' ? h.compaction : h.services.get(key)
+    expect(await h.run()).not.toEqual(delegated)
+    expect(serviceFor).not.toHaveBeenCalled()
+  })
+
+  it.each([{}, { composedPreset: () => 'bound' },
+    { composedPreset: () => null, serviceFor: (): undefined => undefined },
+    { composedPreset: () => '', serviceFor: (): undefined => undefined },
+  ])('reports unsupported preset lookup without measuring or guessing: %j', async presets => {
+    const h = fixture()
+    h.services.set('agentPresets', presets)
+    expect(await h.run()).toEqual(delegated)
+    expect(h.measure).not.toHaveBeenCalled()
+    expect(h.warn).toHaveBeenCalledOnce()
+  })
+
+  it('rereads preset services after replacement instead of retaining a retired engine', async () => {
+    const h = fixture()
+    let engine: typeof h.compaction | undefined = h.compaction
+    h.services.set('agentPresets', { composedPreset: () => 'bound', serviceFor: () => engine })
+    expect(await h.run()).not.toEqual(delegated)
+    engine = undefined
+    expect(await h.run()).toEqual(delegated)
+    expect(h.measure).toHaveBeenCalledOnce()
+  })
+
+  it('does not borrow global recovery when the initiating Agent context is unavailable', async () => {
+    const h = fixture()
+    h.services.set('agents', { currentInitiator: () => ({ session: h.session }) })
+    expect(await h.run()).toEqual(delegated)
+    expect(h.measure).not.toHaveBeenCalled()
+    expect(h.warn).toHaveBeenCalledOnce()
+  })
+
+  it('contains failed preset lookup without exposing private error content', async () => {
+    const h = fixture()
+    h.services.set('agentPresets', { composedPreset: () => 'bound',
+      serviceFor: () => { throw new Error('private preset details') } })
+    expect(await h.run()).toEqual(delegated)
+    expect(h.measure).not.toHaveBeenCalled()
+    expect(h.warn).toHaveBeenCalledOnce()
+    expect(h.warn.mock.calls[0]?.[0]).not.toContain('private preset details')
+  })
+
   it('emits a local terminal overflow before dispatch without mutating the frozen request or history', async () => {
     const h = fixture()
     const request = h.request()
