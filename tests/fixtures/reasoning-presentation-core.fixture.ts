@@ -58,7 +58,9 @@ describe('Copilot reasoning presentation against real Core services', () => {
           } },
         } }] }),
         event(3, 'assistant/message', {
-          turn: 1, step: 1, stream: [], usage: { inputTokens: 3, outputTokens: 113, totalTokens: 32601 },
+          turn: 1, step: 1, stream: [], usage: {
+            inputTokens: 3, outputTokens: 113, totalTokens: 32601, cacheReadTokens: 30237, cacheWriteTokens: 2248,
+          },
           message: { id: 'usage-fixture-reply', role: 'assistant',
             source: { kind: 'model', provider: 'github-copilot-preview', model: 'fixture-model' },
             content: [{ type: 'text', text: 'Synthetic recovered completion.' }] },
