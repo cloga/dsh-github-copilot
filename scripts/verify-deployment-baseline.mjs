@@ -324,6 +324,10 @@ const metadata = manifest.capabilities?.find(capability => capability.id === 'ac
 assert(metadata?.activation === 'validated-account-endpoints-and-capabilities', 'managed models must follow account endpoint and capability evidence')
 const publicAdapter = manifest.capabilities?.find(capability => capability.id === 'public-adapter-account-model-route')
 assert(publicAdapter?.activation === 'published-adapter-and-native-sdk', 'managed route must reuse the public adapter and native SDK')
+assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/request-body-timeout.ts' && item.marker === 'COPILOT_REQUEST_BODY_TIMEOUT'),
+  'managed request-body timeout guidance must retain explicit source evidence')
+assert(publicAdapter.tests.some(item => item.file === 'tests/request-body-timeout.spec.ts'),
+  'managed request-body timeout observation must retain bounded/cancellation regression evidence')
 assert(!manifest.capabilities.some(capability => capability.id === 'capability-gated-mixed-copilot-protocols'), 'unshipped Core capability requirement must be retired')
 const genericSources = ['src/account-model-catalog.ts', 'src/account-model-source.ts', 'src/account-model-auth.ts', 'src/preview-provider.ts', 'src/preview-route.ts', 'src/pi-provider-bridge.ts', 'src/request-budget.ts', 'src/compaction-pressure.ts']
 for (const path of genericSources) await verifyGenericSource(path)

@@ -415,6 +415,7 @@ class PreviewAdapter extends PiAiAdapter {
       // dispatch closure, never on the shared lease, to restore its structured code.
       let requestFailure: LlmError | undefined
       let wireAbort: ManagedWireAbortCode | undefined
+      let bodyTimeout: string | undefined
       const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
         if (signal.aborted) throw abortFailure(signal)
         const imageFailure = imageInputFailure(lease.descriptor, context.messages)
@@ -444,6 +445,9 @@ class PreviewAdapter extends PiAiAdapter {
           onWireAbort(code) {
             wireAbort = code
           },
+          onRequestBodyTimeout(diagnostic) {
+            bodyTimeout = diagnostic
+          },
           onReplayFailure(error) {
             // Only this dispatch's verified wire/payload observer can set this;
             // arbitrary upstream text must never masquerade as a compatibility failure.
@@ -469,6 +473,12 @@ class PreviewAdapter extends PiAiAdapter {
           }
           if (chunk.type === 'finish' && chunk.reason.kind === 'error' && chunk.reason.failure.code === 'UNKNOWN_MODEL') {
             await owner.refreshRejected(lease.snapshot, signal)
+          }
+          if (chunk.type === 'finish' && chunk.reason.kind === 'error'
+            && bodyTimeout !== undefined && chunk.reason.failure.code !== 'ABORTED') {
+            if (signal.aborted) throw abortFailure(signal)
+            yield { ...chunk, reason: { ...chunk.reason, failure: { ...chunk.reason.failure, message: bodyTimeout } } }
+            continue
           }
           yield chunk
         }

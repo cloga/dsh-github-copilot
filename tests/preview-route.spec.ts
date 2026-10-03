@@ -106,6 +106,58 @@ async function call(ctx: Context, options: Partial<GenerateOptions> = {}) {
   return { assembler, message: assembler.message({ provider: PREVIEW, model,
     ...assembler.replayState === undefined ? {} : { replayState: assembler.replayState } }) }
 }
+
+describe('managed request-body timeout guidance', () => {
+  it('enriches only a verified 408 while preserving native failure classification and retry ownership', async () => {
+    const payload = { message: 'Timed out reading request body. Try again, or use a smaller request size.',
+      code: 'user_request_timeout', private: 'SECRET_PROVIDER_BODY' }
+    let body = ''
+    const fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      body = typeof init?.body === 'string' ? init.body : ''
+      return new Response(JSON.stringify(payload), { status: 408 })
+    })
+    stubFetch(fetch)
+    const harness = await runtime()
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish.kind).toBe('error')
+    if (result.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal failure')
+    const first = result.assembler.finish.failure
+    expect(first.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+    expect(first.message).toContain(`Request body: ${Buffer.byteLength(body, 'utf8')} UTF-8 bytes`)
+    expect(first.message).not.toContain('SECRET_PROVIDER_BODY')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    fetch.mockImplementation(async () => new Response('synthetic generic timeout', { status: 408 }))
+    const generic = await call(harness.ctx)
+    if (generic.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal failure')
+    expect(generic.assembler.finish.failure.code).toBe(first.code)
+    expect(generic.assembler.finish.failure.message).not.toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not leak a timeout diagnostic between concurrent prepared and direct dispatches', async () => {
+    let calls = 0
+    const fetch = vi.fn(async () => {
+      calls++
+      return calls === 1
+        ? new Response(JSON.stringify({ code: 'user_request_timeout',
+          message: 'Timed out reading request body. Try again, or use a smaller request size.' }), { status: 408 })
+        : response()
+    })
+    stubFetch(fetch)
+    const harness = await runtime()
+    const prepared = call(harness.ctx)
+    const chunks: StreamChunk[] = []
+    const direct = (async () => {
+      for await (const chunk of harness.adapter.stream({ provider: PREVIEW, model: MODEL, messages: [] })) chunks.push(chunk)
+    })()
+    const [result] = await Promise.all([prepared, direct])
+    const endings = [result.assembler.finish, ...chunks.filter(chunk => chunk.type === 'finish').map(chunk => chunk.reason)]
+    expect(endings.filter(reason => reason.kind === 'error')).toHaveLength(1)
+    expect(endings.filter(reason => reason.kind === 'stop')).toHaveLength(1)
+    for (const reason of endings) if (reason.kind === 'error') expect(reason.failure.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+})
 function compatibilityOffloadedImageBlock(block: Message['content'][number]): Message['content'][number] {
   return block.type === 'image' ? { ...block, offloaded: true } as Message['content'][number] : block
 }

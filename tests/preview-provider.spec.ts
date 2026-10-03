@@ -333,6 +333,40 @@ describe('account provider model HTTP authorization observation', () => {
   })
 })
 
+describe('managed upload-timeout observation', () => {
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'observes verified %s timeout without changing bytes, Response, native retries or credential ownership', async api => {
+      const item = descriptor(api)
+      const onRequestBodyTimeout = vi.fn()
+      const onUnauthorized = vi.fn()
+      const guard: AccountProviderGuard = { ...accountGuard(item.id), onRequestBodyTimeout, onUnauthorized }
+      const { provider, models } = createAccountProvider([item], guard, baseURL)
+      const body = JSON.stringify({ code: 'user_request_timeout',
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' })
+      const response = new Response(body, { status: 408 })
+      let requestBody: string | undefined
+      const fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        requestBody = typeof init?.body === 'string' ? init.body : undefined
+        return response
+      })
+      const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [
+        { role: 'user', content: 'Synthetic 中文 input', timestamp: 0 },
+      ] }), { apiKey: 'synthetic-account-token', maxRetries: 0, fetch })
+      for await (const _event of stream) { /* Native terminal delivery remains unchanged. */ }
+      expect((await stream.result()).stopReason).toBe('error')
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(requestBody).toBeDefined()
+      expect(onRequestBodyTimeout.mock.calls[0]).toEqual([undefined])
+      expect(onRequestBodyTimeout.mock.lastCall?.[0]).toContain(
+        `Request body: ${Buffer.byteLength(requestBody!, 'utf8')} UTF-8 bytes`,
+      )
+      expect(onUnauthorized).not.toHaveBeenCalled()
+      // Native SDK consumed the original, not a synthetic replacement response.
+      expect(response.bodyUsed).toBe(true)
+    },
+  )
+})
+
 describe('managed Responses replay compatibility', () => {
   function replayContext(includeEmptyReasoning = false): PiContext {
     return { messages: [{ role: 'user', content: 'Synthetic task', timestamp: 0 }, {

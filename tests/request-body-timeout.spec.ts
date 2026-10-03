@@ -1,0 +1,73 @@
+import { describe, expect, it, vi } from 'vitest'
+import { requestBodyTimeoutDiagnostic } from '../src/request-body-timeout.ts'
+
+const error = { code: 'user_request_timeout',
+  message: 'Timed out reading request body. Try again, or use a smaller request size.' }
+
+describe('verified request-body timeout diagnostics', () => {
+  it.each([error, { error }])('recognizes the observed structured 408 without leaking body text', async body => {
+    const response = new Response(JSON.stringify({ ...body, private: 'SECRET_RESPONSE' }), { status: 408 })
+    const text = await requestBodyTimeoutDiagnostic(response, '{"input":"中文"}')
+    expect(text).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+    expect(text).toContain(`Request body: ${Buffer.byteLength('{"input":"中文"}', 'utf8')} UTF-8 bytes`)
+    expect(text).toContain('not context-window overflow')
+    expect(text).not.toContain('SECRET_RESPONSE')
+    expect(await response.json()).toEqual({ ...body, private: 'SECRET_RESPONSE' })
+  })
+
+  it.each([
+    [400, error], [401, error], [500, error],
+    [408, { ...error, code: 'other_timeout' }],
+    [408, { ...error, message: 'synthetic unrelated timeout' }],
+    [408, { error, code: 'auth' }],
+    [408, { error, message: 'contradictory outer message' }],
+    [408, 'user_request_timeout'],
+  ])('retains unknown native behavior for status %s and body %j', async (status, body) => {
+    const response = new Response(JSON.stringify(body), { status: Number(status) })
+    expect(await requestBodyTimeoutDiagnostic(response, 'synthetic')).toBeUndefined()
+    expect(await response.json()).toEqual(body)
+  })
+
+  it('reports unknown request bytes honestly without serializing arbitrary bodies', async () => {
+    const response = new Response(JSON.stringify(error), { status: 408 })
+    expect(await requestBodyTimeoutDiagnostic(response)).toContain('Request body size unavailable')
+  })
+
+  it('does not infer a diagnostic from malformed or oversized bodies', async () => {
+    for (const body of ['not JSON', JSON.stringify({ ...error, private: 'x'.repeat(8192) })]) {
+      const response = new Response(body, { status: 408 })
+      expect(await requestBodyTimeoutDiagnostic(response, 'synthetic')).toBeUndefined()
+      expect(await response.text()).toBe(body)
+    }
+  })
+
+  it('refuses invalid UTF-8 and bounds empty-chunk work without consuming native data', async () => {
+    const invalid = new Response(new Uint8Array([0xc0, 0xaf]), { status: 408 })
+    expect(await requestBodyTimeoutDiagnostic(invalid, 'synthetic')).toBeUndefined()
+    expect(new Uint8Array(await invalid.arrayBuffer())).toEqual(new Uint8Array([0xc0, 0xaf]))
+    let chunks = 0
+    const empty = new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++chunks < 9000) controller.enqueue(new Uint8Array())
+        else controller.close()
+      },
+    }), { status: 408 })
+    expect(await requestBodyTimeoutDiagnostic(empty, 'synthetic')).toBeUndefined()
+    expect(chunks).toBeLessThan(9000)
+    await empty.body?.cancel()
+  })
+
+  it('bounds stalled response observation and gives cancellation priority', async () => {
+    vi.useFakeTimers()
+    try {
+      const controller = new AbortController()
+      const response = new Response(new ReadableStream<Uint8Array>({ start() {} }), { status: 408 })
+      const result = requestBodyTimeoutDiagnostic(response, 'synthetic', controller.signal)
+      controller.abort()
+      expect(await result).toBeUndefined()
+      const stalled = requestBodyTimeoutDiagnostic(response.clone(), 'synthetic')
+      await vi.advanceTimersByTimeAsync(250)
+      expect(await stalled).toBeUndefined()
+    } finally { vi.useRealTimers() }
+  })
+})
