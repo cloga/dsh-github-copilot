@@ -271,6 +271,9 @@ export function selectAutoModel(
     inputFitDiagnostic,
     explanation: Object.freeze({ ...explanation, assessment: Object.freeze({
       ...explanation.assessment, signals: Object.freeze([...explanation.assessment.signals]),
+      ...explanation.assessment.semantic === undefined ? {} : {
+        semantic: Object.freeze({ ...explanation.assessment.semantic }),
+      },
     }) }),
   })
 }

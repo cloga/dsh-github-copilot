@@ -27,3 +27,16 @@ it('shows established continuation evidence without an irrelevant disabled exper
   expect(text.assessment).toContain('investigation')
   expect(text.diagnostic).toBeUndefined()
 })
+it.each(['en', 'zh'])('explains timeout as unknown-demand policy fallback, not proven task complexity (%s)', locale => {
+  const text = selectionExplanation({ ...explanation, method: 'equal-distribution',
+    assessment: { demand: 'unknown', source: 'local', signals: ['insufficient-evidence'], diagnostic: 'timeout',
+      semantic: { modelId: 'aux-fixture', budgetMs: 8000, elapsedMs: 8001, stage: 'adapter-started',
+        adapterStartedMs: 100, outputCharacters: 0, validation: 'not-validated' } },
+  }, locale)
+  expect(text.conclusion).toContain(locale === 'en' ? 'as a fallback' : '兜底')
+  expect(text.conclusion).toContain('Powerful')
+  expect(text.semantic).toContain('aux-fixture')
+  expect(text.semantic).toContain('8000 ms')
+  expect(text.semantic).toContain(locale === 'en' ? 'No text output observed' : '未观察到文本输出')
+  expect(text.diagnostic).toContain(locale === 'en' ? 'not a timeout of the main answer' : '不代表正式回答超时')
+})

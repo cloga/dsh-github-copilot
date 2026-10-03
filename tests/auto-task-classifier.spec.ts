@@ -10,6 +10,14 @@ const model: AccountModelDescriptor = {
     apiSource: 'advertised-native', policySource: 'server-enabled', contextWindowSource: 'max_context_window_tokens' },
 }
 describe('concrete managed task classifier', () => {
+  it('never starts an auxiliary adapter after cancellation during preparation', async () => {
+    const controller = new AbortController()
+    controller.abort(new Error('CANCELLED'))
+    const stream = vi.fn()
+    await expect(classifyTaskWithAdapter(model, { text: 'task', omitted: false }, controller.signal, stream))
+      .rejects.toThrow('CANCELLED')
+    expect(stream).not.toHaveBeenCalled()
+  })
   it('selects only supplier lightweight candidates with bounded input/output headroom, never guessed names', () => {
     expect(taskClassifierModel([{ ...model, category: undefined }, { ...model, category: 'powerful' }])).toBeUndefined()
     expect(taskClassifierModel([{ ...model, contextWindow: 2000 }, model])).toBe(model)
@@ -18,7 +26,7 @@ describe('concrete managed task classifier', () => {
   it('makes one concrete native call with no tools, history identity, fake purpose or recursive Auto', async () => {
     const stream = vi.fn(async function* (request: GenerateOptions): AsyncIterable<StreamChunk> {
       expect(request.model).toBe(model.id)
-      expect(request.maxTokens).toBe(512)
+      expect(request.maxTokens).toBe(128)
       expect(request.tools).toBeUndefined()
       expect(request.sessionId).toBeUndefined()
       expect(request.purpose).toBeUndefined()
@@ -40,4 +48,23 @@ describe('concrete managed task classifier', () => {
       new AbortController().signal, stream)).rejects.toThrow()
     expect(stream).toHaveBeenCalledOnce()
   })
+  it.each([{ efforts: [], nativeOff: true }, { efforts: ['high'], nativeOff: true },
+    { efforts: ['off', 'high'], nativeOff: false }, { efforts: ['off', 'high'], nativeOff: true }])(
+    'requests off reasoning only for matching supplier and published native support: $efforts/$nativeOff', async ({ efforts, nativeOff }) => {
+      const observe = vi.fn()
+      const output = '{"demand":"routine","signals":[]}'
+      const stream = vi.fn(async function* (request: GenerateOptions): AsyncIterable<StreamChunk> {
+        expect(request.reasoningEffort).toBe(efforts.includes('off') && nativeOff ? 'off' : undefined)
+        yield { type: 'text-delta', index: 0, text: '' }
+        yield { type: 'text-delta', index: 0, text: output }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      })
+      await classifyTaskWithAdapter({ ...model, reasoning: { advertisedEfforts: efforts, unmappedEfforts: [] } },
+        { text: 'PRIVATE_TASK', omitted: false }, new AbortController().signal, stream, observe, nativeOff)
+      expect(observe.mock.calls.map(([value]) => value)).toEqual([
+        { stage: 'adapter-started' }, { stage: 'text', characters: 0 }, { stage: 'text', characters: output.length },
+        { stage: 'finished', stopped: true },
+      ])
+      expect(JSON.stringify(observe.mock.calls)).not.toContain('PRIVATE_TASK')
+    })
 })

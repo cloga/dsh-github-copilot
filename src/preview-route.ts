@@ -749,13 +749,20 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     followParentModel: () => cacheSettings().followParentModel === true,
     semanticAssessment: () => cacheSettings().autoSemanticAssessment ?? true,
     assessmentDiagnostic: code => ctx.logger.warn(code),
-    async classifyTask(input, signal) {
+    async classifyTask(input, signal, observe) {
       const snapshot = await discoverSnapshot({ signal })
       const model = taskClassifierModel(snapshot.models.filter(model => !excludedModels().has(model.id)))
       if (model === undefined) throw failure('COPILOT_AUTO_CLASSIFIER_UNAVAILABLE')
+      observe?.({ stage: 'model-selected', modelId: model.id })
       const revision = lifetime.revision
       const adapter = new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings)
-      try { return await classifyTaskWithAdapter(model, input, signal, request => adapter.stream(request)) }
+      try {
+        const prepared = await adapter.prepareCall(GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model.id, signal)
+        if (signal.aborted) throw signal.reason
+        const offSupported = prepared.model.reasoning?.efforts.some(effort => effort.id === 'off') === true
+        return await classifyTaskWithAdapter(model, input, signal,
+          request => prepared.stream(request), observe, offSupported)
+      }
       finally {
         if (!lifetime.isCurrent(revision) || source.readSnapshot() !== snapshot || proofFor(snapshot) === undefined) {
           throw new TaskAssessmentRevokedError(failure('COPILOT_PREVIEW_METADATA_STALE', 'ABORTED'))

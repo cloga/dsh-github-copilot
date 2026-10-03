@@ -290,12 +290,16 @@ describe('plugin-owned account Copilot route', () => {
     const modelCalls = vi.fn(async (_input: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>
       expect(body.model).toBe('classifier-fixture')
+      expect(body.max_output_tokens).toBe(128)
+      expect(body.reasoning).toBeUndefined()
       expect(body.tools === undefined || Array.isArray(body.tools) && body.tools.length === 0).toBe(true)
       return response(false, undefined, '{"demand":"routine","signals":["bounded-transformation"]}')
     })
+    const classifier = catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' })
+    classifier.capabilities.supports.reasoning_effort = ['off', 'high']
     stubFetch(async (input, init) => String(input).endsWith('/models')
       ? catalogResponse([
-        catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' }),
+        classifier,
         catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
       ]) : modelCalls(input, init), true)
     const harness = await runtime(grant({ availableModelIds: [] }), {
@@ -326,6 +330,12 @@ describe('plugin-owned account Copilot route', () => {
         : { demand: 'routine', source: 'semantic' },
         targetCategory: 'versatile', selectedCategory: 'versatile', method: 'only-candidate' },
     })
+    if (enabled !== false) {
+      expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+        explanation: { assessment: { semantic: { modelId: 'classifier-fixture', budgetMs: 8000,
+          stage: 'finished', nativeFinish: 'stop', validation: 'valid' } } },
+      })
+    }
   })
   it('forwards native SDK failed zero usage without changing the shared accounting stream', async () => {
     stubFetch(async () => new Response('synthetic unavailable', { status: 503 }))

@@ -4,6 +4,58 @@ import { assessAutoTask, assessTaskLocally, assessmentInput, TaskAssessmentRevok
 const message = (text: string, role = 'user') => ({ role, content: [{ type: 'text', text }] })
 const signal = () => new AbortController().signal
 describe('bounded contextual Auto task assessment', () => {
+  it('captures bounded phase evidence for a timed-out partial result without treating it as a validated task', async () => {
+    const result = await assessAutoTask([message('Continue')], {
+      enabled: true, signal: signal(), timeoutMs: 20, diagnostic: vi.fn(),
+      classify: async (_input, _signal, observe) => {
+        observe?.({ stage: 'model-selected', modelId: 'synthetic-classifier' })
+        observe?.({ stage: 'adapter-started' })
+        observe?.({ stage: 'text', characters: 5 })
+        return await new Promise<string>(() => {})
+      },
+    })
+    expect(result).toMatchObject({ demand: 'unknown', diagnostic: 'timeout',
+      semantic: { modelId: 'synthetic-classifier', stage: 'text-received', outputCharacters: 5,
+        budgetMs: 20, validation: 'not-validated' } })
+    expect(result.semantic?.firstTextMs).toBeGreaterThanOrEqual(0)
+    expect(result.semantic?.elapsedMs).toBeGreaterThanOrEqual(result.semantic!.firstTextMs!)
+    expect(Object.isFrozen(result.semantic)).toBe(true)
+  })
+  it.each(['valid', 'invalid', 'context-omitted'] as const)('captures native completion separately from result acceptance: %s', async validation => {
+    const output = validation === 'invalid' ? 'PRIVATE_INVALID'
+      : '{"demand":"routine","signals":["bounded-transformation"]}'
+    const result = await assessAutoTask([message(validation === 'context-omitted' ? 'x'.repeat(2000) : 'Convert this.')], {
+      enabled: true, signal: signal(), diagnostic: vi.fn(),
+      classify: async (_input, _signal, observe) => {
+        observe?.({ stage: 'model-selected', modelId: 'fixture' })
+        observe?.({ stage: 'adapter-started' })
+        observe?.({ stage: 'text', characters: output.length })
+        observe?.({ stage: 'finished', stopped: true })
+        return output
+      },
+    })
+    expect(result.semantic).toMatchObject({ stage: 'finished', nativeFinish: 'stop', validation })
+    expect(JSON.stringify(result.semantic)).not.toContain('PRIVATE_INVALID')
+    expect(result.demand).toBe(validation === 'valid' ? 'routine' : 'unknown')
+  })
+  it('preserves the frozen timeout snapshot when an uncooperative classifier reports late output', async () => {
+    let observeLate: Parameters<NonNullable<import('../src/auto-task-assessment.ts').TaskAssessmentDependencies['classify']>>[2]
+    let resolve!: (text: string) => void
+    const result = await assessAutoTask([message('Continue')], {
+      enabled: true, signal: signal(), timeoutMs: 10, diagnostic: vi.fn(),
+      classify: (_input, _signal, observe) => {
+        observeLate = observe
+        return new Promise<string>(done => { resolve = done })
+      },
+    })
+    const snapshot = JSON.stringify(result)
+    observeLate?.({ stage: 'adapter-started' })
+    observeLate?.({ stage: 'text', characters: 30 })
+    resolve('{"demand":"simple","signals":[]}')
+    await Promise.resolve()
+    expect(JSON.stringify(result)).toBe(snapshot)
+    expect(result.semantic).toMatchObject({ stage: 'preparing', validation: 'not-validated' })
+  })
   it('recognizes isolated multilingual greetings but not greetings during ongoing work', () => {
     for (const text of ['hello', '你好！']) expect(assessTaskLocally([message(text)])).toMatchObject({ demand: 'simple' })
     expect(assessTaskLocally([message('Investigating an unresolved failure.', 'assistant'), message('hello')]))
