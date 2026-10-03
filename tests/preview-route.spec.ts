@@ -6,6 +6,8 @@ import '@earendil-works/pi-ai/api/anthropic-messages'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -79,10 +81,10 @@ async function runtime(initial: RecordValue | undefined = grant(), config: Previ
   }
 }
 function event(type: string, data: Record<string, unknown>) { return `data: ${JSON.stringify({ type, ...data })}\n\n` }
-function response(tool = false, phase?: 'commentary' | 'final_answer') {
+function response(tool = false, phase?: 'commentary' | 'final_answer', text = 'hello') {
   const reasoning = { type: 'reasoning', id: 'rs_synthetic', summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'synthetic-opaque-replay' }
   const output = tool ? { type: 'function_call', id: 'fc_synthetic', call_id: 'call_synthetic', name: 'echo', arguments: '{"value":"hi"}' }
-    : { type: 'message', id: 'msg_synthetic', role: 'assistant', content: [{ type: 'output_text', text: 'hello' }],
+    : { type: 'message', id: 'msg_synthetic', role: 'assistant', content: [{ type: 'output_text', text }],
       ...phase === undefined ? {} : { phase } }
   return new Response([
     event('response.created', { response: { id: 'resp_synthetic' } }),
@@ -91,7 +93,7 @@ function response(tool = false, phase?: 'commentary' | 'final_answer') {
     event('response.output_item.done', { output_index: 0, item: reasoning }),
     event('response.output_item.added', { output_index: 1, item: output }),
     ...(tool ? [event('response.function_call_arguments.delta', { output_index: 1, delta: '{"value":"hi"}' })]
-      : [event('response.output_text.delta', { output_index: 1, delta: 'hello' })]),
+      : [event('response.output_text.delta', { output_index: 1, delta: text })]),
     event('response.output_item.done', { output_index: 1, item: output }),
     event('response.completed', { response: { status: 'completed', output: [reasoning, output], usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 } } }),
   ].join(''), { headers: { 'content-type': 'text/event-stream' } })
@@ -276,6 +278,43 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
 
 describe('plugin-owned account Copilot route', () => {
+  it('assesses Auto through one concrete public native adapter call and freezes the captured reason across retries', async () => {
+    const modelCalls = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      expect(body.model).toBe('classifier-fixture')
+      expect(body.tools === undefined || Array.isArray(body.tools) && body.tools.length === 0).toBe(true)
+      return response(false, undefined, '{"demand":"routine","signals":["bounded-transformation"]}')
+    })
+    stubFetch(async (input, init) => String(input).endsWith('/models')
+      ? catalogResponse([
+        catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' }),
+        catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
+      ]) : modelCalls(input, init), true)
+    const harness = await runtime(grant({ availableModelIds: [] }), {
+      accountModelSettings: () => ({ autoSemanticAssessment: true, excludedModelIds: [] }),
+    })
+    const agent = { ctx: harness.ctx, session: {
+      id: 'assessment-session', header: { id: 'assessment-session' }, requestHeader: () => undefined,
+    } } as unknown as Agent
+    harness.ctx.provide('tokenMeter', { estimateMessage: () => 100, measure: () => ({ totalTokens: 100 }) } as never)
+    harness.ctx.provide('sessionProjections', { stateOf: () => ({ pending: { provider: PREVIEW, model: AUTO } }) } as never)
+    const scope = scopeTarget(agent, agent), signal = new AbortController().signal
+    await harness.ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+    const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Convert these records to CSV.' }] })]
+    const enter = () => harness.ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+      async () => ({ kind: 'enter' as const, messages }))
+    await Promise.all([enter(), enter()])
+    const request = () => harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+      async () => ({ provider: PREVIEW, model: AUTO }))
+    expect(await request()).toMatchObject({ model: 'answer-fixture' })
+    await enter()
+    expect(await request()).toMatchObject({ model: 'answer-fixture' })
+    expect(modelCalls).toHaveBeenCalledOnce()
+    expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+      mode: 'auto', explanation: { assessment: { demand: 'routine', source: 'semantic' },
+        targetCategory: 'versatile', selectedCategory: 'versatile', method: 'only-candidate' },
+    })
+  })
   it('does not let native SDK failed zero usage reset context evidence or fabricate settled usage', async () => {
     stubFetch(async () => new Response('synthetic unavailable', { status: 503 }))
     const harness = await runtime()
@@ -635,6 +674,7 @@ describe('plugin-owned account Copilot route', () => {
     const view = await harness.ctx.get('githubCopilotPreview')!.discover()
     expect(view).toMatchObject({ available: true, rejected: [], warnings: [
       { id: item.id, code: 'INPUT_LIMIT_ESTIMATED_GUARD' },
+      { id: item.id, code: 'AUTO_CATEGORY_MISSING' },
       { id: item.id, code: 'REASONING_EFFORTS_UNSUPPORTED' },
     ] })
     expect((await call(harness.ctx, { model: item.id })).assembler.finish).toEqual({ kind: 'stop' })

@@ -1,6 +1,6 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, vi } from 'vitest'
-import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
+import type { AccountModelCategory, AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import {
   AutoModelRoutingError, autoModelInputModalities, classifyAutoModelTurn, estimateTurnInputTokens,
   selectAutoModel as selectWithMeasurement,
@@ -17,10 +17,12 @@ function model(id: string, options: {
   maxTokens: number
   efforts?: string[]
   image?: boolean
+  category?: AccountModelCategory
 }): AccountModelDescriptor {
   return {
     id,
     name: id,
+    category: options.category,
     api: 'openai-responses',
     contextWindow: options.contextWindow,
     maxTokens: options.maxTokens,
@@ -45,9 +47,9 @@ function message(text: string) {
 }
 
 describe('Auto model routing policy', () => {
-  const fast = model('fixture-fast', { contextWindow: 64_000, maxTokens: 8_000, efforts: ['low'] })
-  const balanced = model('fixture-balanced', { contextWindow: 128_000, maxTokens: 16_000, efforts: ['medium'] })
-  const strong = model('fixture-strong', { contextWindow: 256_000, maxTokens: 32_000, efforts: ['high', 'xhigh'] })
+  const fast = model('fixture-fast', { contextWindow: 64_000, maxTokens: 8_000, efforts: ['low'], category: 'lightweight' })
+  const balanced = model('fixture-balanced', { contextWindow: 128_000, maxTokens: 16_000, efforts: ['medium'], category: 'versatile' })
+  const strong = model('fixture-strong', { contextWindow: 256_000, maxTokens: 32_000, efforts: ['high', 'xhigh'], category: 'powerful' })
 
   it('does not discard a complete Core assistant message when it contains reasoning', () => {
     const history = [
@@ -81,15 +83,16 @@ describe('Auto model routing policy', () => {
       .toThrow('COPILOT_AUTO_TOKEN_ESTIMATE_INVALID')
   })
 
-  it('classifies only the latest user turn and selects a deterministic capacity tier', () => {
+  it('retains legacy length evidence but does not use it as task or supplier category evidence', () => {
     expect(classifyAutoModelTurn([message('old '.repeat(2_000)), message('Explain this symbol.')]))
       .toMatchObject({ taskClass: 'fast', requiresImage: false })
     expect(selectAutoModel([strong, fast, balanced], [message('Explain this symbol.')]))
-      .toMatchObject({ model: fast, taskClass: 'fast', reason: 'short-text-turn', candidateCount: 3 })
+      .toMatchObject({ model: balanced, taskClass: 'fast', reason: 'short-text-turn', candidateCount: 3,
+        explanation: { assessment: { demand: 'unknown' }, targetCategory: 'versatile' } })
     expect(selectAutoModel([strong, fast, balanced], [message('Investigate this behavior with enough detail to exceed the short threshold. '.repeat(20))]))
-      .toMatchObject({ model: balanced, taskClass: 'balanced', reason: 'standard-turn' })
+      .toMatchObject({ model: strong, taskClass: 'balanced', reason: 'standard-turn' })
     expect(selectAutoModel([balanced, strong, fast], [message(`Analyze:\n${'detail '.repeat(700)}`)]))
-      .toMatchObject({ model: strong, taskClass: 'strong', reason: 'large-structured-turn' })
+      .toMatchObject({ model: balanced, taskClass: 'strong', reason: 'large-structured-turn' })
   })
 
   it('requires account-verified image capability for image turns', () => {
@@ -136,18 +139,19 @@ describe('Auto model routing policy', () => {
     expect(selectAutoModel([fast], history).model).toBe(fast)
   })
 
-  it('uses one candidate pool with bounded soft preferences rather than tier filters', () => {
+  it('uses the task/category policy with one hard-eligible pool for all preferences', () => {
     const pool = [strong, fast, balanced]
-    const short = [message('Explain this symbol.')]
-    const ordinary = [message('Investigate the behavior in detail. '.repeat(30))]
-    const demanding = [message('Analyze:\n' + 'detail '.repeat(700))]
+    const short = [message('Hello!')]
+    const ordinary = [message('Convert this table.')]
+    const demanding = [message('Prove this theorem.')]
+    const routine = { assessment: { demand: 'routine', source: 'semantic', signals: ['bounded-transformation'] } } as const
     expect(selectAutoModel(pool, short, 'efficiency').model).toBe(fast)
     expect(selectAutoModel(pool, short, 'balance').model).toBe(fast)
-    expect(selectAutoModel(pool, short, 'intelligence').model).toBe(balanced)
-    expect(selectAutoModel(pool, ordinary, 'efficiency').model).toBe(fast)
-    expect(selectAutoModel(pool, ordinary, 'balance').model).toBe(balanced)
-    expect(selectAutoModel(pool, ordinary, 'intelligence').model).toBe(strong)
-    expect(selectAutoModel(pool, demanding, 'efficiency').model).toBe(balanced)
+    expect(selectAutoModel(pool, short, 'intelligence').model).toBe(fast)
+    expect(selectAutoModel(pool, ordinary, 'efficiency', routine).model).toBe(fast)
+    expect(selectAutoModel(pool, ordinary, 'balance', routine).model).toBe(balanced)
+    expect(selectAutoModel(pool, ordinary, 'intelligence', routine).model).toBe(strong)
+    expect(selectAutoModel(pool, demanding, 'efficiency').model).toBe(strong)
     expect(selectAutoModel(pool, demanding, 'balance').model).toBe(strong)
     expect(selectAutoModel(pool, demanding, 'intelligence').model).toBe(strong)
     for (const preference of ['efficiency', 'balance', 'intelligence'] as const) {
@@ -167,12 +171,12 @@ describe('Auto model routing policy', () => {
     }
   })
 
-  it('distributes unrelated balanced/strong Intelligence turns across upper candidates without monopolization', () => {
+  it('distributes only equally categorized fitting candidates without capacity-based weights', () => {
     const m1 = model('fixture-fast', { contextWindow: 64_000, maxTokens: 8_000, efforts: ['low'] })
     const m2 = model('fixture-mid-1', { contextWindow: 128_000, maxTokens: 16_000, efforts: ['medium'] })
-    const m3 = model('fixture-mid-2', { contextWindow: 200_000, maxTokens: 24_000, efforts: ['medium'] })
-    const m4 = model('fixture-strong-1', { contextWindow: 256_000, maxTokens: 32_000, efforts: ['high'] })
-    const m5 = model('fixture-strong-2', { contextWindow: 500_000, maxTokens: 64_000, efforts: ['xhigh'] })
+    const m3 = model('fixture-mid-2', { contextWindow: 200_000, maxTokens: 24_000, efforts: ['medium'], category: 'powerful' })
+    const m4 = model('fixture-strong-1', { contextWindow: 256_000, maxTokens: 32_000, efforts: ['high'], category: 'powerful' })
+    const m5 = model('fixture-strong-2', { contextWindow: 500_000, maxTokens: 64_000, efforts: ['xhigh'], category: 'powerful' })
     const pool5 = [m1, m2, m3, m4, m5]
     const demanding = [message('Analyze:\n' + 'detail '.repeat(700))]
 
@@ -183,10 +187,9 @@ describe('Auto model routing policy', () => {
         turn: 1,
       })
       chosen.add(decision.model.id)
-      // All selected models must be in the upper capacity band (m3, m4, m5)
       expect([m3.id, m4.id, m5.id]).toContain(decision.model.id)
+      expect(decision.explanation).toMatchObject({ selectedCategory: 'powerful', method: 'equal-distribution', categoryCandidateCount: 3 })
     }
-    // Multiple distinct upper-tier models must be selected across different sessions
     expect(chosen.size).toBeGreaterThan(1)
   })
 
@@ -203,21 +206,30 @@ describe('Auto model routing policy', () => {
     expect(retry.selectedInputBudget).toBe(first.selectedInputBudget)
   })
 
-  it('picks lighter capacity for simple Intelligence turns and higher capacity for demanding Efficiency turns', () => {
-    const m1 = model('fixture-fast', { contextWindow: 64_000, maxTokens: 8_000, efforts: ['low'] })
-    const m2 = model('fixture-mid-1', { contextWindow: 128_000, maxTokens: 16_000, efforts: ['medium'] })
-    const m3 = model('fixture-mid-2', { contextWindow: 200_000, maxTokens: 24_000, efforts: ['medium'] })
-    const m4 = model('fixture-strong', { contextWindow: 500_000, maxTokens: 64_000, efforts: ['xhigh'] })
-    const pool = [m1, m2, m3, m4]
-    const short = [message('Explain this symbol.')]
-    const demanding = [message('Analyze:\n' + 'detail '.repeat(700))]
+  it('uses lightweight for an isolated greeting even with Intelligence and powerful for short hard Efficiency work', () => {
+    expect(selectAutoModel([fast, balanced, strong], [message('Hello!')], 'intelligence').model).toBe(fast)
+    expect(selectAutoModel([fast, balanced, strong], [message('Prove this theorem.')], 'efficiency').model).toBe(strong)
+    expect(selectAutoModel([fast, balanced, strong], [message('Continue.')], 'intelligence').model).toBe(strong)
+  })
 
-    // Simple Intelligence picks lighter/middle, not the highest monster model
-    expect(selectAutoModel(pool, short, 'intelligence').model.id).toBe(m2.id)
-    expect(selectAutoModel(pool, short, 'efficiency').model.id).toBe(m1.id)
+  it('preserves suitable continuity but never lets it override task category or input fit', () => {
+    const second = { ...balanced, id: 'second-versatile' }
+    expect(selectAutoModel([fast, balanced, second, strong], [message('Continue.')], 'balance',
+      { previousModelId: second.id }).explanation.method).toBe('continuity')
+    expect(selectAutoModel([fast, balanced, strong], [message('Prove it.')], 'balance',
+      { previousModelId: balanced.id }).model).toBe(strong)
+    expect(selectAutoModel([fast, balanced, strong], [message('Hello!')], 'intelligence',
+      { previousModelId: strong.id }).model).toBe(fast)
+    expect(selectAutoModel([fast, balanced, strong], [message('Continue.')], 'balance',
+      { previousModelId: balanced.id, inputTokenFloor: 150_000 }).model).toBe(strong)
+  })
 
-    // Demanding Efficiency picks a capable model (task demand dominates over efficiency preference)
-    expect(selectAutoModel(pool, demanding, 'efficiency').model.id).toBe(m2.id)
+  it('discloses category fallbacks and never guesses missing category from ID or capacity', () => {
+    const unknown = model('powerful-sounding-name', { contextWindow: 1_000_000, maxTokens: 100_000 })
+    expect(selectAutoModel([balanced, unknown], [message('Prove it.')], 'intelligence'))
+      .toMatchObject({ model: balanced, explanation: { fallback: true, selectedCategory: 'versatile', targetCategory: 'powerful' } })
+    expect(selectAutoModel([unknown], [message('Hello!')], 'intelligence').explanation)
+      .toMatchObject({ fallback: true, selectedCategory: 'unknown' })
   })
 
   it('preserves single candidate unchanged across all preferences', () => {

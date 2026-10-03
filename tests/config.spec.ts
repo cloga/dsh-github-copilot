@@ -62,6 +62,10 @@ describe('session search settings', () => {
 })
 
 describe('managed request and compaction settings', () => {
+  it('keeps semantic Auto assessment an explicit disabled-by-default experiment', () => {
+    expect(readInlineConfig(Config(base)).autoSemanticAssessment).toBe(false)
+    expect(readInlineConfig(Config({ ...base, autoSemanticAssessment: true })).autoSemanticAssessment).toBe(true)
+  })
   it('separates managed chat liveness and image projection from search deadlines', () => {
     expect(readInlineConfig(Config(base))).toMatchObject({
       chatStreamIdleTimeoutMs: 300_000, chatStreamLiveness: true, chatMaxRequestImageBytes: 20_971_520,

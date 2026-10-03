@@ -1,6 +1,6 @@
 # GitHub Copilot Auto model routing MVP
 
-**Tracking:** [#174](https://github.com/cloga/dsh-github-copilot/issues/174), [#192](https://github.com/cloga/dsh-github-copilot/issues/192), [#199](https://github.com/cloga/dsh-github-copilot/issues/199)
+**Tracking:** [#174](https://github.com/cloga/dsh-github-copilot/issues/174), [#192](https://github.com/cloga/dsh-github-copilot/issues/192), [#199](https://github.com/cloga/dsh-github-copilot/issues/199), [#258](https://github.com/cloga/dsh-github-copilot/issues/258)
 
 **Target:** official DSH and Windows Desktop `0.2.0-rc.2`
 
@@ -31,7 +31,7 @@ MIME are not wire-format proof. See [image compatibility and limits](./image-inp
 
 The account `/models` catalog is authoritative for entitlement and hard capabilities: protocol, context and output limits, image input, tool support, reasoning efforts, and server policy. Unknown or incomplete capability metadata fails closed.
 
-The catalog does not provide trustworthy quality, latency, price, or global-health rankings. The routing policy therefore does **not** infer model quality from a marketing name, model-ID prefix, provider order, or token price. It does not claim to reproduce GitHub's private Auto algorithm.
+The catalog supplies `model_picker_category` (`powerful`, `versatile`, `lightweight`), but not trustworthy measured quality, latency, price, or global-health rankings. Missing, invalid and new category values remain unclassified with diagnostics. The routing policy does **not** infer category from a marketing name, model-ID prefix, reasoning effort, context capacity or token price. It does not claim to reproduce GitHub's private Auto algorithm.
 
 ### Hard input fit check before preference
 
@@ -49,28 +49,35 @@ Before applying soft preferences, routing checks whether each candidate can acco
      - `compaction-eligible`: prior history is compressible and downstream dispatch will trigger compaction pressure.
 5. **Final framing limitation:** The fresh entered-message estimate and current native envelope floor are not the final candidate-specific serialized request. Later framing, changed tools and native attachment projection can still exceed a candidate's budget. The native provider guard (`inspectRequest`) remains authoritative and truthfully rejects such a request with `COPILOT_CONTEXT_BUDGET_EXCEEDED` without bypassing safety boundaries.
 
-### Soft capacity preferences across candidate bands
+### Task-aware supplier category preferences
 
-All three virtual preferences use the *same* eligible account models. Account entitlement, verified input capability (including image input), and input headroom are hard filters; preference changes where the routing policy lands in the deterministic, advertised-capacity order across candidate bands:
+All three preferences use the *same* hard-eligible account pool. The default local
+assessment recognizes isolated greetings and explicit difficult reasoning or
+investigation; other tasks remain uncertain rather than guessing from length.
+An optional `github-copilot.autoSemanticAssessment: true` experiment makes one
+bounded auxiliary native-adapter call to a concrete, non-excluded supplier
+Lightweight model. It adds latency and supplier charges not included in native
+chat Usage. It is off by default pending labeled-corpus calibration.
 
-- **Intelligence:** Biased toward higher advertised capacity across the upper candidate band.
-- **Efficiency:** Biased toward lower advertised capacity across the lower candidate band, though demanding tasks allow higher capacity.
-- **Balance:** Central candidate band.
-
-To avoid monopolizing a single top candidate (such as Grok 4.7) across all turns and Sessions, band selection uses an in-memory deterministic seed derived from `${sessionId}:${turn}` (or turn content when Session context is absent). This guarantees:
-
-- Selection is **100% frozen** across all steps and retries within the same turn.
-- Unrelated Sessions or turns sample across the candidate band rather than concentrating on one model.
-- No sensitive prompt text or seed hashes are persisted or sent over the network.
-- When only a single candidate is eligible or fitting, it is returned unchanged.
-
-| Latest-turn class | Efficiency | Balance (`auto`) | Intelligence |
+| Task demand | Efficiency | Balance (`auto`) | Intelligence |
 | --- | --- | --- | --- |
-| Fast | low band (index 0) | low band (index 0) | middle band |
-| Balanced | lower band | center band | upper band |
-| Strong | center band | upper band | upper band |
+| Proven simple | Lightweight | Lightweight | Lightweight |
+| Routine | Lightweight | Versatile | Powerful |
+| Complex | Powerful | Powerful | Powerful |
+| Unknown | Versatile | Versatile | Powerful |
 
-These are **capacity preferences**, not measured quality, speed, price, or inference-cost preferences. They cannot promise that Intelligence is smarter or Efficiency faster or cheaper. The actual request-budget and compaction checks still apply after selection; no cost or speed metadata is fabricated.
+If the target category has no fitting model, follow the documented category
+fallback order, using unclassified models only last. Keep the previous managed
+model if it remains in the first available category and fits this turn.
+Otherwise use stable equal-weight Session/turn allocation within that category;
+ID ordering breaks ties, not quality rankings. Capacity and reasoning-effort
+bands no longer determine task quality. All steps/retries retain the decision.
+
+These are declared policies, not measured quality, speed or cost guarantees.
+Captured footer reasons show task evidence, selected/target category, fallback,
+continuity or equal tie-breaking, and no-fit recovery. Legacy records without
+details say the reasons were not retained; they never reconstruct history from
+today's settings. See [requirements, assessment limits and rollout](./auto-task-routing.md).
 
 The exact virtual preference stays in the Session's pending selection across turns, while each real request header and transport record the chosen account model. Switching to a real model ends automatic routing for subsequent turns. New turns no longer write a separate decision event; compatible historical events without a preference field remain Balance for display.
 

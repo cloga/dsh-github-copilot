@@ -22,6 +22,25 @@ describe('ephemeral turn selection evidence', () => {
     expect(TurnSelectionSchema.safeParse({ mode: 'manual', model: 'invented' }).success).toBe(false)
     expect(TurnSelectionSchema.safeParse({ mode: 'auto', preference: 'balance', reason: 'invented', candidateCount: 2 }).success).toBe(false)
   })
+  it('strictly decodes detailed explanations and copies frozen evidence without retaining caller arrays', () => {
+    const selection = { mode: 'auto', preference: 'intelligence', reason: 'short-text-turn', candidateCount: 3,
+      fittingCandidateCount: 2, explanation: {
+        assessment: { demand: 'simple', source: 'local', signals: ['isolated-greeting'] },
+        targetCategory: 'lightweight', selectedCategory: 'lightweight', categoryCandidateCount: 1,
+        method: 'only-candidate', fallback: false,
+      } } as const
+    expect(TurnSelectionSchema.safeParse(selection).success).toBe(true)
+    expect(TurnSelectionSchema.safeParse({ ...selection, explanation: { ...selection.explanation, model: 'invented' } }).success).toBe(false)
+    expect(TurnSelectionSchema.safeParse({ ...selection, explanation: { ...selection.explanation,
+      assessment: { ...selection.explanation.assessment, demand: 'invented' } } }).success).toBe(false)
+    const store = new TurnSelectionStore(), agent = {}
+    store.record(agent, 1, selection)
+    const value = store.get(agent, 1)
+    expect(value).toEqual(selection)
+    if (value.mode !== 'auto') throw new Error('EXPECTED_AUTO')
+    expect(value.explanation).not.toBe(selection.explanation)
+    expect(Object.isFrozen(value.explanation?.assessment.signals)).toBe(true)
+  })
   it('evicts old agents without mixing their records', () => {
     const store = new TurnSelectionStore(), first = {}
     store.record(first, 1, { mode: 'manual' })
