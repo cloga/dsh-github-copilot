@@ -62,6 +62,19 @@ describe('session search settings', () => {
 })
 
 describe('managed request and compaction settings', () => {
+  it('separates managed chat liveness and image projection from search deadlines', () => {
+    expect(readInlineConfig(Config(base))).toMatchObject({
+      chatStreamIdleTimeoutMs: 300_000, chatStreamLiveness: true, chatMaxRequestImageBytes: 20_971_520,
+    })
+    expect(readInlineConfig(Config({ ...base, chatStreamIdleTimeoutMs: 400_000,
+      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608 }))).toMatchObject({
+      idleTimeoutMs: 300_000, chatStreamIdleTimeoutMs: 400_000,
+      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608,
+    })
+  })
+  it.each(['chatStreamIdleTimeoutMs', 'chatMaxRequestImageBytes'] as const)('rejects unsafe managed request setting %s', key => {
+    for (const value of [0, -1, 0.5, Number.NaN, Infinity]) expect(() => Config({ ...base, [key]: value })).toThrow()
+  })
   it('defaults to estimated headroom, early pressure and supported low summary effort', () => {
     expect(Config(base)).toMatchObject({ requestBudgetSafetyTokens: 4096, requestBudgetPressureRatio: 0.9, compactionReasoning: 'prefer-low' })
   })

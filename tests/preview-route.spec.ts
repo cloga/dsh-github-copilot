@@ -109,6 +109,86 @@ async function call(ctx: Context, options: Partial<GenerateOptions> = {}) {
 }
 
 describe('managed request-body timeout guidance', () => {
+  it('excludes actual Core consumer think time despite eager SDK event forwarding', async () => {
+    let source!: ReadableStreamDefaultController<Uint8Array>
+    let wireSignal: AbortSignal | null | undefined
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      wireSignal = init?.signal
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          source = controller
+          controller.enqueue(new TextEncoder().encode(
+            event('response.output_item.added', { output_index: 0, item: {
+              id: 'synthetic-think-time', type: 'message', role: 'assistant', content: [],
+            } }) + event('response.output_text.delta', { output_index: 0, delta: 'hello' }),
+          ))
+          init?.signal?.addEventListener('abort', () => {
+            controller.error(new Error('Synthetic transport aborted'))
+          }, { once: true })
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } })
+    })
+    stubFetch(fetch)
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500 }),
+    })
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    const iterator = prepared.stream({ ...prepared.config, messages: [] })[Symbol.asyncIterator]()
+    try {
+      let next = await iterator.next()
+      while (!next.done && next.value.type !== 'text-delta') next = await iterator.next()
+      expect(next.done).toBe(false)
+      await new Promise(resolve => setTimeout(resolve, 1200))
+      expect(wireSignal?.aborted).toBe(false)
+      source.enqueue(new TextEncoder().encode(event('response.completed', {
+        response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+      })))
+      source.close()
+      const assembler = new BlockAssembler()
+      while (!(next = await iterator.next()).done) assembler.push(next.value)
+      expect(assembler.finish).toEqual({ kind: 'stop' })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    } finally { await iterator.return?.() }
+  })
+  it('restores byte-idle failures as TIMEOUT without adding a native wire attempt', async () => {
+    const fetch = vi.fn((_input: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      expect(init?.signal).toBeDefined()
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+    }))
+    stubFetch(fetch)
+    const harness = await runtime(grant(), { chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500 }) })
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'TIMEOUT', message: expect.stringContaining('COPILOT_STREAM_IDLE_TIMEOUT') },
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    if (result.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal timeout')
+    expect(result.assembler.finish.failure.message).toContain('waiting for HTTP response')
+    expect(result.assembler.finish.failure.message).toContain('UTF-8 bytes')
+  })
+
+  it('supports explicitly restoring the native-only semantic timeout', async () => {
+    let canceled = false
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        init?.signal?.addEventListener('abort', () => {
+          canceled = true
+          controller.error(new Error('Synthetic canceled transport'))
+        }, { once: true })
+      },
+    }), { headers: { 'content-type': 'text/event-stream' } }))
+    stubFetch(fetch)
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500, chatStreamLiveness: false }),
+    })
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'TIMEOUT', message: 'pi-ai stream idle timeout after 500ms' },
+    })
+    expect(canceled).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('enriches only a verified 408 while preserving native failure classification and retry ownership', async () => {
     const payload = { message: 'Timed out reading request body. Try again, or use a smaller request size.',
       code: 'user_request_timeout', private: 'SECRET_PROVIDER_BODY' }
@@ -1882,8 +1962,10 @@ describe('plugin-owned account Copilot route', () => {
     expect(attachment.attachmentId).toBe('synthetic-image')
   })
 
-  it('keeps the mapped read-only path when Core offloads an image to fit its request budget', async () => {
-    const harness = await runtime(grant(), { maxRequestImageBytes: 1 })
+  it.each([false, true])('keeps the mapped read-only path when Core offloads an image to fit its request budget', async settings => {
+    const harness = await runtime(grant(), settings
+      ? { chatRequestSettings: () => ({ chatMaxRequestImageBytes: 1 }) }
+      : { maxRequestImageBytes: 1 })
     const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
     type ImageRef = Extract<Message['content'][number], { type: 'image' }>['attachment']
     const attachment: ImageRef = { attachmentId: 'synthetic-offload' as ImageRef['attachmentId'], mediaType: 'image/png', bytes: data.length, width: 1, height: 1 }

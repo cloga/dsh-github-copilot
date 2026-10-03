@@ -32,6 +32,8 @@ On official rc.2, routing is exposed through native live `Config` fields, not a 
 
 Managed Copilot HTTP `408 / user_request_timeout` with the verified request-body timeout message now reports `COPILOT_REQUEST_BODY_TIMEOUT` and the final JSON request's UTF-8 byte count when observable. Bytes are not context tokens, and a request-body timeout does not prove context overflow. Native retries and failure classification remain unchanged. If retries exhaust, explicitly compact the conversation or reduce attachments/tool output before retrying, and check network/proxy health and [GitHub service status](https://www.githubstatus.com/). Compaction is not guaranteed to succeed or cure network/service faults; increasing a client timeout cannot change the server timeout. No automatic history trimming, model switch, compaction or new retry loop is introduced. Unknown errors retain native behavior.
 
+Managed HTTP/SSE chat now distinguishes **byte idle** from **assistant-output silence**. Native Core ignores SSE heartbeats when timing assistant chunks; synthetic unchanged-adapter tests reproduce a timeout despite incoming bytes. By default, five minutes without response headers/nonempty body bytes still fails, but real byte progress permits up to ten minutes without an assistant chunk. Endless heartbeats cannot postpone failure indefinitely, and consumer think time is excluded. `chatStreamLiveness: false` restores native-only timing; explicit WebSocket/`auto` transport remains native-only. This fixes the reproduced false-idle mechanism, not every retry or upstream HTTP 408, and does not establish heartbeat activity in a production incident.
+
 | DSH surface | Exact source pin | Models UI seam |
 |---|---|---|
 | Controlled Desktop `0.1.1-rc.2` baseline | Controlled Core commit [`a772dbb`](https://github.com/cloga/deepseek-harness/commit/a772dbbde82780bff2b9394427e9f0a24cafa1d5) on `cloga-pi-ai-model-api` | Dedicated **Settings → GitHub Copilot** section |
@@ -106,7 +108,7 @@ The Host reads GitHub's internal quota endpoint using the existing canonical OAu
 
 ## Install and sign in
 
-The commands below target the package version `0.4.0-alpha.79`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
+The commands below target the package version `0.4.0-alpha.80`. Versioned URLs describe the intended release artifacts, not proof that publication or local activation has completed; use them only once that Release and its checksums are available. Install into the profile you use (replace `web` when targeting another profile):
 
 Before installing/updating, unpack the **checksum-verified** archive into a temporary directory and run its read-only composition preflight (replace all paths with absolute paths for the intended profile):
 
@@ -119,10 +121,10 @@ Include any launcher patch files with repeated `--patch /absolute/file` argument
 For a standalone named profile only, the supported CLI command is:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.79/dsh-github-copilot-0.4.0-alpha.79.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.80/dsh-github-copilot-0.4.0-alpha.80.tgz
 ```
 
-For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.79` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
+For Desktop profiles, use Desktop's native package manager with `dsh-github-copilot@0.4.0-alpha.80` after the same preflight and only when registry access is permitted. Desktop reserves its `desktop` profile from CLI management. If registry access is blocked or unavailable, stop; the documented [controlled offline CLI procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles) is not a Desktop workaround.
 
 Then open the Models UI listed above, find **GitHub Copilot**, select **Sign in**, and complete the GitHub device-code flow. Plugin installation changes the selected profile; activation follows that profile's normal reload/restart policy.
 
@@ -177,7 +179,7 @@ Agents should treat the browser authorization as a human handoff, not as a token
 5. Confirm **Signed in** and inspect the automatic discovery result before asking the user to choose a model. Already-signed-in Models opening ensures missing/stale metadata automatically; fresh ready cache makes no request. Use visible **Retry** for errors or **Manage → Refresh models** for an intentional forced update, not routine setup. Status alone does not discover, and login, metadata and successful model calls remain separate evidence.
 6. Use **Sign out** only when the user explicitly asks to disconnect the account. It deletes the Copilot credential record but preserves route settings.
 
-GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.79`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
+GitHub Releases and npm are the default distribution channels for each new version, using the same verified tarball. Pin the version and verify the evidence for the channel used: Release `SHA256SUMS`, and npm `dist.integrity` when installing from npm. Install into Desktop profiles only through Desktop's native package manager; the reserved `desktop` profile is not managed by the DSH CLI. After npm publication is verified, the native manager accepts `dsh-github-copilot@0.4.0-alpha.80`, not a URL or file. Controlled offline CLI maintenance is documented for standalone named profiles only, never Desktop-managed profiles. Follow the mandatory search-composition preflight, backup, single-writer and post-install checks; do not bypass a corporate registry ban, disable TLS verification or restart without separate approval. See [distribution and publication requirements](./docs/npm-distribution.md).
 
 **Desktop package-update and Web-lifecycle boundaries:** the native manager's `restart-required` result for an in-place installed-package upgrade is authoritative and distinct from plugin-bundle removal/re-add behavior. Any disable, removal, or upgrade involving service recomposition (`cordis.patch.yml`, such as the isolated routed web search layer) may leave dependent entries pending until Desktop is fully exited and cold-restarted. If the native manager reports only entries such as `pending (waiting for service: web)` while this plugin already shows **Off**, the requested disabled state has been persisted; cold-restart Desktop instead of repeatedly toggling or reinstalling the plugin. Other errors are not covered by this guidance and must still be investigated.
 
@@ -363,6 +365,9 @@ The plugin details page exposes only **Search provider** and **Fallback provider
 |---|---:|---|
 | `accountModelTtlMs` | `86400000` | Maximum account-metadata reuse window in milliseconds (24h); does not extend credentials or proof validity. |
 | `accountModelFailureCooldownMs` | `300000` | Failure cooldown in milliseconds (5min) for non-forcing discovery; no periodic retries. |
+| `chatStreamIdleTimeoutMs` | `300000` | Managed chat byte-idle interval; native assistant-chunk silence is bounded to twice this interval when liveness is enabled (maximum 2147483647 ms). Separate from hosted search. |
+| `chatStreamLiveness` | `true` | Observe actual HTTP/SSE bytes without synthetic assistant output; `false` restores native-only timing. Explicit WebSocket/`auto` transport is unchanged. |
+| `chatMaxRequestImageBytes` | `20971520` | Native outgoing image budget (20 MiB), not a total JSON/supplier limit. A smaller explicit value lets Core offload older images to mapped read-only paths; original history stays intact, but outgoing image visibility changes. |
 | `requestBudgetSafetyTokens` | `4096` | Non-negative safe-integer estimated input allowance; larger values reduce available input. |
 | `requestBudgetPressureRatio` | `0.9` | Fraction (0.01–1, step 0.01) for early local pressure, only with supported enabled stock recovery. |
 | `compactionReasoning` | `prefer-low` | Choose supported minimal/low only when summary effort is absent; `preserve` keeps native defaults. |
@@ -456,8 +461,8 @@ Report the published Release URL, version, tag/commit and verified asset SHA-256
 `package.json` declares public npm distribution. A release tag must equal `v${package.json.version}`. Versions use standard SemVer prerelease labels (`alpha`, `beta`, or `rc`), each with its matching npm dist-tag; only stable versions use `latest`. The Release workflow performs the frozen install and complete verification gate, packs once (or recovers the original archive on retry), verifies `SHA256SUMS`, publishes the immutable GitHub Release and then publishes those same bytes to npm through OIDC. Either channel failing means delivery is incomplete. First package creation needs an authorized maintainer; staging requires an existing package and is not a first-package bootstrap. Historical releases are not republished.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.79/dsh-github-copilot-0.4.0-alpha.79.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.79/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.80/dsh-github-copilot-0.4.0-alpha.80.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.80/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -465,7 +470,7 @@ PowerShell can verify the same two downloaded files with:
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.79.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.80.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

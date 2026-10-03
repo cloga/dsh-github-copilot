@@ -40,6 +40,8 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   | 'streamIdleTimeoutMs' | 'maxRequestImageBytes' | 'requestImagePixelBudget' | 'requestImageMaxBytes' | 'retryPolicy'>
   & Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
   & {
+    readonly streamLiveness?: boolean
+    readonly chatRequestSettings?: () => Pick<InlineConfig, 'chatStreamIdleTimeoutMs' | 'chatStreamLiveness' | 'chatMaxRequestImageBytes'>
     readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'>
     readonly requestBudget?: Partial<RequestBudgetPolicy>
     readonly requestBudgetSettings?: () => Partial<RequestBudgetPolicy>
@@ -315,7 +317,7 @@ function budgetFailure(result: RequestBudgetFailure): LlmError {
 /** Account-bound admission and purpose defaults; Core owns model conversion and wire/replay. */
 class PreviewAdapter extends PiAiAdapter {
   constructor(private readonly lifetime: PreviewLifetime,
-    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout'>) => PiAiAdapterOptions,
+    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness'>) => PiAiAdapterOptions,
     private readonly discoverSnapshot: (options?: AccountModelLoadOptions) => Promise<AccountModelSnapshot>,
     private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
     private readonly requestBudgetSettings: () => Partial<RequestBudgetPolicy>,
@@ -419,6 +421,7 @@ class PreviewAdapter extends PiAiAdapter {
       let requestFailure: LlmError | undefined
       let wireAbort: ManagedWireAbortCode | undefined
       let bodyTimeout: string | undefined
+      let liveness: Parameters<NonNullable<AccountProviderGuard['onStreamLiveness']>>[0] | undefined
       const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
         if (signal.aborted) throw abortFailure(signal)
         const imageFailure = imageInputFailure(lease.descriptor, context.messages)
@@ -451,6 +454,12 @@ class PreviewAdapter extends PiAiAdapter {
           onRequestBodyTimeout(diagnostic) {
             bodyTimeout = diagnostic
           },
+          onStreamIdleTimeout(error) {
+            requestFailure = new LlmError(error.message, 'TIMEOUT', { cause: error })
+          },
+          onStreamLiveness(control) {
+            liveness = control
+          },
           onReplayFailure(error) {
             // Only this dispatch's verified wire/payload observer can set this;
             // arbitrary upstream text must never masquerade as a compatibility failure.
@@ -466,6 +475,7 @@ class PreviewAdapter extends PiAiAdapter {
           ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
         }
         for await (const chunk of native.stream(request)) {
+          let delivered = chunk
           if (requestFailure !== undefined) {
             if (signal.aborted) throw abortFailure(signal)
             throw requestFailure
@@ -480,10 +490,12 @@ class PreviewAdapter extends PiAiAdapter {
           if (chunk.type === 'finish' && chunk.reason.kind === 'error'
             && bodyTimeout !== undefined && chunk.reason.failure.code !== 'ABORTED') {
             if (signal.aborted) throw abortFailure(signal)
-            yield { ...chunk, reason: { ...chunk.reason, failure: { ...chunk.reason.failure, message: bodyTimeout } } }
-            continue
+            delivered = { ...chunk, reason: { ...chunk.reason, failure: { ...chunk.reason.failure, message: bodyTimeout } } }
           }
-          yield chunk
+          // SDK lazyStream eagerly forwards events; only this Core-chunk boundary
+          // observes consumer backpressure rather than its internal producer.
+          liveness?.pause()
+          try { yield delivered } finally { liveness?.resume() }
         }
         if (requestFailure !== undefined) throw requestFailure
       } catch (cause) {
@@ -501,7 +513,7 @@ class PreviewAdapter extends PiAiAdapter {
 /** Register one stable account route; attach/status remain network-free. */
 export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings,
-    requestBudget, requestBudgetSettings, ...requestConfig } = config
+    requestBudget, requestBudgetSettings, streamLiveness, chatRequestSettings, ...requestConfig } = config
   const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'>
     = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs, excludedModelIds: [] }))
   const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
@@ -692,8 +704,13 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     // stream. Never replay a model wire request or retry generic provider errors.
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
-  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout'> = {}): PiAiAdapterOptions => {
+  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness'> = {}): PiAiAdapterOptions => {
+    const settings = chatRequestSettings?.()
+    const idle = settings?.chatStreamIdleTimeoutMs ?? template.streamIdleTimeoutMs
+    const enabled = (settings?.chatStreamLiveness ?? streamLiveness ?? true)
+      && (template.transport === undefined || template.transport === 'sse')
     const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...hooks,
+      ...enabled ? { streamIdleTimeoutMs: idle } : {},
       onUnauthorized() {
         // A late response from before sign-in, refresh or disposal cannot retire
         // a newer credential. This synchronous fence precedes every state change.
@@ -707,7 +724,12 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
       },
     }
     const { provider } = createAccountProvider(lease?.snapshot.models ?? [], guard, lease?.proof.baseURL ?? 'https://api.individual.githubcopilot.com')
-    const profile = Object.freeze({ ...template, piProvider: provider })
+    // Byte-idle retains the original interval; real SSE progress earns only a bounded
+    // extra semantic window. WebSocket/auto keep the untouched native policy.
+    const profile = resolvedProfile(provider, { ...requestConfig,
+      streamIdleTimeoutMs: enabled ? Math.min(idle * 2, 2_147_483_647) : idle,
+      maxRequestImageBytes: settings?.chatMaxRequestImageBytes ?? template.maxRequestImageBytes,
+    })
     const profiles = new Map([[GITHUB_COPILOT_PREVIEW_PROVIDER_ID, profile]])
     return { profiles: () => profiles, resolveApiKey: async () => { lifetime.assertActive(); return undefined },
       auth: { credentials: store, authContext: { env: async () => undefined, fileExists: async () => false } },

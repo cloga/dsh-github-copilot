@@ -79,9 +79,9 @@ function nativeEvents(api: AccountModelApi): Response {
   ]
   return new Response(events.map(value => `event: ${value.type}\n${sse(value)}`).join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
-async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>) {
+async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>, streamIdleTimeoutMs?: number) {
   const item = descriptor(api)
-  const guarded = accountGuard(item.id)
+  const guarded = { ...accountGuard(item.id), ...streamIdleTimeoutMs === undefined ? {} : { streamIdleTimeoutMs } }
   const { provider } = createAccountProvider([item], guarded, baseURL)
   const profile: ResolvedPiAiProviderProfile = { provider: PREVIEW, displayName: 'Account models', piProvider: provider,
     streamIdleTimeoutMs: 300_000, maxRequestImageBytes: 20_971_520,
@@ -108,6 +108,32 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('account-driven native provider', () => {
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)('preserves native output and reasoning with byte-aware %s observation', async api => {
+    const fetch = vi.fn(async () => nativeEvents(api))
+    vi.stubGlobal('fetch', fetch)
+    const result = await accountCall(api, 'high', undefined, 1000)
+    expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    expect(result.assembler.blocks()).toContainEqual({ type: 'reasoning', text: 'Public summary.' })
+    expect(result.assembler.blocks()).toContainEqual({ type: 'text', text: 'Hello.' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it('releases the admitted wire lease if the idle interval is invalid', async () => {
+    const item = descriptor('openai-responses')
+    const guard = accountGuard(item.id)
+    const release = vi.fn()
+    const fetch = vi.fn()
+    const { provider, models } = createAccountProvider([item], {
+      ...guard, streamIdleTimeoutMs: NaN,
+      beforeWire: async () => ({ signal: guard.signal, release }),
+    }, baseURL)
+    const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+      apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+    })
+    for await (const _event of stream) { /* Preserve the native terminal failure. */ }
+    expect((await stream.result()).errorMessage).toContain('COPILOT_STREAM_IDLE_INTERVAL_INVALID')
+    expect(release).toHaveBeenCalledTimes(1)
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)('routes an unseen ID through published Core and native %s with Bearer auth', async api => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'must-not-use')
     let body: Record<string, unknown> | undefined
