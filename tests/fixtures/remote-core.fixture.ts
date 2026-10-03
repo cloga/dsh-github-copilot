@@ -1,10 +1,96 @@
-/** Actual tagged Core Client gateway with synthetic RPC transport; no Host or network. */
+/** Actual tagged Core gateways with in-process transport; no live profile or network. */
 import { Context } from '@deepseek-ai/cordis'
 import * as Gateway from '@deepseek-ai/dsh-api-gateway/client'
+import { TypertGatewayService } from '@deepseek-ai/dsh-api-gateway'
+import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
+import { HostConnectionService } from '@deepseek-ai/dsh-client-connection'
+import { TurnSelectionController } from '../../src/turn-selection-host.ts'
+import { TurnSelectionStore } from '../../src/turn-selection.ts'
 import { it, expect, vi } from 'vitest'
 import remote from '../../src/remote.ts'
 import selectionRemote from '../../src/turn-selection-remote.ts'
 import { name, version } from '#package.json' with { type: 'json' }
+
+it.each(['source', 'strict'] as const)('reads retained selection through actual Client and %s Host gateways', async mode => {
+  expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
+  const host = new Context(), client = new Context()
+  const store = new TurnSelectionStore()
+  const master = { id: 'viewed-master' }
+  const denied = new Error('fixture access denied')
+  const resolve = vi.fn((id: string) => {
+    if (id === 'denied-master') throw denied
+    return id === master.id ? master : undefined
+  })
+  try {
+    const registry = new TypertRegistry(host)
+    registry.lookups.register('agent', {
+      parameter: 'agent', wire: 'agentId',
+      hostTypeSymbol: '@deepseek-ai/dsh-agent#Agent',
+      wireTypeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
+      resolve,
+    })
+    if (mode === 'strict') registry.register({
+      package: selectionRemote.package, face: 'host', schemas: [],
+      model: { services: [], events: [], objects: [] }, invocations: selectionRemote.descriptors,
+    })
+    const connection = new HostConnectionService(host, [], {})
+    const gateway = new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
+    const handler = connection.createSharedFetchHandler('/api')
+    let rpcId = 0
+    const rpc = vi.fn(async (_path: string, method: string, payload: unknown) => {
+      const response = await handler.fetch(new Request(`http://fixture.invalid/api/${method}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'client-request', rpcId: `selection-${++rpcId}`, method, payload }),
+      }))
+      if (response.status !== 200) throw new Error(`Fixture carrier HTTP ${response.status}`)
+      return (await response.json()).result
+    })
+    client.provide('typert', {
+      remotes: { register: () => () => {} },
+      contexts: { getClient: () => ({ identity: () => 'ambient-other-session' }) },
+    })
+    client.provide('connection', { rpc: { call: rpc, open: vi.fn() },
+      registerGenerationSource: () => () => {}, start: () => ({ stop: () => {} }),
+      generation: { getSnapshot: () => undefined } })
+    Gateway.apply(client)
+    await client.remote.$mount(selectionRemote)
+
+    const legacyRead = vi.fn(() => ({ mode: 'manual' }))
+    const legacy = await host.plugin({ apply(ctx) {
+      ctx.provide('githubCopilotTurnSelection', { get: legacyRead })
+    } })
+    await expect(gateway.invoke({ namespace: 'githubCopilotTurnSelection', method: 'get',
+      args: { agentId: master.id, turn: 7 } })).rejects.toMatchObject({
+      code: mode === 'strict' ? 'gateway/binding-invalid' : 'gateway/invocation-unavailable',
+    })
+    expect(legacyRead).not.toHaveBeenCalled()
+    await legacy.dispose()
+
+    const owner = await host.plugin({ apply(ctx) { new TurnSelectionController(ctx, store) } })
+    const auto = { mode: 'auto', preference: 'balance', reason: 'standard-turn', candidateCount: 2 } as const
+    store.record(master, 7, auto)
+    store.record(master, 8, { mode: 'manual' })
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 7))
+      .resolves.toEqual({ ok: true, value: auto })
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 8))
+      .resolves.toEqual({ ok: true, value: { mode: 'manual' } })
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 9))
+      .resolves.toEqual({ ok: true, value: { mode: 'unknown' } })
+    await expect(client.remote.githubCopilotTurnSelection.get('missing-master', 7))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-not-found' } })
+    await expect(client.remote.githubCopilotTurnSelection.get('denied-master', 7))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-failed' } })
+    expect(resolve.mock.calls.some(([id]) => id === 'ambient-other-session')).toBe(false)
+    store.remove(master)
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 7))
+      .resolves.toEqual({ ok: true, value: { mode: 'unknown' } })
+    await owner.dispose()
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 7))
+      .resolves.toMatchObject({ ok: false, error: {
+        code: mode === 'strict' ? 'gateway/service-unavailable' : 'gateway/internal',
+      } })
+  } finally { await client.fiber.dispose(); await host.fiber.dispose() }
+})
 
 it('keeps explicit master selection reads independent of ambient Client agent scope', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')

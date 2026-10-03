@@ -239,6 +239,12 @@ Never say GPT-6/search works merely because settings, typecheck or a package imp
 
 ## Changing capabilities
 
+The turn selection Host endpoint must use `TurnSelectionController`, extending
+public `TypertRemoteService` with `@Remote get`. A plain `ctx.provide` object
+cannot supply the native gateway binding or source method discovery. Test both
+actual Client and Host gateways; a synthetic RPC success cannot prove Host
+reachability. Preserve native Agent lookup and bounded store ownership (#254).
+
 Automatic pressure and Auto recovery availability resolve the initiating Agent's bound preset through public `agentPresets.composedPreset()` / `serviceFor(agent, 'compaction')`. A bound preset without an engine must not borrow global recovery. Only non-preset Agents use their own `agent.ctx.get('compaction')`; never scan Core's private registry or cache an engine across preset replacement. Native transactions, cancellation, retry policy and manual-only segmented recovery remain unchanged.
 
 Selection footer Remote calls carry an explicit viewed Session ID and turn.

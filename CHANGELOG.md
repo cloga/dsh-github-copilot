@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.79 (prepared)
+
+- Bind retained turn selection reads through the public `TypertRemoteService` and `@Remote get`, fixing the Host registration missing from the alpha.76 Client-only correction (#254).
+- Cover actual Client-to-Host calls in source-discovery and strict modes, including Auto/Manual, missing evidence, missing/denied identities and unload; preserve lookup checks and the existing bounded decision store.
+
 ## 0.4.0-alpha.78 (prepared)
 
 - Optimize individual Exclude/Restore saves with a strict preferences-only Remote response, avoiding credential/account-status reads and live-session scans (#252). Keep single-row immediate persistence, CAS conflicts, invalidation and failure recovery; no batch UI.

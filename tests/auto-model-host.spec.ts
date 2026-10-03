@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import { foldFollowState, initialFollowState, PARENT_MODEL_FOLLOW_PROJECTION } from '../src/parent-model-follow.ts'
 import { installAutoModelRouting as installRouting } from '../src/auto-model-host.ts'
+import { TurnSelectionController } from '../src/turn-selection-host.ts'
 import * as routing from '../src/auto-model-routing.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
@@ -20,7 +21,9 @@ function installAutoModelRouting(...[ctx, dependencies]: Parameters<typeof insta
     estimateMessage: (message: unknown) => Math.ceil(JSON.stringify(message).length / 4),
     measure: () => ({ totalTokens: 0 }),
   })
-  return installRouting(ctx, dependencies)
+  const dispose = installRouting(ctx, dependencies)
+  expect(ctx.githubCopilotTurnSelection).toBeInstanceOf(TurnSelectionController)
+  return dispose
 }
 
 function model(id: string, contextWindow: number, effort: string): AccountModelDescriptor {
