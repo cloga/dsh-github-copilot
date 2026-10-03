@@ -103,7 +103,7 @@ if (remote.descriptors.length !== 17 || JSON.stringify(methods) !== JSON.stringi
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
   || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get'])) {
-  throw new Error('built Remote entry must retain ten authorization/model-preference/migration controls, three model-role methods, one search catalog, two quota methods and one scoped selection lookup')
+  throw new Error('built Remote entry must retain ten authorization/model-preference/migration controls, three model-role methods, one search catalog, two quota methods and one explicit selection lookup')
 }
 const selection = selectionDescriptors[0]
 if (selection.id !== 'dsh-github-copilot:githubCopilotTurnSelection.get'
