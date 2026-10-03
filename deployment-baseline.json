@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.82"
+    "version": "0.4.0-alpha.83"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1111,6 +1111,10 @@
         {"file": "tests/auto-model-routing.spec.ts", "name": "preserves suitable continuity but never lets it override task category or input fit"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "discloses category fallbacks and never guesses missing category from ID or capacity"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "bounds context, never reads attachment/reasoning bodies, and does not downshift omitted context"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "inherits difficult-task evidence only through explicit bounded continuations"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "recognizes only isolated explicit fenced mechanical transformations as routine"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "preserves valid bounded rows and prioritizes the current user and nearest task over verbose output"},
+        {"file": "tests/auto-selection-explanation.spec.ts", "name": "distinguishes local rule coverage from absent conversation context in both languages"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "preserves caller cancellation instead of using a success-shaped fallback"},
         {"file": "tests/preview-route.spec.ts", "name": "assesses Auto through one concrete public native adapter call and freezes the captured reason across retries"},
         {"file": "tests/turn-selection-card.spec.ts", "name": "explains a captured task/category decision with progressive details (%s)"},

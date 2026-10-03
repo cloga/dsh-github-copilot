@@ -52,11 +52,16 @@ Before applying soft preferences, routing checks whether each candidate can acco
 ### Task-aware supplier category preferences
 
 All three preferences use the *same* hard-eligible account pool. The default local
-assessment recognizes isolated greetings and explicit difficult reasoning or
-investigation; other tasks remain uncertain rather than guessing from length.
+assessment recognizes isolated greetings, explicit difficult reasoning or
+investigation, bounded explicit continuations of those difficult tasks, and
+isolated fenced mechanical transformations. Other tasks remain uncertain rather
+than guessing from length; insufficient local evidence does not mean the
+conversation lacks context.
 An optional `github-copilot.autoSemanticAssessment: true` experiment makes one
 bounded auxiliary native-adapter call to a concrete, non-excluded supplier
-Lightweight model. It adds latency and supplier charges not included in native
+Lightweight model only for locally unknown demand. It prioritizes the current
+and preceding user requests without removing omitted-context safeguards. It
+adds latency and supplier charges not included in native
 chat Usage. It is off by default pending labeled-corpus calibration.
 
 | Task demand | Efficiency | Balance (`auto`) | Intelligence |
