@@ -26,10 +26,11 @@ function installAutoModelRouting(...[ctx, dependencies]: Parameters<typeof insta
   return dispose
 }
 
-function model(id: string, contextWindow: number, effort: string): AccountModelDescriptor {
+function model(id: string, contextWindow: number, effort: string, category?: AccountModelDescriptor['category']): AccountModelDescriptor {
   return {
     id,
     name: id,
+    category,
     api: 'openai-responses',
     contextWindow,
     maxTokens: Math.floor(contextWindow / 4),
@@ -251,7 +252,7 @@ describe('Auto model Host integration', () => {
     const scope = scopeTarget(agent, agent)
     const promptScope = scopeTarget(new SystemPrompt(ctx, {}), agent)
     const loadModels = vi.fn(async () => [
-      model('fixture-fast', 64_000, 'low'), model('fixture-middle', 128_000, 'medium'), model('fixture-strong', 256_000, 'high'),
+      model('fixture-fast', 64_000, 'low', 'lightweight'), model('fixture-middle', 128_000, 'medium', 'versatile'), model('fixture-strong', 256_000, 'high', 'powerful'),
     ])
     ctx.provide('sessionProjections', { stateOf: () => selection } as never)
     const dispose = installAutoModelRouting(ctx, { loadModels })
@@ -267,7 +268,7 @@ describe('Auto model Host integration', () => {
     try {
       await enter(1, 'Short.')
       const first = await request(1, INTELLIGENCE)
-      expect(first.model).toBe('fixture-middle')
+      expect(first.model).toBe('fixture-strong')
       expect(selection.pending?.model).toBe(INTELLIGENCE)
       expect(ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
         mode: 'auto', preference: 'intelligence', reason: 'short-text-turn', candidateCount: 3,
@@ -308,8 +309,8 @@ describe('Auto model Host integration', () => {
     ctx.provide('sessionProjections', { stateOf: () => selection } as never)
     ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: PREVIEW, model: AUTO }) } as never)
     const loadModels = vi.fn(async () => [
-      model('fixture-fast', 64_000, 'low'),
-      model('fixture-strong', 256_000, 'high'),
+      model('fixture-fast', 64_000, 'low', 'lightweight'),
+      model('fixture-strong', 256_000, 'high', 'powerful'),
     ])
     const dispose = installAutoModelRouting(ctx, { loadModels })
     ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
@@ -322,7 +323,7 @@ describe('Auto model Host integration', () => {
     const request = (turn: number, modelId: string) => ctx.waterfall(scope, 'agent/request',
       { agent, turn, step: 1, signal }, async () => ({ provider: PREVIEW, model: modelId }))
     try {
-      await enter(1, 'Short question.')
+      await enter(1, 'Hello!')
       const first = await request(1, AUTO)
       expect(first.model).toBe('fixture-fast')
       expect(selection.pending).toEqual({ provider: PREVIEW, model: AUTO })

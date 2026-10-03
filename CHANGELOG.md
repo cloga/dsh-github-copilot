@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.81 (prepared)
+
+- Route Auto through current supplier Powerful/Versatile/Lightweight categories and contextual task evidence instead of advertised-capacity bands (#258). Preserve hard input/image/exclusion/account admission and native no-fit recovery.
+- Use Lightweight for isolated greetings even with Intelligence, retain capable targets for short hard work, prefer suitable previous-model continuity, and distribute only equal-category candidates.
+- Explain the actual captured turn choice, category fallback and continuity/tie-break in the footer; old records explicitly lack detailed reasons rather than displaying generic reconstructed text.
+- Add an off-by-default bounded semantic-assessment experiment through the existing native adapter. Strict output, omitted-context conservatism, cancellation and diagnostic fallback remain; extra calls add latency and supplier charges outside native Chat Usage. Synthetic tests do not establish calibrated accuracy or GitHub-private parity.
+
 ## 0.4.0-alpha.80 (prepared)
 
 - Observe real HTTP/SSE byte progress on managed requests, retaining the original five-minute byte-idle bound while allowing at most ten minutes without a native assistant chunk (#253).

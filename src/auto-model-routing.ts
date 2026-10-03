@@ -1,4 +1,6 @@
-import type { AccountModelDescriptor } from './account-model-catalog.ts'
+import type { AccountModelCategory, AccountModelDescriptor } from './account-model-catalog.ts'
+import { assessTaskLocally } from './auto-task-assessment.ts'
+import type { TaskAssessment } from './auto-task-assessment.ts'
 import { autoModelPreference } from './copilot-identity.ts'
 import type { AutoModelPreference } from './copilot-identity.ts'
 import { calculateRequestBudget, DEFAULT_REQUEST_BUDGET_POLICY } from './request-budget.ts'
@@ -30,6 +32,16 @@ export interface AutoModelDecision {
   readonly estimatedInputTokens: number
   readonly selectedInputBudget: number
   readonly inputFitDiagnostic: AutoModelInputFitDiagnostic
+  readonly explanation: AutoSelectionExplanation
+}
+
+export interface AutoSelectionExplanation {
+  readonly assessment: TaskAssessment
+  readonly targetCategory: AccountModelCategory
+  readonly selectedCategory: AccountModelCategory | 'unknown'
+  readonly categoryCandidateCount: number
+  readonly method: 'continuity' | 'equal-distribution' | 'only-candidate' | 'no-fit'
+  readonly fallback: boolean
 }
 
 export interface AutoModelRoutingContext {
@@ -42,6 +54,8 @@ export interface AutoModelRoutingContext {
   readonly seed?: string | number
   readonly compactionAvailable?: boolean
   readonly hasCompactionSummary?: boolean
+  readonly assessment?: TaskAssessment
+  readonly previousModelId?: string
 }
 
 export class AutoModelRoutingError extends Error {
@@ -52,9 +66,6 @@ export class AutoModelRoutingError extends Error {
   }
 }
 
-const effortOrder = new Map([
-  ['off', 0], ['minimal', 1], ['low', 2], ['medium', 3], ['high', 4], ['xhigh', 5], ['max', 6],
-])
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -62,6 +73,7 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function userMessage(value: unknown): value is Record<string, unknown> {
   if (!record(value)) return false
+  if (record(value.source) && value.source.kind === 'model-selection') return false
   if (value.role === 'user') return true
   return record(value.source) && value.source.kind === 'user'
 }
@@ -90,19 +102,6 @@ export function classifyAutoModelTurn(messages: readonly unknown[]): AutoModelFe
     : textLength <= 600 && codeFenceCount <= 2 ? 'fast'
       : textLength > 4_000 || codeFenceCount >= 4 ? 'strong' : 'balanced'
   return Object.freeze({ taskClass, textLength, codeFenceCount, requiresImage })
-}
-
-function maximumEffort(model: AccountModelDescriptor): number {
-  let rank = -1
-  for (const effort of model.reasoning.advertisedEfforts) rank = Math.max(rank, effortOrder.get(effort) ?? -1)
-  return rank
-}
-
-function compareCapacity(left: AccountModelDescriptor, right: AccountModelDescriptor): number {
-  return maximumEffort(left) - maximumEffort(right)
-    || left.contextWindow - right.contextWindow
-    || left.maxTokens - right.maxTokens
-    || left.id.localeCompare(right.id, 'en')
 }
 
 function reasonFor(features: AutoModelFeatures): AutoModelDecision['reason'] {
@@ -171,95 +170,16 @@ function resolveSeed(messages: readonly unknown[], context?: AutoModelRoutingCon
   return fnv1a(text || 'default-auto-seed')
 }
 
-function pickBandIndex(
-  n: number,
-  taskClass: AutoModelClass,
-  preference: AutoModelPreference,
-  seed: number,
-): number {
-  if (n <= 1) return 0
-  const middle = Math.floor((n - 1) / 2)
-  if (n === 2) {
-    if (taskClass === 'fast') return preference === 'intelligence' ? 1 : 0
-    if (taskClass === 'strong') return 1
-    return preference === 'efficiency' ? 0 : 1
-  }
-
-  let start: number
-  let end: number
-  let bias: 'low' | 'center' | 'high'
-
-  if (taskClass === 'fast') {
-    if (preference === 'intelligence') {
-      start = Math.max(0, middle - 1)
-      end = Math.min(n - 1, Math.max(1, middle))
-      bias = 'high'
-    } else {
-      start = 0
-      end = 0
-      bias = 'low'
-    }
-  } else if (taskClass === 'strong') {
-    if (preference === 'efficiency') {
-      start = Math.min(n - 1, Math.max(1, middle))
-      end = start
-      bias = 'center'
-    } else if (preference === 'balance') {
-      start = Math.min(n - 1, Math.max(1, middle))
-      end = n - 1
-      bias = 'high'
-    } else {
-      const upperCount = Math.max(2, Math.min(3, Math.ceil(n / 2)))
-      start = Math.max(1, n - upperCount)
-      end = n - 1
-      bias = 'high'
-    }
-  } else {
-    if (preference === 'efficiency') {
-      const lowerCount = Math.max(1, Math.min(2, Math.floor(n / 3)))
-      start = 0
-      end = lowerCount - 1
-      bias = 'low'
-    } else if (preference === 'intelligence') {
-      const upperCount = Math.max(2, Math.min(3, Math.ceil(n / 2)))
-      start = Math.max(1, n - upperCount)
-      end = n - 1
-      bias = 'high'
-    } else {
-      const spread = n >= 5 ? 1 : 0
-      start = Math.max(0, middle - spread)
-      end = Math.min(n - 1, middle + spread)
-      bias = 'center'
-    }
-  }
-
-  const bandSize = end - start + 1
-  if (bandSize <= 1) return start
-
-  const weights: number[] = []
-  for (let i = 0; i < bandSize; i++) {
-    if (bias === 'high') {
-      weights.push(i + 1)
-    } else if (bias === 'low') {
-      weights.push(bandSize - i)
-    } else {
-      const dist = Math.abs(i - Math.floor((bandSize - 1) / 2))
-      weights.push(bandSize - dist)
-    }
-  }
-  const totalWeight = weights.reduce((sum, w) => sum + w, 0)
-  const offset = seed % totalWeight
-  let accumulated = 0
-  for (let i = 0; i < bandSize; i++) {
-    accumulated += weights[i]!
-    if (offset < accumulated) return start + i
-  }
-  return end
+function targetCategory(assessment: TaskAssessment, preference: AutoModelPreference): AccountModelCategory {
+  if (assessment.demand === 'simple') return 'lightweight'
+  if (assessment.demand === 'complex' || preference === 'intelligence') return 'powerful'
+  if (assessment.demand === 'routine' && preference === 'efficiency') return 'lightweight'
+  return 'versatile'
 }
 
 /**
- * Filter by hard capabilities and input headroom before soft preference.
- * Soft preferences distribute across capacity bands using in-memory deterministic seeds.
+ * Filter input headroom before task-aware supplier categories.
+ * Preserve suitable continuity; distribute only equally classified candidates.
  * Preserves Core compaction ownership if no candidate currently fits.
  */
 export function selectAutoModel(
@@ -271,7 +191,7 @@ export function selectAutoModel(
   const features = classifyAutoModelTurn(messages)
   const eligible = models.filter(model => autoModelPreference(model.id) === undefined
     && model.input.includes('text') && (!features.requiresImage || model.input.includes('image')))
-    .toSorted(compareCapacity)
+    .toSorted((left, right) => left.id.localeCompare(right.id, 'en'))
   if (eligible.length === 0) throw new AutoModelRoutingError('COPILOT_AUTO_NO_ELIGIBLE_MODEL')
 
   const estimateMessage = context?.estimateMessage
@@ -288,14 +208,28 @@ export function selectAutoModel(
   })
 
   const seed = resolveSeed(messages, context)
+  const assessment = context?.assessment ?? assessTaskLocally(messages)
+  const target = targetCategory(assessment, preference)
+  const order: readonly (AccountModelCategory | 'unknown')[] = target === 'powerful'
+    ? ['powerful', 'versatile', 'lightweight', 'unknown']
+    : target === 'lightweight' ? ['lightweight', 'versatile', 'powerful', 'unknown']
+      : ['versatile', 'powerful', 'lightweight', 'unknown']
 
   let selectedModel: AccountModelDescriptor
   let inputFitDiagnostic: AutoModelInputFitDiagnostic
   let selectedInputBudget: number
+  let explanation: AutoSelectionExplanation
 
   if (fitting.length > 0) {
-    const index = pickBandIndex(fitting.length, features.taskClass, preference, seed)
-    selectedModel = fitting[index]!
+    const selectedCategory = order.find(category => fitting.some(model => (model.category ?? 'unknown') === category))!
+    const pool = fitting.filter(model => (model.category ?? 'unknown') === selectedCategory)
+    const previous = pool.find(model => model.id === context?.previousModelId)
+    selectedModel = previous ?? pool[seed % pool.length]!
+    explanation = {
+      assessment, targetCategory: target, selectedCategory, categoryCandidateCount: pool.length,
+      method: previous ? 'continuity' : pool.length === 1 ? 'only-candidate' : 'equal-distribution',
+      fallback: selectedCategory !== target,
+    }
     selectedInputBudget = candidateInputLimit(selectedModel, requestedMaxTokens, policy)
     inputFitDiagnostic = 'fitting-candidate-selected'
   } else {
@@ -310,6 +244,8 @@ export function selectAutoModel(
     }
     selectedModel = maxModel
     selectedInputBudget = maxLimit
+    explanation = { assessment, targetCategory: target, selectedCategory: selectedModel.category ?? 'unknown',
+      categoryCandidateCount: 0, method: 'no-fit', fallback: true }
 
     const latestUserTokens = latestUserTurnTokens(messages, estimateMessage)
     if (latestUserTokens > maxLimit) {
@@ -333,6 +269,9 @@ export function selectAutoModel(
     estimatedInputTokens,
     selectedInputBudget,
     inputFitDiagnostic,
+    explanation: Object.freeze({ ...explanation, assessment: Object.freeze({
+      ...explanation.assessment, signals: Object.freeze([...explanation.assessment.signals]),
+    }) }),
   })
 }
 

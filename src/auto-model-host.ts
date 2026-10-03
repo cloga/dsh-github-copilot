@@ -12,6 +12,8 @@ import type { RequestBudgetPolicy } from './request-budget.ts'
 import { TurnSelectionStore } from './turn-selection.ts'
 import { TurnSelectionController } from './turn-selection-host.ts'
 import { z } from 'zod'
+import { assessAutoTask } from './auto-task-assessment.ts'
+import type { AssessmentInput } from './auto-task-assessment.ts'
 import {
   PARENT_MODEL_FOLLOW_PROJECTION, initialFollowState, foldFollowState, followSelection,
   resolveParentModel, ParentModelFollowError,
@@ -28,6 +30,9 @@ export interface AutoModelHostDependencies {
   parentModelBindings?: () => readonly ParentModelBinding[]
   followParentModel?: () => boolean
   admitModel?: (agent: Agent, turn: number, model: string, signal: AbortSignal) => void
+  semanticAssessment?: () => boolean
+  classifyTask?: (input: AssessmentInput, signal: AbortSignal) => Promise<string>
+  assessmentDiagnostic?: (code: string) => void
 }
 
 interface CapturedTurn {
@@ -41,8 +46,8 @@ interface RoutedTurn {
   recorded: boolean
 }
 
-function failure(code: string): LlmError {
-  return new LlmError(code, 'INVALID_REQUEST')
+function failure(code: string, kind: 'INVALID_REQUEST' | 'ABORTED' = 'INVALID_REQUEST'): LlmError {
+  return new LlmError(code, kind)
 }
 
 async function decide(
@@ -52,7 +57,15 @@ async function decide(
   preference: AutoModelPreference,
   context?: AutoModelRoutingContext,
 ): Promise<AutoModelDecision> {
-  try { return selectAutoModel(await dependencies.loadModels(signal), messages, preference, context) }
+  try {
+    const assessment = await assessAutoTask(messages, {
+      enabled: dependencies.semanticAssessment?.() === true, signal,
+      classify: dependencies.classifyTask,
+      diagnostic: dependencies.assessmentDiagnostic ?? (() => { throw failure('COPILOT_AUTO_ASSESSMENT_DIAGNOSTIC_UNAVAILABLE') }),
+    })
+    if (signal.aborted) throw signal.reason
+    return selectAutoModel(await dependencies.loadModels(signal), messages, preference, { ...context, assessment })
+  }
   catch (cause) {
     if (cause instanceof AutoModelRoutingError) throw failure(cause.code)
     throw cause
@@ -108,6 +121,8 @@ function buildRoutingContext(
     requestBudgetPolicy,
     compactionAvailable,
     hasCompactionSummary,
+    previousModelId: requestHeader?.config.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+      ? requestHeader.config.model : undefined,
   }
 }
 
@@ -155,6 +170,38 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
   new TurnSelectionController(ctx, selections)
   const captured = new WeakMap<Agent, CapturedTurn>()
   const routed = new WeakMap<Agent, RoutedTurn>()
+  const pendingDecisions = new WeakMap<Agent, {
+    turn: number; signal: AbortSignal; stop: AbortController; promise: Promise<RoutedTurn>
+  }>()
+  const activeDecisions = new Set<AbortController>()
+  let active = true
+  const decisionFor = (agent: Agent, turn: number, messages: readonly unknown[],
+    preference: AutoModelPreference, signal: AbortSignal): Promise<RoutedTurn> => {
+    if (!active || signal.aborted) return Promise.reject(signal.reason ?? failure('COPILOT_AUTO_DISPOSED', 'ABORTED'))
+    const completed = routed.get(agent)
+    if (completed?.turn === turn) return Promise.resolve(completed)
+    const existing = pendingDecisions.get(agent)
+    if (existing?.turn === turn) {
+      if (existing.signal !== signal) return Promise.reject(failure('COPILOT_AUTO_TURN_SIGNAL_CHANGED'))
+      return existing.promise
+    }
+    existing?.stop.abort(failure('COPILOT_AUTO_TURN_REPLACED', 'ABORTED'))
+    const stop = new AbortController()
+    const combined = AbortSignal.any([signal, stop.signal])
+    const routingContext = buildRoutingContext(ctx, agent, turn, messages, dependencies.budgetPolicy?.())
+    activeDecisions.add(stop)
+    const promise = decide(dependencies, combined, messages, preference, routingContext).then(decision => {
+      if (!active || combined.aborted) throw combined.reason ?? failure('COPILOT_AUTO_DISPOSED', 'ABORTED')
+      const state = { turn, decision, recorded: false }
+      routed.set(agent, state)
+      return state
+    }).finally(() => {
+      activeDecisions.delete(stop)
+      if (pendingDecisions.get(agent)?.stop === stop) pendingDecisions.delete(agent)
+    })
+    pendingDecisions.set(agent, { turn, signal, stop, promise })
+    return promise
+  }
   const agentDisposers = new WeakMap<Agent, Dispose>()
   const activeDisposers = new Set<Dispose>()
   const followed = new WeakMap<Agent, { turn: number; selection: FollowSelection | undefined }>()
@@ -264,13 +311,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       if (result.kind !== 'enter' || signal.aborted || preference === undefined) return result
       let state = routed.get(agent)
       if (state?.turn !== turn) {
-        const routingContext = buildRoutingContext(ctx, agent, turn, entered, dependencies.budgetPolicy?.())
-        state = {
-          turn,
-          decision: await decide(dependencies, signal, entered, preference, routingContext),
-          recorded: false,
-        }
-        routed.set(agent, state)
+        state = await decisionFor(agent, turn, entered, preference, signal)
       }
       const filtered = result.messages.filter(message => !modelSelectionNotice(message))
       const notice = actualNotice(agent, state.decision.model.id)
@@ -292,6 +333,8 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     agentDisposers.delete(agent)
     captured.delete(agent)
     routed.delete(agent)
+    pendingDecisions.get(agent)?.stop.abort(failure('COPILOT_AUTO_AGENT_DISPOSED', 'ABORTED'))
+    pendingDecisions.delete(agent)
     followed.delete(agent)
     selections.remove(agent)
     return undefined
@@ -329,9 +372,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       if (input?.turn !== turn) throw failure('COPILOT_AUTO_TURN_CONTEXT_UNAVAILABLE')
       const preference = virtualPreference ?? (pending === undefined ? undefined : autoModelPreference(pending))
       if (preference === undefined) throw failure('COPILOT_AUTO_PREFERENCE_UNAVAILABLE')
-      const routingContext = buildRoutingContext(ctx, agent, turn, input.messages, dependencies.budgetPolicy?.())
-      state = { turn, decision: await decide(dependencies, signal, input.messages, preference, routingContext), recorded: false }
-      routed.set(agent, state)
+      state = await decisionFor(agent, turn, input.messages, preference, signal)
     }
     if (!state.recorded) {
       const projections: unknown = ctx.get('sessionProjections')
@@ -351,11 +392,15 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       selections.record(agent, turn, {
         mode: 'auto', preference: state.decision.preference, reason: state.decision.reason,
         candidateCount: state.decision.candidateCount, fittingCandidateCount: state.decision.fittingCandidateCount,
+        explanation: state.decision.explanation,
       })
     }
     return { ...resolved, model: state.decision.model.id }
   }, { prepend: true })
   return () => {
+    active = false
+    for (const stop of activeDecisions) stop.abort(failure('COPILOT_AUTO_DISPOSED', 'ABORTED'))
+    activeDecisions.clear()
     removeCreated()
     removeDisposed()
     removeRequest()

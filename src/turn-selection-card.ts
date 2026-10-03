@@ -1,6 +1,7 @@
 import { createElement as h, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { TurnSelection } from './turn-selection.ts'
+import { selectionExplanation } from './auto-selection-explanation.ts'
 
 export function TurnSelectionCard({ selection, locale = 'en', incomplete = false, readState = 'ready', retry }: {
   selection: TurnSelection; locale?: string; incomplete?: boolean
@@ -40,12 +41,8 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
   }, [open])
   const label = selection.mode === 'auto' ? `Auto (${selection.preference})`
     : selection.mode === 'manual' ? zh ? '手动' : 'Manual' : zh ? '选择方式未知' : 'Selection unknown'
-  const reason = selection.mode !== 'auto' ? '' : {
-    'short-text-turn': zh ? '短文本轮次' : 'Short text turn',
-    'standard-turn': zh ? '常规轮次' : 'Standard turn',
-    'large-structured-turn': zh ? '较大结构化轮次' : 'Large structured turn',
-    'image-capability': zh ? '需要图片能力' : 'Image capability required',
-  }[selection.reason]
+  const explanation = selection.mode === 'auto' && selection.explanation !== undefined
+    ? selectionExplanation(selection.explanation, locale) : undefined
   const button = { font: 'inherit', color: 'inherit', background: 'transparent', border: '1px solid var(--dsw-alias-border-main, GrayText)', borderRadius: 6, cursor: 'pointer' }
   return h('span', { style: { order: 1, display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 4,
     minWidth: 0, maxWidth: '100%', fontSize: 'var(--dsh-content-font-size-secondary, 13px)', color: 'var(--dsw-alias-label-tertiary, GrayText)' } },
@@ -55,18 +52,23 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
     : readState === 'failed' ? zh ? '选择记录读取失败' : 'Selection unavailable' : label),
   readState === 'failed' && retry ? h('button', { type: 'button', style: button, onClick: retry }, zh ? '重试' : 'Retry') : null,
   readState === 'ready' && (selection.mode === 'auto' || incomplete) ? h('button', { ref: trigger, type: 'button', style: { ...button, width: 24, height: 24, flexShrink: 0 },
-    'aria-label': zh ? '本轮选择记录' : 'Turn selection evidence', 'aria-expanded': open, 'aria-controls': open ? id : undefined,
+    'aria-label': zh ? '为什么本轮选择这个模型' : 'Why this model was selected', 'aria-expanded': open, 'aria-controls': open ? id : undefined,
     'aria-haspopup': 'dialog', onClick: () => setOpen(value => !value) }, 'ⓘ') : null,
   open ? h('div', { ref: panel, id, popover: 'manual', role: 'dialog', 'aria-label': zh ? '本轮选择记录' : 'Turn selection evidence',
     style: { position: 'fixed', inset: 'auto', ...position, margin: 0, zIndex: 1000, width: 300, maxWidth: 'calc(100vw - 24px)',
       maxHeight: `calc(100dvh - ${position.top + 12}px)`, overflowY: 'auto', overflowWrap: 'anywhere', boxSizing: 'border-box',
       padding: 16, borderRadius: 12, border: button.border, background: 'var(--dsw-alias-bg-layer-2, Canvas)',
       color: 'var(--dsw-alias-label-primary, CanvasText)', lineHeight: 1.6 } },
-    h('strong', null, zh ? '本轮选择记录' : 'Turn selection evidence'),
-    selection.mode === 'auto' ? h('p', null, `${reason}. `,
-      zh ? `容量偏好：${selection.preference}。` : `Capacity preference: ${selection.preference}. `,
-      zh ? `从 ${selection.candidateCount} 个合格模型中选择。` : `Selected from ${selection.candidateCount} eligible models.`,
-      selection.fittingCandidateCount === undefined ? '' : zh ? `其中 ${selection.fittingCandidateCount} 个可容纳估算输入。` : ` ${selection.fittingCandidateCount} fit the estimated input.`) : null,
+    h('strong', null, zh ? '为什么本轮选择这个模型' : 'Why this model was selected'),
+    selection.mode === 'auto' ? explanation === undefined
+      ? h('p', null, zh ? '本轮未保留详细选模原因；不使用当前设置反推历史。' : 'Detailed selection reasons were not retained for this turn; today’s settings cannot reconstruct them.')
+      : h('div', null, h('p', null, explanation.conclusion), h('p', null, explanation.choice),
+        h('details', null, h('summary', null, zh ? '查看判断依据' : 'Assessment details'),
+          h('p', null, explanation.assessment),
+          h('p', null, zh ? `${selection.candidateCount} 个合格候选；${selection.fittingCandidateCount ?? '未知'} 个可容纳估算输入。`
+            : `${selection.candidateCount} eligible candidates; ${selection.fittingCandidateCount ?? 'unknown'} fit the estimated input.`),
+          explanation.diagnostic ? h('p', null, explanation.diagnostic) : null,
+          h('p', null, zh ? '分类来自供应方；不保证实际速度、费用或任务质量。' : 'Supplier categories do not guarantee actual speed, cost or task quality.'))) : null,
     incomplete ? h('p', null, zh ? '模型归属不完整：部分尝试或历史未记录模型。原生 Usage 保持不变。' : 'Model attribution is incomplete: some attempts or history have no recorded model. Native Usage is unchanged.') : null,
     h('p', null, zh ? '此记录说明选择方式，不证明执行；实际模型以原生 Usage 为准。' : 'Selection evidence is not execution proof; see native Usage for recorded models.'),
     h('button', { ref: close, type: 'button', style: button, onClick: () => { setOpen(false); trigger.current?.focus() } }, zh ? '关闭' : 'Close'),

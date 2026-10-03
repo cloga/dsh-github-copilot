@@ -17,6 +17,31 @@ async function mount(selection: TurnSelection, locale = 'en') {
   return container
 }
 const auto = { mode: 'auto', preference: 'intelligence', reason: 'large-structured-turn', candidateCount: 3 } as const
+it.each(['en', 'zh'])('explains a captured task/category decision with progressive details (%s)', async locale => {
+  const container = await mount({ ...auto, explanation: {
+    assessment: { demand: 'simple', source: 'local', signals: ['isolated-greeting'] },
+    targetCategory: 'lightweight', selectedCategory: 'lightweight', categoryCandidateCount: 1,
+    method: 'only-candidate', fallback: false,
+  } }, locale)
+  expect(container.textContent).not.toContain('Lightweight')
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.textContent).toContain('Lightweight')
+  expect(container.textContent).toContain(locale === 'en' ? 'Only one eligible fitting candidate' : '只有一个')
+  expect(container.querySelector('details')?.open).toBe(false)
+  expect(container.textContent).toContain(locale === 'en' ? 'isolated greeting' : '独立问候')
+  expect(container.textContent).not.toContain('Capacity preference')
+})
+it.each(['continuity', 'equal-distribution', 'no-fit'] as const)('shows the captured actual selection method: %s', async method => {
+  const container = await mount({ ...auto, explanation: {
+    assessment: { demand: 'unknown', source: 'local', signals: ['continuation'], diagnostic: 'disabled' },
+    targetCategory: 'powerful', selectedCategory: 'versatile', categoryCandidateCount: method === 'no-fit' ? 0 : 2,
+    method, fallback: true,
+  } })
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.textContent).toContain(method === 'continuity' ? 'Kept the previous model'
+    : method === 'equal-distribution' ? 'stable equal-weight allocation' : 'No candidate fits')
+  expect(container.textContent).toContain('Semantic assessment is disabled')
+})
 it.each([
   { selection: auto, routes: undefined, expected: 'Auto (intelligence)ⓘ' },
   { selection: { mode: 'manual' } as const, routes: undefined, expected: 'Manualⓘ' },
@@ -83,7 +108,7 @@ it('shows only mode, then opens truthful reasons with focus, Escape and outside 
   expect(container.textContent).toBe('Auto (intelligence)ⓘ')
   const trigger = container.querySelector('button')!
   await act(async () => trigger.click())
-  expect(container.textContent).toContain('Large structured turn')
+  expect(container.textContent).toContain('Detailed selection reasons were not retained')
   expect(container.textContent).toContain('not execution proof')
   expect(document.activeElement?.textContent).toBe('Close')
   expect(container.querySelector<HTMLElement>('[role=dialog]')!.style.maxWidth).toBe('calc(100vw - 24px)')
@@ -178,8 +203,8 @@ it.each(['map', 'native-store'] as const)('reads exact completed turn evidence t
   expect(container.querySelector('span')!.style.order).toBe('1')
   expect(container.querySelector('span')!.style.flexWrap).toBe('wrap')
   await act(async () => container.querySelector('button')!.click())
-  expect(container.querySelector('[role=dialog]')?.textContent).toContain('Large structured turn')
-  expect(container.querySelector('[role=dialog]')?.textContent).toContain('3 eligible models')
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('Detailed selection reasons were not retained')
+  expect(container.querySelector('[role=dialog]')?.textContent).not.toContain('Capacity preference')
   await act(async () => root.render(createElement(component!, { ...props, unrelatedPicker: 'different-model' })))
   expect(get).toHaveBeenCalledTimes(1)
   expect(diagnostic).not.toHaveBeenCalled()

@@ -13,6 +13,7 @@ export const ACCOUNT_MODEL_CATALOG_LIMITS = Object.freeze({
 
 export type AccountModelApi = 'anthropic-messages' | 'openai-responses' | 'openai-completions'
 export type AccountModelHttpEndpoint = '/v1/messages' | '/responses' | '/chat/completions'
+export type AccountModelCategory = 'powerful' | 'versatile' | 'lightweight'
 type RecognizedEndpoint = AccountModelHttpEndpoint | 'ws:/responses'
 
 /** Advertised data only; consumers must not turn unfamiliar labels into supported Core controls. */
@@ -33,6 +34,7 @@ export interface AccountModelDescriptor {
   readonly maxInputTokens?: number
   readonly maxTokens: number
   readonly input: readonly ('text' | 'image')[]
+  readonly category?: AccountModelCategory
   readonly reasoning: AccountModelReasoning
   readonly evidence: {
     /** Recognized endpoint literals only, never arbitrary URLs or query strings. */
@@ -43,6 +45,7 @@ export interface AccountModelDescriptor {
     readonly policySource: 'server-enabled' | 'account-available-id'
     readonly contextWindowSource: 'max_context_window_tokens' | 'max_prompt_tokens'
     readonly visionMediaTypes?: readonly string[]
+    readonly categoryDiagnostic?: 'missing' | 'unknown' | 'invalid'
   }
 }
 
@@ -133,6 +136,10 @@ function recognizedEndpoint(value: string): value is RecognizedEndpoint {
 }
 
 function normalizeModel(raw: object, id: string, options: AccountModelCatalogOptions, budget: Budget): AccountModelDescriptor {
+  const rawCategory = field(raw, 'model_picker_category', budget)
+  const category = rawCategory === 'powerful' || rawCategory === 'versatile' || rawCategory === 'lightweight' ? rawCategory : undefined
+  const categoryDiagnostic = category !== undefined ? undefined
+    : rawCategory === undefined ? 'missing' as const : typeof rawCategory === 'string' ? 'unknown' as const : 'invalid' as const
   const rawName = field(raw, 'name', budget)
   const name = rawName === undefined ? id : text(rawName, ACCOUNT_MODEL_CATALOG_LIMITS.maxNameLength, 'INVALID_NAME', budget)
   const picker = field(raw, 'model_picker_enabled', budget)
@@ -220,6 +227,7 @@ function normalizeModel(raw: object, id: string, options: AccountModelCatalogOpt
     ...maxInputTokens === undefined ? {} : { maxInputTokens },
     maxTokens,
     input: Object.freeze(imageInput ? ['text', 'image'] as const : ['text'] as const),
+    ...category === undefined ? {} : { category },
     reasoning: Object.freeze({
       advertisedEfforts: Object.freeze(efforts),
       unmappedEfforts: Object.freeze(efforts.filter(effort => !knownEfforts.has(effort))),
@@ -234,6 +242,7 @@ function normalizeModel(raw: object, id: string, options: AccountModelCatalogOpt
       policySource,
       contextWindowSource: maxContext === undefined ? 'max_prompt_tokens' as const : 'max_context_window_tokens' as const,
       ...visionMediaTypes === undefined ? {} : { visionMediaTypes },
+      ...categoryDiagnostic === undefined ? {} : { categoryDiagnostic },
     }),
   })
 }

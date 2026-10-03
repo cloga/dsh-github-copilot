@@ -1,0 +1,114 @@
+# Contextual Auto routing and captured selection reasons
+
+Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258).
+
+## Requirements
+
+Auto must explain why the initiating turn chose its actual route, not display a
+generic description of prompt length. Intelligence prioritizes response quality
+but can use a lightweight model for demonstrably simple work. Efficiency favors
+economical capability without knowingly underpowering difficult work. Balance
+trades those priorities. All preferences share the same account model pool.
+
+The authenticated account `/models` response supplies `model_picker_category`.
+The October 3, 2026 bounded live probe observed `powerful`, `versatile` and
+`lightweight`; some records lacked the field. This is supplier classification,
+not measured latency, quality, price or health. Official documentation's
+`category` is a different source and must not override live account facts.
+Do not derive category from IDs, names, reasoning effort or context capacity.
+
+Hard constraints remain first: entitlement, exclusions, current proof, text/image
+capability and actual image format, estimated input headroom and final native
+admission. No preference overrides these. No new Core owner, adapter, credential
+record, general transport, global model mutation or durable decision event.
+
+## Task assessment
+
+Assessment concerns the task in context, not the last sentence's length.
+An isolated greeting may be low demand. A short request to prove a theorem or
+continue an unresolved investigation is not evidence of low demand. Long input
+can be mechanical. Prior assistant/tool work prevents a greeting/continuation
+shortcut from claiming an isolated simple task.
+
+Use a conservative local assessment as the default. Unknown is an explicit
+outcome, never silently translated into simple. Optional semantic assessment is
+an experiment until evaluated against annotated tasks; it must not claim
+equivalence to GitHub's private router or calibrated confidence.
+
+The semantic experiment uses one fixed concrete account candidate through the
+existing managed native adapter, never an Auto ID and never `ctx.llm` routing
+recursion. It has no tools, bounded text-only assessment context, bounded JSON
+output, one deadline, cancellation and no new retry loop. Text from messages is
+untrusted data, not router instructions. Files/images/reasoning/replay bodies
+are not read; omitted context makes classification uncertain and cannot justify
+downshifting. Assessment input is a separate projection: the actual chat
+messages, system prompt, tools, attachments and history stay untouched.
+
+The strict result contains demand (`simple`, `routine`, `complex`, `unknown`)
+and finite evidence signals, not a model ID, raw reasoning or an uncalibrated
+confidence percentage. Invalid/truncated/failed results retain the local
+assessment with an explicit diagnostic. Caller cancellation aborts the turn
+instead of falling back. Credential, metadata and account revocation remain
+fatal through existing lease/admission guards. Extra calls incur supplier
+charges and latency, separate from native chat Usage and without inferred cost.
+
+## Category policy and continuity
+
+| Task demand | Efficiency | Balance | Intelligence |
+| --- | --- | --- | --- |
+| Proven simple | Lightweight | Lightweight | Lightweight |
+| Routine | Lightweight | Versatile | Powerful |
+| Complex | Powerful | Powerful | Powerful |
+| Unknown | Versatile | Versatile | Powerful |
+
+These are declared routing policies, not benchmark rankings. Efficiency's
+routine lightweight selection is an economical approximation, not proof of
+equal output quality. Intelligence never treats short length alone as simple.
+
+When the target has no fitting candidates, use the disclosed category fallback:
+powerful -> versatile -> lightweight; versatile -> powerful -> lightweight;
+lightweight -> versatile -> powerful. Unclassified candidates are a final
+explicit fallback only, not fabricated categories. Unknown/new category values
+remain unclassified with a bounded catalog diagnostic.
+
+Within the first available category, retain the previous managed model only
+when it remains eligible and suitable. Otherwise use stable equal-weight
+Session/turn selection with deterministic ID ordering as a tie breaker. Do not
+infer quality from that ordering or assign fabricated weights. Once admitted,
+all steps/retries share the turn decision. Continuity reduces unnecessary
+switches but is not a claim of supplier cache savings.
+
+If no model fits, preserve the existing largest-admissible-input recovery
+branch and its native compaction diagnostics. Explain that no candidate fits;
+never label this as a successful preference match or silently trim history.
+
+## Explanation contract
+
+Capture task source/demand/signals, assessment diagnostic, target/selected
+category, fitting category count, category fallback and continuity/tie-break or
+no-fit selection at decision time. Client reads the explicit viewed Session and
+turn through the existing strict Remote. It does not rerun classification or
+consult today's picker. Show a decisive first sentence, bounded supporting
+facts and optional policy detail. Do not repeat the model name or change Usage.
+
+Legacy records without detailed evidence show that the reason was not retained.
+Host-lifetime evidence may be lost on restart; do not invent durable history or
+promise cold-history reconstruction.
+
+## Acceptance and rollout
+
+Regress category normalization (missing/new/invalid values), short difficult
+tasks, isolated greetings, contextual continuation, long mechanical input,
+category fallback, previous-model eligibility, deterministic tie breaking,
+no-fit recovery, one-call semantic success/invalid/failure/timeout/cancellation,
+omitted context, strict Remote and footer English/Chinese explanations.
+
+Retain native gateway, parent following, manual selection, exclusion admission,
+account proof, image admission and compaction fixture coverage. Full protected
+Windows/Linux CI remains mandatory before merge/release. No live inference
+calls are needed for synthetic acceptance.
+
+Before making semantic assessment the default, evaluate a reviewed labeled
+corpus for complex-to-simple errors, extra latency, token use and stability
+across languages and prompt injection. Synthetic passing tests are not this
+evaluation. Publication does not authorize profile installation or restart.

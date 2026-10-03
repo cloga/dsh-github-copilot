@@ -29,6 +29,8 @@ import type { RequestBudgetFailure, RequestBudgetPolicy } from './request-budget
 import { installCopilotCompactionPressure } from './compaction-pressure.ts'
 import { autoModelInputModalities } from './auto-model-routing.ts'
 import { installAutoModelRouting } from './auto-model-host.ts'
+import { classifyTaskWithAdapter, taskClassifierModel } from './auto-task-classifier.ts'
+import { TaskAssessmentRevokedError } from './auto-task-assessment.ts'
 import { ResponsesRetryReplay } from './responses-replay-compat.ts'
 import { excludedModelSet, ModelExclusionTurns } from './model-exclusions.ts'
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
@@ -42,7 +44,7 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   & {
     readonly streamLiveness?: boolean
     readonly chatRequestSettings?: () => Pick<InlineConfig, 'chatStreamIdleTimeoutMs' | 'chatStreamLiveness' | 'chatMaxRequestImageBytes'>
-    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'>
+    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment'>
     readonly requestBudget?: Partial<RequestBudgetPolicy>
     readonly requestBudgetSettings?: () => Partial<RequestBudgetPolicy>
   }
@@ -514,7 +516,7 @@ class PreviewAdapter extends PiAiAdapter {
 export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings,
     requestBudget, requestBudgetSettings, streamLiveness, chatRequestSettings, ...requestConfig } = config
-  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'>
+  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment'>
     = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs, excludedModelIds: [] }))
   const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
   const excludedModels = () => excludedModelSet(cacheSettings().excludedModelIds)
@@ -598,6 +600,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     const warnings = snapshot?.models.flatMap(model => {
       const codes: string[] = []
       if (model.maxInputTokens !== undefined && model.maxInputTokens < model.contextWindow) codes.push('INPUT_LIMIT_ESTIMATED_GUARD')
+      if (model.evidence.categoryDiagnostic !== undefined) codes.push(`AUTO_CATEGORY_${model.evidence.categoryDiagnostic.toUpperCase()}`)
       if (snapshotProof !== undefined && accountModelFromDescriptor(model, snapshotProof.baseURL).unmappedReasoningEfforts.length > 0) codes.push('REASONING_EFFORTS_UNSUPPORTED')
       return codes.map(code => Object.freeze({ id: model.id, code }))
     }) ?? []
@@ -745,6 +748,21 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     budgetPolicy: () => budgetSettings(),
     parentModelBindings: () => cacheSettings().parentModelFollow ?? [],
     followParentModel: () => cacheSettings().followParentModel === true,
+    semanticAssessment: () => cacheSettings().autoSemanticAssessment === true,
+    assessmentDiagnostic: code => ctx.logger.warn(code),
+    async classifyTask(input, signal) {
+      const snapshot = await discoverSnapshot({ signal })
+      const model = taskClassifierModel(snapshot.models.filter(model => !excludedModels().has(model.id)))
+      if (model === undefined) throw failure('COPILOT_AUTO_CLASSIFIER_UNAVAILABLE')
+      const revision = lifetime.revision
+      const adapter = new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings)
+      try { return await classifyTaskWithAdapter(model, input, signal, request => adapter.stream(request)) }
+      finally {
+        if (!lifetime.isCurrent(revision) || source.readSnapshot() !== snapshot || proofFor(snapshot) === undefined) {
+          throw new TaskAssessmentRevokedError(failure('COPILOT_PREVIEW_METADATA_STALE', 'ABORTED'))
+        }
+      }
+    },
     admitModel(agent, turn, model, signal) {
       if (!exclusionTurns.admit(agent.session, turn, model, signal, excludedModels())) {
         throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
