@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.74"
+    "version": "0.4.0-alpha.75"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -546,6 +546,8 @@
         {"file": "src/preview-route.ts", "marker": "ctx.llm.registerAdapter"},
         {"file": "src/preview-route.ts", "marker": "createAccountModelSource"},
         {"file": "src/preview-provider.ts", "marker": "native.streamSimple"},
+        {"file": "src/request-body-timeout.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
+        {"file": "src/response-error-body.ts", "marker": "readResponseErrorJson"},
         {"file": "src/pi-provider-bridge.ts", "marker": "PiStreamPublicCompatibility"}
       ],
       "tests": [
@@ -557,6 +559,9 @@
         {"file": "tests/preview-route.spec.ts", "name": "discovers mixed and unseen account models without model-name routing rules"},
         {"file": "tests/preview-route.spec.ts", "name": "uses unmodified stock LlmRuntime preparation and leaves canonical model registration alone"},
         {"file": "tests/preview-route.spec.ts", "name": "replays opaque reasoning and tool-call identities through the native adapter on a second turn"},
+        {"file": "tests/preview-route.spec.ts", "name": "enriches only a verified 408 while preserving native failure classification and retry ownership"},
+        {"file": "tests/preview-provider.spec.ts", "name": "observes verified %s timeout without changing bytes, Response, native retries or credential ownership"},
+        {"file": "tests/request-body-timeout.spec.ts", "name": "bounds stalled response observation and gives cancellation priority"},
         {"file": "tests/pi-provider-bridge.spec.ts", "name": "preserves the stream object rather than copying or replacing its private queue"},
         {"file": "tests/pi-provider-bridge.spec.ts", "name": "passes the checked simple input through and rejects unsupported advanced entry without I/O"}
       ]

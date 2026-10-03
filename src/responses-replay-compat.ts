@@ -1,3 +1,5 @@
+import { readResponseErrorJson } from './response-error-body.ts'
+
 type ReplayFailure = 'scope-mismatch' | 'unsupported' | 'invalid-payload'
 
 const replayDiagnostics: Record<ReplayFailure, string> = {
@@ -211,25 +213,7 @@ const scopeMessages = new Set([
   'input item ID does not belong to this connection',
   'input item does not belong to this connection',
 ])
-const maxErrorBytes = 8 * 1024
-const errorReadTimeoutMs = 250
-
-async function readScopeError(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<boolean> {
-  const decoder = new TextDecoder('utf-8', { fatal: true })
-  let bytes = 0
-  let chunks = 0
-  let text = ''
-  while (true) {
-    // Empty, immediately resolved chunks can starve timers; bound work as well as bytes.
-    if (chunks++ > maxErrorBytes) return false
-    const chunk = await reader.read()
-    if (chunk.done) break
-    bytes += chunk.value.byteLength
-    if (bytes > maxErrorBytes) return false
-    text += decoder.decode(chunk.value, { stream: true })
-  }
-  text += decoder.decode()
-  const body: unknown = JSON.parse(text)
+function isScopeError(body: unknown): boolean {
   if (!isRecord(body)) return false
   const error = Object.hasOwn(body, 'error') ? body.error : body
   if (!isRecord(error) || typeof error.message !== 'string' || !scopeMessages.has(error.message)) return false
@@ -243,31 +227,6 @@ async function readScopeError(reader: ReadableStreamDefaultReader<Uint8Array>): 
 /** Observe a cloned, bounded 401 body; every unknown result retains native auth behavior. */
 export async function isCopilotInputItemScopeError(response: Response, signal?: AbortSignal): Promise<boolean> {
   if (response.status !== 401 || signal?.aborted) return false
-  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  let onAbort: (() => void) | undefined
-  try {
-    const clone = response.clone()
-    if (!clone.body) return false
-    reader = clone.body.getReader()
-    const interrupted = new Promise<boolean>(resolve => {
-      onAbort = () => resolve(false)
-      signal?.addEventListener('abort', onAbort, { once: true })
-      timeout = setTimeout(() => resolve(false), errorReadTimeoutMs)
-      if (signal?.aborted) resolve(false)
-    })
-    const result = await Promise.race([readScopeError(reader), interrupted])
-    return !signal?.aborted && result
-  } catch {
-    return false
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout)
-    if (onAbort) signal?.removeEventListener('abort', onAbort)
-    if (reader) {
-      // A clone uses a tee: cancellation can wait for the untouched original branch
-      // forever. Observe rejection but never await that promise or consume the original.
-      try { void reader.cancel().catch(() => {}) } catch { /* Already closed/errored. */ }
-      try { reader.releaseLock() } catch { /* A pending read may still own the lock. */ }
-    }
-  }
+  const body = await readResponseErrorJson(response, signal)
+  return !signal?.aborted && isScopeError(body)
 }

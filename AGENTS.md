@@ -72,6 +72,7 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/wire.ts`, `src/wire-anthropic.ts`: inline hosted-search streaming.
 - `src/traditional-search.ts`: `github-copilot-hosted` `ctx.web` provider.
 - `src/serialize.ts`, `src/sse.ts`, `src/failure.ts`: protocol conversion and bounded error handling.
+- `src/response-error-body.ts`, `src/request-body-timeout.ts`: bounded clone-only HTTP error evidence and safe managed upload-timeout guidance. Exact verified `408/user_request_timeout` preserves native failure classification/retry metadata; final JSON bytes are not tokens or a payload limit. Never infer overflow, auto-compact, trim history, switch models or add retries from a 408.
 - `tests/`: unit and integration evidence; mirror the source area being changed.
 - `deployment-baseline.json`: declared machine-readable compatibility and capability evidence inventory.
 - `scripts/verify-deployment-baseline.mjs`: invariant drift gate.

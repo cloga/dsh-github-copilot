@@ -11,6 +11,7 @@ import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { CopilotResponsesReplayError, isCopilotInputItemScopeError, normalizeCopilotResponsesPayload } from './responses-replay-compat.ts'
 import type { ResponsesRetryReplay } from './responses-replay-compat.ts'
+import { requestBodyTimeoutDiagnostic } from './request-body-timeout.ts'
 
 export type ManagedWireAbortCode = 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' | 'COPILOT_PREVIEW_DISPOSED'
 
@@ -34,6 +35,8 @@ export interface PreviewProviderGuard {
   onReplayFailure?(error: CopilotResponsesReplayError): void
   /** Preserve an owned abort cause before SDK terminal delivery and lease cleanup. */
   onWireAbort?(code: ManagedWireAbortCode): void
+  /** Request-local safe guidance from a verified HTTP response; undefined clears prior evidence. */
+  onRequestBodyTimeout?(diagnostic: string | undefined): void
 }
 
 /** Guard for one selected model in an account-bound descriptor snapshot. */
@@ -215,10 +218,16 @@ export function createAccountProvider(
       } : options.onPayload
       const fetch = options.fetch ?? globalThis.fetch
       const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
+        guard.onRequestBodyTimeout?.(undefined)
         let response: Response
         try { response = await fetch(input, init) }
         catch (error) { retry?.observe(undefined, 0); throw error }
         retry?.observe(typeof init?.body === 'string' ? init.body : undefined, response.status)
+        if (response.status === 408 && guard.onRequestBodyTimeout !== undefined) {
+          const diagnostic = await requestBodyTimeoutDiagnostic(response,
+            typeof init?.body === 'string' ? init.body : undefined, lease.signal)
+          if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout(diagnostic)
+        }
         // A bounded clone identifies only the observed request-scope rejection.
         // Preserve the original Response/status/body for the native SDK.
         if (response.status === 401) {

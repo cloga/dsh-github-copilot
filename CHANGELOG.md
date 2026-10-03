@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.75 (prepared)
+
+- Add safe, actionable managed `COPILOT_REQUEST_BODY_TIMEOUT` guidance for the exact observed HTTP 408 request-body timeout, including final JSON UTF-8 bytes when observable (#246).
+- Preserve native failure classification, retry metadata, payloads, cancellation and credential ownership; no new retry, timeout change, automatic compaction, hidden trimming or model switch.
+- Share the existing bounded clone-only response observer with replay-scope classification and cover all three native HTTP protocols, unknown/oversized/stalled replies and concurrent dispatch isolation. This is diagnostic/recovery guidance, not a claim to eliminate upstream timeouts.
+
 ## 0.4.0-alpha.74 (prepared)
 
 - Add `/copilot-compact [status|cancel]` to the explicitly selected recovery engine when native commands/jobs are available (#244).

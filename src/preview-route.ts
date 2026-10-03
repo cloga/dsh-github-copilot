@@ -312,7 +312,7 @@ function budgetFailure(result: RequestBudgetFailure): LlmError {
 /** Account-bound admission and purpose defaults; Core owns model conversion and wire/replay. */
 class PreviewAdapter extends PiAiAdapter {
   constructor(private readonly lifetime: PreviewLifetime,
-    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort'>) => PiAiAdapterOptions,
+    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout'>) => PiAiAdapterOptions,
     private readonly discoverSnapshot: (options?: AccountModelLoadOptions) => Promise<AccountModelSnapshot>,
     private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
     private readonly requestBudgetSettings: () => Partial<RequestBudgetPolicy>,
@@ -415,6 +415,7 @@ class PreviewAdapter extends PiAiAdapter {
       // dispatch closure, never on the shared lease, to restore its structured code.
       let requestFailure: LlmError | undefined
       let wireAbort: ManagedWireAbortCode | undefined
+      let bodyTimeout: string | undefined
       const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
         if (signal.aborted) throw abortFailure(signal)
         const imageFailure = imageInputFailure(lease.descriptor, context.messages)
@@ -444,6 +445,9 @@ class PreviewAdapter extends PiAiAdapter {
           onWireAbort(code) {
             wireAbort = code
           },
+          onRequestBodyTimeout(diagnostic) {
+            bodyTimeout = diagnostic
+          },
           onReplayFailure(error) {
             // Only this dispatch's verified wire/payload observer can set this;
             // arbitrary upstream text must never masquerade as a compatibility failure.
@@ -469,6 +473,12 @@ class PreviewAdapter extends PiAiAdapter {
           }
           if (chunk.type === 'finish' && chunk.reason.kind === 'error' && chunk.reason.failure.code === 'UNKNOWN_MODEL') {
             await owner.refreshRejected(lease.snapshot, signal)
+          }
+          if (chunk.type === 'finish' && chunk.reason.kind === 'error'
+            && bodyTimeout !== undefined && chunk.reason.failure.code !== 'ABORTED') {
+            if (signal.aborted) throw abortFailure(signal)
+            yield { ...chunk, reason: { ...chunk.reason, failure: { ...chunk.reason.failure, message: bodyTimeout } } }
+            continue
           }
           yield chunk
         }
@@ -677,7 +687,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     // stream. Never replay a model wire request or retry generic provider errors.
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
-  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort'> = {}): PiAiAdapterOptions => {
+  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout'> = {}): PiAiAdapterOptions => {
     const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...hooks,
       onUnauthorized() {
         // A late response from before sign-in, refresh or disposal cannot retire
