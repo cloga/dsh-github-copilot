@@ -68,6 +68,7 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
           h('p', null, zh ? `${selection.candidateCount} 个合格候选；${selection.fittingCandidateCount ?? '未知'} 个可容纳估算输入。`
             : `${selection.candidateCount} eligible candidates; ${selection.fittingCandidateCount ?? 'unknown'} fit the estimated input.`),
           explanation.diagnostic ? h('p', null, explanation.diagnostic) : null,
+          explanation.semantic ? h('p', null, explanation.semantic) : null,
           h('p', null, zh ? '分类来自供应方；不保证实际速度、费用或任务质量。' : 'Supplier categories do not guarantee actual speed, cost or task quality.'))) : null,
     incomplete ? h('p', null, zh ? '模型归属不完整：部分尝试或历史未记录模型。原生 Usage 保持不变。' : 'Model attribution is incomplete: some attempts or history have no recorded model. Native Usage is unchanged.') : null,
     h('p', null, zh ? '此记录说明选择方式，不证明执行；实际模型以原生 Usage 为准。' : 'Selection evidence is not execution proof; see native Usage for recorded models.'),

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.88 (prepared)
+
+- Capture bounded classifier model, total elapsed/budget, adapter-start, first-text, native finish and validation milestones in immutable ephemeral Auto turn evidence (#272). No prompts, raw outputs, credentials, replay or usage are recorded.
+- Reduce auxiliary classification to 128 output tokens with compact demand/fixed-signal JSON. Request off reasoning only when supplier metadata and the published prepared-model capabilities agree; unsupported controls retain native policy.
+- Explain semantic timeout as unknown-demand preference fallback and expose auxiliary milestones inside the existing bilingual disclosure. Preserve the 8s end-to-end deadline, cancellation/revocation, omitted-context guards and single attempt; no longer timeout, retries, guessed model-health ranking or measured improvement claim.
+
 ## 0.4.0-alpha.87 (prepared)
 
 - Remove managed terminal-zero usage filtering so native failure/cancellation samples remain available to Core's shared turn and cumulative accounting (#270).

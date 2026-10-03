@@ -80,6 +80,48 @@ charges and latency, separate from native chat Usage and without inferred cost.
 
 ## Category policy and continuity
 
+### Auxiliary latency evidence and bounded output (#272)
+
+The assessment still has one **8-second end-to-end deadline**, including account
+discovery/preparation and the native call. It does not retry on timeout or try a
+second classifier. The response budget is now 128 output tokens, with compact
+demand JSON and at most three fixed signals requested. The strict decoder
+retains its seven-signal compatibility bound; raw explanation, confidence
+percentages and reasoning are not requested. Truncation remains failure, never
+accepted partial JSON.
+
+Request `off` reasoning only when both current supplier metadata advertises it
+and the public prepared model lists an `off` effort. Supplier metadata alone
+does not establish native support: current managed reasoning maps can decline
+`off` even when advertised. In that case retain native policy, do not change
+shared model maps, guess a wire value or patch Core. No claim that reasoning is
+disabled for all classifiers is made.
+
+Captured Host-lifetime selection evidence now includes a bounded public
+classifier ID, configured waiting budget, total monotonic assessment elapsed
+time, adapter-invocation start, first nonempty text time, native stop/non-stop
+finish observation and strict result-validation status. Preparation is included
+in total time; adapter start is **not HTTP dispatch**, first text is **not first
+network byte**, and these milestones cannot distinguish connection, supplier
+queueing or computation. Absence says no milestone was observed before
+settlement, not that the provider never emitted data. Counts are characters,
+not tokens/credits; no prompt, text, replay, credential, error body or hash is
+captured. Late callbacks cannot rewrite a settled decision.
+
+The existing strict explicit-Session/turn Remote carries this optional evidence;
+old explanations remain decodable without it. Numeric/model evidence is copied
+and frozen in the bounded store and routing decision, not durably appended or
+reconstructed after restart. The footer says assessment timed out, demand
+remained unknown, and preference policy selected the category as a fallback.
+Progressive details show milestones separately from native answer Usage.
+
+This is instrumentation and bounded output optimization, not a measured latency
+improvement or classifier calibration. No latency-ranked classifier pool,
+cross-turn assessment cache, cooldown, adaptive deadline or extra probe is
+introduced without reviewing real observations. Existing local evidence,
+omitted-context downshift protection, cancellation, account/proof revocation,
+same-turn single-flight, eligibility and category policy remain unchanged.
+
 | Task demand | Efficiency | Balance | Intelligence |
 | --- | --- | --- | --- |
 | Proven simple | Lightweight | Lightweight | Lightweight |

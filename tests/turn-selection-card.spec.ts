@@ -17,6 +17,25 @@ async function mount(selection: TurnSelection, locale = 'en') {
   return container
 }
 const auto = { mode: 'auto', preference: 'intelligence', reason: 'large-structured-turn', candidateCount: 3 } as const
+it.each(['en', 'zh'])('keeps captured auxiliary timing inside progressive evidence and explains timeout fallback (%s)', async locale => {
+  const container = await mount({ ...auto, explanation: {
+    assessment: { demand: 'unknown', source: 'local', signals: ['insufficient-evidence'], diagnostic: 'timeout',
+      semantic: { modelId: 'auxiliary-fixture', budgetMs: 8000, elapsedMs: 8002, stage: 'text-received',
+        adapterStartedMs: 20, firstTextMs: 6000, outputCharacters: 10, validation: 'not-validated' } },
+    targetCategory: 'powerful', selectedCategory: 'powerful', categoryCandidateCount: 2,
+    method: 'equal-distribution', fallback: false,
+  } }, locale)
+  expect(container.textContent).not.toContain('8000')
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.querySelector('details')?.open).toBe(false)
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain(locale === 'en' ? 'as a fallback' : '兜底')
+  expect(container.querySelector('details')?.textContent).toContain('auxiliary-fixture')
+  expect(container.querySelector('details')?.textContent).toContain('6000 ms')
+  expect(container.querySelector('details')?.textContent).toContain(locale === 'en' ? 'not completed' : '未完成')
+  expect(document.activeElement?.textContent).toBe(locale === 'en' ? 'Close' : '关闭')
+  await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
+  expect(container.querySelector('[role=dialog]')).toBeNull()
+})
 it.each(['en', 'zh'])('explains a captured task/category decision with progressive details (%s)', async locale => {
   const container = await mount({ ...auto, explanation: {
     assessment: { demand: 'simple', source: 'local', signals: ['isolated-greeting'] },

@@ -2,11 +2,13 @@ import type { AutoModelPreference } from './copilot-identity.ts'
 import { z } from 'zod'
 import { TaskAssessmentSchema } from './auto-task-assessment.ts'
 import type { AutoSelectionExplanation } from './auto-model-routing.ts'
+import { SemanticAssessmentEvidenceSchema } from './auto-assessment-evidence.ts'
 
 const ExplanationSchema = z.object({
   assessment: TaskAssessmentSchema.extend({
     source: z.enum(['local', 'semantic']),
     diagnostic: z.enum(['disabled', 'unavailable', 'invalid-result', 'timeout', 'failed', 'context-omitted']).optional(),
+    semantic: SemanticAssessmentEvidenceSchema.optional(),
   }).strict(),
   targetCategory: z.enum(['powerful', 'versatile', 'lightweight']),
   selectedCategory: z.enum(['powerful', 'versatile', 'lightweight', 'unknown']),
@@ -53,6 +55,9 @@ export class TurnSelectionStore {
       turns.set(turn, Object.freeze({ ...selection, ...explanation === undefined ? {} : {
         explanation: Object.freeze({ ...explanation, assessment: Object.freeze({
           ...explanation.assessment, signals: Object.freeze([...explanation.assessment.signals]),
+          ...explanation.assessment.semantic === undefined ? {} : {
+            semantic: Object.freeze({ ...explanation.assessment.semantic }),
+          },
         }) }),
       } }))
     }

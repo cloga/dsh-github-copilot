@@ -68,6 +68,7 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/responses-reasoning.ts`, `src/responses-reasoning-text.ts`: selected-model effort mapping and public summary assembly.
 - `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments and action-specific Goal update schemas.
 - `src/plan.ts`: Copilot-only, fail-closed hosted-search candidate lifecycle.
+- `src/auto-assessment-evidence.ts`: bounded request-local semantic classifier milestones copied into strict ephemeral turn evidence; no prompts, replay, credentials or error bodies. Total includes preparation; adapter start and first text are not HTTP dispatch/byte timings. Keep one 8s deadline and 128-token compact output. Request reasoning-off only when supplier and public prepared-model effort agree; unsupported native controls stay unchanged. No guessed latency ranking, adaptive timeout, cooldown or cross-turn cache without reviewed observations.
 - `src/probe.ts`: bounded native-search capability proof.
 - `src/wire.ts`, `src/wire-anthropic.ts`: inline hosted-search streaming.
 - `src/traditional-search.ts`: `github-copilot-hosted` `ctx.web` provider.

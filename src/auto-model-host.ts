@@ -13,7 +13,7 @@ import { TurnSelectionStore } from './turn-selection.ts'
 import { TurnSelectionController } from './turn-selection-host.ts'
 import { z } from 'zod'
 import { assessAutoTask } from './auto-task-assessment.ts'
-import type { AssessmentInput } from './auto-task-assessment.ts'
+import type { TaskAssessmentDependencies } from './auto-task-assessment.ts'
 import {
   PARENT_MODEL_FOLLOW_PROJECTION, initialFollowState, foldFollowState, followSelection,
   resolveParentModel, ParentModelFollowError,
@@ -31,7 +31,7 @@ export interface AutoModelHostDependencies {
   followParentModel?: () => boolean
   admitModel?: (agent: Agent, turn: number, model: string, signal: AbortSignal) => void
   semanticAssessment?: () => boolean
-  classifyTask?: (input: AssessmentInput, signal: AbortSignal) => Promise<string>
+  classifyTask?: TaskAssessmentDependencies['classify']
   assessmentDiagnostic?: (code: string) => void
 }
 
