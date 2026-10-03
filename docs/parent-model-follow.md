@@ -1,5 +1,28 @@
 # One-switch parent model following
 
+**Status:** implemented in the published alpha.88 line for official DSH/Windows
+Desktop `0.2.0-rc.2`, through plugin-owned public routing. This is separate from
+retired Model roles and any upstream native rules UI. Publication is not proof
+of installation or loaded runtime.
+
+## Enable and use
+
+Open **Plugins → dsh-github-copilot → Details**, enable **Follow parent model**
+and save. It defaults to Off and applies to the current profile; no child IDs
+are required for ordinary use.
+
+A supported child follows a fixed managed parent on its next turn. With an
+Auto parent, it follows the exact Auto preference and chooses using its own
+context, not necessarily the parent's last concrete model. A child's own
+explicit selection wins. Existing running/admitted turns remain unchanged.
+Roots, forks, other-provider parents and dedicated legacy policies are outside
+the broad switch. Missing eligible parent evidence is an explicit failure,
+not permission to guess another route.
+
+Turning Off does not remove legacy `parentModelFollow` bindings; the page
+reports them separately. No settings/history migration, descriptor rewrite
+or global default change is performed.
+
 ## Requirement and decision
 
 Users change a master model and expect its subagents and Team mates to follow.
@@ -7,7 +30,7 @@ They must not manage Session IDs, bind each child, or visit a roster to enable
 the same policy repeatedly. Alpha.66's explicit bindings were a technical
 foundation, not an adequate ordinary user experience.
 
-Add one **Follow parent model** switch to the existing plugin configuration
+The **Follow parent model** switch lives on the existing plugin configuration
 page, above the separate Web search section. Save once for the current DSH
 profile. Default Off; no automatic migration or live profile changes on upgrade.
 
@@ -55,7 +78,7 @@ The component inherits the page's system font, native controls and currentColor
 theme. Labels wrap on narrow windows; all actions work with keyboard and have
 visible native focus. There is no separate mobile composition or custom artwork.
 
-## Technical plan
+## Implemented contract
 
 1. Add live boolean `github-copilot.followParentModel`, default false. Retain
    legacy `parentModelFollow` bindings unchanged, hidden from ordinary settings.
