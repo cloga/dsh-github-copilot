@@ -1,6 +1,7 @@
 # Contextual Auto routing and captured selection reasons
 
-Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258).
+Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
+[evidence refinement #262](https://github.com/cloga/dsh-github-copilot/issues/262).
 
 ## Requirements
 
@@ -35,6 +36,20 @@ outcome, never silently translated into simple. Optional semantic assessment is
 an experiment until evaluated against annotated tasks; it must not claim
 equivalence to GitHub's private router or calibrated confidence.
 
+Local rules recognize an isolated, explicit JSON-to-CSV/CSV-to-JSON conversion
+or line sort only when the entire request is at most 1600 characters, contains
+one fenced payload and no other work or non-text content. This establishes
+routine, not simple. An exact acknowledgement/continue request can inherit
+explicit difficult-task evidence from the nearest non-continuation user request
+among the preceding twelve user requests. A new task or an expired anchor stops
+inheritance; simple/routine demand is never inherited.
+
+`uncertain` remains a valid task result. `insufficient-evidence` means the local
+rules cannot establish demand, not that the conversation has no context.
+Attachments, unfamiliar instructions and genuinely ambiguous continuations can
+still remain unknown. These refinements do not change category preference,
+previous-model eligibility or the default-disabled semantic experiment.
+
 The semantic experiment uses one fixed concrete account candidate through the
 existing managed native adapter, never an Auto ID and never `ctx.llm` routing
 recursion. It has no tools, bounded text-only assessment context, bounded JSON
@@ -43,6 +58,14 @@ untrusted data, not router instructions. Files/images/reasoning/replay bodies
 are not read; omitted context makes classification uncertain and cannot justify
 downshifting. Assessment input is a separate projection: the actual chat
 messages, system prompt, tools, attachments and history stay untouched.
+
+Only locally unknown tasks invoke the enabled experiment. Context packing keeps
+the current and nearest preceding user requests before recent output, then
+restores chronological order. At most twelve complete JSON rows, 1600 text
+characters per row and 8000 serialized characters are retained; JSON escape
+expansion is included in this bound. Any truncation, skipped row or non-text
+content still marks omitted context and prevents a semantic simple/routine
+downshift. Prioritization does not prove omitted output irrelevant.
 
 The strict result contains demand (`simple`, `routine`, `complex`, `unknown`)
 and finite evidence signals, not a model ID, raw reasoning or an uncalibrated

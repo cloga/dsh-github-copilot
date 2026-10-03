@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.83 (prepared)
+
+- Reduce avoidable Auto uncertainty through bounded difficult-task continuation and isolated fenced mechanical-transform recognition (#262); preserve unknown for new, incomplete and ambiguous work.
+- Prioritize current and preceding user requests in the bounded semantic projection, preserving complete JSON rows, chronological order and omitted-context downshift protection.
+- Call the optional semantic experiment only for locally unknown demand. Explain local rule coverage separately from absent conversation context; retain off-by-default semantics, category policy and native turn ownership.
+
 ## 0.4.0-alpha.82 (prepared)
 
 - Explain missing native Turn Usage on completed Copilot replies through a plugin-owned read-only conversation projection and a compact, keyboard-accessible footer disclosure (#259).

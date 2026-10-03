@@ -48,9 +48,62 @@ describe('bounded contextual Auto task assessment', () => {
       expect(diagnostic).toHaveBeenCalledWith('COPILOT_AUTO_ASSESSMENT_INVALID_RESULT')
     })
   it('does not let a classifier downgrade explicit investigation evidence', async () => {
+    const classify = vi.fn(async () => '{"demand":"simple","signals":[]}')
     expect(await assessAutoTask([message('Debug this failure')], { enabled: true, signal: signal(),
-      classify: async () => '{"demand":"simple","signals":[]}', diagnostic: vi.fn() }))
-      .toMatchObject({ source: 'local', demand: 'complex', diagnostic: 'invalid-result' })
+      classify, diagnostic: vi.fn() }))
+      .toMatchObject({ source: 'local', demand: 'complex' })
+    expect(classify).not.toHaveBeenCalled()
+  })
+  it('inherits difficult-task evidence only through explicit bounded continuations', () => {
+    const history = [message('Investigate the failing build.'), message('Need to inspect the logs.', 'assistant')]
+    expect(assessTaskLocally([...history, message('继续')]))
+      .toMatchObject({ demand: 'complex', signals: ['continuation', 'reasoning', 'investigation'] })
+    expect(assessTaskLocally([...history, message('继续'), message('Next step.', 'assistant'), message('好的')]))
+      .toMatchObject({ demand: 'complex' })
+    expect(assessTaskLocally([...history, message('Write a birthday greeting.')])).toMatchObject({ demand: 'unknown' })
+    expect(assessTaskLocally([...history, message('A new task.'), message('继续')])).toMatchObject({ demand: 'unknown' })
+    expect(assessTaskLocally([message('Continue')])).toMatchObject({ demand: 'unknown' })
+    expect(assessTaskLocally([message('Investigate the build.'), ...Array.from({ length: 13 }, () => message('Continue'))]))
+      .toMatchObject({ demand: 'unknown' })
+  })
+  it('recognizes only isolated explicit fenced mechanical transformations as routine', async () => {
+    const classify = vi.fn()
+    for (const instruction of ['Convert the following JSON to CSV:', 'Sort the following lines:', '将以下 JSON 转换为 CSV：']) {
+      const current = message(`${instruction}\n\`\`\`\n{"a":1}\n\`\`\``)
+      expect(await assessAutoTask([current], { enabled: true, signal: signal(), classify, diagnostic: vi.fn() }))
+        .toMatchObject({ demand: 'routine', signals: ['bounded-transformation'] })
+      expect(assessTaskLocally([message('Unresolved work.', 'assistant'), current])).toMatchObject({ demand: 'unknown' })
+    }
+    expect(classify).not.toHaveBeenCalled()
+    expect(assessTaskLocally([message('Sort the following lines:\r\n```text\r\nb\r\na\r\n```')]))
+      .toMatchObject({ demand: 'routine' })
+    for (const current of ['Convert it to CSV.', 'Translate this file.', 'Sort the following lines:\n```\na\n```\nThen deploy it.',
+      'Sort the following lines:\n```\na\n```\n```\nb\n```',
+      'Sort the following lines:\n```\n' + 'x'.repeat(2000) + '\n```']) {
+      expect(assessTaskLocally([message(current)])).toMatchObject({ demand: 'unknown' })
+    }
+    const image = { type: 'image', get attachment() { throw new Error('READ_ATTACHMENT') } }
+    expect(assessTaskLocally([{ role: 'user', content: [{ type: 'text', text: 'Sort the following lines:\n```\na\n```' }, image] }]))
+      .toMatchObject({ demand: 'unknown' })
+  })
+  it('preserves valid bounded rows and prioritizes the current user and nearest task over verbose output', () => {
+    const history = [message('Investigate the build.'), ...Array.from({ length: 15 }, () => message('x'.repeat(1700), 'tool')),
+      message('Current request: continue the build investigation.')]
+    const input = assessmentInput(history)
+    expect(input.omitted).toBe(true)
+    expect(input.text.length).toBeLessThanOrEqual(8000)
+    const rows = input.text.split('\n').map(row => JSON.parse(row))
+    expect(rows.at(-1).text).toBe('Current request: continue the build investigation.')
+    expect(rows[0].text).toBe('Investigate the build.')
+    expect(rows.length).toBeLessThanOrEqual(12)
+    expect(assessmentInput(history)).toEqual(input)
+    const escaped = assessmentInput([message('"\n\\'.repeat(600)), message('Continue')])
+    expect(escaped.text.length).toBeLessThanOrEqual(8000)
+    expect(() => escaped.text.split('\n').forEach(row => JSON.parse(row))).not.toThrow()
+    const expanded = assessmentInput([message('\u0001'.repeat(1600))])
+    expect(expanded.omitted).toBe(true)
+    expect(expanded.text.length).toBeLessThanOrEqual(8000)
+    expect(JSON.parse(expanded.text).role).toBe('user')
   })
   it('bounds context, never reads attachment/reasoning bodies, and does not downshift omitted context', async () => {
     const image = { type: 'image', get attachment() { throw new Error('READ_ATTACHMENT') } }

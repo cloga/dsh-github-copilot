@@ -18,7 +18,7 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
     investigation: zh ? '调查或调试' : 'investigation or debugging',
     continuation: zh ? '继续已有工作' : 'continuation of existing work',
     'context-omitted': zh ? '判断上下文不完整' : 'incomplete assessment context',
-    'insufficient-evidence': zh ? '缺少足够判断依据' : 'insufficient evidence',
+    'insufficient-evidence': zh ? '本地规则尚不能确定任务需求' : 'local rules cannot establish task demand',
   }
   const conclusion = explanation.method === 'no-fit'
     ? zh ? '没有候选能直接容纳估算输入；选中输入预算最大的模型，保留原生压缩或失败处理。'
@@ -38,7 +38,8 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
         : zh ? '所有候选均不适配；这不是成功的偏好匹配。' : 'All candidates are oversized; this is not a successful preference match.'
   const diagnostic = explanation.assessment.diagnostic === undefined ? undefined
     : explanation.assessment.diagnostic === 'disabled'
-      ? zh ? '语义判断实验未开启，本轮使用保守本地规则。' : 'Semantic assessment is disabled; this turn used conservative local rules.'
+      ? zh ? '语义判断实验未开启；这是本地规则的判断边界，不代表会话没有上下文。'
+        : 'Semantic assessment is disabled; this is a limit of local rules, not proof that the conversation lacks context.'
       : zh ? `语义判断未提供完整可用依据（${{
         unavailable: '没有可用分类模型', 'invalid-result': '结果无效', timeout: '超时',
         failed: '请求失败', 'context-omitted': '上下文不完整',

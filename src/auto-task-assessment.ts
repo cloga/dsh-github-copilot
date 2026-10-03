@@ -27,6 +27,20 @@ function user(message: unknown): boolean {
   return message.role === 'user' || record(message.source) && message.source.kind === 'user'
 }
 
+function difficult(current: string): boolean {
+  return /\b(prove|proof|theorem|debug|investigate|diagnose)\b|证明|定理|调试|排查|根因|调查/iu.test(current)
+}
+
+function continuation(current: string): boolean {
+  return /^(continue|please continue|go on|yes|ok|okay|继续|接着|嗯|好|好的|可以|执行吧|开始吧)[.!！。，,\s]*$/iu.test(current)
+}
+
+function boundedTransformation(current: string): boolean {
+  if (current.length > 1600) return false
+  const match = /^(?:convert the following (?:JSON to CSV|CSV to JSON)|sort the following lines|将以下 (?:JSON 转换为 CSV|CSV 转换为 JSON)|对以下行排序)[:：][ \t]*\r?\n```[a-z]*\r?\n([\s\S]+)\r?\n```[ \t]*$/iu.exec(current)
+  return match !== null && typeof match[1] === 'string' && !match[1].includes('```')
+}
+
 export function assessTaskLocally(messages: readonly unknown[]): TaskAssessment {
   const last = messages.findLast(user)
   const current = text(last).trim()
@@ -38,10 +52,19 @@ export function assessTaskLocally(messages: readonly unknown[]): TaskAssessment 
   if (!hasWork && !nonText && /^(hello|hi|hey|你好|您好|嗨)[!！。.\s]*$/iu.test(current)) {
     return { demand: 'simple', source: 'local', signals: ['isolated-greeting'] }
   }
-  if (/\b(prove|proof|theorem|debug|investigate|diagnose)\b|证明|定理|调试|排查|根因|调查/iu.test(current)) {
+  if (difficult(current)) {
     return { demand: 'complex', source: 'local', signals: ['reasoning', 'investigation'] }
   }
-  if (/^(continue|go on|继续|接着)[.!！。\s]*$/iu.test(current) || hasWork && current.length < 80) {
+  if (!hasWork && !nonText && boundedTransformation(current)) {
+    return { demand: 'routine', source: 'local', signals: ['bounded-transformation'] }
+  }
+  if (continuation(current)) {
+    const anchor = history.filter(user).slice(-12).findLast(message => !continuation(text(message).trim()))
+    if (anchor && difficult(text(anchor))) {
+      return { demand: 'complex', source: 'local', signals: ['continuation', 'reasoning', 'investigation'] }
+    }
+  }
+  if (continuation(current) || hasWork && current.length < 80) {
     return { demand: 'unknown', source: 'local', signals: ['continuation', 'insufficient-evidence'] }
   }
   return { demand: 'unknown', source: 'local', signals: ['insufficient-evidence'] }
@@ -57,20 +80,34 @@ export function assessmentInput(messages: readonly unknown[]): AssessmentInput {
   let omitted = false
   const context = messages.filter(message => !record(message) || message.role !== 'system' && message.role !== 'developer'
     && !(record(message.source) && message.source.kind === 'model-selection'))
-  if (context.length > 12) omitted = true
-  const rows = context.slice(-12).map(message => {
-    if (!record(message)) { omitted = true; return '' }
+  const lastUser = context.findLastIndex(user)
+  const priorUser = context.slice(0, lastUser < 0 ? 0 : lastUser).findLastIndex(user)
+  const priority = [...new Set([lastUser, priorUser, ...context.map((_, index) => index).reverse()])].filter(index => index >= 0)
+  const rows = new Map<number, string>()
+  let length = 0
+  for (const index of priority) {
+    const message = context[index]
+    if (!record(message)) { omitted = true; continue }
     if (!Array.isArray(message.content)) omitted = true
     const content = text(message)
     if (Array.isArray(message.content) && message.content.some(block => !record(block) || block.type !== 'text')) omitted = true
     if (content.length > 1600) omitted = true
     const role = typeof message.role === 'string' && ['user', 'assistant', 'tool', 'developer'].includes(message.role)
       ? message.role : user(message) ? 'user' : 'context'
-    return JSON.stringify({ role, text: content.slice(0, 1600) })
-  })
-  const serialized = rows.join('\n')
-  if (serialized.length > 8000) omitted = true
-  return { text: serialized.slice(-8000), omitted }
+    let prefix = content.slice(0, 1600)
+    let row = JSON.stringify({ role, text: prefix })
+    // Escape expansion must not displace the current request or split a JSON row.
+    while (row.length > 8000) {
+      omitted = true
+      prefix = prefix.slice(0, Math.floor(prefix.length / 2))
+      row = JSON.stringify({ role, text: prefix })
+    }
+    const added = row.length + (rows.size ? 1 : 0)
+    if (rows.size >= 12 || length + added > 8000) { omitted = true; continue }
+    rows.set(index, row)
+    length += added
+  }
+  return { text: [...rows].sort(([left], [right]) => left - right).map(([, row]) => row).join('\n'), omitted }
 }
 
 export interface TaskAssessmentDependencies {
@@ -91,7 +128,7 @@ export async function assessAutoTask(
 ): Promise<TaskAssessment> {
   const local = assessTaskLocally(messages)
   if (dependencies.signal.aborted) throw dependencies.signal.reason
-  if (local.demand === 'simple') return local
+  if (local.demand !== 'unknown') return local
   if (!dependencies.enabled) return { ...local, diagnostic: 'disabled' }
   if (!dependencies.classify) {
     dependencies.diagnostic('COPILOT_AUTO_ASSESSMENT_UNAVAILABLE')
@@ -118,11 +155,6 @@ export async function assessAutoTask(
     if (input.omitted && (parsed.data.demand === 'simple' || parsed.data.demand === 'routine')) {
       dependencies.diagnostic('COPILOT_AUTO_ASSESSMENT_CONTEXT_OMITTED')
       return { demand: 'unknown', source: 'semantic', signals: ['context-omitted'], diagnostic: 'context-omitted' }
-    }
-    // An advisory classifier cannot override explicit difficult-task evidence.
-    if (local.demand === 'complex' && parsed.data.demand !== 'complex') {
-      dependencies.diagnostic('COPILOT_AUTO_ASSESSMENT_INVALID_RESULT')
-      return { ...local, diagnostic: 'invalid-result' }
     }
     return { ...parsed.data, source: 'semantic' }
   } catch (cause) {
