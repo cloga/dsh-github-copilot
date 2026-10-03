@@ -28,6 +28,6 @@ describe('strict Remote factory compatibility', () => {
         checked++
       }
     }
-    expect(checked).toBe(23)
+    expect(checked).toBe(26)
   })
 })
