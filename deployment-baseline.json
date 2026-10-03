@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.88"
+    "version": "0.4.0-alpha.89"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -600,10 +600,13 @@
         {"file": "tests/preview-route.spec.ts", "name": "enriches only a verified 408 while preserving native failure classification and retry ownership"},
         {"file": "tests/preview-provider.spec.ts", "name": "observes verified %s timeout without changing bytes, Response, native retries or credential ownership"},
         {"file": "tests/request-body-timeout.spec.ts", "name": "bounds stalled response observation and gives cancellation priority"},
+        {"file": "tests/request-body-timeout.spec.ts", "name": "correlates verified failure using bounded model, protocol, UTC time and supplier identifiers only"},
+        {"file": "tests/request-body-timeout.spec.ts", "name": "rejects unrecognized identifier shapes and unsafe metadata rather than echoing headers"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "captures bounded phase evidence for a timed-out partial result without treating it as a validated task"},
         {"file": "tests/auto-task-evidence.spec.ts", "name": "captures monotonic auxiliary phases without text, accounting or late mutation"},
         {"file": "tests/request-body-evidence.spec.ts", "name": "measures a nine MiB native-style inline image without exposing or decoding it"},
         {"file": "tests/preview-provider.spec.ts", "name": "captures final %s callback bytes and dispatch-local header time before clone observation"},
+        {"file": "tests/preview-provider.spec.ts", "name": "sends complete three MiB %s JSON through native HTTP Fetch without truncation or hidden retries"},
         {"file": "tests/copilot-stream-liveness.spec.ts", "name": "does not count consumer think time as provider idle"},
         {"file": "tests/copilot-stream-adapter.spec.ts", "name": "reproduces native semantic timeout despite ongoing SSE bytes"},
         {"file": "tests/copilot-stream-adapter.spec.ts", "name": "allows real late output after the original semantic-idle boundary"},

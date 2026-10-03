@@ -249,11 +249,12 @@ export function createAccountProvider(
         try { response = await fetch(input, init) }
         catch (error) { retry?.observe(undefined, 0); throw error }
         const responseHeadersMs = performance.now() - startedAt
+        const observedAtMs = Date.now()
         retry?.observe(typeof init?.body === 'string' ? init.body : undefined, response.status)
         if (response.status === 408 && guard.onRequestBodyTimeout !== undefined) {
           const diagnostic = await requestBodyTimeoutDiagnostic(response,
             typeof init?.body === 'string' ? init.body : undefined, lease.signal,
-            { protocol: entry.api, responseHeadersMs })
+            { protocol: entry.api, responseHeadersMs, modelId: entry.id, observedAtMs })
           if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout(diagnostic)
         }
         // A bounded clone identifies only the observed request-scope rejection.

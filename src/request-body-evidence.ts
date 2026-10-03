@@ -25,6 +25,9 @@ export type RequestBodyEvidence = {
 
 export interface RequestBodyDispatchEvidence {
   readonly protocol: RequestBodyProtocol
+  readonly modelId?: string
+  /** Wall-clock response-header observation; separate from monotonic elapsed time. */
+  readonly observedAtMs?: number
   /** Fetch invocation to response headers, not upload duration or clone-observation time. */
   readonly responseHeadersMs: number
 }

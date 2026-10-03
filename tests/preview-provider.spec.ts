@@ -2,6 +2,7 @@
 import '@earendil-works/pi-ai/api/openai-responses'
 import '@earendil-works/pi-ai/api/openai-completions'
 import '@earendil-works/pi-ai/api/anthropic-messages'
+import { createServer } from 'node:http'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { lazyStream } from '@earendil-works/pi-ai'
 import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
@@ -363,6 +364,62 @@ describe('account provider model HTTP authorization observation', () => {
 
 describe('managed upload-timeout observation', () => {
   it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'sends complete three MiB %s JSON through native HTTP Fetch without truncation or hidden retries', async api => {
+      const item = descriptor(api)
+      const diagnostic = vi.fn()
+      const { provider, models } = createAccountProvider([item], {
+        ...accountGuard(item.id), onRequestBodyTimeout: diagnostic,
+      }, baseURL)
+      let received = '', contentLength: string | undefined, transferEncoding: string | undefined
+      const server = createServer((request, response) => {
+        const chunks: Buffer[] = []
+        contentLength = request.headers['content-length']
+        transferEncoding = request.headers['transfer-encoding']
+        request.on('data', chunk => chunks.push(Buffer.from(chunk)))
+        request.on('end', () => {
+          received = Buffer.concat(chunks).toString('utf8')
+          response.writeHead(408, { 'content-type': 'application/json' })
+          response.end(JSON.stringify({ code: 'user_request_timeout',
+            message: 'Timed out reading request body. Try again, or use a smaller request size.' }))
+        })
+      })
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject)
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      try {
+        const address = server.address()
+        if (address === null || typeof address === 'string') throw new Error('LOCAL_FIXTURE_ADDRESS_UNAVAILABLE')
+        let finalBody = ''
+        // Test-only destination: no account request or real credential leaves loopback.
+        const fetch = vi.fn((_input: unknown, init?: RequestInit) => {
+          finalBody = String(init?.body)
+          return globalThis.fetch(`http://127.0.0.1:${address.port}`, init)
+        })
+        const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+          apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+          onPayload(payload) {
+            if (typeof payload !== 'object' || payload === null) throw new Error('EXPECTED_NATIVE_PAYLOAD')
+            return { ...payload, [api === 'openai-responses' ? 'input' : 'messages']: [
+              { role: 'user', content: 'synthetic '.repeat(320000) },
+            ] }
+          },
+        })
+        for await (const _event of stream) { /* Native terminal error remains unchanged. */ }
+        expect((await stream.result()).stopReason).toBe('error')
+        expect(Buffer.byteLength(finalBody)).toBeGreaterThan(3 * 1024 * 1024)
+        expect(received).toBe(finalBody)
+        expect(contentLength).toBe(String(Buffer.byteLength(finalBody)))
+        expect(transferEncoding).toBeUndefined()
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(diagnostic.mock.lastCall?.[0]).toContain('No image blocks were identified')
+        expect(diagnostic.mock.lastCall?.[0]).not.toContain('synthetic synthetic')
+      } finally {
+        server.closeAllConnections()
+        await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+      }
+    })
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
     'captures final %s callback bytes and dispatch-local header time before clone observation', async api => {
       const item = descriptor(api)
       const diagnostic = vi.fn()
@@ -371,6 +428,9 @@ describe('managed upload-timeout observation', () => {
       }, baseURL)
       let clock = 100
       const timer = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+      const observedAtMs = Date.UTC(2026, 9, 4, 1, 30)
+      const wallClock = vi.spyOn(Date, 'now').mockReturnValue(observedAtMs)
+      const errorReader = timeoutDiagnostics.requestBodyTimeoutDiagnostic
       const observer = vi.spyOn(timeoutDiagnostics, 'requestBodyTimeoutDiagnostic')
       const image = api === 'anthropic-messages'
         ? { type: 'image', source: { type: 'base64', data: 'AAAA', media_type: 'image/png' } }
@@ -381,8 +441,13 @@ describe('managed upload-timeout observation', () => {
           : api === 'anthropic-messages' ? [{ role: 'assistant', content: [{ type: 'redacted_thinking', data: 'PRIVATE_OPAQUE' }] }] : []]
       let finalBody = ''
       const response = new Response(JSON.stringify({ code: 'user_request_timeout',
-        message: 'Timed out reading request body. Try again, or use a smaller request size.' }), { status: 408 })
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' }), { status: 408,
+          headers: { 'x-request-id': '12345678-1234-4abc-8abc-123456789abc' } })
       try {
+        observer.mockImplementation(async (...args) => {
+          wallClock.mockReturnValue(observedAtMs + 1000)
+          return errorReader(...args)
+        })
         const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
           finalBody = String(init?.body)
           clock = 175
@@ -398,7 +463,11 @@ describe('managed upload-timeout observation', () => {
         })
         for await (const _event of stream) { /* Native error remains SDK-owned. */ }
         expect((await stream.result()).stopReason).toBe('error')
-        expect(observer.mock.lastCall?.[3]).toEqual({ protocol: api, responseHeadersMs: 75 })
+        expect(observer.mock.lastCall?.[3]).toEqual({ protocol: api, responseHeadersMs: 75,
+          modelId: item.id, observedAtMs })
+        expect(diagnostic.mock.lastCall?.[0]).toContain(`Model: ${item.id}; protocol: ${api}`)
+        expect(diagnostic.mock.lastCall?.[0]).toContain('Observed at: 2026-10-04T01:30:00.000Z')
+        expect(diagnostic.mock.lastCall?.[0]).toContain('x-request-id=12345678-1234-4abc-8abc-123456789abc')
         expect(diagnostic.mock.lastCall?.[0]).toContain('75 ms (round trip, not upload duration)')
         expect(diagnostic.mock.lastCall?.[0]).toContain(`image blocks ${Buffer.byteLength(JSON.stringify(image))}`)
         expect(diagnostic.mock.lastCall?.[0]).toContain(`opaque replay ${api === 'openai-completions' ? 0 : Buffer.byteLength(JSON.stringify('PRIVATE_OPAQUE'))}`)
@@ -406,7 +475,7 @@ describe('managed upload-timeout observation', () => {
         expect(observer.mock.lastCall?.[1]).toBe(finalBody)
         expect(response.bodyUsed).toBe(true)
         expect(fetch).toHaveBeenCalledTimes(1)
-      } finally { timer.mockRestore(); observer.mockRestore() }
+      } finally { timer.mockRestore(); wallClock.mockRestore(); observer.mockRestore() }
     })
   it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
     'observes verified %s timeout without changing bytes, Response, native retries or credential ownership', async api => {

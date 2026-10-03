@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.89 (prepared)
+
+- Correlate exact verified Copilot request-body HTTP 408 diagnostics with the admitted model/protocol, UTC response-header observation time and strictly bounded recognized supplier request IDs (#276). Unsafe/missing values remain unavailable; no request text, arbitrary headers or credentials are recorded.
+- Tailor recovery guidance to bounded composition: no identified images means no image-budget recommendation, while unavailable composition never becomes a zero-image claim. Preserve native requests, responses, retries, cancellation, history and model selection.
+- Add all-protocol native adapter, real loopback three-MiB upload and privacy/bounds regressions. Loopback proves complete local transmission only, not production network/provider acceptance. This improves diagnostic evidence, not measured transport speed or a claim to eliminate supplier 408s; no live probes, profile installation or restart are performed.
+
 ## 0.4.0-alpha.88 (prepared)
 
 - Capture bounded classifier model, total elapsed/budget, adapter-start, first-text, native finish and validation milestones in immutable ephemeral Auto turn evidence (#272). No prompts, raw outputs, credentials, replay or usage are recorded.

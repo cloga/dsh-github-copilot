@@ -6,6 +6,59 @@ const error = { code: 'user_request_timeout',
   message: 'Timed out reading request body. Try again, or use a smaller request size.' }
 
 describe('verified request-body timeout diagnostics', () => {
+  it('correlates verified failure using bounded model, protocol, UTC time and supplier identifiers only', async () => {
+    const response = new Response(JSON.stringify(error), { status: 408, headers: {
+      'x-request-id': '12345678-1234-4abc-8abc-123456789abc',
+      'x-github-request-id': 'ABCD:1234:123ABC:456DEF:6789ABCD',
+      authorization: 'PRIVATE_TOKEN', 'x-private': 'PRIVATE_HEADER',
+    } })
+    const text = await requestBodyTimeoutDiagnostic(response, '{"input":[],"tools":[]}', undefined,
+      { protocol: 'openai-responses', responseHeadersMs: 60566, modelId: 'fixture-model',
+        observedAtMs: Date.UTC(2026, 9, 3, 23, 30) })
+    expect(text).toContain('Model: fixture-model; protocol: openai-responses')
+    expect(text).toContain('Observed at: 2026-10-03T23:30:00.000Z')
+    expect(text).toContain('x-request-id=12345678-1234-4abc-8abc-123456789abc')
+    expect(text).toContain('x-github-request-id=ABCD:1234:123ABC:456DEF:6789ABCD')
+    expect(text).not.toContain('PRIVATE')
+    expect(text).toContain('No image blocks were identified')
+    expect(text).not.toContain('attachment/image-offload budget change')
+    expect(await response.json()).toEqual(error)
+  })
+  it('rejects unrecognized identifier shapes and unsafe metadata rather than echoing headers', async () => {
+    const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408, headers: {
+      'x-request-id': 'private-customer-name', 'x-github-request-id': 'private-value',
+      'request-id': '12345678-1234-4abc-8abc-123456789abc',
+    } }), '{"input":[]}', undefined, { protocol: 'openai-responses', responseHeadersMs: 1,
+      modelId: 'PRIVATE\nVALUE', observedAtMs: Infinity })
+    expect(text).toContain('Model: unavailable')
+    expect(text).toContain('Observed at: unavailable')
+    expect(text).toContain('Supplier request IDs: unavailable')
+    expect(text).not.toContain('private')
+    expect(text).not.toContain('PRIVATE')
+  })
+  it.each([
+    ['fixture\n', -1], ['x'.repeat(201), 253402300800000], ['', 1.5],
+  ] as const)('rejects invalid model and timestamp bounds (%j)', async (modelId, observedAtMs) => {
+    const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408 }),
+      undefined, undefined, { protocol: 'openai-responses', responseHeadersMs: 1, modelId, observedAtMs })
+    expect(text).toContain('Model: unavailable')
+    expect(text).toContain('Observed at: unavailable')
+    expect(text).toContain('Composition is unavailable')
+    expect(text).not.toContain('No image blocks were identified')
+    expect(text).not.toContain('attachment/image-offload budget change')
+  })
+  it.each([
+    '12345678-1234-4abc-8abc-123456789abc, 12345678-1234-4abc-8abc-123456789abc',
+    'a'.repeat(1000),
+    'customer-token',
+  ])('does not echo joined, oversized or unknown supplier IDs', async value => {
+    const response = new Response(JSON.stringify(error), { status: 408,
+      headers: { 'x-request-id': value, 'x-github-request-id': value } })
+    const text = await requestBodyTimeoutDiagnostic(response)
+    expect(text).toContain('Supplier request IDs: unavailable')
+    expect(text).not.toContain(value)
+    expect(text).toContain('protocol: unavailable')
+  })
   it('analyzes only verified failures and reports honest header timing without leaking final payload', async () => {
     const observer = vi.spyOn(bodyEvidence, 'requestBodyEvidence')
     try {
@@ -18,6 +71,8 @@ describe('verified request-body timeout diagnostics', () => {
       expect(observer).toHaveBeenCalledExactlyOnceWith(body, 'openai-responses')
       expect(text).toContain('Composition (wire UTF-8 bytes)')
       expect(text).toContain('125 ms (round trip, not upload duration)')
+      expect(text).toContain('attachment/image-offload budget change only for identified image blocks')
+      expect(text).not.toContain('No image blocks were identified')
       expect(text).not.toContain('SECRET')
     } finally { observer.mockRestore() }
   })
