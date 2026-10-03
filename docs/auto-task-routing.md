@@ -31,10 +31,13 @@ continue an unresolved investigation is not evidence of low demand. Long input
 can be mechanical. Prior assistant/tool work prevents a greeting/continuation
 shortcut from claiming an isolated simple task.
 
-Use a conservative local assessment as the default. Unknown is an explicit
-outcome, never silently translated into simple. Optional semantic assessment is
-an experiment until evaluated against annotated tasks; it must not claim
-equivalence to GitHub's private router or calibrated confidence.
+Use conservative local assessment first. Unknown is an explicit outcome, never
+silently translated into simple. Semantic assessment is enabled by default for
+locally unknown demand at the user's explicit rollout request (#267), not
+because labeled-corpus calibration has completed. Set
+`github-copilot.autoSemanticAssessment: false` to disable auxiliary inference;
+an existing explicit false remains respected. It must not claim equivalence to
+GitHub's private router or calibrated confidence.
 
 Local rules recognize an isolated, explicit JSON-to-CSV/CSV-to-JSON conversion
 or line sort only when the entire request is at most 1600 characters, contains
@@ -48,7 +51,7 @@ inheritance; simple/routine demand is never inherited.
 rules cannot establish demand, not that the conversation has no context.
 Attachments, unfamiliar instructions and genuinely ambiguous continuations can
 still remain unknown. These refinements do not change category preference,
-previous-model eligibility or the default-disabled semantic experiment.
+previous-model eligibility or semantic safeguards.
 
 The semantic experiment uses one fixed concrete account candidate through the
 existing managed native adapter, never an Auto ID and never `ctx.llm` routing
@@ -131,7 +134,10 @@ account proof, image admission and compaction fixture coverage. Full protected
 Windows/Linux CI remains mandatory before merge/release. No live inference
 calls are needed for synthetic acceptance.
 
-Before making semantic assessment the default, evaluate a reviewed labeled
-corpus for complex-to-simple errors, extra latency, token use and stability
-across languages and prompt injection. Synthetic passing tests are not this
-evaluation. Publication does not authorize profile installation or restart.
+Default enablement is a user-authorized rollout, not an accuracy qualification.
+Evaluate a reviewed labeled corpus for complex-to-simple errors, extra latency,
+token use and stability across languages and prompt injection before claiming
+calibrated performance. Synthetic passing tests are not this evaluation.
+Missing settings adopt the enabled default after upgrade; explicit false is
+not overwritten and no profile migration is performed. Publication does not
+authorize profile installation or restart.
