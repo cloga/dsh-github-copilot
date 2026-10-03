@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { BackgroundCompaction } from '../src/background-compaction.ts'
 import type { JobHooks, JobSpec, JobView } from '@deepseek-ai/dsh-jobs'
 import { JobId } from '@deepseek-ai/dsh-jobs'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 
 function fixture() {
   const jobs = new Map<string, { spec: JobSpec; hooks: JobHooks; view: JobView }>()
@@ -36,15 +36,15 @@ function fixture() {
     }),
   }
   const compact = vi.fn((_agent: { id: SessionId }, signal: AbortSignal) =>
-    new Promise<{ shadowedSeqs: number[]; shadowedTokenCount: number } | null>((resolve, reject) => {
+    new Promise<{ shadowedSeqs: SessionSeq[]; shadowedTokenCount: number } | null>((resolve, reject) => {
       signal.addEventListener('abort', () => reject(signal.reason), { once: true })
       finish = resolve
     }))
-  let finish: (value: { shadowedSeqs: number[]; shadowedTokenCount: number } | null) => void = () => {}
+  let finish: (value: { shadowedSeqs: SessionSeq[]; shadowedTokenCount: number } | null) => void = () => {}
   const warn = vi.fn()
   const controller = new BackgroundCompaction(registry, compact, warn)
   const owner = { id: SessionId('owner') }
-  return { controller, registry, compact, owner, jobs, warn, finish: () => finish({ shadowedSeqs: [1, 2], shadowedTokenCount: 50 }) }
+  return { controller, registry, compact, owner, jobs, warn, finish: () => finish({ shadowedSeqs: [SessionSeq(1), SessionSeq(2)], shadowedTokenCount: 50 }) }
 }
 
 describe('background manual compaction admission', () => {
