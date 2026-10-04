@@ -6,6 +6,8 @@ import '@earendil-works/pi-ai/api/anthropic-messages'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -13,6 +15,7 @@ import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../src/preview-route.ts'
 import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
+import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
@@ -78,10 +81,10 @@ async function runtime(initial: RecordValue | undefined = grant(), config: Previ
   }
 }
 function event(type: string, data: Record<string, unknown>) { return `data: ${JSON.stringify({ type, ...data })}\n\n` }
-function response(tool = false, phase?: 'commentary' | 'final_answer') {
+function response(tool = false, phase?: 'commentary' | 'final_answer', text = 'hello') {
   const reasoning = { type: 'reasoning', id: 'rs_synthetic', summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'synthetic-opaque-replay' }
   const output = tool ? { type: 'function_call', id: 'fc_synthetic', call_id: 'call_synthetic', name: 'echo', arguments: '{"value":"hi"}' }
-    : { type: 'message', id: 'msg_synthetic', role: 'assistant', content: [{ type: 'output_text', text: 'hello' }],
+    : { type: 'message', id: 'msg_synthetic', role: 'assistant', content: [{ type: 'output_text', text }],
       ...phase === undefined ? {} : { phase } }
   return new Response([
     event('response.created', { response: { id: 'resp_synthetic' } }),
@@ -90,7 +93,7 @@ function response(tool = false, phase?: 'commentary' | 'final_answer') {
     event('response.output_item.done', { output_index: 0, item: reasoning }),
     event('response.output_item.added', { output_index: 1, item: output }),
     ...(tool ? [event('response.function_call_arguments.delta', { output_index: 1, delta: '{"value":"hi"}' })]
-      : [event('response.output_text.delta', { output_index: 1, delta: 'hello' })]),
+      : [event('response.output_text.delta', { output_index: 1, delta: text })]),
     event('response.output_item.done', { output_index: 1, item: output }),
     event('response.completed', { response: { status: 'completed', output: [reasoning, output], usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 } } }),
   ].join(''), { headers: { 'content-type': 'text/event-stream' } })
@@ -106,6 +109,152 @@ async function call(ctx: Context, options: Partial<GenerateOptions> = {}) {
   return { assembler, message: assembler.message({ provider: PREVIEW, model,
     ...assembler.replayState === undefined ? {} : { replayState: assembler.replayState } }) }
 }
+
+describe('managed request-body timeout guidance', () => {
+  it('excludes actual Core consumer think time despite eager SDK event forwarding', async () => {
+    let source!: ReadableStreamDefaultController<Uint8Array>
+    let wireSignal: AbortSignal | null | undefined
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      wireSignal = init?.signal
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          source = controller
+          controller.enqueue(new TextEncoder().encode(
+            event('response.output_item.added', { output_index: 0, item: {
+              id: 'synthetic-think-time', type: 'message', role: 'assistant', content: [],
+            } }) + event('response.output_text.delta', { output_index: 0, delta: 'hello' }),
+          ))
+          init?.signal?.addEventListener('abort', () => {
+            controller.error(new Error('Synthetic transport aborted'))
+          }, { once: true })
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } })
+    })
+    stubFetch(fetch)
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500 }),
+    })
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    const iterator = prepared.stream({ ...prepared.config, messages: [] })[Symbol.asyncIterator]()
+    try {
+      let next = await iterator.next()
+      while (!next.done && next.value.type !== 'text-delta') next = await iterator.next()
+      expect(next.done).toBe(false)
+      await new Promise(resolve => setTimeout(resolve, 1200))
+      expect(wireSignal?.aborted).toBe(false)
+      source.enqueue(new TextEncoder().encode(event('response.completed', {
+        response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+      })))
+      source.close()
+      const assembler = new BlockAssembler()
+      while (!(next = await iterator.next()).done) assembler.push(next.value)
+      expect(assembler.finish).toEqual({ kind: 'stop' })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    } finally { await iterator.return?.() }
+  })
+  it('restores byte-idle failures as TIMEOUT without adding a native wire attempt', async () => {
+    const fetch = vi.fn((_input: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      expect(init?.signal).toBeDefined()
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+    }))
+    stubFetch(fetch)
+    const harness = await runtime(grant(), { chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500 }) })
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'TIMEOUT', message: expect.stringContaining('COPILOT_STREAM_IDLE_TIMEOUT') },
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    if (result.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal timeout')
+    expect(result.assembler.finish.failure.message).toContain('waiting for HTTP response')
+    expect(result.assembler.finish.failure.message).toContain('UTF-8 bytes')
+  })
+
+  it('supports explicitly restoring the native-only semantic timeout', async () => {
+    let canceled = false
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        init?.signal?.addEventListener('abort', () => {
+          canceled = true
+          controller.error(new Error('Synthetic canceled transport'))
+        }, { once: true })
+      },
+    }), { headers: { 'content-type': 'text/event-stream' } }))
+    stubFetch(fetch)
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500, chatStreamLiveness: false }),
+    })
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'TIMEOUT', message: 'pi-ai stream idle timeout after 500ms' },
+    })
+    expect(canceled).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('enriches only a verified 408 while preserving native failure classification and retry ownership', async () => {
+    const payload = { message: 'Timed out reading request body. Try again, or use a smaller request size.',
+      code: 'user_request_timeout', private: 'SECRET_PROVIDER_BODY' }
+    let body = ''
+    const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      body = typeof init?.body === 'string' ? init.body : ''
+      return new Response(JSON.stringify(payload), { status: 408 })
+    })
+    stubFetch(fetch)
+    const harness = await runtime()
+    const observer = vi.spyOn(timeoutDiagnostics, 'requestBodyTimeoutDiagnostic').mockResolvedValueOnce(undefined)
+    let baseline: Awaited<ReturnType<typeof call>>
+    try { baseline = await call(harness.ctx) }
+    finally { observer.mockRestore() }
+    if (baseline.assembler.finish.kind !== 'error') throw new Error('fixture requires native terminal failure')
+    const native = baseline.assembler.finish.failure
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish.kind).toBe('error')
+    if (result.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal failure')
+    const first = result.assembler.finish.failure
+    expect(first.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+    expect(first.message).toContain(`Request body: ${Buffer.byteLength(body, 'utf8')} UTF-8 bytes`)
+    expect(first.message).toContain('Composition (wire UTF-8 bytes)')
+    expect(first.message).toMatch(/Fetch-to-response-headers: \d+ ms/u)
+    expect(first.message).not.toContain('SECRET_PROVIDER_BODY')
+    expect({ ...first, message: undefined }).toEqual({ ...native, message: undefined })
+    expect(fetch).toHaveBeenCalledTimes(2)
+    fetch.mockImplementation(async () => new Response('synthetic generic timeout', { status: 408 }))
+    const generic = await call(harness.ctx)
+    if (generic.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal failure')
+    expect(generic.assembler.finish.failure.message).not.toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not leak a timeout diagnostic between concurrent prepared and direct dispatches', async () => {
+    let calls = 0
+    let failedBodyBytes = 0
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      calls++
+      if (calls === 1) failedBodyBytes = Buffer.byteLength(String(init?.body))
+      return calls === 1
+        ? new Response(JSON.stringify({ code: 'user_request_timeout',
+          message: 'Timed out reading request body. Try again, or use a smaller request size.' }), { status: 408 })
+        : response()
+    })
+    stubFetch(fetch)
+    const harness = await runtime()
+    const prepared = call(harness.ctx)
+    const chunks: StreamChunk[] = []
+    const direct = (async () => {
+      for await (const chunk of harness.adapter.stream({ provider: PREVIEW, model: MODEL, messages: [] })) chunks.push(chunk)
+    })()
+    const [result] = await Promise.all([prepared, direct])
+    const endings = [result.assembler.finish, ...chunks.filter(chunk => chunk.type === 'finish').map(chunk => chunk.reason)]
+    expect(endings.filter(reason => reason.kind === 'error')).toHaveLength(1)
+    expect(endings.filter(reason => reason.kind === 'stop')).toHaveLength(1)
+    for (const reason of endings) if (reason.kind === 'error') {
+      expect(reason.failure.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+      expect(reason.failure.message).toContain(`Request body: ${failedBodyBytes} UTF-8 bytes`)
+      expect(reason.failure.message).toContain('Composition (wire UTF-8 bytes)')
+    }
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+})
 function compatibilityOffloadedImageBlock(block: Message['content'][number]): Message['content'][number] {
   return block.type === 'image' ? { ...block, offloaded: true } as Message['content'][number] : block
 }
@@ -137,6 +286,124 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
 
 describe('plugin-owned account Copilot route', () => {
+  it.each([undefined, true, false, 'no-settings'] as const)('assesses Auto with setting %s and freezes the captured reason across retries', async enabled => {
+    const modelCalls = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      expect(body.model).toBe('classifier-fixture')
+      expect(body.max_output_tokens).toBe(128)
+      expect(body.reasoning).toBeUndefined()
+      expect(body.tools === undefined || Array.isArray(body.tools) && body.tools.length === 0).toBe(true)
+      return response(false, undefined, '{"demand":"routine","signals":["bounded-transformation"]}')
+    })
+    const classifier = catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' })
+    classifier.capabilities.supports.reasoning_effort = ['off', 'high']
+    stubFetch(async (input, init) => String(input).endsWith('/models')
+      ? catalogResponse([
+        classifier,
+        catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
+      ]) : modelCalls(input, init), true)
+    const harness = await runtime(grant({ availableModelIds: [] }), {
+      ...(enabled === 'no-settings' ? {} : {
+        accountModelSettings: () => ({ autoSemanticAssessment: enabled, excludedModelIds: [] }),
+      }),
+    })
+    const agent = { ctx: harness.ctx, session: {
+      id: 'assessment-session', header: { id: 'assessment-session' }, requestHeader: () => undefined,
+    } } as unknown as Agent
+    harness.ctx.provide('tokenMeter', { estimateMessage: () => 100, measure: () => ({ totalTokens: 100 }) } as never)
+    harness.ctx.provide('sessionProjections', { stateOf: () => ({ pending: { provider: PREVIEW, model: AUTO } }) } as never)
+    const scope = scopeTarget(agent, agent), signal = new AbortController().signal
+    await harness.ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+    const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Convert these records to CSV.' }] })]
+    const enter = () => harness.ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+      async () => ({ kind: 'enter' as const, messages }))
+    await Promise.all([enter(), enter()])
+    const request = () => harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+      async () => ({ provider: PREVIEW, model: AUTO }))
+    expect(await request()).toMatchObject({ model: 'answer-fixture' })
+    await enter()
+    expect(await request()).toMatchObject({ model: 'answer-fixture' })
+    expect(modelCalls).toHaveBeenCalledTimes(enabled === false ? 0 : 1)
+    expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+      mode: 'auto', explanation: { assessment: enabled === false
+        ? { demand: 'unknown', source: 'local', diagnostic: 'disabled' }
+        : { demand: 'routine', source: 'semantic' },
+        targetCategory: 'versatile', selectedCategory: 'versatile', method: 'only-candidate' },
+    })
+    if (enabled !== false) {
+      expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+        explanation: { assessment: { semantic: { modelId: 'classifier-fixture', budgetMs: 8000,
+          stage: 'finished', nativeFinish: 'stop', validation: 'valid' } } },
+      })
+    }
+  })
+  it('forwards native SDK failed zero usage without changing the shared accounting stream', async () => {
+    stubFetch(async () => new Response('synthetic unavailable', { status: 503 }))
+    const harness = await runtime()
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    const assembler = new BlockAssembler()
+    const chunks: StreamChunk[] = []
+    for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) {
+      chunks.push(chunk)
+      assembler.push(chunk)
+    }
+    expect(chunks.filter(chunk => chunk.type === 'usage')).toEqual([
+      { type: 'usage', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+    ])
+    expect(assembler.finish.kind).toBe('error')
+    expect(assembler.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
+  })
+  it.each([
+    ['/responses', 0], ['/v1/messages', 100],
+  ] as const)('preserves native cancellation usage on %s (%s input tokens)', async (endpoint, tokens) => {
+    const id = 'synthetic-cancel-model'
+    const stop = new AbortController()
+    const items = [catalogItem(id, endpoint, { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: false },
+      limits: { max_context_window_tokens: 64000, max_prompt_tokens: 48000, max_output_tokens: 8000 },
+    } })]
+    stubFetch(async (input, init) => {
+      if (String(input).endsWith('/models')) return catalogResponse(items)
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          const packet = (type: string, data: Record<string, unknown>) =>
+            `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`
+          controller.enqueue(new TextEncoder().encode(endpoint === '/responses'
+            ? event('response.created', { response: { id: 'resp_synthetic' } })
+            : packet('message_start', { message: { id: 'msg_synthetic', type: 'message',
+              role: 'assistant', model: id, content: [], stop_reason: null,
+              usage: { input_tokens: tokens, output_tokens: 0 } } })))
+          init?.signal?.addEventListener('abort', () => controller.error(new Error('synthetic cancellation')), { once: true })
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } })
+    }, true)
+    const harness = await runtime(grant({ availableModelIds: [] }))
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: id })
+    const timer = setTimeout(() => stop.abort(), 100)
+    const chunks: StreamChunk[] = []
+    try {
+      for await (const chunk of prepared.stream({ ...prepared.config, signal: stop.signal,
+        messages: [createUserMessage({ content: [{ type: 'text', text: 'synthetic' }], source: { kind: 'user' } })],
+      })) chunks.push(chunk)
+    } finally { clearTimeout(timer) }
+    expect(chunks.filter(chunk => chunk.type === 'usage')).toEqual([
+      { type: 'usage', usage: { inputTokens: tokens, outputTokens: 0, totalTokens: tokens } },
+    ])
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'aborted' } })
+  })
+  it('preserves native successful zero usage rather than treating it as failure', async () => {
+    stubFetch(async () => {
+      const successful = response()
+      return new Response((await successful.text()).replace(
+        '"input_tokens":1,"output_tokens":2,"total_tokens":3',
+        '"input_tokens":0,"output_tokens":0,"total_tokens":0',
+      ), { headers: successful.headers })
+    })
+    const harness = await runtime()
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish.kind).toBe('stop')
+    expect(result.assembler.usage).toMatchObject({ inputTokens: 0, outputTokens: 0 })
+  })
   it.each(['step/start', 'turn/end'] as const)('clears only the matching Session retry cache on %s across fresh Core preparations', async eventType => {
     const fetch = vi.fn(async () => new Response('synthetic timeout', { status: 408 }))
     stubFetch(fetch)
@@ -469,6 +736,7 @@ describe('plugin-owned account Copilot route', () => {
     const view = await harness.ctx.get('githubCopilotPreview')!.discover()
     expect(view).toMatchObject({ available: true, rejected: [], warnings: [
       { id: item.id, code: 'INPUT_LIMIT_ESTIMATED_GUARD' },
+      { id: item.id, code: 'AUTO_CATEGORY_MISSING' },
       { id: item.id, code: 'REASONING_EFFORTS_UNSUPPORTED' },
     ] })
     expect((await call(harness.ctx, { model: item.id })).assembler.finish).toEqual({ kind: 'stop' })
@@ -1718,6 +1986,44 @@ describe('plugin-owned account Copilot route', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it.each([true, false])('admits projected MIME rather than durable MIME before wire: %s', async supported => {
+    const item = catalogItem('fixture-image-model', '/responses', { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: true },
+      limits: { max_context_window_tokens: 128000, max_output_tokens: 8000,
+        vision: { supported_media_types: [supported ? 'image/png' : 'image/jpeg'] } },
+    } })
+    let wires = 0
+    stubFetch(async input => {
+      if (String(input).endsWith('/models')) return catalogResponse([item])
+      wires++
+      return response()
+    }, true)
+    const harness = await runtime(grant({ availableModelIds: [] }))
+    const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
+    type ImageRef = Extract<Message['content'][number], { type: 'image' }>['attachment']
+    const attachment: ImageRef = { attachmentId: 'synthetic-projected-image' as ImageRef['attachmentId'],
+      mediaType: 'image/webp', bytes: 100, width: 1, height: 1 }
+    await harness.ctx.plugin({ apply(owner: Context) {
+      owner.provide('attachments', {
+        imageLimits: { maxImageBytes: 1_000_000, maxImagesPerMessage: 4, maxMessageImageBytes: 4_000_000,
+          maxImagePixels: 1_000_000, maxImageDimension: 4096, mediaTypes: ['image/png', 'image/webp'] },
+        readImageRequest: async () => ({ variantId: 'synthetic-projected-version', attachment,
+          data, mediaType: 'image/png', bytes: data.length, width: 1, height: 1, depth: 'uchar', space: 'srgb', hasAlpha: true }),
+        imageHostPath: () => undefined,
+      } as unknown as Context['attachments'])
+    } })
+    const result = await call(harness.ctx, { model: item.id, messages: [createUserMessage({
+      content: [{ type: 'image', attachment }], source: { kind: 'user' },
+    })] })
+    if (supported) expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    else expect(result.assembler.finish).toEqual({
+      kind: 'error',
+      failure: { message: 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED', code: 'INVALID_REQUEST' },
+    })
+    expect(wires).toBe(supported ? 1 : 0)
+    expect(attachment.mediaType).toBe('image/webp')
+  })
+
   it.each([true, false])('uses native attachment projection and execution-world mapping when available: %s', async mapped => {
     const harness = await runtime()
     const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
@@ -1758,8 +2064,10 @@ describe('plugin-owned account Copilot route', () => {
     expect(attachment.attachmentId).toBe('synthetic-image')
   })
 
-  it('keeps the mapped read-only path when Core offloads an image to fit its request budget', async () => {
-    const harness = await runtime(grant(), { maxRequestImageBytes: 1 })
+  it.each([false, true])('keeps the mapped read-only path when Core offloads an image to fit its request budget', async settings => {
+    const harness = await runtime(grant(), settings
+      ? { chatRequestSettings: () => ({ chatMaxRequestImageBytes: 1 }) }
+      : { maxRequestImageBytes: 1 })
     const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
     type ImageRef = Extract<Message['content'][number], { type: 'image' }>['attachment']
     const attachment: ImageRef = { attachmentId: 'synthetic-offload' as ImageRef['attachmentId'], mediaType: 'image/png', bytes: data.length, width: 1, height: 1 }

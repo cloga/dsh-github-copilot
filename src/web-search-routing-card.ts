@@ -15,6 +15,7 @@ const DEEPSEEK_SEARCH_PROVIDER = 'deepseek-official'
 interface SearchRoutingCardProps {
   readonly settings: ClientContext['remote']['settings']
   readonly routing: ClientContext['remote']['githubCopilotSearchRouting']
+  readonly settingsRevision?: { previous: number; next: number }
 }
 interface Draft {
   primary: string
@@ -302,6 +303,12 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
   }, [load])
 
   const usesCopilot = draft.primary === GITHUB_COPILOT_SEARCH_PROVIDER || draft.provider === GITHUB_COPILOT_SEARCH_PROVIDER
+  useEffect(() => {
+    const revision = props.settingsRevision
+    if (!revision) return
+    setDraft(value => value.routingRevision === revision.previous ? { ...value, routingRevision: revision.next } : value)
+    setOverride(value => value.revision === revision.previous ? { ...value, revision: revision.next } : value)
+  }, [props.settingsRevision])
   const disabled = loading || saving !== undefined || !writable || draft.routingRevision === undefined || !catalogReady
   const primaryKnown = draft.primary === 'auto' || draft.primary === 'none' || providers.includes(draft.primary)
   const fallbackKnown = draft.provider === 'none' || providers.includes(draft.provider)

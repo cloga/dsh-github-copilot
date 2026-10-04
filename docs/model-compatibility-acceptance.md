@@ -20,6 +20,8 @@ Follow the [plugin-only boundary](../AGENTS.md#plugin-only-implementation-bounda
 - Include GPT-6 Astra, Gemini 3.8 Flash and GPT-5.6 Sol Fast metadata fixtures, plus arbitrary unseen IDs on all three supported protocols. The unseen-ID cases must pass without adding those IDs to implementation tables.
 - Cover missing/conflicting endpoints, missing/invalid limits, duplicate conflicting IDs, explicit denial, stale account snapshots, unsupported reasoning labels, unknown fields and hostile extra getters.
 - Exercise real published adapter/SDK code against local synthetic HTTP for all supported protocols, including tools, public summaries, two-turn opaque replay, images and interruption/retry paths. Synthetic results are not claims of live account availability.
+- Verify managed request-body timeout guidance only for the observed HTTP `408`, exact `user_request_timeout` code and request-body message. Bound clone reads to 8 KiB/250 ms, retain the original native response, and expose only fixed guidance plus final string-body UTF-8 bytes. Preserve failure code, retry metadata, cancellation, unchanged retry payloads and independent dispatches. Do not reclassify 408 as overflow, invent a safe byte threshold, change client timeouts, refresh OAuth, compact automatically or promise elimination of upstream failures.
+- Verify byte-aware managed HTTP/SSE liveness through unchanged published and tagged adapters: heartbeat bytes may cross the original semantic deadline before actual output, but endless heartbeat-only output must hit the bounded native deadline. Real header/body stalls retain the original interval and a dispatch-local TIMEOUT; consumer think time, caller/credential cancellation, exact bytes, parser ownership and one native wire attempt remain unchanged. Explicit WebSocket/auto and opt-out retain native-only behavior. Preserve the 20 MiB native image budget by default; explicit smaller budgets must use native offload and retain mapped read-only paths/history, never hidden trimming or a claimed supplier threshold. These synthetic cases do not attest production heartbeat activity or cure HTTP 408.
 - Run source/test typechecks, complete repository tests, built Host/Client/Remote smoke, archive verification, and relevant unchanged-Core compatibility fixtures. Do not suppress type or test failures to bridge incompatible SDK versions.
 
 ## Explicit public-interface limits
@@ -46,3 +48,44 @@ Follow the [plugin-only boundary](../AGENTS.md#plugin-only-implementation-bounda
 - [pi v0.87.1 release](https://github.com/earendil-works/pi/releases/tag/v0.87.1)
 
 These references guide parsing and tests; they are not a guarantee that the upstream discovery schema will never change. Schema drift must be surfaced rather than silently guessed.
+
+## Authentication, replay and request diagnostics
+
+These failures have different owners; do not repair every rejection by signing out.
+
+| Diagnostic | Boundary and safe action |
+|---|---|
+| `COPILOT_AUTHORIZATION_BEGIN_FAILED` | Sign-in did not complete; interaction milestones are not a credential commit or root-cause proof |
+| `COPILOT_ROUTE_REPAIR_FAILED` | Authentication is retained; review legacy configuration and use explicit repair |
+| Native AUTH / HTTP 401 | Exact managed proof may be retired; a later explicit request/discovery can renew natively, not replay the failed message |
+| `COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH` | Exact uncoded item-scope rejection is request-local INVALID_REQUEST, without invalidating shared proof/other requests |
+| `COPILOT_RESPONSES_REPLAY_UNSUPPORTED` | Incomplete/reference-only historical payload lacks safe reconstruction evidence |
+| `COPILOT_REQUEST_BODY_TIMEOUT` | Strict verified request-body 408; composition/timing is not proof of overflow or network cause |
+
+HTTP auth recovery is bounded by account cooldown, including forced discovery.
+An old late response cannot invalidate a newer sign-in. HTTP 403, network errors
+and strings mentioning 401 are not auth evidence; malformed/ambiguous/oversized
+bodies retain native handling. HTTP tests do not prove WebSocket recovery.
+
+### Responses replay compatibility
+
+The public SDK payload hook normalizes only direct IDs on complete assistant
+messages, function calls and encrypted reasoning items. A narrowly recognized
+empty completed reasoning shell can be omitted from outgoing requests only with
+empty summary/content, no encrypted content and no unknown fields. Durable
+history, public summaries, opaque bytes, nested IDs, phase and `call_id` pairing
+stay unchanged.
+
+After actual HTTP 408, a newly prepared attempt in the same native step can
+reuse exact normalized payload only when transcript/every other field agree,
+with matching references and no conflicts. Evidence is bound to Session/model/
+account proof and original signal, expires in 60 seconds, is limited to 2 MiB
+and clears on next step/turn, concurrency, cancellation or account discontinuity.
+This creates no retry or cold-history reconstruction. Canonical/other routes,
+protocols and native retry policy stay unchanged. Synthetic adapter tests are
+not acceptance proof for an old conversation. Never discard opaque reasoning,
+rewrite history, replay business work or reset credentials automatically.
+
+For TLS/quota, see [trust boundaries](./copilot-usage.md#account-data-boundary).
+For HTTP 408 and oversized summaries, see
+[budget and recovery limits](./copilot-compaction.md#existing-oversized-history-and-recovery-limits).

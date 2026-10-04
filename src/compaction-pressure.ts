@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { callConfigEquals, CONTEXT_WINDOW_EXCEEDED_CODE, isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { currentSearchInitiator } from './current-provider.ts'
+import { agentCompaction } from './agent-compaction.ts'
 import { isPluginPreviewProvider } from './model-protocol.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 
@@ -80,7 +81,7 @@ export function installCopilotCompactionPressure(
 
     // These are public BasicCompactionEngine configuration leaves, not a second
     // service registration or private access to its recovery counters.
-    const compaction = object(optionalService(ctx, 'compaction'))
+    const compaction = object(agentCompaction(owner))
     const config = object(compaction?.config)
     if (config?.auto === false) return undefined
     if (config?.auto !== true || typeof compaction?.compactIfNeeded !== 'function') {

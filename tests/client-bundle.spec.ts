@@ -140,6 +140,14 @@ describe('tsdown client artifact', () => {
     let memoIndex = 0, effectIndex = 0
     const hooks = {
       ...React,
+      useState(initial?: unknown) {
+        const instance = current, index = memoIndex++
+        instance.memos[index] ??= { deps: [], value: typeof initial === 'function' ? initial() : initial }
+        return [instance.memos[index]!.value, (next: unknown) => {
+          const previous = instance.memos[index]!.value
+          instance.memos[index]!.value = typeof next === 'function' ? next(previous) : next
+        }]
+      },
       useMemo<T>(factory: () => T, deps: React.DependencyList): T {
         const index = memoIndex++, previous = current.memos[index]
         if (!previous || deps.some((value, at) => !Object.is(value, previous.deps[at]))) current.memos[index] = { deps, value: factory() }
@@ -183,6 +191,7 @@ describe('tsdown client artifact', () => {
       remote: { $mount: vi.fn(async () => async () => {}), $on: on, githubCopilot: remote, settings: settingsRemote },
       on,
       logger: { warn: vi.fn() },
+      get: vi.fn(),
       slots: {
         spec: (name: string) => ({ kind: name === 'plugins.bundle.config' ? 'keyed' : 'list', scope: 'root' }),
         register(options: { name: string; id?: string; key?: string }, render: Render) {
@@ -253,7 +262,10 @@ describe('tsdown client artifact', () => {
       expect(fixture.registrations.has('settings.models.footer')).toBe(true)
       expect(fixture.registrations.has('settings.models.footer:github-copilot-search-routing')).toBe(false)
       const element = fixture.registrations.get('plugins.bundle.config')!({ view: 'page' })
-      expect(element.type).toBe(fixture.client.exports.WebSearchRoutingCard)
+      expect(element.type).toBe(fixture.client.exports.CopilotPluginSettingsPage)
+      const page = fixture.instance().render(element)
+      expect(page?.props.children[0].type).toBe(fixture.client.exports.ParentModelFollowCard)
+      expect(page?.props.children[1].type).toBe(fixture.client.exports.WebSearchRoutingCard)
       expect(fixture.registrations.get('plugins.bundle.config')!({ view: 'summary' })).toBeNull()
       expect(element.props.settings).toBe(fixture.ctx.remote.settings)
     } finally { await fixture.dispose() }
@@ -383,7 +395,7 @@ describe('tsdown client artifact', () => {
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'migrationStatus',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
     ])
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
@@ -391,6 +403,10 @@ describe('tsdown client artifact', () => {
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
         expect(descriptor.parameters).toHaveLength(1)
         expect(descriptor.parameters[0]?.codec.mode).toBe('strict')
+      }
+      else if (descriptor.method === 'setModelExcluded') {
+        expect(descriptor.parameters).toHaveLength(2)
+        expect(descriptor.parameters.every(parameter => parameter.codec.mode === 'strict')).toBe(true)
       }
       else expect(descriptor.parameters).toEqual([])
       expect(descriptor).toMatchObject({
@@ -401,6 +417,7 @@ describe('tsdown client artifact', () => {
         mode: 'strict',
         typeSymbol: descriptor.method === 'migrationStatus'
           ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
+          : descriptor.method === 'setModelExcluded' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
           : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })
     }
@@ -457,12 +474,18 @@ describe('tsdown client artifact', () => {
     expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotUsage/get', { args: {} }, expect.any(AbortSignal))
 
     const selectionDescriptor = contributions[0]!.descriptors.find(descriptor => descriptor.namespace === 'githubCopilotTurnSelection')!
+    expect(selectionDescriptor).not.toHaveProperty('scope')
     expect(selectionDescriptor).toMatchObject({
-      scope: { context: 'agent', wire: 'agentId' },
+      invocation: { kind: 'direct' },
       parameters: [{ source: 'lookup', lookup: 'agent' }, { source: 'json' }],
     })
     if (selectionDescriptor.result.mode !== 'strict') throw new Error('expected independent strict selection codec')
     expect(selectionDescriptor.result.create().parse({ mode: 'manual' })).toEqual({ mode: 'manual' })
+    rpcCall.mockResolvedValueOnce({ ok: true, value: { mode: 'manual' } })
+    await expect(ctx.remote.githubCopilotTurnSelection.get('explicit-master', 7))
+      .resolves.toEqual({ ok: true, value: { mode: 'manual' } })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotTurnSelection/get',
+      { args: { agentId: 'explicit-master', turn: 7 } }, expect.any(AbortSignal))
 
     const statusDescriptor = contributions[0]!.descriptors.find(
       descriptor => descriptor.method === 'status',

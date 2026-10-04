@@ -1,6 +1,159 @@
 # Changelog
 
-## 0.4.0-alpha.61 (prepared)
+## 0.4.0-alpha.91 (prepared)
+
+- Prevent known continuing-step managed input pressure before native model-attempt admission through the public `agent/pre-step` seam (#280), using the initiating Agent's current compaction service and one native transaction.
+- Require a committed owned route and a proven absent pending model change. Respect disabled auto, overflow policy, cancellation and native failures; retain final converted admission and stream-pressure fallback.
+- Prove the before/after accounting boundary with the unchanged rc.2 AgentLoop: successful early reduction removes the unsampled pressure attempt and preserves complete native two-step Usage. First-step/pending selections, new prefix growth and final hard refusals remain limitations; no historical totals, usage samples, retry counters or model selections are rewritten.
+
+## 0.4.0-alpha.88 (prepared)
+
+- Capture bounded classifier model, total elapsed/budget, adapter-start, first-text, native finish and validation milestones in immutable ephemeral Auto turn evidence (#272). No prompts, raw outputs, credentials, replay or usage are recorded.
+- Reduce auxiliary classification to 128 output tokens with compact demand/fixed-signal JSON. Request off reasoning only when supplier metadata and the published prepared-model capabilities agree; unsupported controls retain native policy.
+- Explain semantic timeout as unknown-demand preference fallback and expose auxiliary milestones inside the existing bilingual disclosure. Preserve the 8s end-to-end deadline, cancellation/revocation, omitted-context guards and single attempt; no longer timeout, retries, guessed model-health ranking or measured improvement claim.
+
+## 0.4.0-alpha.87 (prepared)
+
+- Remove managed terminal-zero usage filtering so native failure/cancellation samples remain available to Core's shared turn and cumulative accounting (#270).
+- Retain unreliable failed-zero classification only in the independent historical context disclosure. Native zero pressure remains a known limitation, not a reason to remove shared usage or invent supplier receipts.
+- Add native Responses zero/Anthropic nonzero cancellation and unchanged Core whole-turn regressions. Preserve errors, cancellation, retry and old histories; genuinely missing usage/lifecycle and timeout limitations remain explicit.
+
+## 0.4.0-alpha.86 (prepared)
+
+- Enable bounded semantic Auto assessment by default for locally unknown tasks at the user's explicit request (#267). Preserve existing explicit false settings and document the opt-out.
+- Apply the same default to unset managed-route settings, while retaining local known-task short-circuiting, one auxiliary call per admitted turn, strict output, timeout/cancellation/account guards and omitted-context protection.
+- Disclose additional supplier charges outside native Chat Usage. Default rollout does not claim labeled-corpus calibration, change native history or perform profile installation/restart.
+
+## 0.4.0-alpha.84 (prepared)
+
+- Add bounded numeric composition of the actual final request for verified Copilot `408 / user_request_timeout`, distinguishing conversation, tool definitions, protocol-owned system/instructions and residual framing (#263).
+- Within conversation, count structural image blocks and opaque replay as disjoint wire-byte subsets without decoding or reporting their content. Missing, unsupported, malformed and work-limited evidence remains explicit.
+- Capture per-dispatch fetch-to-response-header elapsed time before clone observation, honestly labeled as round trip rather than upload duration. Preserve native payload/response bytes, failure classification, retry, cancellation and credentials; no automatic settings change, trimming, compaction or model switch. Diagnostics guide explicit mitigation, not a claim to cure recurring 408.
+
+## 0.4.0-alpha.83 (prepared)
+
+- Reduce avoidable Auto uncertainty through bounded difficult-task continuation and isolated fenced mechanical-transform recognition (#262); preserve unknown for new, incomplete and ambiguous work.
+- Prioritize current and preceding user requests in the bounded semantic projection, preserving complete JSON rows, chronological order and omitted-context downshift protection.
+- Call the optional semantic experiment only for locally unknown demand. Explain local rule coverage separately from absent conversation context; retain off-by-default semantics, category policy and native turn ownership.
+
+## 0.4.0-alpha.82 (prepared)
+
+- Explain missing native Turn Usage on completed Copilot replies through a plugin-owned read-only conversation projection and a compact, keyboard-accessible footer disclosure (#259).
+- Distinguish the exact recorded local pre-dispatch input-budget block, other settlements without usage, and incomplete history. A recovered turn can contain reported successful steps without a provable whole-turn total.
+- Preserve native Usage when complete; do not fabricate zero usage, aggregate partial totals, change history or replace compaction/retry ownership. Record the observed plugin/Core integration gap and its limits.
+
+## 0.4.0-alpha.81 (prepared)
+
+- Route Auto through current supplier Powerful/Versatile/Lightweight categories and contextual task evidence instead of advertised-capacity bands (#258). Preserve hard input/image/exclusion/account admission and native no-fit recovery.
+- Use Lightweight for isolated greetings even with Intelligence, retain capable targets for short hard work, prefer suitable previous-model continuity, and distribute only equal-category candidates.
+- Explain the actual captured turn choice, category fallback and continuity/tie-break in the footer; old records explicitly lack detailed reasons rather than displaying generic reconstructed text.
+- Add an off-by-default bounded semantic-assessment experiment through the existing native adapter. Strict output, omitted-context conservatism, cancellation and diagnostic fallback remain; extra calls add latency and supplier charges outside native Chat Usage. Synthetic tests do not establish calibrated accuracy or GitHub-private parity.
+
+## 0.4.0-alpha.80 (prepared)
+
+- Observe real HTTP/SSE byte progress on managed requests, retaining the original five-minute byte-idle bound while allowing at most ten minutes without a native assistant chunk (#253).
+- Preserve native SDK parsing, exact stream bytes, caller cancellation and retry ownership; endless heartbeats remain bounded and explicit WebSocket/auto transport keeps native behavior.
+- Add separate managed-chat timeout/opt-out settings and a configurable native image-request budget with the unchanged 20 MiB default. No hidden history trimming, automatic model switch, extra retry or claim to cure HTTP 408.
+- Reproduce heartbeat-only semantic timeouts and verify real late output, actual byte stalls and cleanup through unchanged native adapters.
+
+## 0.4.0-alpha.79 (prepared)
+
+- Bind retained turn selection reads through the public `TypertRemoteService` and `@Remote get`, fixing the Host registration missing from the alpha.76 Client-only correction (#254).
+- Cover actual Client-to-Host calls in source-discovery and strict modes, including Auto/Manual, missing evidence, missing/denied identities and unload; preserve lookup checks and the existing bounded decision store.
+
+## 0.4.0-alpha.78 (prepared)
+
+- Optimize individual Exclude/Restore saves with a strict preferences-only Remote response, avoiding credential/account-status reads and live-session scans (#252). Keep single-row immediate persistence, CAS conflicts, invalidation and failure recovery; no batch UI.
+- Permit exclusion of selected models without rewriting Session/default selections. Preserve already admitted native turns through tool steps and retries, reject excluded models on new turns, and retain account/token/metadata/cancellation guards.
+- Native configuration serialization, file locks and Loader synchronization still gate save completion; no live latency threshold or loaded Desktop upgrade is claimed.
+
+## 0.4.0-alpha.77 (prepared)
+
+- Resolve automatic compaction pressure and Auto recovery availability from the initiating Agent's preset through the existing public service lookup (#248), including Desktop's isolated compaction groups.
+- Never borrow global recovery when a bound preset has no engine; preserve disabled/zero-retry policy, native transactions, cancellation, and manual-only segmented recovery. No new command, timeout reclassification, Core change, or automatic model switch.
+- Cover concurrent enabled/disabled/absent preset engines with unchanged official rc.2 AgentLoop, durable summary/rebuilt-request and cancellation evidence; add the frozen preset dependency closure to both required CI and release gates.
+
+## 0.4.0-alpha.76 (prepared)
+
+- Fix fresh master/lead Auto footer reads rejected by the native Client gateway when an ambient agent context reduced the explicit two-argument call to one (#249). Preserve native Host lookup and strict codecs; do not substitute the ambient Session.
+- Distinguish failed selection reads from successfully read missing evidence. Add a bounded, explicit same-turn Retry without rerunning inference or leaking raw errors.
+- Reproduce the old descriptor failure and verify bound/unbound calls through the unchanged pinned Client gateway.
+
+## 0.4.0-alpha.75 (prepared)
+
+- Add safe, actionable managed `COPILOT_REQUEST_BODY_TIMEOUT` guidance for the exact observed HTTP 408 request-body timeout, including final JSON UTF-8 bytes when observable (#246).
+- Preserve native failure classification, retry metadata, payloads, cancellation and credential ownership; no new retry, timeout change, automatic compaction, hidden trimming or model switch.
+- Share the existing bounded clone-only response observer with replay-scope classification and cover all three native HTTP protocols, unknown/oversized/stalled replies and concurrent dispatch isolation. This is diagnostic/recovery guidance, not a claim to eliminate upstream timeouts.
+
+## 0.4.0-alpha.74 (prepared)
+
+- Add `/copilot-compact [status|cancel]` to the explicitly selected recovery engine when native commands/jobs are available (#244).
+- Acknowledge a Session-owned background job promptly instead of holding Desktop's unary command request past its response-header timeout. Preserve native `/compact`, maintenance locks and compaction transactions.
+- Deduplicate active starts, cancel and drain on teardown, and collect native settlement without waking the model or resuming a Goal. Admission is not completion; failed summaries retain their native diagnostics.
+
+## 0.4.0-alpha.73 (prepared)
+
+- Prevent managed Copilot failure/cancellation terminal zero-usage samples from resetting native context pressure; preserve successful zero and real nonzero usage (#242).
+- Add a strict plugin-owned historical context projection and an additive composer disclosure for replayed failed-zero readings. Last input-plus-cache samples are historical evidence, never current occupancy or inferred percentages.
+- Revoke old samples on route changes, compaction, surface replacement and invalid attribution. Keep the Core meter, account Credits, durable history, retries and compaction ownership unchanged.
+
+## 0.4.0-alpha.72 (prepared)
+
+- Retain the mounted account controller and model metadata across exclusion-driven Models rerenders by capturing the native traced Copilot Remote once per UI registration (#240).
+- Avoid redundant account status and model-discovery work on provider/footer/section rerenders; preserve real registration teardown, credential invalidation, selection locks and exclusion CAS.
+- Add regressions with fresh Remote proxies and a blocked second status read, plus exact published-gateway namespace identity evidence. No Core changes or Desktop install/restart.
+
+## 0.4.0-alpha.71 (prepared)
+
+- Decouple the Auto selection footer from optional conversation projections and wait for its exact Remote namespace (#238).
+- Use native completed-turn evidence to show retained Auto/Manual records when projection data is unavailable; keep incomplete attribution explicit without guessing historical selections or changing native Usage.
+- Cover cold/incremental native assembly and session-scoped rendering, projection failures, pending dependencies and invalid completion evidence. Live Desktop recovery still requires loaded-version verification.
+
+## 0.4.0-alpha.70 (prepared)
+
+- Require image-capable Auto candidates for retained historical user/tool images after text-only continuations; honor native image offload markers (#236).
+- Validate actual native-projected image MIME against explicit account format evidence before managed dispatch, with request-local diagnostics and no image rewriting, model switch or additional retry.
+- Document why durable attachment formats and filenames cannot prove outgoing MIME, and retain the original service-side rejection as unverified rather than declaring Grok text-only.
+
+## 0.4.0-alpha.69 (prepared)
+
+- Add an explicit, opt-in manual compaction engine for compressible already-oversized managed Copilot histories. It uses a bounded public summary hook and native transactional replacement without changing the default compaction service. Include account-proof and failure boundaries in the recovery design.
+
+## 0.4.0-alpha.68 (prepared)
+
+- Add one **Follow parent model** control in plugin settings. Enable once for existing and new supported Copilot subagents and Team mates; no Session IDs or per-child setup (#234).
+- Preserve active turns, child-owned manual selections and independent child Auto decisions. Keep legacy explicit bindings without hidden migration.
+- Record requirements, implementation plan and a synthetic screenshot of the actual settings component; use narrow settings CAS and preserve unsaved search drafts.
+
+## 0.4.0-alpha.66 (prepared)
+
+- Add explicit native child/direct-parent model-follow bindings, disabled by default. Enrolled children follow fixed selections on their next turn or independently resolve the parent's Auto preference against their own context (#229).
+- Preserve in-flight turn routing, explicit child selections, native histories, defaults, credentials and permissions. Unknown lineage, unsupported children and missing parent evidence fail with named diagnostics rather than guessed models.
+- Record exact-source inheritance research, configuration boundaries and validation limits. Native creation labels are not rewritten, and existing children are never automatically enrolled.
+
+## 0.4.0-alpha.65 (prepared)
+
+- Fix Auto input undercount by using Core's public TokenMeter instead of passing Core messages to pi-ai's incompatible estimator and swallowing its errors (#230). Include assistant reasoning/tool history and retain native current-surface/tool-envelope measurement as a conservative floor.
+- Fail Auto explicitly when native measurement is missing or invalid; fixed model selection remains available. Recognize native compact-checkpoint provenance without changing messages or same-turn routing.
+- This is a preventive input-fit fix, not recovery of already oversized manual summaries. The independent summary-input overflow investigation remains open in #228; no chunking, alternate summarizer, history deletion, or extra retry loop is introduced.
+
+## 0.4.0-alpha.64 (prepared)
+
+- Omit only explicitly empty completed reasoning shells from managed Responses outgoing payloads, without changing durable history, opaque encrypted content, public summaries or tool call/result pairing (#226).
+- Preserve fail-closed handling for partial, unknown and reference-dependent replay. Existing HTTP-408 retry snapshots may reuse the same omitted shell only when the entire original request and retry scope match; no new retry loop or model switch is introduced.
+
+## 0.4.0-alpha.63 (prepared)
+
+- Restore the completed-reply Auto preference and recorded-reason disclosure on official Desktop by reading ChatNodeStore's public iterable `values()` instead of requiring a JavaScript `Map` (#222). Retain Map support and diagnose an unavailable collection once without querying another turn.
+- Preserve exact Session/turn lookup, stale-response isolation, unknown/manual evidence rules, native Usage model display, and existing selection policy. No history migration or Core changes are required.
+
+## 0.4.0-alpha.62 (prepared)
+
+- Preserve model preferences through Client authorization decoding and make hidden exclusions a native live Config field, fixing both invisible controls and rejected settings writes (#223).
+- Add All/Enabled/Excluded filtering, searchable model rows, explicit selected-model locks, status-only Retry and named read-only diagnostics. Keep discovery details separate and reject stale action results after account changes or unmount.
+- Add shared-account-to-Manage regression coverage and unchanged native SettingsForms CAS/fiber/persistence evidence. No Core, credentials, histories or native picker layout are changed.
+
+## 0.4.0-alpha.61 (released)
 
 - Preserve the exact normalized managed Responses request across Core's freshly prepared retry attempts only after the previous request actually received HTTP 408. Short-lived state is scoped to the original turn signal, Session, model and account proof, and cleared on new step/turn end. Retry-only item references or incomplete ID-bearing items must identify matching complete prior items without contradictory fields, and all other payload and transcript bytes must agree; changed inputs, concurrent requests and cold resumes fail closed (#217).
 - Keep native retry policy, SDK transport, durable replay, credentials, and model selection unchanged. A synthetic native-SDK regression covers two 408 responses followed by a reference-only third attempt; real account acceptance and Desktop installation remain unverified.

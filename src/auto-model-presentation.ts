@@ -5,6 +5,8 @@ import { TURN_MODEL_PROVENANCE_KEY, isTurnModelProvenance, turnModelProvenanceDe
 import { TurnSelectionCard } from './turn-selection-card.ts'
 import { TurnSelectionSchema } from './turn-selection.ts'
 import type { TurnSelection } from './turn-selection.ts'
+import { TURN_USAGE_EVIDENCE_KEY, isTurnUsageEvidence, turnUsageDiagnostic, turnUsageEvidenceDefinition } from './turn-usage-evidence.ts'
+import { TurnUsageNotice } from './turn-usage-notice.ts'
 
 export const AUTO_MODEL_ATTRIBUTION_KEY = 'github-copilot-auto-model-attribution'
 const SLOT = 'conversation.chat.assistant-actions'
@@ -109,7 +111,8 @@ interface Source {
 }
 const missingSource: Source = { getSnapshot: () => undefined, subscribe: () => noop }
 
-function sourceOf(props: Record<string, unknown>, key: string, diagnostic: (code: string) => void): Source {
+function sourceOf(props: Record<string, unknown>, key: string, diagnostic: (code: string) => void,
+  failure = 'COPILOT_TURN_SELECTION_PROJECTION_FAILED'): Source {
   const turn = props.turn
   if (!record(turn) || !record(turn.data) || typeof turn.data.source !== 'function') return missingSource
   try {
@@ -117,39 +120,57 @@ function sourceOf(props: Record<string, unknown>, key: string, diagnostic: (code
     return record(source) && typeof source.getSnapshot === 'function' && typeof source.subscribe === 'function'
       ? source as unknown as Source : missingSource
   } catch {
-    diagnostic('COPILOT_TURN_SELECTION_PROJECTION_FAILED')
+    diagnostic(failure)
     return missingSource
   }
 }
 
 interface SelectionRemote { get(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }> }
 interface LocaleReader { getLocale(): { active: string }; subscribe(listener: () => void): Dispose }
-function findTurn(snapshot: unknown, messageId: unknown): unknown {
-  if (!record(snapshot) || !(snapshot.nodes instanceof Map) || typeof messageId !== 'string') return undefined
-  for (const node of snapshot.nodes.values()) {
+function iterable(value: unknown): value is Iterable<unknown> {
+  return value !== null && typeof value === 'object' && Symbol.iterator in value && typeof value[Symbol.iterator] === 'function'
+}
+function findTail(snapshot: unknown, messageId: unknown, diagnostic: (code: string) => void): Record<string, unknown> | undefined {
+  if (typeof messageId !== 'string') return undefined
+  if (!record(snapshot) || !record(snapshot.nodes) || typeof snapshot.nodes.values !== 'function') {
+    diagnostic('COPILOT_TURN_SELECTION_CHAT_NODES_UNAVAILABLE')
+    return undefined
+  }
+  const nodes: unknown = snapshot.nodes.values()
+  if (!iterable(nodes)) {
+    diagnostic('COPILOT_TURN_SELECTION_CHAT_NODES_UNAVAILABLE')
+    return undefined
+  }
+  for (const node of nodes) {
     if (!record(node) || node.kind !== 'turn-tail' || !record(node.data) || !record(node.data.closing)) continue
     const closing = node.data.closing
-    if (record(closing.finalNode) && closing.finalNode.messageId === messageId && record(node.location)) return node.location.turn
+    if (record(closing.finalNode) && closing.finalNode.messageId === messageId && record(node.location)) return node
   }
   return undefined
 }
 
 function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote; locale?: LocaleReader; diagnostic: (code: string) => void }): React.ReactElement | null {
   const [live, setLive] = React.useState<TurnSelection>({ mode: 'unknown' })
+  const [readState, setReadState] = React.useState<'loading' | 'ready' | 'failed'>('loading')
+  const [readAttempt, setReadAttempt] = React.useState(0)
   const turn = record(props.turn) && sequence(props.turn.turn) ? props.turn.turn : undefined
   const sessionId = typeof props.sessionId === 'string' ? props.sessionId : undefined
   React.useEffect(() => {
     setLive({ mode: 'unknown' })
-    if (turn === undefined || sessionId === undefined || props.remote === undefined) return
+    if (turn === undefined || sessionId === undefined || props.remote === undefined) {
+      setReadState('failed')
+      return
+    }
+    setReadState('loading')
     let active = true
     void props.remote.get(sessionId, turn).then(result => {
       if (!active) return
       const parsed = result.ok ? TurnSelectionSchema.safeParse(result.value) : undefined
-      if (parsed?.success) setLive(parsed.data)
-      else props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED')
-    }, () => { if (active) props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED') })
+      if (parsed?.success) { setLive(parsed.data); setReadState('ready') }
+      else { setReadState('failed'); props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED') }
+    }, () => { if (active) { setReadState('failed'); props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED') } })
     return () => { active = false }
-  }, [props.remote, sessionId, turn, props.diagnostic])
+  }, [props.remote, sessionId, turn, props.diagnostic, readAttempt])
   const language = React.useSyncExternalStore(
     props.locale ? listener => props.locale!.subscribe(listener) : () => noop,
     () => props.locale?.getLocale().active ?? 'en', () => 'en',
@@ -158,16 +179,32 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   const value = React.useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot)
   const provenanceSource = sourceOf(props, TURN_MODEL_PROVENANCE_KEY, props.diagnostic)
   const provenance = React.useSyncExternalStore(provenanceSource.subscribe, provenanceSource.getSnapshot, provenanceSource.getSnapshot)
+  const usageSource = sourceOf(props, TURN_USAGE_EVIDENCE_KEY, props.diagnostic, 'COPILOT_TURN_USAGE_PROJECTION_FAILED')
+  const usageEvidence = React.useSyncExternalStore(usageSource.subscribe, usageSource.getSnapshot, usageSource.getSnapshot)
   const parsed = attribution({ type: 'github-copilot/auto-model-decision', data: { ...record(value) ? value : {}, turn: 0 } })?.value
   const evidence = isTurnModelProvenance(provenance) ? provenance : undefined
-  if (evidence?.ended !== true) return null
-  const copilot = evidence.routes.some(route => route.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID || route.provider === GITHUB_COPILOT_PROVIDER_ID)
-  if (!copilot && parsed === undefined && live.mode === 'unknown') return null
+  const native = record(props.tail) && record(props.tail.data) ? props.tail.data : undefined
+  const nativeCompleted = native?.turn === turn && sequence(native?.seq)
+  if (evidence?.ended !== true && !nativeCompleted) return null
+  if (evidence === undefined) props.diagnostic('COPILOT_TURN_SELECTION_PROVENANCE_UNAVAILABLE')
+  const nativeRoutes = nativeCompleted && record(native?.tokenUsage) && Array.isArray(native.tokenUsage.routes)
+    ? native.tokenUsage.routes : []
+  const routes: readonly unknown[] = evidence?.routes ?? nativeRoutes
+  const copilot = routes.some(route => record(route)
+    && (route.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID || route.provider === GITHUB_COPILOT_PROVIDER_ID)
+    && typeof route.model === 'string' && route.model.trim() !== '')
+  const usageDiagnostic = turn === undefined ? undefined : turnUsageDiagnostic(turn, native, usageEvidence, copilot)
+  if (!copilot && parsed === undefined && live.mode === 'unknown' && usageDiagnostic === undefined) return null
+  if (usageDiagnostic !== undefined && !isTurnUsageEvidence(usageEvidence)) props.diagnostic('COPILOT_TURN_USAGE_EVIDENCE_UNAVAILABLE')
   const selection: TurnSelection = live.mode !== 'unknown' ? live : parsed?.preference ? {
     mode: 'auto', preference: parsed.preference, reason: parsed.reason,
     candidateCount: parsed.candidateCount, fittingCandidateCount: parsed.fittingCandidateCount,
   } : { mode: 'unknown' }
-  return React.createElement(TurnSelectionCard, { selection, locale: language, incomplete: evidence.incomplete })
+  return React.createElement(React.Fragment, null,
+    React.createElement(TurnSelectionCard, { selection, locale: language, incomplete: evidence?.incomplete ?? true,
+      readState: selection.mode === 'unknown' ? readState : 'ready',
+      retry: props.remote === undefined ? undefined : () => setReadAttempt(value => value + 1) }),
+    usageDiagnostic === undefined ? null : React.createElement(TurnUsageNotice, { diagnostic: usageDiagnostic, locale: language }))
 }
 
 interface Slots {
@@ -177,12 +214,42 @@ interface Slots {
 }
 
 interface ConversationEvents {
-  register(definition: typeof autoModelAttributionDefinition | typeof turnModelProvenanceDefinition): Dispose
+  register(definition: typeof autoModelAttributionDefinition | typeof turnModelProvenanceDefinition | typeof turnUsageEvidenceDefinition): Dispose
+}
+
+export function installAutoModelProjections(capabilities: {
+  readonly uiConversation: unknown
+  readonly diagnostic: (code: string) => void
+}): Dispose {
+  if (!record(capabilities.uiConversation) || !record(capabilities.uiConversation.events)
+    || typeof capabilities.uiConversation.events.register !== 'function') {
+    capabilities.diagnostic('COPILOT_AUTO_PROJECTIONS_UNAVAILABLE')
+    return noop
+  }
+  const events = capabilities.uiConversation.events as unknown as ConversationEvents
+  let removeDefinition: Dispose = noop
+  let removeProvenance: Dispose = noop
+  let removeUsage: Dispose = noop
+  try {
+    removeDefinition = events.register(autoModelAttributionDefinition)
+    removeProvenance = events.register(turnModelProvenanceDefinition)
+  } catch {
+    removeProvenance()
+    removeDefinition()
+    capabilities.diagnostic('COPILOT_AUTO_PROJECTIONS_FAILED')
+    return noop
+  }
+  try {
+    removeUsage = events.register(turnUsageEvidenceDefinition)
+  } catch {
+    capabilities.diagnostic('COPILOT_TURN_USAGE_PROJECTION_FAILED')
+  }
+  return () => { removeUsage(); removeProvenance(); removeDefinition() }
 }
 
 export function installAutoModelPresentation(capabilities: {
   readonly slots: unknown
-  readonly uiConversation: unknown
+  readonly uiConversation?: unknown
   readonly diagnostic: (code: string) => void
   readonly remote?: unknown
   readonly locale?: unknown
@@ -192,14 +259,11 @@ export function installAutoModelPresentation(capabilities: {
     if (!diagnosed.has(code)) { diagnosed.add(code); capabilities.diagnostic(code) }
   }
   const slotsCandidate = capabilities.slots
-  if (!record(slotsCandidate) || !['spec', 'inject', 'register'].every(key => typeof slotsCandidate[key] === 'function')
-    || !record(capabilities.uiConversation) || !record(capabilities.uiConversation.events)
-    || typeof capabilities.uiConversation.events.register !== 'function') {
+  if (!record(slotsCandidate) || !['spec', 'inject', 'register'].every(key => typeof slotsCandidate[key] === 'function')) {
     diagnostic('COPILOT_AUTO_PRESENTATION_UNAVAILABLE')
     return noop
   }
   const slots = slotsCandidate as unknown as Slots
-  const events = capabilities.uiConversation.events as unknown as ConversationEvents
   const face = record(capabilities.remote) ? capabilities.remote.githubCopilotTurnSelection : undefined
   const remote = record(face) && typeof face.get === 'function' ? face as unknown as SelectionRemote : undefined
   const locale = record(capabilities.locale) && typeof capabilities.locale.getLocale === 'function'
@@ -211,16 +275,15 @@ export function installAutoModelPresentation(capabilities: {
       return null
     }
     const useChat = props.useChat as (selector: (snapshot: unknown) => unknown) => unknown
-    const turn = useChat(snapshot => findTurn(snapshot, props.messageId))
+    const tail = useChat(snapshot => findTail(snapshot, props.messageId, diagnostic))
+    const turn = record(tail) && record(tail.location) ? tail.location.turn : undefined
     if (!record(turn) || !sequence(turn.turn)) return null
-    return React.createElement(Attribution, { ...props, key: `${props.sessionId}:${turn.turn}`, turn, remote, locale, diagnostic })
+    return React.createElement(Attribution, { ...props, key: `${props.sessionId}:${turn.turn}`, turn, tail, remote, locale, diagnostic })
   }
-  let removeDefinition: Dispose = noop
-  let removeProvenance: Dispose = noop
+  const removeProjections = capabilities.uiConversation === undefined ? noop
+    : installAutoModelProjections({ uiConversation: capabilities.uiConversation, diagnostic })
   let removeInjection: Dispose = noop
   try {
-    removeDefinition = events.register(autoModelAttributionDefinition)
-    removeProvenance = events.register(turnModelProvenanceDefinition)
     removeInjection = slots.inject(SLOT, () => {
       if (slots.spec(SLOT)?.kind !== 'list' || slots.spec(SLOT)?.scope !== 'session') {
         diagnostic('COPILOT_AUTO_ACTIONS_SLOT_UNAVAILABLE')
@@ -230,14 +293,12 @@ export function installAutoModelPresentation(capabilities: {
     })
   } catch {
     removeInjection()
-    removeProvenance()
-    removeDefinition()
+    removeProjections()
     diagnostic('COPILOT_AUTO_PRESENTATION_FAILED')
     return noop
   }
   return () => {
     removeInjection()
-    removeProvenance()
-    removeDefinition()
+    removeProjections()
   }
 }

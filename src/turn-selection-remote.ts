@@ -17,7 +17,8 @@ const contribution: TypertRemoteContribution = {
   descriptors: [{
     id: 'dsh-github-copilot:githubCopilotTurnSelection.get',
     namespace: 'githubCopilotTurnSelection', service: 'githubCopilotTurnSelection', method: 'get',
-    invocation: { kind: 'direct' }, scope: { context: 'agent', wire: 'agentId' },
+    // The footer always supplies the viewed Session ID, even inside a bound Chat.
+    invocation: { kind: 'direct' },
     parameters: [
       { name: 'agent', wire: 'agentId', source: 'lookup', lookup: 'agent',
         codec: strictRemoteCodec('@deepseek-ai/dsh-session/types#SessionId', z.string().min(1).max(256)) },

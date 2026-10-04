@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import vm from 'node:vm'
@@ -77,6 +77,20 @@ if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
   throw new Error('built Host must export apply and inject')
 }
 
+const recovery = await import(pathToFileURL(resolve(root, 'lib/manual-compaction-recovery.js')).href)
+if (typeof recovery.default !== 'function') throw new Error('built recovery engine must remain independently importable')
+for (const file of (await readdir(resolve(root, 'lib'))).filter(file => file.endsWith('.js'))) {
+  if ((await readFile(resolve(root, 'lib', file), 'utf8')).includes('@deepseek-ai/dsh-jobs')) {
+    throw new Error('jobs must remain a type-only development dependency, not a bundled runtime import')
+  }
+}
+const recoveryTypes = await readFile(resolve(root, 'lib/types/manual-compaction-recovery.d.ts'), 'utf8')
+if (/dsh-jobs|background-compaction/u.test(recoveryTypes)
+  || packageJson.devDependencies?.['@deepseek-ai/dsh-jobs'] === undefined
+  || ['dependencies', 'optionalDependencies', 'peerDependencies'].some(field => packageJson[field]?.['@deepseek-ai/dsh-jobs'] !== undefined)) {
+  throw new Error('recovery public declarations and deployment must not require the jobs type dependency')
+}
+
 const remote = (await import(pathToFileURL(resolve(root, 'lib/remote.js')).href)).default
 const authorizationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilot')
 const roleDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDualModel')
@@ -84,23 +98,23 @@ const catalogDescriptors = remote.descriptors.filter(descriptor => descriptor.na
 const usageDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
 const selectionDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotTurnSelection')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 17 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 18 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
   || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get'])) {
-  throw new Error('built Remote entry must retain ten authorization/model-preference/migration controls, three model-role methods, one search catalog, two quota methods and one scoped selection lookup')
+  throw new Error('built Remote entry must retain ten legacy authorization/model-preference/migration controls, one narrow exclusion control, three model-role methods, one search catalog, two quota methods and one explicit selection lookup')
 }
 const selection = selectionDescriptors[0]
 if (selection.id !== 'dsh-github-copilot:githubCopilotTurnSelection.get'
   || selection.service !== 'githubCopilotTurnSelection' || selection.invocation.kind !== 'direct'
-  || selection.scope?.context !== 'agent' || selection.scope.wire !== 'agentId'
+  || selection.scope !== undefined
   || selection.parameters.length !== 2 || selection.parameters[0].source !== 'lookup'
   || selection.parameters[0].lookup !== 'agent' || selection.parameters[0].wire !== 'agentId'
   || selection.parameters[0].codec.typeSymbol !== '@deepseek-ai/dsh-session/types#SessionId'
   || selection.parameters[1].source !== 'json' || selection.parameters[1].wire !== 'turn'
   || selection.result.mode !== 'strict' || selection.result.typeSymbol !== 'dsh-github-copilot#TurnSelection') {
-  throw new Error('turn selection Remote must retain native agent scope and lookup')
+  throw new Error('turn selection Remote must retain explicit Session arguments and native agent lookup without ambient scope projection')
 }
 selection.result.schema.parse({ mode: 'manual' })
 if (selection.result.schema.safeParse({ mode: 'manual', model: 'invented' }).success
@@ -132,9 +146,10 @@ for (const descriptor of authorizationDescriptors) {
     || descriptor.service !== 'githubCopilotAuthorization' || descriptor.namespace !== 'githubCopilot') {
     throw new Error('built Remote descriptor identity must match its exact owned service and namespace')
   }
-  const modelPreference = descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel'
+  const narrowPreference = descriptor.method === 'setModelExcluded'
+  const modelPreference = narrowPreference || descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel'
   if (descriptor.invocation.kind !== 'direct'
-    || (modelPreference ? descriptor.parameters.length !== 1 : descriptor.parameters.length !== 0)) {
+    || descriptor.parameters.length !== (narrowPreference ? 2 : modelPreference ? 1 : 0)) {
     throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} has an unexpected direct-call parameter contract`)
   }
   if (modelPreference) {
@@ -148,6 +163,7 @@ for (const descriptor of authorizationDescriptors) {
   }
   const typeSymbol = descriptor.method === 'migrationStatus'
     ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
+    : narrowPreference ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
     : 'dsh-github-copilot#GitHubCopilotAuthorizationView'
   if (
     descriptor.result.mode !== 'strict'
@@ -155,6 +171,23 @@ for (const descriptor of authorizationDescriptors) {
     || typeof descriptor.result.schema?.parse !== 'function'
   ) {
     throw new Error(`built Remote ${descriptor.namespace}/${descriptor.method} must expose its own exact strict result codec`)
+  }
+  if (narrowPreference) {
+    const parameter = descriptor.parameters[1]
+    if (parameter.name !== 'excluded' || parameter.wire !== 'excluded' || parameter.source !== 'json'
+      || parameter.codec.mode !== 'strict'
+      || parameter.codec.typeSymbol !== 'dsh-github-copilot#GitHubCopilotModelExcluded'
+      || parameter.codec.schema.parse(true) !== true || parameter.codec.schema.parse(false) !== false
+      || parameter.codec.schema.safeParse('false').success) {
+      throw new Error('narrow exclusion Remote must retain its strict boolean argument')
+    }
+    const preferences = { state: 'ready', writable: true, revision: 1,
+      excludedModelIds: ['gpt-5.4'], lockedModelIds: [], unavailableExcludedModelIds: [] }
+    descriptor.result.schema.parse(preferences)
+    if (descriptor.result.schema.safeParse({ ...preferences, credentials: 'private' }).success
+      || descriptor.result.schema.safeParse({ ...preferences, revision: -1 }).success) {
+      throw new Error('narrow exclusion Remote accepts private fields or invalid revision')
+    }
   }
 }
 if ('DualModelCard' in clientExports) throw new Error('built Client must not export the retired model-role settings card')

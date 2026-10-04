@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.61"
+    "version": "0.4.0-alpha.91"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -223,7 +223,7 @@
           "desktopPackageSet": "installed-descriptor-audited",
           "managedProviderValidation": "synthetic-tagged-source-runtime",
           "resolvedProfileDiagnostics": "plugin-owned-empty-modelErrors",
-          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
         }
       ],
       "packages": [
@@ -234,11 +234,15 @@
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-settings-models",
         "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-commands",
+        "@deepseek-ai/dsh-compaction",
+        "@deepseek-ai/dsh-compaction-basic",
         "@deepseek-ai/dsh-credentials",
         "@deepseek-ai/dsh-launch-environment",
         "@deepseek-ai/dsh-llm",
         "@deepseek-ai/dsh-llm-pi-ai",
         "@deepseek-ai/dsh-scope",
+        "@deepseek-ai/dsh-session",
         "@deepseek-ai/dsh-settings",
         "@deepseek-ai/dsh-typert-protocol",
         "@deepseek-ai/dsh-web",
@@ -284,6 +288,51 @@
     ]
   },
   "capabilities": [
+    {
+      "id": "missing-turn-usage-explanation",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/turn-usage-evidence.ts", "marker": "github-copilot-turn-usage-evidence"},
+        {"file": "src/turn-usage-evidence.ts", "marker": "tail.tokenUsage !== undefined"},
+        {"file": "src/turn-usage-notice.ts", "marker": "Turn Usage incomplete"},
+        {"file": "src/turn-usage-evidence.ts", "marker": "stateVersion: 2"},
+        {"file": "src/request-body-timeout-marker.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
+        {"file": "src/auto-model-presentation.ts", "marker": "turnUsageEvidenceDefinition"},
+        {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/turn-usage-core.fixture.ts"}
+      ],
+      "tests": [
+        {"file": "tests/turn-usage-evidence.spec.ts", "name": "explains a recovered local block alongside reported successful steps without summing tokens"},
+        {"file": "tests/turn-usage-evidence.spec.ts", "name": "does not label generic overflow, provider errors or ambiguous streams as pre-dispatch"},
+        {"file": "tests/turn-usage-evidence.spec.ts", "name": "retains same-attempt timeout coordinates and proven same-step retry completion without filling usage"},
+        {"file": "tests/turn-usage-evidence.spec.ts", "name": "keeps incomplete, reordered, interrupted and cross-step retry evidence uncertain"},
+        {"file": "tests/turn-usage-notice.spec.ts", "name": "keeps the fixed-height footer compact and opens a bounded nonmodal explanation"},
+        {"file": "tests/turn-usage-integration.spec.ts", "name": "explains native missing usage even when the independent selection Remote fails"},
+        {"file": "tests/fixtures/turn-usage-core.fixture.ts", "name": "reproduces the finish-only local block and explains it without changing native accounting"},
+        {"file": "tests/fixtures/turn-usage-core.fixture.ts", "name": "associates a recorded 408 with its missing sample and exact retry without restoring the native total"},
+        {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "explains missing turn Usage through native assembly and scoped actions (%s)"}
+      ]
+    },
+    {
+      "id": "historical-context-evidence",
+      "required": true,
+      "evidenceScope": "synthetic-stream-replay-and-additive-ui-not-current-occupancy-or-live-desktop",
+      "sourceMarkers": [
+        {"file": "src/context-usage.ts", "marker": "isZeroContextUsage"},
+        {"file": "src/index.ts", "marker": "installContextEvidence(ctx)"},
+        {"file": "src/client.ts", "marker": "registerContextEvidenceUi"},
+        {"file": "src/context-evidence.ts", "marker": "githubCopilotContextEvidence"},
+        {"file": "docs/copilot-usage.md", "marker": "historical input sample, not current occupancy"}
+      ],
+      "tests": [
+        {"file": "tests/context-usage.spec.ts", "name": "classifies zero only for separate historical evidence without changing the sample"},
+        {"file": "tests/context-evidence.spec.ts", "name": "replays failed zero samples without discarding the last valid input sample"},
+        {"file": "tests/context-evidence-ui.spec.ts", "name": "labels counts as historical rather than current occupancy in %s"},
+        {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "cold-folds native model selections independently without replacing the controller projection"},
+        {"file": "tests/preview-route.spec.ts", "name": "forwards native SDK failed zero usage without changing the shared accounting stream"},
+        {"file": "tests/preview-route.spec.ts", "name": "preserves native cancellation usage on %s (%s input tokens)"},
+        {"file": "tests/fixtures/turn-usage-core.fixture.ts", "name": "retains native whole-turn accounting for a sampled %s attempt after successful steps"}
+      ]
+    },
     {
       "id": "account-quota-composer-usage",
       "required": true,
@@ -429,16 +478,45 @@
       "sourceMarkers": [
         {"file": "src/request-budget.ts", "marker": "calculateRequestBudget"},
         {"file": "src/compaction-pressure.ts", "marker": "installCopilotCompactionPressure"},
+        {"file": "src/pre-step-pressure.ts", "marker": "installCopilotPreStepPressure"},
+        {"file": "src/pre-step-pressure.ts", "marker": "selection.pending !== null"},
+        {"file": "src/agent-compaction.ts", "marker": "presets.serviceFor(agent, 'compaction')"},
         {"file": "src/preview-route.ts", "marker": "COPILOT_CONTEXT_BUDGET_EXCEEDED"},
         {"file": "src/preview-provider.ts", "marker": "inspectRequest"}
       ],
       "tests": [
         {"file": "tests/preview-route.spec.ts", "name": "rejects independent input overflow before model wire, prepared=%s"},
+        {"file": "tests/compaction-pressure.spec.ts", "name": "does not substitute a global engine when the bound preset has none"},
+        {"file": "tests/pre-step-pressure.spec.ts", "name": "skips pending selection instead of compressing against the previous route"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "prevents continuing-step pressure attempts while retaining complete native turn usage, preStep=%s"},
+        {"file": "tests/auto-model-host.spec.ts", "name": "uses owning preset recovery availability (%s) for Auto diagnostics"},
+        {"file": "tests/fixtures/scoped-compaction-core.fixture.ts", "name": "global pressure finds isolated preset recovery: %j"},
         {"file": "tests/preview-route.spec.ts", "name": "reserves the requested output separately from the independent prompt ceiling"},
         {"file": "tests/preview-route.spec.ts", "name": "uses supported low effort for compaction only without rewriting its output cap"},
         {"file": "tests/preview-route.spec.ts", "name": "refuses an already oversized manual summary without sending or truncating its history"},
         {"file": "tests/preview-route.spec.ts", "name": "keeps output truncation distinct from context overflow and successful summary output"},
         {"file": "tests/preview-route.spec.ts", "name": "isolates concurrent chat success from a rejected compaction admission"}
+      ]
+    },
+    {
+      "id": "opt-in-oversized-manual-compaction",
+      "required": true,
+      "evidenceScope": "synthetic-public-subclass-and-exact-tagged-source-no-live-inference",
+      "sourceMarkers": [
+        {"file": "src/manual-compaction-recovery.ts", "marker": "extends BasicCompactionEngine"},
+        {"file": "src/manual-compaction-recovery.ts", "marker": "COPILOT_MANUAL_RECOVERY_"},
+        {"file": "src/background-compaction.ts", "marker": "copilot-compact"},
+        {"file": "src/background-compaction.ts", "marker": "this.jobs.wait(jobId"},
+        {"file": "src/preview-route.ts", "marker": "recoveryLimits(modelId)"},
+        {"file": "docs/manual-compaction-recovery.md", "marker": "separately selected"}
+      ],
+      "tests": [
+        {"file": "tests/manual-compaction-recovery.spec.ts", "name": "reduces an oversized balanced history with bounded complete calls and an unmarked aggregate audit"},
+        {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects an indivisible span before dispatch and leaves recovery to native failure handling"},
+        {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects unmatched tool calls before dispatch instead of splitting a call and result"},
+        {"file": "tests/background-compaction.spec.ts", "name": "acknowledges before completion and outlives a five-minute caller deadline"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "commits beyond the carrier deadline without a model wakeup and keeps status owner-scoped"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "recovers oversized manual history with one native transaction and honest multi-call audit"}
       ]
     },
     {
@@ -501,7 +579,15 @@
         {"file": "src/preview-route.ts", "marker": "modelErrors: new Map<string, string>()"},
         {"file": "src/preview-route.ts", "marker": "ctx.llm.registerAdapter"},
         {"file": "src/preview-route.ts", "marker": "createAccountModelSource"},
+        {"file": "src/model-exclusions.ts", "marker": "class ModelExclusionTurns"},
+        {"file": "src/remote.ts", "marker": "githubCopilot.setModelExcluded"},
         {"file": "src/preview-provider.ts", "marker": "native.streamSimple"},
+        {"file": "src/auto-assessment-evidence.ts", "marker": "SemanticAssessmentEvidenceSchema"},
+        {"file": "src/request-body-timeout-marker.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
+        {"file": "src/request-body-evidence.ts", "marker": "REQUEST_BODY_EVIDENCE_LIMITS"},
+        {"file": "src/copilot-stream-liveness.ts", "marker": "COPILOT_STREAM_IDLE_TIMEOUT"},
+        {"file": "src/preview-route.ts", "marker": "Math.min(idle * 2, 2_147_483_647)"},
+        {"file": "src/response-error-body.ts", "marker": "readResponseErrorJson"},
         {"file": "src/pi-provider-bridge.ts", "marker": "PiStreamPublicCompatibility"}
       ],
       "tests": [
@@ -512,7 +598,22 @@
         {"file": "tests/inline/apply.spec.ts", "name": "delegates Anthropic in-band system authority before probing at position %s"},
         {"file": "tests/preview-route.spec.ts", "name": "discovers mixed and unseen account models without model-name routing rules"},
         {"file": "tests/preview-route.spec.ts", "name": "uses unmodified stock LlmRuntime preparation and leaves canonical model registration alone"},
+        {"file": "tests/fixtures/model-exclusions-core.fixture.ts", "name": "keeps native tool steps in an admitted turn after exclusion and enforces exclusion on the next turn (%s)"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "answers a narrow single-model save without reading credentials or enumerating sessions"},
         {"file": "tests/preview-route.spec.ts", "name": "replays opaque reasoning and tool-call identities through the native adapter on a second turn"},
+        {"file": "tests/preview-route.spec.ts", "name": "enriches only a verified 408 while preserving native failure classification and retry ownership"},
+        {"file": "tests/preview-provider.spec.ts", "name": "observes verified %s timeout without changing bytes, Response, native retries or credential ownership"},
+        {"file": "tests/request-body-timeout.spec.ts", "name": "bounds stalled response observation and gives cancellation priority"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "captures bounded phase evidence for a timed-out partial result without treating it as a validated task"},
+        {"file": "tests/auto-task-evidence.spec.ts", "name": "captures monotonic auxiliary phases without text, accounting or late mutation"},
+        {"file": "tests/request-body-evidence.spec.ts", "name": "measures a nine MiB native-style inline image without exposing or decoding it"},
+        {"file": "tests/preview-provider.spec.ts", "name": "captures final %s callback bytes and dispatch-local header time before clone observation"},
+        {"file": "tests/copilot-stream-liveness.spec.ts", "name": "does not count consumer think time as provider idle"},
+        {"file": "tests/copilot-stream-adapter.spec.ts", "name": "reproduces native semantic timeout despite ongoing SSE bytes"},
+        {"file": "tests/copilot-stream-adapter.spec.ts", "name": "allows real late output after the original semantic-idle boundary"},
+        {"file": "tests/copilot-stream-adapter.spec.ts", "name": "retains a native hard semantic deadline for an endless heartbeat stream"},
+        {"file": "tests/preview-route.spec.ts", "name": "restores byte-idle failures as TIMEOUT without adding a native wire attempt"},
+        {"file": "tests/preview-route.spec.ts", "name": "excludes actual Core consumer think time despite eager SDK event forwarding"},
         {"file": "tests/pi-provider-bridge.spec.ts", "name": "preserves the stream object rather than copying or replacing its private queue"},
         {"file": "tests/pi-provider-bridge.spec.ts", "name": "passes the checked simple input through and rejects unsupported advanced entry without I/O"}
       ]
@@ -566,7 +667,11 @@
       ],
       "tests": [
         {"file": "tests/preview-provider.spec.ts", "name": "normalizes only wire item IDs after native serialization while preserving durable replay and tool pairing"},
-        {"file": "tests/preview-provider.spec.ts", "name": "sends identical normalized bytes on the third Core-style attempt after two HTTP 408s"},
+        {"file": "tests/preview-provider.spec.ts", "name": "sends identical normalized bytes after two HTTP 408s (empty reasoning: %s)"},
+        {"file": "tests/preview-provider.spec.ts", "name": "omits an empty SDK reasoning signature while preserving opaque reasoning and tool pairing"},
+        {"file": "tests/responses-replay-compat.spec.ts", "name": "omits only explicitly empty completed reasoning shells without changing history or tool pairing"},
+        {"file": "tests/responses-replay-compat.spec.ts", "name": "does not mistake partial, opaque, nonempty or unknown reasoning data for an empty shell"},
+        {"file": "tests/responses-replay-compat.spec.ts", "name": "reuses omitted empty shells only from the exact HTTP-408 snapshot"},
         {"file": "tests/responses-replay-compat.spec.ts", "name": "refuses a new step, session, signal, cold resume, stale entry and concurrent requests"},
         {"file": "tests/preview-route.spec.ts", "name": "clears only the matching Session retry cache on %s across fresh Core preparations"},
         {"file": "tests/preview-route.spec.ts", "name": "classifies \"$message\" in a $envelope Responses 401 locally and reuses the same credential without discovery or refresh"},
@@ -992,23 +1097,58 @@
       "id": "managed-copilot-auto-model-routing",
       "required": true,
       "sourceMarkers": [
+        {"file": "src/account-model-catalog.ts", "marker": "model_picker_category"},
+        {"file": "src/auto-task-assessment.ts", "marker": "COPILOT_AUTO_ASSESSMENT_CONTEXT_OMITTED"},
+        {"file": "src/auto-task-classifier.ts", "marker": "classifyTaskWithAdapter"},
+        {"file": "src/auto-model-routing.ts", "marker": "targetCategory"},
+        {"file": "src/config.ts", "marker": "autoSemanticAssessment"},
+        {"file": "src/auto-selection-explanation.ts", "marker": "No candidate fits"},
         {"file": "src/preview-route.ts", "marker": "GITHUB_COPILOT_AUTO_MODEL_ID"},
         {"file": "src/auto-model-host.ts", "marker": "keep attribution out of the log"},
+        {"file": "src/parent-model-follow.ts", "marker": "resolveParentModel"},
+        {"file": "src/config.ts", "marker": "parentModelFollow"},
+        {"file": "src/config.ts", "marker": "followParentModel"},
+        {"file": "src/parent-model-follow-card.ts", "marker": "Follow parent model"},
+        {"file": "src/auto-model-host.ts", "marker": "COPILOT_AUTO_TOKEN_METER_UNAVAILABLE"},
         {"file": "src/auto-model-presentation.ts", "marker": "conversation.chat.assistant-actions"},
+        {"file": "src/auto-model-presentation.ts", "marker": "installAutoModelProjections"},
         {"file": "src/auto-model-presentation.ts", "marker": "turnModelProvenanceDefinition"},
         {"file": "src/turn-model-provenance.ts", "marker": "assistant/message"},
         {"file": "src/turn-selection-card.ts", "marker": "Selection unknown"},
         {"file": "src/turn-selection-remote.ts", "marker": "lookup: 'agent'"},
+        {"file": "src/turn-selection-host.ts", "marker": "extends TypertRemoteService"},
+        {"file": "src/turn-selection-card.ts", "marker": "Selection unavailable"},
         {"file": "docs/automatic-model-routing.md", "marker": "plugin-only"}
       ],
       "tests": [
-        {"file": "tests/auto-model-routing.spec.ts", "name": "classifies only the latest user turn and selects a deterministic capacity tier"},
+        {"file": "tests/auto-model-host.spec.ts", "name": "follows fixed and Auto parents using %s without writing child selections"},
+        {"file": "tests/scripts/parent-model-follow.test.mjs", "name": "explicit same-model and different-model child selections both win"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "retains legacy length evidence but does not use it as task or supplier category evidence"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "uses the task/category policy with one hard-eligible pool for all preferences"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "preserves suitable continuity but never lets it override task category or input fit"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "discloses category fallbacks and never guesses missing category from ID or capacity"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "bounds context, never reads attachment/reasoning bodies, and does not downshift omitted context"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "inherits difficult-task evidence only through explicit bounded continuations"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "recognizes only isolated explicit fenced mechanical transformations as routine"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "preserves valid bounded rows and prioritizes the current user and nearest task over verbose output"},
+        {"file": "tests/auto-selection-explanation.spec.ts", "name": "distinguishes local rule coverage from absent conversation context in both languages"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "preserves caller cancellation instead of using a success-shaped fallback"},
+        {"file": "tests/config.spec.ts", "name": "defaults semantic Auto assessment on while preserving explicit opt-out"},
+        {"file": "tests/preview-route.spec.ts", "name": "assesses Auto with setting %s and freezes the captured reason across retries"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "explains a captured task/category decision with progressive details (%s)"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "does not discard a complete Core assistant message when it contains reasoning"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "retains the native current-surface and tool-envelope measurement as an input floor"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "prices Core assistant text and reasoning with the unchanged native token meter"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "requires account-verified image capability for image turns"},
         {"file": "tests/auto-model-host.spec.ts", "name": "resolves after downstream model selection and freezes one decision per turn"},
         {"file": "tests/auto-model-host.spec.ts", "name": "replaces Core virtual-Auto switch guidance with the resolved real route"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "folds a durable decision into turn-scoped credential-free attribution"},
         {"file": "tests/auto-model-presentation.spec.ts", "name": "omits attribution when a compatible history contains no optional decision"},
-        {"file": "tests/turn-selection-card.spec.ts", "name": "reads exact completed turn evidence once through the public action slot and keeps actual model out of footer"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "reads exact completed turn evidence through %s and exposes reasons without repeating the model"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "diagnoses an unavailable node collection without reading another turn"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "uses native completion independently of optional projections: $expected"},
+        {"file": "tests/client.spec.ts", "name": "registers and disposes Auto actions while the optional conversation fiber remains pending"},
+        {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "renders retained Auto evidence without optional projections through native %s and slots"},
         {"file": "tests/turn-model-provenance.spec.ts", "name": "retains known models around zero-usage failed attempts without reading payloads"},
         {"file": "tests/preview-route.spec.ts", "name": "publishes Auto as a virtual picker entry but refuses unresolved adapter dispatch"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "shrinks durable history and rebuilds the switched model request without sending the oversized original"}
@@ -1073,6 +1213,7 @@
     "./remote": [],
     "./routed-web": ["default"],
     "./web-delegate": ["name", "inject", "apply"],
+    "./manual-compaction-recovery": ["CopilotManualRecoveryCompactionEngine", "summarizeOversizedManualInput"],
     "./deployment-baseline.json": [],
     "./package.json": []
   }

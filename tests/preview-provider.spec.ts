@@ -17,6 +17,8 @@ import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import { BlockAssembler, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW } from '../src/copilot-identity.ts'
 import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
+import { requestBodyEvidence } from '../src/request-body-evidence.ts'
+import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
 
 // Preserve the real factory by default; one observer identity test replaces only
 // its returned stream entrypoint, without modifying the installed ESM module.
@@ -79,9 +81,9 @@ function nativeEvents(api: AccountModelApi): Response {
   ]
   return new Response(events.map(value => `event: ${value.type}\n${sse(value)}`).join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
-async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>) {
+async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>, streamIdleTimeoutMs?: number) {
   const item = descriptor(api)
-  const guarded = accountGuard(item.id)
+  const guarded = { ...accountGuard(item.id), ...streamIdleTimeoutMs === undefined ? {} : { streamIdleTimeoutMs } }
   const { provider } = createAccountProvider([item], guarded, baseURL)
   const profile: ResolvedPiAiProviderProfile = { provider: PREVIEW, displayName: 'Account models', piProvider: provider,
     streamIdleTimeoutMs: 300_000, maxRequestImageBytes: 20_971_520,
@@ -108,6 +110,32 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('account-driven native provider', () => {
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)('preserves native output and reasoning with byte-aware %s observation', async api => {
+    const fetch = vi.fn(async () => nativeEvents(api))
+    vi.stubGlobal('fetch', fetch)
+    const result = await accountCall(api, 'high', undefined, 1000)
+    expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    expect(result.assembler.blocks()).toContainEqual({ type: 'reasoning', text: 'Public summary.' })
+    expect(result.assembler.blocks()).toContainEqual({ type: 'text', text: 'Hello.' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it('releases the admitted wire lease if the idle interval is invalid', async () => {
+    const item = descriptor('openai-responses')
+    const guard = accountGuard(item.id)
+    const release = vi.fn()
+    const fetch = vi.fn()
+    const { provider, models } = createAccountProvider([item], {
+      ...guard, streamIdleTimeoutMs: NaN,
+      beforeWire: async () => ({ signal: guard.signal, release }),
+    }, baseURL)
+    const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+      apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+    })
+    for await (const _event of stream) { /* Preserve the native terminal failure. */ }
+    expect((await stream.result()).errorMessage).toContain('COPILOT_STREAM_IDLE_INTERVAL_INVALID')
+    expect(release).toHaveBeenCalledTimes(1)
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)('routes an unseen ID through published Core and native %s with Bearer auth', async api => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'must-not-use')
     let body: Record<string, unknown> | undefined
@@ -333,14 +361,101 @@ describe('account provider model HTTP authorization observation', () => {
   })
 })
 
+describe('managed upload-timeout observation', () => {
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'captures final %s callback bytes and dispatch-local header time before clone observation', async api => {
+      const item = descriptor(api)
+      const diagnostic = vi.fn()
+      const { provider, models } = createAccountProvider([item], {
+        ...accountGuard(item.id), onRequestBodyTimeout: diagnostic,
+      }, baseURL)
+      let clock = 100
+      const timer = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+      const observer = vi.spyOn(timeoutDiagnostics, 'requestBodyTimeoutDiagnostic')
+      const image = api === 'anthropic-messages'
+        ? { type: 'image', source: { type: 'base64', data: 'AAAA', media_type: 'image/png' } }
+        : api === 'openai-responses' ? { type: 'input_image', image_url: 'data:image/png;base64,AAAA' }
+          : { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }
+      const conversation = [{ role: 'user', content: [{ type: 'text', text: 'PRIVATE_CALLBACK 中文' }, image] },
+        ...api === 'openai-responses' ? [{ type: 'reasoning', encrypted_content: 'PRIVATE_OPAQUE', summary: [] }]
+          : api === 'anthropic-messages' ? [{ role: 'assistant', content: [{ type: 'redacted_thinking', data: 'PRIVATE_OPAQUE' }] }] : []]
+      let finalBody = ''
+      const response = new Response(JSON.stringify({ code: 'user_request_timeout',
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' }), { status: 408 })
+      try {
+        const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+          finalBody = String(init?.body)
+          clock = 175
+          return response
+        })
+        const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+          apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+          onPayload(payload) {
+            if (typeof payload !== 'object' || payload === null) throw new Error('EXPECTED_NATIVE_PAYLOAD')
+            return { ...payload, [api === 'openai-responses' ? 'input' : 'messages']: conversation,
+              tools: [{ type: 'function', name: 'private_tool', parameters: { type: 'object' } }] }
+          },
+        })
+        for await (const _event of stream) { /* Native error remains SDK-owned. */ }
+        expect((await stream.result()).stopReason).toBe('error')
+        expect(observer.mock.lastCall?.[3]).toEqual({ protocol: api, responseHeadersMs: 75 })
+        expect(diagnostic.mock.lastCall?.[0]).toContain('75 ms (round trip, not upload duration)')
+        expect(diagnostic.mock.lastCall?.[0]).toContain(`image blocks ${Buffer.byteLength(JSON.stringify(image))}`)
+        expect(diagnostic.mock.lastCall?.[0]).toContain(`opaque replay ${api === 'openai-completions' ? 0 : Buffer.byteLength(JSON.stringify('PRIVATE_OPAQUE'))}`)
+        expect(diagnostic.mock.lastCall?.[0]).not.toContain('PRIVATE')
+        expect(observer.mock.lastCall?.[1]).toBe(finalBody)
+        expect(response.bodyUsed).toBe(true)
+        expect(fetch).toHaveBeenCalledTimes(1)
+      } finally { timer.mockRestore(); observer.mockRestore() }
+    })
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'observes verified %s timeout without changing bytes, Response, native retries or credential ownership', async api => {
+      const item = descriptor(api)
+      const onRequestBodyTimeout = vi.fn()
+      const onUnauthorized = vi.fn()
+      const guard: AccountProviderGuard = { ...accountGuard(item.id), onRequestBodyTimeout, onUnauthorized }
+      const { provider, models } = createAccountProvider([item], guard, baseURL)
+      const body = JSON.stringify({ code: 'user_request_timeout',
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' })
+      const response = new Response(body, { status: 408 })
+      let requestBody: string | undefined
+      const fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        requestBody = typeof init?.body === 'string' ? init.body : undefined
+        return response
+      })
+      const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [
+        { role: 'user', content: 'Synthetic 中文 input', timestamp: 0 },
+      ] }), { apiKey: 'synthetic-account-token', maxRetries: 0, fetch })
+      for await (const _event of stream) { /* Native terminal delivery remains unchanged. */ }
+      expect((await stream.result()).stopReason).toBe('error')
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(requestBody).toBeDefined()
+      expect(onRequestBodyTimeout.mock.calls[0]).toEqual([undefined])
+      expect(onRequestBodyTimeout.mock.lastCall?.[0]).toContain(
+        `Request body: ${Buffer.byteLength(requestBody!, 'utf8')} UTF-8 bytes`,
+      )
+      expect(onUnauthorized).not.toHaveBeenCalled()
+      const evidence = requestBodyEvidence(requestBody, api)
+      if (evidence.state !== 'complete') throw new Error('fixture requires complete wire composition')
+      expect(onRequestBodyTimeout.mock.lastCall?.[0]).toContain(`conversation ${evidence.conversationBytes}`)
+      expect(onRequestBodyTimeout.mock.lastCall?.[0]).toMatch(/Fetch-to-response-headers: \d+ ms \(round trip, not upload duration\)/u)
+      // Native SDK consumed the original, not a synthetic replacement response.
+      expect(response.bodyUsed).toBe(true)
+    },
+  )
+})
+
 describe('managed Responses replay compatibility', () => {
-  function replayContext(): PiContext {
+  function replayContext(includeEmptyReasoning = false): PiContext {
     return { messages: [{ role: 'user', content: 'Synthetic task', timestamp: 0 }, {
       role: 'assistant', api: 'openai-responses', provider: PREVIEW, model: 'future-lab-r17',
       stopReason: 'toolUse', timestamp: 0,
       usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       content: [
+        ...includeEmptyReasoning ? [{ type: 'thinking' as const, thinking: '', thinkingSignature: JSON.stringify({
+          type: 'reasoning', id: 'rs_empty_scope', summary: [],
+        }) }] : [],
         { type: 'thinking', thinking: 'Public summary.', thinkingSignature: JSON.stringify({
           type: 'reasoning', id: 'rs_old_scope', summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'opaque-old-reasoning',
         }) },
@@ -350,12 +465,12 @@ describe('managed Responses replay compatibility', () => {
     }, { role: 'toolResult', toolCallId: 'call_check|fc_old_scope', toolName: 'check',
       content: [{ type: 'text', text: 'Done.' }], isError: false, timestamp: 0 }] }
   }
-  it('sends identical normalized bytes on the third Core-style attempt after two HTTP 408s', async () => {
+  it.each([false, true])('sends identical normalized bytes after two HTTP 408s (empty reasoning: %s)', async includeEmptyReasoning => {
     const item = descriptor('openai-responses')
     const retryReplay = new ResponsesRetryReplay()
     const coreSignal = new AbortController().signal
     const guard: AccountProviderGuard = { ...accountGuard(item.id), retryReplay, retrySignal: coreSignal }
-    const context = normalizeContext(replayContext())
+    const context = normalizeContext(replayContext(includeEmptyReasoning))
     const original = JSON.stringify(context)
     const bodies: string[] = []
     let firstPayload: Record<string, unknown> | undefined
@@ -425,6 +540,30 @@ describe('managed Responses replay compatibility', () => {
     expect(call.call_id).toBe(output.call_id)
     expect(JSON.parse(String(call.arguments))).toEqual({ id: 'keep-business-id' })
     expect(result.body!.store).toBe(false)
+    expect(result.replayFailure).not.toHaveBeenCalled()
+    expect(result.unauthorized).not.toHaveBeenCalled()
+  })
+  it('omits an empty SDK reasoning signature while preserving opaque reasoning and tool pairing', async () => {
+    const context = replayContext(true)
+    const original = JSON.stringify(context)
+    const onPayload = vi.fn((payload: unknown) => {
+      const input = (payload as { input: Record<string, unknown>[] }).input
+      expect(input.find(item => item.id === 'rs_empty_scope')).toEqual({
+        type: 'reasoning', id: 'rs_empty_scope', summary: [],
+      })
+    })
+    const result = await invoke(context, { onPayload })
+    expect(onPayload).toHaveBeenCalledTimes(1)
+    expect(result.result.stopReason).toBe('stop')
+    expect(result.fetch).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(context)).toBe(original)
+    const input = result.body!.input as Record<string, unknown>[]
+    expect(input.filter(item => item.type === 'reasoning')).toEqual([{
+      type: 'reasoning', summary: [{ type: 'summary_text', text: 'Public summary.' }],
+      encrypted_content: 'opaque-old-reasoning',
+    }])
+    expect(input.find(item => item.type === 'function_call')!.call_id)
+      .toBe(input.find(item => item.type === 'function_call_output')!.call_id)
     expect(result.replayFailure).not.toHaveBeenCalled()
     expect(result.unauthorized).not.toHaveBeenCalled()
   })

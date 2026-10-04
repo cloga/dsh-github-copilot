@@ -31,6 +31,14 @@ test('plans only known task IDs with unexecuted argument arrays', async () => {
   assert.ok((await planTask('tooling')).commands.some(command => command.argv[1] === 'test:scripts'))
 })
 
+test('context diagnostics preserve shared usage and include native whole-turn evidence', async () => {
+  const plan = await planTask('context')
+  assert.ok(plan.commands.some(command => command.argv.includes('tests/fixtures/turn-usage-core.fixture.ts')))
+  const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+  assert.ok(contract.tasks.context.risk.includes('Never filter or delay shared native usage'))
+  await verifyAgentContract()
+})
+
 test('important updates carry release follow-through without a second approval prompt', async () => {
   const plan = await planTask('release')
   const policy = plan.boundaries.releaseDelivery
@@ -163,11 +171,23 @@ test('CLI unknown input returns one JSON error with exit 2', () => {
 test('agent contract references actual files and verification gates', async () => {
   const result = await verifyAgentContract()
   assert.equal(result.ok, true)
-  assert.equal(result.taskCount, 9)
+  assert.equal(result.taskCount, 12)
+  const autorouting = await planTask('autorouting')
+  assert.ok(autorouting.read.includes('docs/auto-task-routing.md'))
+  assert.ok(autorouting.tests.includes('tests/auto-task-classifier.spec.ts'))
+  const context = await planTask('context')
+  assert.ok(context.read.includes('src/context-evidence.ts'))
+  assert.ok(context.tests.includes('tests/context-evidence-runtime.spec.ts'))
   const history = await planTask('history')
   assert.ok(history.read.includes('scripts/repair-auto-model-history.mjs'))
   assert.ok(history.tests.includes('tests/scripts/repair-auto-model-history.test.mjs'))
+  assert.ok(history.read.includes('src/turn-usage-evidence.ts'))
+  assert.ok(history.tests.includes('tests/fixtures/turn-usage-core.fixture.ts'))
+  assert.ok(history.risk.includes('No fabricated zero usage, partial token totals'))
   const usage = await planTask('usage')
   assert.ok(usage.read.includes('src/copilot-usage-host.ts'))
   assert.ok(usage.tests.includes('tests/scripts/copilot-usage-gateway.test.mjs'))
+  const compaction = await planTask('compaction')
+  assert.ok(compaction.read.includes('docs/manual-compaction-recovery.md'))
+  assert.ok(compaction.tests.includes('tests/manual-compaction-recovery.spec.ts'))
 })

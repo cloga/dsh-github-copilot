@@ -1,5 +1,10 @@
 # Agent readiness audit
 
+> **Historical audit:** dated follow-ups preserve plans and validation blockers
+> at the time, not current setup requirements or release status. Start with
+> [AGENTS.md](../AGENTS.md), current README and the
+> [rc.2 review](./official-first-020-rc2.md).
+
 Tracking: [#73](https://github.com/cloga/dsh-github-copilot/issues/73). Audited baseline: `d9d0954` (2026-09-05). This is an evidence inventory, not a blanket certification of live Copilot behavior.
 
 ## Scope and method

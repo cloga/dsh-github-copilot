@@ -91,6 +91,7 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
   const mounted = root.plugin({ inject: client.inject, apply: client.apply })
   await mounted
   await vi.waitFor(() => expect(registrations.has(`${usageSlot}:github-copilot-usage`)).toBe(true))
+  await vi.waitFor(() => expect(registrations.has(`${usageSlot}:github-copilot-context-evidence`)).toBe(true))
   const setFooter = (enabled: boolean) => {
     if (enabled) declared.add(footerSlot)
     else declared.delete(footerSlot)
@@ -111,6 +112,7 @@ function expectOnlyRetainedUi(f: Fixture, footer: boolean) {
   expect([...f.registrations.keys()].sort()).toEqual([
     `${providerSlot}:llm-pi-ai`, `${settingsSlot}:${accountId}`,
     `${settingsSlot}:github-copilot-search-routing`, `${usageSlot}:github-copilot-usage`,
+    `${usageSlot}:github-copilot-context-evidence`,
   ].sort())
   // Adjacent positive assertions rule out an unactivated Client or empty registry.
   const account = f.registrations.get(`${settingsSlot}:${accountId}`)!.render({})!
@@ -123,6 +125,9 @@ function expectOnlyRetainedUi(f: Fixture, footer: boolean) {
   expect(provider.type).toBe(client.GitHubCopilotAccountSurface)
   expect(provider.props.eligible).toBe(true)
   expect(f.registrations.get(`${usageSlot}:github-copilot-usage`)!.render({
+    sessionId: 'existing-session', useSession: () => undefined, useProjection: () => undefined,
+  })).not.toBeNull()
+  expect(f.registrations.get(`${usageSlot}:github-copilot-context-evidence`)!.render({
     sessionId: 'existing-session', useSession: () => undefined, useProjection: () => undefined,
   })).not.toBeNull()
   // Inspect every attempted registration, not only the final active map: a

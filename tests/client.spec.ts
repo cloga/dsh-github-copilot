@@ -40,6 +40,105 @@ import {
 } from '../src/client.ts'
 
 describe('GitHub Copilot Models client', () => {
+  it('keeps preferences through shared account status and the mounted Manage surface', async () => {
+    const preferences = { state: 'ready' as const, writable: true, revision: 2,
+      excludedModelIds: ['excluded'], lockedModelIds: [], unavailableExcludedModelIds: ['excluded'] }
+    const { remote, surfaces, provider } = surfaceFixture({ ...accountResult().value, modelPreferences: preferences })
+    surfaces.mount(provider, Symbol('provider'), remote as never)
+    await Promise.resolve()
+    const account = surfaces.getSnapshot()!.account
+    vi.mocked(React.useMemo).mockImplementation(factory => factory())
+    vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe, snapshot) => snapshot())
+    vi.mocked(React.useEffect).mockImplementation(() => undefined)
+    vi.mocked(React.useId).mockReturnValue('fixture-management')
+    vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
+    const elements = descendants(GitHubCopilotCompactAccount({ remote: remote as never, account }))
+    expect(elements.find(element => element.type === GitHubCopilotModelPreferencesPanel)?.props.preferences).toEqual(preferences)
+    expect(elements.some(element => element.type === 'summary' && element.props.children === 'Discovery details')).toBe(true)
+  })
+
+  function preferencesFixture() {
+    const models: AccountModels = { state: 'ready', rejected: [], models: [
+      { id: 'enabled', name: 'Enabled model', api: 'openai-responses' },
+      { id: 'excluded', name: 'Excluded model', api: 'openai-responses' },
+    ] }
+    const preferences = { state: 'ready' as const, writable: true, revision: 1,
+      excludedModelIds: ['excluded', 'absent'], lockedModelIds: [], unavailableExcludedModelIds: ['absent'] }
+    return { models, preferences }
+  }
+
+  it('shows read-only account rows with unknown exclusion status and recovers via status without discovery', async () => {
+    const { models, preferences } = preferencesFixture()
+    const remote = modelRemote()
+    remote.status.mockResolvedValue({ ok: true, value: { ...accountResult(models).value, modelPreferences: preferences } })
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models, preferences: undefined,
+    }))
+    const initial = descendants(panel.render())
+    expect(initial.filter(element => element.props['data-model-id']).every(element => element.props.disabled)).toBe(true)
+    expect(initial.some(element => String(element.props.children).includes('Exclusion status unknown'))).toBe(true)
+    await initial.find(element => element.props['data-dsh-github-copilot-preferences-retry'])!.props.onClick()
+    const recovered = descendants(panel.render())
+    expect(recovered.find(element => element.props['data-model-id'] === 'enabled')?.props.disabled).toBe(false)
+    expect(remote.status).toHaveBeenCalledOnce()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.ensureModels).not.toHaveBeenCalled()
+  })
+
+  it('combines filters and search, preserves failed actions, and prevents duplicate writes before render', async () => {
+    const { models, preferences } = preferencesFixture()
+    const remote = modelRemote()
+    const write = deferred<ReturnType<typeof accountResult>>()
+    remote.setModelExcluded.mockReturnValue(write.promise)
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never, models, preferences }))
+    let elements = descendants(panel.render())
+    const action = elements.find(element => element.props['data-model-id'] === 'enabled')!
+    const pending = action.props.onClick()
+    await action.props.onClick()
+    expect(remote.setModelExcluded).toHaveBeenCalledExactlyOnceWith('enabled', true)
+    write.reject(new Error('PRIVATE_HOST_FAILURE'))
+    await pending
+    elements = descendants(panel.render())
+    expect(elements.find(element => element.props['data-model-id'] === 'enabled')?.props.children).toBe('Exclude')
+    expect(elements.some(element => String(element.props.children).includes('PRIVATE_HOST_FAILURE'))).toBe(false)
+    elements.find(element => element.type === 'button' && element.props.children === 'Excluded (2)')!.props.onClick()
+    elements = descendants(panel.render())
+    expect(elements.filter(element => element.props['data-model-id']).map(element => element.props['data-model-id'])).toEqual(['excluded', 'absent'])
+    elements.find(element => element.props['data-dsh-github-copilot-model-search'])!.props.onChange({ currentTarget: { value: 'absent' } })
+    expect(descendants(panel.render()).filter(element => element.props['data-model-id'])).toHaveLength(1)
+  })
+
+  it('ignores a retry response after the account props have been replaced', async () => {
+    const fixture = preferencesFixture()
+    const remote = modelRemote()
+    const read = deferred<ReturnType<typeof accountResult>>()
+    remote.status.mockReturnValue(read.promise)
+    let models: AccountModels | undefined = fixture.models
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models, preferences: undefined,
+    }))
+    const pending = descendants(panel.render()).find(element => element.props['data-dsh-github-copilot-preferences-retry'])!.props.onClick()
+    models = undefined
+    panel.render()
+    read.resolve({ ok: true, value: { ...accountResult(fixture.models).value } })
+    await pending
+    expect(descendants(panel.render()).filter(element => element.props['data-model-id'])).toHaveLength(0)
+  })
+
+  it('updates one row from the narrow preferences result without account status or discovery', async () => {
+    const { models, preferences } = preferencesFixture()
+    const remote = modelRemote()
+    remote.setModelExcluded.mockResolvedValue({ ok: true, value: { ...preferences,
+      revision: 2, excludedModelIds: ['absent', 'enabled', 'excluded'] } })
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never, models, preferences }))
+    await descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')!.props.onClick()
+    expect(descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')?.props.children).toBe('Restore')
+    expect(remote.setModelExcluded).toHaveBeenCalledExactlyOnceWith('enabled', true)
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.ensureModels).not.toHaveBeenCalled()
+  })
+
   function descendants(root: unknown): ReactElement[] {
     if (Array.isArray(root)) return root.flatMap(descendants)
     if (!isValidElement(root)) return []
@@ -62,11 +161,11 @@ describe('GitHub Copilot Models client', () => {
   function modelRemote(discoverModels: ReturnType<typeof vi.fn> = vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] }))) {
     return { discoverModels, ensureModels: vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] })),
       status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(),
-      excludeModel: vi.fn(), restoreModel: vi.fn() }
+      excludeModel: vi.fn(), restoreModel: vi.fn(), setModelExcluded: vi.fn() }
   }
   // Tiny deterministic hook host: component state/ref identity and effect cleanup,
   // without mounting a browser or invoking any real Remote implementation.
-  function panelHarness(initialRemote: object) {
+  function panelHarness(initialRemote: object, component = (remote: object) => GitHubCopilotAccountModelsPanel({ remote: remote as never })) {
     let remote = initialRemote
     const states: unknown[] = []
     const setters: ReturnType<typeof vi.fn>[] = []
@@ -97,7 +196,7 @@ describe('GitHub Copilot Models client', () => {
           })
         }
       })
-      return GitHubCopilotAccountModelsPanel({ remote: remote as never })
+      return component(remote)
     }
     const render = (nextRemote = remote) => {
       if (!mounted) throw new Error('test panel is unmounted')
@@ -826,8 +925,9 @@ describe('GitHub Copilot Models client', () => {
     vi.mocked(React.useState).mockImplementation((initial?: unknown) =>
       [typeof initial === 'function' ? initial() : initial, vi.fn()] as never)
     vi.mocked(React.useEffect).mockImplementation(() => undefined)
+    vi.mocked(React.useRef).mockImplementation(initial => ({ current: initial }))
     const remote = modelRemote()
-    remote.restoreModel.mockResolvedValue(accountResult())
+    remote.setModelExcluded.mockResolvedValue({ ok: true, value: preferencesFixture().preferences })
     const tree = GitHubCopilotModelPreferencesPanel({
       remote: remote as never,
       models: { state: 'ready', rejected: [], models: [
@@ -843,18 +943,35 @@ describe('GitHub Copilot Models client', () => {
         unavailableExcludedModelIds: ['temporarily-absent'],
       },
     })
+
     const elements = descendants(tree)
     expect(elements.find(element => element.type === 'summary')?.props.children)
-      .toBe('Model preferences · 1 visible · 2 excluded')
+      .toBe('Model preferences · 1 enabled · 2 excluded')
     expect(elements.find(element => element.props['data-dsh-github-copilot-model-search'] === true)).toBeDefined()
     const selected = elements.find(element => element.props['data-model-id'] === 'selected')
-    expect(selected?.props).toMatchObject({ disabled: true, children: 'Exclude' })
+    expect(selected?.props).toMatchObject({ disabled: false, children: 'Exclude' })
     const restore = elements.find(element => element.props['data-model-id'] === 'temporarily-absent')
     expect(restore?.props.children).toBe('Restore')
     await restore?.props.onClick()
-    expect(remote.restoreModel).toHaveBeenCalledWith('temporarily-absent')
+    expect(remote.setModelExcluded).toHaveBeenCalledWith('temporarily-absent', false)
     expect(remote.status).not.toHaveBeenCalled()
     expect(remote.discoverModels).not.toHaveBeenCalled()
+  })
+
+  it('preserves owned model preferences through the actual account decoder without reading extra fields', () => {
+    const preferences = {
+      state: 'ready', writable: true, revision: 3,
+      excludedModelIds: ['excluded'], lockedModelIds: ['selected'],
+      unavailableExcludedModelIds: [],
+    }
+    Object.defineProperty(preferences, 'privateData', { get() { throw new Error('must not read extras') } })
+    const decoded = authorizationViewFrom({ ...accountResult().value, modelPreferences: preferences })
+    expect(decoded?.modelPreferences).toEqual(preferences)
+    expect(decoded?.modelPreferences).not.toBe(preferences)
+    expect(decoded?.modelPreferences?.excludedModelIds).not.toBe(preferences.excludedModelIds)
+    expect(authorizationViewFrom({
+      ...accountResult().value, modelPreferences: { ...preferences, excludedModelIds: [123] },
+    })).toBeUndefined()
   })
 
   it('preserves safe warnings from discovery while accepting older responses without them', async () => {
@@ -1159,6 +1276,7 @@ describe('GitHub Copilot Models client', () => {
         spec: ReturnType<typeof vi.fn>
       }
       logger: { warn: ReturnType<typeof vi.fn> }
+      get: ReturnType<typeof vi.fn>
       on: ReturnType<typeof vi.fn>
       inject: ReturnType<typeof vi.fn>
     }
@@ -1170,7 +1288,8 @@ describe('GitHub Copilot Models client', () => {
         return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
       }
       const cleanup = callback(ctx)
-      if (services.includes('remote.settings')) {
+      if (services.includes('remote.settings') || services.includes('remote.githubCopilotTurnSelection')
+        || services.length === 1 && services[0] === 'slots') {
         return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })
       }
       if (typeof cleanup === 'function') cleanupUi = cleanup as () => void
@@ -1201,10 +1320,11 @@ describe('GitHub Copilot Models client', () => {
         register,
         spec: vi.fn((name: string) => ({
           kind: name === 'settings.models.provider-card' || name === 'plugins.bundle.config' ? 'keyed' : 'list',
-          scope: 'root',
+          scope: name === 'conversation.chat.assistant-actions' ? 'session' : 'root',
         })),
       },
       logger: { warn: vi.fn() },
+      get: vi.fn((name: string) => name === 'slots' ? ctx.slots : undefined),
       on: vi.fn(() => vi.fn()),
       inject,
     }
@@ -1243,6 +1363,46 @@ describe('GitHub Copilot Models client', () => {
     expect(first.props).not.toHaveProperty('copilot')
     await dispose()
   })
+
+  it.each(['settings.models.provider-card', 'settings.models.footer', 'settings.section'])(
+    'retains account metadata without redundant reads on exclusion-driven %s renders', async slot => {
+      const { ctx, register } = clientContext([slot])
+      const fixture = preferencesFixture()
+      const view = { ...accountResult(fixture.models).value, modelPreferences: fixture.preferences }
+      const status = vi.fn().mockResolvedValue({ ok: true, value: view })
+      const ensureModels = vi.fn(), discoverModels = vi.fn()
+      const namespace = vi.fn(() => ({ status, ensureModels, discoverModels }))
+      Object.defineProperty(ctx.remote, 'githubCopilot', { get: namespace })
+      const dispose = await apply(ctx as never)
+      const render = register.mock.calls.find(([options]) => options.name === slot)?.[1] as (props: object) => ReactElement
+      const props = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, settingsNs: 'llm-pi-ai' }, configured: true }
+      const first = render(props)
+      const token = Symbol('mounted-account')
+      const surfaces: ReturnType<typeof createAccountSurfaces> = first.props.surfaces
+      const unmount = surfaces.mount(first.props.seat, token, first.props.remote)
+      await Promise.resolve()
+      await Promise.resolve()
+      const account = surfaces.getSnapshot()!.account
+      expect(account.getSnapshot().checking).toBe(false)
+      expect(account.getSnapshot().view?.accountModels).toEqual(view.accountModels)
+      // Any second status read would block for as long as the Host takes.
+      status.mockImplementation(() => new Promise(() => {}))
+      for (let i = 0; i < 5; i++) {
+        const next = render(props)
+        expect(next.props.remote).toBe(first.props.remote)
+        expect(next.props.seat).toBe(first.props.seat)
+        surfaces.mount(next.props.seat, token, next.props.remote)
+        expect(surfaces.getSnapshot()!.account).toBe(account)
+        expect(account.getSnapshot().checking).toBe(false)
+        expect(account.getSnapshot().view?.modelPreferences).toEqual(view.modelPreferences)
+      }
+      expect(namespace).toHaveBeenCalledTimes(1)
+      expect(status).toHaveBeenCalledTimes(1)
+      expect(ensureModels).not.toHaveBeenCalled()
+      expect(discoverModels).not.toHaveBeenCalled()
+      unmount()
+      await dispose()
+    })
 
   it('moves search routing between the bundle page and Models fallback as the bundle slot appears and disappears', async () => {
     const { ctx, register, registrations, injections } = clientContext(['settings.models.footer'])
@@ -1371,12 +1531,23 @@ describe('GitHub Copilot Models client', () => {
     const { ctx, disposeRemote, disposeUi, disposePresentation } = clientContext(['settings.section'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotTurnSelection', 'slots'], expect.any(Function))
     expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotDualModel', 'slots'], expect.any(Function))
     expect(disposePresentation).not.toHaveBeenCalled()
     await dispose()
     expect(disposePresentation).toHaveBeenCalledOnce()
     expect(disposeUi).toHaveBeenCalledOnce()
     expect(disposeRemote).toHaveBeenCalledOnce()
+  })
+
+  it('registers and disposes Auto actions while the optional conversation fiber remains pending', async () => {
+    const { ctx, registrations } = clientContext(['conversation.chat.assistant-actions'])
+    const dispose = await apply(ctx as never)
+    const remove = registrations.get('conversation.chat.assistant-actions')
+    expect(remove).toBeTypeOf('function')
+    expect(remove).not.toHaveBeenCalled()
+    await dispose()
+    expect(remove).toHaveBeenCalledOnce()
   })
 
   it('mounts its Remote contribution and registers the rc.1 provider-card seat', async () => {

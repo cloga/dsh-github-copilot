@@ -14,7 +14,11 @@ import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
+import { scopeTarget } from '@deepseek-ai/dsh-scope'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { installAutoModelRouting } from '../../src/auto-model-host.ts'
+import { COPILOT_CONTEXT_EVIDENCE, ContextEvidenceSchema, installContextEvidence } from '../../src/context-evidence.ts'
 import { currentChatRoute, currentSearchInitiator, currentSearchSelection } from '../../src/current-provider.ts'
 import { migrationStatus, type MigrationSelection } from '../../src/migration-status.ts'
 
@@ -124,8 +128,11 @@ async function fixture({ mountController = true } = {}) {
     canOpenPath: () => false, openPath: forbidden,
   }) : undefined
   const shells: AgentShell[] = []
-  const add = async (id: string, status: Agent['status'] = 'idle') => {
-    const session = Session.create(SessionId(id))
+  const add = async (id: string, status: Agent['status'] = 'idle', parent?: Agent) => {
+    const empty = Session.create(SessionId(id))
+    const session = parent === undefined ? empty : Session.create(empty.id, [], {
+      ...empty.header, origin: 'subagent', parentSession: parent.session.id, delegationDepth: 1,
+    })
     const shell: AgentShell = { id: session.id, session, status, ctx }
     Object.defineProperty(shell, 'options', { get: forbidden })
     // No fake loop: the real registry accepts an already-created Agent. Only its
@@ -167,6 +174,79 @@ function requestConfig(selection: MigrationSelection): RequestConfig {
 }
 
 describe('tagged Core public Session context (actual controller projection)', () => {
+  it('cold-folds native model selections independently without replacing the controller projection', async () => {
+    const f = await fixture()
+    const agent = await f.add('context-evidence-selection')
+    agent.session.append('model/selection', managedPending)
+    const nativeSelection = f.projections.stateOf(agent.session, 'modelSelection')
+    const fiber = f.ctx.plugin({ apply: installContextEvidence })
+    await fiber
+    expect(ContextEvidenceSchema.parse(
+      f.projections.snapshot(agent.session, [COPILOT_CONTEXT_EVIDENCE]).values[COPILOT_CONTEXT_EVIDENCE],
+    ).route).toEqual({ provider: managedPending.provider, model: managedPending.model })
+    expect(f.projections.stateOf(agent.session, 'modelSelection')).toEqual(nativeSelection)
+    agent.session.append('model/selection', { provider: otherB.provider, model: otherB.model })
+    expect(f.projections.stateOf(agent.session, COPILOT_CONTEXT_EVIDENCE)?.route)
+      .toEqual({ provider: otherB.provider, model: otherB.model })
+    await fiber.dispose()
+    expect(f.projections.snapshot(agent.session).values).not.toHaveProperty(COPILOT_CONTEXT_EVIDENCE)
+    expect(f.projections.stateOf(agent.session, 'modelSelection')).toBeDefined()
+    expect(f.forbidden).not.toHaveBeenCalled()
+  })
+
+  it('folds enrolled child turns through the native projection registry before request admission', async () => {
+    const f = await fixture()
+    const parent = await f.add('follow-parent')
+    recordHeader(parent.session, { provider: 'github-copilot-preview', model: 'fixture-old' })
+    parent.session.append('model/selection', managedPending)
+    let enabled = true
+    const dispose = installAutoModelRouting(f.ctx, {
+      parentModelBindings: () => enabled
+        ? [{ childSessionId: 'follow-child', parentSessionId: parent.id }] : [],
+      loadModels: f.forbidden,
+    })
+    const child = await f.add('follow-child', 'running', parent)
+    const scope = scopeTarget(child, child)
+    const promptScope = scopeTarget(new SystemPrompt(f.ctx, {}), child)
+    const signal = new AbortController().signal
+    const original = { provider: 'github-copilot-preview', model: 'fixture-child', maxTokens: 100,
+      reasoningEffort: ReasoningEffortId('high') }
+    const assemble = async () => {
+      const assembly = { sections: [], contexts: [], tools: [], variables: original }
+      return f.ctx.waterfall(promptScope, 'system-prompt/assemble', assembly, {}, async () => assembly)
+    }
+    const request = (turn: number) => f.ctx.waterfall(scope, 'agent/request',
+      { agent: child, turn, step: 1, signal }, async () => original)
+    try {
+      child.session.append('turn/start', { turn: 1 })
+      Reflect.apply(child.session.append, child.session, ['subagent/descriptor', {
+        version: 3, provider: 'spawn', mode: 'continuable', label: 'Synthetic child',
+        agentProvider: original.provider, agentModel: original.model,
+      }])
+      expect((await assemble()).variables.model).toBe(managedPending.model)
+      child.session.append('step/start', { turn: 1, step: 1 })
+      parent.session.append('model/selection', { provider: original.provider, model: 'fixture-new-parent' })
+      expect(await request(1)).toEqual({ provider: original.provider, model: managedPending.model, maxTokens: 100 })
+      child.session.append('turn/start', { turn: 2 })
+      expect((await assemble()).variables.model).toBe('fixture-new-parent')
+      expect((await request(2)).model).toBe('fixture-new-parent')
+      enabled = false
+      expect((await request(2)).model).toBe('fixture-new-parent')
+      child.session.append('turn/start', { turn: 3 })
+      expect(await request(3)).toEqual(original)
+      enabled = true
+      child.session.append('step/start', { turn: 3, step: 1 })
+      expect(await request(3)).toEqual(original)
+      child.session.append('turn/start', { turn: 4 })
+      child.session.append('model/selection', { provider: original.provider, model: original.model })
+      expect(await request(4)).toEqual(original)
+      expect(child.session.snapshotEvents().filter(event => event.type === 'model/selection')).toHaveLength(1)
+      expect(f.forbidden).not.toHaveBeenCalled()
+    } finally {
+      dispose()
+    }
+  })
+
   it('installs the actual controller fold and applies pending > header > genuinely-empty default', async () => {
     const f = await fixture()
     expect(f.controller).toBeInstanceOf(SessionController)

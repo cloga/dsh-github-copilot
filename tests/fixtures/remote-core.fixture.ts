@@ -1,9 +1,137 @@
-/** Actual tagged Core Client gateway with synthetic RPC transport; no Host or network. */
+/** Actual tagged Core gateways with in-process transport; no live profile or network. */
 import { Context } from '@deepseek-ai/cordis'
 import * as Gateway from '@deepseek-ai/dsh-api-gateway/client'
+import { TypertGatewayService } from '@deepseek-ai/dsh-api-gateway'
+import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
+import { HostConnectionService } from '@deepseek-ai/dsh-client-connection'
+import { TurnSelectionController } from '../../src/turn-selection-host.ts'
+import { TurnSelectionStore } from '../../src/turn-selection.ts'
 import { it, expect, vi } from 'vitest'
 import remote from '../../src/remote.ts'
+import selectionRemote from '../../src/turn-selection-remote.ts'
 import { name, version } from '#package.json' with { type: 'json' }
+
+it.each(['source', 'strict'] as const)('reads retained selection through actual Client and %s Host gateways', async mode => {
+  expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
+  const host = new Context(), client = new Context()
+  const store = new TurnSelectionStore()
+  const master = { id: 'viewed-master' }
+  const denied = new Error('fixture access denied')
+  const resolve = vi.fn((id: string) => {
+    if (id === 'denied-master') throw denied
+    return id === master.id ? master : undefined
+  })
+  try {
+    const registry = new TypertRegistry(host)
+    registry.lookups.register('agent', {
+      parameter: 'agent', wire: 'agentId',
+      hostTypeSymbol: '@deepseek-ai/dsh-agent#Agent',
+      wireTypeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
+      resolve,
+    })
+    if (mode === 'strict') registry.register({
+      package: selectionRemote.package, face: 'host', schemas: [],
+      model: { services: [], events: [], objects: [] }, invocations: selectionRemote.descriptors,
+    })
+    const connection = new HostConnectionService(host, [], {})
+    const gateway = new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
+    const handler = connection.createSharedFetchHandler('/api')
+    let rpcId = 0
+    const rpc = vi.fn(async (_path: string, method: string, payload: unknown) => {
+      const response = await handler.fetch(new Request(`http://fixture.invalid/api/${method}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'client-request', rpcId: `selection-${++rpcId}`, method, payload }),
+      }))
+      if (response.status !== 200) throw new Error(`Fixture carrier HTTP ${response.status}`)
+      return (await response.json()).result
+    })
+    client.provide('typert', {
+      remotes: { register: () => () => {} },
+      contexts: { getClient: () => ({ identity: () => 'ambient-other-session' }) },
+    })
+    client.provide('connection', { rpc: { call: rpc, open: vi.fn() },
+      registerGenerationSource: () => () => {}, start: () => ({ stop: () => {} }),
+      generation: { getSnapshot: () => undefined } })
+    Gateway.apply(client)
+    await client.remote.$mount(selectionRemote)
+
+    const legacyRead = vi.fn(() => ({ mode: 'manual' }))
+    const legacy = await host.plugin({ apply(ctx) {
+      ctx.provide('githubCopilotTurnSelection', { get: legacyRead })
+    } })
+    await expect(gateway.invoke({ namespace: 'githubCopilotTurnSelection', method: 'get',
+      args: { agentId: master.id, turn: 7 } })).rejects.toMatchObject({
+      code: mode === 'strict' ? 'gateway/binding-invalid' : 'gateway/invocation-unavailable',
+    })
+    expect(legacyRead).not.toHaveBeenCalled()
+    await legacy.dispose()
+
+    const owner = await host.plugin({ apply(ctx) { new TurnSelectionController(ctx, store) } })
+    const auto = { mode: 'auto', preference: 'balance', reason: 'standard-turn', candidateCount: 2 } as const
+    store.record(master, 7, auto)
+    store.record(master, 8, { mode: 'manual' })
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 7))
+      .resolves.toEqual({ ok: true, value: auto })
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 8))
+      .resolves.toEqual({ ok: true, value: { mode: 'manual' } })
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 9))
+      .resolves.toEqual({ ok: true, value: { mode: 'unknown' } })
+    await expect(client.remote.githubCopilotTurnSelection.get('missing-master', 7))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-not-found' } })
+    await expect(client.remote.githubCopilotTurnSelection.get('denied-master', 7))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-failed' } })
+    expect(resolve.mock.calls.some(([id]) => id === 'ambient-other-session')).toBe(false)
+    store.remove(master)
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 7))
+      .resolves.toEqual({ ok: true, value: { mode: 'unknown' } })
+    await owner.dispose()
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 7))
+      .resolves.toMatchObject({ ok: false, error: {
+        code: mode === 'strict' ? 'gateway/service-unavailable' : 'gateway/internal',
+      } })
+  } finally { await client.fiber.dispose(); await host.fiber.dispose() }
+})
+
+it('keeps explicit master selection reads independent of ambient Client agent scope', async () => {
+  expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
+  const ctx = new Context()
+  let bound: string | undefined = 'ambient-other-session'
+  const selection = { mode: 'auto', preference: 'balance', reason: 'standard-turn', candidateCount: 2 }
+  const identity = vi.fn(() => bound)
+  const rpc = vi.fn(async () => ({ ok: true, value: selection }))
+  try {
+    ctx.provide('typert', {
+      remotes: { register: () => () => {} },
+      contexts: { getClient: () => ({ identity }) },
+    })
+    ctx.provide('connection', { rpc: { call: rpc, open: vi.fn() },
+      registerGenerationSource: () => () => {}, start: () => ({ stop: () => {} }),
+      generation: { getSnapshot: () => undefined } })
+    Gateway.apply(ctx)
+    // Reproduce the old descriptor's failure using the actual native gateway.
+    const legacy = { ...selectionRemote, descriptors: selectionRemote.descriptors.map(descriptor => ({
+      ...descriptor, scope: { context: 'agent' as const, wire: 'agentId' },
+    })) }
+    const removeLegacy = await ctx.remote.$mount(legacy)
+    await expect(ctx.remote.githubCopilotTurnSelection.get('viewed-master', 7))
+      .rejects.toThrow('expected 1 argument(s), got 2')
+    expect(rpc).not.toHaveBeenCalled()
+    await removeLegacy()
+
+    const remove = await ctx.remote.$mount(selectionRemote)
+    for (const ambient of ['ambient-other-session', undefined]) {
+      bound = ambient
+      await expect(ctx.remote.githubCopilotTurnSelection.get('viewed-master', 7))
+        .resolves.toEqual({ ok: true, value: selection })
+      expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilotTurnSelection/get',
+        { args: { agentId: 'viewed-master', turn: 7 } }, expect.any(AbortSignal))
+    }
+    const descriptor = selectionRemote.descriptors[0]!
+    expect(descriptor.scope).toBeUndefined()
+    expect(descriptor.parameters[0]).toMatchObject({ source: 'lookup', lookup: 'agent', wire: 'agentId' })
+    await remove()
+  } finally { await ctx.fiber.dispose() }
+})
 
 it('mounts authorization, role and search-catalog Remotes on the exact target Client gateway', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
@@ -40,10 +168,10 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     expect(registered).toEqual([remote])
     expect(remote.descriptors.map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'migrationStatus',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
     ])
-    for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot')) {
+    for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot' && item.method !== 'setModelExcluded')) {
       expect(descriptor.result.mode).toBe('strict')
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
@@ -102,6 +230,17 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
         expect(codec.create().parse).toBeTypeOf('function')
       }
     }
+    const preferenceDescriptor = remote.descriptors.find(item => item.method === 'setModelExcluded')!
+    const preferences = { state: 'ready', writable: true, revision: 1,
+      excludedModelIds: ['gpt-5.4'], lockedModelIds: [], unavailableExcludedModelIds: [] }
+    expect(preferenceDescriptor.result.create().parse(preferences)).toEqual(preferences)
+    expect(() => preferenceDescriptor.result.create().parse({ ...preferences, credential: 'forbidden' })).toThrow()
+    expect(preferenceDescriptor.parameters[1]?.codec.create().parse(false)).toBe(false)
+    expect(() => preferenceDescriptor.parameters[1]?.codec.create().parse('false')).toThrow()
+    rpc.mockResolvedValueOnce({ ok: true, value: preferences })
+    await expect(ctx.remote.githubCopilot.setModelExcluded('gpt-5.4', true)).resolves.toEqual({ ok: true, value: preferences })
+    expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilot/setModelExcluded',
+      { args: { modelId: 'gpt-5.4', excluded: true } }, expect.any(AbortSignal))
     await dispose()
     expect(ctx.get('remote.githubCopilot')).toBeUndefined()
     expect(ctx.get('remote.githubCopilotDualModel')).toBeUndefined()

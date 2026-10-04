@@ -57,6 +57,12 @@ jobs:
       - name: Install compaction recovery verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop...' --filter '@deepseek-ai/dsh-compaction-basic...'
+      - name: Install background compaction jobs verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-jobs-local...' --filter '@deepseek-ai/dsh-commands...'
+      - name: Install isolated preset compaction verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-preset-registry...' --filter '@deepseek-ai/cordis-plugin-group...'
       - name: Install subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
@@ -123,7 +129,7 @@ jobs:
           cd "$RUNNER_TEMP/copilot-published-core"
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
           node node_modules/typescript/bin/tsc -p tsconfig.tests.json
-          node node_modules/vitest/vitest.mjs run tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts tests/search-routing.spec.ts tests/routed-web.spec.ts tests/deepseek-search-fallback.spec.ts
+          node node_modules/vitest/vitest.mjs run tests/copilot-stream-liveness.spec.ts tests/copilot-stream-adapter.spec.ts tests/config.spec.ts tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts tests/search-routing.spec.ts tests/routed-web.spec.ts tests/deepseek-search-fallback.spec.ts tests/context-usage.spec.ts tests/context-evidence.spec.ts tests/context-evidence-runtime.spec.ts tests/context-evidence-ui.spec.ts tests/background-compaction.spec.ts tests/manual-compaction-recovery.spec.ts
 
   release-ready:
     name: release-ready

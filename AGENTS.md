@@ -42,8 +42,8 @@ This repository owns eleven narrow surfaces:
 7. A bounded account-discovery route that supplies validated endpoint/capability metadata to the published native adapter, plus exact plugin-owned model exclusions enforced across its directory, Auto pools and direct admission, without maintaining model-ID routing rules or changing Core's catalog.
 8. Optional, provider-scoped Chat presentation for completed empty reasoning disclosures; durable content and encrypted replay metadata remain Core-owned.
 9. Compatibility-only policy restoration and request recovery for existing dedicated planner/executor Sessions. Model roles UI, settings writes and new dedicated roots are retired (#158); never reintroduce them or migrate histories implicitly.
-10. Managed-route estimated input/output admission, optional exact-request pressure signalling through official compaction recovery, and supported low summary effort only when no effort is already resolved. See [compaction budgets](./docs/copilot-compaction.md). Preserve truthful capacities, requested output caps, native errors/replay and transaction ownership; no hidden history trimming, chunking, new retry loop, competing compaction service or automatic model switch. Preventive guards do not claim recovery of an already oversized manual summary.
-11. Optional account quota reads and a session-scoped composer usage control through public credentials, strict Remotes and additive slots. Keep account billing-cycle credits separate from context tokens and session cost. Missing, pooled, legacy and stale data must retain their real semantics; never infer credits from token estimates or account deltas. See [quota boundaries](./docs/copilot-usage.md).
+10. Managed-route estimated input/output admission, optional exact-request pressure signalling through official compaction recovery, and supported low summary effort only when no effort is already resolved. See [compaction budgets](./docs/copilot-compaction.md). Preserve truthful capacities, requested output caps, native errors/replay and transaction ownership; no hidden history trimming, chunking, new retry loop, competing compaction service or automatic model switch. The separately selected, single-service [manual recovery engine](./docs/manual-compaction-recovery.md) may use bounded, explicit intermediate summaries through the public subclass hook; the preventive default never claims recovery of an already oversized manual summary.
+11. Optional account quota reads and a session-scoped composer usage control through public credentials, strict Remotes and additive slots. Keep account billing-cycle credits separate from context tokens and session cost. Missing, pooled, legacy and stale data must retain their real semantics; never infer credits from token estimates or account deltas. A separate plugin-owned historical context projection may diagnose failed-zero readings, never filter shared native usage, replace Core's meter, infer current occupancy/percentages or rewrite history. See [quota boundaries](./docs/copilot-usage.md).
 
 ## Retired model-role compatibility boundary (#158)
 
@@ -61,16 +61,21 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/reasoning-presentation.ts`: guarded native Chat delegation and historical Copilot provenance; filters temporary view props only, never messages, signatures, replay indexes or usage.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/copilot-usage-host.ts`, `src/copilot-usage-remote.ts`, `src/copilot-usage-card.ts`, `src/copilot-usage-ui.ts`: bounded Host quota snapshots, an independent strict namespace and reversible composer presentation. No real account fetches in tests, private Client store/DOM injection, new credential owner or general model wire.
+- `src/context-usage.ts`, `src/context-evidence.ts`, `src/context-evidence-ui.ts`: diagnostic-only failed-zero classification and bounded numeric historical evidence through a plugin-owned public projection and additive composer disclosure. Never filter native usage chunks to protect context readings: shared samples also feed Core's turn and cumulative accounting. Historical counts never become current occupancy; Core pressure, billing and durable events stay under Core ownership.
 - `src/current-provider.ts`: selected DSH route plus installed pi-ai catalog facts.
 - `src/temporary-models.ts`: exact, account-gated corrections with semantic protocol/capability retirement.
 - `src/model-protocol.ts`: explicit Core capability detection and conservative legacy fallback.
 - `src/responses-reasoning.ts`, `src/responses-reasoning-text.ts`: selected-model effort mapping and public summary assembly.
 - `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments and action-specific Goal update schemas.
 - `src/plan.ts`: Copilot-only, fail-closed hosted-search candidate lifecycle.
+- `src/auto-assessment-evidence.ts`: bounded request-local semantic classifier milestones copied into strict ephemeral turn evidence; no prompts, replay, credentials or error bodies. Total includes preparation; adapter start and first text are not HTTP dispatch/byte timings. Keep one 8s deadline and 128-token compact output. Request reasoning-off only when supplier and public prepared-model effort agree; unsupported native controls stay unchanged. No guessed latency ranking, adaptive timeout, cooldown or cross-turn cache without reviewed observations.
 - `src/probe.ts`: bounded native-search capability proof.
 - `src/wire.ts`, `src/wire-anthropic.ts`: inline hosted-search streaming.
 - `src/traditional-search.ts`: `github-copilot-hosted` `ctx.web` provider.
 - `src/serialize.ts`, `src/sse.ts`, `src/failure.ts`: protocol conversion and bounded error handling.
+- `src/response-error-body.ts`, `src/request-body-timeout.ts`: bounded clone-only HTTP error evidence and safe managed upload-timeout guidance. Exact verified `408/user_request_timeout` preserves native failure classification/retry metadata; final JSON bytes are not tokens or a payload limit. Never infer overflow, auto-compact, trim history, switch models or add retries from a 408.
+- `src/request-body-evidence.ts`: verified-408-only, bounded numeric original-JSON span accounting through the existing fetch hook. Conversation/tool definitions/top-level system/residual partition total bytes; structural image and opaque replay spans are disjoint conversation subsets, never decoded contents. Unknown/limited evidence stays explicit. Fetch-to-header time excludes clone inspection and is not upload duration. No success-path analysis, retained body, automatic mitigation or supplier-limit claim.
+- `src/copilot-stream-liveness.ts`: request-local HTTP/SSE byte-idle observation, paired with the public native adapter's bounded assistant-chunk deadline. Default five-minute byte idle and ten-minute semantic silence; no fake assistant output, private watchdog access, new retry or Core patch. Consumer think time is excluded; explicit WebSocket/auto stays native-only. `chatStreamLiveness: false` restores native-only timing. `chatMaxRequestImageBytes` retains Core's 20 MiB default; smaller explicit settings authorize only native image offload, not hidden history trimming or a guessed supplier limit. Synthetic heartbeat evidence is not production heartbeat proof.
 - `tests/`: unit and integration evidence; mirror the source area being changed.
 - `deployment-baseline.json`: declared machine-readable compatibility and capability evidence inventory.
 - `scripts/verify-deployment-baseline.mjs`: invariant drift gate.
@@ -145,6 +150,7 @@ These pins document compatibility evidence. They do not authorize creating anoth
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.
 - Provider headers: rc.1 validates configured headers through Fetch and reuses Host-owned headers during model discovery.
 - Remote results: the nine ordinary authorization/model-preference methods retain the Zod v4 `GitHubCopilotAuthorizationView` strict codec required by rc.2 and accepted by rc.1. The tenth no-argument `migrationStatus()` method has a separate strict `GitHubCopilotMigrationStatus` codec; it does not change the ordinary auth contract.
+- Single-model saves use the additive `setModelExcluded(modelId, excluded)` Remote with an independent strict `GitHubCopilotModelPreferencesView` result. Preserve the ten existing descriptor identities/codecs. Do not read credentials, discover models or enumerate Sessions on this mutation path; confirm native CAS persistence before returning.
 
 When upgrading DSH or pi-ai, inspect the exact tagged public exports and update the baseline, compatibility guard, tests, and docs together. Apply the **official-first policy**: compare each customization's purpose against exact official source/contracts, classify complete/partial/unverified support, choose retain/migrate/retire, and record the remaining gap plus a concrete retirement trigger. Unverified parity is not evidence of absence. Prefer official behavior only after configuration/data migration, safety and runtime acceptance are reviewed; remove redundant paths and their obsolete tests without losing user-visible acceptance coverage. The current comparison is [official-first alpha.2](./docs/official-first-016-alpha2.md).
 
@@ -235,6 +241,45 @@ The release CI matrix targets only exact official `0.2.0-rc.2` on Windows and Li
 Never say GPT-6/search works merely because settings, typecheck or a package import passes. Report the layers separately. Keep synthetic credentials in fixtures; no real sign-in, logout or API call just to produce test evidence. Do not recommend disabling capability proof as a routine repair. Preserve logs locally and report only redacted facts; route security-sensitive findings through SECURITY.md.
 
 ## Changing capabilities
+
+Completed-turn Usage diagnostics (#259) are read-only plugin conversation data and an additive assistant-actions explanation. Official rc.2 hides its total if any attempt lacks complete accounting; the plugin's finish-only pre-dispatch pressure block can trigger this rule even after recovery. Never fabricate zero usage or replace it with successful-step partial totals. Identify local interception only from its exact recorded finish-only diagnostic, keep other missing samples and paged evidence uncertain, and suppress the explanation whenever native `tokenUsage` exists. Preserve native accounting, history, pressure and recovery; see `docs/copilot-usage.md`.
+
+Auto task routing (#258) uses current `model_picker_category` facts, never model
+names, effort or context capacity as a quality category. Hard eligibility/input
+fit precede task/preference policy; unknown category and uncertain task evidence
+remain explicit. Keep suitable previous-model continuity and equal-weight
+tie-breaking within the first available category. Capture actual reasons once
+per turn without durable decision events or changing Usage.
+`autoSemanticAssessment` is default-on by explicit user rollout request (#267),
+only for locally unknown demand; preserve explicit false opt-out. One bounded concrete
+native-adapter request, no tools/Auto recursion/new retry, explicit failures and
+omitted-context conservatism. Extra supplier charges are separate from Chat
+Usage. Default rollout is not labeled-corpus calibration; require that evaluation
+before claiming calibrated performance. Synthetic tests do not prove GitHub-private
+routing equivalence. See `docs/auto-task-routing.md`.
+
+The turn selection Host endpoint must use `TurnSelectionController`, extending
+public `TypertRemoteService` with `@Remote get`. A plain `ctx.provide` object
+cannot supply the native gateway binding or source method discovery. Test both
+actual Client and Host gateways; a synthetic RPC success cannot prove Host
+reachability. Preserve native Agent lookup and bounded store ownership (#254).
+
+Automatic pressure and Auto recovery availability resolve the initiating Agent's bound preset through public `agentPresets.composedPreset()` / `serviceFor(agent, 'compaction')`. A bound preset without an engine must not borrow global recovery. Only non-preset Agents use their own `agent.ctx.get('compaction')`; never scan Core's private registry or cache an engine across preset replacement. Native transactions, cancellation, retry policy and manual-only segmented recovery remain unchanged.
+
+Continuing-step pressure prevention uses public `agent/pre-step` before `step/start`, only with a committed managed header, no selection notice, and known `modelSelection.pending: null`. Capacity lookup is not request estimation. Use the native surface meter and one currently bound native transaction; preserve final converted hard admission and stream-pressure fallback. First-step/pending/unknown evidence delegates. Native compaction failures propagate before attempt admission. Never claim all missing turn Usage is repaired, filter native samples, invent zero usage or rewrite historical totals. Native turn-tail accounting groups events by recorded turn, not compaction replacement sequence range.
+
+Selection footer Remote calls carry an explicit viewed Session ID and turn.
+Do not add an automatic Client `scope` projection: rc.2 prefers the scoped
+variant and removes the ID argument, breaking the footer's two-argument call.
+Retain native Host agent lookup/access checks and strict codecs. Failed reads
+must remain distinct from successfully read missing evidence; Retry reads the
+same turn only and never replays inference. See #249.
+
+Parent-model following uses the profile-wide `github-copilot.followParentModel` switch (default false), with a single control in the plugin-detail page (#234). Never require per-session enrollment for the ordinary experience. Preserve legacy `parentModelFollow` bindings independently, including when the broad switch is off. `src/parent-model-follow.ts` and the Auto Host integration use public projections and per-turn scoped routing, never descriptor/history/default writes. Child-owned explicit selections win; enabling authorizes replacement of creation-time route snapshots, not removal of later picker history. Only supported native spawn children and managed Copilot parents participate; roots, other providers, fork descriptors and historical dedicated policies remain native. Missing eligible parent evidence fails explicitly. Settings changes preserve admitted turns, and Client saves use one path-level CAS without credentials/discovery. See `docs/parent-model-follow.md` for requirements/mockup and `docs/automatic-model-routing.md` for exact-source evidence.
+
+Model preferences must survive the Client's owned-field projection before strict decoding. `excludedModelIds` is a hidden volatile Config leaf, read via `readInlineConfig`; exercise native SettingsForms CAS, fiber preservation and restart persistence, not only map-backed settings mocks. Missing preference settings leave model rows read-only with named diagnostics and status-only Retry. Unknown exclusion state is not an empty exclusion set. Discovery diagnostics stay in a separate Manage disclosure. Selected models are excludable without scanning Sessions/defaults; the legacy `lockedModelIds` wire leaf stays empty. Check exclusion at new-turn admission through public `agent/request`, preserving only the same Session/turn/model and exact native request signal for subsequent steps/retries. Clear admission on `turn/end`. Direct/unbound requests and new turns remain excluded; never rewrite selections/history or switch models silently. Account/token/metadata/cancellation guards remain independent and revocable.
+
+Capture the traced `remote.githubCopilot` namespace once per account UI registration, shared by provider/footer/section renders. Native namespace property reads create fresh proxy identities; rereading during parent renders resets the mounted account controller and can block exclusion changes on redundant status/discovery work. Actual registration teardown and credential/connection invalidation retain their existing safety semantics.
 
 Auto history compatibility (alpha.54, #204): official rc.2 `Session.append()` has no public ignorable-envelope option. Do not emit optional `github-copilot/auto-model-decision` events or borrow another event type; retain native real-model provenance and durable Auto selection without new durable decision recording. The assistant-actions selection footer reads bounded Host-lifetime decisions through native agent-scoped lookup and compatible historical events. Explicit captured fixed selection alone proves Manual; missing evidence is unknown, never reconstructed from today's picker. Do not repeat model names, add Model details, change native Usage/context metering or modify parent DOM. `scripts/repair-auto-model-history.mjs` is explicit source-checkout maintenance, not a runtime hook: strict pinned official v4 validation, check-only by default, optional detached repaired copy plus byte-exact backup. It never replaces live history. Applying a copy requires separately approved stopped writers and a fresh source-hash check. See `docs/automatic-model-routing.md`.
 

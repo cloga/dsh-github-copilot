@@ -1,198 +1,149 @@
-# Default dual distribution
+# Distribution and installation
 
-Refs #43. This change supersedes the original Release-only distribution decision
-at the user's request; that closed issue did not originally request npm.
-
-Every new version is distributed through both an immutable GitHub Release and
-the public npm registry. The name `dsh-github-copilot` remains provisional until
-an authorized maintainer verifies availability or ownership. Never publish an
-empty placeholder package, reuse historical alpha.17, change immutable assets,
-or describe a local archive as a published package.
+Every new version is distributed through an immutable GitHub Release and public
+npm, using the **same original verified tarball**. Package bootstrap is complete;
+subsequent publication uses the configured OIDC Trusted Publisher. Earlier
+Release-only policy and one-time bootstrap tooling are historical.
 
 ## Authorization and readiness
 
-Use only organizationally approved registry access and build environments.
+Use approved registry access and build environments.
 A blocked corporate registry is not authorization to use a VPN, proxy, mirror,
-personal device or GitHub Actions as a bypass. Obtain the applicable approval
-before any registry traffic or publication. Local tests use synthetic registry
-responses; they do not establish registry connectivity, ownership or live
-Desktop compatibility.
+personal device or CI as a bypass. Local synthetic registry tests do not prove
+connectivity, publication rights or live Desktop compatibility.
 
-Before the first release, confirm the package name and the maintainer's write
-access, public repository visibility, 2FA, approved publication environment, and
-the next unused version in both registries. Only then merge the prepared version
-through the normal reviewed PR path. Version changes include package.json,
-deployment-baseline.json and both README URLs; `publishConfig.tag` must agree
-with the channel. Do not silently rename a taken package.
+Versions align package, deployment baseline, both README URLs and annotated tag.
+Channel is `alpha`, `beta`, `rc` or stable `latest`; never silently rename a
+package, move/reuse tags, repack immutable assets or publish placeholders.
 
-## Initial package publication is complete
+## Trusted publishing
 
-The initial `dsh-github-copilot@0.4.0-alpha.18` package was published from the
-immutable `v0.4.0-alpha.18` GitHub Release archive. The public registry version,
-SHA-512 SRI, `alpha` tag, tarball size and SHA-256 were independently verified
-against those original Release bytes. The one-time workflow, token-authenticated
-bootstrap script and their focused tests have therefore been removed. No normal
-release workflow references `NPM_TOKEN`; removing any now-unused repository
-secret remains a separate explicit maintainer operation.
+[npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) requires npm
+>=11.5.1 and Node >=22.14.0. Publishing uses Node 24 and pinned npm 11.5.1;
+development retains the package's pnpm pin.
 
-The successful publish was not immediately visible to a read performed about
-four seconds later, so that workflow run ended as a failure even though the
-package and tag subsequently converged. Treat this as an uncertain write, not
-permission to publish again. npm registry package metadata and dist-tags are
-eventually consistent: after any successful or uncertain publish command, wait
-for the exact version to become observable, verify `dist.integrity` and the
-non-decreasing channel tag, then rerun the normal pipeline to reconcile
-read-only. Never retry a publish merely because immediate readback is stale.
-
-**`npm stage publish` cannot bootstrap a nonexistent package.** The
-[official npm stage prerequisites](https://docs.npmjs.com/cli/v11/commands/npm-stage/)
-require the package to already exist. For an existing package, staged publishing
-is an optional separately approved process: a maintainer reviews Staged Packages
-on npmjs.com and approves with 2FA. Staged is **pending approval**, not npm live.
-It reserves the version; a conflicting normal publish must fail, not reject or
-overwrite the stage automatically. Approval can update its immutable chosen
-dist-tag, so review channel ordering again before approval. This repository does
-not add a long-term manual/opt-in step to normal releases.
-
-## Trusted publishing for subsequent versions
-
-[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) requires
-npm CLI >=11.5.1 and Node >=22.14.0. The publishing workflow uses Node 24 and
-pins npm 11.5.1; package development retains the pinned pnpm version.
-
-In the package settings, an authorized maintainer configures:
-
-| Field | Value |
-| --- | --- |
+| Publisher field | Value |
+|---|---|
 | Provider | GitHub Actions, GitHub-hosted runner |
-| Organization or user | `cloga` |
-| Repository | `dsh-github-copilot` |
-| Workflow filename | `ci.yml` (the caller, **not** `release.yml`) |
-| Environment | Unset; the current release job declares none |
-| Allowed actions | Enable direct `npm publish` |
+| Owner / repository | `cloga` / `dsh-github-copilot` |
+| Workflow | `ci.yml` caller, not reusable `release.yml` |
+| Environment | Unset |
+| Allowed action | Direct `npm publish` |
 
-Both caller and reusable child grant `id-token: write`. New trusted publisher
-configurations may default to stage-only permission: direct publish permission
-is an explicit maintainer choice, not implied by a successful stage. No
-`NPM_TOKEN` or `NODE_AUTH_TOKEN` is configured in normal release CI; missing OIDC
-fails loudly rather than falling back to persistent tokens. npm creates
-provenance automatically for supported public-repository trusted publishes.
-Do not change token/2FA policy as part of an automated repair.
+Caller and reusable workflow grant `id-token: write`. No normal release uses
+`NPM_TOKEN` / `NODE_AUTH_TOKEN` or persistent-token fallback. Direct publication
+permission is explicit, not implied by a stage. Staged publication is separately
+approved, pending npm maintainer review/2FA, not live; it reserves the version.
+[`npm stage publish`](https://docs.npmjs.com/cli/v11/commands/npm-stage/) requires
+an existing package and cannot bootstrap one. Do not change auth/2FA policy to
+repair publication.
 
 ## Same bytes, recovery and tags
 
-The repository-wide release concurrency group serializes releases and remains
-non-cancelling. External/manual publishers must coordinate with it: npm does
-not provide atomic compare-and-swap for a dist-tag. Do not run concurrent manual
-publishes or approvals while a release job is publishing.
+The non-cancelling repository release concurrency group serializes publication.
+External publishers must coordinate; dist-tags are not atomic CAS.
 
-After the full compatibility gate, a new release packs one tarball with
-`pnpm --config.ignore-scripts=true pack --pack-destination artifacts`; verification
-already ran prepack's baseline check and built the package, so packing does not
-rebuild it. A retry
-first inspects the existing exact tag/Release and downloads the original
-uploaded archive. Recovery verifies asset sizes/digests, checksum and local
-build equality; it never repacks or overwrites an existing archive. Partial
-drafts with a tarball can recover their checksum; published incomplete or
-non-immutable Releases fail closed. GitHub publishing reconciles its immutable
-assets, and npm publishes the same archive with lifecycle scripts disabled.
+After the complete compatibility gate, pack once with
+`pnpm --config.ignore-scripts=true pack --pack-destination artifacts`.
+Verification already built/prepacked. Recovery downloads the original uploaded
+archive, verifies tag/source, size/digests, SHA-256/SHA-512 and build equality,
+and never repacks/overwrites immutable bytes. Release assets include
+`SHA256SUMS`; npm receives that same archive with lifecycle scripts disabled.
 
-The npm step reads package/version state before writing. Only E404 means
-absence; auth, TLS, timeout, malformed metadata and registry failures stop
-delivery. An existing exact version is accepted only with matching SHA-512 SRI
-and a channel tag at that version or a newer one. Conflicting bytes fail closed.
-An uncertain write is not retried in-process. Allow registry visibility to
-converge, then rerun the workflow to reconcile the exact existing version.
-A matching version with an older/missing tag requires maintainer review; the
-workflow does not silently repair it with separate dist-tag writes.
+Only registry E404 establishes absence. Auth, TLS, malformed metadata and network
+failures stop delivery. Existing exact versions require matching SRI and a
+same-channel tag at that version or newer; conflicting bytes fail closed.
+Visibility can lag a successful write. After successful/uncertain publication,
+wait for visibility and reconcile read-only; **never automatically republish**.
+A missing/older tag needs review, not a hidden dist-tag write.
 
-`alpha`, `beta`, and `rc` versions use those tags, never `latest`. Stable
-versions use `latest`. SemVer comparison (not lexical sorting) prevents tag
-downgrades. Publishing a missing older version when its tag already points to a
-newer version fails before writing; reconciling an already published older
-version does not lower that pointer.
-
-Report GitHub URL/tag/commit/asset/SHA-256 and npm version/channel/SRI separately.
-GitHub success followed by npm failure is partial delivery, not success.
-There is no historical bulk backfill and no silent npm opt-out.
+SemVer ordering prevents downgrades. Missing older releases are not published
+when their channel already points newer; reconciling existing older bytes never
+lowers the pointer. Report GitHub tag/commit/assets/SHA-256 and npm version/SRI
+separately. One channel succeeding is partial delivery.
+[Read-only reconciliation](./npm-publication-readback.md).
 
 ## Installation preflight still applies
 
-Desktop profiles must be managed through Desktop's native package manager.
-The reserved `desktop` profile is not supported by DSH CLI plugin commands.
-After npm publication is verified, the native manager accepts the exact
-`dsh-github-copilot@<version>` npm spec, not a Release URL or local tarball.
-The CLI procedure below applies only to standalone named profiles and is not a
-Desktop fallback when registry access is blocked.
+Desktop's native package manager accepts an exact verified npm spec, not a URL
+or local archive. Generic/global CLI entry points must not be assumed to manage the reserved
+`desktop` profile. Qualify Desktop's dedicated entry below.
 
-Neither entry point replaces the package's required
-`scripts/check-search-composition.mjs` preflight. The official DSH 0.2
-`composeProfile()` path writes the empty `cordis.yml` root before normal launch,
-including when Desktop supplies an already resolved profile. Therefore the
-preflight refuses a nonempty root as `NONEMPTY_DISPOSABLE_PROFILE_ROOT`; do not
-install or start/restart that profile until the data has been preserved and an
-officially supported migration has been established. A package lookup,
-preflight or successful installation is not proof of runtime activation or a
-model call.
+Neither entry replaces the checksum-verified package's
+`scripts/check-search-composition.mjs` preflight. Official `composeProfile()`
+writes the empty `cordis.yml` root during normal launch, including resolved
+Desktop profiles. `NONEMPTY_DISPOSABLE_PROFILE_ROOT` must therefore stop
+installation/startup until its contents are preserved and reviewed.
+
+A nonempty root may be reconstructible from existing bundles and persistent
+patches, but must never be assumed disposable. Establish complete equality
+through public composition and recheck source hashes before any separately
+approved normalization. Installation approval is not blanket configuration
+deletion approval. Check actual shared-peer resolution for stale profile-local
+shadows; do not patch/copy peers as a plugin compatibility workaround.
+
+### Desktop-bundled CLI on official rc.2
+
+Read-only inspection of official `@deepseek-ai/dsh-desktop-host@0.2.0-rc.2`
+`lib/cli.js` confirms `runDesktopCli` calls public `runCli` with
+`manageDesktopProfile: true` and bundled pnpm through Electron Node mode.
+This capability is specific to the qualified entry, not a global shim or an
+unverified future release.
+
+Resolve the intended installation's `resources\runtime\cli\bin\dsh.cmd`, verify
+its owning version/public entry and exact profile/home/anchor; do not rely on
+PATH. With explicit installation approval, verified bytes and `supported: true`:
+
+```powershell
+& '<verified Desktop installation>\resources\runtime\cli\bin\dsh.cmd' plugin --profile desktop add '<absolute path to verified release.tgz>'
+```
+
+This example grants no action permission or universal offline guarantee.
+Dependencies still require an approved registry or complete authorized cache.
+CLI support does **not** override composition safety: when preflight fails,
+no add, root rewrite or
+restart followed merely to get past that diagnostic is authorized.
+Use one writer, a private metadata backup, guarded edits and full package/bundle/
+patch/peer readback. Installed-on-disk and loaded runtime remain distinct.
+Stopping/restarting requires separate restart approval.
 
 ## Controlled offline CLI maintenance for standalone profiles
 
-This path installs this package's prebuilt, verified Release without requiring
-access to a blocked npm registry. It is not permission to bypass organizational registry restrictions:
-use only artifacts obtained through organizationally approved sources and
-already available dependency caches. A registry ban remains in force; offline
-installation does not repair TLS or prove that npm publication is healthy. The
-dual-channel **publication** policy above is unchanged. **Do not use this path
-for a Desktop-managed/reserved profile.**
+This installs a prebuilt verified Release using existing authorized caches;
+it is not permission to bypass organizational registry restrictions.
+It does not fix TLS or prove public npm health. **Do not use this path
+unchanged for a Desktop-managed/reserved profile**: qualify Desktop's own entry
+and retain independent preflight/approval checks.
 
-1. Obtain explicit installation approval for the exact version and profile.
-   Resolve the standalone DSH CLI, install anchor, `DSH_HOME` and profile
-   directory; do not target Desktop's reserved `desktop` profile or assume a
-   shell shim points to the intended installation.
-2. Verify the original Release tarball with an independently trusted SHA-256,
-   its package name/version and safe archive layout. Do not substitute a local
-   build or repack an existing immutable Release. Extract only the verified
-   artifact before executing its packaged preflight.
-3. Run `scripts/check-search-composition.mjs` against that exact profile, home
-   and install anchor, including any extra startup patches. Require
-   `supported: true`; unknown, conflicting or unsupported composition is a stop,
-   not permission to remove guards or rewrite the profile.
-4. Keep one writer: do not run concurrent package/profile updates. Take a
-   private backup of installation metadata (package.json,
-   lockfile, bundle/patch configuration and relevant package-manager settings),
-   record the current version, and retain a verified rollback artifact.
-   Do not copy credential stores, `.env` files or browser storage. If ensuring
-   exclusive maintenance requires stopping the Host, obtain separate approval.
-5. Invoke the supported DSH CLI with an absolute path to the verified archive:
+1. Obtain explicit installation approval for exact version/profile. Resolve
+   standalone CLI, install anchor, home and profile; do not infer ownership from
+   PATH or target reserved Desktop with a generic entry.
+2. Verify original Release bytes with an independently trusted SHA-256,
+   package name/version and safe archive layout. Extract only that artifact,
+   never a substitute local build or repack.
+3. Run `scripts/check-search-composition.mjs` with all startup patches and require
+   `supported: true`. Unknown/conflicting composition stops before mutation.
+4. Keep one writer. Take a private backup of package/lock/bundle/patch metadata
+   and record rollback bytes. Do not copy credential stores, `.env` or browser
+   storage. Host shutdown needs separate permission.
+5. Invoke the qualified CLI:
 
    ```sh
    dsh plugin --profile web add /absolute/path/to/verified-release.tgz --offline --ignore-scripts
    ```
 
-   Replace `web` and the archive path with the approved targets. `--offline`
-   requires the existing cache; `--ignore-scripts` prevents package lifecycle
-   scripts from creating a second, uncontrolled installation/network path. If
-   the cache is incomplete or a dependency requires a new build, stop and report
-   the missing requirement. Do not silently remove these flags, change registry,
-   add a VPN/proxy/mirror, or fetch blocked dependencies through another channel.
-   Keep TLS verification enabled. Actual platform permission/approval refusals
-   remain authoritative; this procedure does not override them.
-6. Check the exit result and read back the installed version, lock entry and
-   package files against the verified archive. Re-run the composition preflight
-   and an appropriate import-only smoke check without activating the plugin.
-   Inspect all metadata differences: the CLI reconciles `dsh.profile.bundles`
-   and may add unrelated installed bundles. Preserve unrelated settings; stop
-   for review on unexpected changes and revert only changes proven to belong
-   to this operation, never overwrite later user edits with a whole backup.
-   Use the package manager, not manual copying into node_modules or Core patches.
-7. Report the installed version, checksum, backup and evidence limits. Obtain
-   separate restart approval before interrupting the Host or active Sessions.
-   Installed-on-disk and loaded-runtime are separate states: after an approved
-   restart, verify the loaded build and the intended behavior independently.
+   Offline needs existing cache; ignore-scripts excludes uncontrolled lifecycle
+   work. If cache is incomplete or a build is required, stop. Do not silently
+   remove flags, change registry or acquire blocked dependencies elsewhere.
+   Keep TLS verification enabled; platform refusals remain authoritative.
+6. Check exit result, installed version, lock/files and all metadata differences.
+   Re-run preflight and import-only smoke without plugin activation. CLI may
+   reconcile `dsh.profile.bundles`; preserve unrelated entries and review
+   unexpected changes. Use package manager, never manual node_modules copying
+   or Core patches. A failed command is not proof nothing changed.
+7. Report version/checksum/backup and evidence limits. Obtain restart approval,
+   then separately verify loaded build and intended behavior.
 
-If installation fails, inspect the actual installed state before retrying or
-rolling back; a failed command is not proof that nothing changed. A rollback
-also needs reviewed, narrowly scoped metadata/dependency restoration. This
-procedure does not authorize Desktop profile management, rewrite installed or
-published historical docs, change machine-wide registry policy, or grant blanket
-approval for future updates.
+Rollback needs fresh-state review and narrow restoration of this operation's
+changes, never a whole backup over later user edits. This procedure grants no
+future-update permission or machine-wide network policy change.

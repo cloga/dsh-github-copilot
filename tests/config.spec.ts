@@ -21,14 +21,34 @@ describe('session search settings', () => {
     expect(() => Config(untrusted)).toThrow()
   })
 
-  it('projects only routing, the legacy model override and its ownership journal as live fields', () => {
+  it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['excludedModelIds', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
     expect(parsed.searchRouting.get()).toMatchObject({ defaultSearchProvider: 'deepseek-official' })
     expect(readInlineConfig(parsed)).toMatchObject({ searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
+  })
+
+  describe('explicit parent model following', () => {
+    it('defaults to no enrolled children and snapshots live binding values', () => {
+      expect(readInlineConfig(Config(base)).parentModelFollow).toEqual([])
+      expect(readInlineConfig(Config(base)).followParentModel).toBe(false)
+      let enabled = false
+      const live = { ...base, followParentModel: { get: () => enabled } }
+      expect(readInlineConfig(live).followParentModel).toBe(false)
+      enabled = true
+      expect(readInlineConfig(live).followParentModel).toBe(true)
+      const binding = { childSessionId: 'child', parentSessionId: 'parent' }
+      const current = readInlineConfig({ ...base, parentModelFollow: { get: () => ({ 0: binding, length: 1 }) } })
+      expect(current.parentModelFollow).toEqual([binding])
+      binding.parentSessionId = 'changed'
+      expect(current.parentModelFollow?.[0]?.parentSessionId).toBe('parent')
+    })
+    it('rejects empty lineage identities', () => {
+      expect(() => Config({ ...base, parentModelFollow: [{ childSessionId: '', parentSessionId: 'parent' }] })).toThrow()
+    })
   })
 
   it('reads each current snapshot rather than freezing live routing at activation', () => {
@@ -42,6 +62,24 @@ describe('session search settings', () => {
 })
 
 describe('managed request and compaction settings', () => {
+  it('defaults semantic Auto assessment on while preserving explicit opt-out', () => {
+    expect(readInlineConfig(Config(base)).autoSemanticAssessment).toBe(true)
+    expect(readInlineConfig(Config({ ...base, autoSemanticAssessment: true })).autoSemanticAssessment).toBe(true)
+    expect(readInlineConfig(Config({ ...base, autoSemanticAssessment: false })).autoSemanticAssessment).toBe(false)
+  })
+  it('separates managed chat liveness and image projection from search deadlines', () => {
+    expect(readInlineConfig(Config(base))).toMatchObject({
+      chatStreamIdleTimeoutMs: 300_000, chatStreamLiveness: true, chatMaxRequestImageBytes: 20_971_520,
+    })
+    expect(readInlineConfig(Config({ ...base, chatStreamIdleTimeoutMs: 400_000,
+      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608 }))).toMatchObject({
+      idleTimeoutMs: 300_000, chatStreamIdleTimeoutMs: 400_000,
+      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608,
+    })
+  })
+  it.each(['chatStreamIdleTimeoutMs', 'chatMaxRequestImageBytes'] as const)('rejects unsafe managed request setting %s', key => {
+    for (const value of [0, -1, 0.5, Number.NaN, Infinity]) expect(() => Config({ ...base, [key]: value })).toThrow()
+  })
   it('defaults to estimated headroom, early pressure and supported low summary effort', () => {
     expect(Config(base)).toMatchObject({ requestBudgetSafetyTokens: 4096, requestBudgetPressureRatio: 0.9, compactionReasoning: 'prefer-low' })
   })
@@ -63,7 +101,7 @@ describe('managed request and compaction settings', () => {
 
 describe('account model cache settings', () => {
   it('defaults to a day of metadata reuse and five minutes between passive failure retries', () => {
-    expect(Config(base)).toMatchObject({
+    expect(readInlineConfig(Config(base))).toMatchObject({
       accountModelTtlMs: 86_400_000,
       accountModelFailureCooldownMs: 300_000,
       excludedModelIds: [],

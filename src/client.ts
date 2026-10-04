@@ -13,11 +13,14 @@ import type { GitHubCopilotAuthorizationView } from './authorization-controller.
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { installReasoningPresentation } from './reasoning-presentation.ts'
-import { installAutoModelPresentation } from './auto-model-presentation.ts'
+import { installAutoModelPresentation, installAutoModelProjections } from './auto-model-presentation.ts'
 import { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
+import { ParentModelFollowCard } from './parent-model-follow-card.ts'
 export { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
+export { ParentModelFollowCard } from './parent-model-follow-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
 import { registerCopilotUsageUi } from './copilot-usage-ui.ts'
+import { registerContextEvidenceUi } from './context-evidence-ui.ts'
 import { externalLinkTarget } from './external-link.ts'
 import { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
 export { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
@@ -105,6 +108,14 @@ export function authorizationViewFrom(value: unknown): GitHubCopilotAuthorizatio
     if (route !== undefined) owned.route = viewFields(route, ['state', 'diagnosticCode'])
     const accountModels = source.accountModels
     if (accountModels !== undefined) owned.accountModels = accountModelsSnapshot(accountModels)
+    if (source.modelPreferences !== undefined) {
+      const fields = viewRecord(source.modelPreferences)
+      const next = viewFields(fields, ['state', 'writable', 'revision', 'error'])
+      for (const key of ['excludedModelIds', 'lockedModelIds', 'unavailableExcludedModelIds']) {
+        next[key] = viewStrings(fields[key])
+      }
+      owned.modelPreferences = next
+    }
     const parsed = GitHubCopilotAuthorizationViewSchema.safeParse(owned)
     return parsed.success ? parsed.data : undefined
   } catch {
@@ -705,14 +716,16 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     actionButton(state.operation === 'cancel' ? 'Cancelling…' : 'Cancel sign-in', account.cancel, state.operation === 'cancel')) : null,
   manageOpen ? createElement('div', { id: managementId, role: 'region', 'aria-label': 'GitHub Copilot account management',
     style: { marginTop: '12px', paddingTop: '12px', borderTop: '1px solid color-mix(in srgb, currentColor 18%, transparent)', overflowWrap: 'anywhere' } },
-    createElement('p', { style: { margin: '0 0 10px', fontSize: '13px' } }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
-    signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
-      { 'data-dsh-github-copilot-refresh-models': true }) : null,
     signedIn ? createElement(GitHubCopilotModelPreferencesPanel, {
       remote: props.remote, models, preferences: view?.modelPreferences,
     }) : null,
-    models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Account model metadata is not available yet.')
-      : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models }),
+    createElement('details', { style: { marginBlock: '16px' } },
+      createElement('summary', null, 'Discovery details'),
+      createElement('p', { style: { fontSize: '13px' } }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
+      models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Account model metadata is not available yet.')
+        : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models })),
+    signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
+      { 'data-dsh-github-copilot-refresh-models': true }) : null,
     routeStatusMessage(view) === undefined ? null : createElement('p', { role: 'status' }, routeStatusMessage(view)),
     view?.route?.state === 'needs-repair' && signedIn ? actionButton('Repair model configuration', account.reconcile, pendingAction) : null,
     signedIn ? actionButton(state.operation === 'signOut' ? 'Signing out…' : 'Sign out', account.signOut, pendingAction || view?.writable === false) : null,
@@ -827,6 +840,8 @@ export function GitHubCopilotSettingsSection(
 
 function registerUi(ctx: ClientContext): () => void {
   const surfaces = createAccountSurfaces()
+  // Native namespace lookups create traced proxies; capture once per registration.
+  const remote = ctx.remote.githubCopilot
   const disposeCredentials = ctx.remote.$on('credentials/reference-updated', () => surfaces.invalidate())
   const disposeReset = ctx.on('connection/reset', () => surfaces.invalidate())
   let active = true
@@ -843,7 +858,7 @@ function registerUi(ctx: ClientContext): () => void {
           id: 'github-copilot',
           order: 11,
           label: 'GitHub Copilot',
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote: ctx.remote.githubCopilot }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote }))
         disposeFallback = () => { surfaces.revoke(seat); dispose() }
       }
       return
@@ -864,7 +879,7 @@ function registerUi(ctx: ClientContext): () => void {
         'GitHub Copilot account models are already managed by the account panel. Saving this additional provider profile enables another model group; it does not connect a second account. Use the account panel instead. This plugin cannot disable the native Save action.')
       }
       return createElement(GitHubCopilotAccountSurface, {
-        surfaces, seat, remote: ctx.remote.githubCopilot, eligible: isGitHubCopilotAccountRow(props),
+        surfaces, seat, remote, eligible: isGitHubCopilotAccountRow(props),
       })
     })
     return () => { surfaces.revoke(seat); dispose() }
@@ -886,7 +901,7 @@ function registerUi(ctx: ClientContext): () => void {
           name: 'settings.models.footer',
           id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
           order: 10,
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote: ctx.remote.githubCopilot }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote }))
       } catch {
         // Do not withdraw working fallback authorization until footer registration succeeds.
         reportFooterUnavailable()
@@ -928,6 +943,16 @@ function registerUi(ctx: ClientContext): () => void {
     disposeSettingsSectionInjection()
     disposeFallback?.()
   }
+}
+
+export function CopilotPluginSettingsPage(props: {
+  settings: ClientContext['remote']['settings']
+  routing: ClientContext['remote']['githubCopilotSearchRouting']
+}) {
+  const [revision, setRevision] = useState<{ previous: number; next: number }>()
+  return createElement('div', null,
+    createElement(ParentModelFollowCard, { settings: props.settings, onSaved: setRevision }),
+    createElement(WebSearchRoutingCard, { ...props, settingsRevision: revision }))
 }
 
 /** Optional search settings must never hold account authorization UI in waiting. */
@@ -976,7 +1001,7 @@ function registerSearchUi(ctx: ClientContext): () => void {
       try {
         dispose = ctx.slots.register({
           name: 'plugins.bundle.config', key: 'dsh-github-copilot',
-        }, ({ view }) => view === 'page' ? render() : null)
+        }, ({ view }) => view === 'page' ? createElement(CopilotPluginSettingsPage, { settings, routing }) : null)
       } catch {
         ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_BUNDLE_UNAVAILABLE')
         return () => {}
@@ -1033,6 +1058,13 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }
   const searchUi = ctx.inject(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
   const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
+  const contextUi = ctx.inject(['slots'], registerContextEvidenceUi)
+  const autoUi = ctx.inject(['remote.githubCopilotTurnSelection', 'slots'], scope => installAutoModelPresentation({
+    slots: scope.slots,
+    remote: scope.remote,
+    locale: scope.get('locale'),
+    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
+  }))
   // Optional Chat contributions must not hold authorization activation on older Cores.
   const presentation = ctx.inject(['uiConversation', 'slots'], scope => {
     const capabilities = {
@@ -1043,14 +1075,16 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       diagnostic: (code: string) => scope.logger.warn(`[github-copilot] ${code}`),
     }
     const reasoning = installReasoningPresentation(capabilities)
-    const auto = installAutoModelPresentation(capabilities)
+    const auto = installAutoModelProjections(capabilities)
     return () => {
       auto()
       reasoning()
     }
   })
   return async () => {
+    await contextUi.dispose()
     await usageUi.dispose()
+    await autoUi.dispose()
     await presentation.dispose()
     await searchUi.dispose()
     await ui.dispose()

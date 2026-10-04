@@ -17,12 +17,117 @@ async function mount(selection: TurnSelection, locale = 'en') {
   return container
 }
 const auto = { mode: 'auto', preference: 'intelligence', reason: 'large-structured-turn', candidateCount: 3 } as const
+it.each(['en', 'zh'])('keeps captured auxiliary timing inside progressive evidence and explains timeout fallback (%s)', async locale => {
+  const container = await mount({ ...auto, explanation: {
+    assessment: { demand: 'unknown', source: 'local', signals: ['insufficient-evidence'], diagnostic: 'timeout',
+      semantic: { modelId: 'auxiliary-fixture', budgetMs: 8000, elapsedMs: 8002, stage: 'text-received',
+        adapterStartedMs: 20, firstTextMs: 6000, outputCharacters: 10, validation: 'not-validated' } },
+    targetCategory: 'powerful', selectedCategory: 'powerful', categoryCandidateCount: 2,
+    method: 'equal-distribution', fallback: false,
+  } }, locale)
+  expect(container.textContent).not.toContain('8000')
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.querySelector('details')?.open).toBe(false)
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain(locale === 'en' ? 'as a fallback' : '兜底')
+  expect(container.querySelector('details')?.textContent).toContain('auxiliary-fixture')
+  expect(container.querySelector('details')?.textContent).toContain('6000 ms')
+  expect(container.querySelector('details')?.textContent).toContain(locale === 'en' ? 'not completed' : '未完成')
+  expect(document.activeElement?.textContent).toBe(locale === 'en' ? 'Close' : '关闭')
+  await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
+  expect(container.querySelector('[role=dialog]')).toBeNull()
+})
+it.each(['en', 'zh'])('explains a captured task/category decision with progressive details (%s)', async locale => {
+  const container = await mount({ ...auto, explanation: {
+    assessment: { demand: 'simple', source: 'local', signals: ['isolated-greeting'] },
+    targetCategory: 'lightweight', selectedCategory: 'lightweight', categoryCandidateCount: 1,
+    method: 'only-candidate', fallback: false,
+  } }, locale)
+  expect(container.textContent).not.toContain('Lightweight')
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.textContent).toContain('Lightweight')
+  expect(container.textContent).toContain(locale === 'en' ? 'Only one eligible fitting candidate' : '只有一个')
+  expect(container.querySelector('details')?.open).toBe(false)
+  expect(container.textContent).toContain(locale === 'en' ? 'isolated greeting' : '独立问候')
+  expect(container.textContent).not.toContain('Capacity preference')
+})
+it.each(['continuity', 'equal-distribution', 'no-fit'] as const)('shows the captured actual selection method: %s', async method => {
+  const container = await mount({ ...auto, explanation: {
+    assessment: { demand: 'unknown', source: 'local', signals: ['continuation'], diagnostic: 'disabled' },
+    targetCategory: 'powerful', selectedCategory: 'versatile', categoryCandidateCount: method === 'no-fit' ? 0 : 2,
+    method, fallback: true,
+  } })
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.textContent).toContain(method === 'continuity' ? 'Kept the previous model'
+    : method === 'equal-distribution' ? 'stable equal-weight allocation' : 'No candidate fits')
+  expect(container.textContent).toContain('Semantic assessment is disabled')
+})
+it.each([
+  { selection: auto, routes: undefined, expected: 'Auto (intelligence)ⓘ' },
+  { selection: { mode: 'manual' } as const, routes: undefined, expected: 'Manualⓘ' },
+  { selection: { mode: 'unknown' } as const, routes: [{ provider: 'github-copilot-preview', model: 'fixture' }], expected: 'Selection unknownⓘ' },
+  { selection: { mode: 'unknown' } as const, routes: [{ provider: 'other', model: 'fixture' }], expected: '' },
+])('uses native completion independently of optional projections: $expected', async ({ selection, routes, expected }) => {
+  let component: ComponentType<Record<string, unknown>> | undefined
+  const get = vi.fn(async () => ({ ok: true, value: selection }))
+  const diagnostic = vi.fn()
+  cleanups.push(installAutoModelPresentation({ diagnostic, remote: { githubCopilotTurnSelection: { get } },
+    slots: {
+      spec: () => ({ kind: 'list', scope: 'session' }), inject: (_: string, setup: () => () => void) => setup(),
+      register: (_: unknown, value: ComponentType<Record<string, unknown>>) => { component = value; return () => {} },
+    },
+  }))
+  expect(component).toBeTypeOf('function')
+  const turn = { turn: 7, data: { source: () => ({ getSnapshot: () => undefined, subscribe: () => () => {} }) } }
+  const snapshot = { nodes: { values: () => [{
+    kind: 'turn-tail', location: { kind: 'turn', turn },
+    data: { turn: 7, seq: 12, closing: { finalNode: { messageId: 'reply' } }, tokenUsage: { routes } },
+  }] } }
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  await act(async () => root.render(createElement(component!, {
+    sessionId: 'session-a', messageId: 'reply', useChat: (select: (value: unknown) => unknown) => select(snapshot),
+  })))
+  expect(container.textContent).toBe(expected)
+  expect(get).toHaveBeenCalledExactlyOnceWith('session-a', 7)
+  expect(diagnostic).toHaveBeenCalledWith('COPILOT_TURN_SELECTION_PROVENANCE_UNAVAILABLE')
+  if (expected) {
+    await act(async () => container.querySelector('button')!.click())
+    expect(container.querySelector('[role=dialog]')?.textContent).toContain('Model attribution is incomplete')
+    expect(container.querySelector('[role=dialog]')?.textContent).toContain('Native Usage is unchanged')
+  }
+})
+it.each([
+  { turn: 8, seq: 12, messageId: 'reply' },
+  { turn: 7, seq: undefined, messageId: 'reply' },
+  { turn: 7, seq: -1, messageId: 'reply' },
+  { turn: 7, seq: 12, messageId: 'another-reply' },
+])('rejects missing or mismatched native completion without optional projections: %j', async data => {
+  let component: ComponentType<Record<string, unknown>> | undefined
+  const get = vi.fn(async () => ({ ok: true, value: auto }))
+  cleanups.push(installAutoModelPresentation({ diagnostic: vi.fn(), remote: { githubCopilotTurnSelection: { get } },
+    slots: {
+      spec: () => ({ kind: 'list', scope: 'session' }), inject: (_: string, setup: () => () => void) => setup(),
+      register: (_: unknown, value: ComponentType<Record<string, unknown>>) => { component = value; return () => {} },
+    },
+  }))
+  const snapshot = { nodes: { values: () => [{
+    kind: 'turn-tail', location: { turn: { turn: 7 } },
+    data: { ...data, closing: { finalNode: { messageId: data.messageId } } },
+  }] } }
+  const container = document.createElement('div')
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  await act(async () => root.render(createElement(component!, {
+    sessionId: 'session-a', messageId: 'reply', useChat: (select: (value: unknown) => unknown) => select(snapshot),
+  })))
+  expect(container.textContent).toBe('')
+  if (data.messageId !== 'reply') expect(get).not.toHaveBeenCalled()
+})
 it('shows only mode, then opens truthful reasons with focus, Escape and outside dismissal', async () => {
   const container = await mount(auto)
   expect(container.textContent).toBe('Auto (intelligence)ⓘ')
   const trigger = container.querySelector('button')!
   await act(async () => trigger.click())
-  expect(container.textContent).toContain('Large structured turn')
+  expect(container.textContent).toContain('Detailed selection reasons were not retained')
   expect(container.textContent).toContain('not execution proof')
   expect(document.activeElement?.textContent).toBe('Close')
   expect(container.querySelector<HTMLElement>('[role=dialog]')!.style.maxWidth).toBe('calc(100vw - 24px)')
@@ -71,10 +176,14 @@ it('ignores stale Session responses and diagnoses errors without inferring manua
   await act(async () => root.render(createElement(component!, { ...props, sessionId: 'old' })))
   await act(async () => root.render(createElement(component!, { ...props, sessionId: 'new' })))
   await act(async () => resolveOld({ ok: true, value: auto }))
-  expect(container.textContent).toBe('Selection unknown')
+  expect(container.textContent).toBe('Selection unavailableRetry')
   expect(diagnostic).toHaveBeenCalledWith('COPILOT_TURN_SELECTION_READ_FAILED')
+  get.mockImplementation(() => Promise.resolve({ ok: true, value: auto }))
+  await act(async () => container.querySelector('button')!.click())
+  expect(get).toHaveBeenLastCalledWith('new', 1)
+  expect(container.textContent).toBe('Auto (intelligence)ⓘ')
 })
-it('reads exact completed turn evidence once through the public action slot and keeps actual model out of footer', async () => {
+it.each(['map', 'native-store'] as const)('reads exact completed turn evidence through %s and exposes reasons without repeating the model', async storeKind => {
   let component: ComponentType<Record<string, unknown>> | undefined
   const get = vi.fn(async () => ({ ok: true, value: auto }))
   const diagnostic = vi.fn()
@@ -93,7 +202,18 @@ it('reads exact completed turn evidence once through the public action slot and 
     [AUTO_MODEL_ATTRIBUTION_KEY]: undefined,
   }
   const turn = { turn: 7, data: { source: (key: string) => ({ getSnapshot: () => values[key], subscribe: () => () => {} }) } }
-  const snapshot = { nodes: new Map([['tail', { kind: 'turn-tail', data: { closing: { finalNode: { messageId: 'reply' } } }, location: { turn } }]]) }
+  const tail = { kind: 'turn-tail', data: { closing: { finalNode: { messageId: 'reply' } } }, location: { turn } }
+  // Official ChatNodeStore is a class whose values() returns an array, not a Map.
+  class NativeNodeStore {
+    constructor(private readonly nodes: readonly unknown[]) {}
+    values() { return this.nodes }
+  }
+  const snapshot = { nodes: storeKind === 'map' ? new Map([['tail', tail]]) : new NativeNodeStore([
+    { kind: 'assistant-step' },
+    { ...tail, data: { closing: null } },
+    { ...tail, data: { closing: { finalNode: { messageId: 'another-reply' } } } },
+    tail,
+  ]) }
   const props = { sessionId: 'session-a', messageId: 'reply', useChat: (selector: (value: unknown) => unknown) => selector(snapshot) }
   await act(async () => root.render(createElement(component!, props)))
   expect(container.textContent).toBe('Auto (intelligence)ⓘ')
@@ -101,7 +221,36 @@ it('reads exact completed turn evidence once through the public action slot and 
   expect(container.textContent).not.toContain('actual-model')
   expect(container.querySelector('span')!.style.order).toBe('1')
   expect(container.querySelector('span')!.style.flexWrap).toBe('wrap')
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('Detailed selection reasons were not retained')
+  expect(container.querySelector('[role=dialog]')?.textContent).not.toContain('Capacity preference')
   await act(async () => root.render(createElement(component!, { ...props, unrelatedPicker: 'different-model' })))
   expect(get).toHaveBeenCalledTimes(1)
   expect(diagnostic).not.toHaveBeenCalled()
+})
+it.each([
+  { nodes: undefined },
+  { nodes: { values: [] } },
+  { nodes: { values: () => null } },
+])('diagnoses an unavailable node collection without reading another turn', async snapshot => {
+  let component: ComponentType<Record<string, unknown>> | undefined
+  const diagnostic = vi.fn()
+  const get = vi.fn()
+  cleanups.push(installAutoModelPresentation({
+    diagnostic, remote: { githubCopilotTurnSelection: { get } },
+    uiConversation: { events: { register: () => () => {} } },
+    slots: {
+      spec: () => ({ kind: 'list', scope: 'session' }),
+      inject: (_: string, setup: () => () => void) => setup(),
+      register: (_: unknown, value: ComponentType<Record<string, unknown>>) => { component = value; return () => {} },
+    },
+  }))
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  const props = { sessionId: 'session-a', messageId: 'reply', useChat: (select: (snapshot: unknown) => unknown) => select(snapshot) }
+  await act(async () => root.render(createElement(component!, props)))
+  await act(async () => root.render(createElement(component!, { ...props })))
+  expect(container.textContent).toBe('')
+  expect(get).not.toHaveBeenCalled()
+  expect(diagnostic).toHaveBeenCalledExactlyOnceWith('COPILOT_TURN_SELECTION_CHAT_NODES_UNAVAILABLE')
 })

@@ -11,6 +11,7 @@ import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import GitHubCopilotDualModel from './dual-model-host.ts'
 import SearchRoutingController from './search-routing-host.ts'
 import GitHubCopilotUsageController from './copilot-usage-host.ts'
+import { installContextEvidence } from './context-evidence.ts'
 // Bring the `systemPrompt` service declaration (dsh-agent augmentation) into
 // the type graph: module augmentations only apply when their module is part
 // of the program.
@@ -157,6 +158,7 @@ export function apply(ctx: Context, config: LiveInlineConfig): void {
   // selection listener remains downstream. The filter must observe the
   // provider/model variables that model selection adds while unwinding.
   installCopilotToolSchemaCompatibility(ctx)
+  installContextEvidence(ctx)
   let promptText: PromptRouteText = () => ''
   ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const owner = currentSearchInitiator(ctx)
@@ -201,7 +203,7 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     const cfg = current()
     return cfg.searchRouting ?? {}
   }
-  ctx.plugin(previewPlugin, { accountModelSettings: () => current(), requestBudgetSettings: () => {
+  ctx.plugin(previewPlugin, { accountModelSettings: () => current(), chatRequestSettings: () => current(), requestBudgetSettings: () => {
     const selected = current()
     return { safetyTokens: selected.requestBudgetSafetyTokens, pressureRatio: selected.requestBudgetPressureRatio,
       compactionReasoning: selected.compactionReasoning }
