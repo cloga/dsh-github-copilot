@@ -17,6 +17,7 @@ import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import { createGitHubCopilotCredentialStore } from '../../src/copilot-auth.ts'
 import { GitHubCopilotAuthorizationController } from '../../src/authorization-controller.ts'
 import { migrationStatus } from '../../src/migration-status.ts'
+import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
@@ -81,7 +82,10 @@ it('persists independent native credentials and SettingsForms CAS across profile
       })
       hosts.push(host)
       ctx.provide('githubCopilotAccounts', { host, get: () => host.get() })
-      return { ctx, host }
+      const sessionAccounts = new SessionAccountsHost(ctx)
+      ctx.provide('githubCopilotSessionAccounts', sessionAccounts)
+      ctx.effect(() => () => sessionAccounts.dispose())
+      return { ctx, host, sessionAccounts }
     }
     let { ctx, host } = await start()
     const providerRevision = () => ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!.revision
@@ -98,6 +102,12 @@ it('persists independent native credentials and SettingsForms CAS across profile
     const revision = (await host.get()).revision!
     expect(await host.switchAccount(A, revision)).toMatchObject({ state: 'ready', activeAccountId: A })
     expect([...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber).toBe(selectorFiber)
+    const viewedSession = { session: { id: 'synthetic-session-override' } }
+    await ctx.githubCopilotSessionAccounts.set(viewedSession, B, (await host.get()).revision!)
+    expect(ctx.githubCopilotSessionAccounts.selected(viewedSession)).toEqual({ accountId: B, source: 'session' })
+    expect(ctx.githubCopilotSessionAccounts.selected({ session: { id: 'synthetic-inherited' } }))
+      .toEqual({ accountId: A, source: 'global' })
+    expect([...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber).toBe(selectorFiber)
     await expect(ctx.settings.mutate('github-copilot', [{ op: 'set', path: ['activeAccountId'], value: B }], revision))
       .rejects.toThrow('changed since it was read')
     host.dispose()
@@ -106,6 +116,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
     ctx = reopened.ctx
     host = reopened.host
     expect(await host.get()).toMatchObject({ state: 'ready', activeAccountId: A })
+    expect(ctx.githubCopilotSessionAccounts.selected(viewedSession)).toEqual({ accountId: B, source: 'session' })
     expect(await ctx.credentials.readRecord(key(A))).toEqual(grant(A))
     const beforeB = await ctx.credentials.readRecord(key(B))
     expect(beforeB).toEqual(grant(B))

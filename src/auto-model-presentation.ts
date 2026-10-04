@@ -7,6 +7,8 @@ import { TurnSelectionSchema } from './turn-selection.ts'
 import type { TurnSelection } from './turn-selection.ts'
 import { TURN_USAGE_EVIDENCE_KEY, isTurnUsageEvidence, turnUsageDiagnostic, turnUsageEvidenceDefinition } from './turn-usage-evidence.ts'
 import { TurnUsageNotice } from './turn-usage-notice.ts'
+import { TurnAccountViewSchema } from './session-accounts-remote.ts'
+import type { TurnAccountView } from './session-accounts-remote.ts'
 
 export const AUTO_MODEL_ATTRIBUTION_KEY = 'github-copilot-auto-model-attribution'
 const SLOT = 'conversation.chat.assistant-actions'
@@ -126,6 +128,7 @@ function sourceOf(props: Record<string, unknown>, key: string, diagnostic: (code
 }
 
 interface SelectionRemote { get(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }> }
+interface AccountRemote { turn(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }> }
 interface LocaleReader { getLocale(): { active: string }; subscribe(listener: () => void): Dispose }
 function iterable(value: unknown): value is Iterable<unknown> {
   return value !== null && typeof value === 'object' && Symbol.iterator in value && typeof value[Symbol.iterator] === 'function'
@@ -149,12 +152,28 @@ function findTail(snapshot: unknown, messageId: unknown, diagnostic: (code: stri
   return undefined
 }
 
-function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote; locale?: LocaleReader; diagnostic: (code: string) => void }): React.ReactElement | null {
+function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote; accountRemote?: AccountRemote; locale?: LocaleReader; diagnostic: (code: string) => void }): React.ReactElement | null {
   const [live, setLive] = React.useState<TurnSelection>({ mode: 'unknown' })
   const [readState, setReadState] = React.useState<'loading' | 'ready' | 'failed'>('loading')
   const [readAttempt, setReadAttempt] = React.useState(0)
   const turn = record(props.turn) && sequence(props.turn.turn) ? props.turn.turn : undefined
   const sessionId = typeof props.sessionId === 'string' ? props.sessionId : undefined
+  const [account, setAccount] = React.useState<TurnAccountView>()
+  const [accountFailed, setAccountFailed] = React.useState(false)
+  const [accountAttempt, setAccountAttempt] = React.useState(0)
+  React.useEffect(() => {
+    setAccount(undefined)
+    setAccountFailed(false)
+    if (turn === undefined || sessionId === undefined || props.accountRemote === undefined) return
+    let active = true
+    void props.accountRemote.turn(sessionId, turn).then(result => {
+      if (!active) return
+      const parsed = result.ok ? TurnAccountViewSchema.safeParse(result.value) : undefined
+      if (parsed?.success) setAccount(parsed.data)
+      else { setAccountFailed(true); props.diagnostic('COPILOT_TURN_ACCOUNT_READ_FAILED') }
+    }, () => { if (active) { setAccountFailed(true); props.diagnostic('COPILOT_TURN_ACCOUNT_READ_FAILED') } })
+    return () => { active = false }
+  }, [props.accountRemote, sessionId, turn, props.diagnostic, accountAttempt])
   React.useEffect(() => {
     setLive({ mode: 'unknown' })
     if (turn === undefined || sessionId === undefined || props.remote === undefined) {
@@ -203,6 +222,7 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   return React.createElement(React.Fragment, null,
     React.createElement(TurnSelectionCard, { selection, locale: language, incomplete: evidence?.incomplete ?? true,
       readState: selection.mode === 'unknown' ? readState : 'ready',
+      account, accountFailed, retryAccount: () => setAccountAttempt(value => value + 1),
       retry: props.remote === undefined ? undefined : () => setReadAttempt(value => value + 1) }),
     usageDiagnostic === undefined ? null : React.createElement(TurnUsageNotice, { diagnostic: usageDiagnostic, locale: language }))
 }
@@ -266,6 +286,10 @@ export function installAutoModelPresentation(capabilities: {
   const slots = slotsCandidate as unknown as Slots
   const face = record(capabilities.remote) ? capabilities.remote.githubCopilotTurnSelection : undefined
   const remote = record(face) && typeof face.get === 'function' ? face as unknown as SelectionRemote : undefined
+  const accountFace = record(capabilities.remote) ? capabilities.remote.githubCopilotSessionAccount : undefined
+  const readAccount = record(accountFace) ? accountFace.turn : undefined
+  const accountRemote: AccountRemote | undefined = typeof readAccount === 'function'
+    ? { turn: (agentId, turn) => readAccount(agentId, turn) } : undefined
   const locale = record(capabilities.locale) && typeof capabilities.locale.getLocale === 'function'
     && typeof capabilities.locale.subscribe === 'function' ? capabilities.locale as unknown as LocaleReader : undefined
   if (!remote) diagnostic('COPILOT_TURN_SELECTION_REMOTE_UNAVAILABLE')
@@ -278,7 +302,7 @@ export function installAutoModelPresentation(capabilities: {
     const tail = useChat(snapshot => findTail(snapshot, props.messageId, diagnostic))
     const turn = record(tail) && record(tail.location) ? tail.location.turn : undefined
     if (!record(turn) || !sequence(turn.turn)) return null
-    return React.createElement(Attribution, { ...props, key: `${props.sessionId}:${turn.turn}`, turn, tail, remote, locale, diagnostic })
+    return React.createElement(Attribution, { ...props, key: `${props.sessionId}:${turn.turn}`, turn, tail, remote, accountRemote, locale, diagnostic })
   }
   const removeProjections = capabilities.uiConversation === undefined ? noop
     : installAutoModelProjections({ uiConversation: capabilities.uiConversation, diagnostic })

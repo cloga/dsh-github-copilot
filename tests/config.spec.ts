@@ -23,7 +23,7 @@ describe('session search settings', () => {
 
   it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['excludedModelIds', 'activeAccountId', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['excludedModelIds', 'activeAccountId', 'sessionAccounts', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
@@ -39,6 +39,13 @@ describe('session search settings', () => {
     expect(readInlineConfig(live).activeAccountId).toBeUndefined()
     accountId = '11111111-1111-4111-8111-111111111111'
     expect(readInlineConfig(live).activeAccountId).toBe(accountId)
+  })
+  it('keeps Session account preferences hidden and snapshots their live rows', () => {
+    expect(Config.dict?.sessionAccounts?.meta.hidden).toBe(true)
+    expect(readInlineConfig(Config(base)).sessionAccounts).toEqual([])
+    const preference = { sessionId: 'session-a', accountId: 'canonical' }
+    const current = readInlineConfig({ ...base, sessionAccounts: { get: () => ({ 0: preference, length: 1 }) } })
+    expect(current.sessionAccounts).toEqual([preference])
   })
 
   describe('explicit parent model following', () => {

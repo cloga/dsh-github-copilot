@@ -10,7 +10,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, Message, PreparedAdapterCall, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../src/preview-route.ts'
@@ -19,6 +19,7 @@ import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
+import type { CopilotAccountBinding } from '../src/copilot-accounts-types.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
@@ -316,6 +317,194 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
   })
 }
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
+
+describe('account-local managed runtimes', () => {
+  const second = '11111111-1111-4111-8111-111111111111'
+  async function scopedRuntime() {
+    const ctx = new Context()
+    contexts.push(ctx)
+    let active = 'canonical'
+    let initiator: string | undefined
+    const bound = new WeakMap<AbortSignal, string>()
+    const changed = new Set<() => void>()
+    const captured = vi.fn()
+    const key = (id: string) => id === 'canonical' ? KEY : `github-copilot/account-${id}`
+    const records = new Map([
+      [key('canonical'), grant({ refresh: 'synthetic-a', access: 'synthetic-a-token', availableModelIds: ['account-a-model'] })],
+      [key(second), grant({ refresh: 'synthetic-b', access: 'synthetic-b-token', availableModelIds: ['account-b-model'] })],
+    ])
+    const captureAccount = (accountId: string): CopilotAccountBinding => Object.freeze({
+      accountId, key: key(accountId), generation: 0, assertCurrent() {},
+    })
+    await ctx.plugin({ apply(owner: Context) {
+      owner.provide('credentials', {
+        readRecord: async (id: string) => records.get(id),
+        modifyRecord: async (id: string, mutate: (record: RecordValue | undefined) => Promise<RecordValue | undefined>) => {
+          const next = await mutate(records.get(id))
+          if (next !== undefined) records.set(id, next)
+          return records.get(id)
+        },
+        listRecords: async () => [...records.keys()].map(key => ({ key, kind: 'grant' })),
+        deleteRecord: async (id: string) => { records.delete(id) },
+      } as never)
+      owner.provide('githubCopilotAccounts', { host: {
+        capture: () => captureAccount(active), captureAccount,
+        acquire: (_signal: AbortSignal | undefined, _managed: boolean, accountId: string) => ({
+          binding: captureAccount(accountId), release() {},
+        }),
+        onChanged: (listener: () => void) => { changed.add(listener); return () => { changed.delete(listener) } },
+      } } as never)
+      owner.provide('githubCopilotSessionAccounts', {
+        requestBinding: (signal?: AbortSignal) => captureAccount((signal && bound.get(signal)) ?? initiator ?? active),
+        admit: (_agent: Agent, _turn: number, signal: AbortSignal) => captureAccount(bound.get(signal) ?? initiator ?? active),
+        recordRequest: captured,
+      } as never)
+    } })
+    await ctx.plugin(LlmRuntime)
+    const registrations = vi.spyOn(ctx.llm, 'registerAdapter')
+    await ctx.plugin(previewPlugin, { accountModelFailureCooldownMs: 0 })
+    expect(registrations).toHaveBeenCalledTimes(1)
+    const adapter = registrations.mock.calls[0]![1]
+    registrations.mockRestore()
+    return { ctx, adapter, captured,
+      bind(id: string) { const signal = new AbortController().signal; bound.set(signal, id); return signal },
+      switchDefault(id: string) { active = id; for (const listener of changed) listener() },
+      within(id: string | undefined) { initiator = id },
+      rotate(id: string) {
+        const record = records.get(key(id))!
+        records.set(key(id), { ...record, payload: { ...record.payload, access: `${record.payload.access}-rotated` } })
+        ctx.emit('credentials/record-updated', key(id) as never)
+      },
+    }
+  }
+  function scopedFetch() {
+    const requests: { model: string; token: string | null }[] = []
+    stubFetch(async (input, init) => {
+      const token = new Headers(init?.headers).get('authorization')
+      if (String(input).endsWith('/models')) {
+        return catalogResponse([catalogItem(token?.includes('synthetic-a-token') ? 'account-a-model' : 'account-b-model')])
+      }
+      requests.push({ model: (JSON.parse(String(init?.body)) as { model: string }).model, token })
+      return response()
+    }, true)
+    return requests
+  }
+  async function drain(prepared: PreparedAdapterCall, signal: AbortSignal) {
+    const chunks = []
+    for await (const chunk of prepared.stream({ provider: PREVIEW, model: prepared.model.id, messages: [], signal })) chunks.push(chunk)
+    expect(chunks.some(chunk => chunk.type === 'finish' && chunk.reason.kind === 'stop')).toBe(true)
+  }
+  it('keeps concurrent prepared turns on their own record when the global directory switches', async () => {
+    const requests = scopedFetch()
+    const harness = await scopedRuntime()
+    const a = harness.bind('canonical'), b = harness.bind(second)
+    const [preparedA, preparedB] = await Promise.all([
+      harness.adapter.prepareCall(PREVIEW, 'account-a-model', a),
+      harness.adapter.prepareCall(PREVIEW, 'account-b-model', b),
+    ])
+    expect(harness.captured).not.toHaveBeenCalled()
+    harness.within('canonical')
+    const proofA = harness.ctx.githubCopilotPreview.captureSearchProof()
+    expect(harness.ctx.githubCopilotPreview.routeFacts('account-a-model')).toBeDefined()
+    expect(harness.ctx.githubCopilotPreview.recoveryLimits('account-a-model')).toBeDefined()
+    const composite = AbortSignal.any([a, new AbortController().signal])
+    await harness.ctx.githubCopilotPreview.discover({ signal: composite })
+    expect(harness.ctx.githubCopilotPreview.getView().models.map(model => model.id)).toEqual(['account-a-model'])
+    expect((await harness.ctx.githubCopilotPreview.resolveRequestAuth('account-a-model', composite)).apiKey)
+      .toBe('synthetic-a-token')
+    const [authA, authB] = await Promise.all([
+      harness.ctx.githubCopilotPreview.resolveRequestAuth('account-a-model', a),
+      harness.ctx.githubCopilotPreview.resolveRequestAuth('account-b-model', b),
+    ])
+    expect([authA.apiKey, authB.apiKey]).toEqual(['synthetic-a-token', 'synthetic-b-token'])
+    harness.within(undefined)
+    harness.switchDefault(second)
+    expect((await harness.adapter.listModels(PREVIEW)).map(model => model.id)).toContain('account-b-model')
+    expect(harness.ctx.githubCopilotPreview.getView().models.map(model => model.id)).toEqual(['account-b-model'])
+    expect(proofA()).toBe(true)
+    harness.within('canonical')
+    expect(harness.ctx.githubCopilotPreview.routeFacts('account-a-model')).toBeDefined()
+    expect((await harness.ctx.githubCopilotPreview.resolveRequestAuth('account-a-model', composite)).apiKey)
+      .toBe('synthetic-a-token')
+    harness.within(undefined)
+    await Promise.all([drain(preparedA, a), drain(preparedB, b)])
+    expect(requests).toEqual(expect.arrayContaining([
+      { model: 'account-a-model', token: 'Bearer synthetic-a-token' },
+      { model: 'account-b-model', token: 'Bearer synthetic-b-token' },
+    ]))
+    expect(requests).toHaveLength(2)
+    expect(harness.captured.mock.calls.map(([signal]) => signal)).toEqual(expect.arrayContaining([a, b]))
+  })
+  it('revokes only the matching account proof and prepared turn on credential updates', async () => {
+    const requests = scopedFetch()
+    const harness = await scopedRuntime()
+    const a = harness.bind('canonical'), b = harness.bind(second)
+    const [preparedA, preparedB] = await Promise.all([
+      harness.adapter.prepareCall(PREVIEW, 'account-a-model', a),
+      harness.adapter.prepareCall(PREVIEW, 'account-b-model', b),
+    ])
+    harness.within('canonical')
+    const proofA = harness.ctx.githubCopilotPreview.captureSearchProof()
+    harness.within(second)
+    const proofB = harness.ctx.githubCopilotPreview.captureSearchProof()
+    harness.within(undefined)
+    harness.rotate('canonical')
+    expect(proofA()).toBe(false)
+    expect(proofB()).toBe(true)
+    await expect(drain(preparedA, a)).rejects.toThrow()
+    await drain(preparedB, b)
+    expect(requests).toEqual([{ model: 'account-b-model', token: 'Bearer synthetic-b-token' }])
+  })
+  it('bounds runtime ownership without evicting an already prepared account', async () => {
+    const requests = scopedFetch()
+    const harness = await scopedRuntime()
+    const a = harness.bind('canonical')
+    const prepared = await harness.adapter.prepareCall(PREVIEW, 'account-a-model', a)
+    for (let index = 0; index < 31; index++) {
+      harness.within(`${String(index).padStart(8, '0')}-2222-4222-8222-222222222222`)
+      expect(harness.ctx.githubCopilotPreview.getView().state).toBe('unconfigured')
+    }
+    harness.within(second)
+    expect(() => harness.ctx.githubCopilotPreview.getView()).toThrow(/RUNTIME_LIMIT/)
+    harness.within(undefined)
+    await drain(prepared, a)
+    expect(requests).toEqual([{ model: 'account-a-model', token: 'Bearer synthetic-a-token' }])
+  })
+  it('classifies and selects Auto from the initiating account instead of the global directory', async () => {
+    const classifierRequests: { model: string; token: string | null }[] = []
+    stubFetch(async (input, init) => {
+      const token = new Headers(init?.headers).get('authorization')
+      if (String(input).endsWith('/models')) {
+        const model = catalogItem(token?.includes('synthetic-a-token') ? 'account-a-model' : 'account-b-model',
+          '/responses', { model_picker_category: 'lightweight' })
+        model.capabilities.supports.reasoning_effort = ['off', 'high']
+        return catalogResponse([model])
+      }
+      const body = JSON.parse(String(init?.body)) as { model: string }
+      classifierRequests.push({ model: body.model, token })
+      return response(false, undefined, '{"demand":"routine","signals":["bounded-transformation"]}')
+    }, true)
+    const harness = await scopedRuntime()
+    const signal = harness.bind(second)
+    harness.within(second)
+    const agent = { ctx: harness.ctx, session: {
+      id: 'account-b-auto', header: { id: 'account-b-auto' }, requestHeader: () => undefined,
+    } } as unknown as Agent
+    harness.ctx.provide('tokenMeter', { estimateMessage: () => 100, measure: () => ({ totalTokens: 100 }) } as never)
+    harness.ctx.provide('sessionProjections', { stateOf: () => ({ pending: { provider: PREVIEW, model: AUTO } }) } as never)
+    const scope = scopeTarget(agent, agent)
+    await harness.ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+    const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Convert these records.' }] })]
+    await harness.ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+      async () => ({ kind: 'enter' as const, messages }))
+    expect(await harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+      async () => ({ provider: PREVIEW, model: AUTO }))).toMatchObject({ model: 'account-b-model' })
+    expect(classifierRequests).toEqual([{ model: 'account-b-model', token: 'Bearer synthetic-b-token' }])
+    expect(harness.captured).not.toHaveBeenCalled()
+    harness.within(undefined)
+    expect((await harness.adapter.listModels(PREVIEW)).map(model => model.id)).toContain('account-a-model')
+  })
+})
 
 describe('plugin-owned account Copilot route', () => {
   it('does not dispatch an auxiliary request when native preparation outlasts a delayed deadline timer', async () => {
@@ -1656,7 +1845,8 @@ describe('plugin-owned account Copilot route', () => {
     await vi.waitFor(() => expect(finish).toBeDefined())
     // This seam belongs to the plugin, not Core. Run the real source load and
     // pause only its caller continuation after the new cache is already public.
-    const lifetime = Reflect.get(harness.adapter, 'lifetime') as { source: AccountModelSource }
+    const runtimeForRequest = Reflect.get(harness.adapter, 'requestRuntime') as () => { lifetime: { source: AccountModelSource } }
+    const lifetime = runtimeForRequest().lifetime
     const source = lifetime.source
     const originalLoad = source.load.bind(source)
     const previous = source.readDisplaySnapshot()
