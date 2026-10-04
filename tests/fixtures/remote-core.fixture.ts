@@ -197,7 +197,7 @@ it('keeps explicit master selection reads independent of ambient Client agent sc
   } finally { await ctx.fiber.dispose() }
 })
 
-it('mounts authorization, role and search-catalog Remotes on the exact target Client gateway', async () => {
+it('mounts authorization, account, role and search-catalog Remotes on the exact target Client gateway', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'])
     .toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
@@ -213,13 +213,18 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
   const catalog = { supported: true, providers: [{ id: 'synthetic-registered-search' }] }
   const usage = { state: 'ready', billing: 'credits', budget: 'individual',
     used: 3600, remaining: 16400, limit: 20000, percentUsed: 18, observedAt: 1 }
+  const accounts = {
+    state: 'ready', activeAccountId: 'canonical', revision: 2, writable: true, switchable: true,
+    accounts: [{ id: 'canonical', configured: true, identityState: 'ready', identity: { userId: 1, login: 'demo-user' } }],
+    notices: [],
+  }
   const roleView = { supported: false, writable: false, revision: 2, diagnostic: 'DUAL_MODEL_RETIRED',
     configuration: { enabled: true, plannerModel: 'planner', executorModel: 'executor' }, models: [], workspaces: [] }
   const recovered = { sessionId: 'synthetic-existing-role-root' }
   const retiredError = { code: 'copilot/dual-model', message: 'DUAL_MODEL_RETIRED', details: { reason: 'DUAL_MODEL_RETIRED' } }
   const rpc = vi.fn(async (_path: string, method: string) => method === 'githubCopilotDualModel/save'
     ? { ok: false, error: retiredError } : { ok: true,
-      value: method.startsWith('githubCopilotUsage/') ? usage : method.endsWith('/migrationStatus') ? migration : method === 'githubCopilotSearchRouting/providers' ? catalog
+      value: method.startsWith('githubCopilotAccounts/') ? accounts : method.startsWith('githubCopilotUsage/') ? usage : method.endsWith('/migrationStatus') ? migration : method === 'githubCopilotSearchRouting/providers' ? catalog
         : method === 'githubCopilotDualModel/create' ? recovered : method.startsWith('githubCopilotDualModel/') ? roleView : view })
   const stop = vi.fn()
   try {
@@ -230,7 +235,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     Gateway.apply(ctx)
     const dispose = await ctx.remote.$mount(remote)
     expect(registered).toEqual([remote])
-    expect(remote.descriptors.map(item => item.method)).toEqual([
+    expect(remote.descriptors.filter(item => item.namespace !== 'githubCopilotAccounts').map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'authorize', 'setEnabled',
@@ -273,6 +278,31 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     const usageDescriptor = remote.descriptors.find(item => item.namespace === 'githubCopilotUsage')!
     expect(usageDescriptor.result.create().parse(usage)).toEqual(usage)
     expect(() => usageDescriptor.result.create().parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
+    const accountDescriptors = remote.descriptors.filter(item => item.namespace === 'githubCopilotAccounts')
+    expect(accountDescriptors.map(item => item.method).sort()).toEqual([
+      'add', 'cancel', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount',
+    ])
+    for (const descriptor of accountDescriptors) {
+      expect(descriptor.invocation).toEqual({ kind: 'direct' })
+      expect(descriptor.result.create().parse(accounts)).toEqual(accounts)
+      expect(() => descriptor.result.create().parse({ ...accounts, credential: 'synthetic-forbidden' })).toThrow()
+      expect(() => descriptor.result.create().parse({ ...accounts, accounts: [{
+        ...accounts.accounts[0], grant: 'synthetic-forbidden',
+      }] })).toThrow()
+      const method = ctx.remote.githubCopilotAccounts[descriptor.method]
+      const parameterized = ['switchAccount', 'removeAccount', 'reauthorize'].includes(descriptor.method)
+      const accountId = '00000000-0000-4000-8000-000000000001'
+      if (parameterized) {
+        expect(descriptor.parameters).toHaveLength(2)
+        expect(descriptor.parameters[0]?.codec.create().parse(accountId)).toBe(accountId)
+        expect(() => descriptor.parameters[0]?.codec.create().parse('unrecognized-account')).toThrow()
+        expect(descriptor.parameters[1]?.codec.create().parse(2)).toBe(2)
+        expect(() => descriptor.parameters[1]?.codec.create().parse(-1)).toThrow()
+      } else expect(descriptor.parameters).toEqual([])
+      await expect(parameterized ? method(accountId, 2) : method()).resolves.toEqual({ ok: true, value: accounts })
+      expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilotAccounts/${descriptor.method}`,
+        { args: parameterized ? { accountId, expectedRevision: 2 } : {} }, expect.any(AbortSignal))
+    }
     await expect(ctx.remote.githubCopilotDualModel.view()).resolves.toEqual({ ok: true, value: roleView })
     await expect(ctx.remote.githubCopilotDualModel.save({ configuration: roleView.configuration, expectedRevision: 2 }))
       .resolves.toMatchObject({ ok: false, error: retiredError })
@@ -310,6 +340,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     expect(ctx.get('remote.githubCopilotDualModel')).toBeUndefined()
     expect(ctx.get('remote.githubCopilotSearchRouting')).toBeUndefined()
     expect(ctx.get('remote.githubCopilotUsage')).toBeUndefined()
+    expect(ctx.get('remote.githubCopilotAccounts')).toBeUndefined()
   } finally { await ctx.fiber.dispose() }
   expect(stop).toHaveBeenCalledOnce()
 })

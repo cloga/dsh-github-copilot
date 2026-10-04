@@ -3,6 +3,10 @@ import type { CSSProperties, ReactElement } from 'react'
 import { CopilotUsageViewSchema } from './copilot-usage-remote.ts'
 import { externalLinkTarget } from './external-link.ts'
 import type { CopilotUsageView } from './copilot-usage-types.ts'
+import { accountIdentityLabel, accountsViewFrom } from './copilot-accounts-card.ts'
+import { accountPresentationChanges } from './copilot-account-presentation.ts'
+import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
+import type { CopilotAccountsView } from './copilot-accounts-types.ts'
 
 /** Client-only face: no credentials, provider transport or billing arithmetic. */
 export interface CopilotUsageRemote {
@@ -11,6 +15,7 @@ export interface CopilotUsageRemote {
 }
 export interface CopilotUsageCardProps {
   remote?: CopilotUsageRemote
+  accountsRemote?: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'>
   /** Changes revoke every in-flight read, including switches between Copilot routes. */
   contextKey: string
   locale?: string
@@ -19,7 +24,8 @@ export interface CopilotUsageCardProps {
 const copy = {
   en: {
     credits: 'Credits', requests: 'Premium requests', unknown: 'Copilot usage',
-    title: 'Copilot credits', account: 'Account-wide · across Copilot apps',
+    title: 'Copilot credits', account: 'Account-wide quota snapshot',
+    identityUnavailable: 'GitHub account identity unavailable',
     used: 'used', left: 'left', usedLabel: 'Used this cycle', remaining: 'Remaining',
     unavailable: 'Not available', loading: 'Loading…', stale: 'Last known',
     individual: 'Cycle budget', pooled: 'Shared budget · no personal balance available',
@@ -36,7 +42,8 @@ const copy = {
   },
   zh: {
     credits: '额度', requests: '高级请求', unknown: 'Copilot 用量',
-    title: 'Copilot 额度', account: '账号范围 · 所有 Copilot 应用',
+    title: 'Copilot 额度', account: '账号范围 · 配额快照',
+    identityUnavailable: 'GitHub 账号信息暂不可用',
     used: '已用', left: '剩余', usedLabel: '本周期已用', remaining: '剩余',
     unavailable: '暂不可用', loading: '正在加载…', stale: '上次已知数据',
     individual: '周期额度', pooled: '共享额度 · 无个人余额信息',
@@ -79,6 +86,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const t = language === 'zh-CN' ? copy.zh : copy.en
   const id = useId()
   const [view, setView] = useState<CopilotUsageView>()
+  const [accounts, setAccounts] = useState<CopilotAccountsView>()
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(false)
@@ -87,6 +95,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const panel = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const lifecycle = useRef({ active: false, generation: 0, busy: false })
+  const identityRead = useRef(false)
   const close = useCallback((restore = false) => {
     setOpen(false)
     if (restore) trigger.current?.focus()
@@ -94,32 +103,44 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
 
   const load = useCallback(async (force: boolean) => {
     const owner = lifecycle.current
-    if (!owner.active || owner.busy || props.remote === undefined || document.visibilityState === 'hidden') return
+    if (!owner.active || owner.busy || accountPresentationChanges.pending()
+      || props.remote === undefined || document.visibilityState === 'hidden') return
     owner.busy = true
     const generation = ++owner.generation
     const current = () => owner.active && owner.generation === generation
     setBusy(true)
     setFailed(false)
     try {
-      const result = await (force ? props.remote.refresh() : props.remote.get())
+      const identityOperation = props.accountsRemote === undefined ? undefined
+        : force || !identityRead.current ? props.accountsRemote.refreshIdentity() : props.accountsRemote.get()
+      identityRead.current = true
+      const [result, identityResult] = await Promise.all([
+        force ? props.remote.refresh() : props.remote.get(),
+        identityOperation?.catch(() => undefined),
+      ])
       if (!current()) return
+      const identityView = identityResult?.ok === true ? accountsViewFrom(identityResult.value) : undefined
+      setAccounts(identityView)
       const parsed = result.ok ? CopilotUsageViewSchema.safeParse(result.value) : undefined
-      if (parsed?.success !== true) {
+      if (parsed?.success !== true || props.accountsRemote !== undefined
+        && (identityView === undefined || parsed.data.accountId !== identityView.activeAccountId)) {
         // A transport error cannot prove the old snapshot belongs to this account.
         setView(undefined)
         setFailed(true)
       } else setView(parsed.data)
     } catch {
-      if (current()) { setView(undefined); setFailed(true) }
+      if (current()) { setView(undefined); setAccounts(undefined); setFailed(true) }
     } finally {
       if (current()) { owner.busy = false; setBusy(false) }
     }
-  }, [props.remote, props.contextKey])
+  }, [props.remote, props.accountsRemote, props.contextKey])
 
   useEffect(() => {
     const owner = lifecycle.current
     owner.active = true
     setView(undefined)
+    setAccounts(undefined)
+    identityRead.current = false
     setFailed(false)
     setBusy(false)
     setOpen(false)
@@ -128,12 +149,22 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     const timer = props.remote === undefined ? undefined : window.setInterval(() => { void load(false) }, 60_000)
     const visible = () => { if (document.visibilityState === 'visible') void load(false) }
     document.addEventListener('visibilitychange', visible)
+    const unsubscribe = accountPresentationChanges.subscribe(() => {
+      owner.generation++
+      owner.busy = false
+      setAccounts(undefined)
+      setView(undefined)
+      setBusy(false)
+      setFailed(false)
+      if (!accountPresentationChanges.pending()) void load(false)
+    })
     return () => {
       owner.active = false
       owner.generation++
       owner.busy = false
       if (timer !== undefined) window.clearInterval(timer)
       document.removeEventListener('visibilitychange', visible)
+      unsubscribe()
     }
   }, [load, props.remote])
 
@@ -236,6 +267,8 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     h('div', { style: row },
       h('div', null,
         h('strong', { id: `${id}-title` }, view?.billing === 'credits' ? t.title : unit),
+        h('p', { style: { ...muted, color: 'inherit' }, 'data-copilot-credits-account': '' },
+          accountIdentityLabel(accounts) ?? t.identityUnavailable),
         h('p', { id: `${id}-scope`, style: muted }, t.account)),
       h('button', { ref: closeButton, type: 'button', 'aria-label': t.close, style: button, onClick: () => { close(true) } }, '×')),
     view?.state === 'stale' ? h('p', { role: 'status', style: muted }, t.stale) : null,

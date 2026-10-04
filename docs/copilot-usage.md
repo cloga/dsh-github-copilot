@@ -5,7 +5,7 @@ The optional composer control separates three quantities:
 | Quantity | Scope | Rule |
 | --- | --- | --- |
 | Context occupancy | Current native request/context window | Remains owned by DSH's native meter. |
-| Account usage and remaining allocation | GitHub account billing cycle, across Copilot applications | Display only validated provider quota data; identify stale snapshots explicitly. |
+| Account usage and remaining allocation | Authorized GitHub account quota snapshot | Display only validated provider quota data; identify stale snapshots explicitly. Do not claim cross-application aggregation. |
 | Session credits | Complete provider-reported usage attributable to this DSH Session | Not displayed because the supported adapter does not supply it. Do not infer it from tokens, cost estimates or account balance changes. |
 
 ## Presentation
@@ -13,6 +13,12 @@ The optional composer control separates three quantities:
 The control is an additive `conversation.composer.dock` contribution for the current Copilot Session. It does not replace the composer, move native DOM nodes, modify global defaults, switch a model or enroll other Sessions. Native context occupancy and the new account budget are not interchangeable.
 
 The compact control shows reported usage and remaining allocation where available. Its details explain the unit, budget, reset timestamp, freshness and unavailable data. Legacy premium requests must never be relabeled AI credits. A pooled organization account can have absolute credits used without a personal denominator; it does not imply unlimited use or expose a knowable organization balance. Percentage-only data must not create falsely precise absolute amounts.
+
+The account extension described in [Copilot accounts](./copilot-accounts.md)
+adds a readonly GitHub identity under the details title. Account management and
+switching remain in Models; no Chat switcher is added. Identity and quota must
+carry matching active-account evidence before they are presented together.
+Failure to read identity is not a different account or a zero balance.
 
 Detailed amounts are rounded to two decimal places for display; a positive amount below 0.01 is shown as `<0.01`, not zero. GitHub billing remains authoritative. Known individual budgets at 90% used show a low-budget warning, not a spending restriction. The plan link uses the supported Desktop browser handoff with a selectable URL fallback. Details use the browser's native popover top layer when available and a fixed-position fallback otherwise; no additional ReactDOM copy or private Core DOM access is introduced.
 
@@ -66,9 +72,15 @@ Synthetic unit/UI tests and exact unchanged Core accounting/registry fixtures pr
 
 ## Account data boundary
 
-The Host uses the existing `llm-pi-ai/github-copilot` OAuth grant through public credential APIs. GitHub's `copilot_internal/user` endpoint uses the GitHub grant, not a second sign-in or a newly pasted token. Access-token renewal remains owned by pi-ai; quota inspection must not introduce a refresh implementation or credential persistence.
+The Host uses the selected account's OAuth grant through public credential APIs,
+with `llm-pi-ai/github-copilot` retained for canonical compatibility. GitHub's
+`copilot_internal/user` endpoint uses the GitHub grant, not a quota-specific
+sign-in or a newly pasted token. Access-token renewal remains owned by pi-ai;
+quota inspection must not introduce a refresh implementation or credential
+persistence. The account-record extension has its own explicit ownership
+contract in [Copilot accounts](./copilot-accounts.md).
 
-Quota requests are lazy, single-flight and bounded by timeout, response size and cache/failure policy. Account continuity is checked around asynchronous work and before releasing cached data. Authentication denial, sign-out, account invalidation or disposal must not release a previous account's snapshot. A same-account transient failure may expose a timestamped last-known snapshot, never a current balance. Responses and diagnostics exclude tokens, raw provider bodies and account identifiers. Requests do not follow redirects with the credential; custom enterprise hosts are not guessed.
+Quota requests are lazy, single-flight and bounded by timeout, response size and cache/failure policy. Account continuity is checked around asynchronous work and before releasing cached data. Authentication denial, sign-out, account invalidation or disposal must not release a previous account's snapshot. A same-account transient failure may expose a timestamped last-known snapshot, never a current balance. Responses and diagnostics exclude tokens and raw provider bodies. An opaque plugin account identifier may bind a snapshot to readonly identity; it is not a token fingerprint or billing identifier. Requests do not follow redirects with the credential; custom enterprise hosts are not guessed.
 
 The plugin's default quota fetch lazily creates one request-scoped Undici agent for `https://api.github.com/copilot_internal/user`. It unions and deduplicates `tls.getCACertificates('default')` (including any configured extra CA certificates) and `tls.getCACertificates('system')`, with `rejectUnauthorized: true`. Node 22.19.0 provides both CA APIs; Undici 6 supports that runtime floor. The agent is reused for refreshes and destroyed on controller disposal. Injected test fetchers bypass the agent. No global dispatcher, environment variable, Desktop trust preference, model/search transport or credential owner is changed.
 

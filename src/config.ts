@@ -44,6 +44,8 @@ export interface InlineConfig {
   accountModelFailureCooldownMs?: number
   /** Exact account model IDs hidden from the managed directory and every Auto candidate pool. */
   excludedModelIds?: string[]
+  /** Opaque profile-wide account selector; absence retains canonical compatibility. */
+  activeAccountId?: string
   /** Explicit native child/direct-parent enrollments; empty preserves native routing. */
   parentModelFollow?: ParentModelBinding[]
   /** Profile-wide next-turn policy for supported native children. */
@@ -68,7 +70,8 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId'> & {
+  activeAccountId?: string | LiveSetting<string | undefined>
   followParentModel?: boolean | LiveSetting<boolean>
   parentModelFollow?: ParentModelBinding[] | LiveSetting<ArrayLike<ParentModelBinding>>
   excludedModelIds?: string[] | LiveSetting<ArrayLike<string>>
@@ -77,7 +80,8 @@ export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId'> & {
+  activeAccountId: LiveSetting<string | undefined>
   followParentModel: LiveSetting<boolean>
   parentModelFollow: LiveSetting<ArrayLike<ParentModelBinding>>
   excludedModelIds: LiveSetting<ArrayLike<string>>
@@ -92,6 +96,7 @@ export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
   const bindings = readConfigValue<ArrayLike<ParentModelBinding> | undefined>(config.parentModelFollow)
   return {
     ...config,
+    activeAccountId: readConfigValue(config.activeAccountId),
     excludedModelIds: exclusions === undefined ? undefined : Array.from(exclusions),
     parentModelFollow: bindings === undefined ? undefined : Array.from(bindings, binding => ({
       childSessionId: binding.childSessionId, parentSessionId: binding.parentSessionId,
@@ -121,6 +126,7 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   accountModelTtlMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(86_400_000),
   accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
   excludedModelIds: z.array(z.string()).default([]).hidden().volatile(),
+  activeAccountId: z.string().hidden().volatile(),
   followParentModel: z.boolean().default(false).volatile(),
   autoSemanticAssessment: z.boolean().default(true),
   parentModelFollow: z.array(z.object({

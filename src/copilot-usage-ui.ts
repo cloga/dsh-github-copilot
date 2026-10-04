@@ -1,8 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { createElement, useEffect, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
 import { CopilotUsageCard } from './copilot-usage-card.ts'
 import type { CopilotUsageRemote } from './copilot-usage-card.ts'
+import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
 
 const slot = 'conversation.composer.dock'
 const noop = () => {}
@@ -54,9 +57,10 @@ function effectiveCopilot(projection: unknown): { provider: string; model: strin
   return next.provider === 'github-copilot' || next.provider === 'github-copilot-preview' ? next : undefined
 }
 
-function Surface({ runtime, remote, locale, diagnostic }: {
+function Surface({ runtime, remote, accountsRemote, locale, diagnostic }: {
   runtime: RuntimeProps
   remote: CopilotUsageRemote | undefined
+  accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'> | undefined
   locale: LocaleReader | undefined
   diagnostic: (code: string) => void
 }): ReactElement | null {
@@ -74,7 +78,7 @@ function Surface({ runtime, remote, locale, diagnostic }: {
   }, [projection, diagnostic])
   if (!valid || current === undefined) return null
   const contextKey = JSON.stringify([runtime.sessionId, current.provider, current.model])
-  return createElement(CopilotUsageCard, { key: contextKey, contextKey, remote, locale: language })
+  return createElement(CopilotUsageCard, { key: contextKey, contextKey, remote, accountsRemote, locale: language })
 }
 
 /** Public additive dock only; native composer, ContextMeter and other features stay owned by Core. */
@@ -91,12 +95,17 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
   const slots = candidate
   // Resolve a traced Remote once, not on each render or Session-model update.
   let remote: CopilotUsageRemote | undefined
+  let accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'> | undefined
   try {
     const namespaces: unknown = ctx.remote
     const face = record(namespaces) ? namespaces.githubCopilotUsage : undefined
     if (isRemote(face)) {
       remote = face
     } else diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE')
+    const accounts = record(namespaces) ? namespaces.githubCopilotAccounts : undefined
+    if (record(accounts) && typeof accounts.get === 'function' && typeof accounts.refreshIdentity === 'function') {
+      accountsRemote = accounts as Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'>
+    } else diagnostic('COPILOT_ACCOUNTS_REMOTE_UNAVAILABLE')
   } catch { diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE') }
   const localeCandidate: unknown = ctx.get('locale')
   const locale = isLocale(localeCandidate) ? localeCandidate : undefined
@@ -119,7 +128,7 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
             return null
           }
           return createElement(Surface, {
-            runtime: props, remote, locale, diagnostic,
+            runtime: props, remote, accountsRemote, locale, diagnostic,
           })
         })
         let removed = false

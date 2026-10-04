@@ -6,15 +6,21 @@
 
 **English** | [简体中文](./README.zh.md)
 
-GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter and one Host-owned OAuth account; it does not patch Core or maintain a second model catalog.
+GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter with one active Host-side OAuth account per profile; it does not patch Core or maintain a second model catalog.
 
-**Source candidate: `0.4.0-alpha.99` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+The [account requirements and design](./docs/copilot-accounts.md) cover
+independent official authorizations in the existing credentials service.
+**Models → Manage → GitHub accounts** is the only management/switching entry;
+Credits details show the current GitHub identity read-only.
+
+**Source candidate: `0.4.0-alpha.100` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
 | Task | Where to start |
 |---|---|
 | Sign in and manage account models | **Settings → Models → GitHub Copilot → Sign in** |
+| Add or switch GitHub accounts | **Manage → GitHub accounts**; managed-only profiles |
 | Exclude or restore individual models | **Manage → Model preferences** |
 | Choose models automatically | Pick **Auto · Balance**, **Auto · Efficiency** or **Auto · Intelligence** |
 | Follow a parent model in supported subagents | **Plugins → dsh-github-copilot → Details → Follow parent model** |
@@ -40,10 +46,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.99/dsh-github-copilot-0.4.0-alpha.99.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.100/dsh-github-copilot-0.4.0-alpha.100.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.99` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.100` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -51,7 +57,9 @@ After an approved reload/restart:
 2. Copy the displayed one-time code and complete GitHub's device flow in your own browser. Desktop uses its system-browser handoff; a selectable verification URL remains available if it does not open.
 3. Wait for **Signed in** and account discovery, then choose a model. Opening Models and normal use ensure missing/stale metadata; **Manage → Refresh models** is an intentional forced refresh, not routine setup.
 
-Sign-out requires an explicit action and removes only the Copilot credential record, not route settings. Upgrades preserve existing native Copilot profiles; two groups can remain until [explicit single-route migration](./docs/single-route-migration.md). Installation never migrates conversations or defaults.
+Sign-out requires an explicit action and removes only the active account's authorization, not other saved grants or route settings. Upgrades preserve existing native Copilot profiles; two groups can remain until [explicit single-route migration](./docs/single-route-migration.md). Installation never migrates conversations or defaults.
+
+In **Manage → GitHub accounts**, adding an account never replaces the active one. A confirmed switch applies profile-wide to subsequent managed requests; relevant active work and native-route or incomplete evidence block it. The new account may not offer your selected model, and old encrypted replay may be account-bound: no automatic model substitution or history removal occurs. **Reauthorize** renews the same saved identity; **Remove** deletes only an inactive saved authorization. Missing/revoked accounts never fall back to another account.
 
 **Desktop lifecycle:** disable/remove/upgrade can require a full cold restart for Web service recomposition. If the plugin is Off and the native manager reports only `pending (waiting for service: web)`, do not repeatedly toggle or reinstall. Obtain restart approval and follow [rc.2 lifecycle guidance](./docs/web-lifecycle-rc2.md).
 
@@ -181,14 +189,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.99/dsh-github-copilot-0.4.0-alpha.99.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.99/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.100/dsh-github-copilot-0.4.0-alpha.100.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.100/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.99.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.100.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

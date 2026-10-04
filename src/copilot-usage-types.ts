@@ -1,5 +1,6 @@
 /** Client-safe account snapshot. Amounts are credits or requests, never token estimates. */
 export interface CopilotUsageView {
+  readonly accountId?: string
   readonly state: 'ready' | 'stale' | 'unavailable' | 'signed-out'
   readonly billing: 'credits' | 'requests' | 'unknown'
   readonly budget: 'individual' | 'pooled' | 'unknown'

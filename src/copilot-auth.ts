@@ -14,8 +14,22 @@ import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-co
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { readCopilotCatalog } from './model-protocol.ts'
+import type { CopilotAccountBinding } from './copilot-accounts-types.ts'
+import type {} from './copilot-accounts-host.ts'
+import { readSettingsNamespace } from './settings-reader.ts'
 
 export { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
+
+export function captureActiveGitHubCopilotBinding(ctx: Context): CopilotAccountBinding | undefined {
+  const accounts = ctx.get('githubCopilotAccounts')
+  if (accounts) return accounts.host.capture()
+  const settings = readSettingsNamespace(ctx, 'github-copilot')
+  if (typeof settings === 'object' && settings !== null
+    && 'activeAccountId' in settings && settings.activeAccountId !== undefined && settings.activeAccountId !== 'canonical') {
+    throw new Error('COPILOT_ACCOUNTS_SETTINGS_UNAVAILABLE')
+  }
+  return undefined
+}
 
 interface ApiKeyRecord {
   readonly kind: 'api-key'
@@ -83,27 +97,37 @@ function toRecord(credential: Credential): CredentialRecord {
 export function createGitHubCopilotCredentialStore(
   ctx: Context,
   logicalProviderId: typeof GITHUB_COPILOT_PROVIDER_ID | typeof GITHUB_COPILOT_PREVIEW_PROVIDER_ID = GITHUB_COPILOT_PROVIDER_ID,
+  binding?: CopilotAccountBinding,
 ): CredentialStore {
+  const key = binding?.key ?? GITHUB_COPILOT_CREDENTIAL_KEY
   const assertProvider = (providerId: string): void => {
     if (providerId !== logicalProviderId) throw new Error('COPILOT_CREDENTIAL_PROVIDER_MISMATCH')
   }
   return {
     read: async (providerId) => {
       assertProvider(providerId)
-      return toCredential(await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY))
+      binding?.assertCurrent()
+      const value = toCredential(await credentialService(ctx).readRecord(key))
+      binding?.assertCurrent()
+      return value
     },
     list: async (): Promise<readonly CredentialInfo[]> => {
-      const record = await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+      binding?.assertCurrent()
+      const record = (await credentialService(ctx).listRecords()).find(record => record.key === key)
+      binding?.assertCurrent()
       return record === undefined
         ? []
         : [{ providerId: logicalProviderId, type: record.kind === 'api-key' ? 'api_key' : 'oauth' }]
     },
     modify: async (providerId, mutate) => {
       assertProvider(providerId)
+      binding?.assertCurrent()
       const stored = await credentialService(ctx).modifyRecord(
-        GITHUB_COPILOT_CREDENTIAL_KEY,
+        key,
         async current => {
+          binding?.assertCurrent()
           const next = await mutate(toCredential(current))
+          binding?.assertCurrent()
           return next === undefined ? undefined : toRecord(next)
         },
       )
@@ -111,7 +135,8 @@ export function createGitHubCopilotCredentialStore(
     },
     delete: async (providerId) => {
       assertProvider(providerId)
-      await credentialService(ctx).deleteRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+      binding?.assertCurrent()
+      await credentialService(ctx).deleteRecord(key)
     },
   }
 }
@@ -129,6 +154,10 @@ export function createGitHubCopilotTokenResolver(
   if (provider.auth.oauth === undefined) throw new Error('github-copilot: native OAuth method is unavailable')
   models.setProvider({ ...provider, auth: { oauth: provider.auth.oauth } })
   return async (modelId) => {
+    const binding = captureActiveGitHubCopilotBinding(ctx)
+    if (binding !== undefined && binding.accountId !== 'canonical') {
+      throw new Error('COPILOT_ACCOUNTS_ROUTE_BLOCKED')
+    }
     const snapshot = readCopilotCatalog(ctx)
     const installedModels = new Map(snapshot.models.map(model => [model.id, model]))
     const native = installedModels.get(modelId)
@@ -137,6 +166,7 @@ export function createGitHubCopilotTokenResolver(
     }
     // Resolve OAuth only. A local model would inject headers from another pi copy.
     const resolved = await models.getAuth('github-copilot')
+    binding?.assertCurrent()
     if (resolved === undefined) return undefined
     if (onCredentialChanged !== undefined) {
       try {
@@ -153,6 +183,7 @@ export function createGitHubCopilotTokenResolver(
       throw new Error(`github-copilot: model "${modelId}" is not available for the signed-in Copilot account`)
     }
     const apiKey = resolved.auth.apiKey
+    binding?.assertCurrent()
     if (apiKey === undefined) return undefined
     return {
       apiKey,

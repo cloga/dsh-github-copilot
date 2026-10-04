@@ -4,6 +4,7 @@ import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Agent } from 'undici'
 import GitHubCopilotUsageController, { CopilotUsageSource, COPILOT_USAGE_ENDPOINT } from '../src/copilot-usage-host.ts'
+import { CopilotAccountsHost } from '../src/copilot-accounts-host.ts'
 
 const grant = { type: 'oauth', refresh: 'synthetic-github-token', access: 'synthetic-copilot-token', expires: 1 }
 const quota = { token_based_billing: true, quota_snapshots: { premium_interactions: {
@@ -14,17 +15,28 @@ function deferred<T>() {
   const promise = new Promise<T>(done => { resolve = done })
   return { promise, resolve }
 }
-function fixture() {
+function fixture(accountId?: string) {
   let stored: unknown = { ...grant }, now = 1_800_000_000_000
   const readCredential = vi.fn(async () => stored)
   const fetcher = vi.fn<typeof fetch>(async () => Response.json(quota))
-  const source = new CopilotUsageSource({ readCredential, fetch: fetcher, now: () => now })
+  const source = new CopilotUsageSource({ readCredential, fetch: fetcher, now: () => now, accountId })
   return { source, fetcher, readCredential, setGrant: (value: unknown) => { stored = value },
     advance: (ms: number) => { now += ms } }
 }
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 describe('Copilot usage Host lifecycle', () => {
+  it('retains captured account identity on ready and stale quota but not unavailable results', async () => {
+    const accountId = '11111111-1111-4111-8111-111111111111'
+    const f = fixture(accountId)
+    expect(await f.source.get()).toMatchObject({ state: 'ready', accountId })
+    f.advance(61_000)
+    f.fetcher.mockRejectedValueOnce(new TypeError('network unavailable'))
+    expect(await f.source.refresh()).toMatchObject({ state: 'stale', accountId })
+    f.setGrant(undefined)
+    expect(await f.source.get()).not.toHaveProperty('accountId')
+    await f.source.dispose()
+  })
   it('uses a reusable quota-only dispatcher with deduplicated default and system CAs', async () => {
     const ca = vi.fn((type: 'default' | 'system') => type === 'default'
       ? ['default PEM', 'shared PEM'] : ['shared PEM', 'system PEM'])
@@ -275,7 +287,7 @@ describe('Copilot usage Host lifecycle', () => {
     const controller = new GitHubCopilotUsageController(ctx)
     try {
       expect(fetcher).not.toHaveBeenCalled()
-      expect(await controller.get()).toMatchObject({ state: 'ready' })
+      expect(await controller.get()).toMatchObject({ state: 'ready', accountId: 'canonical' })
       ctx.emit('credentials/record-updated', credentialKey('other', 'record')); await controller.get()
       ctx.emit('settings/document-updated', 'unrelated' as SettingsNamespace, 1); await controller.get()
       expect(fetcher).toHaveBeenCalledTimes(1)
@@ -285,5 +297,30 @@ describe('Copilot usage Host lifecycle', () => {
       await controller.get(); expect(fetcher).toHaveBeenCalledTimes(3)
     } finally { await ctx.fiber.dispose() }
     expect(await controller.get()).toMatchObject({ diagnostic: 'COPILOT_USAGE_DISPOSED' })
+  })
+  it('rechecks selection on get and never relabels cached quota after an unnotified switch', async () => {
+    const ctx = new Context()
+    const a = '11111111-1111-4111-8111-111111111111'
+    const b = '22222222-2222-4222-8222-222222222222'
+    let selected = a
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(quota))
+    ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', revision: 1, value: { activeAccountId: selected } }],
+      mutate: vi.fn() })
+    ctx.provide('credentials', {
+      readRecord: async (key: string) => ({ kind: 'grant', payload: { ...grant, refresh: `synthetic-${key}` } }),
+      listRecords: async () => [], modifyRecord: vi.fn(), deleteRecord: vi.fn(),
+    })
+    const accounts = new CopilotAccountsHost(ctx)
+    ctx.provide('githubCopilotAccounts', { host: accounts })
+    const controller = new GitHubCopilotUsageController(ctx)
+    try {
+      expect(await controller.get()).toMatchObject({ state: 'ready', accountId: a })
+      selected = b
+      expect(await controller.get()).toMatchObject({ state: 'ready', accountId: b })
+      expect(fetcher).toHaveBeenCalledTimes(2)
+      expect(fetcher.mock.calls[1]?.[1]?.headers).toMatchObject({
+        Authorization: `token synthetic-github-copilot/account-${b}`,
+      })
+    } finally { await ctx.fiber.dispose(); accounts.dispose() }
   })
 })

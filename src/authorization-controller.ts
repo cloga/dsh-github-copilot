@@ -14,6 +14,7 @@ import {
 import { temporaryGitHubCopilotModelFromProfile } from './temporary-models.ts'
 import { migrationStatus, type GitHubCopilotMigrationStatus } from './migration-status.ts'
 import { normalizeExcludedModelIds } from './model-exclusions.ts'
+import type {} from './copilot-accounts-host.ts'
 
 export { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
@@ -452,6 +453,27 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
   @Remote
   async status(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts) {
+      let accountId: string
+      try { accountId = accounts.host.capture().accountId }
+      catch {
+        return { phase: 'error', configured: false, writable: false, inFlight: false, notices: [],
+          error: 'COPILOT_ACCOUNTS_SELECTOR_INVALID' }
+      }
+      if (accountId !== 'canonical') {
+        const view = await accounts.get()
+        const row = view.accounts.find(row => row.id === accountId)
+        const discovered = accountModelsView(this.ctx)
+        return { phase: view.operation === 'authorizing' ? 'authorizing' : view.state === 'error' ? 'error'
+          : row?.configured ? 'signed-in' : 'signed-out',
+        configured: row?.configured === true, writable: view.writable, inFlight: view.operation !== undefined,
+        notices: view.notices, route: { state: 'not-configured' },
+        ...discovered === undefined ? {} : { accountModels: discovered },
+        modelPreferences: modelPreferencesView(this.ctx, discovered, this.modelPreferenceFailure),
+        ...view.diagnostic === undefined ? {} : { error: view.diagnostic } }
+      }
+    }
     const authorization = service<AuthorizationServiceView>(
       this.ctx,
       'authorization',
@@ -552,6 +574,8 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   /** Explicit route repair over the stored account snapshot; never forces OAuth or a network probe. */
   @Remote
   async reconcile(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts && accounts.host.capture().accountId !== 'canonical') return this.status()
     const current = await this.status()
     if (!current.configured || current.inFlight || this.attempt !== undefined) return current
     await this.ensureProviderProfile()
@@ -560,6 +584,16 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
   @Remote
   async start(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts) {
+      const binding = accounts.host.capture()
+      if (binding.accountId !== 'canonical') {
+        const view = await accounts.get()
+        if (view.revision === undefined) return this.status()
+        await accounts.host.reauthorize(binding.accountId, view.revision)
+        return this.status()
+      }
+    }
     const current = await this.status()
     if (current.inFlight || this.attempt !== undefined) return current
     if (current.configured) return this.reconcile()
@@ -582,6 +616,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       )
     }
 
+    const admission = accounts?.host.acquireCanonicalAuthorization()
     this.notices = []
     this.failure = undefined
     this.reconciliationFailed = false
@@ -629,6 +664,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       this.ctx.logger.error('github-copilot: authorization.begin failed (COPILOT_AUTHORIZATION_BEGIN_FAILED)')
     }).finally(() => {
       this.attempt = undefined
+      admission?.release()
     })
     this.attempt = running
     return this.status()
@@ -636,6 +672,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
   @Remote
   async cancel(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts && accounts.host.capture().accountId !== 'canonical') {
+      await accounts.cancel()
+      return this.status()
+    }
     const authorization = service<AuthorizationServiceView>(
       this.ctx,
       'authorization',
@@ -649,6 +690,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
   @Remote
   async signOut(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts && accounts.host.capture().accountId !== 'canonical') {
+      await accounts.host.signOutActive()
+      return this.status()
+    }
     const authorization = service<AuthorizationServiceView>(
       this.ctx,
       'authorization',

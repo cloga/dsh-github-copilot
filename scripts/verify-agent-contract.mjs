@@ -41,6 +41,13 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(Array.isArray(contract.entrypoints) && contract.entrypoints.includes('AGENTS.md'), 'authoritative entrypoint is missing')
   for (const path of contract.entrypoints) await file(path)
   require(contract.tasks && Object.keys(contract.tasks).length > 0, 'task directory is missing')
+  require(contract.tasks.accounts?.read?.includes('docs/copilot-accounts.md')
+    && contract.tasks.accounts?.tests?.includes('tests/copilot-accounts-card.spec.ts')
+    && contract.tasks.accounts?.risk?.includes('never grant copies')
+    && contract.tasks.accounts?.risk?.includes('second storage service')
+    && contract.tasks.accounts?.risk?.includes('Models alone')
+    && agentGuide.includes('Approved multi-account ownership extension (#297)'),
+  'account ownership extension must preserve direct native authorization, shared storage and Models-only switching')
   require(contract.tasks.autointent?.read?.includes('src/auto-model-intent.ts')
     && contract.tasks.autointent?.tests?.includes('tests/fixtures/session-context-core.fixture.ts')
     && contract.tasks.autointent?.risk?.includes('No Core projection replacement'),

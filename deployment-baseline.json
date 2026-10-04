@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.99"
+    "version": "0.4.0-alpha.100"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -289,6 +289,32 @@
   },
   "capabilities": [
     {
+      "id": "independent-copilot-accounts",
+      "required": true,
+      "evidenceScope": "synthetic-public-services-native-adapter-and-ui-not-live-oauth-or-provider-access",
+      "activation": "managed-only-explicit-account-selector",
+      "sourceMarkers": [
+        {"file": "AGENTS.md", "marker": "Approved multi-account ownership extension (#297)"},
+        {"file": "src/remote.ts", "marker": "...copilotAccountsRemote.descriptors"},
+        {"file": "src/copilot-accounts-card.ts", "marker": "removeAccount(accountId: string, expectedRevision: number)"},
+        {"file": "src/copilot-account-presentation.ts", "marker": "account data and credentials never travel between surfaces"},
+        {"file": "docs/copilot-accounts.md", "marker": "A mutable active-account lookup inside each store method is forbidden"}
+      ],
+      "tests": [
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "never writes a captured A refresh into B after an external selection change"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "preserves uncertain commit ahead of missing-slot recovery"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "rechecks externally started canonical authorization before selector CAS"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "retains canonical admission through polling and cancellation settlement"},
+        {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent native credentials and SettingsForms CAS across profile restart without cross-account OAuth writes"},
+        {"file": "tests/copilot-accounts-card.spec.ts", "name": "requires a separate confirmation and uses the captured selector revision"},
+        {"file": "tests/copilot-accounts-card.spec.ts", "name": "reauthorizes the existing slot without requesting a new account or switching"},
+        {"file": "tests/copilot-usage-card.spec.ts", "name": "shows current identity only in details without a Chat switching control"},
+        {"file": "tests/copilot-usage-card.spec.ts", "name": "refuses to combine account B identity with account A quota"},
+        {"file": "tests/copilot-usage-card.spec.ts", "name": "immediately revokes mounted presentation on a Models mutation and rejects late previous-account results"},
+        {"file": "tests/fixtures/remote-core.fixture.ts", "name": "mounts authorization, account, role and search-catalog Remotes on the exact target Client gateway"}
+      ]
+    },
+    {
       "id": "missing-turn-usage-explanation",
       "required": true,
       "sourceMarkers": [
@@ -356,7 +382,7 @@
         {"file": "tests/fixtures/copilot-usage-selector-core.fixture.ts", "name": "renders and reacts to the owning Session on %s"},
         {"file": "tests/scripts/copilot-usage-gateway.test.mjs", "name": "quota Remote reaches the actual Host gateway without startup or signed-out network requests"},
         {"file": "tests/client-bundle.spec.ts", "name": "mounts strict Host result codecs through the published rc.1 client carrier"},
-        {"file": "tests/fixtures/remote-core.fixture.ts", "name": "mounts authorization, role and search-catalog Remotes on the exact target Client gateway"}
+        {"file": "tests/fixtures/remote-core.fixture.ts", "name": "mounts authorization, account, role and search-catalog Remotes on the exact target Client gateway"}
       ]
     },
     {

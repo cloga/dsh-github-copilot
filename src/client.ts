@@ -24,6 +24,9 @@ import { registerContextEvidenceUi } from './context-evidence-ui.ts'
 import { registerReplayRecoveryUi } from './replay-recovery-ui.ts'
 import { externalLinkTarget } from './external-link.ts'
 import { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
+import { CopilotAccountsPanel } from './copilot-accounts-card.ts'
+import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
+import { accountPresentationChanges } from './copilot-account-presentation.ts'
 export { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
 import {
   GITHUB_COPILOT_PROVIDER_ID,
@@ -624,6 +627,7 @@ export function GitHubCopilotAccountModelsPanel(props: { readonly remote: Client
 
 interface GitHubCopilotPreviewFooterProps {
   readonly remote: ClientContext['remote']['githubCopilot']
+  readonly accountsRemote?: CopilotAccountsRemote
   /** A slot coordinator owns this controller's attachment across surface handoffs. */
   readonly account?: ReturnType<typeof createCompactAccount>
   readonly embedded?: boolean
@@ -664,6 +668,8 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
   const view = state.view
   const signedIn = view?.configured === true
   const authorizing = view?.inFlight === true || state.operation === 'start' || state.operation === 'cancel'
+  const authorizationBusy = authorizing || state.operation === 'signOut'
+  useEffect(() => authorizationBusy ? accountPresentationChanges.begin() : undefined, [authorizationBusy])
   const pendingAction = state.checking || state.operation !== undefined || authorizing
   const uncertain = state.error === 'COPILOT_AUTHORIZATION_START_FAILED'
     || state.error === 'COPILOT_AUTHORIZATION_CANCEL_FAILED' || state.error === 'COPILOT_SIGN_OUT_FAILED'
@@ -693,6 +699,10 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
       : { minWidth: 0, padding: '12px 14px', margin: '12px 0', borderRadius: '16px',
         border: '1px solid color-mix(in srgb, currentColor 24%, transparent)', background: 'transparent' },
   },
+  props.accountsRemote === undefined ? null : createElement(CopilotAccountsPanel, {
+    remote: props.accountsRemote, expanded: manageOpen, onChanged: account.retryStatus,
+    authorizationBusy, configured: view?.configured,
+  }),
   createElement('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', minHeight: '42px' } },
     createElement('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', minWidth: 0 } },
       props.embedded === true ? null : createElement('h3', { style: { margin: 0, fontSize: '16px', lineHeight: '24px' } }, 'GitHub Copilot'),
@@ -736,7 +746,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
 /** Standalone footer presentation; registered Models seats use the shared surface coordinator. */
 export function GitHubCopilotPreviewFooter(props: GitHubCopilotPreviewFooterProps): ReactElement {
   return createElement('div', { 'data-dsh-github-copilot-preview-footer': true },
-    createElement(GitHubCopilotCompactAccount, { remote: props.remote }))
+    createElement(GitHubCopilotCompactAccount, { remote: props.remote, accountsRemote: props.accountsRemote }))
 }
 
 type AccountSurfaceKind = 'provider' | 'footer' | 'settings'
@@ -828,7 +838,7 @@ export function GitHubCopilotAccountSurface(props: GitHubCopilotPreviewFooterPro
   if (props.eligible === false || owner?.token !== token) return null
   const embedded = props.seat.kind === 'provider'
   return createElement('div', { 'data-dsh-github-copilot-account-surface': props.seat.kind },
-    createElement(GitHubCopilotCompactAccount, { remote: props.remote, account: owner.account, embedded }))
+    createElement(GitHubCopilotCompactAccount, { remote: props.remote, accountsRemote: props.accountsRemote, account: owner.account, embedded }))
 }
 
 /** Unified fallback when the Models footer extension is absent or incompatible. */
@@ -843,6 +853,7 @@ function registerUi(ctx: ClientContext): () => void {
   const surfaces = createAccountSurfaces()
   // Native namespace lookups create traced proxies; capture once per registration.
   const remote = ctx.remote.githubCopilot
+  const accountsRemote = ctx.remote.githubCopilotAccounts
   const disposeCredentials = ctx.remote.$on('credentials/reference-updated', () => surfaces.invalidate())
   const disposeReset = ctx.on('connection/reset', () => surfaces.invalidate())
   let active = true
@@ -859,7 +870,7 @@ function registerUi(ctx: ClientContext): () => void {
           id: 'github-copilot',
           order: 11,
           label: 'GitHub Copilot',
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote }))
         disposeFallback = () => { surfaces.revoke(seat); dispose() }
       }
       return
@@ -880,7 +891,7 @@ function registerUi(ctx: ClientContext): () => void {
         'GitHub Copilot account models are already managed by the account panel. Saving this additional provider profile enables another model group; it does not connect a second account. Use the account panel instead. This plugin cannot disable the native Save action.')
       }
       return createElement(GitHubCopilotAccountSurface, {
-        surfaces, seat, remote, eligible: isGitHubCopilotAccountRow(props),
+        surfaces, seat, remote, accountsRemote, eligible: isGitHubCopilotAccountRow(props),
       })
     })
     return () => { surfaces.revoke(seat); dispose() }
@@ -902,7 +913,7 @@ function registerUi(ctx: ClientContext): () => void {
           name: 'settings.models.footer',
           id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
           order: 10,
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote }))
       } catch {
         // Do not withdraw working fallback authorization until footer registration succeeds.
         reportFooterUnavailable()

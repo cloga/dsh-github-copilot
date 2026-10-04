@@ -11,6 +11,8 @@ import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import GitHubCopilotDualModel from './dual-model-host.ts'
 import SearchRoutingController from './search-routing-host.ts'
 import GitHubCopilotUsageController from './copilot-usage-host.ts'
+import GitHubCopilotAccountsController, { isActiveCopilotRecord } from './copilot-accounts-host.ts'
+import type { CopilotAccountLease } from './copilot-accounts-types.ts'
 import { installContextEvidence } from './context-evidence.ts'
 // Bring the `systemPrompt` service declaration (dsh-agent augmentation) into
 // the type graph: module augmentations only apply when their module is part
@@ -171,7 +173,11 @@ export function apply(ctx: Context, config: LiveInlineConfig): void {
   }, { prepend: true })
   ensureAuthorization(ctx)
   ctx.inject(integrationInject, (integrationCtx) => {
-    promptText = activate(integrationCtx, config)
+    integrationCtx.plugin(GitHubCopilotAccountsController)
+    integrationCtx.inject(['githubCopilotAccounts'], accountsCtx => {
+      promptText = activate(accountsCtx, config)
+      accountsCtx.effect(() => () => { promptText = () => '' })
+    })
   })
 }
 
@@ -203,6 +209,43 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     const cfg = current()
     return cfg.searchRouting ?? {}
   }
+  const accountTurns = new Map<string, CopilotAccountLease>()
+  ctx.on('session/event', (session, event) => {
+    if (event.type !== 'turn/end') return
+    accountTurns.get(session.id)?.release()
+    accountTurns.delete(session.id)
+  })
+  ctx.on('agent/disposed', ({ agent }) => {
+    accountTurns.get(agent.session.id)?.release()
+    accountTurns.delete(agent.session.id)
+  })
+  // Retain the fence across Auto assessment, preparation, retries and tools
+  // until the public turn boundary. No Session or selection writes are needed.
+  ctx.on('agent/request', async ({ agent, signal }, next) => {
+    const projections: unknown = ctx.get('sessionProjections')
+    const state: unknown = typeof projections === 'object' && projections !== null && 'stateOf' in projections
+      && typeof projections.stateOf === 'function'
+      ? Reflect.apply(projections.stateOf, projections, [agent.session, 'modelSelection']) : undefined
+    const pending: unknown = typeof state === 'object' && state !== null && 'pending' in state ? state.pending : undefined
+    const pendingProvider = typeof pending === 'object' && pending !== null && 'provider' in pending ? pending.provider : undefined
+    const selectedProvider = pendingProvider ?? agent.session.requestHeader()?.config.provider
+    const followsParent = current().followParentModel === true || (current().parentModelFollow?.length ?? 0) > 0
+    if (!followsParent && typeof selectedProvider === 'string'
+      && selectedProvider !== GITHUB_COPILOT_PROVIDER_ID && selectedProvider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) return next()
+    const lease = ctx.get('githubCopilotAccounts')?.host.acquire(signal)
+    let retained = false
+    try {
+      const result = await next()
+      lease?.binding.assertCurrent()
+      if (lease && result.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && !signal.aborted) {
+        accountTurns.get(agent.session.id)?.release()
+        accountTurns.set(agent.session.id, lease)
+        retained = true
+      }
+      return result
+    } finally { if (!retained) lease?.release() }
+  }, { prepend: true })
+  ctx.effect(() => () => { for (const lease of accountTurns.values()) lease.release(); accountTurns.clear() })
   ctx.plugin(previewPlugin, { accountModelSettings: () => current(), chatRequestSettings: () => current(), requestBudgetSettings: () => {
     const selected = current()
     return { safetyTokens: selected.requestBudgetSafetyTokens, pressureRatio: selected.requestBudgetPressureRatio,
@@ -277,8 +320,9 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
   // Public emit seam: the payload is a record key, not a grant. ctx.on owns
   // the listener in this Fiber; do not resolve auth or inspect settings here.
   ctx.on('credentials/record-updated', (key) => {
-    if (key === GITHUB_COPILOT_CREDENTIAL_KEY) invalidatePlans()
+    if (isActiveCopilotRecord(ctx, key)) invalidatePlans()
   })
+  ctx.get('githubCopilotAccounts')?.host.onChanged(invalidatePlans)
   ctx.effect(() => () => {
     active = false
     invalidatePlans()
@@ -351,7 +395,9 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
       if (provider !== undefined) candidateProviders.set(candidate, provider)
     }
     for (const candidate of candidates) bind(candidate, cfg.probe ? probeSignal : signal)
-    const nextPlan = new SearchPlan(
+    const admission = ctx.get('githubCopilotAccounts')?.host.acquire(probeSignal)
+    let nextPlan: SearchPlan
+    try { nextPlan = new SearchPlan(
       candidates,
       candidate => probeCandidate(candidate, async selected => {
         operation?.assertCurrent()
@@ -361,7 +407,8 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
       }, cfg.probeTimeoutMs, probeSignal),
       cfg.probe,
       signal,
-    )
+    ) } catch (error) { admission?.release(); throw error }
+    void nextPlan.settled.then(() => admission?.release(), () => admission?.release())
     // SearchPlan may clone the candidate when a fallback spelling wins. Bind
     // that exact chosen object before any caller awaits settle() to use it.
     void nextPlan.settled.then(() => {
@@ -548,13 +595,25 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     return !matches(cached, route, candidates, cfg) || cached.plan.available()
   }
 
-  const traditionalProvider = createTraditionalSearchProvider(
+  const nativeTraditionalProvider = createTraditionalSearchProvider(
     traditionalAvailable,
     webPlan,
     hooks,
     current,
   )
+  const traditionalProvider = { ...nativeTraditionalProvider,
+    async search(request: WebSearchRequest, signal?: AbortSignal) {
+      const lease = ctx.get('githubCopilotAccounts')?.host.acquire(signal)
+      try { return await nativeTraditionalProvider.search(request, signal) }
+      finally { lease?.release() }
+    },
+  }
   async function configuredSearch(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
+    const lease = ctx.get('githubCopilotAccounts')?.host.acquire(signal)
+    try { return await configuredAccountSearch(request, signal) }
+    finally { lease?.release() }
+  }
+  async function configuredAccountSearch(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
     const owner = currentSearchInitiator(ctx)
     const startedGeneration = generation
     const cfg = current()
@@ -769,7 +828,11 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     // owner/proof lifetime, including final HTTP and streaming body reads.
     const signals = [request.signal, p.signal].filter((signal): signal is AbortSignal => signal !== undefined)
     const operation = { ...request, signal: AbortSignal.any(signals) }
-    return inlineWireStream(operation, p, hooks, cfg)
+    return (async function* () {
+      const lease = ctx.get('githubCopilotAccounts')?.host.acquire(operation.signal)
+      try { yield* inlineWireStream(operation, p, hooks, cfg) }
+      finally { lease?.release() }
+    })()
   })
 
   ctx.systemPrompt.section({
