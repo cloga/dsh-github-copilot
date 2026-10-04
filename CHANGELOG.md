@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0-alpha.93 (prepared)
+## 0.4.0-alpha.95 (prepared)
 
 - Preserve native usage and chunk order before restoring dispatch-local byte-idle or replay errors (#285). Previously the owned error could be thrown before the SDK's terminal usage, discarding both failed-zero and real nonzero samples.
 - Prove the correction with unchanged native Responses and Anthropic timeout regressions. Preserve structured errors, cancellation, retry policy and wire/history ownership.
