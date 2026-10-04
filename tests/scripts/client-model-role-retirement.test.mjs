@@ -14,9 +14,9 @@ test('Client entry no longer imports, exports or injects the retired role UI', (
 })
 
 test('Client retains neighboring account, search and usage contributions', () => {
-  assert.match(client, /ctx\.inject\(\['remote\.githubCopilot', 'slots'\], registerUi\)/)
+  assert.match(client, /ctx\.inject\(\['remote\.githubCopilot', 'remote\.githubCopilotAccounts', 'slots'\], registerUi\)/)
   assert.match(client, /ctx\.inject\(\['remote\.settings', 'remote\.githubCopilotSearchRouting', 'slots'\], registerSearchUi\)/)
-  assert.match(client, /ctx\.inject\(\['remote\.githubCopilotUsage', 'slots'\], registerCopilotUsageUi\)/)
+  assert.match(client, /ctx\.inject\(\['remote\.githubCopilotUsage', 'remote\.githubCopilotAccounts', 'slots'\], registerCopilotUsageUi\)/)
   for (const slot of ['settings.models.provider-card', 'settings.models.footer', 'settings.section', 'plugins.bundle.config']) {
     assert.ok(client.includes(`name: '${slot}'`), `Missing retained slot: ${slot}`)
   }
