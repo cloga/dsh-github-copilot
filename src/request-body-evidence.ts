@@ -1,3 +1,5 @@
+import type { RequestUploadEvidence } from './request-upload-evidence.ts'
+
 export type RequestBodyProtocol = 'openai-responses' | 'openai-completions' | 'anthropic-messages'
 export const REQUEST_BODY_EVIDENCE_LIMITS = Object.freeze({
   bytes: 16 * 1024 * 1024,
@@ -27,6 +29,7 @@ export interface RequestBodyDispatchEvidence {
   readonly protocol: RequestBodyProtocol
   /** Fetch invocation to response headers, not upload duration or clone-observation time. */
   readonly responseHeadersMs: number
+  readonly upload?: RequestUploadEvidence
 }
 
 export function formatRequestBodyEvidence(evidence: RequestBodyEvidence, responseHeadersMs?: number): string {

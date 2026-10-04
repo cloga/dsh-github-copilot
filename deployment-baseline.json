@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.96"
+    "version": "0.4.0-alpha.97"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -586,6 +586,7 @@
         {"file": "src/auto-assessment-evidence.ts", "marker": "SemanticAssessmentEvidenceSchema"},
         {"file": "src/request-body-timeout-marker.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
         {"file": "src/request-body-evidence.ts", "marker": "REQUEST_BODY_EVIDENCE_LIMITS"},
+        {"file": "src/request-upload-evidence.ts", "marker": "createRequestUploadObserver"},
         {"file": "src/copilot-stream-liveness.ts", "marker": "COPILOT_STREAM_IDLE_TIMEOUT"},
         {"file": "src/preview-route.ts", "marker": "Math.min(idle * 2, 2_147_483_647)"},
         {"file": "src/response-error-body.ts", "marker": "readResponseErrorJson"},
@@ -605,6 +606,9 @@
         {"file": "tests/preview-route.spec.ts", "name": "enriches only a verified 408 while preserving native failure classification and retry ownership"},
         {"file": "tests/preview-provider.spec.ts", "name": "observes verified %s timeout without changing bytes, Response, native retries or credential ownership"},
         {"file": "tests/request-body-timeout.spec.ts", "name": "bounds stalled response observation and gives cancellation priority"},
+        {"file": "tests/request-upload-evidence.spec.ts", "name": "observes real Node Fetch without changing body, signal, Response, or installing a dispatcher"},
+        {"file": "tests/request-upload-evidence.spec.ts", "name": "keeps simultaneous scopes independent and ignores foreign broadcasts"},
+        {"file": "tests/preview-provider.spec.ts", "name": "records real local Fetch stages on a verified native timeout and disposes the observer on settlement"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "captures bounded phase evidence for a timed-out partial result without treating it as a validated task"},
         {"file": "tests/auto-task-evidence.spec.ts", "name": "captures monotonic auxiliary phases without text, accounting or late mutation"},
         {"file": "tests/request-body-evidence.spec.ts", "name": "measures a nine MiB native-style inline image without exposing or decoding it"},

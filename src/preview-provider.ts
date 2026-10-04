@@ -12,6 +12,7 @@ import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { CopilotResponsesReplayError, isCopilotInputItemScopeError, normalizeCopilotResponsesPayload } from './responses-replay-compat.ts'
 import type { ResponsesRetryReplay } from './responses-replay-compat.ts'
 import { requestBodyTimeoutDiagnostic } from './request-body-timeout.ts'
+import { createRequestUploadObserver } from './request-upload-evidence.ts'
 import { CopilotStreamIdleError, CopilotStreamLiveness } from './copilot-stream-liveness.ts'
 
 export type ManagedWireAbortCode = 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' | 'COPILOT_PREVIEW_DISPOSED'
@@ -256,15 +257,17 @@ export function createAccountProvider(
           clientRequestHeader: replayHeaders?.has('x-client-request-id'),
         } : undefined
         let response: Response
+        const upload = guard.onRequestBodyTimeout === undefined ? undefined : createRequestUploadObserver()
         const startedAt = performance.now()
-        try { response = await fetch(input, init) }
+        try { response = await (upload === undefined ? fetch(input, init) : upload.run(() => fetch(input, init))) }
         catch (error) { retry?.observe(undefined, 0); throw error }
+        finally { upload?.close() }
         const responseHeadersMs = performance.now() - startedAt
         retry?.observe(typeof init?.body === 'string' ? init.body : undefined, response.status)
         if (response.status === 408 && guard.onRequestBodyTimeout !== undefined) {
           const diagnostic = await requestBodyTimeoutDiagnostic(response,
             typeof init?.body === 'string' ? init.body : undefined, lease.signal,
-            { protocol: entry.api, responseHeadersMs })
+            { protocol: entry.api, responseHeadersMs, ...upload === undefined ? {} : { upload: upload.snapshot() } })
           if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout(diagnostic)
         }
         // A bounded clone identifies only the observed request-scope rejection.

@@ -39,6 +39,16 @@ test('context diagnostics preserve shared usage and include native whole-turn ev
   await verifyAgentContract()
 })
 
+test('upload evidence retains request scope, cleanup and local-only observation boundaries', async () => {
+  const plan = await planTask('authorization')
+  assert.ok(plan.commands.some(command => command.argv.includes('tests/request-upload-evidence.spec.ts')))
+  const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+  assert.ok(contract.tasks.authorization.read.includes('src/request-upload-evidence.ts'))
+  assert.match(contract.tasks.authorization.requestBodyEvidenceBoundary, /dispose subscriptions/)
+  assert.match(contract.tasks.authorization.requestBodyEvidenceBoundary, /not kernel ACK, supplier receipt or execution/)
+  await verifyAgentContract()
+})
+
 test('important updates carry release follow-through without a second approval prompt', async () => {
   const plan = await planTask('release')
   const policy = plan.boundaries.releaseDelivery

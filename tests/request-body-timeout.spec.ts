@@ -6,6 +6,20 @@ const error = { code: 'user_request_timeout',
   message: 'Timed out reading request body. Try again, or use a smaller request size.' }
 
 describe('verified request-body timeout diagnostics', () => {
+  it('includes local phase evidence only after strict failure verification and keeps the original response', async () => {
+    const upload = { state: 'observed' as const, bodyWrite: 'observed' as const,
+      bodyWriteCompleteMs: 32, nativeResponseHeadersMs: 900, alpn: 'h2' as const, nodeWritableBufferBytes: 0 }
+    const response = new Response(JSON.stringify(error), { status: 408 })
+    const text = await requestBodyTimeoutDiagnostic(response, '{"input":[]}', undefined,
+      { protocol: 'openai-responses', responseHeadersMs: 901, upload })
+    expect(text).toContain('local body-write complete at 32 ms')
+    expect(text).toContain('native response headers at 900 ms')
+    expect(text).toContain('TLS ALPN h2')
+    expect(text).toContain('not upload duration, kernel ACK, supplier receipt or execution')
+    expect(await response.json()).toEqual(error)
+    expect(await requestBodyTimeoutDiagnostic(new Response('{}', { status: 408 }), '{"input":[]}', undefined,
+      { protocol: 'openai-responses', responseHeadersMs: 901, upload })).toBeUndefined()
+  })
   it('analyzes only verified failures and reports honest header timing without leaking final payload', async () => {
     const observer = vi.spyOn(bodyEvidence, 'requestBodyEvidence')
     try {
