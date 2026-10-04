@@ -46,6 +46,10 @@ export interface PreviewProviderGuard {
 
 /** Guard for one selected model in an account-bound descriptor snapshot. */
 export interface AccountProviderGuard extends PreviewProviderGuard {
+  /** Explicit, request-admitted recovery; absent by default. */
+  recoverReplay?(payload: unknown): unknown
+  /** Only exact verified scope HTTP failures may offer recovery evidence. */
+  onReplayScopeRejected?(body: string | undefined): void
   readonly selectedModelId?: string
   readonly retryReplay?: ResponsesRetryReplay
   readonly retrySignal?: AbortSignal
@@ -233,7 +237,8 @@ export function createAccountProvider(
         if (lease.signal.aborted || options.signal?.aborted) throw new Error('COPILOT_MANAGED_ABORTED')
         try {
           const effective = replacement === undefined ? payload : replacement
-          return retry === undefined ? normalizeCopilotResponsesPayload(effective) : retry.normalize(effective)
+          const normalized = retry === undefined ? normalizeCopilotResponsesPayload(effective) : retry.normalize(effective)
+          return guard.recoverReplay === undefined ? normalized : guard.recoverReplay(normalized)
         }
         catch (error) {
           if (error instanceof CopilotResponsesReplayError) reportReplayFailure(error)
@@ -266,6 +271,7 @@ export function createAccountProvider(
         // Preserve the original Response/status/body for the native SDK.
         if (response.status === 401) {
           if (responses && await isCopilotInputItemScopeError(response, lease.signal)) {
+            guard.onReplayScopeRejected?.(replayDispatch?.body)
             reportReplayFailure(new CopilotResponsesReplayError('scope-mismatch', replayDispatch))
           } else unauthorized = true
         }

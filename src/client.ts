@@ -21,6 +21,7 @@ export { ParentModelFollowCard } from './parent-model-follow-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
 import { registerCopilotUsageUi } from './copilot-usage-ui.ts'
 import { registerContextEvidenceUi } from './context-evidence-ui.ts'
+import { registerReplayRecoveryUi } from './replay-recovery-ui.ts'
 import { externalLinkTarget } from './external-link.ts'
 import { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
 export { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
@@ -1059,6 +1060,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const searchUi = ctx.inject(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
   const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
   const contextUi = ctx.inject(['slots'], registerContextEvidenceUi)
+  const recoveryUi = ctx.inject(['remote.githubCopilotReplayRecovery', 'slots'], registerReplayRecoveryUi)
   const autoUi = ctx.inject(['remote.githubCopilotTurnSelection', 'slots'], scope => installAutoModelPresentation({
     slots: scope.slots,
     remote: scope.remote,
@@ -1082,6 +1084,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     }
   })
   return async () => {
+    await recoveryUi.dispose()
     await contextUi.dispose()
     await usageUi.dispose()
     await autoUi.dispose()

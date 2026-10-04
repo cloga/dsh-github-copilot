@@ -97,13 +97,28 @@ const roleDescriptors = remote.descriptors.filter(descriptor => descriptor.names
 const catalogDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSearchRouting')
 const usageDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
 const selectionDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotTurnSelection')
+const replayDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotReplayRecovery')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 18 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 20 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
-  || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get'])) {
-  throw new Error('built Remote entry must retain ten legacy authorization/model-preference/migration controls, one narrow exclusion control, three model-role methods, one search catalog, two quota methods and one explicit selection lookup')
+  || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get'])
+  || JSON.stringify(replayDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'setEnabled'])) {
+  throw new Error('built Remote entry must retain existing controls and add only two explicit replay recovery controls')
+}
+for (const descriptor of replayDescriptors) {
+  if (descriptor.id !== `dsh-github-copilot:githubCopilotReplayRecovery.${descriptor.method}`
+    || descriptor.service !== 'githubCopilotReplayRecovery' || descriptor.invocation.kind !== 'direct'
+    || descriptor.scope !== undefined || descriptor.parameters[0].lookup !== 'agent'
+    || descriptor.parameters[0].wire !== 'agentId' || descriptor.parameters[0].source !== 'lookup'
+    || descriptor.parameters.length !== (descriptor.method === 'get' ? 1 : 3)
+    || descriptor.result.mode !== 'strict'
+    || descriptor.result.typeSymbol !== 'dsh-github-copilot#ReplayRecoveryView') throw new Error('replay recovery Remote binding differs')
+  descriptor.result.schema.parse({ state: 'unavailable' })
+  if (descriptor.result.schema.safeParse({ state: 'unavailable', input: [] }).success) {
+    throw new Error('replay recovery Remote accepts request content')
+  }
 }
 const selection = selectionDescriptors[0]
 if (selection.id !== 'dsh-github-copilot:githubCopilotTurnSelection.get'

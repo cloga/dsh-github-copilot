@@ -9,7 +9,63 @@ import { TurnSelectionStore } from '../../src/turn-selection.ts'
 import { it, expect, vi } from 'vitest'
 import remote from '../../src/remote.ts'
 import selectionRemote from '../../src/turn-selection-remote.ts'
+import recoveryRemote from '../../src/replay-recovery-remote.ts'
+import { ReplayRecoveryController } from '../../src/replay-recovery-host.ts'
+import { ReplayRecoveryStore } from '../../src/replay-recovery.ts'
 import { name, version } from '#package.json' with { type: 'json' }
+
+it.each(['source', 'strict'] as const)('binds explicit replay recovery through native Client and %s Host gateways', async mode => {
+  const host = new Context(), client = new Context()
+  const store = new ReplayRecoveryStore(), busy = new WeakSet<object>()
+  const agent = { id: 'recovery-owner', session: {} }
+  try {
+    const registry = new TypertRegistry(host)
+    registry.lookups.register('agent', {
+      parameter: 'agent', wire: 'agentId', hostTypeSymbol: '@deepseek-ai/dsh-agent#Agent',
+      wireTypeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
+      resolve: id => id === agent.id ? agent : undefined,
+    })
+    if (mode === 'strict') registry.register({
+      package: recoveryRemote.package, face: 'host', schemas: [],
+      model: { services: [], events: [], objects: [] }, invocations: recoveryRemote.descriptors,
+    })
+    const connection = new HostConnectionService(host, [], {})
+    new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
+    const handler = connection.createSharedFetchHandler('/api')
+    let sequence = 0
+    client.provide('typert', { remotes: { register: () => () => {} },
+      contexts: { getClient: () => ({ identity: () => 'unrelated-ambient-session' }) } })
+    client.provide('connection', { rpc: { call: async (_path: string, method: string, payload: unknown) => {
+      const response = await handler.fetch(new Request(`http://fixture.invalid/api/${method}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'client-request', rpcId: `recovery-${++sequence}`, method, payload }),
+      }))
+      return (await response.json()).result
+    }, open: vi.fn() }, registerGenerationSource: () => () => {}, start: () => ({ stop: () => {} }),
+    generation: { getSnapshot: () => undefined } })
+    Gateway.apply(client)
+    await client.remote.$mount(recoveryRemote)
+    new ReplayRecoveryController(host, store, () => 'proof', busy)
+    store.recordFailure(agent.session, 'proof', 'synthetic-model', JSON.stringify({
+      input: [{ type: 'reasoning', encrypted_content: 'synthetic-private', summary: [] }], store: false,
+    }))
+    const remote = client.remote.githubCopilotReplayRecovery
+    const result = await remote.get(agent.id)
+    expect(result).toMatchObject({ ok: true, value: { state: 'available', itemCount: 1 } })
+    if (!result.ok || result.value.state === 'unavailable') throw new Error('missing recovery')
+    expect(JSON.stringify(result)).not.toContain('synthetic-private')
+    busy.add(agent.session)
+    await expect(remote.setEnabled(agent.id, result.value.revision, true)).resolves.toMatchObject({ ok: false })
+    busy.delete(agent.session)
+    await expect(remote.setEnabled(agent.id, result.value.revision, true))
+      .resolves.toMatchObject({ ok: true, value: { state: 'enabled' } })
+    await expect(remote.get('missing')).resolves.toMatchObject({ ok: false })
+    await expect(remote.setEnabled(agent.id, '00000000-0000-4000-8000-000000000001', false))
+      .resolves.toMatchObject({ ok: false })
+    store.clear()
+    await expect(remote.get(agent.id)).resolves.toEqual({ ok: true, value: { state: 'unavailable' } })
+  } finally { await client.fiber.dispose(); await host.fiber.dispose() }
+})
 
 it.each(['source', 'strict'] as const)('reads retained selection through actual Client and %s Host gateways', async mode => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
