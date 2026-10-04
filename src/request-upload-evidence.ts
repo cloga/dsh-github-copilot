@@ -8,7 +8,8 @@ export type RequestUploadEvidence = {
   readonly nativeResponseHeadersMs?: number
   readonly alpn: 'h2' | 'http/1.1' | 'unavailable'
   readonly nodeWritableBufferBytes?: number
-} | { readonly state: 'unavailable' | 'work-limit' }
+} | { readonly state: 'unavailable' }
+  | { readonly state: 'work-limit' }
   | { readonly state: 'ambiguous'; readonly requestCount: number }
 
 function object(value: unknown): value is Record<string, unknown> {
