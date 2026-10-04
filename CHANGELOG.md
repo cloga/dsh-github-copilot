@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.103 (prepared)
+
+- Reevaluate transient account BUSY failures from current leases, authorization and managed Agent activity on status reads instead of retaining a stale rejection after work ends (#303).
+- Keep active work blocked and preserve missing evidence, native-route restrictions and uncertain-commit errors. Status recovery does not refresh credentials, authorize another account, switch models or write settings/history.
+
 ## 0.4.0-alpha.102 (prepared)
 
 - Read official rc.2 SettingsForms values without requiring the retired `get()` method, fixing an unconditional `COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE` account-switching blocker (#301).

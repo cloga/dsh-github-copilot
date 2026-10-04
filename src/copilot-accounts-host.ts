@@ -225,7 +225,8 @@ export class CopilotAccountsHost {
       if (activeAccountId !== 'canonical' && !accounts.some(row => row.id === activeAccountId && row.configured)) {
         fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
       }
-      problem = this.lastFailure ?? this.routeDiagnostic()
+      const retainedFailure = this.lastFailure === 'COPILOT_ACCOUNTS_BUSY' ? undefined : this.lastFailure
+      problem = retainedFailure ?? this.routeDiagnostic() ?? (this.busy() ? 'COPILOT_ACCOUNTS_BUSY' : undefined)
     } catch (error) { problem = diagnostic(error, 'COPILOT_ACCOUNTS_CREDENTIALS_UNAVAILABLE') }
     if (this.lastFailure === 'COPILOT_ACCOUNTS_COMMIT_UNCERTAIN') problem = this.lastFailure
     const recovery = problem === 'COPILOT_ACCOUNTS_SELECTED_MISSING' && writable && this.routeDiagnostic() === undefined

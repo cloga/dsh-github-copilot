@@ -5,7 +5,7 @@
 This document records the approved requirements and implementation design for
 issue #297. Multi-account behavior is not released or installed until the
 acceptance gates below complete. The existing single-account behavior remains
-the compatibility baseline. The current source candidate is `0.4.0-alpha.102`;
+the compatibility baseline. The current source candidate is `0.4.0-alpha.103`;
 publication, installation and loaded runtime state are separate evidence.
 
 ## Requirements
@@ -135,6 +135,14 @@ eligibility override.
 4. CAS the selector, read back committed settings and confirm target evidence.
 5. Revoke old model, Auto, search, quota, identity and recovery evidence and
    update the directory and UI without model/history/default writes.
+
+`COPILOT_ACCOUNTS_BUSY` is transient: each account status read reevaluates
+current managed Agent activity, operation leases and authorization. A rejected
+switch must not remain busy after that work settles. Reading status does not
+refresh credentials or retry the rejected switch. In Models, use **Refresh
+account information** after work ends to update the mounted view. With only
+one saved account, first use **Add GitHub account**; a **Switch** control is
+shown only for another saved account. No running work is cancelled for this.
 
 Failed preparation leaves the old selector unchanged. A committed selector
 followed by failed readback is reported as uncertain, never successful and
