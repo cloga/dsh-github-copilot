@@ -139,8 +139,11 @@ export function requestBodyEvidence(body: string | undefined, protocol: RequestB
         whitespace()
         if (body[position++] !== ':') throw new EvidenceParseError('invalid-json')
         whitespace()
+        const contentArray = key === 'content' && (location === 'conversation' || location === 'content')
+          || protocol === 'openai-responses' && location === 'conversation' && value.type === 'function_call_output'
+            && key === 'output'
         const childLocation = imageBlock ? 'other' : depth === 0 && key === conversationKey ? 'conversation'
-          : key === 'content' && (location === 'conversation' || location === 'content') && Array.isArray(value[key])
+          : contentArray && Array.isArray(value[key])
             ? 'content' : 'other'
         const childStart = position, child = visit(value[key], depth + 1, childLocation)
         // Only counted spans need encoding work; never repeatedly encode arbitrary nested history.
