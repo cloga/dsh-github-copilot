@@ -2,6 +2,7 @@ import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import vm from 'node:vm'
+import { importsRuntimePackage } from './runtime-imports.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
@@ -80,7 +81,7 @@ if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
 const recovery = await import(pathToFileURL(resolve(root, 'lib/manual-compaction-recovery.js')).href)
 if (typeof recovery.default !== 'function') throw new Error('built recovery engine must remain independently importable')
 for (const file of (await readdir(resolve(root, 'lib'))).filter(file => file.endsWith('.js'))) {
-  if ((await readFile(resolve(root, 'lib', file), 'utf8')).includes('@deepseek-ai/dsh-jobs')) {
+  if (importsRuntimePackage(await readFile(resolve(root, 'lib', file), 'utf8'), '@deepseek-ai/dsh-jobs')) {
     throw new Error('jobs must remain a type-only development dependency, not a bundled runtime import')
   }
 }
