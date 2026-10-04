@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.100 (prepared)
+
+- Add independently authorized GitHub Copilot accounts through official OAuth and the existing DSH credentials service (#297). Preserve the canonical compatibility account; inactive-account refresh remains lazy and record-bound.
+- Manage, confirm switches, remove inactive authorizations and reauthorize the same identity in Models. Managed-only evidence, target preflight, activity fencing and path-level selector CAS prevent unsafe switches; no history, selected-model or default rewrites.
+- Show the current GitHub identity read-only in Credits details, paired with account-bound quota evidence. Clear mounted readings during account changes and reject late responses; quota snapshots are not proof of cross-app AI-credit aggregation.
+- Preserve existing Remotes and add a separate strict account namespace. Native gateway, adapter and synthetic on-disk restart tests complement the required full CI; no live OAuth, installation or loaded Desktop success is implied.
+
 ## 0.4.0-alpha.99 (prepared)
 
 - Enforce Auto assessment's single monotonic deadline at preparation, native request and result boundaries even when a delayed timer has not fired (#295). Dispose the assessment timer and listener on settlement; preserve cancellation, proof revocation and unknown-demand fallback.

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { strictRemoteCodec } from './remote-codec.ts'
 import { COPILOT_USAGE_DIAGNOSTICS, COPILOT_USAGE_MAX_AMOUNT, COPILOT_USAGE_MAX_TIMESTAMP } from './copilot-usage-types.ts'
 import type { CopilotUsageView } from './copilot-usage-types.ts'
+import { COPILOT_ACCOUNT_ID_PATTERN } from './copilot-accounts-types.ts'
 export type { CopilotUsageView } from './copilot-usage-types.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
@@ -17,6 +18,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 const amount = z.number().finite().nonnegative().max(COPILOT_USAGE_MAX_AMOUNT)
 const timestamp = z.number().int().nonnegative().max(COPILOT_USAGE_MAX_TIMESTAMP)
 export const CopilotUsageViewSchema = z.object({
+  accountId: z.string().max(36).regex(COPILOT_ACCOUNT_ID_PATTERN).optional(),
   state: z.enum(['ready', 'stale', 'unavailable', 'signed-out']),
   billing: z.enum(['credits', 'requests', 'unknown']),
   budget: z.enum(['individual', 'pooled', 'unknown']),

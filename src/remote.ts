@@ -15,6 +15,7 @@ import searchRoutingRemote from './search-routing-remote.ts'
 import copilotUsageRemote from './copilot-usage-remote.ts'
 import turnSelectionRemote from './turn-selection-remote.ts'
 import replayRecoveryRemote from './replay-recovery-remote.ts'
+import copilotAccountsRemote from './copilot-accounts-remote.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
@@ -176,6 +177,7 @@ const contribution: TypertRemoteContribution = {
     ...copilotUsageRemote.descriptors,
     ...turnSelectionRemote.descriptors,
     ...replayRecoveryRemote.descriptors,
+    ...copilotAccountsRemote.descriptors,
   ],
 }
 

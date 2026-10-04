@@ -37,9 +37,30 @@ function active(signal: AbortSignal): void {
  * login, environment fallback or separate credential record is introduced here.
  */
 export function createAccountModelAuth(
-  credentials: CredentialStore,
+  credentials: CredentialStore | (() => CredentialStore),
   renewRejectedCredential?: (grant: GitHubCopilotOAuthCredential) => boolean,
 ): Pick<AccountModelSourceDependencies, 'resolveAuth' | 'assertAuthCurrent'> {
+  if (typeof credentials === 'function') {
+    const owners = new WeakMap<AbortSignal, { auth: AccountModelAuth; owner: ReturnType<typeof createAccountModelAuth> }>()
+    return {
+      async resolveAuth(signal) {
+        const owner = createAccountModelAuth(credentials(), renewRejectedCredential)
+        const auth = await owner.resolveAuth(signal)
+        owners.set(signal, { auth, owner })
+        return auth
+      },
+      async assertAuthCurrent(auth, signal) {
+        // AccountModelSource intentionally normalizes a fresh auth DTO. Its
+        // signal, rather than DTO identity, retains the captured store owner.
+        const entry = owners.get(signal)
+        if (!entry || entry.auth.accountKey !== auth.accountKey || entry.auth.apiKey !== auth.apiKey
+          || entry.auth.baseURL !== auth.baseURL || authEntitlementKey(entry.auth) !== authEntitlementKey(auth)) {
+          throw new Error('COPILOT_ACCOUNT_AUTH_CHANGED')
+        }
+        await entry.owner.assertAuthCurrent(auth, signal)
+      },
+    }
+  }
   const native = githubCopilotProvider()
   const oauth = native.auth.oauth
   if (oauth === undefined) throw new Error('COPILOT_ACCOUNT_OAUTH_UNAVAILABLE')

@@ -10,6 +10,20 @@ const compactionCommand = "pnpm install --frozen-lockfile --filter '@deepseek-ai
 const jobsCommand = "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-jobs-local...' --filter '@deepseek-ai/dsh-commands...'"
 const presetsCommand = "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-preset-registry...' --filter '@deepseek-ai/cordis-plugin-group...'"
 for (const filename of ['ci.yml', 'release.yml']) {
+  test(`${filename} installs unchanged native account persistence dependencies before tagged preparation`, async () => {
+    const source = await readFile(new URL(`../../.github/workflows/${filename}`, import.meta.url), 'utf8')
+    const blocks = source.split(/(?=^      - )/m)
+    const index = blocks.findIndex(block => block.includes('Install native account persistence verification closure'))
+    assert.ok(index >= 0)
+    const block = blocks[index]
+    assert.match(block, /working-directory: dsh-upstream/)
+    assert.doesNotMatch(block, /^        if:/m)
+    for (const name of ['credentials-local', 'app-boot', 'config-editor', 'settings', 'authorization']) {
+      assert.ok(block.includes(`--filter '@deepseek-ai/dsh-${name}...'`))
+    }
+    assert.match(block, /pnpm install --frozen-lockfile/)
+    assert.ok(index < blocks.findIndex(part => part.includes('node scripts/verify-tagged-core.mjs prepare')))
+  })
   test(`${filename} prepares the Session/Remote runtime dependency closure`, async () => {
     const source = await readFile(new URL(`../../.github/workflows/${filename}`, import.meta.url), 'utf8')
     assert.equal(assertTaggedRuntimeClosure(source), true)

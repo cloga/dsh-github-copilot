@@ -21,10 +21,10 @@ import { providerRequestHeaders } from './copilot-request.ts'
 import { applyRequestAuth, normalizeRequestAuth } from './copilot-request.ts'
 import type { ResolvedRequestAuth } from './copilot-request.ts'
 import { isAbortError, providerErrorMessage, readBounded } from './http.ts'
-import { version } from '#package.json' with { type: 'json' }
+import packageMetadata from '#package.json' with { type: 'json' }
 
 /** Attribution header value sent on probe requests; single-sourced from package.json. */
-const USER_AGENT = `dsh-github-copilot/${version}`
+const USER_AGENT = `dsh-github-copilot/${packageMetadata.version}`
 
 /** Upper bound on generated tokens for a probe reply; the verdict needs none of it. */
 const PROBE_MAX_TOKENS = 64

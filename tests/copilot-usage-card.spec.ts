@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CopilotUsageCard } from '../src/copilot-usage-card.ts'
 import type { CopilotUsageRemote, CopilotUsageCardProps } from '../src/copilot-usage-card.ts'
 import type { CopilotUsageView } from '../src/copilot-usage-types.ts'
+import type { CopilotAccountsRemote } from '../src/copilot-accounts-card.ts'
+import type { CopilotAccountsView } from '../src/copilot-accounts-types.ts'
+import { accountPresentationChanges } from '../src/copilot-account-presentation.ts'
 
 const cleanups: Array<() => void> = []
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }) })
@@ -46,6 +49,85 @@ function deferred<T>() {
 }
 
 describe('Copilot account usage chip', () => {
+  it('shows current identity only in details without a Chat switching control', async () => {
+    const accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'> = {
+      get: vi.fn(async () => ({ ok: true as const, value: {
+        state: 'ready' as const, activeAccountId: 'canonical', revision: 2, writable: true, switchable: true,
+        accounts: [{ id: 'canonical', configured: true, identityState: 'ready' as const, identity: { login: 'demo-user', userId: 1 } }],
+        notices: [],
+      } })),
+      refreshIdentity: vi.fn(async function () { return accountsRemote.get() }),
+    }
+    await mount({ remote: remote(view({ accountId: 'canonical' })), accountsRemote, contextKey: 'identity' })
+    expect(trigger().textContent).not.toContain('demo-user')
+    await click(trigger())
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-user')
+    expect(text()).not.toContain('across Copilot apps')
+    expect(Array.from(document.querySelectorAll('button')).some(node => /switch|add.*account|remove/i.test(node.textContent ?? ''))).toBe(false)
+  })
+  it('refuses to combine account B identity with account A quota', async () => {
+    const snapshot = { state: 'ready' as const, activeAccountId: 'canonical', revision: 2, writable: true, switchable: true,
+      accounts: [{ id: 'canonical', configured: true, identityState: 'ready' as const, identity: { login: 'demo-b', userId: 2 } }],
+      notices: [] }
+    const accountsRemote = { get: vi.fn(async () => ({ ok: true as const, value: snapshot })),
+      refreshIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot })) }
+    await mount({ remote: remote(view({ accountId: '00000000-0000-4000-8000-000000000001' })), accountsRemote, contextKey: 'changed-account' })
+    expect(trigger().textContent).not.toContain('42.25')
+    await click(trigger())
+    expect(text()).toContain('Could not refresh usage')
+    expect(document.querySelector('[role="progressbar"]')).toBeNull()
+  })
+  it('retains account-bound quota when the separate identity lookup is unavailable', async () => {
+    const snapshot: CopilotAccountsView = {
+      state: 'ready', activeAccountId: 'canonical', revision: 2, writable: true, switchable: true,
+      accounts: [{ id: 'canonical', configured: true, identityState: 'unavailable' }], notices: [],
+    }
+    const accountsRemote = {
+      get: vi.fn(async () => ({ ok: true as const, value: snapshot })),
+      refreshIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot })),
+    }
+    await mount({ remote: remote(view({ accountId: 'canonical' })), accountsRemote, contextKey: 'identity-unavailable' })
+    expect(trigger().textContent).toContain('42.25')
+    await click(trigger())
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toContain('identity unavailable')
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  })
+  it('immediately revokes mounted presentation on a Models mutation and rejects late previous-account results', async () => {
+    let activeAccountId = 'canonical'
+    const nextId = '00000000-0000-4000-8000-000000000001'
+    const snapshot = (): CopilotAccountsView => ({
+      state: 'ready', activeAccountId, revision: 2, writable: true, switchable: true, notices: [],
+      accounts: [
+        { id: 'canonical', configured: true, identityState: 'ready', identity: { login: 'demo-a', userId: 1 } },
+        { id: nextId, configured: true, identityState: 'ready', identity: { login: 'demo-b', userId: 2 } },
+      ],
+    })
+    const accountsRemote = {
+      get: vi.fn(async () => ({ ok: true as const, value: snapshot() })),
+      refreshIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot() })),
+    }
+    const late = deferred<ReturnType<typeof ok>>()
+    const api = {
+      get: vi.fn(async () => ok(view({ accountId: activeAccountId, used: activeAccountId === 'canonical' ? 42.25 : 12,
+        remaining: activeAccountId === 'canonical' ? 57.75 : 88, percentUsed: activeAccountId === 'canonical' ? 42.25 : 12 }))),
+      refresh: vi.fn(() => late.promise),
+    }
+    await mount({ remote: api, accountsRemote, contextKey: 'mutation' })
+    await click(trigger())
+    expect(text()).toContain('@demo-a')
+    await click(button('Refresh'))
+    let finish = () => {}
+    await act(async () => { finish = accountPresentationChanges.begin() })
+    cleanups.push(finish)
+    expect(text()).not.toContain('@demo-a')
+    expect(trigger().textContent).not.toContain('42.25')
+    await act(async () => { activeAccountId = nextId; finish() })
+    expect(text()).toContain('@demo-b')
+    expect(trigger().textContent).toContain('12 used')
+    await act(async () => { late.resolve(ok(view({ accountId: 'canonical' }))) })
+    expect(text()).not.toContain('@demo-a')
+    expect(trigger().textContent).toContain('12 used')
+  })
   it('uses native secondary type tokens and a bounded single-line trigger', async () => {
     await mount()
     const control = trigger()
@@ -195,7 +277,9 @@ describe('Copilot account usage chip', () => {
     expect(trigger().textContent).toContain('已用')
     await click(trigger())
     expect(text()).not.toContain('本会话')
-    expect(text()).not.toContain('暂不可用')
+    expect(text()).toContain('GitHub 账号信息暂不可用')
+    expect(text()).toContain('42.25')
+    expect(text()).toContain('57.75')
     expect(text()).toContain('账号范围')
     expect(button('刷新')).toBeDefined()
   })

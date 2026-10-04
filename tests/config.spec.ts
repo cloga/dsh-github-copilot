@@ -23,12 +23,22 @@ describe('session search settings', () => {
 
   it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['excludedModelIds', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['excludedModelIds', 'activeAccountId', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
     expect(parsed.searchRouting.get()).toMatchObject({ defaultSearchProvider: 'deepseek-official' })
     expect(readInlineConfig(parsed)).toMatchObject({ searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
+  })
+
+  it('keeps the account selector hidden, volatile and absent by default', () => {
+    expect(Config.dict?.activeAccountId?.meta.hidden).toBe(true)
+    expect(readInlineConfig(Config(base)).activeAccountId).toBeUndefined()
+    let accountId: string | undefined
+    const live = { ...base, activeAccountId: { get: () => accountId } }
+    expect(readInlineConfig(live).activeAccountId).toBeUndefined()
+    accountId = '11111111-1111-4111-8111-111111111111'
+    expect(readInlineConfig(live).activeAccountId).toBe(accountId)
   })
 
   describe('explicit parent model following', () => {

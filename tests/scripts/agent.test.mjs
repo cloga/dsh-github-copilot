@@ -39,6 +39,20 @@ test('context diagnostics preserve shared usage and include native whole-turn ev
   await verifyAgentContract()
 })
 
+test('multi-account plan retains explicit direct-grant ownership and UI boundaries', async () => {
+  const plan = await planTask('accounts')
+  assert.ok(plan.commands.some(command => command.argv.includes('tests/copilot-accounts-card.spec.ts')))
+  const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+  assert.match(contract.tasks.accounts.risk, /never grant copies/)
+  assert.match(contract.tasks.accounts.risk, /Models alone/)
+  assert.match(contract.tasks.accounts.risk, /Missing selected account never falls back/)
+  const doc = await readFile(join(repositoryRoot, 'docs/copilot-accounts.md'), 'utf8')
+  assert.match(doc, /immutable account identifier/)
+  assert.match(doc, /not a cross-namespace/)
+  assert.match(doc, /No automatic fallback/)
+  await verifyAgentContract()
+})
+
 test('upload evidence retains request scope, cleanup and local-only observation boundaries', async () => {
   const plan = await planTask('authorization')
   assert.ok(plan.commands.some(command => command.argv.includes('tests/request-upload-evidence.spec.ts')))
@@ -181,7 +195,7 @@ test('CLI unknown input returns one JSON error with exit 2', () => {
 test('agent contract references actual files and verification gates', async () => {
   const result = await verifyAgentContract()
   assert.equal(result.ok, true)
-  assert.equal(result.taskCount, 13)
+  assert.equal(result.taskCount, 14)
   const autointent = await planTask('autointent')
   assert.ok(autointent.read.includes('src/auto-model-intent.ts'))
   assert.ok(autointent.tests.includes('tests/fixtures/session-context-core.fixture.ts'))
