@@ -5,7 +5,7 @@
 This document records the approved requirements and implementation design for
 issue #297. Multi-account behavior is not released or installed until the
 acceptance gates below complete. The existing single-account behavior remains
-the compatibility baseline. The current source candidate is `0.4.0-alpha.101`;
+the compatibility baseline. The current source candidate is `0.4.0-alpha.102`;
 publication, installation and loaded runtime state are separate evidence.
 
 ## Requirements
@@ -118,6 +118,14 @@ must complete before the new slot can be selected. Partial authorization is
 reported truthfully and can be retried or explicitly removed.
 
 Switching has a preparation phase and a commit phase:
+
+Route eligibility reads official rc.2 SettingsForms through redacted
+`describe()` values and revision-bearing namespaces; it does not require the
+retired `get()` method. Missing or malformed configuration still means
+incomplete evidence, not an absent native route. The legacy reader remains
+available for retained compatibility fixtures. Account persistence acceptance
+uses real SettingsForms and the production route diagnostic, without an
+eligibility override.
 
 1. Capture the selector revision and verify managed-only route eligibility.
 2. Validate target identity, refresh authorization as needed and check account

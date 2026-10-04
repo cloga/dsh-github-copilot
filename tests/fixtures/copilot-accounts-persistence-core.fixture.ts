@@ -10,11 +10,13 @@ import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import Authorization from '@deepseek-ai/dsh-authorization'
 import { createModels } from '@earendil-works/pi-ai'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
+import { Config as PiAiConfig } from '@deepseek-ai/dsh-llm-pi-ai'
 import { expect, it, vi } from 'vitest'
 import { Config } from '../../src/config.ts'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import { createGitHubCopilotCredentialStore } from '../../src/copilot-auth.ts'
 import { GitHubCopilotAuthorizationController } from '../../src/authorization-controller.ts'
+import { migrationStatus } from '../../src/migration-status.ts'
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
@@ -40,6 +42,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
     await writeFile(join(bundle, 'cordis.patch.yml'), JSON.stringify([{ insert: [
       { id: 'config-editor', name: 'cordis:editor' }, { id: 'settings', name: 'cordis:settings' },
       { id: 'github-copilot', name: 'cordis:selector', config: {} },
+      { id: 'llm-pi-ai', name: 'cordis:provider-config', config: { providers: {} } },
     ] }]))
     await writeFile(join(dir, 'cordis.yml'), '[]\n')
     const profile: ProfileContext = { name: 'synthetic', startedBundles: ['synthetic-bundle'], dir,
@@ -50,13 +53,22 @@ it('persists independent native credentials and SettingsForms CAS across profile
         scope.provide('profileContext', profile)
         scope.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
         Object.assign(scope.loader.builtins, { editor: ConfigEditor, settings: Settings,
-          selector: { Config, apply() {} } })
+          selector: { Config, apply() {} }, 'provider-config': { Config: PiAiConfig, apply() {} } })
       })
       contexts.push(ctx)
       await ctx.plugin(LocalCredentialProvider, { path: join(dir, '.credentials.yaml'), dshHome: home, watch: false })
       await ctx.plugin(Authorization)
+      ctx.provide('agents', { list: () => [] })
+      ctx.provide('sessionProjections', { stateOf: () => undefined })
+      ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'github-copilot-preview', model: 'synthetic' }) })
+      ctx.provide('llm', { listProviders: () => [{ id: 'github-copilot-preview' }] })
+      expect(Reflect.get(ctx.settings, 'get')).toBeUndefined()
+      expect(migrationStatus(ctx)).toMatchObject({
+        capabilities: { settingsCas: true },
+        complete: { routes: true, sessions: true, defaultSelection: true },
+        routes: { nativeConfigured: false, nativeRegistered: false, managedRegistered: true },
+      })
       const host = new CopilotAccountsHost(ctx, {
-        routeDiagnostic: () => undefined,
         validateModels: async () => {},
         fetch: async (_input, init) => {
           const token = new Headers(init?.headers).get('Authorization')
@@ -72,6 +84,14 @@ it('persists independent native credentials and SettingsForms CAS across profile
       return { ctx, host }
     }
     let { ctx, host } = await start()
+    const providerRevision = () => ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')!.revision
+    await ctx.settings.mutate('llm-pi-ai', [
+      { op: 'set', path: ['providers', 'github-copilot'], value: {} },
+    ], providerRevision())
+    expect(await host.get()).toMatchObject({ switchable: false, diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED' })
+    await ctx.settings.mutate('llm-pi-ai', [
+      { op: 'unset', path: ['providers', 'github-copilot'] },
+    ], providerRevision())
     await ctx.credentials.modifyRecord(key(A), async () => grant(A))
     await ctx.credentials.modifyRecord(key(B), async () => grant(B))
     const selectorFiber = [...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber

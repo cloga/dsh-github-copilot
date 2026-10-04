@@ -216,6 +216,37 @@ describe('read-only live migration evidence', () => {
   })
 
   it.each([
+    { config: {}, configured: false },
+    { config: { providers: {} }, configured: false },
+    { config: { providers: { 'github-copilot': {} } }, configured: true },
+  ])('reads native SettingsForms values without legacy get (%j)', ({ config, configured }) => {
+    const f = fixture()
+    f.services.set('settings', { describe: f.describeSettings, mutate: f.forbidden })
+    f.describeSettings.mockReturnValue([
+      { ns: 'llm-pi-ai', revision: 2, value: config }, { ns: 'github-copilot', revision: 5 },
+    ])
+    expect(migrationStatus(f.ctx)).toMatchObject({
+      capabilities: { settingsCas: true }, complete: { routes: true },
+      routes: { nativeConfigured: configured },
+    })
+    expect(f.describeSettings).toHaveBeenCalledExactlyOnceWith({ redactSecrets: true })
+    expect(f.get).not.toHaveBeenCalled()
+    expect(f.forbidden).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, null, { providers: null }, { providers: { 'github-copilot': null } }])('does not infer absence from invalid native descriptor values (%j)', value => {
+    const f = fixture()
+    f.services.set('settings', { describe: f.describeSettings, mutate: f.forbidden })
+    f.describeSettings.mockReturnValue([
+      { ns: 'llm-pi-ai', revision: 2, value }, { ns: 'github-copilot', revision: 5 },
+    ])
+    expect(migrationStatus(f.ctx)).toMatchObject({
+      capabilities: { settingsCas: false }, complete: { routes: false }, routes: { nativeConfigured: null },
+    })
+    expect(f.forbidden).not.toHaveBeenCalled()
+  })
+
+  it.each([
     [], [{ ns: 'llm-pi-ai', revision: 1 }], [{ ns: 'github-copilot', revision: 1 }],
     [{ ns: 'llm-pi-ai', revision: 1 }, { ns: 'llm-pi-ai', revision: 1 }, { ns: 'github-copilot', revision: 1 }],
     [{ ns: 'llm-pi-ai', revision: NaN }, { ns: 'github-copilot', revision: 1 }],

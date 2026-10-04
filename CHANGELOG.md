@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.102 (prepared)
+
+- Read official rc.2 SettingsForms values without requiring the retired `get()` method, fixing an unconditional `COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE` account-switching blocker (#301).
+- Exercise the production route diagnostic in native account persistence and restart coverage. Preserve unknown-evidence rejection, managed-only eligibility, activity fencing, target validation and selector CAS; no credentials, history, model-selection or Core changes.
+
 ## 0.4.0-alpha.101 (prepared)
 
 - Accept GitHub Enterprise Managed User login names, including underscore-separated enterprise suffixes and setup admin names, in both Host identity normalization and strict Client Remote decoding. Keep bounded JSON, numeric identity, credentials and account-switching safeguards unchanged.
