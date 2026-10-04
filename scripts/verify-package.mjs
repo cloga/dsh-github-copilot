@@ -99,14 +99,36 @@ const catalogDescriptors = remote.descriptors.filter(descriptor => descriptor.na
 const usageDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
 const selectionDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotTurnSelection')
 const replayDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotReplayRecovery')
+const accountDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 21 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 28 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
   || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get'])
-  || JSON.stringify(replayDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorize', 'get', 'setEnabled'])) {
-  throw new Error('built Remote entry must retain existing controls and three explicit replay recovery controls')
+  || JSON.stringify(replayDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorize', 'get', 'setEnabled'])
+  || JSON.stringify(accountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['add', 'cancel', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])) {
+  throw new Error('built Remote entry must retain existing controls and independent account controls')
+}
+for (const descriptor of accountDescriptors) {
+  const mutation = ['reauthorize', 'removeAccount', 'switchAccount'].includes(descriptor.method)
+  if (descriptor.id !== `dsh-github-copilot:githubCopilotAccounts.${descriptor.method}`
+    || descriptor.service !== 'githubCopilotAccounts' || descriptor.invocation.kind !== 'direct'
+    || descriptor.scope !== undefined || descriptor.parameters.length !== (mutation ? 2 : 0)
+    || descriptor.result.mode !== 'strict'
+    || descriptor.result.typeSymbol !== 'dsh-github-copilot#CopilotAccountsView') throw new Error('account Remote identity or codec differs')
+  const view = { state: 'ready', activeAccountId: 'canonical', writable: false, switchable: false, accounts: [], notices: [] }
+  descriptor.result.schema.parse(view)
+  if (descriptor.result.schema.safeParse({ ...view, credentials: 'private' }).success
+    || descriptor.result.schema.safeParse({ ...view, activeAccountId: 'invalid' }).success) throw new Error('account Remote accepts private fields or invalid account identity')
+  if (mutation) {
+    const [accountId, expectedRevision] = descriptor.parameters
+    if (accountId.wire !== 'accountId' || accountId.source !== 'json' || accountId.codec.mode !== 'strict'
+      || accountId.codec.schema.parse('canonical') !== 'canonical' || accountId.codec.schema.safeParse('invalid').success
+      || expectedRevision.wire !== 'expectedRevision' || expectedRevision.source !== 'json'
+      || expectedRevision.codec.mode !== 'strict' || expectedRevision.codec.schema.parse(0) !== 0
+      || expectedRevision.codec.schema.safeParse(-1).success) throw new Error('account Remote must retain strict selector CAS parameters')
+  }
 }
 for (const descriptor of replayDescriptors) {
   if (descriptor.id !== `dsh-github-copilot:githubCopilotReplayRecovery.${descriptor.method}`
