@@ -102,11 +102,11 @@ const replayDescriptors = remote.descriptors.filter(descriptor => descriptor.nam
 const accountDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts')
 const sessionAccountDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionAccount')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 34 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 35 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
-  || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get'])
+  || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get', 'requestedModels'])
   || JSON.stringify(replayDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorize', 'get', 'setEnabled'])
   || JSON.stringify(accountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['add', 'cancel', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])
   || JSON.stringify(sessionAccountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])) {
@@ -163,6 +163,15 @@ for (const descriptor of replayDescriptors) {
   }
 }
 const selection = selectionDescriptors[0]
+const requested = selectionDescriptors[1]
+if (requested.id !== 'dsh-github-copilot:githubCopilotTurnSelection.requestedModels'
+  || requested.invocation.kind !== 'direct' || requested.scope !== undefined
+  || requested.parameters[0].source !== 'lookup' || requested.parameters[0].lookup !== 'agent'
+  || requested.parameters[1].wire !== 'turn' || requested.result.mode !== 'strict'
+  || requested.result.typeSymbol !== 'dsh-github-copilot#RequestedModels'
+  || requested.result.schema.safeParse({ routes: [], incomplete: true, content: 'private' }).success) {
+  throw new Error('requested model evidence must retain explicit lookup and strict content-free results')
+}
 if (selection.id !== 'dsh-github-copilot:githubCopilotTurnSelection.get'
   || selection.service !== 'githubCopilotTurnSelection' || selection.invocation.kind !== 'direct'
   || selection.scope !== undefined

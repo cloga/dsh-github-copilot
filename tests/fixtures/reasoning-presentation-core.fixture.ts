@@ -86,6 +86,13 @@ describe('Copilot reasoning presentation against real Core services', () => {
       }, props => createElement(props.SessionProvider, { session: 'fixture-session' as never },
         props.renderSlot('conversation.chat.assistant-actions', { messageId: 'usage-fixture-reply' as never })))
       await act(async () => root.render(ctx.slots.renderSlot('root', {})))
+      const modelTrigger = container.querySelector<HTMLButtonElement>('[aria-label="View turn model and selection evidence"]')
+      if (!modelTrigger) throw new Error('Missing existing model evidence dialog')
+      await act(async () => modelTrigger.click())
+      expect(container.querySelector('[role=dialog]')?.textContent).toContain('Recorded models')
+      expect(container.querySelector('[role=dialog]')?.textContent).toContain('fixture-model')
+      expect(container.querySelector('[role=dialog]')?.textContent).toContain('Model attribution is incomplete')
+      await act(async () => Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Close')!.click())
       const trigger = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Turn Usage incomplete')
       if (!trigger) throw new Error('Missing native fixture Usage explanation')
       await act(async () => trigger.click())

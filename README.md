@@ -15,7 +15,7 @@ Inside **Credits**, choose a saved account for this Session's subsequent turns o
 restore **Follow global default**. Running turns retain their original account.
 Identity display accepts GitHub Enterprise Managed User names, including their underscore-separated enterprise suffixes.
 
-**Source candidate: `0.4.0-alpha.104` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+**Source candidate: `0.4.0-alpha.105` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -55,10 +55,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.104/dsh-github-copilot-0.4.0-alpha.104.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.105/dsh-github-copilot-0.4.0-alpha.105.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.104` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.105` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -96,6 +96,8 @@ Semantic assessment is **enabled by default only for locally unknown tasks**. It
 The deadline is checked against a monotonic clock at preparation, native request and result boundaries, even if the event loop delays the timer. Such delays can postpone settlement; they do not authorize late dispatch or late-result acceptance. Eligible Lightweight classifiers advertising reasoning `off` take precedence, with deterministic ID tie-breaking; the request uses `off` only if the public native model also supports it. This is not a measured speed ranking. Explanations distinguish the fitting category pool and previous-model continuity from semantic merit.
 
 The reply's selection disclosure shows captured reasons and optional content-free auxiliary milestones. `uncertain` and `insufficient-evidence` do not mean the conversation is empty. **Selection unknown** means no retained record; **Selection unavailable → Retry** means the read failed. Retry rereads that turn, not inference. Evidence is bounded and Host-local, so restart/eviction can lose it.
+
+When a failed/incomplete turn has no native Usage model row, the existing ⓘ opens **Turn model and selection evidence**: successful same-turn sources show **Recorded models** with incomplete failed-attempt attribution; reliable same-turn recorded request configuration shows **Requested model**, not dispatch, execution or billing proof. Missing evidence stays **Unknown**, never inferred from today's picker/default or adjacent turns. Selection reasons remain in a disclosure underneath. Complete native routes avoid repeated model UI; turns without a closing message have no existing assistant-actions entry. Native Usage and retries are unchanged. [Evidence boundaries](./docs/automatic-model-routing.md#attribution-and-explanation).
 
 **Model exclusions** remove exact IDs from the managed picker and new Auto pools. Selected models are excludable: an admitted turn keeps its model, but a new turn/direct request cannot use an excluded ID. A fixed selection is never silently replaced. Unknown preference settings leave controls read-only, not falsely enabled. Saves use narrow native CAS without credentials, discovery or Session scans.
 
@@ -204,14 +206,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.104/dsh-github-copilot-0.4.0-alpha.104.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.104/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.105/dsh-github-copilot-0.4.0-alpha.105.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.105/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.104.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.105.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

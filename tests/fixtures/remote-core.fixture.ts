@@ -16,6 +16,8 @@ import { name, version } from '#package.json' with { type: 'json' }
 import sessionAccountRemote from '../../src/session-accounts-remote.ts'
 import { SessionAccountController } from '../../src/session-accounts-controller.ts'
 import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
+import SessionStore from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 
 it.each(['source', 'strict'] as const)('binds Session account choices and historical reads through native Client and %s Host gateways', async mode => {
@@ -156,7 +158,9 @@ it.each(['source', 'strict'] as const)('reads retained selection through actual 
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   const host = new Context(), client = new Context()
   const store = new TurnSelectionStore()
-  const master = { id: 'viewed-master' }
+  await host.plugin(SessionStore)
+  await host.plugin(SessionProjectionRegistry)
+  const master = { id: 'viewed-master', session: host.sessions.create() }
   const denied = new Error('fixture access denied')
   const resolve = vi.fn((id: string) => {
     if (id === 'denied-master') throw denied
@@ -208,6 +212,19 @@ it.each(['source', 'strict'] as const)('reads retained selection through actual 
     await legacy.dispose()
 
     const owner = await host.plugin({ apply(ctx) { new TurnSelectionController(ctx, store) } })
+    master.session.append('turn/start', { turn: 7 })
+    master.session.append('step/start', { turn: 7, step: 1 })
+    master.session.append('request/header', { header: { config: { provider: 'github-copilot-preview', model: 'fixture-request' } }, reason: 'initial' })
+    master.session.append('step/end', { turn: 7, step: 1 })
+    master.session.append('turn/end', { turn: 7, reason: { kind: 'completed' } })
+    await expect(client.remote.githubCopilotTurnSelection.requestedModels(master.id, 7))
+      .resolves.toEqual({ ok: true, value: { routes: [{ provider: 'github-copilot-preview', model: 'fixture-request' }], incomplete: false } })
+    await expect(client.remote.githubCopilotTurnSelection.requestedModels(master.id, 8))
+      .resolves.toEqual({ ok: true, value: { routes: [], incomplete: true } })
+    await expect(client.remote.githubCopilotTurnSelection.requestedModels('missing-master', 7))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-not-found' } })
+    await expect(client.remote.githubCopilotTurnSelection.requestedModels('denied-master', 7))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-failed' } })
     const auto = { mode: 'auto', preference: 'balance', reason: 'standard-turn', candidateCount: 2 } as const
     store.record(master, 7, auto)
     store.record(master, 8, { mode: 'manual' })

@@ -6,6 +6,7 @@ import { deriveTurnTokenUsage } from '@deepseek-ai/dsh-token-meter/client'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { turnUsageEvidenceDefinition as definition, turnUsageDiagnostic } from '../../src/turn-usage-evidence.ts'
 import { REQUEST_BODY_TIMEOUT_MARKER } from '../../src/request-body-timeout-marker.ts'
+import { turnModelProvenanceDefinition } from '../../src/turn-model-provenance.ts'
 import type { RetryId } from '@deepseek-ai/dsh-llm-retry/types'
 
 const usage = { inputTokens: 3, outputTokens: 113, totalTokens: 32601, cacheReadTokens: 30237, cacheWriteTokens: 2248 }
@@ -45,6 +46,9 @@ describe('missing turn usage on unchanged official accounting', () => {
     ]
     const original = JSON.stringify(events)
     const tokenUsage = deriveTurnTokenUsage(events)
+    expect(tokenUsage?.routes).toBeUndefined()
+    expect(turnModelProvenanceDefinition.buildLocationData({ matches: events.map(event => ({ event })) }, 'turn', null)?.value)
+      .toMatchObject({ incomplete: true, routes: [{ provider: 'github-copilot-preview', model: 'fixture-model' }] })
     expect(tokenUsage).toMatchObject({
       uncachedInputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens,
       cacheReadTokens: usage.cacheReadTokens, cacheWriteTokens: usage.cacheWriteTokens,

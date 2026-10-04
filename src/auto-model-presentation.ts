@@ -3,6 +3,9 @@ import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID } from '
 import type { AutoModelPreference } from './copilot-identity.ts'
 import { TURN_MODEL_PROVENANCE_KEY, isTurnModelProvenance, turnModelProvenanceDefinition } from './turn-model-provenance.ts'
 import { TurnSelectionCard } from './turn-selection-card.ts'
+import type { TurnModelEvidence } from './turn-selection-card.ts'
+import { RequestedModelsSchema } from './turn-request-models.ts'
+import type { RequestedModels } from './turn-request-models.ts'
 import { TurnSelectionSchema } from './turn-selection.ts'
 import type { TurnSelection } from './turn-selection.ts'
 import { TURN_USAGE_EVIDENCE_KEY, isTurnUsageEvidence, turnUsageDiagnostic, turnUsageEvidenceDefinition } from './turn-usage-evidence.ts'
@@ -127,7 +130,10 @@ function sourceOf(props: Record<string, unknown>, key: string, diagnostic: (code
   }
 }
 
-interface SelectionRemote { get(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }> }
+interface SelectionRemote {
+  get(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }>
+  requestedModels?(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }>
+}
 interface AccountRemote { turn(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }> }
 interface LocaleReader { getLocale(): { active: string }; subscribe(listener: () => void): Dispose }
 function iterable(value: unknown): value is Iterable<unknown> {
@@ -156,6 +162,9 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   const [live, setLive] = React.useState<TurnSelection>({ mode: 'unknown' })
   const [readState, setReadState] = React.useState<'loading' | 'ready' | 'failed'>('loading')
   const [readAttempt, setReadAttempt] = React.useState(0)
+  const [requested, setRequested] = React.useState<RequestedModels>()
+  const [modelsFailed, setModelsFailed] = React.useState(false)
+  const [modelsAttempt, setModelsAttempt] = React.useState(0)
   const turn = record(props.turn) && sequence(props.turn.turn) ? props.turn.turn : undefined
   const sessionId = typeof props.sessionId === 'string' ? props.sessionId : undefined
   const [account, setAccount] = React.useState<TurnAccountView>()
@@ -204,11 +213,31 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   const evidence = isTurnModelProvenance(provenance) ? provenance : undefined
   const native = record(props.tail) && record(props.tail.data) ? props.tail.data : undefined
   const nativeCompleted = native?.turn === turn && sequence(native?.seq)
-  if (evidence?.ended !== true && !nativeCompleted) return null
-  if (evidence === undefined) props.diagnostic('COPILOT_TURN_SELECTION_PROVENANCE_UNAVAILABLE')
+  const completed = evidence?.ended === true || nativeCompleted
   const nativeRoutes = nativeCompleted && record(native?.tokenUsage) && Array.isArray(native.tokenUsage.routes)
     ? native.tokenUsage.routes : []
-  const routes: readonly unknown[] = evidence?.routes ?? nativeRoutes
+  const recorded = evidence?.routes.length ? evidence.routes : nativeRoutes.filter((route): route is { provider: string; model: string } =>
+    record(route) && typeof route.provider === 'string' && route.provider.trim() !== ''
+      && typeof route.model === 'string' && route.model.trim() !== '')
+  const needsRequested = completed && recorded.length === 0
+  React.useEffect(() => {
+    setRequested(undefined)
+    setModelsFailed(false)
+    if (!needsRequested || turn === undefined || sessionId === undefined) return
+    const read = props.remote?.requestedModels
+    if (!read) { setModelsFailed(true); props.diagnostic('COPILOT_TURN_REQUEST_REMOTE_UNAVAILABLE'); return }
+    let active = true
+    void read(sessionId, turn).then(result => {
+      if (!active) return
+      const parsed = result.ok ? RequestedModelsSchema.safeParse(result.value) : undefined
+      if (parsed?.success) setRequested(parsed.data)
+      else { setModelsFailed(true); props.diagnostic('COPILOT_TURN_REQUEST_READ_FAILED') }
+    }, () => { if (active) { setModelsFailed(true); props.diagnostic('COPILOT_TURN_REQUEST_READ_FAILED') } })
+    return () => { active = false }
+  }, [needsRequested, turn, sessionId, props.remote, props.diagnostic, modelsAttempt])
+  if (!completed) return null
+  if (evidence === undefined) props.diagnostic('COPILOT_TURN_SELECTION_PROVENANCE_UNAVAILABLE')
+  const routes: readonly unknown[] = recorded.length ? recorded : requested?.incomplete === false ? requested.routes : []
   const copilot = routes.some(route => record(route)
     && (route.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID || route.provider === GITHUB_COPILOT_PROVIDER_ID)
     && typeof route.model === 'string' && route.model.trim() !== '')
@@ -219,9 +248,18 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
     mode: 'auto', preference: parsed.preference, reason: parsed.reason,
     candidateCount: parsed.candidateCount, fittingCandidateCount: parsed.fittingCandidateCount,
   } : { mode: 'unknown' }
+  const nativeCompleteModels = nativeCompleted && nativeRoutes.length > 0
+    && nativeRoutes.every(route => record(route) && typeof route.provider === 'string' && route.provider.trim() !== ''
+      && typeof route.model === 'string' && route.model.trim() !== '')
+  const models: TurnModelEvidence | undefined = nativeCompleteModels ? undefined : recorded.length
+    ? { kind: 'recorded', routes: recorded, incomplete: evidence?.incomplete ?? true }
+    : requested?.incomplete === false && requested.routes.length
+      ? { kind: 'requested', routes: requested.routes, incomplete: true }
+      : { kind: 'unknown', routes: [], incomplete: true }
   return React.createElement(React.Fragment, null,
-    React.createElement(TurnSelectionCard, { selection, locale: language, incomplete: evidence?.incomplete ?? true,
+    React.createElement(TurnSelectionCard, { selection, locale: language, incomplete: nativeCompleteModels ? false : evidence?.incomplete ?? true,
       readState: selection.mode === 'unknown' ? readState : 'ready',
+      models, modelsFailed, retryModels: props.remote?.requestedModels === undefined ? undefined : () => setModelsAttempt(value => value + 1),
       account, accountFailed, retryAccount: () => setAccountAttempt(value => value + 1),
       retry: props.remote === undefined ? undefined : () => setReadAttempt(value => value + 1) }),
     usageDiagnostic === undefined ? null : React.createElement(TurnUsageNotice, { diagnostic: usageDiagnostic, locale: language }))
@@ -285,7 +323,12 @@ export function installAutoModelPresentation(capabilities: {
   }
   const slots = slotsCandidate as unknown as Slots
   const face = record(capabilities.remote) ? capabilities.remote.githubCopilotTurnSelection : undefined
-  const remote = record(face) && typeof face.get === 'function' ? face as unknown as SelectionRemote : undefined
+  const getSelection = record(face) ? face.get : undefined
+  const getRequested = record(face) ? face.requestedModels : undefined
+  const remote: SelectionRemote | undefined = typeof getSelection === 'function' ? {
+    get: (agentId, turn) => getSelection(agentId, turn),
+    ...typeof getRequested === 'function' ? { requestedModels: (agentId: string, turn: number) => getRequested(agentId, turn) } : {},
+  } : undefined
   const accountFace = record(capabilities.remote) ? capabilities.remote.githubCopilotSessionAccount : undefined
   const readAccount = record(accountFace) ? accountFace.turn : undefined
   const accountRemote: AccountRemote | undefined = typeof readAccount === 'function'

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.104"
+    "version": "0.4.0-alpha.105"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1214,6 +1214,11 @@
         {"file": "src/auto-model-presentation.ts", "marker": "installAutoModelProjections"},
         {"file": "src/auto-model-presentation.ts", "marker": "turnModelProvenanceDefinition"},
         {"file": "src/turn-model-provenance.ts", "marker": "assistant/message"},
+        {"file": "src/turn-request-models.ts", "marker": "stateVersion: 1"},
+        {"file": "src/turn-request-models.ts", "marker": "active.step === null"},
+        {"file": "src/turn-selection-card.ts", "marker": "Turn model and selection evidence"},
+        {"file": "src/turn-selection-card.ts", "marker": "Recorded models"},
+        {"file": "src/turn-selection-remote.ts", "marker": "RequestedModelsSchema"},
         {"file": "src/turn-selection-card.ts", "marker": "Selection unknown"},
         {"file": "src/turn-selection-remote.ts", "marker": "lookup: 'agent'"},
         {"file": "src/turn-selection-host.ts", "marker": "extends TypertRemoteService"},
@@ -1250,6 +1255,9 @@
         {"file": "tests/client.spec.ts", "name": "registers and disposes Auto actions while the optional conversation fiber remains pending"},
         {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "renders retained Auto evidence without optional projections through native %s and slots"},
         {"file": "tests/turn-model-provenance.spec.ts", "name": "retains known models around zero-usage failed attempts without reading payloads"},
+        {"file": "tests/turn-request-models.spec.ts", "name": "captures only headers inside a recorded step, never inherits adjacent or current selections"},
+        {"file": "tests/turn-request-models-runtime.spec.ts", "name": "cold-folds same-turn requested models through the native public registry without changing events"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "keeps model evidence first inside the existing dialog with multiple routes and overflow (%s)"},
         {"file": "tests/preview-route.spec.ts", "name": "publishes Auto as a virtual picker entry but refuses unresolved adapter dispatch"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "shrinks durable history and rebuilds the switched model request without sending the oversized original"}
       ]
