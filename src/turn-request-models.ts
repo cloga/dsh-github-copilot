@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
+import type { Context } from '@deepseek-ai/cordis'
 
 export const TURN_REQUEST_MODELS = 'githubCopilotTurnRequestModels'
 const count = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
@@ -15,8 +16,10 @@ export const TurnRequestModelsStateSchema = z.object({
 }).strict()
 type State = z.infer<typeof TurnRequestModelsStateSchema>
 declare module '@deepseek-ai/dsh-session-projection/types' {
-  interface SessionProjectionMap { githubCopilotTurnRequestModels: State }
   interface SessionProjectionStateMap { githubCopilotTurnRequestModels: State }
+}
+type Definition = Omit<ProjectionDefinition<typeof TURN_REQUEST_MODELS, State>, 'stateSchema'> & {
+  stateSchema: typeof TurnRequestModelsStateSchema
 }
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -61,4 +64,17 @@ export const turnRequestModelsDefinition = {
   key: TURN_REQUEST_MODELS, stateVersion: 1, stateSchema: TurnRequestModelsStateSchema,
   init: (): State => ({ active: null, turns: [] }),
   apply: foldTurnRequestModels,
-} satisfies ProjectionDefinition<typeof TURN_REQUEST_MODELS, State>
+} satisfies Definition
+
+export function installTurnRequestModels(ctx: Context): void {
+  ctx.inject(['sessionProjections'], scope => {
+    const registry: unknown = scope.get('sessionProjections')
+    if (!record(registry) || typeof registry.register !== 'function') {
+      scope.logger.warn('[github-copilot] COPILOT_TURN_REQUEST_PROJECTION_UNAVAILABLE')
+      return
+    }
+    const remove: unknown = registry.register(turnRequestModelsDefinition)
+    if (typeof remove !== 'function') throw new Error('COPILOT_TURN_REQUEST_PROJECTION_DISPOSER_UNAVAILABLE')
+    return () => { remove() }
+  })
+}

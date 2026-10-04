@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { TurnSelection, TurnSelectionStore } from './turn-selection.ts'
-import { TURN_REQUEST_MODELS, turnRequestModelsDefinition, TurnRequestModelsStateSchema } from './turn-request-models.ts'
+import { TURN_REQUEST_MODELS, installTurnRequestModels, TurnRequestModelsStateSchema } from './turn-request-models.ts'
 import type { RequestedModels } from './turn-request-models.ts'
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -13,16 +13,7 @@ function record(value: unknown): value is Record<string, unknown> {
 export class TurnSelectionController extends TypertRemoteService {
   constructor(ctx: Context, private readonly selections: TurnSelectionStore) {
     super(ctx, 'githubCopilotTurnSelection')
-    ctx.inject(['sessionProjections'], scope => {
-      const registry: unknown = scope.get('sessionProjections')
-      if (!record(registry) || typeof registry.register !== 'function') {
-        scope.logger.warn('[github-copilot] COPILOT_TURN_REQUEST_PROJECTION_UNAVAILABLE')
-        return
-      }
-      const remove: unknown = registry.register(turnRequestModelsDefinition)
-      if (typeof remove !== 'function') throw new Error('COPILOT_TURN_REQUEST_PROJECTION_DISPOSER_UNAVAILABLE')
-      return () => { remove() }
-    })
+    installTurnRequestModels(ctx)
   }
 
   @Remote
