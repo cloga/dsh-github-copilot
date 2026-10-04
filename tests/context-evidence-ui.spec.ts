@@ -57,6 +57,21 @@ function fixture(spec = { kind: 'list', scope: 'session' }) {
   return { ctx, released, component: () => component!, declare: () => { remove = declare?.() }, dispose }
 }
 describe('additive historical context notice', () => {
+  it.each(['en', 'zh-CN'])('matches composer statistics typography without changing disclosure behavior in %s', async locale => {
+    const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence: invalid, locale })
+    await view.render()
+    const summary = view.container.querySelector('summary')!
+    expect(summary.style.fontFamily).toBe('var(--dsw-font-family, inherit)')
+    expect(summary.style.fontSize).toBe('var(--dsh-content-font-size-secondary, 13px)')
+    expect(summary.style.lineHeight).toBe('calc(20px + var(--dsh-content-font-delta-secondary, 0px))')
+    expect(summary.style.fontWeight).toBe('400')
+    expect(summary.style.color).toBe('var(--dsw-alias-label-tertiary, GrayText)')
+    expect(summary.style.cursor).toBe('pointer')
+    expect(view.container.querySelector('details')!.open).toBe(false)
+    await view.render({ evidence: undefined, locale })
+    expect(view.container.querySelector('summary')!.style.cssText).toBe(summary.style.cssText)
+    expect(view.container.textContent).toContain('COPILOT_CONTEXT_PROJECTION_UNAVAILABLE')
+  })
   it.each(['en', 'zh-CN'])('labels counts as historical rather than current occupancy in %s', async locale => {
     const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence: invalid, locale })
     await view.render()

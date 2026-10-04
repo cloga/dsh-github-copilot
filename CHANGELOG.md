@@ -1,10 +1,15 @@
 # Changelog
 
-## 0.4.0-alpha.92 (prepared)
+## 0.4.0-alpha.93 (prepared)
 
 - Preserve native usage and chunk order before restoring dispatch-local byte-idle or replay errors (#285). Previously the owned error could be thrown before the SDK's terminal usage, discarding both failed-zero and real nonzero samples.
 - Prove the correction with unchanged native Responses and Anthropic timeout regressions. Preserve structured errors, cancellation, retry policy and wire/history ownership.
 - Document the separate native failed-zero context-pressure limitation and retry backoff timing. This is an accounting correction, not a cure for supplier HTTP 408 or a replacement native context meter; loaded Desktop acceptance remains unverified.
+
+## 0.4.0-alpha.92 (prepared)
+
+- Match the historical context disclosure title to neighboring composer statistics using the existing secondary font-size/line-height tokens, normal weight and tertiary label color (#283).
+- Preserve native disclosure interaction, localization, historical evidence, context metering and Usage ownership; this changes presentation only.
 
 ## 0.4.0-alpha.91 (prepared)
 
