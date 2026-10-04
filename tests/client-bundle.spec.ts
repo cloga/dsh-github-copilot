@@ -396,7 +396,7 @@ describe('tsdown client artifact', () => {
     expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'setEnabled',
     ])
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
@@ -486,6 +486,19 @@ describe('tsdown client artifact', () => {
       .resolves.toEqual({ ok: true, value: { mode: 'manual' } })
     expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotTurnSelection/get',
       { args: { agentId: 'explicit-master', turn: 7 } }, expect.any(AbortSignal))
+
+    const recovery = { state: 'available', revision: '12345678-1234-4234-8234-123456789012',
+      itemCount: 1, model: 'synthetic-model' }
+    rpcCall.mockResolvedValueOnce({ ok: true, value: recovery })
+    await expect(ctx.remote.githubCopilotReplayRecovery.get('explicit-master'))
+      .resolves.toEqual({ ok: true, value: recovery })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotReplayRecovery/get',
+      { args: { agentId: 'explicit-master' } }, expect.any(AbortSignal))
+    rpcCall.mockResolvedValueOnce({ ok: true, value: { ...recovery, state: 'enabled' } })
+    await expect(ctx.remote.githubCopilotReplayRecovery.setEnabled('explicit-master', recovery.revision, true))
+      .resolves.toEqual({ ok: true, value: { ...recovery, state: 'enabled' } })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotReplayRecovery/setEnabled',
+      { args: { agentId: 'explicit-master', revision: recovery.revision, enabled: true } }, expect.any(AbortSignal))
 
     const statusDescriptor = contributions[0]!.descriptors.find(
       descriptor => descriptor.method === 'status',

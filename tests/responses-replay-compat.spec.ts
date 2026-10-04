@@ -8,6 +8,70 @@ import {
 
 const encoder = new TextEncoder()
 
+describe('verified replay scope dispatch evidence', () => {
+  it('reports only fixed counts and header presence from the dispatched body', () => {
+    const body = JSON.stringify({ input: [
+      { type: 'reasoning', encrypted_content: 'secret-opaque', summary: [{ text: 'secret-summary' }] },
+      { type: 'message', role: 'assistant', id: 'secret-id', content: 'secret-content' },
+      { type: 'function_call', call_id: 'secret-call', name: 'secret-tool', arguments: 'secret-arguments' },
+      { type: 'function_call_output', call_id: 'secret-call', output: 'secret-output' },
+      { type: 'item_reference', id: 'secret-reference' },
+      { type: 'secret-unknown-kind', metadata: { id: 'secret-nested' } },
+    ], previous_response_id: 'secret-response', store: false })
+    const error = new CopilotResponsesReplayError('scope-mismatch', { body,
+      sessionHeader: true, clientRequestHeader: false })
+    expect(error.message).toContain('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH')
+    expect(error.message).toContain('items=6, directIds=2, references=1, encryptedReasoning=1, otherItems=1')
+    expect(error.message).toContain('previousResponse=present, store=false')
+    expect(error.message).toContain('sessionHeader=present, clientRequestHeader=absent')
+    expect(error.message).not.toContain('secret')
+    expect(error.message.length).toBeLessThan(900)
+    expect(JSON.stringify(error)).not.toContain('secret')
+  })
+
+  it('does not claim a missing direct ID proves replay is connection-independent', () => {
+    const error = new CopilotResponsesReplayError('scope-mismatch', { body: JSON.stringify({
+      input: [{ type: 'reasoning', encrypted_content: 'secret-opaque' }], store: false,
+    }), sessionHeader: false, clientRequestHeader: false })
+    expect(error.message).toContain('directIds=0, references=0, encryptedReasoning=1')
+    expect(error.message).toContain('Counts do not identify the rejected item or prove opaque replay is portable.')
+    expect(error.message).toContain('sessionHeader=absent, clientRequestHeader=absent')
+  })
+
+  it.each([
+    [undefined, 'unavailable'],
+    ['{"input":[', 'invalid-json'],
+    ['{"input":[],"input":[]}', 'invalid-json'],
+    [JSON.stringify({ input: 'secret-text' }), 'unsupported-shape'],
+    [JSON.stringify({ input: [null] }), 'unsupported-shape'],
+    [`{"input":[${'['.repeat(65)}0${']'.repeat(65)}]}`, 'work-limit'],
+    [JSON.stringify({ input: [{ role: 'user', content: 'x'.repeat(16 * 1024 * 1024) }] }), 'size-limit'],
+  ])('keeps unavailable or bounded-out dispatch evidence explicit (case %#)', (body, state) => {
+    const error = new CopilotResponsesReplayError('scope-mismatch', { body })
+    expect(error.message).toContain(`Replay structure unavailable (${state})`)
+    expect(error.message).not.toContain('directIds=0')
+    expect(error.message).toContain('sessionHeader=unavailable')
+    expect(error.message).not.toContain('secret')
+  })
+
+  it('does not change historical or non-scope diagnostics without dispatch evidence', () => {
+    expect(new CopilotResponsesReplayError('scope-mismatch').message)
+      .toBe('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: Copilot Responses input references belong to a different connection.')
+    expect(new CopilotResponsesReplayError('unsupported', { body: '{"input":[]}' }).message)
+      .toBe(new CopilotResponsesReplayError('unsupported').message)
+  })
+
+  it('does not coerce unknown JSON discriminators or mistake nested IDs for direct IDs', () => {
+    const error = new CopilotResponsesReplayError('scope-mismatch', { body: JSON.stringify({
+      input: [{ type: { toString: null }, role: { toString: 'secret' }, metadata: { id: 'secret' } }],
+      previous_response_id: {}, store: 'secret',
+    }) })
+    expect(error.message).toContain('items=1, directIds=0, references=0, encryptedReasoning=0, otherItems=1')
+    expect(error.message).toContain('previousResponse=invalid, store=invalid')
+    expect(error.message).not.toContain('secret')
+  })
+})
+
 function normalize(input: unknown[]) {
   return normalizeCopilotResponsesPayload({ input }) as { input: Record<string, unknown>[] }
 }

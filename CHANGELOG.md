@@ -6,6 +6,11 @@
 - Prove the correction with unchanged native Responses and Anthropic timeout regressions. Preserve structured errors, cancellation, retry policy and wire/history ownership.
 - Document the separate native failed-zero context-pressure limitation and retry backoff timing. This is an accounting correction, not a cure for supplier HTTP 408 or a replacement native context meter; loaded Desktop acceptance remains unverified.
 
+## 0.4.0-alpha.93 (prepared)
+
+- Add default-off, explicit session replay recovery after verified Responses scope rejection. Confirming the disclosed loss omits only matching old encrypted items and their summaries on later requests; stored history, tool pairs and new reasoning remain unchanged.
+- Bind recovery to native Agent lookup, initiating request signals, model/account proof and bounded Host-lifetime evidence. Do not automatically retry or treat this as a 408 fix.
+
 ## 0.4.0-alpha.92 (prepared)
 
 - Match the historical context disclosure title to neighboring composer statistics using the existing secondary font-size/line-height tokens, normal weight and tertiary label color (#283).

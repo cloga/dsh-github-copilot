@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { installReplayRecovery } from './replay-recovery-host.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { Config as PiAiConfig, PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { PiAiAdapterOptions, PiAiProviderProfile, ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
@@ -319,11 +320,12 @@ function budgetFailure(result: RequestBudgetFailure): LlmError {
 /** Account-bound admission and purpose defaults; Core owns model conversion and wire/replay. */
 class PreviewAdapter extends PiAiAdapter {
   constructor(private readonly lifetime: PreviewLifetime,
-    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness'>) => PiAiAdapterOptions,
+    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'>) => PiAiAdapterOptions,
     private readonly discoverSnapshot: (options?: AccountModelLoadOptions) => Promise<AccountModelSnapshot>,
     private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
     private readonly requestBudgetSettings: () => Partial<RequestBudgetPolicy>,
     private readonly accountModelSettings: () => Pick<InlineConfig, 'excludedModelIds'>,
+    private readonly replayRecovery?: ReturnType<typeof installReplayRecovery>,
   ) { super(optionsFor()) }
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     owned(provider)
@@ -421,6 +423,7 @@ class PreviewAdapter extends PiAiAdapter {
       // SDK lazyStream retains only error text. Keep an owned failure in this exact
       // dispatch closure, never on the shared lease, to restore its structured code.
       let requestFailure: LlmError | undefined
+      const recovery = owner.replayRecovery?.prepare(options)
       let wireAbort: ManagedWireAbortCode | undefined
       let bodyTimeout: string | undefined
       let liveness: Parameters<NonNullable<AccountProviderGuard['onStreamLiveness']>>[0] | undefined
@@ -450,6 +453,7 @@ class PreviewAdapter extends PiAiAdapter {
         // Same immutable descriptor/profile generation, but request-local provider
         // callbacks: concurrent compaction and chat cannot share purpose or errors.
         const native = new PiAiAdapter(owner.optionsFor(lease, { inspectRequest,
+          ...recovery === undefined ? {} : { recoverReplay: recovery.transform, onReplayScopeRejected: recovery.rejected },
           onWireAbort(code) {
             wireAbort = code
           },
@@ -583,6 +587,10 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     && snapshotProof !== undefined && snapshotProof.expires > Date.now() ? displayProofFor(snapshot) : undefined
   const exclusionTurns = new ModelExclusionTurns()
   const lifetime = new PreviewLifetime(store, source, proofFor, displayProofFor, modelId => excludedModels().has(modelId), exclusionTurns)
+  const replayRecovery = installReplayRecovery(ctx, () => {
+    if (snapshotProof === undefined || snapshotProof.expires <= Date.now()) return undefined
+    return `${lifetime.revision}:${snapshotProof.accountKey}:${snapshotProof.tokenFingerprint}`
+  })
   const removeStepListener = ctx.on('session/event', (session, event) => {
     if (event.type === 'step/start' || event.type === 'turn/end') lifetime.clearSessionRetries(session.id)
     if (event.type === 'turn/end') exclusionTurns.end(session)
@@ -709,7 +717,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     // stream. Never replay a model wire request or retry generic provider errors.
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
-  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness'> = {}): PiAiAdapterOptions => {
+  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'> = {}): PiAiAdapterOptions => {
     const settings = chatRequestSettings?.()
     const idle = settings?.chatStreamIdleTimeoutMs ?? template.streamIdleTimeoutMs
     const enabled = (settings?.chatStreamLiveness ?? streamLiveness ?? true)
@@ -779,7 +787,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     },
   })
   const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
-    new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings))
+    new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings, replayRecovery))
   let exclusionSignature = JSON.stringify([...excludedModels()])
   const removeSettings = onSettingsNamespaceUpdated(ctx, namespace => {
     if (namespace !== 'github-copilot') return
@@ -875,6 +883,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   ctx.effect(() => () => {
     lifetime.dispose()
     removeStepListener()
+    replayRecovery.dispose()
     removeListener()
     removeSettings()
     removeAutoRoute()
