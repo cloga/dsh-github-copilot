@@ -12,8 +12,8 @@ export interface TurnModelEvidence {
 }
 
 function turnAccountLabel(account: TurnAccountView, zh: boolean): string {
-  return account.identity === undefined ? zh ? '身份暂不可用' : 'identity unavailable'
-    : `@${account.identity.login}`
+  if (account.state !== 'recorded' || account.identity === undefined) return zh ? '身份暂不可用' : 'identity unavailable'
+  return `@${account.identity.login}`
 }
 
 export function TurnSelectionCard({ selection, locale = 'en', incomplete = false, readState = 'ready', retry,

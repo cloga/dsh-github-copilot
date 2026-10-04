@@ -158,7 +158,8 @@ const accountCopy = {
   },
 } as const
 
-function accountProblemMessage(code: CopilotAccountsView['diagnostic'], text: typeof accountCopy.en): string {
+function accountProblemMessage(code: CopilotAccountsView['diagnostic'],
+  text: typeof accountCopy.en | typeof accountCopy.zh): string {
   switch (code) {
     case 'COPILOT_ACCOUNTS_ROUTE_BLOCKED': return text.routeBlocked
     case 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE': return text.evidenceIncomplete
