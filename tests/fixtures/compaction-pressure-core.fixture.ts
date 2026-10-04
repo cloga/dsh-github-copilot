@@ -396,6 +396,13 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
       })
     } else expect(deriveTurnTokenUsage(usageEvents)).toBeUndefined()
     expect(f.failures).toHaveLength(preStep ? 0 : 1)
+    f.send('Synthetic independent subsequent turn.')
+    await f.agent.whenIdle()
+    const subsequent = f.currentEvents().filter(event => 'turn' in event.data && event.data.turn === 3)
+    expect(subsequent.at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
+    expect(deriveTurnTokenUsage(subsequent)).toMatchObject({
+      uncachedInputTokens: 20, outputTokens: 5, totalTokens: 25,
+    })
     expect(f.forbiddenFetch).not.toHaveBeenCalled()
   })
   it.each([false, true])('uses real managed admission with full native summary input and large prior usage, recovery=%s', async recoveryEngine => {
