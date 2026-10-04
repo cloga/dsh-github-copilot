@@ -59,7 +59,12 @@ export function ContextEvidenceNotice({ evidence, locale = 'en', applicable = tr
   const text = locale.startsWith('zh') ? copy.zh : copy.en
   const sample = applicable ? evidence?.sample : null
   return h('details', { style: { maxWidth: 'min(100%, 38rem)', fontSize: 'inherit', overflowWrap: 'anywhere' } },
-    h('summary', { style: { cursor: 'pointer' } }, text.title),
+    h('summary', { style: {
+      cursor: 'pointer', fontFamily: 'var(--dsw-font-family, inherit)',
+      fontSize: 'var(--dsh-content-font-size-secondary, 13px)', fontWeight: 400,
+      lineHeight: 'calc(20px + var(--dsh-content-font-delta-secondary, 0px))',
+      color: 'var(--dsw-alias-label-tertiary, GrayText)',
+    } }, text.title),
     h('p', { style: { marginBlock: '0.5rem' } }, evidence === undefined ? text.missing
       : evidence.reason === 'unknown' ? text.unknown : text.explanation),
     sample ? h('p', { style: { marginBlock: '0.5rem' } },
