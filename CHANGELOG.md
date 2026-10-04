@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.91 (prepared)
+
+- Prevent known continuing-step managed input pressure before native model-attempt admission through the public `agent/pre-step` seam (#280), using the initiating Agent's current compaction service and one native transaction.
+- Require a committed owned route and a proven absent pending model change. Respect disabled auto, overflow policy, cancellation and native failures; retain final converted admission and stream-pressure fallback.
+- Prove the before/after accounting boundary with the unchanged rc.2 AgentLoop: successful early reduction removes the unsampled pressure attempt and preserves complete native two-step Usage. First-step/pending selections, new prefix growth and final hard refusals remain limitations; no historical totals, usage samples, retry counters or model selections are rewritten.
+
 ## 0.4.0-alpha.88 (prepared)
 
 - Capture bounded classifier model, total elapsed/budget, adapter-start, first-text, native finish and validation milestones in immutable ephemeral Auto turn evidence (#272). No prompts, raw outputs, credentials, replay or usage are recorded.

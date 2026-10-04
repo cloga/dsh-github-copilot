@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.88"
+    "version": "0.4.0-alpha.91"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -478,6 +478,8 @@
       "sourceMarkers": [
         {"file": "src/request-budget.ts", "marker": "calculateRequestBudget"},
         {"file": "src/compaction-pressure.ts", "marker": "installCopilotCompactionPressure"},
+        {"file": "src/pre-step-pressure.ts", "marker": "installCopilotPreStepPressure"},
+        {"file": "src/pre-step-pressure.ts", "marker": "selection.pending !== null"},
         {"file": "src/agent-compaction.ts", "marker": "presets.serviceFor(agent, 'compaction')"},
         {"file": "src/preview-route.ts", "marker": "COPILOT_CONTEXT_BUDGET_EXCEEDED"},
         {"file": "src/preview-provider.ts", "marker": "inspectRequest"}
@@ -485,6 +487,8 @@
       "tests": [
         {"file": "tests/preview-route.spec.ts", "name": "rejects independent input overflow before model wire, prepared=%s"},
         {"file": "tests/compaction-pressure.spec.ts", "name": "does not substitute a global engine when the bound preset has none"},
+        {"file": "tests/pre-step-pressure.spec.ts", "name": "skips pending selection instead of compressing against the previous route"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "prevents continuing-step pressure attempts while retaining complete native turn usage, preStep=%s"},
         {"file": "tests/auto-model-host.spec.ts", "name": "uses owning preset recovery availability (%s) for Auto diagnostics"},
         {"file": "tests/fixtures/scoped-compaction-core.fixture.ts", "name": "global pressure finds isolated preset recovery: %j"},
         {"file": "tests/preview-route.spec.ts", "name": "reserves the requested output separately from the independent prompt ceiling"},

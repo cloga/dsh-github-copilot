@@ -266,6 +266,8 @@ reachability. Preserve native Agent lookup and bounded store ownership (#254).
 
 Automatic pressure and Auto recovery availability resolve the initiating Agent's bound preset through public `agentPresets.composedPreset()` / `serviceFor(agent, 'compaction')`. A bound preset without an engine must not borrow global recovery. Only non-preset Agents use their own `agent.ctx.get('compaction')`; never scan Core's private registry or cache an engine across preset replacement. Native transactions, cancellation, retry policy and manual-only segmented recovery remain unchanged.
 
+Continuing-step pressure prevention uses public `agent/pre-step` before `step/start`, only with a committed managed header, no selection notice, and known `modelSelection.pending: null`. Capacity lookup is not request estimation. Use the native surface meter and one currently bound native transaction; preserve final converted hard admission and stream-pressure fallback. First-step/pending/unknown evidence delegates. Native compaction failures propagate before attempt admission. Never claim all missing turn Usage is repaired, filter native samples, invent zero usage or rewrite historical totals. Native turn-tail accounting groups events by recorded turn, not compaction replacement sequence range.
+
 Selection footer Remote calls carry an explicit viewed Session ID and turn.
 Do not add an automatic Client `scope` projection: rc.2 prefers the scoped
 variant and removes the ID argument, breaking the footer's two-argument call.

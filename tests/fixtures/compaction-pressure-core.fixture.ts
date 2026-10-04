@@ -13,19 +13,21 @@ import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import Commands from '@deepseek-ai/dsh-commands'
 import LocalJobs from '@deepseek-ai/dsh-jobs-local'
-import LlmRuntime, { LlmAdapter, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { LlmAdapter, ToolCallId, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
+import { deriveTurnTokenUsage } from '@deepseek-ai/dsh-token-meter/client'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import * as PiEstimate from '@earendil-works/pi-ai/utils/estimate'
 import '@earendil-works/pi-ai/api/openai-responses'
 import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCopilotCompactionPressure } from '../../src/compaction-pressure.ts'
+import { installCopilotPreStepPressure } from '../../src/pre-step-pressure.ts'
 import { installAutoModelRouting } from '../../src/auto-model-host.ts'
 import { estimateTurnInputTokens } from '../../src/auto-model-routing.ts'
 import CopilotManualRecoveryCompactionEngine from '../../src/manual-compaction-recovery.ts'
@@ -87,6 +89,8 @@ function observeRequest(options: GenerateOptions): RequestObservation {
 /** Model double at the public adapter seam; every compaction decision remains Core-owned. */
 class FixtureAdapter extends LlmAdapter {
   nextUsage?: TokenUsage
+  defaultUsage?: TokenUsage
+  nextTool = false
   readonly conversation: RequestObservation[] = []
   readonly summaries: RequestObservation[] = []
   readonly summaryStarted = Promise.withResolvers<void>()
@@ -128,9 +132,19 @@ class FixtureAdapter extends LlmAdapter {
     const text = summary ? (this.summaryMode === 'max-tokens' ? 'PARTIAL_CHECKPOINT' : checkpoint) : 'CONVERSATION_REPLY'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'block-end', index: 0, block: { type: 'text', text } }
-    if (!summary && this.nextUsage !== undefined) {
-      yield { type: 'usage', usage: this.nextUsage }
+    const usage = this.nextUsage ?? this.defaultUsage
+    if (!summary && usage !== undefined) {
+      yield { type: 'usage', usage }
       this.nextUsage = undefined
+    }
+    if (!summary && this.nextTool) {
+      this.nextTool = false
+      yield { type: 'block-start', index: 1, blockType: 'tool-call' }
+      yield { type: 'block-end', index: 1, block: {
+        type: 'tool-call', id: ToolCallId('pre-step-tool'), name: 'pressure_fixture_tool', arguments: '{}',
+      } }
+      yield { type: 'finish', reason: { kind: 'tool-calls' } }
+      return
     }
     yield { type: 'finish', reason: { kind: summary && this.summaryMode === 'max-tokens' ? 'max-tokens' : 'stop' } }
   }
@@ -340,6 +354,57 @@ function compactionEvents(events: readonly SessionEvent[]): SessionEvent[] {
 }
 
 describe('alpha2 stock compaction driven by the Copilot local pressure signal', () => {
+  it.each([false, true])('prevents continuing-step pressure attempts while retaining complete native turn usage, preStep=%s', async preStep => {
+    const f = await fixture()
+    const forbidden = vi.fn(async (): Promise<never> => { throw new Error('no native open') })
+    const register = () => () => {}
+    f.ctx.provide('typert', {
+      lookups: { configure: register, register },
+      contexts: { configureHost: register, registerHost: register },
+    })
+    f.ctx.provide('fileUploads', { registerAgentResolver: register })
+    f.ctx.provide('agentDefaultModel', { currentSelection: () => undefined, saveSelection: forbidden })
+    new SessionController(f.ctx, { nativeOpen: false }, { canOpenPath: () => false, openPath: forbidden })
+    f.ctx.tools.register(defineTool({
+      name: 'pressure_fixture_tool', description: 'Synthetic pressure output.',
+      parameters: {}, output: { schema: { type: 'string' }, render: (_args, text) => [{ type: 'text', text }] },
+      execute: async () => 'synthetic tool output '.repeat(100),
+    }))
+    const samples = { inputTokens: 20, outputTokens: 5, totalTokens: 25, cacheReadTokens: 0, cacheWriteTokens: 0 }
+    f.adapter.defaultUsage = samples
+    f.adapter.nextTool = true
+    const budget = f.originalTokens + 200
+    f.enable(budget, 'fixture-model-A')
+    if (preStep) installCopilotPreStepPressure(f.ctx, {
+      resolve: () => ({ inputBudgetTokens: budget }),
+    })
+    f.send('Synthetic same-turn tool continuation.')
+    await f.agent.whenIdle()
+    const events = f.currentEvents()
+    expect(events.at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
+    expect(events.filter(event => event.type === 'step/start')).toHaveLength(2)
+    expect(events.filter(event => event.type === 'assistant/attempt')).toHaveLength(preStep ? 0 : 1)
+    expect(f.adapter.conversation).toHaveLength(3)
+    expect(f.adapter.summaries).toHaveLength(1)
+    const secondStart = events.filter(event => event.type === 'step/start')[1]!
+    expect(compactionEvents(events).every(event => event.seq < secondStart.seq)).toBe(preStep)
+    // Native turn-tail matches by recorded turn, not by the compaction event range.
+    const usageEvents = events.filter(event => 'turn' in event.data && event.data.turn === 2)
+    if (preStep) {
+      expect(deriveTurnTokenUsage(usageEvents)).toMatchObject({
+        uncachedInputTokens: 40, outputTokens: 10, totalTokens: 50,
+      })
+    } else expect(deriveTurnTokenUsage(usageEvents)).toBeUndefined()
+    expect(f.failures).toHaveLength(preStep ? 0 : 1)
+    f.send('Synthetic independent subsequent turn.')
+    await f.agent.whenIdle()
+    const subsequent = f.currentEvents().filter(event => 'turn' in event.data && event.data.turn === 3)
+    expect(subsequent.at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
+    expect(deriveTurnTokenUsage(subsequent)).toMatchObject({
+      uncachedInputTokens: 20, outputTokens: 5, totalTokens: 25,
+    })
+    expect(f.forbiddenFetch).not.toHaveBeenCalled()
+  })
   it.each([false, true])('uses real managed admission with full native summary input and large prior usage, recovery=%s', async recoveryEngine => {
     const f = await fixture('stop', true, true, recoveryEngine)
     for (let turn = 0; turn < 26; turn++) {
