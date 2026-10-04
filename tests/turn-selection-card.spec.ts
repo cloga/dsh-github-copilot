@@ -91,7 +91,7 @@ it.each(['continuity', 'equal-distribution', 'no-fit'] as const)('shows the capt
 it.each([
   { selection: auto, routes: undefined, expected: 'Auto (intelligence)ⓘ' },
   { selection: { mode: 'manual' } as const, routes: undefined, expected: 'Manualⓘ' },
-  { selection: { mode: 'unknown' } as const, routes: [{ provider: 'github-copilot-preview', model: 'fixture' }], expected: 'Selection unknownⓘ' },
+  { selection: { mode: 'unknown' } as const, routes: [{ provider: 'github-copilot-preview', model: 'fixture' }], expected: 'Selection unknown' },
   { selection: { mode: 'unknown' } as const, routes: [{ provider: 'other', model: 'fixture' }], expected: '' },
 ])('uses native completion independently of optional projections: $expected', async ({ selection, routes, expected }) => {
   let component: ComponentType<Record<string, unknown>> | undefined
@@ -117,10 +117,11 @@ it.each([
   expect(container.textContent).toBe(expected)
   expect(get).toHaveBeenCalledExactlyOnceWith('session-a', 7)
   expect(diagnostic).toHaveBeenCalledWith('COPILOT_TURN_SELECTION_PROVENANCE_UNAVAILABLE')
-  if (expected) {
+  if (expected.includes('ⓘ')) {
     await act(async () => container.querySelector('button')!.click())
-    expect(container.querySelector('[role=dialog]')?.textContent).toContain('Model attribution is incomplete')
-    expect(container.querySelector('[role=dialog]')?.textContent).toContain('Native Usage is unchanged')
+    expect(container.querySelector('[role=dialog]')?.textContent).toContain('native Usage is unchanged')
+    if (routes?.length) expect(container.querySelector('[role=dialog]')?.textContent).not.toContain('Recorded models')
+    else expect(container.querySelector('[role=dialog]')?.textContent).toContain('Model evidence unavailable')
   }
 })
 it.each([
@@ -203,7 +204,7 @@ it('ignores stale Session responses and diagnoses errors without inferring manua
   await act(async () => root.render(createElement(component!, { ...props, sessionId: 'old' })))
   await act(async () => root.render(createElement(component!, { ...props, sessionId: 'new' })))
   await act(async () => resolveOld({ ok: true, value: auto }))
-  expect(container.textContent).toBe('Selection unavailableRetry')
+  expect(container.textContent).toBe('Selection unavailableRetryⓘ')
   expect(diagnostic).toHaveBeenCalledWith('COPILOT_TURN_SELECTION_READ_FAILED')
   get.mockImplementation(() => Promise.resolve({ ok: true, value: auto }))
   await act(async () => container.querySelector('button')!.click())
@@ -250,10 +251,81 @@ it.each(['map', 'native-store'] as const)('reads exact completed turn evidence t
   expect(container.querySelector('span')!.style.flexWrap).toBe('wrap')
   await act(async () => container.querySelector('button')!.click())
   expect(container.querySelector('[role=dialog]')?.textContent).toContain('Detailed selection reasons were not retained')
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('actual-model')
   expect(container.querySelector('[role=dialog]')?.textContent).not.toContain('Capacity preference')
   await act(async () => root.render(createElement(component!, { ...props, unrelatedPicker: 'different-model' })))
   expect(get).toHaveBeenCalledTimes(1)
   expect(diagnostic).not.toHaveBeenCalled()
+})
+it.each(['en', 'zh-CN'])('keeps model evidence first inside the existing dialog with multiple routes and overflow (%s)', async locale => {
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  const model = 'synthetic-long-model-'.repeat(40)
+  await act(async () => root.render(createElement(TurnSelectionCard, {
+    selection: auto, locale, models: { kind: 'recorded', incomplete: true,
+      routes: [{ provider: 'github-copilot-preview', model }, { provider: 'other-provider', model: 'fixture-b' }] },
+  })))
+  expect(container.textContent).not.toContain(model)
+  expect(container.querySelectorAll('button')).toHaveLength(1)
+  await act(async () => container.querySelector('button')!.click())
+  const dialog = container.querySelector<HTMLElement>('[role=dialog]')!
+  expect(dialog.getAttribute('aria-label')).toBe(locale === 'en' ? 'Turn model and selection evidence' : '本轮模型与选择记录')
+  expect(dialog.textContent).toContain(locale === 'en' ? 'Recorded models' : '已记录模型')
+  expect(dialog.textContent).toContain(model)
+  expect(dialog.textContent).toContain('other-provider')
+  expect(dialog.textContent).toContain(locale === 'en' ? 'failed attempts' : '失败尝试')
+  expect(dialog.style.overflowWrap).toBe('anywhere')
+  expect(dialog.querySelector('section')!.compareDocumentPosition(dialog.querySelector('details')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(dialog.querySelector('details')!.open).toBe(false)
+})
+it.each(['requested', 'unknown'] as const)('does not turn %s evidence into execution or selection proof', async kind => {
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  const retryModels = vi.fn()
+  await act(async () => root.render(createElement(TurnSelectionCard, {
+    selection: { mode: 'unknown' }, models: { kind, incomplete: true,
+      routes: kind === 'requested' ? [{ provider: 'github-copilot-preview', model: 'request-only' }] : [] },
+    modelsFailed: kind === 'unknown', retryModels,
+  })))
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.textContent).toContain(kind === 'requested' ? 'Requested model' : 'Unknown')
+  expect(container.textContent).toContain(kind === 'requested' ? 'not proof of dispatch' : 'not proof of missing evidence')
+  expect(container.textContent).toContain('Selection evidence was not retained')
+  if (kind === 'unknown') {
+    await act(async () => Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Retry')!.click())
+    expect(retryModels).toHaveBeenCalledOnce()
+  }
+})
+it('reads requested models for the viewed turn and retries only failed evidence without changing selection', async () => {
+  let component: ComponentType<Record<string, unknown>> | undefined
+  const requestedModels = vi.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({
+    ok: true, value: { routes: [{ provider: 'github-copilot-preview', model: 'fixture-request-only' }], incomplete: false },
+  })
+  const get = vi.fn(async () => ({ ok: true, value: { mode: 'manual' } }))
+  cleanups.push(installAutoModelPresentation({ diagnostic: vi.fn(),
+    remote: { githubCopilotTurnSelection: { get, requestedModels } },
+    slots: { spec: () => ({ kind: 'list', scope: 'session' }), inject: (_: string, setup: () => () => void) => setup(),
+      register: (_: unknown, value: ComponentType<Record<string, unknown>>) => { component = value; return () => {} } },
+  }))
+  const turn = { turn: 7, data: { source: () => ({ getSnapshot: () => undefined, subscribe: () => () => {} }) } }
+  const snapshot = { nodes: new Map([['tail', { kind: 'turn-tail', location: { turn },
+    data: { turn: 7, seq: 12, closing: { finalNode: { messageId: 'reply' } } } }]]) }
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  const props = { sessionId: 'viewed', messageId: 'reply', useChat: (select: (value: unknown) => unknown) => select(snapshot) }
+  await act(async () => root.render(createElement(component!, props)))
+  expect(requestedModels).toHaveBeenCalledExactlyOnceWith('viewed', 7)
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.textContent).toContain('not proof of missing evidence')
+  await act(async () => Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Retry')!.click())
+  expect(requestedModels).toHaveBeenLastCalledWith('viewed', 7)
+  expect(get).toHaveBeenCalledTimes(1)
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('Requested model')
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('fixture-request-only')
+  expect(container.querySelector('[role=dialog]')?.textContent).not.toContain('Recorded models')
+  await act(async () => root.render(createElement(component!, { ...props, unrelatedPicker: 'wrong-model' })))
+  expect(requestedModels).toHaveBeenCalledTimes(2)
+  expect(container.textContent).not.toContain('wrong-model')
 })
 it.each([
   { nodes: undefined },

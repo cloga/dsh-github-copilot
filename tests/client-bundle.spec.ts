@@ -397,7 +397,7 @@ describe('tsdown client artifact', () => {
       && descriptor.namespace !== 'githubCopilotSessionAccount').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'authorize', 'setEnabled',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'get', 'authorize', 'setEnabled',
     ])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())
       .toEqual(['add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])

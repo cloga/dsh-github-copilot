@@ -90,9 +90,33 @@ successful read has no record. Failed reads show **Selection unavailable → Ret
 Retry rereads the same Session/turn; it never runs inference.
 
 The public assistant-actions slot adds the plugin item after native Usage/time.
-It cannot change the native fixed-height parent row, repeats no model name and
-adds no Model details button. A turn without a closing message has no such
-anchor. Optional conversation projections do not control selection mounting.
+It cannot change the native fixed-height parent row and adds no Model details
+or footer button. The existing info dialog is **Turn model and selection evidence**.
+When native Usage lacks complete model routes, model evidence comes first and the
+original selection explanation remains in a collapsed disclosure below:
+
+- **Recorded models** lists independent successful same-turn `assistant/message`
+  sources, preserving multiple models/providers. Failed attempts, retries and
+  paged/missing history retain an explicit incomplete-attribution warning; known
+  sources do not prove which models every failed attempt used.
+- **Requested model** is the fallback when no successful source exists. An
+  independent public Session projection folds native `turn/start`, `step/start`,
+  `request/header`, `step/end` and `turn/end`; only headers inside a recorded open
+  step bind to that turn. Native headers have no turn field and are not emitted
+  for every unchanged request. Therefore absent headers stay unknown, never
+  inherited from an earlier turn or today's `Session.requestHeader()`. Configuration
+  proves neither dispatch nor execution, usage or billing.
+- Missing/invalid evidence stays **Unknown**. Requested-model read failures are
+  distinct from missing evidence and have same-Session/turn read-only Retry.
+  Selection mode and model evidence remain independent.
+
+Complete native Usage routes avoid redundant model presentation. A turn without
+a closing message has no assistant-actions anchor; pure failed turns without one
+are not promised an injected entry. Optional conversation projections do not
+control selection mounting. The request projection has its own `stateVersion: 1`,
+retains at most 128 turns and 32 distinct routes per turn (overflow invalidates
+that turn), and stores no message/tool/replay/credential content. Cold folding
+uses existing recorded events only, not custom events or history conversion.
 
 The bounded Host store retains 64 Agents and 128 turns per Agent. Disposal,
 eviction and restart lose new records. Compatible historical Auto events remain
@@ -103,7 +127,8 @@ official rc.2 `Session.append()` has no public ignorable-envelope option.
 `TurnSelectionController` extends public `TypertRemoteService` with `@Remote get`.
 Client calls carry explicit viewed Session ID and turn, with no automatic
 Client scope projection that would remove the ID. Native Host Agent lookup,
-access checks and strict codecs remain. Actual Client/Host gateway regressions
+access checks and strict codecs remain. Additive `requestedModels` preserves the
+existing `get` descriptor and strict selection codec unchanged. Actual Client/Host gateway regressions
 cover reachability, bound contexts and missing/denied identities; mock RPC
 success is not sufficient evidence.
 

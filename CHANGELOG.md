@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.106 (prepared)
+
+- Show truthful failed-turn model evidence inside the existing Auto/Manual info dialog, with selection reasons disclosed below (#310). Preserve successful same-turn models/providers and explicit incomplete failed-attempt attribution without changing native Usage.
+- Add bounded public same-turn request-header evidence as Requested model, never dispatch, execution or billing proof. Missing/invalid evidence remains unknown; read-only Retry stays on the viewed Session/turn. No new footer button, durable events, history writes or entry for turns lacking a closing assistant-actions anchor.
+
 ## 0.4.0-alpha.105 (prepared)
 
 - Renew expired account identity from visible Models and Credits through nonforcing, account-scoped ensure reads. Fresh ten-minute cache avoids requests; concurrent consumers share one bounded request and failed renewals retain a thirty-second cooldown (#309).
