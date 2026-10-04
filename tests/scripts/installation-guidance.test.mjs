@@ -55,6 +55,7 @@ test('current user guides retain task-oriented entry points and honest screensho
     assert.ok(text.includes('./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics'), path)
   }
   const provenance = JSON.parse(await doc('docs/images/current-client-provenance.json'))
+  assert.ok(pkg.files.includes('docs/images/current-client-provenance.json'))
   assert.equal(provenance.synthetic, true)
   assert.equal(provenance.capture.externalRequests, false)
   assert.deepEqual(provenance.capture.pageErrors, [])
