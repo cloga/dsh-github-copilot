@@ -505,9 +505,10 @@ describe('managed Responses replay compatibility', () => {
     const release = vi.fn()
     const unauthorized = vi.fn()
     const replayFailure = vi.fn()
+    const rejectedReplay = vi.fn()
     const guard: AccountProviderGuard = { ...accountGuard(item.id),
       beforeWire: async () => ({ signal: new AbortController().signal, release }),
-      onUnauthorized: unauthorized, onReplayFailure: replayFailure,
+      onUnauthorized: unauthorized, onReplayFailure: replayFailure, onReplayScopeRejected: rejectedReplay,
     }
     const { provider, models } = createAccountProvider([item], guard, baseURL)
     let body: Record<string, unknown> | undefined
@@ -521,7 +522,7 @@ describe('managed Responses replay compatibility', () => {
     for await (const _event of stream) { /* Consume the real native SDK stream. */ }
     const result = await stream.result()
     await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(1))
-    return { body, fetch, result, release, unauthorized, replayFailure }
+    return { body, fetch, result, release, unauthorized, replayFailure, rejectedReplay }
   }
   it('normalizes only wire item IDs after native serialization while preserving durable replay and tool pairing', async () => {
     const context = replayContext()
@@ -610,6 +611,7 @@ describe('managed Responses replay compatibility', () => {
     expect(result.result.errorMessage).toContain('COPILOT_RESPONSES_REPLAY_')
     expect(result.fetch).not.toHaveBeenCalled()
     expect(result.replayFailure).toHaveBeenCalledTimes(1)
+    expect(result.rejectedReplay).not.toHaveBeenCalled()
     expect(result.unauthorized).not.toHaveBeenCalled()
   })
   it.each([
@@ -640,7 +642,7 @@ describe('managed Responses replay compatibility', () => {
       }),
     }))
     try {
-      const result = await invoke(context, { fetch })
+      const result = await invoke(context, { fetch, sessionId: 'synthetic-secret-session' })
       expect(result.result.stopReason).toBe('error')
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(receivedResponse).toBe(response)
@@ -649,11 +651,39 @@ describe('managed Responses replay compatibility', () => {
       expect(result.unauthorized).not.toHaveBeenCalled()
       expect(result.replayFailure).toHaveBeenCalledTimes(1)
       expect(result.replayFailure.mock.calls[0]![0].message).toContain('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH')
+      expect(result.replayFailure.mock.calls[0]![0].message).toContain('items=5, directIds=0, references=0, encryptedReasoning=1, otherItems=0')
+      expect(result.rejectedReplay).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(result.rejectedReplay.mock.calls[0]![0]).input).toHaveLength(5)
+      expect(result.replayFailure.mock.calls[0]![0].message).toContain('sessionHeader=present, clientRequestHeader=present')
+      expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/synthetic-secret-session|opaque-old-reasoning|rs_old_scope/)
       expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/input item|synthetic-private-response-body/)
       expect(JSON.stringify(context)).toBe(original)
       expect(response.status).toBe(401)
       expect(response.headers.get('x-synthetic')).toBe('unchanged')
     } finally { factory.mockReset().mockImplementation(originalFactory) }
+  })
+  it('reports the final caller replacement rather than discarded native replay', async () => {
+    const result = await invoke(replayContext(), {
+      sessionId: 'synthetic-secret-session',
+      onPayload: () => ({ input: [{ role: 'user', content: 'synthetic-private', id: 'user-native-owned' }] }),
+      fetch: async () => new Response(JSON.stringify({ message: 'input item does not belong to this connection' }),
+        { status: 401, headers: { 'content-type': 'application/json' } }),
+    })
+    expect(result.replayFailure).toHaveBeenCalledTimes(1)
+    expect(result.replayFailure.mock.calls[0]![0].message).toContain('items=1, directIds=1, references=0, encryptedReasoning=0')
+    expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/synthetic-private|user-native-owned|opaque-old-reasoning/)
+    expect(result.unauthorized).not.toHaveBeenCalled()
+  })
+  it.each([
+    { status: 401, body: '{"message":"invalid token"}' },
+    { status: 401, body: '{"message":"input item does not belong to this connection","code":"auth"}' },
+    { status: 401, body: 'not JSON' },
+    { status: 408, body: '{"message":"input item does not belong to this connection"}' },
+  ])('does not offer replay recovery for an unverified failure: $status $body', async failure => {
+    const result = await invoke(replayContext(), {
+      fetch: async () => new Response(failure.body, { status: failure.status, headers: { 'content-type': 'application/json' } }),
+    })
+    expect(result.rejectedReplay).not.toHaveBeenCalled()
   })
 })
 

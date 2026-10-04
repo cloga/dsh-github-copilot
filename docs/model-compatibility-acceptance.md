@@ -76,6 +76,60 @@ empty summary/content, no encrypted content and no unknown fields. Durable
 history, public summaries, opaque bytes, nested IDs, phase and `call_id` pairing
 stay unchanged.
 
+The source-checkout follow-up for #279 adds bounded structure evidence to an
+exact verified scope rejection: total items, direct ID fields, reference items,
+encrypted reasoning items, unrecognized items, `previous_response_id`/`store`
+state and presence of the two native session/request headers. It observes the
+final HTTP dispatch, not the earlier SDK payload before caller replacement.
+Only fixed labels and counts enter the existing error; no IDs, header values,
+message text, arguments, results or opaque bytes are retained. The shared
+16 MiB/depth/work diagnostic limits apply; unavailable evidence never becomes
+zero counts. Historical errors without this suffix have no such evidence.
+Structure counts alone do not repair cross-turn scope rejection: zero direct
+IDs does not prove encrypted replay is portable.
+
+### Explicit session replay recovery
+
+After an exact verified managed Responses scope rejection, **Replay recovery**
+in that session's composer can offer the failed request's old encrypted items.
+Open it, read the evidence, wait for the active turn to finish, choose **Review
+activation**, then **Accept loss and enable**. It does not send a message or
+retry the failed request. The user chooses whether to submit a subsequent turn.
+The default remains complete native replay.
+
+This is lossy recovery, not a supplier-scope repair. Only complete normalized
+encrypted reasoning items whose entire serialized fingerprints match that
+failed request are omitted from later outgoing requests in the same session
+and model. Their hidden state **and their item summaries** are no longer sent;
+displayed messages, tool calls/results and stored history are not modified.
+New or changed reasoning items remain native-owned. Another scope failure
+requires fresh confirmation rather than broadening enabled omission silently.
+
+Evidence is bounded to 64 sessions, 512 distinct items per session, and one
+hour in the current Host. Only hashes, a model label and confirmation metadata
+are retained, never opaque payloads. The Client receives count/model/state and
+an opaque revision only. Token/account/metadata proof discontinuity, expiry,
+session disposal or Host restart revokes evidence; an old error on disk cannot
+create a candidate. Re-read status after these changes. Disabling affects
+future requests and does not undo answers already generated.
+
+Admission requires the initiating native Agent request signal and exact
+session; unbound requests, compaction, titles, classifier requests, other
+models and other sessions cannot borrow consent. Active-turn writes are
+rejected. Public native Client/Host gateways enforce explicit Agent lookup;
+no ambient Client session projection is added. No Core changes, credentials
+reset, history rewrite, general wire adapter or automatic business retry is
+introduced. This is not a remedy for HTTP 408, quota or context limits.
+
+Two explicitly authorized real-history diagnostic calls reproduced HTTP 401
+with 12 old encrypted items and returned HTTP 200 after omitting exactly those
+items in a disposable request copy, preserving all 80 tool pairs. This
+implicates the old item set, not any specific item, token rotation or backend
+expiry rule. Sequential calls cannot freeze hidden supplier state. Synthetic
+request-chain and native gateway tests qualify the opt-in mechanism; they do
+not establish that every rejected history is recoverable or that an installed
+runtime has enabled it.
+
 After actual HTTP 408, a newly prepared attempt in the same native step can
 reuse exact normalized payload only when transcript/every other field agree,
 with matching references and no conflicts. Evidence is bound to Session/model/

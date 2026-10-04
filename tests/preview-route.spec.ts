@@ -1292,6 +1292,9 @@ describe('plugin-owned account Copilot route', () => {
     expect(first.assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST',
       message: expect.stringContaining('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH') } })
     expect(JSON.stringify(first.assembler.finish)).not.toMatch(/synthetic-private-response-body|synthetic-current-access|input item/)
+    expect(first.assembler.finish).toMatchObject({ failure: {
+      message: expect.stringContaining('Dispatched Responses structure: items=1, directIds=0, references=0, encryptedReasoning=0'),
+    } })
     expect(requests.map(request => request.path)).toEqual(['/models', '/responses'])
     expect(harness.ctx.get('githubCopilotPreview')!.getView().available).toBe(true)
     expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
@@ -1329,6 +1332,49 @@ describe('plugin-owned account Copilot route', () => {
     expect(paths.filter(path => path === '/copilot_internal/v2/token')).toHaveLength(1)
     expect(paths.filter(path => path === '/responses')).toHaveLength(2)
     expect(harness.modify).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers exact failed replay only to its initiating session and recovers after explicit confirmation', async () => {
+    let rejectOpaque = false
+    const bodies: Array<{ input: Record<string, unknown>[] }> = []
+    stubFetch(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { input: Record<string, unknown>[] }
+      bodies.push(body)
+      return rejectOpaque && body.input.some(item => typeof item.encrypted_content === 'string')
+        ? new Response(JSON.stringify({ error: { message: replayScopeMessages[0] } }), { status: 401 })
+        : response()
+    })
+    const harness = await runtime()
+    const first = await call(harness.ctx)
+    const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue.' }] }), first.message]
+    const before = JSON.stringify(messages)
+    rejectOpaque = true
+    const agent = { ctx: harness.ctx, session: {
+      id: 'recovery-session', header: { id: 'recovery-session' }, requestHeader: () => undefined,
+    } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const run = async (turn: number) => {
+      const signal = new AbortController().signal
+      await harness.ctx.waterfall(scope, 'agent/request', { agent, turn, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: MODEL }))
+      const result = await call(harness.ctx, { signal, sessionId: agent.session.id, messages })
+      harness.ctx.emit('session/event', agent.session, { type: 'turn/end' } as never)
+      return result
+    }
+    expect((await run(1)).assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    const service = harness.ctx.githubCopilotReplayRecovery
+    const available = service.get(agent)
+    expect(available).toMatchObject({ state: 'available', itemCount: 1 })
+    if (available.state === 'unavailable') throw new Error('missing recovery evidence')
+    service.setEnabled(agent, available.revision, true)
+    expect((await run(2)).assembler.finish).toEqual({ kind: 'stop' })
+    expect(bodies).toHaveLength(3)
+    expect(bodies[2]!.input.some(item => typeof item.encrypted_content === 'string')).toBe(false)
+    expect(JSON.stringify(messages)).toBe(before)
+    // Unbound callers cannot borrow this session's consent, even with its ID.
+    expect((await call(harness.ctx, { sessionId: agent.session.id, messages })).assembler.finish)
+      .toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    expect(harness.modify).not.toHaveBeenCalled()
   })
 
   it.each(replayScopeMessages)('does not abort a parallel native request when another dispatch receives a replay-scope 401: %s', async message => {

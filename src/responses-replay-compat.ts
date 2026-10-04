@@ -1,4 +1,5 @@
 import { readResponseErrorJson } from './response-error-body.ts'
+import { requestBodyEvidence } from './request-body-evidence.ts'
 
 type ReplayFailure = 'scope-mismatch' | 'unsupported' | 'invalid-payload'
 
@@ -8,12 +9,48 @@ const replayDiagnostics: Record<ReplayFailure, string> = {
   'invalid-payload': 'COPILOT_RESPONSES_REPLAY_INVALID_PAYLOAD: Copilot Responses payload has an invalid replay structure.',
 }
 
-/** Fixed diagnostics only: never include provider bodies, IDs, arguments or replay content. */
+interface ReplayDispatch {
+  readonly body?: string
+  readonly sessionHeader?: boolean
+  readonly clientRequestHeader?: boolean
+}
+
+/** Fixed diagnostics and bounded counts only; never retain request or replay content. */
 export class CopilotResponsesReplayError extends Error {
-  constructor(reason: ReplayFailure = 'unsupported') {
-    super(replayDiagnostics[reason])
+  constructor(reason: ReplayFailure = 'unsupported', dispatch?: ReplayDispatch) {
+    super(replayDiagnostics[reason] + (reason === 'scope-mismatch' && dispatch !== undefined
+      ? ` ${replayDispatchEvidence(dispatch)}` : ''))
     this.name = 'CopilotResponsesReplayError'
   }
+}
+
+function replayDispatchEvidence(dispatch: ReplayDispatch): string {
+  const presence = (value: boolean | undefined) => value === undefined ? 'unavailable' : value ? 'present' : 'absent'
+  const headers = `sessionHeader=${presence(dispatch.sessionHeader)}, clientRequestHeader=${presence(dispatch.clientRequestHeader)}.`
+  const evidence = requestBodyEvidence(dispatch.body, 'openai-responses')
+  const unavailable = (state: string) => `Replay structure unavailable (${state}); no zero counts inferred. ${headers}`
+  if (evidence.state !== 'complete' || dispatch.body === undefined) return unavailable(evidence.state)
+  // The shared span validator bounds bytes, depth and work and rejects duplicate keys.
+  const payload: unknown = JSON.parse(dispatch.body)
+  if (!isRecord(payload) || !Array.isArray(payload.input) || !payload.input.every(isRecord)) {
+    return unavailable('unsupported-shape')
+  }
+  let directIds = 0, references = 0, encryptedReasoning = 0, otherItems = 0
+  for (const item of payload.input) {
+    if (Object.hasOwn(item, 'id')) directIds++
+    if (item.type === 'item_reference') references++
+    if (item.type === 'reasoning' && typeof item.encrypted_content === 'string' && item.encrypted_content.length > 0) encryptedReasoning++
+    const known = typeof item.type === 'string'
+      && ['message', 'reasoning', 'function_call', 'function_call_output', 'item_reference'].includes(item.type)
+    const message = item.type === undefined && typeof item.role === 'string'
+      && ['user', 'system', 'developer', 'assistant'].includes(item.role)
+    if (!known && !message) otherItems++
+  }
+  const previous = payload.previous_response_id
+  const previousResponse = previous === undefined || previous === null || previous === '' ? 'absent'
+    : typeof previous === 'string' ? 'present' : 'invalid'
+  const store = payload.store === undefined ? 'absent' : typeof payload.store === 'boolean' ? String(payload.store) : 'invalid'
+  return `Dispatched Responses structure: items=${payload.input.length}, directIds=${directIds}, references=${references}, encryptedReasoning=${encryptedReasoning}, otherItems=${otherItems}; previousResponse=${previousResponse}, store=${store}; ${headers} Counts do not identify the rejected item or prove opaque replay is portable. History, authorization and native retry policy are unchanged.`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
