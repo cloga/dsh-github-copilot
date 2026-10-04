@@ -482,7 +482,9 @@ class PreviewAdapter extends PiAiAdapter {
         }
         for await (const chunk of native.stream(request)) {
           let delivered = chunk
-          if (requestFailure !== undefined) {
+          // The SDK may already have queued usage before its terminal error.
+          // Restore the owned failure without discarding those shared samples.
+          if (requestFailure !== undefined && chunk.type === 'finish') {
             if (signal.aborted) throw abortFailure(signal)
             throw requestFailure
           }

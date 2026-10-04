@@ -167,6 +167,38 @@ describe('managed request-body timeout guidance', () => {
     if (result.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal timeout')
     expect(result.assembler.finish.failure.message).toContain('waiting for HTTP response')
     expect(result.assembler.finish.failure.message).toContain('UTF-8 bytes')
+    expect(result.assembler.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
+  })
+
+  it('preserves native nonzero Anthropic usage before restoring an owned byte-idle failure', async () => {
+    const id = 'synthetic-idle-usage-model'
+    const items = [catalogItem(id, '/v1/messages', { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: false },
+      limits: { max_context_window_tokens: 64000, max_prompt_tokens: 48000, max_output_tokens: 8000 },
+    } })]
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(
+          `event: message_start\ndata: ${JSON.stringify({ type: 'message_start', message: {
+            id: 'msg_synthetic_idle', type: 'message', role: 'assistant', model: id,
+            content: [], stop_reason: null, usage: { input_tokens: 100, output_tokens: 0 },
+          } })}\n\n`,
+        ))
+        init?.signal?.addEventListener('abort', () => {
+          controller.error(new Error('Synthetic byte-idle transport aborted'))
+        }, { once: true })
+      },
+    }), { headers: { 'content-type': 'text/event-stream' } }))
+    stubFetch(async (input, init) => String(input).endsWith('/models') ? catalogResponse(items) : fetch(input, init), true)
+    const harness = await runtime(grant({ availableModelIds: [] }), {
+      chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500 }),
+    })
+    const result = await call(harness.ctx, { model: id })
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'TIMEOUT', message: expect.stringContaining('COPILOT_STREAM_IDLE_TIMEOUT') },
+    })
+    expect(result.assembler.usage).toEqual({ inputTokens: 100, outputTokens: 0, totalTokens: 100 })
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 
   it('supports explicitly restoring the native-only semantic timeout', async () => {
@@ -1291,6 +1323,7 @@ describe('plugin-owned account Copilot route', () => {
     const first = await call(harness.ctx)
     expect(first.assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST',
       message: expect.stringContaining('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH') } })
+    expect(first.assembler.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
     expect(JSON.stringify(first.assembler.finish)).not.toMatch(/synthetic-private-response-body|synthetic-current-access|input item/)
     expect(first.assembler.finish).toMatchObject({ failure: {
       message: expect.stringContaining('Dispatched Responses structure: items=1, directIds=0, references=0, encryptedReasoning=0'),
