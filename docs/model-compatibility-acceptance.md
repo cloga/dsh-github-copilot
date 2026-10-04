@@ -76,6 +76,19 @@ empty summary/content, no encrypted content and no unknown fields. Durable
 history, public summaries, opaque bytes, nested IDs, phase and `call_id` pairing
 stay unchanged.
 
+The source-checkout follow-up for #279 adds bounded structure evidence to an
+exact verified scope rejection: total items, direct ID fields, reference items,
+encrypted reasoning items, unrecognized items, `previous_response_id`/`store`
+state and presence of the two native session/request headers. It observes the
+final HTTP dispatch, not the earlier SDK payload before caller replacement.
+Only fixed labels and counts enter the existing error; no IDs, header values,
+message text, arguments, results or opaque bytes are retained. The shared
+16 MiB/depth/work diagnostic limits apply; unavailable evidence never becomes
+zero counts. Historical errors without this suffix have no such evidence.
+This is diagnostic instrumentation, not a verified repair of cross-turn scope
+rejection: zero direct IDs does not prove encrypted replay is portable. No
+retry, account invalidation, history modification or model switch is added.
+
 After actual HTTP 408, a newly prepared attempt in the same native step can
 reuse exact normalized payload only when transcript/every other field agree,
 with matching references and no conflicts. Evidence is bound to Session/model/

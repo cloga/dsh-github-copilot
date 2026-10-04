@@ -130,7 +130,7 @@ HTTP/SSE liveness 默认区分 5 分钟字节 idle 和有界的 10 分钟助手�
 | 选模未知／不可读 | 区分记录丢失与读取失败；Retry 只重读 |
 | 缺失／取消后的 Turn Usage | 查看[用量限制](./docs/copilot-usage.md)，不推断零计费 |
 | 历史加载报 `github-copilot/auto-model-decision` | 使用[独立副本、先检查的恢复](./docs/automatic-model-routing.md#recovering-affected-histories)；未经批准且未停写不得替换实际历史 |
-| AUTH、Responses replay scope 或 TLS 错误 | 查看[请求诊断](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics)及[额度 TLS 边界](./docs/copilot-usage.md#account-data-boundary)，不自动丢 replay、重置凭据或关闭 TLS |
+| AUTH、Responses replay scope 或 TLS 错误 | 查看[请求诊断](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics)（含源码版本的 scope 结构证据，并非恢复修复）及[额度 TLS 边界](./docs/copilot-usage.md#account-data-boundary)，不自动丢 replay、重置凭据或关闭 TLS |
 | Hosted search 不可用 | 检查账号／协议／probe 诊断；旧 override 保留至显式 reset |
 
 ## 所有权与深入阅读

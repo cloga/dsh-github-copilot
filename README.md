@@ -130,7 +130,7 @@ Configuration is under `github-copilot`. Credentials, endpoint definitions and a
 | Selection unknown/unavailable | Distinguish lost evidence from read failure; Retry only rereads |
 | Missing/cancelled Turn Usage | Read [usage limitations](./docs/copilot-usage.md); do not infer zero billing |
 | History fails on `github-copilot/auto-model-decision` | Use [detached, check-first recovery](./docs/automatic-model-routing.md#recovering-affected-histories); never replace live history without stopped writers and approval |
-| AUTH, Responses replay-scope or TLS failure | Review [request diagnostics](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics) and [usage TLS boundaries](./docs/copilot-usage.md#account-data-boundary); never discard opaque replay, reset credentials or disable TLS as an automatic repair |
+| AUTH, Responses replay-scope or TLS failure | Review [request diagnostics](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics), including source-checkout scope evidence (not a recovery fix), and [usage TLS boundaries](./docs/copilot-usage.md#account-data-boundary); never discard opaque replay, reset credentials or disable TLS as an automatic repair |
 | Hosted search unavailable | Check account/protocol/probe diagnostics; a legacy override stays authoritative until explicitly reset |
 
 ## Ownership and further reading

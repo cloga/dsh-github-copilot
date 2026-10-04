@@ -640,7 +640,7 @@ describe('managed Responses replay compatibility', () => {
       }),
     }))
     try {
-      const result = await invoke(context, { fetch })
+      const result = await invoke(context, { fetch, sessionId: 'synthetic-secret-session' })
       expect(result.result.stopReason).toBe('error')
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(receivedResponse).toBe(response)
@@ -649,11 +649,26 @@ describe('managed Responses replay compatibility', () => {
       expect(result.unauthorized).not.toHaveBeenCalled()
       expect(result.replayFailure).toHaveBeenCalledTimes(1)
       expect(result.replayFailure.mock.calls[0]![0].message).toContain('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH')
+      expect(result.replayFailure.mock.calls[0]![0].message).toContain('items=5, directIds=0, references=0, encryptedReasoning=1, otherItems=0')
+      expect(result.replayFailure.mock.calls[0]![0].message).toContain('sessionHeader=present, clientRequestHeader=present')
+      expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/synthetic-secret-session|opaque-old-reasoning|rs_old_scope/)
       expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/input item|synthetic-private-response-body/)
       expect(JSON.stringify(context)).toBe(original)
       expect(response.status).toBe(401)
       expect(response.headers.get('x-synthetic')).toBe('unchanged')
     } finally { factory.mockReset().mockImplementation(originalFactory) }
+  })
+  it('reports the final caller replacement rather than discarded native replay', async () => {
+    const result = await invoke(replayContext(), {
+      sessionId: 'synthetic-secret-session',
+      onPayload: () => ({ input: [{ role: 'user', content: 'synthetic-private', id: 'user-native-owned' }] }),
+      fetch: async () => new Response(JSON.stringify({ message: 'input item does not belong to this connection' }),
+        { status: 401, headers: { 'content-type': 'application/json' } }),
+    })
+    expect(result.replayFailure).toHaveBeenCalledTimes(1)
+    expect(result.replayFailure.mock.calls[0]![0].message).toContain('items=1, directIds=1, references=0, encryptedReasoning=0')
+    expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/synthetic-private|user-native-owned|opaque-old-reasoning/)
+    expect(result.unauthorized).not.toHaveBeenCalled()
   })
 })
 

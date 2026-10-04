@@ -1292,6 +1292,9 @@ describe('plugin-owned account Copilot route', () => {
     expect(first.assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST',
       message: expect.stringContaining('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH') } })
     expect(JSON.stringify(first.assembler.finish)).not.toMatch(/synthetic-private-response-body|synthetic-current-access|input item/)
+    expect(first.assembler.finish).toMatchObject({ failure: {
+      message: expect.stringContaining('Dispatched Responses structure: items=1, directIds=0, references=0, encryptedReasoning=0'),
+    } })
     expect(requests.map(request => request.path)).toEqual(['/models', '/responses'])
     expect(harness.ctx.get('githubCopilotPreview')!.getView().available).toBe(true)
     expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })

@@ -244,6 +244,12 @@ export function createAccountProvider(
       const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
         guard.onRequestBodyTimeout?.(undefined)
         liveness?.beginRequest(typeof init?.body === 'string' ? init.body : undefined)
+        const replayHeaders = responses && init?.headers !== undefined ? new Headers(init.headers) : undefined
+        const replayDispatch = responses ? {
+          body: typeof init?.body === 'string' ? init.body : undefined,
+          sessionHeader: replayHeaders?.has('session_id'),
+          clientRequestHeader: replayHeaders?.has('x-client-request-id'),
+        } : undefined
         let response: Response
         const startedAt = performance.now()
         try { response = await fetch(input, init) }
@@ -260,7 +266,7 @@ export function createAccountProvider(
         // Preserve the original Response/status/body for the native SDK.
         if (response.status === 401) {
           if (responses && await isCopilotInputItemScopeError(response, lease.signal)) {
-            reportReplayFailure(new CopilotResponsesReplayError('scope-mismatch'))
+            reportReplayFailure(new CopilotResponsesReplayError('scope-mismatch', replayDispatch))
           } else unauthorized = true
         }
         return liveness?.observe(response) ?? response
