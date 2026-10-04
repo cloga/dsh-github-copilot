@@ -43,4 +43,20 @@ describe('same-turn public request configuration evidence', () => {
     state = fold(state, event('request/header', { header: snapshot, reason: 'change' }))
     expect(state.turns[0]?.routes).toHaveLength(2)
   })
+  it('revokes request evidence after malformed or mismatched step boundaries', () => {
+    for (const boundary of [
+      event('step/end', { turn: 1, step: 2 }),
+      event('step/start', { turn: 1, step: 2 }),
+      { type: 'step/end' },
+      { type: 'request/header' },
+    ]) {
+      let state = fold(definition.init(), event('turn/start', { turn: 1 }))
+      state = fold(state, event('step/start', { turn: 1, step: 1 }))
+      state = fold(state, header())
+      state = fold(state, boundary)
+      state = fold(state, header('later'))
+      expect(state.active).toBeNull()
+      expect(state.turns[0]).toEqual({ turn: 1, routes: [], incomplete: true })
+    }
+  })
 })

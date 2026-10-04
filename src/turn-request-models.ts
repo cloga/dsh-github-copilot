@@ -25,15 +25,20 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 const validCount = (value: unknown): value is number => count.safeParse(value).success
+function uncertain(state: State): State {
+  return { active: null, turns: state.turns.map(row => row.turn === state.active?.turn
+    ? { ...row, routes: [], incomplete: true } : row) }
+}
 export function foldTurnRequestModels(state: State, event: unknown): State {
-  if (!record(event) || !record(event.data)) return state
+  if (!record(event)) return state
+  const lifecycle = ['turn/start', 'turn/end', 'step/start', 'step/end'].includes(String(event.type))
+  if (!record(event.data)) return lifecycle || event.type === 'request/header' ? uncertain(state) : state
   const data = event.data
-  if (['turn/start', 'turn/end', 'step/start', 'step/end'].includes(String(event.type))
+  if (lifecycle
     && (!validCount(data.turn) || event.type !== 'turn/start' && state.active !== null && data.turn !== state.active.turn
-      || String(event.type).startsWith('step/') && !validCount(data.step))) {
-    return { active: null, turns: state.turns.map(row => row.turn === state.active?.turn
-      ? { ...row, routes: [], incomplete: true } : row) }
-  }
+      || String(event.type).startsWith('step/') && !validCount(data.step)
+      || event.type === 'step/start' && state.active?.step != null
+      || event.type === 'step/end' && state.active !== null && data.step !== state.active.step)) return uncertain(state)
   if (event.type === 'turn/start' && validCount(data.turn)) {
     return { active: { turn: data.turn, step: null },
       turns: [...state.turns.filter(row => row.turn !== data.turn), { turn: data.turn, routes: [], incomplete: false }].slice(-128) }
