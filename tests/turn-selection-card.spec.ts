@@ -37,7 +37,7 @@ it('distinguishes failed Account reads from unknown evidence and retries only th
     accountFailed: true, retryAccount })))
   await act(async () => container.querySelector('button')!.click())
   expect(container.querySelector('[role=dialog]')?.textContent).toContain('not proof of missing evidence')
-  const retry = [...container.querySelectorAll('button')].find(button => button.textContent === 'Retry')!
+  const retry = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Retry')!
   await act(async () => retry.click())
   expect(retryAccount).toHaveBeenCalledOnce()
   await act(async () => root.render(createElement(TurnSelectionCard, { selection: { mode: 'manual' }, account: { state: 'unknown' } })))

@@ -6,6 +6,7 @@ import LlmRuntime, { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import { afterEach, expect, it, vi } from 'vitest'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
+import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
 import previewPlugin from '../../src/preview-route.ts'
 
 const A = '11111111-1111-4111-8111-111111111111'
@@ -69,34 +70,44 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
       } })
     const accounts = new CopilotAccountsHost(ctx, { routeDiagnostic: () => undefined })
     ctx.provide('githubCopilotAccounts', { host: accounts })
+    const owner = new SessionAccountsHost(ctx)
+    ctx.provide('githubCopilotSessionAccounts', owner)
+    const session = { id: 'native-account-fixture' }
+    const firstSignal = new AbortController().signal
+    owner.admit({ session }, 1, firstSignal)
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(previewPlugin, {})
     const request = { provider: 'github-copilot-preview', model: MODEL }
     const messages = [createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })]
     const pending = await ctx.llm.prepareCall(request)
-    expect(await accounts.switchAccount(B, 1)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY' })
+    expect(await accounts.switchAccount(B, 1)).toMatchObject({ state: 'ready', activeAccountId: B })
     const first = new BlockAssembler()
     let checkedStream = false
-    for await (const chunk of pending.stream({ ...pending.config, messages })) {
+    for await (const chunk of pending.stream({ ...pending.config, messages, signal: firstSignal })) {
       first.push(chunk)
       if (!checkedStream) {
         checkedStream = true
         ctx.emit('credentials/record-updated', credentialKey('github-copilot', `account-${B}`))
-        expect(await accounts.switchAccount(B, 1)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY' })
+        expect(await accounts.get()).toMatchObject({ state: 'ready', activeAccountId: B })
+        expect(await accounts.remove(A, revision)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY' })
       }
     }
     expect(first.finish).toEqual({ kind: 'stop' })
     expect(wireTokens).toEqual([expect.stringContaining(`synthetic-access-${A}`)])
-    expect(await accounts.switchAccount(B, 1)).toMatchObject({ state: 'ready', activeAccountId: B })
+    expect(owner.turns.evidence(session, 1)).toEqual({ accountId: A, source: 'global' })
+    owner.end(session, 1)
+    const secondSignal = new AbortController().signal
+    owner.admit({ session }, 2, secondSignal)
     const current = await ctx.llm.prepareCall(request)
     const second = new BlockAssembler()
-    for await (const chunk of current.stream({ ...current.config, messages })) second.push(chunk)
+    for await (const chunk of current.stream({ ...current.config, messages, signal: secondSignal })) second.push(chunk)
     expect(second.finish).toEqual({ kind: 'stop' })
     expect(wireTokens).toEqual([expect.stringContaining(`synthetic-access-${A}`), expect.stringContaining(`synthetic-access-${B}`)])
     expect(() => pending.stream({ ...pending.config, messages }))
       .toThrow('a prepared LLM call can only be dispatched once')
     expect(wireTokens).toHaveLength(2)
+    expect(owner.turns.evidence(session, 2)).toMatchObject({ accountId: B, source: 'global' })
     expect(read.mock.calls.every(([key]) => key.startsWith('github-copilot/account-'))).toBe(true)
-    accounts.dispose()
+    owner.dispose(); accounts.dispose()
   } finally { await ctx.fiber.dispose() }
 })
