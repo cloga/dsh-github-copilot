@@ -38,6 +38,9 @@ it('requires the native initiating session and signal, rejects active-turn write
     expect(next.transform(body)).toEqual({ ...body, input: [] })
     dispatch.rejected(JSON.stringify({ input: [{ type: 'reasoning', encrypted_content: 'late' }] }))
     expect(service.get(agent)).toMatchObject({ state: 'enabled', revision: view.revision })
+    ctx.emit(scope, 'agent/disposed', { agent })
+    expect(service.get(agent)).toEqual({ state: 'unavailable' })
+    expect(() => next.transform(body)).toThrow('REVOKED')
     proof = undefined
     expect(() => next.transform(body)).toThrow('REVOKED')
     expect(service.get(agent)).toEqual({ state: 'unavailable' })

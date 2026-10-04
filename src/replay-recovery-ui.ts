@@ -20,10 +20,12 @@ export function ReplayRecoveryCard({ sessionId, remote, locale = 'en' }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
   const [confirm, setConfirm] = useState(false)
+  const pending = useRef(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const perform = async (enabled?: boolean) => {
-    if (busy) return
+    if (pending.current) return
+    pending.current = true
     setBusy(true); setError(false); setConfirm(false)
     try {
       const result = enabled === undefined ? await remote.get(sessionId)
@@ -35,7 +37,7 @@ export function ReplayRecoveryCard({ sessionId, remote, locale = 'en' }: {
       else { setView(undefined); setError(true) }
     } catch {
       if (mounted.current) { setView(undefined); setError(true) }
-    } finally { if (mounted.current) setBusy(false) }
+    } finally { pending.current = false; if (mounted.current) setBusy(false) }
   }
   const button = { font: 'inherit', color: 'inherit', background: 'transparent',
     border: '1px solid var(--dsw-alias-border-main, GrayText)', borderRadius: 6, padding: '6px 10px' }

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.92"
+    "version": "0.4.0-alpha.93"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -677,6 +677,27 @@
         {"file": "tests/preview-route.spec.ts", "name": "classifies \"$message\" in a $envelope Responses 401 locally and reuses the same credential without discovery or refresh"},
         {"file": "tests/preview-route.spec.ts", "name": "does not abort a parallel native request when another dispatch receives a replay-scope 401: %s"},
         {"file": "tests/preview-route.spec.ts", "name": "does not retain a replay-scope failure across independent dispatches of one native prepared lease: %s"}
+      ]
+    },
+    {
+      "id": "managed-explicit-replay-recovery",
+      "required": true,
+      "scope": "managed-responses-initiating-session-only-explicit-loss-confirmation",
+      "liveEndpointAcceptance": "diagnostic-ablation-only-not-installed-feature-acceptance",
+      "sourceMarkers": [
+        {"file": "src/replay-recovery.ts", "marker": "class ReplayRecoveryStore"},
+        {"file": "src/replay-recovery-host.ts", "marker": "extends TypertRemoteService"},
+        {"file": "src/replay-recovery-host.ts", "marker": "COPILOT_REPLAY_RECOVERY_TURN_ACTIVE"},
+        {"file": "src/replay-recovery-remote.ts", "marker": "githubCopilotReplayRecovery.setEnabled"},
+        {"file": "src/replay-recovery-ui.ts", "marker": "Accept loss and enable"}
+      ],
+      "tests": [
+        {"file": "tests/replay-recovery.spec.ts", "name": "keeps default replay and requires a revision-bound confirmation"},
+        {"file": "tests/replay-recovery.spec.ts", "name": "preserves source, fresh reasoning, tools, other models and other owners"},
+        {"file": "tests/replay-recovery-host.spec.ts", "name": "requires the native initiating session and signal, rejects active-turn writes and revokes late requests"},
+        {"file": "tests/replay-recovery-ui.spec.ts", "name": "requires an explicit loss confirmation, never submits a message and sends the read revision"},
+        {"file": "tests/preview-route.spec.ts", "name": "offers exact failed replay only to its initiating session and recovers after explicit confirmation"},
+        {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds explicit replay recovery through native Client and %s Host gateways"}
       ]
     },
     {

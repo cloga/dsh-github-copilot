@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0-alpha.93 (prepared)
+
+- Add default-off, explicit session replay recovery after verified Responses scope rejection. Confirming the disclosed loss omits only matching old encrypted items and their summaries on later requests; stored history, tool pairs and new reasoning remain unchanged.
+- Bind recovery to native Agent lookup, initiating request signals, model/account proof and bounded Host-lifetime evidence. Do not automatically retry or treat this as a 408 fix.
+
+## 0.4.0-alpha.92 (prepared)
+
+- Match the historical context disclosure title to neighboring composer statistics using the existing secondary font-size/line-height tokens, normal weight and tertiary label color (#283).
+- Preserve native disclosure interaction, localization, historical evidence, context metering and Usage ownership; this changes presentation only.
+
 ## 0.4.0-alpha.91 (prepared)
 
 - Prevent known continuing-step managed input pressure before native model-attempt admission through the public `agent/pre-step` seam (#280), using the initiating Agent's current compaction service and one native transaction.

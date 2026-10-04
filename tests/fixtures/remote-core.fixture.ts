@@ -225,7 +225,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     expect(remote.descriptors.map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'setEnabled',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot' && item.method !== 'setModelExcluded')) {
       expect(descriptor.result.mode).toBe('strict')
