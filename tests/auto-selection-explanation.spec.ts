@@ -40,3 +40,10 @@ it.each(['en', 'zh'])('explains timeout as unknown-demand policy fallback, not p
   expect(text.semantic).toContain(locale === 'en' ? 'No text output observed' : '未观察到文本输出')
   expect(text.diagnostic).toContain(locale === 'en' ? 'not a timeout of the main answer' : '不代表正式回答超时')
 })
+it.each(['en', 'zh'])('distinguishes continuity and category pool from semantic model merit (%s)', locale => {
+  const text = selectionExplanation({ ...explanation,
+    assessment: { demand: 'unknown', source: 'local', signals: [], diagnostic: 'timeout' },
+  }, locale)
+  expect(text.choice).toContain('2')
+  expect(text.choice).toContain(locale === 'en' ? 'not a semantic ranking' : '不是语义排名')
+})

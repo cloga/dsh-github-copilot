@@ -4,6 +4,64 @@ import { assessAutoTask, assessTaskLocally, assessmentInput, TaskAssessmentRevok
 const message = (text: string, role = 'user') => ({ role, content: [{ type: 'text', text }] })
 const signal = () => new AbortController().signal
 describe('bounded contextual Auto task assessment', () => {
+  it('rejects late results even before the scheduled timeout callback runs', async () => {
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const diagnostic = vi.fn()
+    try {
+      const result = await assessAutoTask([message('Continue')], {
+        enabled: true, signal: signal(), timeoutMs: 8000, diagnostic,
+        classify: async () => {
+          now = 9000
+          return '{"demand":"simple","signals":[]}'
+        },
+      })
+      expect(result).toMatchObject({ demand: 'unknown', diagnostic: 'timeout',
+        semantic: { elapsedMs: 9000, validation: 'not-validated' } })
+      expect(diagnostic).toHaveBeenCalledWith('COPILOT_AUTO_ASSESSMENT_TIMEOUT')
+    } finally { clock.mockRestore() }
+  })
+  it('aborts preparation at the monotonic deadline before an adapter can start', async () => {
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const adapter = vi.fn()
+    try {
+      const result = await assessAutoTask([message('Continue')], {
+        enabled: true, signal: signal(), timeoutMs: 8000, diagnostic: vi.fn(),
+        classify: async (_input, signal, observe, checkpoint) => {
+          observe?.({ stage: 'model-selected', modelId: 'fixture' })
+          now = 8000
+          checkpoint?.()
+          expect(signal.aborted).toBe(true)
+          adapter()
+          return '{}'
+        },
+      })
+      expect(adapter).not.toHaveBeenCalled()
+      expect(result).toMatchObject({ demand: 'unknown', diagnostic: 'timeout',
+        semantic: { stage: 'model-selected', validation: 'not-validated' } })
+    } finally { clock.mockRestore() }
+  })
+  it('disposes the owned timer after success and ignores post-settlement observations', async () => {
+    const clear = vi.spyOn(globalThis, 'clearTimeout')
+    let observeLate: import('../src/auto-assessment-evidence.ts').TaskClassifierObserver | undefined
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    try {
+      const result = await assessAutoTask([message('Continue')], {
+        enabled: true, signal: signal(), diagnostic: vi.fn(),
+        classify: async (_input, _signal, observe) => {
+          observeLate = observe
+          return '{"demand":"complex","signals":[]}'
+        },
+      })
+      expect(clear).toHaveBeenCalledOnce()
+      const snapshot = JSON.stringify(result)
+      now = 9000
+      expect(() => observeLate?.({ stage: 'adapter-started' })).not.toThrow()
+      expect(JSON.stringify(result)).toBe(snapshot)
+    } finally { clear.mockRestore(); clock.mockRestore() }
+  })
   it('captures bounded phase evidence for a timed-out partial result without treating it as a validated task', async () => {
     const result = await assessAutoTask([message('Continue')], {
       enabled: true, signal: signal(), timeoutMs: 20, diagnostic: vi.fn(),
