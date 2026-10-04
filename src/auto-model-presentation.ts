@@ -113,8 +113,10 @@ export const autoModelAttributionDefinition = {
 interface Source {
   getSnapshot(): unknown
   subscribe(listener: () => void): Dispose
+  readonly failed?: boolean
 }
 const missingSource: Source = { getSnapshot: () => undefined, subscribe: () => noop }
+const failedSource: Source = { ...missingSource, failed: true }
 
 function sourceOf(props: Record<string, unknown>, key: string, diagnostic: (code: string) => void,
   failure = 'COPILOT_TURN_SELECTION_PROJECTION_FAILED'): Source {
@@ -126,7 +128,7 @@ function sourceOf(props: Record<string, unknown>, key: string, diagnostic: (code
       ? source as unknown as Source : missingSource
   } catch {
     diagnostic(failure)
-    return missingSource
+    return failedSource
   }
 }
 
@@ -205,7 +207,7 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   )
   const source = sourceOf(props, AUTO_MODEL_ATTRIBUTION_KEY, props.diagnostic)
   const value = React.useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot)
-  const provenanceSource = sourceOf(props, TURN_MODEL_PROVENANCE_KEY, props.diagnostic)
+  const provenanceSource = sourceOf(props, TURN_MODEL_PROVENANCE_KEY, props.diagnostic, 'COPILOT_TURN_MODEL_PROVENANCE_READ_FAILED')
   const provenance = React.useSyncExternalStore(provenanceSource.subscribe, provenanceSource.getSnapshot, provenanceSource.getSnapshot)
   const usageSource = sourceOf(props, TURN_USAGE_EVIDENCE_KEY, props.diagnostic, 'COPILOT_TURN_USAGE_PROJECTION_FAILED')
   const usageEvidence = React.useSyncExternalStore(usageSource.subscribe, usageSource.getSnapshot, usageSource.getSnapshot)
@@ -259,7 +261,8 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   return React.createElement(React.Fragment, null,
     React.createElement(TurnSelectionCard, { selection, locale: language, incomplete: nativeCompleteModels ? false : evidence?.incomplete ?? true,
       readState: selection.mode === 'unknown' ? readState : 'ready',
-      models, modelsFailed, retryModels: props.remote?.requestedModels === undefined ? undefined : () => setModelsAttempt(value => value + 1),
+      models, modelsFailed: modelsFailed || provenanceSource.failed === true,
+      retryModels: props.remote?.requestedModels === undefined && provenanceSource.failed !== true ? undefined : () => setModelsAttempt(value => value + 1),
       account, accountFailed, retryAccount: () => setAccountAttempt(value => value + 1),
       retry: props.remote === undefined ? undefined : () => setReadAttempt(value => value + 1) }),
     usageDiagnostic === undefined ? null : React.createElement(TurnUsageNotice, { diagnostic: usageDiagnostic, locale: language }))

@@ -95,8 +95,8 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
           : 'From request configuration inside a recorded step of this turn; not proof of dispatch, successful execution or billing attribution.'
           : zh ? '没有可靠的本轮模型证据；不从当前选择、全局默认或相邻轮次倒推。'
             : 'No reliable model evidence for this turn; the current picker, global default and adjacent turns cannot reconstruct it.'),
-      modelsFailed ? h('p', { role: 'status' }, zh ? '请求模型记录读取失败，不等同于没有记录。'
-        : 'Requested-model evidence could not be read; this is not proof of missing evidence.') : null,
+      modelsFailed ? h('p', { role: 'status' }, zh ? '部分模型证据读取失败，不等同于没有记录。'
+        : 'Some model evidence could not be read; this is not proof of missing evidence.') : null,
       modelsFailed && retryModels ? h('button', { type: 'button', style: button, onClick: retryModels }, zh ? '重试' : 'Retry') : null,
     ) : null,
     accountOpen ? h('div', null,

@@ -58,7 +58,7 @@ export function foldTurnRequestModels(state: State, event: unknown): State {
   }) }
 }
 export const turnRequestModelsDefinition = {
-  key: TURN_REQUEST_MODELS, stateVersion: 1, stateSchema: { parse: (value: unknown) => TurnRequestModelsStateSchema.parse(value) },
+  key: TURN_REQUEST_MODELS, stateVersion: 1, stateSchema: TurnRequestModelsStateSchema,
   init: (): State => ({ active: null, turns: [] }),
   apply: foldTurnRequestModels,
 } satisfies ProjectionDefinition<typeof TURN_REQUEST_MODELS, State>
