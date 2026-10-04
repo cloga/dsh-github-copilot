@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.92 (prepared)
+
+- Match the historical context disclosure title to neighboring composer statistics using the existing secondary font-size/line-height tokens, normal weight and tertiary label color (#283).
+- Preserve native disclosure interaction, localization, historical evidence, context metering and Usage ownership; this changes presentation only.
+
 ## 0.4.0-alpha.91 (prepared)
 
 - Prevent known continuing-step managed input pressure before native model-attempt admission through the public `agent/pre-step` seam (#280), using the initiating Agent's current compaction service and one native transaction.
