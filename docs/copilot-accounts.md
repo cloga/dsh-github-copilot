@@ -150,14 +150,6 @@ account information** after work ends to update the mounted view. With only
 one saved account, first use **Add GitHub account**; a **Switch** control is
 shown only for another saved account. No running work is cancelled for this.
 
-`COPILOT_ACCOUNTS_BUSY` is transient: each account status read reevaluates
-current managed Agent activity, operation leases and authorization. A rejected
-switch must not remain busy after that work settles. Reading status does not
-refresh credentials or retry the rejected switch. In Models, use **Refresh
-account information** after work ends to update the mounted view. With only
-one saved account, first use **Add GitHub account**; a **Switch** control is
-shown only for another saved account. No running work is cancelled for this.
-
 Failed preparation leaves the old selector unchanged. A committed selector
 followed by failed readback is reported as uncertain, never successful and
 never automatically rolled back. Cross-process/external mutations are guarded
@@ -169,8 +161,9 @@ native auth refresh, managed answer streams and hosted search. Release leases
 on completion, failure, cancellation and disposal. Switching never terminates
 native retries, rewrites native retry policy or manufactures Usage.
 An abandoned signal-free prepared call has no public completion/cancellation
-evidence; it conservatively retains its barrier until disposal. A guessed idle
-timeout must not permit switching under potentially live work.
+evidence; it conservatively retains its account mutation barrier until disposal.
+Changing the global default can still proceed without redirecting that call.
+A guessed idle timeout must not permit reauthorization/removal of its account.
 
 ## Route compatibility
 

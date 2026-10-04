@@ -6,7 +6,7 @@
 
 **English** | [简体中文](./README.zh.md)
 
-GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter with one active Host-side OAuth account per profile; it does not patch Core or maintain a second model catalog.
+GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
 The [account requirements and design](./docs/copilot-accounts.md) cover
 independent official authorizations in the existing credentials service.
@@ -23,6 +23,7 @@ Identity display accepts GitHub Enterprise Managed User names, including their u
 |---|---|
 | Sign in and manage account models | **Settings → Models → GitHub Copilot → Sign in** |
 | Add or switch GitHub accounts | **Manage → GitHub accounts**; managed-only profiles |
+| Select this Session's next-turn account | **Credits → Switch account**; saved authorizations only |
 | Exclude or restore individual models | **Manage → Model preferences** |
 | Choose models automatically | Pick **Auto · Balance**, **Auto · Efficiency** or **Auto · Intelligence** |
 | Follow a parent model in supported subagents | **Plugins → dsh-github-copilot → Details → Follow parent model** |
@@ -37,7 +38,7 @@ Actual published Client components with synthetic models in an isolated browser.
 
 ![Read-only current GitHub identity in Credits](./docs/images/copilot-accounts-credits.png)
 
-The account images render the actual candidate components with synthetic accounts and quota in an isolated browser. They demonstrate the Models-only switching flow and read-only Credits identity, not real authorization, supplier availability, live account data or loaded Desktop state.
+The account images show the earlier account-management components with synthetic accounts and quota in an isolated browser. The current Session switcher is inside Credits; these images show account management and identity presentation, not real authorization, supplier availability, live account data or loaded Desktop state.
 
 ## Install and sign in
 

@@ -21,6 +21,7 @@
 |---|---|
 | 登录并管理账号模型 | **设置 → 模型 → GitHub Copilot → Sign in** |
 | 添加／切换 GitHub 账号 | **Manage → GitHub accounts**；仅限托管路由 profile |
+| 指定本 Session 后续 turn 的账号 | **Credits → Switch account**；仅选择已保存授权 |
 | 排除／恢复单个模型 | **Manage → Model preferences** |
 | 自动选择模型 | 选择 **Auto · Balance / Efficiency / Intelligence** |
 | 让受支持子代理跟随父模型 | **插件 → dsh-github-copilot → 详情 → Follow parent model** |
@@ -35,7 +36,7 @@
 
 ![Credits 中只读展示当前 GitHub 身份](./docs/images/copilot-accounts-credits.png)
 
-账号图片来自实际候选组件和隔离浏览器中的模拟账号及额度，仅说明 Models 是唯一切换入口、Credits 只读展示身份，不证明真实授权、供应方可用性、真实账号数据或 Desktop 已加载。
+账号图片来自较早的账号管理组件和隔离浏览器中的模拟账号及额度。当前 Session 切换入口位于 Credits 内；这些图片仅说明账号管理与身份展示，不证明真实授权、供应方可用性、真实账号数据或 Desktop 已加载。
 
 ## 安装与登录
 
