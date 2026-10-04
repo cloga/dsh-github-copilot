@@ -40,3 +40,27 @@ test('offline maintenance retains approval, verification and no-bypass boundarie
   assert.match(text, /A blocked corporate registry is not authorization to use a VPN, proxy, mirror,/)
   assert.match(text, /not permission to bypass organizational registry restrictions/)
 })
+
+test('current user guides retain task-oriented entry points and honest screenshot evidence', async () => {
+  const pkg = JSON.parse(await doc('package.json'))
+  for (const path of ['README.md', 'README.zh.md']) {
+    const text = await doc(path)
+    assert.ok(text.includes(pkg.version), path)
+    for (const image of ['copilot-model-preferences.png', 'copilot-search-routing.png']) {
+      assert.ok(text.includes(`./docs/images/${image}`), `${path}: ${image}`)
+      const bytes = await readFile(new URL(`../../docs/images/${image}`, import.meta.url))
+      assert.deepEqual(bytes.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    }
+    assert.ok(text.includes('./CHANGELOG.md'), path)
+    assert.ok(text.includes('./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics'), path)
+  }
+  const provenance = JSON.parse(await doc('docs/current-client-provenance.json'))
+  assert.equal(provenance.synthetic, true)
+  assert.equal(provenance.capture.externalRequests, false)
+  assert.deepEqual(provenance.capture.pageErrors, [])
+  assert.match(provenance.limits, /No live OAuth/)
+  const migration = await doc('docs/single-route-migration.md')
+  assert.doesNotMatch(migration, /planned `0\.4\.0-alpha\.9`/)
+  assert.match(migration, /live-agents-only/)
+  assert.match(migration, /does not attest its publication or execution/)
+})

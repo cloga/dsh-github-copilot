@@ -4,8 +4,8 @@ Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
 [evidence refinement #262](https://github.com/cloga/dsh-github-copilot/issues/262).
 
 **Current contract:** published `0.4.0-alpha.88`, targeting official DSH/Windows
-Desktop `0.2.0-rc.2`. Default semantic enablement arrived in alpha.86; bounded
-auxiliary timing/output evidence arrived in alpha.88. Neither publication nor
+Desktop `0.2.0-rc.2`. Semantic assessment is enabled by default with bounded
+auxiliary timing/output evidence. Neither publication nor
 these explanations prove the version loaded in a particular Host.
 
 ## Using Auto
@@ -88,7 +88,7 @@ Attachments, unfamiliar instructions and genuinely ambiguous continuations can
 still remain unknown. These refinements do not change category preference,
 previous-model eligibility or semantic safeguards.
 
-The semantic experiment uses one fixed concrete account candidate through the
+The semantic assessment uses one fixed concrete account candidate through the
 existing managed native adapter, never an Auto ID and never `ctx.llm` routing
 recursion. It has no tools, bounded text-only assessment context, bounded JSON
 output, one deadline, cancellation and no new retry loop. Text from messages is
@@ -97,7 +97,7 @@ are not read; omitted context makes classification uncertain and cannot justify
 downshifting. Assessment input is a separate projection: the actual chat
 messages, system prompt, tools, attachments and history stay untouched.
 
-Only locally unknown tasks invoke the enabled experiment. Context packing keeps
+Only locally unknown tasks invoke the enabled assessment. Context packing keeps
 the current and nearest preceding user requests before recent output, then
 restores chronological order. At most twelve complete JSON rows, 1600 text
 characters per row and 8000 serialized characters are retained; JSON escape
