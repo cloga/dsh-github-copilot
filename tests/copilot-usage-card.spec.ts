@@ -172,6 +172,44 @@ describe('Copilot account usage chip', () => {
     expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toContain('identity unavailable')
     expect(document.querySelector('[role="alert"]')).toBeNull()
   })
+  it.each([
+    ['en-US', 'Original authorization · Identity unavailable', 'Saved authorization 1 · Identity unavailable'],
+    ['zh-CN', '原始授权 · 身份暂不可用', '已保存授权 1 · 身份暂不可用'],
+  ])('labels unknown Credits accounts without showing opaque IDs (%s)', async (locale, original, saved) => {
+    const first = '00000000-0000-4000-8000-000000000001'
+    const second = '00000000-0000-4000-8000-000000000002'
+    const accounts: CopilotAccountsView = {
+      state: 'ready', activeAccountId: 'canonical', revision: 2, writable: true, switchable: true,
+      accounts: [
+        { id: 'canonical', configured: true, identityState: 'unknown' },
+        { id: first, configured: true, identityState: 'unknown' },
+        { id: second, configured: true, identityState: 'unavailable' },
+      ],
+      notices: [],
+    }
+    const session: SessionAccountView = {
+      source: 'global', accountId: 'canonical', globalAccountId: 'canonical', runningAccountId: 'canonical',
+      accounts,
+    }
+    const set = vi.fn(async () => ({ ok: true as const, value: session }))
+    const accountsRemote = {
+      get: vi.fn(async () => ({ ok: true as const, value: accounts })),
+      ensureIdentity: vi.fn(async () => ({ ok: true as const, value: accounts })),
+      refreshIdentity: vi.fn(async () => ({ ok: true as const, value: accounts })),
+    }
+    await mount({ remote: remote(view({ accountId: 'canonical' })), accountsRemote,
+      sessionAccount: { get: async () => ({ ok: true as const, value: session }), set },
+      contextKey: `unknown-identities-${locale}`, locale })
+    await click(trigger())
+    await click(button(locale === 'zh-CN' ? '切换账号' : 'Switch account'))
+    expect(text()).toContain(original)
+    expect(text()).toContain(saved)
+    expect(text()).toContain(locale === 'zh-CN' ? '已保存授权 2 · 身份暂不可用' : 'Saved authorization 2 · Identity unavailable')
+    expect(text()).not.toContain(first)
+    expect(text()).not.toContain(second)
+    expect(text()).not.toContain('Canonical')
+    expect(set).not.toHaveBeenCalled()
+  })
   it('immediately revokes mounted presentation on a Models mutation and rejects late previous-account results', async () => {
     let activeAccountId = 'canonical'
     const nextId = '00000000-0000-4000-8000-000000000001'

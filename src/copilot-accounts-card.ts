@@ -4,6 +4,7 @@ import { CopilotAccountsViewSchema } from './copilot-accounts-remote.ts'
 import type { CopilotAccountsView } from './copilot-accounts-types.ts'
 import { externalLinkTarget } from './external-link.ts'
 import { accountPresentationChanges } from './copilot-account-presentation.ts'
+import { copyAuthorizationCode } from './authorization-code-clipboard.ts'
 
 type AccountResult = { ok: true; value: CopilotAccountsView } | { ok: false; error: unknown }
 export interface CopilotAccountsRemote {
@@ -58,18 +59,145 @@ const button: CSSProperties = {
 }
 const muted: CSSProperties = { color: secondary, fontSize: 13, lineHeight: 1.5, margin: '6px 0' }
 
+const accountCopy = {
+  en: {
+    identityChecking: 'Checking GitHub identity…', identityUnavailable: 'GitHub account identity unavailable',
+    accounts: 'GitHub accounts',
+    scope: 'Global default for new inherited turns. Credits can override this Session’s subsequent turns. Running turns, explicit Session accounts, models and conversation history stay unchanged.',
+    remoteUnavailable: 'Account management is unavailable in this deployment.',
+    readFailed: 'Could not read account information. Retry before changing accounts.',
+    switchUnavailable: 'Account switching is temporarily unavailable. Refresh account information and try again. No running work will be cancelled.',
+    routeBlocked: 'Account switching is unavailable while a native Copilot route remains configured or selected.',
+    evidenceIncomplete: 'Account switching is unavailable because route or activity evidence is incomplete.',
+    authorizationBusy: 'Account switching is paused while GitHub authorization is in progress.',
+    verifyingBusy: 'Account switching is paused while the authorized account is being verified.',
+    switchingBusy: 'An account change is already in progress.',
+    technicalDetails: 'Technical details',
+    currentDefault: 'Current default',
+    savedAuthorization: 'Saved authorization',
+    authorizationUnavailable: 'Authorization unavailable',
+    identityUnavailableLabel: 'Identity unavailable',
+    switch: 'Switch', reauthorize: 'Reauthorize', remove: 'Remove',
+    confirmRemoveTitle: 'Confirm account removal', confirmSwitchTitle: 'Confirm account switch',
+    removePrompt: (account: string) => `Remove the saved authorization for ${account}? This does not revoke access at GitHub or delete conversations.`,
+    switchPrompt: (account: string) => `Use ${account} for subsequent Copilot work? Existing selected models may be unavailable, and encrypted reasoning from another account may not replay. History will not be modified.`,
+    confirmRemove: 'Confirm removal', confirmSwitch: 'Confirm switch', cancel: 'Cancel',
+    switchFailed: 'Could not confirm the account change. Refresh account information before retrying.',
+    authorizationFailed: 'GitHub authorization did not complete. Try adding the account again.',
+    authorizationUnavailableError: 'GitHub authorization is unavailable in this deployment.',
+    modelsFailed: 'Could not verify the account’s available models. Try again.',
+    identityFailed: 'Could not verify the GitHub account identity. Try again.',
+    accountFailed: 'Could not update GitHub account information. Refresh and try again.',
+    addingStarting: 'Adding account…',
+    addingWaiting: 'Adding account — waiting for GitHub authorization',
+    reauthorizingStarting: 'Reauthorizing account…',
+    reauthorizingWaiting: 'Reauthorizing account — waiting for GitHub authorization',
+    authorizationStarting: 'GitHub authorization is starting…',
+    authorizationWaiting: 'Waiting for GitHub authorization…',
+    verifyingAdding: 'GitHub authorization complete — verifying account identity and available models',
+    verifyingReauthorizing: 'GitHub authorization complete — verifying the saved account identity and available models',
+    verifying: 'GitHub authorization complete — verifying account identity and available models',
+    pendingDefault: 'Your current default account will not change.',
+    verificationLink: 'Open GitHub verification',
+    manualUrl: 'If the browser does not open, copy this address:',
+    codeLabel: 'One-time authorization code',
+    copyCode: 'Copy authorization code', copyingCode: 'Copying…', copiedCodeButton: 'Code copied',
+    copiedCode: 'Authorization code copied to clipboard.',
+    copyFailed: 'Could not copy the code. Select it above and copy it manually.',
+    cancelAdd: 'Cancel adding account', cancelReauthorize: 'Cancel reauthorization',
+    cancelling: 'Cancelling…', add: 'Add GitHub account',
+    refresh: 'Refresh account information', refreshing: 'Checking…',
+  },
+  zh: {
+    identityChecking: '正在检查 GitHub 身份…', identityUnavailable: 'GitHub 账号身份暂不可用',
+    accounts: 'GitHub 账号',
+    scope: '全局默认账号用于后续继承默认值的新 turn。Credits 可为本 Session 后续 turn 指定账号。正在运行的 turn、Session 已指定账号、模型和对话历史保持不变。',
+    remoteUnavailable: '当前部署无法管理账号。',
+    readFailed: '无法读取账号信息。更改账号前请重试。',
+    switchUnavailable: '暂时无法切换账号。请刷新账号信息后重试；不会取消正在运行的工作。',
+    routeBlocked: '原生 Copilot 路由仍在配置或被选用，因此无法切换账号。',
+    evidenceIncomplete: '路由或活动证据不完整，因此无法切换账号。',
+    authorizationBusy: 'GitHub 授权进行期间无法切换账号。',
+    verifyingBusy: '正在验证已授权账号，暂时无法切换。',
+    switchingBusy: '账号更改正在进行中。',
+    technicalDetails: '诊断详情',
+    currentDefault: '当前默认账号',
+    savedAuthorization: '已保存授权',
+    authorizationUnavailable: '授权暂不可用',
+    identityUnavailableLabel: '身份暂不可用',
+    switch: '切换', reauthorize: '重新授权', remove: '移除',
+    confirmRemoveTitle: '确认移除账号', confirmSwitchTitle: '确认切换账号',
+    removePrompt: (account: string) => `移除 ${account} 的已保存授权？这不会撤销 GitHub 端的访问权限，也不会删除对话。`,
+    switchPrompt: (account: string) => `后续 Copilot 工作使用 ${account}？该账号可能没有当前已选模型，加密推理内容也可能绑定其他账号。不会修改历史记录。`,
+    confirmRemove: '确认移除', confirmSwitch: '确认切换', cancel: '取消',
+    switchFailed: '无法确认账号更改结果。请刷新账号信息后再试。',
+    authorizationFailed: 'GitHub 授权未完成。请重新添加账号。',
+    authorizationUnavailableError: '当前部署无法使用 GitHub 授权。',
+    modelsFailed: '无法验证该账号可用的模型，请重试。',
+    identityFailed: '无法验证 GitHub 账号身份，请重试。',
+    accountFailed: '无法更新 GitHub 账号信息。请刷新后重试。',
+    addingStarting: '正在添加账号…',
+    addingWaiting: '正在添加账号，等待 GitHub 授权',
+    reauthorizingStarting: '正在重新授权账号…',
+    reauthorizingWaiting: '正在重新授权账号，等待 GitHub 授权',
+    authorizationStarting: '正在启动 GitHub 授权…',
+    authorizationWaiting: '等待 GitHub 授权…',
+    verifyingAdding: 'GitHub 授权已完成，正在验证账号身份和可用模型',
+    verifyingReauthorizing: 'GitHub 授权已完成，正在验证已保存账号的身份和可用模型',
+    verifying: 'GitHub 授权已完成，正在验证账号身份和可用模型',
+    pendingDefault: '当前默认账号不会更改。',
+    verificationLink: '打开 GitHub 验证页',
+    manualUrl: '如果浏览器未打开，请复制此网址：',
+    codeLabel: '一次性授权码',
+    copyCode: '复制授权码', copyingCode: '正在复制…', copiedCodeButton: '已复制授权码',
+    copiedCode: '授权码已复制到剪贴板。',
+    copyFailed: '无法复制授权码。请选中上方代码并手动复制。',
+    cancelAdd: '取消添加账号', cancelReauthorize: '取消重新授权',
+    cancelling: '正在取消…', add: '添加 GitHub 账号',
+    refresh: '刷新账号信息', refreshing: '正在检查…',
+  },
+} as const
+
+function accountProblemMessage(code: CopilotAccountsView['diagnostic'], text: typeof accountCopy.en): string {
+  switch (code) {
+    case 'COPILOT_ACCOUNTS_ROUTE_BLOCKED': return text.routeBlocked
+    case 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE': return text.evidenceIncomplete
+    case 'COPILOT_ACCOUNTS_BUSY': return text.switchUnavailable
+    case 'COPILOT_ACCOUNTS_AUTH_FAILED': return text.authorizationFailed
+    case 'COPILOT_ACCOUNTS_AUTH_UNAVAILABLE': return text.authorizationUnavailableError
+    case 'COPILOT_ACCOUNTS_MODELS_FAILED': return text.modelsFailed
+    case 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE':
+    case 'COPILOT_ACCOUNTS_IDENTITY_INVALID':
+    case 'COPILOT_ACCOUNTS_IDENTITY_TIMEOUT':
+    case 'COPILOT_ACCOUNTS_IDENTITY_TLS':
+    case 'COPILOT_ACCOUNTS_IDENTITY_NETWORK':
+    case 'COPILOT_ACCOUNTS_IDENTITY_AUTH_REJECTED':
+    case 'COPILOT_ACCOUNTS_IDENTITY_RATE_LIMITED':
+    case 'COPILOT_ACCOUNTS_IDENTITY_HTTP_ERROR':
+    case 'COPILOT_ACCOUNTS_IDENTITY_CHANGED': return text.identityFailed
+    case 'COPILOT_ACCOUNTS_CONFLICT':
+    case 'COPILOT_ACCOUNTS_COMMIT_UNCERTAIN': return text.switchFailed
+    default: return text.accountFailed
+  }
+}
+
 export function CopilotAccountsPanel(props: {
   remote?: CopilotAccountsRemote
   expanded: boolean
   onChanged?: () => void
   authorizationBusy?: boolean
   configured?: boolean
+  locale?: string
 }): ReactElement {
   const [view, setView] = useState<CopilotAccountsView>()
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'failed'>('idle')
+  const [cancelRequested, setCancelRequested] = useState(false)
+  const [authorizationIntent, setAuthorizationIntent] = useState<'add' | 'reauthorize'>()
   const [confirmation, setConfirmation] = useState<{ id: string; revision: number; remove: boolean }>()
-  const lifetime = useRef({ active: false, generation: 0, busy: false })
+  const lifetime = useRef({ active: false, generation: 0, busy: false, copyGeneration: 0 })
+  const text = props.locale?.toLowerCase().startsWith('zh') ? accountCopy.zh : accountCopy.en
   const run = useCallback(async (operation: () => Promise<AccountResult>, changed = false, invalidate = changed) => {
     const owner = lifetime.current
     if (!owner.active || owner.busy) return
@@ -84,9 +212,15 @@ export function CopilotAccountsPanel(props: {
       const next = result.ok ? accountsViewFrom(result.value) : undefined
       setView(next)
       setFailed(next === undefined)
+      if (next?.operation === undefined) {
+        setAuthorizationIntent(undefined)
+        setCancelRequested(false)
+      }
       if (next !== undefined && changed && next.operation === undefined) props.onChanged?.()
     } catch {
-      if (current()) { setView(undefined); setFailed(true) }
+      if (current()) {
+        setView(undefined); setFailed(true); setAuthorizationIntent(undefined); setCancelRequested(false)
+      }
     } finally {
       if (current()) { owner.busy = false; setBusy(false) }
       finishChange?.()
@@ -96,6 +230,7 @@ export function CopilotAccountsPanel(props: {
     const owner = lifetime.current
     owner.active = true
     setView(undefined); setConfirmation(undefined); setBusy(false); setFailed(false)
+    setCopyState('idle'); setCancelRequested(false); setAuthorizationIntent(undefined)
     if (props.remote !== undefined && !props.authorizationBusy) void run(() => props.remote!.ensureIdentity())
     return () => { owner.active = false; owner.generation++; owner.busy = false }
   }, [props.remote, run, props.authorizationBusy, props.configured])
@@ -109,73 +244,146 @@ export function CopilotAccountsPanel(props: {
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', ensure) }
   }, [props.remote, props.authorizationBusy, view?.operation, run])
   useEffect(() => {
-    if (view?.operation !== 'authorizing' || props.remote === undefined) return
+    if ((view?.operation !== 'authorizing' && view?.operation !== 'verifying') || props.remote === undefined) return
     const timer = window.setTimeout(() => { void run(() => props.remote!.get(), true, false) }, 1500)
     return () => window.clearTimeout(timer)
   }, [view, props.remote, run])
+  const activeNotice = view?.operation === 'authorizing' && !cancelRequested ? view.notices.at(-1) : undefined
+  const noticeCode = activeNotice?.code
+  useEffect(() => {
+    lifetime.current.copyGeneration++
+    setCopyState('idle')
+  }, [noticeCode, view?.operation, cancelRequested])
+  useEffect(() => () => { lifetime.current.copyGeneration++ }, [])
+  const copyCode = () => {
+    const code = noticeCode
+    const owner = lifetime.current
+    if (!owner.active || code === undefined || copyState === 'copying' || cancelRequested) return
+    const generation = ++owner.copyGeneration
+    setCopyState('copying')
+    void copyAuthorizationCode(code).then(() => {
+      if (owner.active && owner.copyGeneration === generation) setCopyState('copied')
+    }, () => {
+      if (owner.active && owner.copyGeneration === generation) setCopyState('failed')
+    })
+  }
+  const cancelAuthorization = () => {
+    if (props.remote === undefined || busy) return
+    lifetime.current.copyGeneration++
+    setCopyState('idle')
+    setCancelRequested(true)
+    void run(() => props.remote!.cancel(), true)
+  }
+  const startAdd = () => {
+    setAuthorizationIntent('add')
+    setCancelRequested(false)
+    void run(() => props.remote!.add(), true)
+  }
+  const startReauthorization = (accountId: string, revision: number) => {
+    setAuthorizationIntent('reauthorize')
+    setCancelRequested(false)
+    void run(() => props.remote!.reauthorize(accountId, revision), true)
+  }
   const identity = accountIdentityLabel(view)
   const selected = confirmation === undefined ? undefined : view?.accounts.find(item => item.id === confirmation.id)
   const selectedLabel = selected?.identityState === 'ready' && selected.identity !== undefined
-    ? `@${selected.identity.login}` : 'this account'
+    ? `@${selected.identity.login}` : text.savedAuthorization
   const pending = busy || props.authorizationBusy === true || view?.operation !== undefined
+  const authorizationOperation = view?.operation === 'authorizing' || view?.operation === 'verifying'
+  const authorizationStatus = cancelRequested ? text.cancelling
+    : view?.operation === 'authorizing'
+      ? authorizationIntent === 'add' ? noticeCode === undefined ? text.addingStarting : text.addingWaiting
+        : authorizationIntent === 'reauthorize' ? noticeCode === undefined ? text.reauthorizingStarting : text.reauthorizingWaiting
+          : noticeCode === undefined ? text.authorizationStarting : text.authorizationWaiting
+      : view?.operation === 'verifying'
+        ? authorizationIntent === 'add' ? text.verifyingAdding
+          : authorizationIntent === 'reauthorize' ? text.verifyingReauthorizing : text.verifying
+        : view?.operation === 'switching' ? text.switchingBusy : undefined
+  const switchBlocker = view !== undefined && view.switchable === false
+    ? view.operation === 'authorizing' ? text.authorizationBusy
+      : view.operation === 'verifying' ? text.verifyingBusy
+        : view.operation === 'switching' ? text.switchingBusy
+          : view.diagnostic === 'COPILOT_ACCOUNTS_ROUTE_BLOCKED' ? text.routeBlocked
+            : view.diagnostic === 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE' ? text.evidenceIncomplete
+              : view.state === 'error' ? undefined : text.switchUnavailable
+    : undefined
   const control = (label: string, onClick: () => void, disabled = false) =>
     h('button', { type: 'button', style: { ...button, cursor: disabled ? 'default' : 'pointer' },
       onClick, disabled }, label)
-  return h('div', { 'data-copilot-accounts': '', 'aria-busy': busy, style: { minWidth: 0, overflowWrap: 'anywhere' } },
+  return h('div', { 'data-copilot-accounts': '', 'aria-busy': pending, style: { minWidth: 0, overflowWrap: 'anywhere' } },
     h('p', { style: muted, role: 'status', 'aria-live': 'polite', 'data-copilot-current-account': '' },
-      identity ?? (busy ? 'Checking GitHub identity…' : 'GitHub account identity unavailable')),
+      identity ?? (busy ? text.identityChecking : text.identityUnavailable)),
     !props.expanded ? null : h('div', { style: { display: 'grid', gap: 10, marginBlock: 12 } },
-      h('strong', null, 'GitHub accounts'),
-      h('p', { style: muted }, 'Global default for new inherited turns. Credits can override this Session’s subsequent turns. Running turns, explicit Session accounts, models and conversation history stay unchanged.'),
-      props.remote === undefined ? h('p', { role: 'status', style: muted }, 'COPILOT_ACCOUNTS_REMOTE_UNAVAILABLE · Account management is unavailable in this deployment.') : null,
-      failed ? h('p', { role: 'alert', style: muted }, 'Could not read account information. Retry before changing accounts.') : null,
-      view?.diagnostic === undefined ? null : h('p', { role: 'status', style: muted }, view.diagnostic),
-      view?.switchable === false ? h('p', { style: muted }, 'Switching is unavailable during account management or unbound preparation, while native Copilot routes remain configured, or when route evidence is incomplete. Account-pinned managed turns can continue. No running work will be cancelled.') : null,
+      h('strong', null, text.accounts),
+      h('p', { style: muted }, text.scope),
+      props.remote === undefined ? h('p', { role: 'status', style: muted }, text.remoteUnavailable) : null,
+      failed ? h('p', { role: 'alert', style: muted }, text.readFailed) : null,
+      view?.state === 'error' && view.operation === undefined && view.diagnostic !== undefined
+        ? h('p', { role: 'alert', style: muted }, accountProblemMessage(view.diagnostic, text)) : null,
+      switchBlocker === undefined ? null : h('p', { role: 'status', 'aria-live': 'polite', style: muted }, switchBlocker),
+      authorizationStatus === undefined ? null : h('div', { role: 'status', 'aria-live': 'polite',
+        'data-copilot-account-authorization': '', style: { display: 'grid', gap: 8 } },
+      h('strong', null, authorizationStatus),
+      authorizationOperation ? h('p', { style: muted }, text.pendingDefault) : null,
+      activeNotice?.url === undefined ? null : h('a', { href: activeNotice.url, target: externalLinkTarget(), rel: 'noreferrer',
+        style: { color: 'inherit', width: 'fit-content' } }, text.verificationLink),
+      activeNotice?.url === undefined ? null : h('p', { style: { ...muted, overflowWrap: 'anywhere', userSelect: 'all' } },
+        text.manualUrl, ' ', activeNotice.url),
+      activeNotice?.code === undefined ? null : h('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 } },
+        h('span', { style: { color: secondary, fontSize: 13 } }, text.codeLabel),
+        h('code', { 'data-copilot-account-device-code': '', style: {
+          userSelect: 'all', overflowWrap: 'anywhere', fontSize: 17, fontWeight: 700, letterSpacing: '0.08em',
+        } }, activeNotice.code),
+        control(copyState === 'copying' ? text.copyingCode
+          : copyState === 'copied' ? text.copiedCodeButton : text.copyCode,
+        copyCode, copyState === 'copying' || cancelRequested)),
+      copyState === 'copied' ? h('p', { role: 'status', 'aria-live': 'polite', style: muted }, text.copiedCode) : null,
+      copyState === 'failed' ? h('p', { role: 'alert', 'aria-live': 'polite', style: muted }, text.copyFailed) : null,
+      view?.operation === 'authorizing' ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
+        control(cancelRequested ? text.cancelling
+          : authorizationIntent === 'reauthorize' ? text.cancelReauthorize : text.cancelAdd,
+        cancelAuthorization, busy || cancelRequested)) : null),
+      view?.diagnostic === undefined ? null : h('details', { 'data-copilot-account-diagnostic': '', style: { color: secondary, fontSize: 13 } },
+        h('summary', { style: { cursor: 'pointer' } }, text.technicalDetails),
+        h('code', { style: { overflowWrap: 'anywhere' } }, view.diagnostic)),
       h('ul', { style: { padding: 0, margin: 0, listStyle: 'none' } }, ...(view?.accounts ?? []).map(account =>
         h('li', { key: account.id, style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
           paddingBlock: 10, borderBottom: border } },
         h('div', { style: { minWidth: 0, flex: '1 1 180px' } },
-          h('strong', null, account.identityState === 'ready' && account.identity !== undefined ? `@${account.identity.login}` : 'Identity unavailable'),
-          h('p', { style: muted }, account.id === view?.activeAccountId ? 'Active account'
-            : account.configured ? 'Saved authorization' : 'Authorization unavailable')),
-        account.id === view?.activeAccountId ? null : control('Switch', () => {
+          h('strong', null, account.identityState === 'ready' && account.identity !== undefined ? `@${account.identity.login}`
+            : account.configured ? text.identityUnavailableLabel : text.authorizationUnavailable),
+          h('p', { style: muted }, account.id === view?.activeAccountId ? text.currentDefault
+            : account.configured ? text.savedAuthorization : text.authorizationUnavailable)),
+        account.id === view?.activeAccountId ? null : control(text.switch, () => {
           if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: false })
         }, pending || view?.switchable !== true || view?.revision === undefined || !account.configured),
-        account.id === 'canonical' ? null : control('Reauthorize', () => {
+        account.id === 'canonical' ? null : control(text.reauthorize, () => {
           if (props.remote !== undefined && view?.revision !== undefined) {
             const revision = view.revision
-            void run(() => props.remote!.reauthorize(account.id, revision), true)
+            startReauthorization(account.id, revision)
           }
         }, pending || view?.writable !== true || view?.switchable !== true || view?.revision === undefined),
-        account.id === 'canonical' || account.id === view?.activeAccountId ? null : control('Remove', () => {
+        account.id === 'canonical' || account.id === view?.activeAccountId ? null : control(text.remove, () => {
           if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: true })
         }, pending || view?.writable !== true || view?.revision === undefined)))),
-      confirmation === undefined ? null : h('div', { role: 'group', 'aria-label': confirmation.remove ? 'Confirm account removal' : 'Confirm account switch',
+      confirmation === undefined ? null : h('div', { role: 'group',
+        'aria-label': confirmation.remove ? text.confirmRemoveTitle : text.confirmSwitchTitle,
         style: { border, borderRadius: 8, padding: 12 } },
         h('p', { style: { ...muted, color: 'inherit', marginTop: 0 } }, confirmation.remove
-          ? `Remove the saved authorization for ${selectedLabel}? This does not revoke access at GitHub or delete conversations.`
-          : `Use ${selectedLabel} for subsequent Copilot work? Existing selected models may be unavailable, and encrypted reasoning from another account may not replay. History will not be modified.`),
+          ? text.removePrompt(selectedLabel) : text.switchPrompt(selectedLabel)),
         h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
-          control(confirmation.remove ? 'Confirm removal' : 'Confirm switch', () => {
+          control(confirmation.remove ? text.confirmRemove : text.confirmSwitch, () => {
             const target = confirmation
             setConfirmation(undefined)
             if (props.remote !== undefined) void run(() => target.remove
               ? props.remote!.removeAccount(target.id, target.revision) : props.remote!.switchAccount(target.id, target.revision), true)
           }, pending),
-          control('Cancel', () => setConfirmation(undefined), pending))),
-      ...(view?.notices ?? []).map((notice, index) => h('div', { key: index, style: muted },
-        h('p', null, notice.message),
-        notice.url === undefined ? null : h('a', { href: notice.url, target: externalLinkTarget(), rel: 'noreferrer',
-          style: { color: 'inherit' } }, 'Open GitHub verification'),
-        notice.code === undefined ? null : h('p', null, h('code', { style: { userSelect: 'all' } }, notice.code)),
-        notice.url === undefined ? null : h('p', { style: { userSelect: 'all' } }, notice.url))),
+          control(text.cancel, () => setConfirmation(undefined), pending))),
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
-        view?.operation === 'authorizing' ? control('Cancel account sign-in', () => {
-          if (props.remote !== undefined) void run(() => props.remote!.cancel(), true)
-        }, busy) : control('Add GitHub account', () => {
-          if (props.remote !== undefined) void run(() => props.remote!.add(), true)
+        authorizationOperation ? null : control(text.add, () => {
+          if (props.remote !== undefined) startAdd()
         }, pending || view?.writable !== true || view?.switchable !== true),
-        control(busy ? 'Checking…' : 'Refresh account information', () => {
+        control(busy ? text.refreshing : text.refresh, () => {
           if (props.remote !== undefined) void run(() => props.remote!.refreshIdentity())
         }, pending || props.remote === undefined))))
 }

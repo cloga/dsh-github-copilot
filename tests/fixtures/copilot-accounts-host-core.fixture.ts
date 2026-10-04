@@ -341,6 +341,8 @@ describe('independent Copilot account ownership', () => {
   it('registers public native OAuth and writes directly to a new independent record', async () => {
     const f = fixture()
     f.records.delete(key(A)); f.records.delete(key(B))
+    let finishValidation!: () => void
+    f.validateModels.mockImplementationOnce(() => new Promise<void>(resolve => { finishValidation = resolve }))
     f.fetch.mockImplementation(async (_url, init) => Response.json({
       login: new Headers(init?.headers).get('Authorization') === 'token synthetic-new-github' ? 'new-user' : 'canonical-user',
       id: new Headers(init?.headers).get('Authorization') === 'token synthetic-new-github' ? 3 : 1,
@@ -367,6 +369,12 @@ describe('independent Copilot account ownership', () => {
     })
     const adding = await f.host.add()
     expect(adding.operation).toBe('authorizing')
+    await vi.waitFor(() => expect(f.validateModels).toHaveBeenCalledOnce(), { timeout: 15_000 })
+    const verifying = await f.host.get()
+    expect(verifying).toMatchObject({ state: 'error', operation: 'verifying', activeAccountId: 'canonical',
+      switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY', notices: [] })
+    expect(CopilotAccountsViewSchema.safeParse(verifying).success).toBe(true)
+    finishValidation()
     await vi.waitFor(async () => expect((await f.host.get()).operation).toBeUndefined(), { timeout: 15_000 })
     await expect(begin.mock.results[0]!.value).resolves.toEqual({ status: 'authorized' })
     expect(await f.host.get()).toMatchObject({ state: 'ready', activeAccountId: 'canonical' })

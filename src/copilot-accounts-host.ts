@@ -75,7 +75,7 @@ export class CopilotAccountsHost {
   private readonly identityFailures = new Map<string, { at: number; diagnostic: CopilotAccountsDiagnostic }>()
   private readonly listeners = new Set<() => void>()
   private readonly abort = new AbortController()
-  private operation: 'authorizing' | 'switching' | undefined
+  private operation: 'authorizing' | 'verifying' | 'switching' | undefined
   private attemptKey: string | undefined
   private authorizationAbort: AbortController | undefined
   private notices: CopilotAccountsNotice[] = []
@@ -606,6 +606,8 @@ export class CopilotAccountsHost {
         prompt: async () => { fail('COPILOT_ACCOUNTS_AUTH_UNAVAILABLE') },
       } }).then(async result => {
         if (result.status !== 'authorized') return
+        this.operation = 'verifying'
+        this.notices = []
         const binding = this.capture(accountId)
         const signal = AbortSignal.any([attemptSignal, AbortSignal.timeout(60_000)])
         const identity = await this.identity(binding, signal)
