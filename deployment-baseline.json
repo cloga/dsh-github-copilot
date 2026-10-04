@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.91"
+    "version": "0.4.0-alpha.92"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -330,6 +330,7 @@
         {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "cold-folds native model selections independently without replacing the controller projection"},
         {"file": "tests/preview-route.spec.ts", "name": "forwards native SDK failed zero usage without changing the shared accounting stream"},
         {"file": "tests/preview-route.spec.ts", "name": "preserves native cancellation usage on %s (%s input tokens)"},
+        {"file": "tests/preview-route.spec.ts", "name": "preserves native nonzero Anthropic usage before restoring an owned byte-idle failure"},
         {"file": "tests/fixtures/turn-usage-core.fixture.ts", "name": "retains native whole-turn accounting for a sampled %s attempt after successful steps"}
       ]
     },
