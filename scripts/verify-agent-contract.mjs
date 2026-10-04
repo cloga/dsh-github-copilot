@@ -41,6 +41,10 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(Array.isArray(contract.entrypoints) && contract.entrypoints.includes('AGENTS.md'), 'authoritative entrypoint is missing')
   for (const path of contract.entrypoints) await file(path)
   require(contract.tasks && Object.keys(contract.tasks).length > 0, 'task directory is missing')
+  require(contract.tasks.autointent?.read?.includes('src/auto-model-intent.ts')
+    && contract.tasks.autointent?.tests?.includes('tests/fixtures/session-context-core.fixture.ts')
+    && contract.tasks.autointent?.risk?.includes('No Core projection replacement'),
+  'Auto intent continuity must preserve public projection ownership and exact-source regression evidence')
   require(contract.tasks.history?.read?.includes('src/turn-usage-evidence.ts')
     && contract.tasks.history?.tests?.includes('tests/fixtures/turn-usage-core.fixture.ts')
     && contract.tasks.history?.risk?.includes('No fabricated zero usage, partial token totals'),

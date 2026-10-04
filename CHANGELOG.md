@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.98 (prepared)
+
+- Retain owner-explicit Auto intent through a strict public Session projection when a native virtual request header consumes pending selection (#293).
+- Preserve intent across concrete execution headers and cold replay; later fixed/other-provider choices replace it for future turns. Admitted Auto requests keep their route through late picker changes.
+- Ignore copied fork/child prefixes as owner-explicit evidence; keep native pending/parent-follow precedence and named missing/invalid diagnostics. No Core changes, new durable events, settings/history rewrite or fabricated historical reasons.
+
 ## 0.4.0-alpha.97 (prepared)
 
 - Add request-scoped public native body-write/header timing and optional TLS ALPN/Node buffer observations to exact verified Copilot request-body timeout diagnostics (#291).

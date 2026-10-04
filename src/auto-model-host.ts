@@ -19,6 +19,7 @@ import {
   resolveParentModel, ParentModelFollowError,
 } from './parent-model-follow.ts'
 import type { ParentModelBinding, FollowSelection, FollowSubject } from './parent-model-follow.ts'
+import { AUTO_MODEL_INTENT_PROJECTION, AutoModelIntentSchema, autoModelIntentDefinition } from './auto-model-intent.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context { githubCopilotTurnSelection: { get(agent: Agent, turn: number): ReturnType<TurnSelectionStore['get']> } }
@@ -44,6 +45,7 @@ interface RoutedTurn {
   readonly turn: number
   readonly decision: AutoModelDecision
   recorded: boolean
+  admitted?: Pick<NonNullable<ReturnType<Agent['session']['requestHeader']>>['config'], 'provider' | 'model' | 'reasoningEffort'>
 }
 
 function failure(code: string, kind: 'INVALID_REQUEST' | 'ABORTED' = 'INVALID_REQUEST'): LlmError {
@@ -126,15 +128,6 @@ function buildRoutingContext(
   }
 }
 
-function pendingAuto(ctx: Context, agent: Agent): string | undefined {
-  const candidate: unknown = ctx.get('sessionProjections')
-  if (!record(candidate) || typeof candidate.stateOf !== 'function') return undefined
-  const state: unknown = candidate.stateOf(agent.session, 'modelSelection')
-  if (!record(state) || !record(state.pending) || state.pending.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) return undefined
-  return typeof state.pending.model === 'string' && autoModelPreference(state.pending.model) !== undefined
-    ? state.pending.model : undefined
-}
-
 function modelSelectionNotice(value: unknown): boolean {
   return record(value) && record(value.source) && value.source.kind === 'model-selection'
 }
@@ -175,6 +168,35 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
   }>()
   const activeDecisions = new Set<AbortController>()
   let active = true
+  let removeIntentProjection: Dispose | undefined
+  const retainedAuto = (registry: Record<string, unknown>, session: unknown): string | undefined => {
+    if (typeof registry.register !== 'function' || typeof registry.stateOf !== 'function') {
+      throw failure('COPILOT_AUTO_INTENT_PROJECTIONS_UNAVAILABLE')
+    }
+    if (!removeIntentProjection) {
+      const remove: unknown = registry.register(autoModelIntentDefinition)
+      if (typeof remove !== 'function') throw failure('COPILOT_AUTO_INTENT_DISPOSER_UNAVAILABLE')
+      removeIntentProjection = () => { remove() }
+    }
+    const intent = AutoModelIntentSchema.safeParse(registry.stateOf(session, AUTO_MODEL_INTENT_PROJECTION))
+    if (!intent.success || intent.data.blocked) throw failure('COPILOT_AUTO_INTENT_UNAVAILABLE')
+    const selection = intent.data.selection
+    return selection?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+      && autoModelPreference(selection.model) !== undefined ? selection.model : undefined
+  }
+  const pendingAuto = (agent: Agent): string | undefined => {
+    const registry: unknown = ctx.get('sessionProjections')
+    if (!record(registry) || typeof registry.stateOf !== 'function') return undefined
+    const native: unknown = registry.stateOf(agent.session, 'modelSelection')
+    if (!record(native)) return undefined
+    const selection: unknown = native.pending
+    if (selection === null && agent.session.requestHeader()?.config.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
+      return retainedAuto(registry, agent.session)
+    }
+    if (!record(selection) || selection.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) return undefined
+    return typeof selection.model === 'string' && autoModelPreference(selection.model) !== undefined
+      ? selection.model : undefined
+  }
   const decisionFor = (agent: Agent, turn: number, messages: readonly unknown[],
     preference: AutoModelPreference, signal: AbortSignal): Promise<RoutedTurn> => {
     if (!active || signal.aborted) return Promise.reject(signal.reason ?? failure('COPILOT_AUTO_DISPOSED', 'ABORTED'))
@@ -250,11 +272,15 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       const pending = selection.pending === null ? null : followSelection(selection.pending)
       if (pending === undefined) throw failure('COPILOT_PARENT_MODEL_SELECTION_UNAVAILABLE')
       const header: unknown = session.requestHeader()
+      const recorded = record(header) ? followSelection(header.config) : undefined
+      const retained = pending === null && recorded?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+        ? retainedAuto(projections, session) : undefined
       return {
         id: session.id,
         parentId: typeof session.header.parentSession === 'string' ? session.header.parentSession : undefined,
         origin: typeof session.header.origin === 'string' ? session.header.origin : undefined,
-        state: parsed.data, pending, recorded: record(header) ? followSelection(header.config) : undefined,
+        state: parsed.data, pending,
+        recorded: retained === undefined ? recorded : { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: retained },
       }
     }
     const child = readSubject(agent)
@@ -280,7 +306,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
   const effectiveAuto = (agent: Agent): string | undefined => {
     const inherited = followIntent(agent)
     if (inherited !== undefined) return autoModelPreference(inherited.model) !== undefined ? inherited.model : undefined
-    return pendingAuto(ctx, agent)
+    return pendingAuto(agent)
   }
   const installAgent = (agent: Agent): void => {
     if (agentDisposers.has(agent)) return
@@ -290,7 +316,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       if (inherited !== undefined) return { ...assembled, variables: {
         ...assembled.variables, provider: inherited.provider, model: inherited.model,
       } }
-      const pending = pendingAuto(ctx, agent)
+      const pending = pendingAuto(agent)
       if (pending === undefined) return assembled
       return { ...assembled, variables: {
         ...assembled.variables, provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: pending,
@@ -300,6 +326,12 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       const result = await next()
       const entered = result.kind === 'enter' ? result.messages : messages
       captured.set(agent, { turn, messages: entered })
+      const admitted = routed.get(agent)
+      if (result.kind === 'enter' && !signal.aborted && admitted?.turn === turn && admitted.admitted !== undefined) {
+        const filtered = result.messages.filter(message => !modelSelectionNotice(message))
+        const notice = actualNotice(agent, admitted.decision.model.id)
+        return { ...result, messages: notice === undefined ? filtered : [...filtered, notice] }
+      }
       const pending = effectiveAuto(agent)
       const preference = pending === undefined ? undefined : autoModelPreference(pending)
       const inherited = followIntent(agent)
@@ -342,6 +374,12 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
   const removeRequest = ctx.on('agent/request', async ({ agent, turn, signal }, next) => {
     installAgent(agent)
     const native = await next()
+    const admitted = routed.get(agent)
+    if (admitted?.turn === turn && admitted.admitted !== undefined) {
+      if (!signal.aborted) dependencies.admitModel?.(agent, turn, admitted.decision.model.id, signal)
+      const { reasoningEffort: _changedEffort, ...current } = native
+      return { ...current, ...admitted.admitted }
+    }
     const inherited = followIntent(agent)
     const { reasoningEffort: _nativeEffort, ...withoutEffort } = native
     const resolved = inherited === undefined ? native : { ...withoutEffort, ...inherited }
@@ -389,6 +427,10 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     }
     if (!signal.aborted) {
       dependencies.admitModel?.(agent, turn, state.decision.model.id, signal)
+      state.admitted = {
+        provider: resolved.provider, model: state.decision.model.id,
+        ...(resolved.reasoningEffort === undefined ? {} : { reasoningEffort: resolved.reasoningEffort }),
+      }
       selections.record(agent, turn, {
         mode: 'auto', preference: state.decision.preference, reason: state.decision.reason,
         candidateCount: state.decision.candidateCount, fittingCandidateCount: state.decision.fittingCandidateCount,
@@ -405,6 +447,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     removeDisposed()
     removeRequest()
     removeFollowProjection?.()
+    removeIntentProjection?.()
     for (const dispose of activeDisposers) dispose()
     activeDisposers.clear()
     selections.clear()
