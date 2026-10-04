@@ -71,6 +71,7 @@
     "docs/image-input-compatibility.md",
     "output/auto-model-mockup/index.html",
     "docs/images/dual-model-provenance.json",
+    "docs/images/current-client-provenance.json",
     "scripts/check-search-composition.mjs",
     "docs/images/"
   ],
