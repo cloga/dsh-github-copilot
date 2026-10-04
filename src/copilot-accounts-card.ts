@@ -9,6 +9,7 @@ type AccountResult = { ok: true; value: CopilotAccountsView } | { ok: false; err
 export interface CopilotAccountsRemote {
   get(): Promise<AccountResult>
   refreshIdentity(): Promise<AccountResult>
+  ensureIdentity(): Promise<AccountResult>
   add(): Promise<AccountResult>
   cancel(): Promise<AccountResult>
   switchAccount(accountId: string, expectedRevision: number): Promise<AccountResult>
@@ -95,9 +96,18 @@ export function CopilotAccountsPanel(props: {
     const owner = lifetime.current
     owner.active = true
     setView(undefined); setConfirmation(undefined); setBusy(false); setFailed(false)
-    if (props.remote !== undefined && !props.authorizationBusy) void run(() => props.remote!.refreshIdentity())
+    if (props.remote !== undefined && !props.authorizationBusy) void run(() => props.remote!.ensureIdentity())
     return () => { owner.active = false; owner.generation++; owner.busy = false }
   }, [props.remote, run, props.authorizationBusy, props.configured])
+  useEffect(() => {
+    if (props.remote === undefined || props.authorizationBusy || view?.operation !== undefined) return
+    const ensure = () => {
+      if (document.visibilityState !== 'hidden') void run(() => props.remote!.ensureIdentity())
+    }
+    const timer = window.setInterval(ensure, 60_000)
+    document.addEventListener('visibilitychange', ensure)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', ensure) }
+  }, [props.remote, props.authorizationBusy, view?.operation, run])
   useEffect(() => {
     if (view?.operation !== 'authorizing' || props.remote === undefined) return
     const timer = window.setTimeout(() => { void run(() => props.remote!.get(), true, false) }, 1500)

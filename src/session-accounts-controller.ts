@@ -26,10 +26,18 @@ export class SessionAccountController extends TypertRemoteService {
   }
   @Remote
   async refreshIdentity(agent: Agent): Promise<SessionAccountView> {
+    return this.readIdentity(agent, true)
+  }
+  @Remote
+  async ensureIdentity(agent: Agent): Promise<SessionAccountView> {
+    return this.readIdentity(agent, false)
+  }
+  private async readIdentity(agent: Agent, force: boolean): Promise<SessionAccountView> {
     const selected = this.owner.selected(agent)
     const accounts = this.ctx.get('githubCopilotAccounts')
     if (!accounts) throw new Error('COPILOT_SESSION_ACCOUNTS_UNAVAILABLE')
-    const identity = await accounts.host.refreshIdentityFor(selected.accountId)
+    const identity = await (force ? accounts.host.refreshIdentityFor(selected.accountId)
+      : accounts.host.ensureIdentityFor(selected.accountId))
     const latest = await this.get(agent)
     if (latest.accountId !== selected.accountId || latest.source !== selected.source) throw new Error('COPILOT_ACCOUNTS_CHANGED')
     return { ...latest, accounts: identity }
