@@ -1364,6 +1364,13 @@ describe('GitHub Copilot Models client', () => {
     expect(first.props).not.toHaveProperty('copilot')
     await dispose()
   })
+  it('declares account namespace access for both Models and Credits injection scopes', async () => {
+    const { ctx } = clientContext(['settings.models.footer'])
+    const dispose = await apply(ctx as never)
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
+    await dispose()
+  })
 
   it.each(['settings.models.provider-card', 'settings.models.footer', 'settings.section'])(
     'retains account metadata without redundant reads on exclusion-driven %s renders', async slot => {

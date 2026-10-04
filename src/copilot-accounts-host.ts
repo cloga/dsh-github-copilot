@@ -108,7 +108,11 @@ export class CopilotAccountsHost {
     for (const listener of this.listeners) listener()
   }
   selectionChanged(): void {
-    try { this.selection() } catch { this.revoke() }
+    try { this.selection() } catch { this.selectionSignature = undefined; this.revoke() }
+  }
+  isActiveRecord(key: string): boolean {
+    return isCopilotAccountRecord(key)
+      && (this.selectionSignature === undefined || key === recordKey(this.selectionSignature))
   }
   credentialChanged(key: string): void {
     if (!isCopilotAccountRecord(key)) return
@@ -547,8 +551,8 @@ export function activeCopilotBinding(ctx: Context): CopilotAccountBinding | unde
 }
 export function isActiveCopilotRecord(ctx: Context, key: string): boolean {
   if (!isCopilotAccountRecord(key)) return false
-  try { return key === (activeCopilotBinding(ctx)?.key ?? GITHUB_COPILOT_CREDENTIAL_KEY) }
-  catch { return true }
+  const accounts = ctx.get('githubCopilotAccounts')
+  return accounts === undefined || accounts.host.isActiveRecord(key)
 }
 export default class GitHubCopilotAccountsController extends TypertRemoteService {
   readonly host: CopilotAccountsHost

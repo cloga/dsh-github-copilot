@@ -1,6 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { expect, it, vi } from 'vitest'
-import { CopilotAccountsHost } from '../src/copilot-accounts-host.ts'
+import { CopilotAccountsHost, isActiveCopilotRecord } from '../src/copilot-accounts-host.ts'
 import { CopilotAccountsViewSchema } from '../src/copilot-accounts-remote.ts'
 
 vi.mock('../src/migration-status.ts', () => ({ migrationStatus: () => { throw new Error('No native migration read') } }))
@@ -21,7 +21,7 @@ function fixture(selected: unknown = A) {
     mutate: vi.fn(),
   })
   const host = new CopilotAccountsHost(ctx, { routeDiagnostic: () => undefined })
-  return { host, readRecord, rows, change(value: unknown) { selected = value; revision++; host.selectionChanged() } }
+  return { ctx, host, readRecord, rows, change(value: unknown) { selected = value; revision++; host.selectionChanged() } }
 }
 it('lists safe membership without credentials, discovery or implicit fallback', async () => {
   const f = fixture()
@@ -50,5 +50,22 @@ it('exposes narrowly permitted selected-missing recovery while retaining error e
     diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' })
   expect(CopilotAccountsViewSchema.safeParse(view).success).toBe(true)
   expect(await f.host.reauthorize(A, 1)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' })
+  f.host.dispose()
+})
+it('classifies record notifications from retained selector metadata without reading Settings or credentials', async () => {
+  const f = fixture()
+  f.ctx.provide('githubCopilotAccounts', { host: f.host })
+  await f.host.get()
+  const describe = vi.spyOn(f.ctx.settings, 'describe')
+  for (let index = 0; index < 20; index++) {
+    expect(isActiveCopilotRecord(f.ctx, `github-copilot/account-${A}`)).toBe(true)
+    expect(isActiveCopilotRecord(f.ctx, `github-copilot/account-${B}`)).toBe(false)
+  }
+  expect(describe).not.toHaveBeenCalled()
+  expect(f.readRecord).not.toHaveBeenCalled()
+  f.change(B)
+  describe.mockClear()
+  expect(isActiveCopilotRecord(f.ctx, `github-copilot/account-${B}`)).toBe(true)
+  expect(describe).not.toHaveBeenCalled()
   f.host.dispose()
 })

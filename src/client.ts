@@ -1060,7 +1060,7 @@ function registerSearchUi(ctx: ClientContext): () => void {
 /** Mount the plugin-owned Remote namespace and register the Models card seat. */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(githubCopilotRemote)
-  const ui = ctx.inject(['remote.githubCopilot', 'slots'], registerUi)
+  const ui = ctx.inject(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], registerUi)
   try {
     await ui
   } catch (error) {
@@ -1069,7 +1069,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     throw error
   }
   const searchUi = ctx.inject(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
-  const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
+  const usageUi = ctx.inject(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'slots'], registerCopilotUsageUi)
   const contextUi = ctx.inject(['slots'], registerContextEvidenceUi)
   const recoveryUi = ctx.inject(['remote.githubCopilotReplayRecovery', 'slots'], registerReplayRecoveryUi)
   const autoUi = ctx.inject(['remote.githubCopilotTurnSelection', 'slots'], scope => installAutoModelPresentation({
