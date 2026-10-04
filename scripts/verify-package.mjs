@@ -100,15 +100,34 @@ const usageDescriptors = remote.descriptors.filter(descriptor => descriptor.name
 const selectionDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotTurnSelection')
 const replayDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotReplayRecovery')
 const accountDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts')
+const sessionAccountDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionAccount')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 28 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 34 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
   || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get'])
   || JSON.stringify(replayDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorize', 'get', 'setEnabled'])
-  || JSON.stringify(accountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['add', 'cancel', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])) {
+  || JSON.stringify(accountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['add', 'cancel', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])
+  || JSON.stringify(sessionAccountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])) {
   throw new Error('built Remote entry must retain existing controls and independent account controls')
+}
+for (const descriptor of sessionAccountDescriptors) {
+  const [agent] = descriptor.parameters
+  if (descriptor.id !== `dsh-github-copilot:githubCopilotSessionAccount.${descriptor.method}`
+    || descriptor.service !== 'githubCopilotSessionAccount' || descriptor.invocation.kind !== 'direct'
+    || descriptor.scope !== undefined || descriptor.parameters.length !== (descriptor.method === 'set' ? 3 : descriptor.method === 'turn' ? 2 : 1)
+    || agent.source !== 'lookup' || agent.lookup !== 'agent' || agent.wire !== 'agentId'
+    || agent.codec.mode !== 'strict' || descriptor.result.mode !== 'strict') {
+    throw new Error('Session account Remote must preserve explicit Agent lookup and strict contracts')
+  }
+  if (descriptor.method === 'set') {
+    const [, account, revision] = descriptor.parameters
+    if (account.codec.schema.parse(null) !== null || account.codec.schema.parse('canonical') !== 'canonical'
+      || account.codec.schema.safeParse('invalid').success || revision.codec.schema.safeParse(-1).success) {
+      throw new Error('Session account preference must preserve strict inheritance and CAS')
+    }
+  }
 }
 for (const descriptor of accountDescriptors) {
   const mutation = ['reauthorize', 'removeAccount', 'switchAccount'].includes(descriptor.method)
