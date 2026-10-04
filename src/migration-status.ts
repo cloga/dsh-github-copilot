@@ -1,7 +1,9 @@
 /** Read-only, synchronous evidence for an independently authorized Ops migration. */
 import type { Context } from '@deepseek-ai/cordis'
-import { name, version } from '#package.json' with { type: 'json' }
+import packageMetadata from '#package.json' with { type: 'json' }
 import { GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+
+const { name, version } = packageMetadata
 
 export interface MigrationSelection {
   readonly provider: string
