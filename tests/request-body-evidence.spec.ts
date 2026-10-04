@@ -43,6 +43,31 @@ describe('bounded numeric-only original request body evidence', () => {
       tools: [{ type: 'input_image', image_url: 'secret' }] }), 'openai-responses'))
       .toMatchObject({ state: 'complete', imageBlockBytes: 0, opaqueReplayBytes: 0 })
   })
+  it('counts native Responses function output images without classifying unknown output arrays', () => {
+    const image = { type: 'input_image', detail: 'auto', image_url: 'data:image/png;base64,PRIVATE_IMAGE' }
+    const reference = { type: 'input_image', file_id: 'PRIVATE_FILE' }
+    const conversation = [{ type: 'function_call_output', call_id: 'PRIVATE_CALL',
+      output: [{ type: 'input_text', text: 'PRIVATE_TEXT' }, image, reference],
+      metadata: { output: [image] } },
+    { type: 'future', output: [image] }, { role: 'user', output: [image] }]
+    const body = JSON.stringify({ input: conversation, tools: [{ output: [image] }] })
+    const result = requestBodyEvidence(body, 'openai-responses')
+    expect(result).toMatchObject({ state: 'complete', totalBytes: Buffer.byteLength(body),
+      conversationBytes: bytes(conversation), imageBlockBytes: bytes(image) + bytes(reference),
+      opaqueReplayBytes: 0 })
+    if (result.state !== 'complete') throw new Error('EXPECTED_COMPLETE')
+    expect(result.imageBlockBytes + result.remainingConversationBytes).toBe(result.conversationBytes)
+    expect(JSON.stringify(result)).not.toContain('PRIVATE')
+    expect(requestBodyEvidence(JSON.stringify({ messages: conversation }), 'openai-completions'))
+      .toMatchObject({ state: 'complete', imageBlockBytes: 0 })
+  })
+  it('counts exact escaped Responses tool output image spans without decoding or reserialization', () => {
+    const image = '{ "type" : "input_image", "image_url" : "data:image\\/png;base64,AA\\u0041A" }'
+    const body = `{"input":[{"type":"function_call_output","call_id":"call-test","output":[${image}]}]}`
+    expect(requestBodyEvidence(body, 'openai-responses')).toMatchObject({
+      state: 'complete', totalBytes: Buffer.byteLength(body), imageBlockBytes: Buffer.byteLength(image),
+    })
+  })
   it('preserves absent, unsupported and malformed evidence rather than returning zero-shaped success', () => {
     expect(requestBodyEvidence(undefined, 'openai-responses')).toEqual({ state: 'unavailable' })
     for (const body of ['{}', 'null', '[]', '{"input":"text"}']) {

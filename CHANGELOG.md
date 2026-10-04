@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0-alpha.94 (prepared)
+
+- Count native Responses tool-output image spans under `function_call_output.output[]` in bounded timeout diagnostics (#287), rather than misclassifying them as remaining history.
+- Preserve unknown output shapes, exact original byte spans, total-byte partitions, native image budgets, history/replay, failure classification and transport. Old stored diagnostics are not rewritten; this corrects evidence, not recurring supplier 408s.
+
 ## 0.4.0-alpha.93 (prepared)
 
 - Add default-off, explicit session replay recovery after verified Responses scope rejection. Confirming the disclosed loss omits only matching old encrypted items and their summaries on later requests; stored history, tool pairs and new reasoning remain unchanged.
