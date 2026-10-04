@@ -26,6 +26,7 @@ import type { InlineConfig } from './config.ts'
 import { assessRequestBudget, calculateRequestBudget, resolveRequestBudgetPolicy, selectCompactionReasoning } from './request-budget.ts'
 import type { RequestBudgetFailure, RequestBudgetPolicy } from './request-budget.ts'
 import { installCopilotCompactionPressure } from './compaction-pressure.ts'
+import { installCopilotPreStepPressure } from './pre-step-pressure.ts'
 import { autoModelInputModalities } from './auto-model-routing.ts'
 import { installAutoModelRouting } from './auto-model-host.ts'
 import { classifyTaskWithAdapter, taskClassifierModel } from './auto-task-classifier.ts'
@@ -786,7 +787,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     publishedDirectory = ''
     registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
   })
-  installCopilotCompactionPressure(ctx, { resolve(request) {
+  const pressureCallbacks = { resolve(request: GenerateOptions) {
     const snapshot = source.readSnapshot()
     if (snapshot === undefined || proofFor(snapshot) === undefined) return undefined
     if (excludedModels().has(request.model)) return undefined
@@ -794,7 +795,9 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (descriptor === undefined) return undefined
     const result = calculateRequestBudget(descriptor, request.maxTokens, resolveRequestBudgetPolicy(budgetSettings()))
     return result.ok ? { inputBudgetTokens: result.budget.pressureInputLimit } : undefined
-  } })
+  } }
+  installCopilotPreStepPressure(ctx, pressureCallbacks)
+  installCopilotCompactionPressure(ctx, pressureCallbacks)
   notify = () => {
     const view = getView()
     // These are small owned DTOs, not live Cordis objects or credential records.
