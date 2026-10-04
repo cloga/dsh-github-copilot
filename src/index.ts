@@ -11,8 +11,10 @@ import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import GitHubCopilotDualModel from './dual-model-host.ts'
 import SearchRoutingController from './search-routing-host.ts'
 import GitHubCopilotUsageController from './copilot-usage-host.ts'
-import GitHubCopilotAccountsController, { isActiveCopilotRecord } from './copilot-accounts-host.ts'
+import GitHubCopilotAccountsController, { isCopilotAccountRecord } from './copilot-accounts-host.ts'
 import type { CopilotAccountLease } from './copilot-accounts-types.ts'
+import { SessionAccountsHost } from './session-accounts-host.ts'
+import { SessionAccountController } from './session-accounts-controller.ts'
 import { installContextEvidence } from './context-evidence.ts'
 // Bring the `systemPrompt` service declaration (dsh-agent augmentation) into
 // the type graph: module augmentations only apply when their module is part
@@ -209,19 +211,29 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     const cfg = current()
     return cfg.searchRouting ?? {}
   }
+  const sessionAccounts = new SessionAccountsHost(ctx)
+  ctx.provide('githubCopilotSessionAccounts', sessionAccounts)
+  ctx.plugin({ apply(scope) { new SessionAccountController(scope, sessionAccounts) } })
   const accountTurns = new Map<string, CopilotAccountLease>()
   ctx.on('session/event', (session, event) => {
     if (event.type !== 'turn/end') return
     accountTurns.get(session.id)?.release()
     accountTurns.delete(session.id)
+    sessionAccounts.end(session, event.data.turn)
   })
   ctx.on('agent/disposed', ({ agent }) => {
     accountTurns.get(agent.session.id)?.release()
     accountTurns.delete(agent.session.id)
+    sessionAccounts.remove(agent.session)
   })
   // Retain the fence across Auto assessment, preparation, retries and tools
   // until the public turn boundary. No Session or selection writes are needed.
-  ctx.on('agent/request', async ({ agent, signal }, next) => {
+  const acquireAccount = (signal?: AbortSignal, provider?: string) => {
+    if (provider === GITHUB_COPILOT_PROVIDER_ID) return ctx.get('githubCopilotAccounts')?.host.acquire(signal)
+    const binding = sessionAccounts.requestBinding(signal)
+    return ctx.get('githubCopilotAccounts')?.host.acquire(signal, true, binding.accountId)
+  }
+  ctx.on('agent/request', async ({ agent, turn, signal }, next) => {
     const projections: unknown = ctx.get('sessionProjections')
     const state: unknown = typeof projections === 'object' && projections !== null && 'stateOf' in projections
       && typeof projections.stateOf === 'function'
@@ -229,10 +241,9 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     const pending: unknown = typeof state === 'object' && state !== null && 'pending' in state ? state.pending : undefined
     const pendingProvider = typeof pending === 'object' && pending !== null && 'provider' in pending ? pending.provider : undefined
     const selectedProvider = pendingProvider ?? agent.session.requestHeader()?.config.provider
-    const followsParent = current().followParentModel === true || (current().parentModelFollow?.length ?? 0) > 0
-    if (!followsParent && typeof selectedProvider === 'string'
-      && selectedProvider !== GITHUB_COPILOT_PROVIDER_ID && selectedProvider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) return next()
-    const lease = ctx.get('githubCopilotAccounts')?.host.acquire(signal)
+    if (selectedProvider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID && !sessionAccounts.turns.current(agent.session)) return next()
+    sessionAccounts.admit(agent, turn, signal)
+    const lease = acquireAccount(signal)
     let retained = false
     try {
       const result = await next()
@@ -245,7 +256,7 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
       return result
     } finally { if (!retained) lease?.release() }
   }, { prepend: true })
-  ctx.effect(() => () => { for (const lease of accountTurns.values()) lease.release(); accountTurns.clear() })
+  ctx.effect(() => () => { for (const lease of accountTurns.values()) lease.release(); accountTurns.clear(); sessionAccounts.dispose() })
   ctx.plugin(previewPlugin, { accountModelSettings: () => current(), chatRequestSettings: () => current(), requestBudgetSettings: () => {
     const selected = current()
     return { safetyTokens: selected.requestBudgetSafetyTokens, pressureRatio: selected.requestBudgetPressureRatio,
@@ -268,11 +279,29 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
   let proofCancellation = new AbortController()
   const candidateGenerations = new WeakMap<SearchPlanCandidate, number>()
   const candidateProviders = new WeakMap<SearchPlanCandidate, string>()
+  interface AccountProof { readonly key: string; readonly cancellation: AbortController }
+  const accountProofs = new Map<string, AccountProof>()
+  const candidateAccounts = new WeakMap<SearchPlanCandidate, AccountProof>()
+  function accountProof(signal?: AbortSignal, provider?: string): AccountProof {
+    const key = provider === GITHUB_COPILOT_PROVIDER_ID ? GITHUB_COPILOT_CREDENTIAL_KEY : sessionAccounts.requestBinding(signal).key
+    let proof = accountProofs.get(key)
+    if (!proof) {
+      if (accountProofs.size >= 64) throw new Error('COPILOT_SEARCH_ACCOUNT_PROOF_LIMIT')
+      proof = { key, cancellation: new AbortController() }
+      accountProofs.set(key, proof)
+    }
+    return proof
+  }
+  function invalidateAccount(key: string): void {
+    accountProofs.get(key)?.cancellation.abort()
+    accountProofs.delete(key)
+  }
   interface CachedPlan {
     plan: SearchPlan
     route: CurrentChatRoute | undefined
     probe: { enabled: boolean; timeoutMs: number }
     generation: number
+    account: AccountProof
     assertProof?: () => void
     probeSignal?: AbortSignal
   }
@@ -320,12 +349,13 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
   // Public emit seam: the payload is a record key, not a grant. ctx.on owns
   // the listener in this Fiber; do not resolve auth or inspect settings here.
   ctx.on('credentials/record-updated', (key) => {
-    if (isActiveCopilotRecord(ctx, key)) invalidatePlans()
+    if (isCopilotAccountRecord(key)) invalidateAccount(key)
   })
-  ctx.get('githubCopilotAccounts')?.host.onChanged(invalidatePlans)
   ctx.effect(() => () => {
     active = false
     invalidatePlans()
+    for (const proof of accountProofs.values()) proof.cancellation.abort()
+    accountProofs.clear()
   })
 
   function assertCurrentCandidate(candidate: SearchPlanCandidate): void {
@@ -335,6 +365,11 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     }
     if (candidateGenerations.get(candidate) !== generation) {
       throw new Error('github-copilot: search proof invalidated; retry with current credentials')
+    }
+    const account = candidateAccounts.get(candidate)
+    if (!account || account.cancellation.signal.aborted
+      || accountProof(candidateSignals.get(candidate), candidateProviders.get(candidate)).key !== account.key) {
+      throw new Error('COPILOT_SEARCH_ACCOUNT_PROOF_INVALIDATED')
     }
   }
 
@@ -364,7 +399,10 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
         // before probe/plan/web error translation can erase their distinction.
         // A late failure from an older generation must not cancel a newer proof.
         if (active && candidateGenerations.get(candidate) === generation
-          && candidateSignals.get(candidate)?.aborted !== true) invalidatePlans()
+          && candidateSignals.get(candidate)?.aborted !== true) {
+          const account = candidateAccounts.get(candidate)
+          if (account) invalidateAccount(account.key)
+        }
         throw error
       }
     },
@@ -384,18 +422,20 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     operation?: ConfiguredPlanOperation,
   ): SearchPlan {
     const startedAt = generation
-    const signal = AbortSignal.any([proofCancellation.signal,
+    const account = accountProof(operation?.signal, provider)
+    const signal = AbortSignal.any([proofCancellation.signal, account.cancellation.signal,
       ...plans === undefined ? [] : [plans.cancellation.signal]])
     // Only unfinished probes belong to the creating request. A verified plan
     // must never lend that request's cancellation or deadline to a later query.
     const probeSignal = operation?.signal === undefined ? signal : AbortSignal.any([signal, operation.signal])
     function bind(candidate: SearchPlanCandidate, lifetime: AbortSignal): void {
       candidateGenerations.set(candidate, startedAt)
+      candidateAccounts.set(candidate, account)
       candidateSignals.set(candidate, lifetime)
       if (provider !== undefined) candidateProviders.set(candidate, provider)
     }
     for (const candidate of candidates) bind(candidate, cfg.probe ? probeSignal : signal)
-    const admission = ctx.get('githubCopilotAccounts')?.host.acquire(probeSignal)
+    const admission = acquireAccount(probeSignal, provider)
     let nextPlan: SearchPlan
     try { nextPlan = new SearchPlan(
       candidates,
@@ -420,7 +460,7 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
 
   function matches(
     cached: CachedPlan | undefined, route: CurrentChatRoute | undefined,
-    candidates: readonly SearchPlanCandidate[], cfg: InlineConfig,
+    candidates: readonly SearchPlanCandidate[], cfg: InlineConfig, provider?: string,
   ): cached is CachedPlan {
     // A silent account-proof revision can revoke an old configured capability
     // verdict without emitting a credential event or changing endpoint facts.
@@ -430,6 +470,7 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     if (cached?.assertProof !== undefined && cached.plan.chosenCandidate() === undefined
       && (cached.plan.available() || cached.probeSignal?.aborted === true)) return false
     return cached !== undefined && cached.generation === generation
+      && cached.account === accountProof(undefined, provider) && !cached.account.cancellation.signal.aborted
       && cached.plan.signal?.aborted !== true
       && sameRoute(route, cached.route)
       && cached.probe.enabled === cfg.probe && cached.probe.timeoutMs === cfg.probeTimeoutMs
@@ -446,16 +487,17 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
       : surface === 'configured' ? configuredCandidates(cfg)
         : traditionalCandidates(route, cfg)
     const cached = plans?.[surface]
-    if (matches(cached, route, candidates, cfg)) return cached.plan
-    const startedAt = generation
     // Configured candidates all belong to the account-owned route, even when
     // automatic selection has no single model route to use as a cache key.
     const provider = surface === 'configured' ? GITHUB_COPILOT_PREVIEW_PROVIDER_ID : route?.provider
+    if (matches(cached, route, candidates, cfg, provider)) return cached.plan
+    const startedAt = generation
+    const account = accountProof(operation?.signal, provider)
     const nextPlan = createPlan(candidates, cfg, provider, plans, operation)
     // A resolver may synchronously invalidate credentials before construction returns.
     if (generation === startedAt && active && plans?.cancellation.signal.aborted !== true) {
       if (plans !== undefined) plans[surface] = {
-        plan: nextPlan, route, probe: probeSettings(cfg), generation: startedAt,
+        plan: nextPlan, route, probe: probeSettings(cfg), generation: startedAt, account,
         ...operation === undefined ? {} : { assertProof: operation.assertProof,
           ...operation.signal === undefined ? {} : { probeSignal: operation.signal } },
       }
@@ -478,12 +520,13 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
       throw new Error('github-copilot: hosted search requires agents.currentInitiator() and Session.requestHeader().config')
     }
     const plans = plansFor(owner)
+    const account = accountProof(signal, selection.provider)
     if (selection?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
-      const signals = [proofCancellation.signal, plans.cancellation.signal]
+      const signals = [proofCancellation.signal, account.cancellation.signal, plans.cancellation.signal]
       if (signal !== undefined) signals.push(signal)
       await ctx.get('githubCopilotPreview')?.discover({ force: false, signal: AbortSignal.any(signals) })
     }
-    if (!active || startedAt !== generation || plans.cancellation.signal.aborted || signal?.aborted === true) {
+    if (!active || startedAt !== generation || account.cancellation.signal.aborted || plans.cancellation.signal.aborted || signal?.aborted === true) {
       throw new Error('github-copilot: search proof invalidated during route resolution')
     }
     return plan(currentChatRoute(ctx, selection), cfg, owner, 'traditional')
@@ -505,11 +548,12 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
       throw new Error('github-copilot: independent hosted search requires an initiating Agent and an allowed Copilot provider')
     }
     const plans = plansFor(owner)
-    const signals = [proofCancellation.signal, plans.cancellation.signal]
+    const account = accountProof(signal)
+    const signals = [proofCancellation.signal, account.cancellation.signal, plans.cancellation.signal]
     if (signal !== undefined) signals.push(signal)
     await ctx.get('githubCopilotPreview')?.discover({ force: false, signal: AbortSignal.any(signals) })
     assertCurrent()
-    if (!active || startedAt !== generation || plans.cancellation.signal.aborted || signal?.aborted === true) {
+    if (!active || startedAt !== generation || account.cancellation.signal.aborted || plans.cancellation.signal.aborted || signal?.aborted === true) {
       throw new Error('github-copilot: configured search proof invalidated during route resolution')
     }
     // Passing undefined to currentChatRoute would read Chat: automatic plans
@@ -570,7 +614,7 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
         && ctx.get('githubCopilotPreview')?.getView().configured === true
     }
     const cached = ownerPlans.get(owner)?.traditional
-    return !matches(cached, route, candidates, cfg) || cached.plan.available()
+    return !matches(cached, route, candidates, cfg, route?.provider) || cached.plan.available()
   }
 
   /** Local readiness for the provider-owned Copilot search model. */
@@ -592,7 +636,7 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
         : route?.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && route.api === undefined)
     }
     const cached = ownerPlans.get(owner)?.configured
-    return !matches(cached, route, candidates, cfg) || cached.plan.available()
+    return !matches(cached, route, candidates, cfg, GITHUB_COPILOT_PREVIEW_PROVIDER_ID) || cached.plan.available()
   }
 
   const nativeTraditionalProvider = createTraditionalSearchProvider(
@@ -603,26 +647,27 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
   )
   const traditionalProvider = { ...nativeTraditionalProvider,
     async search(request: WebSearchRequest, signal?: AbortSignal) {
-      const lease = ctx.get('githubCopilotAccounts')?.host.acquire(signal)
+      const lease = acquireAccount(signal, currentSearchSelection(currentSearchInitiator(ctx))?.provider)
       try { return await nativeTraditionalProvider.search(request, signal) }
       finally { lease?.release() }
     },
   }
   async function configuredSearch(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
-    const lease = ctx.get('githubCopilotAccounts')?.host.acquire(signal)
+    const lease = acquireAccount(signal)
     try { return await configuredAccountSearch(request, signal) }
     finally { lease?.release() }
   }
   async function configuredAccountSearch(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
     const owner = currentSearchInitiator(ctx)
     const startedGeneration = generation
+    const account = accountProof(signal)
     const cfg = current()
     // Capture continuity before discovery can revoke the old account revision.
     // Cold metadata is allowed by the owner proof; a later account change is not.
     const preview = ctx.get('githubCopilotPreview')
     const proof = preview?.captureSearchProof()
     const assertProof = () => {
-      if (!active || generation !== startedGeneration || owner === undefined || disposedOwners.has(owner)
+      if (!active || generation !== startedGeneration || account.cancellation.signal.aborted || owner === undefined || disposedOwners.has(owner)
         || preview === undefined || ctx.get('githubCopilotPreview') !== preview || proof?.() !== true) {
         throw new ConfiguredSearchProofInvalidated()
       }
@@ -683,6 +728,7 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
           throw new WebError('web search is disabled by the primary search provider setting', 'WEB_PROVIDER_UNAVAILABLE')
         }
         const startedGeneration = generation
+        const account = accountProof(signal, policy.primaryProvider === 'auto' ? selection?.provider : undefined)
         const registrations: CapturedSearchProvider[] = []
         let usingManagedPrimary = false
         let configuredProofInvalid = false
@@ -733,10 +779,11 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
         const boundSignal = AbortSignal.any([
           ...signal === undefined ? [] : [signal],
           proofCancellation.signal,
+          account.cancellation.signal,
           plansFor(owner).cancellation.signal,
           ...registrations.map(provider => provider.signal),
         ])
-        const canContinue = () => active && generation === startedGeneration && !disposedOwners.has(owner)
+        const canContinue = () => active && generation === startedGeneration && !account.cancellation.signal.aborted && !disposedOwners.has(owner)
           && !configuredProofInvalid && registrations.every(provider => provider.current())
           && (!usingManagedPrimary || ctx.get('githubCopilotPreview') === managedPreview && managedProof?.() === true)
         // Generic dispatch calls the captured registration, including DeepSeek.
@@ -761,15 +808,17 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
       if (!useNative && defaultProviderId !== GITHUB_COPILOT_HOSTED_SEARCH_PROVIDER_ID
         && selectProvider === undefined) return delegate(request, signal)
       const startedGeneration = generation
+      const account = accountProof(signal, useNative ? selection?.provider : undefined)
       const managedPreview = useNative && managedOwned ? ctx.get('githubCopilotPreview') : undefined
       const managedProof = managedPreview?.captureSearchProof()
       const ownerSignal = plansFor(owner).cancellation.signal
       const boundSignal = AbortSignal.any([
         ...signal === undefined ? [] : [signal],
         proofCancellation.signal,
+        account.cancellation.signal,
         ownerSignal,
       ])
-      const canContinue = (): boolean => active && generation === startedGeneration && !disposedOwners.has(owner)
+      const canContinue = (): boolean => active && generation === startedGeneration && !account.cancellation.signal.aborted && !disposedOwners.has(owner)
         && (!useNative || !managedOwned
           || ctx.get('githubCopilotPreview') === managedPreview && managedProof?.() === true)
 
@@ -796,13 +845,22 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     },
   })
 
+  function searchSettingsSignature(): string {
+    const { activeAccountId: _global, sessionAccounts: _sessions, ...settings } = current()
+    return JSON.stringify({ settings, routing: readRouting() })
+  }
+  let settingsSignature = searchSettingsSignature()
   observeSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, config, {
     setSource: (source) => {
       current = source
+      settingsSignature = searchSettingsSignature()
     },
     // Invalidate only. Even an event burst coalesces into one fresh proof per
     // search surface on its next actual request, never one probe per event.
-    onChange: invalidatePlans,
+    onChange: () => {
+      const next = searchSettingsSignature()
+      if (next !== settingsSignature) { settingsSignature = next; invalidatePlans() }
+    },
   })
 
   // SettingsForms projects the Loader entry's volatile Config fields; it does
@@ -829,7 +887,8 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     const signals = [request.signal, p.signal].filter((signal): signal is AbortSignal => signal !== undefined)
     const operation = { ...request, signal: AbortSignal.any(signals) }
     return (async function* () {
-      const lease = ctx.get('githubCopilotAccounts')?.host.acquire(operation.signal)
+      if (operation.signal.aborted) { yield* inlineWireStream(operation, p, hooks, cfg); return }
+      const lease = acquireAccount(operation.signal, operation.provider)
       try { yield* inlineWireStream(operation, p, hooks, cfg) }
       finally { lease?.release() }
     })()
@@ -850,7 +909,7 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
     const cfg = current()
     if (route === undefined || (cfg.providers.length > 0 && !cfg.providers.includes(route.provider))) return ''
     const cached = ownerPlans.get(owner)?.inline
-    const nativeGuidance = servingPrompt(current, matches(cached, route, candidatesForRoute(route), cfg) ? cached.plan : undefined)
+    const nativeGuidance = servingPrompt(current, matches(cached, route, candidatesForRoute(route), cfg, route.provider) ? cached.plan : undefined)
     const owned = route.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID && isPluginPreviewProvider(ctx, route.provider)
     if (!cfg.enabled || cfg.routeWebSearch === false || ctx.get('githubCopilotOriginalWeb') === undefined
       || !isCopilotSearchSelection(route, owned)) return nativeGuidance

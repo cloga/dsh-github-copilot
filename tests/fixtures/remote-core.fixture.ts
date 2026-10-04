@@ -13,6 +13,83 @@ import recoveryRemote from '../../src/replay-recovery-remote.ts'
 import { ReplayRecoveryController } from '../../src/replay-recovery-host.ts'
 import { ReplayRecoveryStore } from '../../src/replay-recovery.ts'
 import { name, version } from '#package.json' with { type: 'json' }
+import sessionAccountRemote from '../../src/session-accounts-remote.ts'
+import { SessionAccountController } from '../../src/session-accounts-controller.ts'
+import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
+import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
+
+it.each(['source', 'strict'] as const)('binds Session account choices and historical reads through native Client and %s Host gateways', async mode => {
+  const host = new Context(), client = new Context()
+  const A = '11111111-1111-4111-8111-111111111111'
+  const master = { id: 'account-master', session: { id: 'account-master' } }
+  let revision = 1, preferences: unknown = []
+  const accountHost = new CopilotAccountsHost(host, { routeDiagnostic: () => undefined })
+  const owner = new SessionAccountsHost(host)
+  try {
+    const registry = new TypertRegistry(host)
+    registry.lookups.register('agent', {
+      parameter: 'agent', wire: 'agentId', hostTypeSymbol: '@deepseek-ai/dsh-agent#Agent',
+      wireTypeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
+      resolve: id => { if (id === 'denied-master') throw new Error('Fixture access denied'); return id === master.id ? master : undefined },
+    })
+    if (mode === 'strict') registry.register({ package: sessionAccountRemote.package, face: 'host', schemas: [],
+      model: { services: [], events: [], objects: [] }, invocations: sessionAccountRemote.descriptors })
+    host.provide('settings', {
+      describe: () => [{ ns: 'github-copilot', revision, value: { sessionAccounts: preferences } }],
+      mutate: async (_ns: string, operations: readonly { path: string[]; value: unknown }[], expected: number) => {
+        if (expected !== revision) throw new Error('Fixture CAS conflict')
+        expect(operations[0]?.path).toEqual(['sessionAccounts'])
+        preferences = operations[0]!.value; revision++
+      },
+    })
+    host.provide('credentials', { listRecords: async () => [{ key: `github-copilot/account-${A}`, kind: 'grant' }] })
+    host.provide('githubCopilotAccounts', { host: accountHost })
+    host.provide('githubCopilotSessionAccounts', owner)
+    const connection = new HostConnectionService(host, [], {})
+    new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
+    const handler = connection.createSharedFetchHandler('/api')
+    let rpcId = 0
+    client.provide('typert', { remotes: { register: () => () => {} }, contexts: { getClient: () => ({ identity: () => 'ambient-other' }) } })
+    client.provide('connection', { rpc: { call: async (_path: string, method: string, payload: unknown) => {
+      const response = await handler.fetch(new Request(`http://fixture.invalid/api/${method}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'client-request', rpcId: `session-account-${++rpcId}`, method, payload }),
+      }))
+      return (await response.json()).result
+    }, open: vi.fn() }, registerGenerationSource: () => () => {}, start: () => ({ stop: () => {} }),
+    generation: { getSnapshot: () => undefined } })
+    Gateway.apply(client)
+    await client.remote.$mount(sessionAccountRemote)
+    await host.plugin({ apply(ctx) { new SessionAccountController(ctx, owner) } })
+    await expect(client.remote.githubCopilotSessionAccount.get(master.id)).resolves.toMatchObject({
+      ok: true, value: { source: 'global', accountId: 'canonical', globalAccountId: 'canonical' },
+    })
+    await expect(client.remote.githubCopilotSessionAccount.set(master.id, A, 1)).resolves.toMatchObject({
+      ok: true, value: { source: 'session', accountId: A, globalAccountId: 'canonical' },
+    })
+    const signal = new AbortController().signal
+    owner.admit(master, 7, signal)
+    owner.recordRequest(signal)
+    owner.end(master.session, 7)
+    await expect(client.remote.githubCopilotSessionAccount.set(master.id, null, 2)).resolves.toMatchObject({
+      ok: true, value: { source: 'global', accountId: 'canonical' },
+    })
+    await expect(client.remote.githubCopilotSessionAccount.turn(master.id, 7)).resolves.toEqual({
+      ok: true, value: { state: 'recorded', accountId: A, source: 'session' },
+    })
+    await expect(client.remote.githubCopilotSessionAccount.turn(master.id, 8)).resolves.toEqual({
+      ok: true, value: { state: 'unknown' },
+    })
+    await expect(client.remote.githubCopilotSessionAccount.turn('missing-master', 7)).resolves.toMatchObject({
+      ok: false, error: { code: 'gateway/lookup-not-found' },
+    })
+    await expect(client.remote.githubCopilotSessionAccount.get('denied-master')).resolves.toMatchObject({
+      ok: false, error: { code: 'gateway/lookup-failed' },
+    })
+    if (mode === 'strict') await expect(client.remote.githubCopilotSessionAccount.set(master.id, 'bad-account', 3))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/input-invalid' } })
+  } finally { owner.dispose(); accountHost.dispose(); await client.fiber.dispose(); await host.fiber.dispose() }
+})
 
 it.each(['source', 'strict'] as const)('binds explicit replay recovery through native Client and %s Host gateways', async mode => {
   const host = new Context(), client = new Context()
@@ -239,6 +316,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'authorize', 'setEnabled',
+      'get', 'set', 'refreshIdentity', 'usage', 'refreshUsage', 'turn',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot' && item.method !== 'setModelExcluded')) {
       expect(descriptor.result.mode).toBe('strict')

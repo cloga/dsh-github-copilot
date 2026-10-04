@@ -7,6 +7,8 @@ import { accountIdentityLabel, accountsViewFrom } from './copilot-accounts-card.
 import { accountPresentationChanges } from './copilot-account-presentation.ts'
 import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
 import type { CopilotAccountsView } from './copilot-accounts-types.ts'
+import { SessionAccountViewSchema } from './session-accounts-remote.ts'
+import type { SessionAccountView } from './session-accounts-remote.ts'
 
 /** Client-only face: no credentials, provider transport or billing arithmetic. */
 export interface CopilotUsageRemote {
@@ -19,6 +21,10 @@ export interface CopilotUsageCardProps {
   /** Changes revoke every in-flight read, including switches between Copilot routes. */
   contextKey: string
   locale?: string
+  sessionAccount?: {
+    get(): Promise<{ ok: true; value: SessionAccountView } | { ok: false; error: unknown }>
+    set(accountId: string | null, revision: number): Promise<{ ok: true; value: SessionAccountView } | { ok: false; error: unknown }>
+  }
 }
 
 const copy = {
@@ -39,6 +45,11 @@ const copy = {
     plan: 'View usage and plan', manual: 'If the browser does not open, copy this address:',
     rounding: 'Amounts rounded for display. GitHub billing is authoritative.', low: 'Low remaining budget',
     missing: 'COPILOT_USAGE_REMOTE_UNAVAILABLE · Account usage is unavailable in this deployment.',
+    switchAccount: 'Switch account', followGlobal: 'Follow global default', sessionSpecified: 'Session override',
+    switchScope: 'Applies to this Session’s subsequent turns. Running turns and other Sessions are unchanged.',
+    accountSaveFailed: 'Could not save the Session account. Refresh and try again.',
+    accountLoading: 'Loading account selection…', accountMissing: 'Account selection unavailable. Refresh to retry.',
+    runningAccount: 'Running turn remains on', identityUnknown: 'Identity unavailable',
   },
   zh: {
     credits: '额度', requests: '高级请求', unknown: 'Copilot 用量',
@@ -57,6 +68,11 @@ const copy = {
     plan: '查看用量与套餐', manual: '若浏览器未打开，请复制此地址：',
     rounding: '显示数值经过四舍五入，账单以 GitHub 为准。', low: '剩余额度较低',
     missing: 'COPILOT_USAGE_REMOTE_UNAVAILABLE · 当前部署无法提供账号用量。',
+    switchAccount: '切换账号', followGlobal: '跟随全局默认', sessionSpecified: 'Session 已指定',
+    switchScope: '用于本 Session 后续 turn，不影响正在运行的 turn 或其他 Session。',
+    accountSaveFailed: '无法保存 Session 账号，请刷新后重试。',
+    accountLoading: '正在读取账号选择…', accountMissing: '账号选择暂不可用，请刷新重试。',
+    runningAccount: '正在运行的 turn 仍使用', identityUnknown: '身份暂不可用',
   },
 } as const
 
@@ -87,6 +103,11 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const id = useId()
   const [view, setView] = useState<CopilotUsageView>()
   const [accounts, setAccounts] = useState<CopilotAccountsView>()
+  const [sessionAccount, setSessionAccount] = useState<SessionAccountView>()
+  const [choosingAccount, setChoosingAccount] = useState(false)
+  const [savingAccount, setSavingAccount] = useState(false)
+  const [accountFailed, setAccountFailed] = useState(false)
+  const [accountSaveFailed, setAccountSaveFailed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(false)
@@ -94,7 +115,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const trigger = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
-  const lifecycle = useRef({ active: false, generation: 0, busy: false })
+  const lifecycle = useRef<{ active: boolean; generation: number; busy: boolean; save?: symbol }>({ active: false, generation: 0, busy: false })
   const identityRead = useRef(false)
   const close = useCallback((restore = false) => {
     setOpen(false)
@@ -103,7 +124,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
 
   const load = useCallback(async (force: boolean) => {
     const owner = lifecycle.current
-    if (!owner.active || owner.busy || accountPresentationChanges.pending()
+    if (!owner.active || owner.busy || owner.save !== undefined || accountPresentationChanges.pending()
       || props.remote === undefined || document.visibilityState === 'hidden') return
     owner.busy = true
     const generation = ++owner.generation
@@ -118,28 +139,40 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         force ? props.remote.refresh() : props.remote.get(),
         identityOperation?.catch(() => undefined),
       ])
+      const sessionResult = props.sessionAccount === undefined ? undefined : await props.sessionAccount.get()
       if (!current()) return
+      const sessionView = sessionResult?.ok ? SessionAccountViewSchema.safeParse(sessionResult.value) : undefined
+      setSessionAccount(sessionView?.success ? sessionView.data : undefined)
+      setAccountFailed(props.sessionAccount !== undefined && sessionView?.success !== true)
       const identityView = identityResult?.ok === true ? accountsViewFrom(identityResult.value) : undefined
       setAccounts(identityView)
       const parsed = result.ok ? CopilotUsageViewSchema.safeParse(result.value) : undefined
       if (parsed?.success !== true || props.accountsRemote !== undefined
-        && (identityView === undefined || parsed.data.accountId !== identityView.activeAccountId)) {
+        && (identityView === undefined || parsed.data.accountId !== identityView.activeAccountId)
+        || props.sessionAccount !== undefined && (sessionView?.success !== true
+          || parsed.data.accountId !== sessionView.data.accountId)) {
         // A transport error cannot prove the old snapshot belongs to this account.
         setView(undefined)
         setFailed(true)
       } else setView(parsed.data)
     } catch {
-      if (current()) { setView(undefined); setAccounts(undefined); setFailed(true) }
+      if (current()) { setView(undefined); setAccounts(undefined); setSessionAccount(undefined);
+        setAccountFailed(props.sessionAccount !== undefined); setFailed(true) }
     } finally {
       if (current()) { owner.busy = false; setBusy(false) }
     }
-  }, [props.remote, props.accountsRemote, props.contextKey])
+  }, [props.remote, props.accountsRemote, props.contextKey, props.sessionAccount])
 
   useEffect(() => {
     const owner = lifecycle.current
     owner.active = true
     setView(undefined)
     setAccounts(undefined)
+    setSessionAccount(undefined)
+    setChoosingAccount(false)
+    setSavingAccount(false)
+    setAccountFailed(false)
+    setAccountSaveFailed(false)
     identityRead.current = false
     setFailed(false)
     setBusy(false)
@@ -152,10 +185,14 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     const unsubscribe = accountPresentationChanges.subscribe(() => {
       owner.generation++
       owner.busy = false
+      owner.save = undefined
+      setSavingAccount(false)
       setAccounts(undefined)
+      setSessionAccount(undefined)
       setView(undefined)
       setBusy(false)
       setFailed(false)
+      identityRead.current = false
       if (!accountPresentationChanges.pending()) void load(false)
     })
     return () => {
@@ -167,6 +204,42 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       unsubscribe()
     }
   }, [load, props.remote])
+
+  const chooseAccount = async (accountId: string | null) => {
+    const owner = lifecycle.current
+    const revision = sessionAccount?.accounts.revision
+    if (!owner.active || owner.save !== undefined || props.sessionAccount === undefined || revision === undefined) return
+    const save = Symbol()
+    owner.save = save
+    const generation = ++owner.generation
+    owner.busy = false
+    setBusy(false)
+    setSavingAccount(true)
+    setAccountSaveFailed(false)
+    try {
+      const result = await props.sessionAccount.set(accountId, revision)
+      if (!owner.active || owner.generation !== generation) return
+      const parsed = result.ok ? SessionAccountViewSchema.safeParse(result.value) : undefined
+      if (!parsed?.success) {
+        setAccountSaveFailed(true); setView(undefined); setAccounts(undefined); setSessionAccount(undefined)
+        return
+      }
+      setSessionAccount(parsed.data)
+      setAccounts(parsed.data.accounts)
+      setView(undefined)
+      identityRead.current = false
+      setChoosingAccount(false)
+      owner.save = undefined
+      setSavingAccount(false)
+      await load(false)
+    } catch {
+      if (owner.active && owner.generation === generation) {
+        setAccountSaveFailed(true); setView(undefined); setAccounts(undefined); setSessionAccount(undefined)
+      }
+    } finally {
+      if (owner.active && owner.save === save) { owner.save = undefined; setSavingAccount(false) }
+    }
+  }
 
   useLayoutEffect(() => {
     if (!open) return
@@ -237,6 +310,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const observed = available ? dateLabel(view.observedAt, language) : undefined
   const reset = available && view.resetAt !== undefined && view.observedAt !== undefined
     && view.resetAt > view.observedAt ? dateLabel(view.resetAt, language) : undefined
+  const runningIdentity = sessionAccount?.accounts.accounts.find(account => account.id === sessionAccount.runningAccountId)?.identity
 
   return h('span', { style: { display: 'inline-flex', minWidth: 0, maxWidth: '100%', fontFamily: 'var(--dsw-font-family, inherit)' } },
     h('button', {
@@ -269,8 +343,29 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         h('strong', { id: `${id}-title` }, view?.billing === 'credits' ? t.title : unit),
         h('p', { style: { ...muted, color: 'inherit' }, 'data-copilot-credits-account': '' },
           accountIdentityLabel(accounts) ?? t.identityUnavailable),
+        props.sessionAccount === undefined ? null : h('p', { style: muted, 'data-copilot-account-source': '' },
+          sessionAccount === undefined ? busy ? t.accountLoading : t.accountMissing
+            : sessionAccount.source === 'global' ? t.followGlobal : t.sessionSpecified),
         h('p', { id: `${id}-scope`, style: muted }, t.account)),
       h('button', { ref: closeButton, type: 'button', 'aria-label': t.close, style: button, onClick: () => { close(true) } }, '×')),
+    props.sessionAccount === undefined ? null : h('div', { style: separator },
+      h('div', { style: row },
+        h('p', { style: muted }, t.switchScope),
+        h('button', { type: 'button', style: { ...button, flexShrink: 0 },
+          disabled: sessionAccount === undefined || sessionAccount.accounts.revision === undefined || busy || savingAccount,
+          'aria-expanded': choosingAccount, onClick: () => setChoosingAccount(value => !value) }, t.switchAccount)),
+      sessionAccount?.runningAccountId === undefined ? null : h('p', { style: muted },
+        `${t.runningAccount}: ${runningIdentity ? '@' + runningIdentity.login : t.identityUnknown}`),
+      choosingAccount && sessionAccount ? h('div', { role: 'group', 'aria-label': t.switchAccount, style: { display: 'grid', gap: 6, marginTop: 10 } },
+        h('button', { type: 'button', style: { ...button, textAlign: 'left' }, disabled: savingAccount,
+          'aria-pressed': sessionAccount.source === 'global', onClick: () => { void chooseAccount(null) } }, t.followGlobal),
+        ...sessionAccount.accounts.accounts.filter(account => account.configured).map(account => h('button', {
+          key: account.id, type: 'button', style: { ...button, textAlign: 'left' }, disabled: savingAccount,
+          'aria-pressed': sessionAccount.source === 'session' && sessionAccount.accountId === account.id,
+          onClick: () => { void chooseAccount(account.id) },
+        }, account.identity ? `@${account.identity.login}` : `${t.identityUnknown} · ${account.id === 'canonical' ? 'Canonical' : account.id.slice(0, 8)}`))) : null,
+      sessionAccount?.accounts.diagnostic === undefined ? null : h('code', { style: muted }, sessionAccount.accounts.diagnostic),
+      accountFailed || accountSaveFailed ? h('p', { role: 'alert', style: muted }, accountSaveFailed ? t.accountSaveFailed : t.accountMissing) : null),
     view?.state === 'stale' ? h('p', { role: 'status', style: muted }, t.stale) : null,
     view?.diagnostic === undefined ? null : h('code', { style: muted }, view.diagnostic),
     props.remote === undefined ? h('p', { role: 'status', style: muted }, t.missing) : null,

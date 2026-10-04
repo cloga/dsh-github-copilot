@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { installReplayRecovery } from './replay-recovery-host.ts'
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Config as PiAiConfig, PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { PiAiAdapterOptions, PiAiProviderProfile, ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import { LlmError, ReasoningEffortId, resolveImageAttachmentAccess, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
@@ -14,7 +15,7 @@ import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import {
   autoModelPreference, GITHUB_COPILOT_AUTO_MODEL_ID, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID,
-  GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
+  GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_CREDENTIAL_KEY,
 } from './copilot-identity.ts'
 import { abortable } from './http.ts'
 import { accountModelFromDescriptor, copilotPublicHeaders, createAccountProvider, ManagedWireAbortError } from './preview-provider.ts'
@@ -36,8 +37,10 @@ import { ResponsesRetryReplay } from './responses-replay-compat.ts'
 import { excludedModelSet, ModelExclusionTurns } from './model-exclusions.ts'
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
 import { imageInputFailure } from './image-input-admission.ts'
-import { activeCopilotBinding, isActiveCopilotRecord } from './copilot-accounts-host.ts'
-import type { CopilotAccountLease } from './copilot-accounts-types.ts'
+import { activeCopilotBinding } from './copilot-accounts-host.ts'
+import type { CopilotAccountBinding, CopilotAccountLease } from './copilot-accounts-types.ts'
+import { COPILOT_ACCOUNTS_MAX } from './copilot-accounts-types.ts'
+import type {} from './session-accounts-host.ts'
 
 /** Safe request knobs; identities, model tables, endpoints and credentials are not configurable. */
 export type PreviewRouteConfig = Pick<PiAiProviderProfile,
@@ -331,6 +334,7 @@ class PreviewAdapter extends PiAiAdapter {
     private readonly accountModelSettings: () => Pick<InlineConfig, 'excludedModelIds'>,
     private readonly replayRecovery?: ReturnType<typeof installReplayRecovery>,
     private readonly requestCheckpoint?: () => void,
+    private readonly captureRequest: (signal?: AbortSignal) => void = () => undefined,
   ) { super(optionsFor()) }
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     owned(provider)
@@ -517,6 +521,7 @@ class PreviewAdapter extends PiAiAdapter {
         const request = { ...options, signal,
           ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
         }
+        let capturedRequest = false
         for await (const chunk of native.stream(request)) {
           owner.requestCheckpoint?.()
           let delivered = chunk
@@ -541,6 +546,10 @@ class PreviewAdapter extends PiAiAdapter {
           // SDK lazyStream eagerly forwards events; only this Core-chunk boundary
           // observes consumer backpressure rather than its internal producer.
           liveness?.pause()
+          if (!capturedRequest && options.purpose === undefined) {
+            capturedRequest = true
+            owner.captureRequest(options.signal)
+          }
           try { yield delivered } finally { liveness?.resume() }
         }
         if (requestFailure !== undefined) throw requestFailure
@@ -556,8 +565,9 @@ class PreviewAdapter extends PiAiAdapter {
   }
 }
 
-/** Register one stable account route; attach/status remain network-free. */
-export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
+function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding: CopilotAccountBinding | undefined,
+  exclusionTurns: ModelExclusionTurns, replayRecovery: ReturnType<typeof installReplayRecovery>,
+  publish: () => void) {
   const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings,
     requestBudget, requestBudgetSettings, streamLiveness, chatRequestSettings, ...requestConfig } = config
   const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment'>
@@ -565,11 +575,11 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
   const excludedModels = () => excludedModelSet(cacheSettings().excludedModelIds)
   resolveRequestBudgetPolicy(budgetSettings())
-  const store = () => createGitHubCopilotCredentialStore(ctx, GITHUB_COPILOT_PREVIEW_PROVIDER_ID, activeCopilotBinding(ctx))
-  const acquire = (signal?: AbortSignal) => ctx.get('githubCopilotAccounts')?.host.acquire(signal)
+  const store = () => createGitHubCopilotCredentialStore(ctx, GITHUB_COPILOT_PREVIEW_PROVIDER_ID, binding)
+  const acquire = (signal?: AbortSignal) => ctx.get('githubCopilotAccounts')?.host.acquire(signal, true, binding?.accountId)
   let rejectedAuth: Proof | undefined
   let authRecovery: { readonly accountKey: string; readonly at: number } | undefined
-  const nativeAuth = createAccountModelAuth(() => createGitHubCopilotCredentialStore(ctx, 'github-copilot', activeCopilotBinding(ctx)), grant => {
+  const nativeAuth = createAccountModelAuth(() => createGitHubCopilotCredentialStore(ctx, 'github-copilot', binding), grant => {
     const accountKey = copilotAccountKey(grant)
     if (rejectedAuth?.accountKey !== accountKey || rejectedAuth.tokenFingerprint !== tokenFingerprint(grant.access)) return false
     const now = Date.now()
@@ -624,21 +634,12 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     && provenSnapshot === snapshot && snapshotProof?.accountKey === snapshot.accountKey ? snapshotProof : undefined
   const proofFor = (snapshot: AccountModelSnapshot): Proof | undefined => source.readSnapshot() === snapshot
     && snapshotProof !== undefined && snapshotProof.expires > Date.now() ? displayProofFor(snapshot) : undefined
-  const exclusionTurns = new ModelExclusionTurns()
-  const lifetime = new PreviewLifetime(store, source, proofFor, displayProofFor, modelId => excludedModels().has(modelId), exclusionTurns, acquire)
-  const replayRecovery = installReplayRecovery(ctx, () => {
-    if (snapshotProof === undefined || snapshotProof.expires <= Date.now()) return undefined
-    return `${lifetime.revision}:${snapshotProof.accountKey}:${snapshotProof.tokenFingerprint}`
-  })
-  const removeStepListener = ctx.on('session/event', (session, event) => {
-    if (event.type === 'step/start' || event.type === 'turn/end') lifetime.clearSessionRetries(session.id)
-    if (event.type === 'turn/end') exclusionTurns.end(session)
-  })
+  const lifetime = new PreviewLifetime(store, source, proofFor, displayProofFor, modelId => excludedModels().has(modelId),
+    exclusionTurns, acquire)
   // Empty provider is used only for registry metadata/config validation, never requests.
   const template = resolvedProfile(createAccountProvider([], lifetime.guard(), 'https://api.individual.githubcopilot.com').provider, requestConfig)
   let configured = false
   let readError: string | undefined
-  let publishedDirectory = ''
   const getView = (): GitHubCopilotPreviewView => {
     const status = source.getView()
     const cachedSnapshot = source.readDisplaySnapshot()
@@ -673,7 +674,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
       ...readError === undefined && status.error === undefined ? {} : { error: readError ?? status.error },
     })
   }
-  let notify = (): void => undefined
+  const notify = publish
   const refresh = async (): Promise<GitHubCopilotPreviewView> => {
     lifetime.assertActive()
     const ticket: CredentialReadTicket = { revision: lifetime.revision }
@@ -789,14 +790,14 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     })
     const profiles = new Map([[GITHUB_COPILOT_PREVIEW_PROVIDER_ID, profile]])
     return { profiles: () => profiles, resolveApiKey: async () => { lifetime.assertActive(); return undefined },
-      auth: { credentials: lease?.credentials ?? createGitHubCopilotCredentialStore(ctx, GITHUB_COPILOT_PREVIEW_PROVIDER_ID),
+      auth: { credentials: lease?.credentials ?? store(),
         authContext: { env: async () => undefined, fileExists: async () => false } },
       resolveAttachments: () => ctx.get('attachments'),
       resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(attachments, hostPath => ctx.get('fs')?.processPathFromHostPath(hostPath), ref),
     }
   }
-  const removeAutoRoute = installAutoModelRouting(ctx, {
-    async loadModels(signal) {
+  const auto = {
+    async loadModels(signal: AbortSignal) {
       const excluded = excludedModels()
       return (await discoverSnapshot({ signal })).models.filter(model => !excluded.has(model.id))
     },
@@ -804,8 +805,9 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     parentModelBindings: () => cacheSettings().parentModelFollow ?? [],
     followParentModel: () => cacheSettings().followParentModel === true,
     semanticAssessment: () => cacheSettings().autoSemanticAssessment ?? true,
-    assessmentDiagnostic: code => ctx.logger.warn(code),
-    async classifyTask(input, signal, observe, checkpoint) {
+    assessmentDiagnostic: (code: string) => ctx.logger.warn(code),
+    async classifyTask(...args: Parameters<NonNullable<Parameters<typeof installAutoModelRouting>[1]['classifyTask']>>) {
+      const [input, signal, observe, checkpoint] = args
       checkpoint?.()
       const snapshot = await discoverSnapshot({ signal })
       checkpoint?.()
@@ -829,23 +831,14 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
         }
       }
     },
-    admitModel(agent, turn, model, signal) {
+    admitModel(agent: Agent, turn: number, model: string, signal: AbortSignal) {
       if (!exclusionTurns.admit(agent.session, turn, model, signal, excludedModels())) {
         throw failure('COPILOT_PREVIEW_MODEL_EXCLUDED', 'INVALID_REQUEST')
       }
     },
-  })
-  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
-    new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings, replayRecovery))
-  let exclusionSignature = JSON.stringify([...excludedModels()])
-  const removeSettings = onSettingsNamespaceUpdated(ctx, namespace => {
-    if (namespace !== 'github-copilot') return
-    const next = JSON.stringify([...excludedModels()])
-    if (next === exclusionSignature) return
-    exclusionSignature = next
-    publishedDirectory = ''
-    registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
-  })
+  }
+  const adapter = new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings,
+    replayRecovery, undefined, signal => ctx.get('githubCopilotSessionAccounts')?.recordRequest(signal))
   const pressureCallbacks = { resolve(request: GenerateOptions) {
     const snapshot = source.readSnapshot()
     if (snapshot === undefined || proofFor(snapshot) === undefined) return undefined
@@ -855,17 +848,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     const result = calculateRequestBudget(descriptor, request.maxTokens, resolveRequestBudgetPolicy(budgetSettings()))
     return result.ok ? { inputBudgetTokens: result.budget.pressureInputLimit } : undefined
   } }
-  installCopilotPreStepPressure(ctx, pressureCallbacks)
-  installCopilotCompactionPressure(ctx, pressureCallbacks)
-  notify = () => {
-    const view = getView()
-    // These are small owned DTOs, not live Cordis objects or credential records.
-    const directory = JSON.stringify({ models: view.models, available: view.available, configured: view.configured })
-    if (directory === publishedDirectory || view.state === 'disposed') return
-    publishedDirectory = directory
-    registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
-  }
-  ctx.provide('githubCopilotPreview', { getView, refresh,
+  const preview: GitHubCopilotPreview = { getView, refresh,
     recoveryLimits(modelId) {
       const snapshot = source.readSnapshot()
       if (snapshot === undefined || proofFor(snapshot) === undefined || !getView().available
@@ -923,19 +906,145 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     async discover(options) {
     try { await discoverSnapshot(options) } catch { lifetime.assertActive() }
     return getView()
-  } })
+  } }
+  return { adapter, preview, auto, pressureCallbacks, optionsFor, lifetime,
+    proof() {
+      if (snapshotProof === undefined || snapshotProof.expires <= Date.now()) return undefined
+      return `${binding?.accountId ?? 'canonical'}:${lifetime.revision}:${snapshotProof.accountKey}:${snapshotProof.tokenFingerprint}`
+    },
+    invalidate() {
+      lifetime.change(); provenSnapshot = undefined; snapshotProof = undefined; lastValidatedProof = undefined
+      void refresh().catch(() => undefined)
+    },
+  }
+}
+
+type AccountRuntime = ReturnType<typeof createAccountRuntime>
+
+/** One registry owner delegates to immutable account-local native adapter state. */
+class AccountRoutingAdapter extends PiAiAdapter {
+  constructor(options: PiAiAdapterOptions, private readonly requestRuntime: (signal?: AbortSignal) => AccountRuntime) { super(options) }
+  override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    return this.requestRuntime().adapter.listModels(provider)
+  }
+  override resolveModel(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo> {
+    return this.requestRuntime(signal).adapter.resolveModel(provider, model, signal)
+  }
+  override prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
+    return this.requestRuntime(signal).adapter.prepareCall(provider, model, signal)
+  }
+  override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    return this.requestRuntime(options.signal).adapter.stream(options)
+  }
+}
+
+/** Register services once; account switches affect the directory, not admitted turns. */
+export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
+  const runtimes = new Map<string, AccountRuntime>()
+  const exclusionTurns = new ModelExclusionTurns()
+  const freezeBinding = (binding: CopilotAccountBinding | undefined) => binding === undefined ? undefined
+    : ctx.get('githubCopilotAccounts')?.host.captureAccount(binding.accountId) ?? binding
+  const globalBinding = () => freezeBinding(activeCopilotBinding(ctx))
+  const requestBinding = (signal?: AbortSignal) => ctx.get('githubCopilotSessionAccounts')?.requestBinding(signal) ?? globalBinding()
+  let disposed = false
+  let publishedDirectory = ''
+  let publish = (): void => undefined
+  const runtimeFor = (binding: CopilotAccountBinding | undefined): AccountRuntime => {
+    if (disposed) throw failure('COPILOT_PREVIEW_DISPOSED', 'ABORTED')
+    binding?.assertCurrent()
+    const accountId = binding?.accountId ?? 'canonical'
+    const current = runtimes.get(accountId)
+    if (current !== undefined) return current
+    // Do not evict prepared calls, discovery, or live Session proof owners.
+    if (runtimes.size >= COPILOT_ACCOUNTS_MAX) throw failure('COPILOT_ACCOUNTS_RUNTIME_LIMIT', 'INVALID_REQUEST')
+    const runtime = createAccountRuntime(ctx, config, binding, exclusionTurns, replayRecovery, () => {
+      if (disposed) return
+      // A broken default directory cannot invalidate a different admitted account.
+      try { if ((globalBinding()?.accountId ?? 'canonical') === accountId) publish() }
+      catch { ctx.logger.warn('COPILOT_PREVIEW_DIRECTORY_ACCOUNT_UNAVAILABLE') }
+    })
+    runtimes.set(accountId, runtime)
+    return runtime
+  }
+  const currentRuntime = (signal?: AbortSignal) => runtimeFor(requestBinding(signal))
+  const directoryRuntime = () => runtimeFor(globalBinding())
+  const replayRecovery = installReplayRecovery(ctx, (agent?: Agent, request?: GenerateOptions) => {
+    const accounts = ctx.get('githubCopilotSessionAccounts')
+    const binding = agent !== undefined && accounts !== undefined
+      ? accounts.bindingForAccount((accounts.turns.current(agent.session) ?? accounts.selected(agent)).accountId)
+      : requestBinding(request?.signal)
+    return runtimeFor(binding).proof()
+  })
+  const initial = directoryRuntime()
+  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
+    new AccountRoutingAdapter(initial.optionsFor(), currentRuntime))
+  publish = () => {
+    const view = directoryRuntime().preview.getView()
+    const directory = JSON.stringify({ account: globalBinding()?.accountId ?? 'canonical',
+      models: view.models, available: view.available, configured: view.configured })
+    if (directory === publishedDirectory || view.state === 'disposed') return
+    publishedDirectory = directory
+    registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
+  }
+  const removeAutoRoute = installAutoModelRouting(ctx, {
+    loadModels: signal => currentRuntime(signal).auto.loadModels(signal),
+    classifyTask: (...args) => currentRuntime(args[1]).auto.classifyTask(...args),
+    budgetPolicy: () => currentRuntime().auto.budgetPolicy(),
+    parentModelBindings: () => currentRuntime().auto.parentModelBindings(),
+    followParentModel: () => currentRuntime().auto.followParentModel(),
+    semanticAssessment: () => currentRuntime().auto.semanticAssessment(),
+    assessmentDiagnostic: code => ctx.logger.warn(code),
+    admitModel: (agent, turn, model, signal) => currentRuntime(signal).auto.admitModel(agent, turn, model, signal),
+  })
+  const pressureCallbacks = {
+    resolve: (request: GenerateOptions) => currentRuntime(request.signal).pressureCallbacks.resolve(request),
+  }
+  installCopilotPreStepPressure(ctx, pressureCallbacks)
+  installCopilotCompactionPressure(ctx, pressureCallbacks)
+  ctx.provide('githubCopilotPreview', {
+    getView: () => disposed ? initial.preview.getView() : currentRuntime().preview.getView(),
+    refresh: async () => currentRuntime().preview.refresh(),
+    discover: options => currentRuntime(options?.signal).preview.discover(options),
+    recoveryLimits: model => currentRuntime().preview.recoveryLimits(model),
+    routeFacts: model => currentRuntime().preview.routeFacts(model),
+    captureSearchProof: () => currentRuntime().preview.captureSearchProof(),
+    resolveRequestAuth: (model, signal) => currentRuntime(signal).preview.resolveRequestAuth(model, signal),
+  })
+  const removeStepListener = ctx.on('session/event', (session, event) => {
+    if (event.type === 'step/start' || event.type === 'turn/end') {
+      for (const runtime of runtimes.values()) runtime.lifetime.clearSessionRetries(session.id)
+    }
+    if (event.type === 'turn/end') exclusionTurns.end(session)
+  })
   const removeListener = ctx.on('credentials/record-updated', key => {
-    if (!isActiveCopilotRecord(ctx, key)) return
-    lifetime.change(); provenSnapshot = undefined; snapshotProof = undefined; lastValidatedProof = undefined
-    void refresh().catch(() => undefined)
+    for (const [accountId, runtime] of runtimes) {
+      const record = accountId === 'canonical' ? GITHUB_COPILOT_CREDENTIAL_KEY : `github-copilot/account-${accountId}`
+      if (record === key) runtime.invalidate()
+    }
   })
   const removeAccountListener = ctx.get('githubCopilotAccounts')?.host.onChanged(() => {
-    if (lifetime.controller.signal.aborted) return
-    lifetime.change(); provenSnapshot = undefined; snapshotProof = undefined; lastValidatedProof = undefined
-    void refresh().catch(() => undefined)
+    publishedDirectory = ''
+    try {
+      publish()
+      void directoryRuntime().preview.refresh().catch(() => undefined)
+    } catch {
+      registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
+      ctx.logger.warn('COPILOT_PREVIEW_DIRECTORY_ACCOUNT_UNAVAILABLE')
+    }
+  })
+  let exclusionSignature = JSON.stringify([...excludedModelSet(config.accountModelSettings?.().excludedModelIds)])
+  const removeSettings = onSettingsNamespaceUpdated(ctx, namespace => {
+    if (namespace !== 'github-copilot') return
+    const next = JSON.stringify([...excludedModelSet(config.accountModelSettings?.().excludedModelIds)])
+    if (next === exclusionSignature) return
+    exclusionSignature = next
+    publishedDirectory = ''
+    registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
   })
   ctx.effect(() => () => {
-    lifetime.dispose()
+    disposed = true
+    for (const runtime of runtimes.values()) runtime.lifetime.dispose()
+    runtimes.clear()
     removeStepListener()
     replayRecovery.dispose()
     removeListener()
@@ -944,7 +1053,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     removeAutoRoute()
     registration()
   })
-  void refresh().catch(() => undefined)
+  void initial.preview.refresh().catch(() => undefined)
 }
 
 export default { name: 'github-copilot-preview', inject: ['llm', 'credentials'], apply }

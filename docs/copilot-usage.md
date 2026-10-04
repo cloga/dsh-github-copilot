@@ -15,9 +15,11 @@ The control is an additive `conversation.composer.dock` contribution for the cur
 The compact control shows reported usage and remaining allocation where available. Its details explain the unit, budget, reset timestamp, freshness and unavailable data. Legacy premium requests must never be relabeled AI credits. A pooled organization account can have absolute credits used without a personal denominator; it does not imply unlimited use or expose a knowable organization balance. Percentage-only data must not create falsely precise absolute amounts.
 
 The account extension described in [Copilot accounts](./copilot-accounts.md)
-adds a readonly GitHub identity under the details title. Account management and
-switching remain in Models; no Chat switcher is added. Identity and quota must
-carry matching active-account evidence before they are presented together.
+adds a readonly GitHub identity under the details title. Models retains account
+authorization and the global default. Managed Sessions can select an already
+authorized account inside Credits for subsequent turns, or restore global
+inheritance; running turns remain on their frozen account. Identity and quota
+must carry matching Session-account evidence before they are presented together.
 Failure to read identity is not a different account or a zero balance.
 
 Detailed amounts are rounded to two decimal places for display; a positive amount below 0.01 is shown as `<0.01`, not zero. GitHub billing remains authoritative. Known individual budgets at 90% used show a low-budget warning, not a spending restriction. The plan link uses the supported Desktop browser handoff with a selectable URL fallback. Details use the browser's native popover top layer when available and a fixed-position fallback otherwise; no additional ReactDOM copy or private Core DOM access is introduced.

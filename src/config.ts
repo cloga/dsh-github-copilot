@@ -12,6 +12,7 @@ import type { WebSearchRoutingConfig } from './web-search-routing-config.ts'
 import { readConfigValue } from './settings-reader.ts'
 import type { LiveSetting } from './settings-reader.ts'
 import type { ParentModelBinding } from './parent-model-follow.ts'
+import type { SessionAccountPreference } from './session-accounts.ts'
 
 /** Plugin configuration. Defaults make the current chat route decide. */
 export interface InlineConfig {
@@ -46,6 +47,8 @@ export interface InlineConfig {
   excludedModelIds?: string[]
   /** Opaque profile-wide account selector; absence retains canonical compatibility. */
   activeAccountId?: string
+  /** Explicit Session overrides; absence means follow the profile default. */
+  sessionAccounts?: SessionAccountPreference[]
   /** Explicit native child/direct-parent enrollments; empty preserves native routing. */
   parentModelFollow?: ParentModelBinding[]
   /** Profile-wide next-turn policy for supported native children. */
@@ -70,7 +73,8 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts'> & {
+  sessionAccounts?: SessionAccountPreference[] | LiveSetting<ArrayLike<SessionAccountPreference>>
   activeAccountId?: string | LiveSetting<string | undefined>
   followParentModel?: boolean | LiveSetting<boolean>
   parentModelFollow?: ParentModelBinding[] | LiveSetting<ArrayLike<ParentModelBinding>>
@@ -80,7 +84,8 @@ export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts'> & {
+  sessionAccounts: LiveSetting<ArrayLike<SessionAccountPreference>>
   activeAccountId: LiveSetting<string | undefined>
   followParentModel: LiveSetting<boolean>
   parentModelFollow: LiveSetting<ArrayLike<ParentModelBinding>>
@@ -94,9 +99,13 @@ export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRou
 export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
   const exclusions = readConfigValue<ArrayLike<string> | undefined>(config.excludedModelIds)
   const bindings = readConfigValue<ArrayLike<ParentModelBinding> | undefined>(config.parentModelFollow)
+  const accounts = readConfigValue<ArrayLike<SessionAccountPreference> | undefined>(config.sessionAccounts)
   return {
     ...config,
     activeAccountId: readConfigValue(config.activeAccountId),
+    sessionAccounts: accounts === undefined ? undefined : Array.from(accounts, account => ({
+      sessionId: account.sessionId, accountId: account.accountId,
+    })),
     excludedModelIds: exclusions === undefined ? undefined : Array.from(exclusions),
     parentModelFollow: bindings === undefined ? undefined : Array.from(bindings, binding => ({
       childSessionId: binding.childSessionId, parentSessionId: binding.parentSessionId,
@@ -127,6 +136,9 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
   excludedModelIds: z.array(z.string()).default([]).hidden().volatile(),
   activeAccountId: z.string().hidden().volatile(),
+  sessionAccounts: z.array(z.object({
+    sessionId: z.string().min(1).max(256), accountId: z.string().min(1).max(36),
+  })).default([]).hidden().volatile(),
   followParentModel: z.boolean().default(false).volatile(),
   autoSemanticAssessment: z.boolean().default(true),
   parentModelFollow: z.array(z.object({

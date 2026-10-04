@@ -116,11 +116,11 @@ export function CopilotAccountsPanel(props: {
       identity ?? (busy ? 'Checking GitHub identity…' : 'GitHub account identity unavailable')),
     !props.expanded ? null : h('div', { style: { display: 'grid', gap: 10, marginBlock: 12 } },
       h('strong', null, 'GitHub accounts'),
-      h('p', { style: muted }, 'One active account for this profile. Switching affects subsequent managed Copilot requests, not saved models or conversation history.'),
+      h('p', { style: muted }, 'Global default for new inherited turns. Credits can override this Session’s subsequent turns. Running turns, explicit Session accounts, models and conversation history stay unchanged.'),
       props.remote === undefined ? h('p', { role: 'status', style: muted }, 'COPILOT_ACCOUNTS_REMOTE_UNAVAILABLE · Account management is unavailable in this deployment.') : null,
       failed ? h('p', { role: 'alert', style: muted }, 'Could not read account information. Retry before changing accounts.') : null,
       view?.diagnostic === undefined ? null : h('p', { role: 'status', style: muted }, view.diagnostic),
-      view?.switchable === false ? h('p', { style: muted }, 'Switching is unavailable while Copilot work is active, native Copilot routes remain configured, or route evidence is incomplete. No running work will be cancelled.') : null,
+      view?.switchable === false ? h('p', { style: muted }, 'Switching is unavailable during account management or unbound preparation, while native Copilot routes remain configured, or when route evidence is incomplete. Account-pinned managed turns can continue. No running work will be cancelled.') : null,
       h('ul', { style: { padding: 0, margin: 0, listStyle: 'none' } }, ...(view?.accounts ?? []).map(account =>
         h('li', { key: account.id, style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
           paddingBlock: 10, borderBottom: border } },

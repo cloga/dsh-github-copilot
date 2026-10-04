@@ -13,24 +13,24 @@ declare module '@deepseek-ai/cordis' {
 
 export class ReplayRecoveryController extends TypertRemoteService {
   constructor(ctx: Context, private readonly store: ReplayRecoveryStore,
-    private readonly proof: () => string | undefined, private readonly busy: WeakSet<object>) {
+    private readonly proof: (agent?: Agent, request?: GenerateOptions) => string | undefined, private readonly busy: WeakSet<object>) {
     super(ctx, 'githubCopilotReplayRecovery')
   }
   @Remote
-  get(agent: Agent): ReplayRecoveryView { return this.store.view(agent.session, this.proof()) }
+  get(agent: Agent): ReplayRecoveryView { return this.store.view(agent.session, this.proof(agent)) }
   @Remote
   setEnabled(agent: Agent, revision: string, enabled: boolean): ReplayRecoveryView {
     if (this.busy.has(agent.session)) throw new Error('COPILOT_REPLAY_RECOVERY_TURN_ACTIVE')
-    return this.store.setEnabled(agent.session, this.proof(), revision, enabled)
+    return this.store.setEnabled(agent.session, this.proof(agent), revision, enabled)
   }
   @Remote
   authorize(agent: Agent, revision: string, duration: ReplayRecoveryDuration): ReplayRecoveryView {
     if (this.busy.has(agent.session)) throw new Error('COPILOT_REPLAY_RECOVERY_TURN_ACTIVE')
-    return this.store.authorize(agent.session, this.proof(), revision, duration)
+    return this.store.authorize(agent.session, this.proof(agent), revision, duration)
   }
 }
 
-export function installReplayRecovery(ctx: Context, proof: () => string | undefined): {
+export function installReplayRecovery(ctx: Context, proof: (agent?: Agent, request?: GenerateOptions) => string | undefined): {
   prepare(request: GenerateOptions): { transform(payload: unknown): unknown; rejected(body: string | undefined): void } | undefined
   dispose(): void
 } {
@@ -63,11 +63,11 @@ export function installReplayRecovery(ctx: Context, proof: () => string | undefi
       if (!active || request.signal === undefined || request.signal.aborted || request.purpose !== undefined
         || request.provider !== 'github-copilot-preview') return undefined
       const binding = requests.get(request.signal)
-      const currentProof = proof()
+      const currentProof = proof(undefined, request)
       if (!binding || binding.session.id !== request.sessionId || !busy.has(binding.session) || currentProof === undefined
         || currentRequests.get(binding.session) !== request.signal) return undefined
       const transform = store.prepare(binding.session, currentProof, request.model, binding.turn)
-      const current = () => active && !request.signal?.aborted && proof() === currentProof
+      const current = () => active && !request.signal?.aborted && proof(undefined, request) === currentProof
         && currentRequests.get(binding.session) === request.signal && busy.has(binding.session)
       return {
         transform(payload) {

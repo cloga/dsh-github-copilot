@@ -13,6 +13,7 @@ import { normalizeCopilotUsage, unavailableCopilotUsage } from './copilot-usage-
 import type { CopilotUsageView, CopilotUsageDiagnostic } from './copilot-usage-types.ts'
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
 import { activeCopilotBinding, isActiveCopilotRecord } from './copilot-accounts-host.ts'
+import type { CopilotAccountBinding } from './copilot-accounts-types.ts'
 
 export const COPILOT_USAGE_ENDPOINT = 'https://api.github.com/copilot_internal/user'
 const TTL_MS = 60_000
@@ -284,6 +285,7 @@ declare module '@deepseek-ai/cordis' {
 }
 
 export default class GitHubCopilotUsageController extends TypertRemoteService {
+  private readonly accountSources = new Map<string, CopilotUsageSource>()
   private source: CopilotUsageSource
   private accountSignature: string | undefined
   private sourceInitialized = false
@@ -292,11 +294,28 @@ export default class GitHubCopilotUsageController extends TypertRemoteService {
     this.source = new CopilotUsageSource({ readCredential: async () => { throw new Error('COPILOT_USAGE_CREDENTIALS_UNAVAILABLE') } })
     ctx.on('credentials/record-updated', key => {
       if (isActiveCopilotRecord(ctx, key)) this.source.invalidate()
+      this.accountSources.get(key)?.invalidate()
     })
     onSettingsNamespaceUpdated(ctx, namespace => {
       if (namespace === 'github-copilot' || namespace === 'llm-pi-ai') this.source.invalidate()
     })
-    ctx.effect(() => () => this.source.dispose())
+    ctx.effect(() => async () => {
+      await this.source.dispose()
+      await Promise.all([...this.accountSources.values()].map(source => source.dispose()))
+      this.accountSources.clear()
+    })
+  }
+  forAccount(binding: CopilotAccountBinding, force = false): Promise<CopilotUsageView> {
+    binding.assertCurrent()
+    let source = this.accountSources.get(binding.key)
+    if (!source) {
+      if (this.accountSources.size >= 32) throw new Error('COPILOT_SESSION_ACCOUNTS_LIMIT')
+      const credentials = createGitHubCopilotCredentialStore(this.ctx, GITHUB_COPILOT_PROVIDER_ID, binding)
+      source = new CopilotUsageSource({ accountId: binding.accountId,
+        readCredential: () => credentials.read(GITHUB_COPILOT_PROVIDER_ID) })
+      this.accountSources.set(binding.key, source)
+    }
+    return force ? source.refresh() : source.get()
   }
   private createSource(): CopilotUsageSource {
     // The store for every read in this cache generation is immutable. A late

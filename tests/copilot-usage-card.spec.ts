@@ -8,6 +8,7 @@ import type { CopilotUsageView } from '../src/copilot-usage-types.ts'
 import type { CopilotAccountsRemote } from '../src/copilot-accounts-card.ts'
 import type { CopilotAccountsView } from '../src/copilot-accounts-types.ts'
 import { accountPresentationChanges } from '../src/copilot-account-presentation.ts'
+import type { SessionAccountView } from '../src/session-accounts-remote.ts'
 
 const cleanups: Array<() => void> = []
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }) })
@@ -49,6 +50,56 @@ function deferred<T>() {
 }
 
 describe('Copilot account usage chip', () => {
+  it('switches only subsequent Session turns inside Credits and can restore inheritance', async () => {
+    const B = '11111111-1111-4111-8111-111111111111'
+    let explicit: string | undefined, revision = 1
+    const snapshot = (): SessionAccountView => ({
+      source: explicit === undefined ? 'global' : 'session', accountId: explicit ?? 'canonical',
+      globalAccountId: 'canonical', runningAccountId: 'canonical',
+      accounts: { state: 'ready', activeAccountId: explicit ?? 'canonical', revision, writable: true, switchable: true, notices: [],
+        accounts: [{ id: 'canonical', configured: true, identityState: 'ready', identity: { login: 'synthetic-a', userId: 1 } },
+          { id: B, configured: true, identityState: 'ready', identity: { login: 'synthetic-b', userId: 2 } }] },
+    })
+    const get = async () => ({ ok: true as const, value: snapshot() })
+    const set = vi.fn(async (accountId: string | null, expected: number) => {
+      expect(expected).toBe(revision)
+      explicit = accountId ?? undefined; revision++
+      return get()
+    })
+    const quota = async () => ok(view({ accountId: explicit ?? 'canonical', used: explicit === B ? 12 : 42.25,
+      remaining: explicit === B ? 88 : 57.75, percentUsed: explicit === B ? 12 : 42.25 }))
+    await mount({ contextKey: 'session', remote: { get: quota, refresh: quota },
+      sessionAccount: { get, set }, accountsRemote: {
+        get: async () => ({ ok: true as const, value: snapshot().accounts }),
+        refreshIdentity: async () => ({ ok: true as const, value: snapshot().accounts }),
+      } })
+    expect(button('Switch account')).toBeUndefined()
+    await click(trigger())
+    expect(text()).toContain('Follow global default')
+    await click(button('Switch account'))
+    await click(button('@synthetic-b'))
+    expect(set).toHaveBeenCalledExactlyOnceWith(B, 1)
+    expect(text()).toContain('Session override')
+    expect(text()).toContain('Running turn remains on: @synthetic-a')
+    expect(trigger().textContent).toContain('12 used')
+    await click(button('Switch account'))
+    await click(button('Follow global default'))
+    expect(set).toHaveBeenLastCalledWith(null, 2)
+    expect(text()).not.toContain('Session override')
+    expect(trigger().textContent).toContain('42.25 used')
+  })
+  it('rejects quota from a previous account even if the Session metadata read succeeds', async () => {
+    const B = '11111111-1111-4111-8111-111111111111'
+    const selection: SessionAccountView = { source: 'session', accountId: B, globalAccountId: 'canonical',
+      accounts: { state: 'ready', activeAccountId: B, revision: 1, writable: true, switchable: true,
+        accounts: [{ id: B, configured: true, identityState: 'unknown' }], notices: [] } }
+    await mount({ contextKey: 'changed-session', remote: remote(view({ accountId: 'canonical' })),
+      sessionAccount: { get: async () => ({ ok: true, value: selection }), set: vi.fn() } })
+    expect(trigger().textContent).not.toContain('42.25')
+    await click(trigger())
+    expect(text()).toContain('Could not refresh usage')
+    expect(text()).not.toContain('Could not save')
+  })
   it('shows current identity only in details without a Chat switching control', async () => {
     const accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'> = {
       get: vi.fn(async () => ({ ok: true as const, value: {

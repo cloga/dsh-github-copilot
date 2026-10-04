@@ -67,6 +67,7 @@ export class CopilotAccountsHost {
   private selectionSignature: string | undefined
   private disposed = false
   private readonly leases = new Set<() => void>()
+  private readonly accountLeases = new Map<string, Set<() => void>>()
   private readonly identities = new Map<string, { identity: CopilotAccountIdentity; key: string; at: number }>()
   private readonly unavailableIdentities = new Set<string>()
   private readonly listeners = new Set<() => void>()
@@ -98,13 +99,12 @@ export class CopilotAccountsHost {
     const signature = accountId
     const changed = this.selectionSignature !== undefined && this.selectionSignature !== signature
     this.selectionSignature = signature
-    if (changed) this.revoke()
+    if (changed) this.revoke(false)
     return { accountId, revision: descriptor.revision }
   }
-  private revoke(): void {
+  private revoke(clearIdentity = true): void {
     this.generation++
-    this.identities.clear()
-    this.unavailableIdentities.clear()
+    if (clearIdentity) { this.identities.clear(); this.unavailableIdentities.clear() }
     for (const listener of this.listeners) listener()
   }
   selectionChanged(): void {
@@ -126,6 +126,10 @@ export class CopilotAccountsHost {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
   }
+  cachedIdentity(accountId: string): CopilotAccountIdentity | undefined {
+    const cached = this.identities.get(accountId)
+    return cached && Date.now() - cached.at < IDENTITY_TTL ? cached.identity : undefined
+  }
   capture(accountId?: string): CopilotAccountBinding {
     const selected = this.selection()
     const target = accountId === undefined ? selected.accountId : id(accountId)
@@ -139,23 +143,48 @@ export class CopilotAccountsHost {
       },
     })
   }
-  acquire(signal?: AbortSignal, requireManaged = true): CopilotAccountLease {
+  /** A frozen turn owns a record, not the mutable profile default. */
+  captureAccount(accountId: string): CopilotAccountBinding {
+    const target = id(accountId)
+    if (this.disposed) fail('COPILOT_ACCOUNTS_DISPOSED')
+    return Object.freeze({ accountId: target, key: recordKey(target), generation: 0,
+      assertCurrent: () => { if (this.disposed) fail('COPILOT_ACCOUNTS_DISPOSED') } })
+  }
+  async validateAccount(binding: CopilotAccountBinding): Promise<void> {
+    const blocked = this.routeDiagnostic(false)
+    if (blocked) fail(blocked)
+    if (!(await this.membership()).some(row => row.id === binding.accountId && row.configured)) {
+      fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
+    }
+    binding.assertCurrent()
+  }
+  acquire(signal?: AbortSignal, requireManaged = true, accountId?: string): CopilotAccountLease {
     if (this.operation !== undefined || this.ctx.get('authorization')?.describe(recordKey('canonical'))?.inFlight === true) {
       fail('COPILOT_ACCOUNTS_BUSY')
     }
     if (signal?.aborted) fail('COPILOT_ACCOUNTS_CHANGED')
-    const binding = this.capture()
+    const binding = accountId === undefined ? this.capture() : this.captureAccount(accountId)
     if (requireManaged && binding.accountId !== 'canonical') {
       const blocked = this.routeDiagnostic(false)
       if (blocked) fail(blocked)
     }
-    const release = () => { this.leases.delete(release); signal?.removeEventListener('abort', release) }
-    this.leases.add(release)
+    let leases = this.leases
+    if (accountId !== undefined) {
+      let pinned = this.accountLeases.get(accountId)
+      if (!pinned) { pinned = new Set(); this.accountLeases.set(accountId, pinned) }
+      leases = pinned
+    }
+    const release = () => {
+      leases.delete(release)
+      if (accountId !== undefined && leases.size === 0) this.accountLeases.delete(accountId)
+      signal?.removeEventListener('abort', release)
+    }
+    leases.add(release)
     signal?.addEventListener('abort', release, { once: true })
     return { binding, release }
   }
   acquireCanonicalAuthorization(): CopilotAccountLease {
-    if (this.busy()) fail('COPILOT_ACCOUNTS_BUSY')
+    if (this.busy() || this.accountLeases.get('canonical')?.size) fail('COPILOT_ACCOUNTS_BUSY')
     const binding = this.capture()
     if (binding.accountId !== 'canonical') fail('COPILOT_ACCOUNTS_CHANGED')
     this.operation = 'authorizing'
@@ -178,7 +207,7 @@ export class CopilotAccountsHost {
       || includeActivity && (evidence.defaultSelection?.provider === GITHUB_COPILOT_PROVIDER_ID
         || evidence.sessions.some(row => row.effectiveSelection?.provider === GITHUB_COPILOT_PROVIDER_ID
           || row.activeRequestSelection?.provider === GITHUB_COPILOT_PROVIDER_ID))) return 'COPILOT_ACCOUNTS_ROUTE_BLOCKED'
-    if (includeActivity && evidence.sessions.some(row => row.status === 'running'
+    if (!this.ctx.get('githubCopilotSessionAccounts') && includeActivity && evidence.sessions.some(row => row.status === 'running'
       && row.effectiveSelection?.provider === 'github-copilot-preview')) return 'COPILOT_ACCOUNTS_BUSY'
     return undefined
   }
@@ -213,22 +242,26 @@ export class CopilotAccountsHost {
     return rows
   }
   async get(): Promise<CopilotAccountsView> {
+    return this.accountView()
+  }
+  private async accountView(accountId?: string): Promise<CopilotAccountsView> {
     let activeAccountId = 'canonical', revision: number | undefined
     let accounts: CopilotAccountView[] = [], writable = false
     let problem: CopilotAccountsDiagnostic | undefined
     try {
       const selection = this.selection()
-      activeAccountId = selection.accountId; revision = selection.revision; writable = true
+      activeAccountId = accountId === undefined ? selection.accountId : id(accountId)
+      revision = selection.revision; writable = true
       accounts = await this.membership()
       const current = this.selection()
-      if (current.accountId !== activeAccountId || current.revision !== revision) fail('COPILOT_ACCOUNTS_CHANGED')
-      if (activeAccountId !== 'canonical' && !accounts.some(row => row.id === activeAccountId && row.configured)) {
+      if (current.accountId !== selection.accountId || current.revision !== revision) fail('COPILOT_ACCOUNTS_CHANGED')
+      if ((accountId !== undefined || activeAccountId !== 'canonical') && !accounts.some(row => row.id === activeAccountId && row.configured)) {
         fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
       }
-      const retainedFailure = this.lastFailure === 'COPILOT_ACCOUNTS_BUSY' ? undefined : this.lastFailure
+      const retainedFailure = accountId !== undefined || this.lastFailure === 'COPILOT_ACCOUNTS_BUSY' ? undefined : this.lastFailure
       problem = retainedFailure ?? this.routeDiagnostic() ?? (this.busy() ? 'COPILOT_ACCOUNTS_BUSY' : undefined)
     } catch (error) { problem = diagnostic(error, 'COPILOT_ACCOUNTS_CREDENTIALS_UNAVAILABLE') }
-    if (this.lastFailure === 'COPILOT_ACCOUNTS_COMMIT_UNCERTAIN') problem = this.lastFailure
+    if (accountId === undefined && this.lastFailure === 'COPILOT_ACCOUNTS_COMMIT_UNCERTAIN') problem = this.lastFailure
     const recovery = problem === 'COPILOT_ACCOUNTS_SELECTED_MISSING' && writable && this.routeDiagnostic() === undefined
     return { state: problem ? 'error' : 'ready', activeAccountId, ...revision === undefined ? {} : { revision },
       writable, switchable: (!problem || recovery) && writable && !this.busy(), accounts,
@@ -306,6 +339,21 @@ export class CopilotAccountsHost {
     } finally { lease?.release() }
     return this.get()
   }
+  async viewForAccount(accountId: string): Promise<CopilotAccountsView> {
+    return this.accountView(accountId)
+  }
+  async refreshIdentityFor(accountId: string): Promise<CopilotAccountsView> {
+    const lease = this.acquire(undefined, false, accountId)
+    try {
+      await this.identity(lease.binding, AbortSignal.any([this.abort.signal, AbortSignal.timeout(TIMEOUT)]))
+    } catch (error) {
+      this.identities.delete(accountId)
+      this.unavailableIdentities.add(accountId)
+      const view = await this.viewForAccount(accountId)
+      return { ...view, state: 'error', switchable: false, diagnostic: diagnostic(error, 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE') }
+    } finally { lease.release() }
+    return this.viewForAccount(accountId)
+  }
   private async validateModels(binding: CopilotAccountBinding, signal: AbortSignal): Promise<void> {
     try {
       if (this.dependencies.validateModels) return await this.dependencies.validateModels(binding, signal)
@@ -380,9 +428,10 @@ export class CopilotAccountsHost {
   }
   async authorize(accountId: string, expectedRevision?: number): Promise<CopilotAccountsView> {
     let removeFlow: (() => void) | undefined
-    let fenced = false
+    let fenced = false, rejectedBusy = false
     try {
       id(accountId)
+      if (this.accountLeases.get(accountId)?.size) fail('COPILOT_ACCOUNTS_BUSY')
       if (accountId === 'canonical') fail('COPILOT_ACCOUNTS_AUTH_UNAVAILABLE')
       const assertRevision = () => {
         if (expectedRevision !== undefined && this.selection().revision !== expectedRevision) fail('COPILOT_ACCOUNTS_CONFLICT')
@@ -490,9 +539,11 @@ export class CopilotAccountsHost {
     } catch (error) {
       removeFlow?.()
       this.lastFailure = diagnostic(error, 'COPILOT_ACCOUNTS_AUTH_FAILED')
+      rejectedBusy = this.lastFailure === 'COPILOT_ACCOUNTS_BUSY'
       if (fenced) { this.operation = undefined; this.attemptKey = undefined; this.authorizationAbort = undefined }
     }
-    return this.get()
+    const view = await this.get()
+    return rejectedBusy ? { ...view, state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY' } : view
   }
   async cancel(): Promise<CopilotAccountsView> {
     this.authorizationAbort?.abort()
@@ -500,12 +551,13 @@ export class CopilotAccountsHost {
     return this.get()
   }
   async remove(accountId: string, expectedRevision: number): Promise<CopilotAccountsView> {
-    let fenced = false
+    let fenced = false, rejectedBusy = false
     try {
       id(accountId)
       const before = this.selection()
       if (!Number.isSafeInteger(expectedRevision) || expectedRevision !== before.revision) fail('COPILOT_ACCOUNTS_CONFLICT')
       if (accountId === 'canonical' || accountId === before.accountId) fail('COPILOT_ACCOUNTS_ACTIVE_REMOVE_BLOCKED')
+      if (this.accountLeases.get(accountId)?.size) fail('COPILOT_ACCOUNTS_BUSY')
       if (this.busy()) fail('COPILOT_ACCOUNTS_BUSY')
       this.operation = 'switching'; fenced = true
       const binding = this.capture(accountId)
@@ -517,13 +569,15 @@ export class CopilotAccountsHost {
       this.identities.delete(accountId)
       this.unavailableIdentities.delete(accountId)
       this.lastFailure = undefined
-    } catch (error) { this.lastFailure = diagnostic(error, 'COPILOT_ACCOUNTS_REMOVE_FAILED') }
+    } catch (error) { this.lastFailure = diagnostic(error, 'COPILOT_ACCOUNTS_REMOVE_FAILED'); rejectedBusy = this.lastFailure === 'COPILOT_ACCOUNTS_BUSY' }
     finally { if (fenced) this.operation = undefined }
-    return this.get()
+    const view = await this.get()
+    return rejectedBusy ? { ...view, state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY' } : view
   }
   async signOutActive(): Promise<void> {
     if (this.busy()) fail('COPILOT_ACCOUNTS_BUSY')
     const binding = this.capture()
+    if (this.accountLeases.get(binding.accountId)?.size) fail('COPILOT_ACCOUNTS_BUSY')
     if (binding.accountId === 'canonical') fail('COPILOT_ACCOUNTS_ACTIVE_REMOVE_BLOCKED')
     this.operation = 'switching'
     try {
@@ -540,6 +594,7 @@ export class CopilotAccountsHost {
     this.abort.abort()
     this.revoke()
     for (const release of this.leases) release()
+    for (const leases of this.accountLeases.values()) for (const release of leases) release()
     this.listeners.clear()
   }
 }

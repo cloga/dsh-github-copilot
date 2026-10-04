@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.104 (prepared)
+
+- Select an already authorized account inside Credits for this Session's subsequent turns, or follow the Models global default. Explicit same-as-default choices remain overrides; running turns keep their frozen account (#305).
+- Isolate managed account metadata, OAuth resolution, Auto assessment, request recovery, quota and search proofs through the published native adapter. Default or Session preference changes do not redirect running steps, retries or search; pinned accounts remain protected from reauthorization/removal.
+- Add Account beside native turn Usage using captured ordinary-request evidence. This bounded Host-lifetime evidence becomes unknown after restart or eviction; no durable events, history changes, inferred billing receipts or subagent totals.
+- Persist only opaque Session preferences through native path-level SettingsForms CAS. Reuse existing Credits/turn popover styles and explicit Session lookup with separate strict Remotes; preserve native account compatibility and credential ownership.
+
 ## 0.4.0-alpha.103 (prepared)
 
 - Reevaluate transient account BUSY failures from current leases, authorization and managed Agent activity on status reads instead of retaining a stale rejection after work ends (#303).

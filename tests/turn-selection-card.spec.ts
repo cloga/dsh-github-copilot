@@ -17,6 +17,33 @@ async function mount(selection: TurnSelection, locale = 'en') {
   return container
 }
 const auto = { mode: 'auto', preference: 'intelligence', reason: 'large-structured-turn', candidateCount: 3 } as const
+it('keeps recorded Account details separate from native Usage and current selection', async () => {
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  await act(async () => root.render(createElement(TurnSelectionCard, { selection: { mode: 'manual' },
+    account: { state: 'recorded', accountId: 'canonical', source: 'global', identity: { login: 'synthetic-old', userId: 1 } } })))
+  expect(container.textContent).toContain('Account · @synthetic-old')
+  expect(container.querySelector('[role=dialog]')).toBeNull()
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('Inherited the global default at turn admission')
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('Host lifetime only')
+  expect(container.querySelector('[role=dialog]')?.textContent).not.toContain('Why this model')
+})
+it('distinguishes failed Account reads from unknown evidence and retries only the read', async () => {
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  const retryAccount = vi.fn()
+  await act(async () => root.render(createElement(TurnSelectionCard, { selection: { mode: 'manual' },
+    accountFailed: true, retryAccount })))
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('not proof of missing evidence')
+  const retry = [...container.querySelectorAll('button')].find(button => button.textContent === 'Retry')!
+  await act(async () => retry.click())
+  expect(retryAccount).toHaveBeenCalledOnce()
+  await act(async () => root.render(createElement(TurnSelectionCard, { selection: { mode: 'manual' }, account: { state: 'unknown' } })))
+  expect(container.textContent).toContain('Account · unknown')
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain('cannot reconstruct history')
+})
 it.each(['en', 'zh'])('keeps captured auxiliary timing inside progressive evidence and explains timeout fallback (%s)', async locale => {
   const container = await mount({ ...auto, explanation: {
     assessment: { demand: 'unknown', source: 'local', signals: ['insufficient-evidence'], diagnostic: 'timeout',

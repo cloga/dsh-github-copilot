@@ -1,11 +1,22 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
-import { createElement, useEffect, useSyncExternalStore } from 'react'
+import { createElement, useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
 import { CopilotUsageCard } from './copilot-usage-card.ts'
 import type { CopilotUsageRemote } from './copilot-usage-card.ts'
 import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
+import type { SessionAccountView } from './session-accounts-remote.ts'
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { CopilotUsageView } from './copilot-usage-types.ts'
+
+interface SessionAccountRemote {
+  get(id: string): Promise<RemoteResult<SessionAccountView>>
+  set(id: string, account: string | null, revision: number): Promise<RemoteResult<SessionAccountView>>
+  refreshIdentity(id: string): Promise<RemoteResult<SessionAccountView>>
+  usage(id: string): Promise<RemoteResult<CopilotUsageView>>
+  refreshUsage(id: string): Promise<RemoteResult<CopilotUsageView>>
+}
 
 const slot = 'conversation.composer.dock'
 const noop = () => {}
@@ -32,6 +43,10 @@ function isSlots(value: unknown): value is Slots {
 function isRemote(value: unknown): value is CopilotUsageRemote {
   return record(value) && typeof value.get === 'function' && typeof value.refresh === 'function'
 }
+function isSessionRemote(value: unknown): value is SessionAccountRemote {
+  return record(value) && typeof value.get === 'function' && typeof value.set === 'function'
+    && typeof value.refreshIdentity === 'function' && typeof value.usage === 'function' && typeof value.refreshUsage === 'function'
+}
 function isLocale(value: unknown): value is LocaleReader {
   return record(value) && typeof value.getLocale === 'function' && typeof value.subscribe === 'function'
 }
@@ -57,10 +72,11 @@ function effectiveCopilot(projection: unknown): { provider: string; model: strin
   return next.provider === 'github-copilot' || next.provider === 'github-copilot-preview' ? next : undefined
 }
 
-function Surface({ runtime, remote, accountsRemote, locale, diagnostic }: {
+function Surface({ runtime, remote, accountsRemote, sessionRemote, locale, diagnostic }: {
   runtime: RuntimeProps
   remote: CopilotUsageRemote | undefined
   accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'> | undefined
+  sessionRemote: SessionAccountRemote | undefined
   locale: LocaleReader | undefined
   diagnostic: (code: string) => void
 }): ReactElement | null {
@@ -73,12 +89,34 @@ function Surface({ runtime, remote, accountsRemote, locale, diagnostic }: {
     () => 'en',
   )
   const current = effectiveCopilot(projection)
+  const bound = useMemo(() => {
+    if (sessionRemote === undefined) return undefined
+    const id = runtime.sessionId
+    return {
+      usage: { get: () => sessionRemote.usage(id), refresh: () => sessionRemote.refreshUsage(id) },
+      identity: {
+        get: async () => {
+          const result = await sessionRemote.get(id)
+          return result.ok ? { ok: true as const, value: result.value.accounts } : result
+        },
+        refreshIdentity: async () => {
+          const result = await sessionRemote.refreshIdentity(id)
+          return result.ok ? { ok: true as const, value: result.value.accounts } : result
+        },
+      },
+      account: { get: () => sessionRemote.get(id),
+        set: (account: string | null, revision: number) => sessionRemote.set(id, account, revision) },
+    }
+  }, [sessionRemote, runtime.sessionId])
   useEffect(() => {
     if (projection === undefined) diagnostic('COPILOT_USAGE_MODEL_PROJECTION_UNAVAILABLE')
   }, [projection, diagnostic])
   if (!valid || current === undefined) return null
   const contextKey = JSON.stringify([runtime.sessionId, current.provider, current.model])
-  return createElement(CopilotUsageCard, { key: contextKey, contextKey, remote, accountsRemote, locale: language })
+  return createElement(CopilotUsageCard, { key: contextKey, contextKey,
+    remote: current.provider === 'github-copilot-preview' ? bound?.usage : remote,
+    accountsRemote: current.provider === 'github-copilot-preview' ? bound?.identity : accountsRemote,
+    sessionAccount: current.provider === 'github-copilot-preview' ? bound?.account : undefined, locale: language })
 }
 
 /** Public additive dock only; native composer, ContextMeter and other features stay owned by Core. */
@@ -96,6 +134,7 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
   // Resolve a traced Remote once, not on each render or Session-model update.
   let remote: CopilotUsageRemote | undefined
   let accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'> | undefined
+  let sessionRemote: SessionAccountRemote | undefined
   try {
     const namespaces: unknown = ctx.remote
     const face = record(namespaces) ? namespaces.githubCopilotUsage : undefined
@@ -106,6 +145,9 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
     if (record(accounts) && typeof accounts.get === 'function' && typeof accounts.refreshIdentity === 'function') {
       accountsRemote = accounts as Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'>
     } else diagnostic('COPILOT_ACCOUNTS_REMOTE_UNAVAILABLE')
+    const session = record(namespaces) ? namespaces.githubCopilotSessionAccount : undefined
+    if (isSessionRemote(session)) sessionRemote = session
+    else diagnostic('COPILOT_SESSION_ACCOUNTS_REMOTE_UNAVAILABLE')
   } catch { diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE') }
   const localeCandidate: unknown = ctx.get('locale')
   const locale = isLocale(localeCandidate) ? localeCandidate : undefined
@@ -128,7 +170,7 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
             return null
           }
           return createElement(Surface, {
-            runtime: props, remote, accountsRemote, locale, diagnostic,
+            runtime: props, remote, accountsRemote, sessionRemote, locale, diagnostic,
           })
         })
         let removed = false

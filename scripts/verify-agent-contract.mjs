@@ -46,8 +46,12 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.accounts?.risk?.includes('never grant copies')
     && contract.tasks.accounts?.risk?.includes('second storage service')
     && contract.tasks.accounts?.risk?.includes('Models alone')
+    && contract.tasks.accounts?.read?.includes('src/session-accounts-host.ts')
+    && contract.tasks.accounts?.tests?.includes('tests/session-accounts-host.spec.ts')
+    && contract.tasks.accounts?.risk?.includes('Freeze before Auto assessment')
+    && contract.tasks.accounts?.risk?.includes('No durable account events')
     && agentGuide.includes('Approved multi-account ownership extension (#297)'),
-  'account ownership extension must preserve direct native authorization, shared storage and Models-only switching')
+  'account ownership must preserve native authorization, shared storage, Session turn freezing and bounded historical evidence')
   require(contract.tasks.autointent?.read?.includes('src/auto-model-intent.ts')
     && contract.tasks.autointent?.tests?.includes('tests/fixtures/session-context-core.fixture.ts')
     && contract.tasks.autointent?.risk?.includes('No Core projection replacement'),

@@ -1368,7 +1368,7 @@ describe('GitHub Copilot Models client', () => {
     const { ctx } = clientContext(['settings.models.footer'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'slots'], expect.any(Function))
     await dispose()
   })
 
@@ -1539,7 +1539,7 @@ describe('GitHub Copilot Models client', () => {
     const { ctx, disposeRemote, disposeUi, disposePresentation } = clientContext(['settings.section'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotTurnSelection', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], expect.any(Function))
     expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotDualModel', 'slots'], expect.any(Function))
     expect(disposePresentation).not.toHaveBeenCalled()
     await dispose()

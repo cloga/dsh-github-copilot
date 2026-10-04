@@ -308,6 +308,19 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
     if (inherited !== undefined) return autoModelPreference(inherited.model) !== undefined ? inherited.model : undefined
     return pendingAuto(agent)
   }
+  const admitAccount = (agent: Agent, turn: number, signal: AbortSignal): void => {
+    const owner = ctx.get('githubCopilotSessionAccounts')
+    if (!owner) return
+    const projections: unknown = ctx.get('sessionProjections')
+    const state: unknown = record(projections) && typeof projections.stateOf === 'function'
+      ? projections.stateOf(agent.session, 'modelSelection') : undefined
+    const pending = record(state) ? state.pending : undefined
+    const inherited = followIntent(agent)
+    const provider = inherited?.provider ?? (record(pending) ? pending.provider
+      : agent.session.requestHeader()?.config.provider
+        ?? (record(state) && pending === null ? ctx.get('agentDefaultModel')?.currentSelection()?.provider : undefined))
+    if (provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID) owner.admit(agent, turn, signal)
+  }
   const installAgent = (agent: Agent): void => {
     if (agentDisposers.has(agent)) return
     const removeAssembly = agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
@@ -323,6 +336,8 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
       } }
     }, { prepend: true })
     const removePreStep = agent.ctx.on('agent/pre-step', async ({ messages, turn, signal }, next) => {
+      // Auto's classifier must use the same frozen account as the answer.
+      admitAccount(agent, turn, signal)
       const result = await next()
       const entered = result.kind === 'enter' ? result.messages : messages
       captured.set(agent, { turn, messages: entered })
@@ -373,6 +388,7 @@ export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHos
   })
   const removeRequest = ctx.on('agent/request', async ({ agent, turn, signal }, next) => {
     installAgent(agent)
+    admitAccount(agent, turn, signal)
     const native = await next()
     const admitted = routed.get(agent)
     if (admitted?.turn === turn && admitted.admitted !== undefined) {

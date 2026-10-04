@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.103"
+    "version": "0.4.0-alpha.104"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -288,6 +288,27 @@
     ]
   },
   "capabilities": [
+    {
+      "id": "copilot-session-accounts",
+      "required": true,
+      "evidenceScope": "synthetic-turn-routing-native-gateways-settings-persistence-and-ui-not-live-account-access",
+      "activation": "managed-only-explicit-session-choice-or-global-default",
+      "sourceMarkers": [
+        {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"},
+        {"file": "src/session-accounts-controller.ts", "marker": "extends TypertRemoteService"},
+        {"file": "src/session-accounts-remote.ts", "marker": "githubCopilotSessionAccount"},
+        {"file": "src/config.ts", "marker": "sessionAccounts:"},
+        {"file": "src/remote.ts", "marker": "...sessionAccountsRemote.descriptors"},
+        {"file": "AGENTS.md", "marker": "Historical Account is an additive assistant-actions disclosure"}
+      ],
+      "tests": [
+        {"file": "tests/session-accounts.spec.ts", "name": "freezes each turn across preference changes, steps and retries"},
+        {"file": "tests/session-accounts-host.spec.ts", "name": "holds account mutation fencing through abort until the actual turn boundary"},
+        {"file": "tests/copilot-usage-card.spec.ts", "name": "switches only subsequent Session turns inside Credits and can restore inheritance"},
+        {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds Session account choices and historical reads through native Client and %s Host gateways"},
+        {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent native credentials and SettingsForms CAS across profile restart without cross-account OAuth writes"}
+      ]
+    },
     {
       "id": "independent-copilot-accounts",
       "required": true,
