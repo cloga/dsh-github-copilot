@@ -22,7 +22,8 @@ function fixture(activeAccountId: unknown = undefined) {
   const records = new Map([[GITHUB_COPILOT_CREDENTIAL_KEY, grant('canonical')], [key(A), grant(A)], [key(B), grant(B)]])
   let revision = 1
   const settings = {
-    describe: () => [{ ns: 'github-copilot', revision, value: { activeAccountId } }],
+    describe: (): { ns: string; revision: number; value: unknown }[] =>
+      [{ ns: 'github-copilot', revision, value: { activeAccountId } }],
     mutate: vi.fn(async (_ns: string, operations: readonly { value: string }[], expected: number) => {
       if (revision !== expected) throw new Error('conflict')
       activeAccountId = operations[0]!.value
@@ -126,6 +127,61 @@ describe('independent Copilot account ownership', () => {
     expect(f.records.has(GITHUB_COPILOT_CREDENTIAL_KEY)).toBe(true)
     const lease = f.host.acquire()
     lease.release()
+  })
+  it('reevaluates busy rejection after a lease ends without identity refresh or mutation', async () => {
+    const f = fixture(A)
+    const lease = f.host.acquire()
+    expect(await f.host.switchAccount(B, 1)).toMatchObject({
+      state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY',
+    })
+    lease.release()
+    const view = await f.host.get()
+    expect(view).toMatchObject({ state: 'ready', switchable: true, activeAccountId: A })
+    expect(view.diagnostic).toBeUndefined()
+    expect(f.fetch).not.toHaveBeenCalled()
+    expect(f.credentials.readRecord).not.toHaveBeenCalled()
+    expect(f.settings.mutate).not.toHaveBeenCalled()
+    f.host.dispose()
+  })
+  it('reports live leases as busy before any rejected switch and keeps other failures', async () => {
+    const f = fixture(A)
+    const lease = f.host.acquire()
+    expect(await f.host.get()).toMatchObject({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY' })
+    expect(await f.host.switchAccount(B, 0)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_CONFLICT' })
+    lease.release()
+    expect(await f.host.get()).toMatchObject({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_CONFLICT' })
+    expect(f.fetch).not.toHaveBeenCalled()
+    expect(f.settings.mutate).not.toHaveBeenCalled()
+    f.host.dispose()
+  })
+  it('reevaluates native managed activity but never bypasses incomplete or blocked route evidence', async () => {
+    const f = fixture(A)
+    let running = true, native = false, complete = true
+    f.settings.describe = () => [
+      { ns: 'github-copilot', revision: 1, value: { activeAccountId: A } },
+      { ns: 'llm-pi-ai', revision: 1, value: { providers: {} } },
+    ]
+    f.ctx.provide('agents', { list: () => [{ id: 'synthetic-agent', status: running ? 'running' : 'idle',
+      session: { id: 'synthetic-agent', requestHeader: () => ({
+        config: { provider: 'github-copilot-preview', model: 'synthetic' },
+      }) } }] })
+    f.ctx.provide('sessionProjections', { stateOf: () => complete ? { pending: null } : undefined })
+    f.ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'github-copilot-preview', model: 'synthetic' }) })
+    f.ctx.provide('llm', { listProviders: () => native
+      ? [{ id: 'github-copilot-preview' }, { id: 'github-copilot' }] : [{ id: 'github-copilot-preview' }] })
+    const host = new CopilotAccountsHost(f.ctx)
+    expect(await host.switchAccount(B, 1)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY', switchable: false })
+    expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY', switchable: false })
+    running = false
+    expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
+    native = true
+    expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED', switchable: false })
+    native = false; complete = false
+    expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE', switchable: false })
+    expect(f.fetch).not.toHaveBeenCalled()
+    expect(f.credentials.readRecord).not.toHaveBeenCalled()
+    expect(f.settings.mutate).not.toHaveBeenCalled()
+    host.dispose(); f.host.dispose()
   })
   it('keeps selected-missing requests fail-closed while exposing explicit recovery', async () => {
     const f = fixture(A)
