@@ -112,6 +112,32 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('account-driven native provider', () => {
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'checks the auxiliary deadline immediately before native %s Fetch and releases the lease', async api => {
+      const item = descriptor(api)
+      const guard = accountGuard(item.id)
+      let expired = false
+      const release = vi.fn(), fetch = vi.fn()
+      const checkpoint = vi.fn(() => {
+        if (expired) throw new DOMException('Synthetic assessment deadline exceeded', 'TimeoutError')
+      })
+      const { provider, models } = createAccountProvider([item], {
+        ...guard,
+        beforeWire: async () => {
+          expired = true
+          return { signal: guard.signal, release }
+        },
+        requestCheckpoint: checkpoint,
+      }, baseURL)
+      const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+        apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+      })
+      for await (const _event of stream) { /* Preserve the native terminal failure. */ }
+      expect((await stream.result()).errorMessage).toBe('Request timed out.')
+      expect(checkpoint).toHaveBeenCalledOnce()
+      expect(fetch).not.toHaveBeenCalled()
+      expect(release).toHaveBeenCalledTimes(1)
+    })
   it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)('preserves native output and reasoning with byte-aware %s observation', async api => {
     const fetch = vi.fn(async () => nativeEvents(api))
     vi.stubGlobal('fetch', fetch)

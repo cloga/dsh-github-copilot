@@ -23,6 +23,12 @@ describe('concrete managed task classifier', () => {
     expect(taskClassifierModel([{ ...model, contextWindow: 2000 }, model])).toBe(model)
     expect(taskClassifierModel([{ ...model, id: 'z' }, { ...model, id: 'a' }])?.id).toBe('a')
   })
+  it('prefers advertised reasoning-off candidates without inferring latency or model-name capabilities', () => {
+    const off = { ...model, id: 'z', reasoning: { advertisedEfforts: ['off'], unmappedEfforts: [] } }
+    expect(taskClassifierModel([{ ...model, id: 'a' }, off])).toBe(off)
+    expect(taskClassifierModel([{ ...off, category: 'powerful' }, model])).toBe(model)
+    expect(taskClassifierModel([{ ...off, contextWindow: 2000 }, model])).toBe(model)
+  })
   it('makes one concrete native call with no tools, history identity, fake purpose or recursive Auto', async () => {
     const stream = vi.fn(async function* (request: GenerateOptions): AsyncIterable<StreamChunk> {
       expect(request.model).toBe(model.id)

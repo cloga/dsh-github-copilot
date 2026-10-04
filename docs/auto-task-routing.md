@@ -3,7 +3,7 @@
 Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
 [evidence refinement #262](https://github.com/cloga/dsh-github-copilot/issues/262).
 
-**Current contract:** published `0.4.0-alpha.88`, targeting official DSH/Windows
+**Current contract:** source candidate `0.4.0-alpha.99`, targeting official DSH/Windows
 Desktop `0.2.0-rc.2`. Semantic assessment is enabled by default with bounded
 auxiliary timing/output evidence. Neither publication nor
 these explanations prove the version loaded in a particular Host.
@@ -123,6 +123,18 @@ retains its seven-signal compatibility bound; raw explanation, confidence
 percentages and reasoning are not requested. Truncation remains failure, never
 accepted partial JSON.
 
+One monotonic deadline is checked after context packing, discovery and native
+preparation, before native request admission, on delivered chunks and before
+accepting a decoded result. A delayed event-loop timer cannot authorize a
+late auxiliary request or result. It can still delay observed settlement:
+this is not a hard real-time guarantee or evidence of a supplier latency cause.
+The owned timer and abort listener are disposed when assessment settles.
+
+Among eligible supplier Lightweight text candidates with the existing input
+headroom, prefer advertised reasoning `off`, then deterministic ID ordering.
+This does not infer speed, health or quality from effort or model names, and
+does not launch a second candidate if native support is absent.
+
 Request `off` reasoning only when both current supplier metadata advertises it
 and the public prepared model lists an `off` effort. Supplier metadata alone
 does not establish native support: current managed reasoning maps can decline
@@ -147,6 +159,8 @@ and frozen in the bounded store and routing decision, not durably appended or
 reconstructed after restart. The footer says assessment timed out, demand
 remained unknown, and preference policy selected the category as a fallback.
 Progressive details show milestones separately from native answer Usage.
+Continuity copy states the fitting category-pool count and explicitly disclaims
+semantic ranking; all-input-fit counts are not the final category pool.
 
 This is instrumentation and bounded output optimization, not a measured latency
 improvement or classifier calibration. No latency-ranked classifier pool,

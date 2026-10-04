@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter and one Host-owned OAuth account; it does not patch Core or maintain a second model catalog.
 
-**Source candidate: `0.4.0-alpha.98` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+**Source candidate: `0.4.0-alpha.99` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -40,10 +40,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.98/dsh-github-copilot-0.4.0-alpha.98.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.99/dsh-github-copilot-0.4.0-alpha.99.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.98` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.99` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -69,6 +69,8 @@ All three Auto preferences use the same account-verified, non-excluded eligible 
 Categories come from authenticated supplier metadata, not model names, context capacity or measured quality rankings. A suitable previous model is retained; otherwise the plugin uses stable equal-weight allocation within the eligible category. Category fallback is explained explicitly. One real model stays fixed throughout each admitted turn's steps, retries and compaction.
 
 Semantic assessment is **enabled by default only for locally unknown tasks**. It makes at most one bounded auxiliary call with an **8-second end-to-end deadline** and **128-token output budget**. Set `github-copilot.autoSemanticAssessment: false` to opt out. Timeout/invalid output leaves demand unknown and uses the preference fallback; it never means simple or triggers another classifier. Caller cancellation and account invalidation remain terminal. Auxiliary calls add latency and supplier charges outside native answer Usage.
+
+The deadline is checked against a monotonic clock at preparation, native request and result boundaries, even if the event loop delays the timer. Such delays can postpone settlement; they do not authorize late dispatch or late-result acceptance. Eligible Lightweight classifiers advertising reasoning `off` take precedence, with deterministic ID tie-breaking; the request uses `off` only if the public native model also supports it. This is not a measured speed ranking. Explanations distinguish the fitting category pool and previous-model continuity from semantic merit.
 
 The reply's selection disclosure shows captured reasons and optional content-free auxiliary milestones. `uncertain` and `insufficient-evidence` do not mean the conversation is empty. **Selection unknown** means no retained record; **Selection unavailable → Retry** means the read failed. Retry rereads that turn, not inference. Evidence is bounded and Host-local, so restart/eviction can lose it.
 
@@ -179,14 +181,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.98/dsh-github-copilot-0.4.0-alpha.98.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.98/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.99/dsh-github-copilot-0.4.0-alpha.99.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.99/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.98.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.99.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

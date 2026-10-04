@@ -56,6 +56,8 @@ export interface AccountProviderGuard extends PreviewProviderGuard {
   readonly retrySignal?: AbortSignal
   /** Per-dispatch admission after native context conversion, before starting a model wire. */
   inspectRequest?(model: Model<Api>, context: TranscriptContext, options?: StreamOptions): void
+  /** Optional auxiliary-call deadline fence immediately before native Fetch dispatch. */
+  requestCheckpoint?(): void
   assertEntitled(credential: GitHubCopilotOAuthCredential, modelId: string): void
 }
 
@@ -248,6 +250,7 @@ export function createAccountProvider(
       } : options.onPayload
       const fetch = options.fetch ?? globalThis.fetch
       const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
+        guard.requestCheckpoint?.()
         guard.onRequestBodyTimeout?.(undefined)
         liveness?.beginRequest(typeof init?.body === 'string' ? init.body : undefined)
         const replayHeaders = responses && init?.headers !== undefined ? new Headers(init.headers) : undefined

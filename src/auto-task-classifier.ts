@@ -11,7 +11,8 @@ export const TASK_CLASSIFIER_MAX_TOKENS = 128
 
 export function taskClassifierModel(models: readonly AccountModelDescriptor[]): AccountModelDescriptor | undefined {
   return models.filter(model => model.category === 'lightweight' && model.input.includes('text'))
-    .toSorted((left, right) => left.id.localeCompare(right.id, 'en'))
+    .toSorted((left, right) => Number(right.reasoning.advertisedEfforts.includes('off'))
+      - Number(left.reasoning.advertisedEfforts.includes('off')) || left.id.localeCompare(right.id, 'en'))
     .find(model => {
       const budget = calculateRequestBudget(model, TASK_CLASSIFIER_MAX_TOKENS)
       return budget.ok && budget.budget.hardInputLimit >= 12_000
@@ -24,7 +25,9 @@ export async function classifyTaskWithAdapter(
   stream: (request: GenerateOptions) => AsyncIterable<StreamChunk>,
   observe?: TaskClassifierObserver,
   reasoningOffSupported = false,
+  checkpoint?: () => void,
 ): Promise<string> {
+  checkpoint?.()
   if (signal.aborted) throw signal.reason
   let output = ''
   let finished = false
@@ -39,6 +42,8 @@ export async function classifyTaskWithAdapter(
     ...reasoningOffSupported && model.reasoning.advertisedEfforts.includes('off')
       ? { reasoningEffort: ReasoningEffortId('off') } : {},
   })) {
+    checkpoint?.()
+    checkpoint?.()
     if (signal.aborted) throw signal.reason
     if (chunk.type === 'text-delta') {
       output += chunk.text

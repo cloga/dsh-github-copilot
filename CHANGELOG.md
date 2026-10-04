@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.99 (prepared)
+
+- Enforce Auto assessment's single monotonic deadline at preparation, native request and result boundaries even when a delayed timer has not fired (#295). Dispose the assessment timer and listener on settlement; preserve cancellation, proof revocation and unknown-demand fallback.
+- Prefer eligible supplier Lightweight classifiers advertising reasoning-off, with deterministic ID tie-breaking. Send off only with matching published native support, without latency guesses, another classifier or retries.
+- Explain the fitting category pool and continuity separately from semantic model merit. Preserve previous-model policy, turn freezing, native Usage and history; no cross-turn cache or Core changes.
+
 ## 0.4.0-alpha.98 (prepared)
 
 - Retain owner-explicit Auto intent through a strict public Session projection when a native virtual request header consumes pending selection (#293).

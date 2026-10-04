@@ -320,12 +320,13 @@ function budgetFailure(result: RequestBudgetFailure): LlmError {
 /** Account-bound admission and purpose defaults; Core owns model conversion and wire/replay. */
 class PreviewAdapter extends PiAiAdapter {
   constructor(private readonly lifetime: PreviewLifetime,
-    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'>) => PiAiAdapterOptions,
+    private readonly optionsFor: (lease?: Lease, hooks?: Pick<AccountProviderGuard, 'inspectRequest' | 'requestCheckpoint' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'>) => PiAiAdapterOptions,
     private readonly discoverSnapshot: (options?: AccountModelLoadOptions) => Promise<AccountModelSnapshot>,
     private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
     private readonly requestBudgetSettings: () => Partial<RequestBudgetPolicy>,
     private readonly accountModelSettings: () => Pick<InlineConfig, 'excludedModelIds'>,
     private readonly replayRecovery?: ReturnType<typeof installReplayRecovery>,
+    private readonly requestCheckpoint?: () => void,
   ) { super(optionsFor()) }
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     owned(provider)
@@ -371,12 +372,16 @@ class PreviewAdapter extends PiAiAdapter {
     return this.withRecovery(snapshot, signal, () => new PiAiAdapter(this.optionsFor(lease)).resolveModel(provider, model, signal))
   }
   override async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
+    this.requestCheckpoint?.()
     owned(provider)
     if (autoModelPreference(model) !== undefined) throw failure('COPILOT_AUTO_ROUTE_UNRESOLVED', 'INVALID_REQUEST')
     const cached = this.lifetime.source.readSnapshot()
     const snapshot = await this.discoverSnapshot({ signal })
+    this.requestCheckpoint?.()
     const lease = await this.lease(snapshot, model, signal, cached === snapshot)
+    this.requestCheckpoint?.()
     const prepared = await this.withRecovery(snapshot, signal, () => new PiAiAdapter(this.optionsFor(lease)).prepareCall(provider, model, signal))
+    this.requestCheckpoint?.()
     return { model: prepared.model, stream: options => this.guardedStream(lease, options) }
   }
   override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
@@ -409,6 +414,7 @@ class PreviewAdapter extends PiAiAdapter {
   private guardedStream(lease: Lease, options: GenerateOptions): AsyncIterable<StreamChunk> {
     const owner = this
     return (async function* () {
+      owner.requestCheckpoint?.()
       owner.lifetime.start(lease)
       owned(options.provider)
       if (options.model !== lease.descriptor.id) throw failure('COPILOT_PREVIEW_MODEL_MISMATCH')
@@ -428,6 +434,7 @@ class PreviewAdapter extends PiAiAdapter {
       let bodyTimeout: string | undefined
       let liveness: Parameters<NonNullable<AccountProviderGuard['onStreamLiveness']>>[0] | undefined
       const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
+        owner.requestCheckpoint?.()
         if (signal.aborted) throw abortFailure(signal)
         const imageFailure = imageInputFailure(lease.descriptor, context.messages)
         if (imageFailure !== undefined) {
@@ -448,11 +455,12 @@ class PreviewAdapter extends PiAiAdapter {
           requestFailure = budgetFailure(admitted)
           throw requestFailure
         }
+        owner.requestCheckpoint?.()
       }
       try {
         // Same immutable descriptor/profile generation, but request-local provider
         // callbacks: concurrent compaction and chat cannot share purpose or errors.
-        const native = new PiAiAdapter(owner.optionsFor(lease, { inspectRequest,
+        const native = new PiAiAdapter(owner.optionsFor(lease, { inspectRequest, requestCheckpoint: owner.requestCheckpoint,
           ...recovery === undefined ? {} : { recoverReplay: recovery.transform, onReplayScopeRejected: recovery.rejected },
           onWireAbort(code) {
             wireAbort = code
@@ -473,6 +481,7 @@ class PreviewAdapter extends PiAiAdapter {
           },
         }))
         const prepared = await native.prepareCall(options.provider, options.model, signal)
+        owner.requestCheckpoint?.()
         const suppliedEffort = options.reasoningEffort ?? prepared.model.reasoning?.defaultEffort
         const effort = options.purpose === 'compaction'
           ? selectCompactionReasoning<string>(getSupportedThinkingLevels(model), suppliedEffort, policy.compactionReasoning)
@@ -481,6 +490,7 @@ class PreviewAdapter extends PiAiAdapter {
           ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
         }
         for await (const chunk of native.stream(request)) {
+          owner.requestCheckpoint?.()
           let delivered = chunk
           // The SDK may already have queued usage before its terminal error.
           // Restore the owned failure without discarding those shared samples.
@@ -717,7 +727,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     // stream. Never replay a model wire request or retry generic provider errors.
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
-  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'> = {}): PiAiAdapterOptions => {
+  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'requestCheckpoint' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'> = {}): PiAiAdapterOptions => {
     const settings = chatRequestSettings?.()
     const idle = settings?.chatStreamIdleTimeoutMs ?? template.streamIdleTimeoutMs
     const enabled = (settings?.chatStreamLiveness ?? streamLiveness ?? true)
@@ -760,19 +770,23 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     followParentModel: () => cacheSettings().followParentModel === true,
     semanticAssessment: () => cacheSettings().autoSemanticAssessment ?? true,
     assessmentDiagnostic: code => ctx.logger.warn(code),
-    async classifyTask(input, signal, observe) {
+    async classifyTask(input, signal, observe, checkpoint) {
+      checkpoint?.()
       const snapshot = await discoverSnapshot({ signal })
+      checkpoint?.()
       const model = taskClassifierModel(snapshot.models.filter(model => !excludedModels().has(model.id)))
       if (model === undefined) throw failure('COPILOT_AUTO_CLASSIFIER_UNAVAILABLE')
       observe?.({ stage: 'model-selected', modelId: model.id })
       const revision = lifetime.revision
-      const adapter = new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings)
+      const adapter = new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings,
+        undefined, checkpoint)
       try {
         const prepared = await adapter.prepareCall(GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model.id, signal)
+        checkpoint?.()
         if (signal.aborted) throw signal.reason
         const offSupported = prepared.model.reasoning?.efforts.some(effort => effort.id === 'off') === true
         return await classifyTaskWithAdapter(model, input, signal,
-          request => prepared.stream(request), observe, offSupported)
+          request => prepared.stream(request), observe, offSupported, checkpoint)
       }
       finally {
         if (!lifetime.isCurrent(revision) || source.readSnapshot() !== snapshot || proofFor(snapshot) === undefined) {

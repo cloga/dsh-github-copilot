@@ -318,6 +318,42 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
 
 describe('plugin-owned account Copilot route', () => {
+  it('does not dispatch an auxiliary request when native preparation outlasts a delayed deadline timer', async () => {
+    const modelCalls = vi.fn(async (_input: unknown, _init?: RequestInit) => response())
+    stubFetch(async (input, init) => String(input).endsWith('/models')
+      ? catalogResponse([
+        catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' }),
+        catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
+      ]) : modelCalls(input, init), true)
+    const harness = await runtime(grant({ availableModelIds: [] }))
+    const agent = { ctx: harness.ctx, session: {
+      id: 'deadline-session', header: { id: 'deadline-session' }, requestHeader: () => undefined,
+    } } as unknown as Agent
+    harness.ctx.provide('tokenMeter', { estimateMessage: () => 100, measure: () => ({ totalTokens: 100 }) } as never)
+    harness.ctx.provide('sessionProjections', { stateOf: () => ({ pending: { provider: PREVIEW, model: AUTO } }) } as never)
+    const scope = scopeTarget(agent, agent), signal = new AbortController().signal
+    await harness.ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const original = CorePiAi.PiAiAdapter.prototype.prepareCall
+    const prepare = vi.spyOn(CorePiAi.PiAiAdapter.prototype, 'prepareCall').mockImplementation(async function (this: CorePiAi.PiAiAdapter, ...args) {
+      const result = await original.apply(this, args)
+      now = 9000
+      return result
+    })
+    try {
+      const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Convert these records.' }] })]
+      await harness.ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      expect(await harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: AUTO }))).toMatchObject({ model: 'answer-fixture' })
+      expect(modelCalls).not.toHaveBeenCalled()
+      expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+        mode: 'auto', explanation: { assessment: { demand: 'unknown', diagnostic: 'timeout',
+          semantic: { stage: 'model-selected', elapsedMs: 9000, validation: 'not-validated' } } },
+      })
+    } finally { prepare.mockRestore(); clock.mockRestore() }
+  })
   it.each([undefined, true, false, 'no-settings'] as const)('assesses Auto with setting %s and freezes the captured reason across retries', async enabled => {
     const modelCalls = vi.fn(async (_input: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.98"
+    "version": "0.4.0-alpha.99"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -584,6 +584,7 @@
         {"file": "src/remote.ts", "marker": "githubCopilot.setModelExcluded"},
         {"file": "src/preview-provider.ts", "marker": "native.streamSimple"},
         {"file": "src/auto-assessment-evidence.ts", "marker": "SemanticAssessmentEvidenceSchema"},
+        {"file": "src/auto-task-assessment.ts", "marker": "performance.now() >= deadline"},
         {"file": "src/request-body-timeout-marker.ts", "marker": "COPILOT_REQUEST_BODY_TIMEOUT"},
         {"file": "src/request-body-evidence.ts", "marker": "REQUEST_BODY_EVIDENCE_LIMITS"},
         {"file": "src/request-upload-evidence.ts", "marker": "createRequestUploadObserver"},
@@ -593,6 +594,12 @@
         {"file": "src/pi-provider-bridge.ts", "marker": "PiStreamPublicCompatibility"}
       ],
       "tests": [
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "rejects late results even before the scheduled timeout callback runs"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "aborts preparation at the monotonic deadline before an adapter can start"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not dispatch an auxiliary request when native preparation outlasts a delayed deadline timer"},
+        {"file": "tests/preview-provider.spec.ts", "name": "checks the auxiliary deadline immediately before native %s Fetch and releases the lease"},
+        {"file": "tests/auto-task-classifier.spec.ts", "name": "prefers advertised reasoning-off candidates without inferring latency or model-name capabilities"},
+        {"file": "tests/auto-selection-explanation.spec.ts", "name": "distinguishes continuity and category pool from semantic model merit (%s)"},
         {"file": "tests/preview-provider.spec.ts", "name": "routes an unseen ID through published Core and native %s with Bearer auth"},
         {"file": "tests/preview-provider.spec.ts", "name": "takes protocol and independent input limits from descriptor evidence rather than the local GPT-6 catalog"},
         {"file": "tests/preview-provider.spec.ts", "name": "does not infer controls from a name or unfamiliar advertised effort labels"},
