@@ -332,7 +332,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     expect(remote.descriptors.filter(item => item.namespace !== 'githubCopilotAccounts').map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'authorize', 'setEnabled',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'get', 'authorize', 'setEnabled',
       'get', 'set', 'refreshIdentity', 'usage', 'refreshUsage', 'turn',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot' && item.method !== 'setModelExcluded')) {

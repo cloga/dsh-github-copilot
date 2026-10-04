@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 
 export const TURN_REQUEST_MODELS = 'githubCopilotTurnRequestModels'
 const count = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
@@ -14,6 +15,7 @@ export const TurnRequestModelsStateSchema = z.object({
 }).strict()
 type State = z.infer<typeof TurnRequestModelsStateSchema>
 declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionMap { githubCopilotTurnRequestModels: State }
   interface SessionProjectionStateMap { githubCopilotTurnRequestModels: State }
 }
 function record(value: unknown): value is Record<string, unknown> {
@@ -56,7 +58,7 @@ export function foldTurnRequestModels(state: State, event: unknown): State {
   }) }
 }
 export const turnRequestModelsDefinition = {
-  key: TURN_REQUEST_MODELS, stateVersion: 1, stateSchema: TurnRequestModelsStateSchema,
+  key: TURN_REQUEST_MODELS, stateVersion: 1, stateSchema: { parse: (value: unknown) => TurnRequestModelsStateSchema.parse(value) },
   init: (): State => ({ active: null, turns: [] }),
   apply: foldTurnRequestModels,
-}
+} satisfies ProjectionDefinition<typeof TURN_REQUEST_MODELS, State>
