@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.105 (prepared)
+
+- Renew expired account identity from visible Models and Credits through nonforcing, account-scoped ensure reads. Fresh ten-minute cache avoids requests; concurrent consumers share one bounded request and failed renewals retain a thirty-second cooldown (#309).
+- Revoke pending identity on credential changes, selection changes and disposal, rejecting late results even when credentials retain the same bytes. Explicit account switching/reauthorization still validates fresh identity.
+- Settle account-coherent Credits independently of slow identity renewal. Preserve Session account choices, running-turn pins, quota freshness semantics and metadata-only status reads.
+- Add strict additive global/Session ensure Remotes and sanitized timeout, TLS, network, authentication, rate-limit and HTTP diagnostics. No authenticated provider calls, installation or restart are implied by synthetic evidence.
+
 ## 0.4.0-alpha.104 (prepared)
 
 - Select an already authorized account inside Credits for this Session's subsequent turns, or follow the Models global default. Explicit same-as-default choices remain overrides; running turns keep their frozen account (#305).

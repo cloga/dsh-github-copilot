@@ -10,6 +10,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     githubCopilotAccounts: {
       get(): Promise<RemoteResult<CopilotAccountsView>>
       refreshIdentity(): Promise<RemoteResult<CopilotAccountsView>>
+      ensureIdentity(): Promise<RemoteResult<CopilotAccountsView>>
       add(): Promise<RemoteResult<CopilotAccountsView>>
       cancel(): Promise<RemoteResult<CopilotAccountsView>>
       reauthorize(accountId: string, expectedRevision: number): Promise<RemoteResult<CopilotAccountsView>>
@@ -51,7 +52,7 @@ export const CopilotAccountsViewSchema = z.object({
 })
 const contribution: TypertRemoteContribution = {
   package: 'dsh-github-copilot',
-  descriptors: ['get', 'refreshIdentity', 'add', 'cancel', 'switchAccount', 'removeAccount', 'reauthorize'].map(method => ({
+  descriptors: ['get', 'refreshIdentity', 'ensureIdentity', 'add', 'cancel', 'switchAccount', 'removeAccount', 'reauthorize'].map(method => ({
     id: `dsh-github-copilot:githubCopilotAccounts.${method}`,
     namespace: 'githubCopilotAccounts', service: 'githubCopilotAccounts', method,
     invocation: { kind: 'direct' },

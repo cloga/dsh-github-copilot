@@ -27,6 +27,7 @@ function remote(value = view()): CopilotAccountsRemote {
   expect(decoded.success, JSON.stringify(decoded)).toBe(true)
   return {
     get: vi.fn(async () => ok(value)), refreshIdentity: vi.fn(async () => ok(value)),
+    ensureIdentity: vi.fn(async () => ok(value)),
     add: vi.fn(async () => ok(value)), cancel: vi.fn(async () => ok(value)),
     switchAccount: vi.fn(async () => ok(value)), removeAccount: vi.fn(async () => ok(value)),
     reauthorize: vi.fn(async () => ok(value)),
@@ -58,7 +59,8 @@ describe('Models account management', () => {
     await mount(api, false)
     expect(text()).toBe('@demo-a')
     expect(document.querySelector('button')).toBeNull()
-    expect(api.refreshIdentity).toHaveBeenCalledOnce()
+    expect(api.ensureIdentity).toHaveBeenCalledOnce()
+    expect(api.refreshIdentity).not.toHaveBeenCalled()
     expect(api.add).not.toHaveBeenCalled()
   })
   it('requires a separate confirmation and uses the captured selector revision', async () => {
@@ -109,11 +111,11 @@ describe('Models account management', () => {
     })) })
     expect(text()).not.toContain('@demo-a')
     expect(button('Add GitHub account').disabled).toBe(true)
-    expect(api.refreshIdentity).toHaveBeenCalledOnce()
+    expect(api.ensureIdentity).toHaveBeenCalledOnce()
     await act(async () => { root.render(createElement(CopilotAccountsPanel, {
       remote: api, expanded: true, authorizationBusy: false, configured: false,
     })) })
-    expect(api.refreshIdentity).toHaveBeenCalledTimes(2)
+    expect(api.ensureIdentity).toHaveBeenCalledTimes(2)
   })
   it('disables switching and adding for unproven route/activity eligibility', async () => {
     const api = remote(view({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY' }))

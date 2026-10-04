@@ -21,10 +21,11 @@ describe('account Remote public gateway binding', () => {
       })
       let browserRecord: CredentialRecord | undefined
       const read = vi.fn(async (key: string) => {
+        if (key === 'llm-pi-ai/github-copilot') return undefined
         expect(key).toBe('client-connection/browser-session')
         return browserRecord
       })
-      host.provide('credentials', { listRecords: async () => [], readRecord: read,
+      host.provide('credentials', { listRecords: async () => [], readRecord: read, deleteRecord: vi.fn(),
         modifyRecord: async (key: string, mutate: (record: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>) => {
           expect(key).toBe('client-connection/browser-session')
           browserRecord = await mutate(browserRecord)
@@ -57,10 +58,15 @@ describe('account Remote public gateway binding', () => {
           diagnostic: 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE',
           accounts: [{ id: 'canonical', configured: false, identityState: 'unknown' }] },
       })
+      await expect(client.remote.githubCopilotAccounts.ensureIdentity()).resolves.toMatchObject({
+        ok: true, value: { state: 'error', activeAccountId: 'canonical',
+          diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' },
+      })
       await expect(client.remote.githubCopilotAccounts.switchAccount('canonical', 3)).resolves.toMatchObject({
         ok: true, value: { diagnostic: 'COPILOT_ACCOUNTS_CONFLICT' },
       })
-      expect(read.mock.calls.every(([key]) => key === 'client-connection/browser-session')).toBe(true)
+      expect(read.mock.calls.every(([key]) => key === 'client-connection/browser-session'
+        || key === 'llm-pi-ai/github-copilot')).toBe(true)
       await expect(client.remote.githubCopilotAccounts.reauthorize('11111111-1111-4111-8111-111111111111', 3))
         .resolves.toMatchObject({ ok: true, value: { diagnostic: 'COPILOT_ACCOUNTS_CONFLICT' } })
       await expect(client.remote.githubCopilotAccounts.removeAccount('arbitrary/key', 4)).resolves.toMatchObject(

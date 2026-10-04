@@ -50,6 +50,31 @@ function deferred<T>() {
 }
 
 describe('Copilot account usage chip', () => {
+  it('settles quota before a slow identity renewal and uses nonforcing ensure on visible refresh cadence', async () => {
+    const snapshot: CopilotAccountsView = {
+      state: 'ready', activeAccountId: 'canonical', revision: 1, writable: true, switchable: true,
+      accounts: [{ id: 'canonical', configured: true, identityState: 'unknown' }], notices: [],
+    }
+    const identity = deferred<{ ok: true; value: CopilotAccountsView }>()
+    const accountsRemote = {
+      get: vi.fn(async () => ({ ok: true as const, value: snapshot })),
+      ensureIdentity: vi.fn(() => identity.promise),
+      refreshIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot })),
+    }
+    await mount({ remote: remote(view({ accountId: 'canonical' })), accountsRemote, contextKey: 'slow-identity' })
+    expect(trigger().textContent).toContain('42.25')
+    await click(trigger())
+    expect(text()).not.toContain('Refreshing')
+    expect(accountsRemote.ensureIdentity).toHaveBeenCalledOnce()
+    expect(accountsRemote.refreshIdentity).not.toHaveBeenCalled()
+    await act(async () => { identity.resolve({ ok: true, value: {
+      ...snapshot, accounts: [{ id: 'canonical', configured: true, identityState: 'ready', identity: { login: 'renewed-user', userId: 1 } }],
+    } }) })
+    expect(text()).toContain('@renewed-user')
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(accountsRemote.ensureIdentity).toHaveBeenCalledTimes(2)
+    expect(accountsRemote.refreshIdentity).not.toHaveBeenCalled()
+  })
   it('switches only subsequent Session turns inside Credits and can restore inheritance', async () => {
     const B = '11111111-1111-4111-8111-111111111111'
     let explicit: string | undefined, revision = 1
@@ -72,6 +97,7 @@ describe('Copilot account usage chip', () => {
       sessionAccount: { get, set }, accountsRemote: {
         get: async () => ({ ok: true as const, value: snapshot().accounts }),
         refreshIdentity: async () => ({ ok: true as const, value: snapshot().accounts }),
+        ensureIdentity: async () => ({ ok: true as const, value: snapshot().accounts }),
       } })
     expect(button('Switch account')).toBeUndefined()
     await click(trigger())
@@ -101,13 +127,14 @@ describe('Copilot account usage chip', () => {
     expect(text()).not.toContain('Could not save')
   })
   it('shows current identity only in details without a Chat switching control', async () => {
-    const accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'> = {
+    const accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'> = {
       get: vi.fn(async () => ({ ok: true as const, value: {
         state: 'ready' as const, activeAccountId: 'canonical', revision: 2, writable: true, switchable: true,
         accounts: [{ id: 'canonical', configured: true, identityState: 'ready' as const, identity: { login: 'demo-user', userId: 1 } }],
         notices: [],
       } })),
       refreshIdentity: vi.fn(async function () { return accountsRemote.get() }),
+      ensureIdentity: vi.fn(async function () { return accountsRemote.get() }),
     }
     await mount({ remote: remote(view({ accountId: 'canonical' })), accountsRemote, contextKey: 'identity' })
     expect(trigger().textContent).not.toContain('demo-user')
@@ -121,6 +148,7 @@ describe('Copilot account usage chip', () => {
       accounts: [{ id: 'canonical', configured: true, identityState: 'ready' as const, identity: { login: 'demo-b', userId: 2 } }],
       notices: [] }
     const accountsRemote = { get: vi.fn(async () => ({ ok: true as const, value: snapshot })),
+      ensureIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot })),
       refreshIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot })) }
     await mount({ remote: remote(view({ accountId: '00000000-0000-4000-8000-000000000001' })), accountsRemote, contextKey: 'changed-account' })
     expect(trigger().textContent).not.toContain('42.25')
@@ -135,6 +163,7 @@ describe('Copilot account usage chip', () => {
     }
     const accountsRemote = {
       get: vi.fn(async () => ({ ok: true as const, value: snapshot })),
+      ensureIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot })),
       refreshIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot })),
     }
     await mount({ remote: remote(view({ accountId: 'canonical' })), accountsRemote, contextKey: 'identity-unavailable' })
@@ -155,6 +184,7 @@ describe('Copilot account usage chip', () => {
     })
     const accountsRemote = {
       get: vi.fn(async () => ({ ok: true as const, value: snapshot() })),
+      ensureIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot() })),
       refreshIdentity: vi.fn(async () => ({ ok: true as const, value: snapshot() })),
     }
     const late = deferred<ReturnType<typeof ok>>()

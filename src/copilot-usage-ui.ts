@@ -14,6 +14,7 @@ interface SessionAccountRemote {
   get(id: string): Promise<RemoteResult<SessionAccountView>>
   set(id: string, account: string | null, revision: number): Promise<RemoteResult<SessionAccountView>>
   refreshIdentity(id: string): Promise<RemoteResult<SessionAccountView>>
+  ensureIdentity(id: string): Promise<RemoteResult<SessionAccountView>>
   usage(id: string): Promise<RemoteResult<CopilotUsageView>>
   refreshUsage(id: string): Promise<RemoteResult<CopilotUsageView>>
 }
@@ -45,7 +46,8 @@ function isRemote(value: unknown): value is CopilotUsageRemote {
 }
 function isSessionRemote(value: unknown): value is SessionAccountRemote {
   return record(value) && typeof value.get === 'function' && typeof value.set === 'function'
-    && typeof value.refreshIdentity === 'function' && typeof value.usage === 'function' && typeof value.refreshUsage === 'function'
+    && typeof value.refreshIdentity === 'function' && typeof value.ensureIdentity === 'function'
+    && typeof value.usage === 'function' && typeof value.refreshUsage === 'function'
 }
 function isLocale(value: unknown): value is LocaleReader {
   return record(value) && typeof value.getLocale === 'function' && typeof value.subscribe === 'function'
@@ -75,7 +77,7 @@ function effectiveCopilot(projection: unknown): { provider: string; model: strin
 function Surface({ runtime, remote, accountsRemote, sessionRemote, locale, diagnostic }: {
   runtime: RuntimeProps
   remote: CopilotUsageRemote | undefined
-  accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'> | undefined
+  accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'> | undefined
   sessionRemote: SessionAccountRemote | undefined
   locale: LocaleReader | undefined
   diagnostic: (code: string) => void
@@ -101,6 +103,10 @@ function Surface({ runtime, remote, accountsRemote, sessionRemote, locale, diagn
         },
         refreshIdentity: async () => {
           const result = await sessionRemote.refreshIdentity(id)
+          return result.ok ? { ok: true as const, value: result.value.accounts } : result
+        },
+        ensureIdentity: async () => {
+          const result = await sessionRemote.ensureIdentity(id)
           return result.ok ? { ok: true as const, value: result.value.accounts } : result
         },
       },
@@ -133,7 +139,7 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
   const slots = candidate
   // Resolve a traced Remote once, not on each render or Session-model update.
   let remote: CopilotUsageRemote | undefined
-  let accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'> | undefined
+  let accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'> | undefined
   let sessionRemote: SessionAccountRemote | undefined
   try {
     const namespaces: unknown = ctx.remote
@@ -142,8 +148,9 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
       remote = face
     } else diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE')
     const accounts = record(namespaces) ? namespaces.githubCopilotAccounts : undefined
-    if (record(accounts) && typeof accounts.get === 'function' && typeof accounts.refreshIdentity === 'function') {
-      accountsRemote = accounts as Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'>
+    if (record(accounts) && typeof accounts.get === 'function' && typeof accounts.refreshIdentity === 'function'
+      && typeof accounts.ensureIdentity === 'function') {
+      accountsRemote = accounts as Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'>
     } else diagnostic('COPILOT_ACCOUNTS_REMOTE_UNAVAILABLE')
     const session = record(namespaces) ? namespaces.githubCopilotSessionAccount : undefined
     if (isSessionRemote(session)) sessionRemote = session

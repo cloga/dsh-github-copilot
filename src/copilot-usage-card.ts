@@ -17,7 +17,7 @@ export interface CopilotUsageRemote {
 }
 export interface CopilotUsageCardProps {
   remote?: CopilotUsageRemote
-  accountsRemote?: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity'>
+  accountsRemote?: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'>
   /** Changes revoke every in-flight read, including switches between Copilot routes. */
   contextKey: string
   locale?: string
@@ -116,7 +116,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const panel = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const lifecycle = useRef<{ active: boolean; generation: number; busy: boolean; save?: symbol }>({ active: false, generation: 0, busy: false })
-  const identityRead = useRef(false)
   const close = useCallback((restore = false) => {
     setOpen(false)
     if (restore) trigger.current?.focus()
@@ -133,13 +132,12 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     setFailed(false)
     try {
       const identityOperation = props.accountsRemote === undefined ? undefined
-        : force || !identityRead.current ? props.accountsRemote.refreshIdentity() : props.accountsRemote.get()
-      identityRead.current = true
-      const [result, identityResult] = await Promise.all([
+        : (force ? props.accountsRemote.refreshIdentity() : props.accountsRemote.ensureIdentity()).catch(() => undefined)
+      const [result, identityResult, sessionResult] = await Promise.all([
         force ? props.remote.refresh() : props.remote.get(),
-        identityOperation?.catch(() => undefined),
+        props.accountsRemote?.get().catch(() => undefined),
+        props.sessionAccount?.get(),
       ])
-      const sessionResult = props.sessionAccount === undefined ? undefined : await props.sessionAccount.get()
       if (!current()) return
       const sessionView = sessionResult?.ok ? SessionAccountViewSchema.safeParse(sessionResult.value) : undefined
       setSessionAccount(sessionView?.success ? sessionView.data : undefined)
@@ -155,6 +153,17 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         setView(undefined)
         setFailed(true)
       } else setView(parsed.data)
+      owner.busy = false
+      setBusy(false)
+      const renewed = await identityOperation
+      if (!current()) return
+      const renewedView = renewed?.ok === true ? accountsViewFrom(renewed.value) : undefined
+      if (renewedView !== undefined && renewedView.activeAccountId === identityView?.activeAccountId) {
+        setAccounts(renewedView)
+      } else if (props.accountsRemote !== undefined) {
+        setAccounts(undefined)
+        if (renewedView !== undefined) { setView(undefined); setFailed(true) }
+      }
     } catch {
       if (current()) { setView(undefined); setAccounts(undefined); setSessionAccount(undefined);
         setAccountFailed(props.sessionAccount !== undefined); setFailed(true) }
@@ -173,7 +182,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     setSavingAccount(false)
     setAccountFailed(false)
     setAccountSaveFailed(false)
-    identityRead.current = false
     setFailed(false)
     setBusy(false)
     setOpen(false)
@@ -192,7 +200,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       setView(undefined)
       setBusy(false)
       setFailed(false)
-      identityRead.current = false
       if (!accountPresentationChanges.pending()) void load(false)
     })
     return () => {
@@ -227,7 +234,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       setSessionAccount(parsed.data)
       setAccounts(parsed.data.accounts)
       setView(undefined)
-      identityRead.current = false
       setChoosingAccount(false)
       owner.save = undefined
       setSavingAccount(false)

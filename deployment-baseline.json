@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.104"
+    "version": "0.4.0-alpha.105"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -315,6 +315,7 @@
       "evidenceScope": "synthetic-public-services-native-adapter-and-ui-not-live-oauth-or-provider-access",
       "activation": "managed-only-explicit-account-selector",
       "sourceMarkers": [
+        {"file": "src/copilot-accounts-host.ts", "marker": "async ensureIdentityFor(accountId: string)"},
         {"file": "AGENTS.md", "marker": "Approved multi-account ownership extension (#297)"},
         {"file": "src/remote.ts", "marker": "...copilotAccountsRemote.descriptors"},
         {"file": "src/copilot-accounts-card.ts", "marker": "removeAccount(accountId: string, expectedRevision: number)"},
@@ -322,6 +323,8 @@
         {"file": "docs/copilot-accounts.md", "marker": "A mutable active-account lookup inside each store method is forbidden"}
       ],
       "tests": [
+        {"file": "tests/copilot-identity-refresh.spec.ts", "name": "renews expired identity once for account %s without changing metadata-only reads"},
+        {"file": "tests/copilot-usage-card.spec.ts", "name": "settles quota before a slow identity renewal and uses nonforcing ensure on visible refresh cadence"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "never writes a captured A refresh into B after an external selection change"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "preserves uncertain commit ahead of missing-slot recovery"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "rechecks externally started canonical authorization before selector CAS"},

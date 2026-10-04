@@ -200,7 +200,7 @@ These images render the actual candidate components with synthetic accounts
 and quota in an isolated browser. They are not real authorization, supplier
 availability or loaded Desktop evidence.
 
-The separate `githubCopilotAccounts` namespace exposes `get`,
+The separate `githubCopilotAccounts` namespace exposes `get`, `ensureIdentity`,
 `refreshIdentity`, `add`, `cancel`, `switchAccount`, `reauthorize` and
 `removeAccount`. Existing Remote descriptors are retained. The removal method
 cannot be named `remove`: official rc.2 reserves that inherited service name
@@ -231,8 +231,26 @@ identity, grants or quota between surfaces. Failed reads never restore the
 previous username as current.
 Missing quota is not zero; pooled, stale, request-based and credit-based
 snapshots retain their distinct meanings. Do not claim cross-app aggregation
-or relabel request counts as AI credits. No new periodic account network poll
-or inference is introduced.
+or relabel request counts as AI credits.
+
+Visible Models and Credits surfaces ensure identity on mount, visibility return
+and their sixty-second display cadence. `get` and `viewForAccount` remain
+metadata-only. Nonforcing ensure reuses a fresh ten-minute identity, joins
+same-account in-flight work and observes a thirty-second failure cooldown;
+explicit **Refresh account information** bypasses cooldown but joins active
+work. There is no render-driven request loop or background polling after
+unmount. Credential changes revoke identity and pending work; cancelled or
+expired identity is never shown as current. Session ensure retains explicit
+Agent lookup and rechecks account selection before returning.
+
+Quota settles independently of identity renewal only after account-coherent
+metadata checks. Identity failures cannot turn account quota into zero or
+discard an otherwise valid same-account reading. Sanitized diagnostics separate
+timeout, certificate, network, auth rejection, rate limiting and other HTTP
+failures; no raw response/error text or credentials enter the Remote. These
+diagnostics do not establish the cause of earlier screenshots or prove live
+supplier health. Account switching, duplicate checks and reauthorization still
+require fresh authenticated identity validation, not the presentation cache.
 
 ## Acceptance gates
 
