@@ -31,6 +31,12 @@
 
 图片来自实际已发布 Client 组件和隔离浏览器中的模拟模型，仅说明界面，不证明真实登录、模型可用性、搜索或 Desktop 已加载。
 
+![在 Models 中切换已保存的 GitHub 账号](./docs/images/copilot-accounts.png)
+
+![Credits 中只读展示当前 GitHub 身份](./docs/images/copilot-accounts-credits.png)
+
+账号图片来自实际候选组件和隔离浏览器中的模拟账号及额度，仅说明 Models 是唯一切换入口、Credits 只读展示身份，不证明真实授权、供应方可用性、真实账号数据或 Desktop 已加载。
+
 ## 安装与登录
 
 使用已校验的固定版本、指定 profile 和获准的包源。不需要 `copilot2api`、外部网关、手工粘贴 GitHub token、占位 key 或另装 `dsh-web-search-provider`。

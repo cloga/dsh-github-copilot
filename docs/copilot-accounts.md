@@ -150,6 +150,14 @@ account information** after work ends to update the mounted view. With only
 one saved account, first use **Add GitHub account**; a **Switch** control is
 shown only for another saved account. No running work is cancelled for this.
 
+`COPILOT_ACCOUNTS_BUSY` is transient: each account status read reevaluates
+current managed Agent activity, operation leases and authorization. A rejected
+switch must not remain busy after that work settles. Reading status does not
+refresh credentials or retry the rejected switch. In Models, use **Refresh
+account information** after work ends to update the mounted view. With only
+one saved account, first use **Add GitHub account**; a **Switch** control is
+shown only for another saved account. No running work is cancelled for this.
+
 Failed preparation leaves the old selector unchanged. A committed selector
 followed by failed readback is reported as uncertain, never successful and
 never automatically rolled back. Cross-process/external mutations are guarded

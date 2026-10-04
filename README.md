@@ -31,7 +31,13 @@ Identity display accepts GitHub Enterprise Managed User names, including their u
 
 ![Account controls and model preferences from the published Client](./docs/images/copilot-model-preferences.png)
 
-Actual published Client components with synthetic models in an isolated browser. These screenshots demonstrate presentation, not live sign-in, model availability, search or loaded Desktop state.
+Actual published Client components with synthetic models in an isolated browser. This screenshot demonstrates presentation, not live sign-in, model availability, search or loaded Desktop state.
+
+![Switching between saved GitHub accounts in Models](./docs/images/copilot-accounts.png)
+
+![Read-only current GitHub identity in Credits](./docs/images/copilot-accounts-credits.png)
+
+The account images render the actual candidate components with synthetic accounts and quota in an isolated browser. They demonstrate the Models-only switching flow and read-only Credits identity, not real authorization, supplier availability, live account data or loaded Desktop state.
 
 ## Install and sign in
 
