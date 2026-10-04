@@ -95,7 +95,7 @@ export function migrationStatus(ctx: Context): GitHubCopilotMigrationStatus {
   const agents = api(ctx, 'agents', ['list'])
   const projections = api(ctx, 'sessionProjections', ['stateOf'])
   const defaults = api(ctx, 'agentDefaultModel', ['currentSelection'])
-  const settings = api(ctx, 'settings', ['describe', 'get', 'mutate'])
+  const settings = api(ctx, 'settings', ['describe', 'mutate'])
   const llm = api(ctx, 'llm', ['listProviders'])
   result.capabilities.agentsList = agents !== undefined
   result.capabilities.sessionProjections = projections !== undefined
@@ -147,15 +147,18 @@ export function migrationStatus(ctx: Context): GitHubCopilotMigrationStatus {
     try {
       const descriptors = array(call(settings, 'describe', { redactSecrets: true }))
       const found = new Set<string>()
+      let providerConfig: unknown
       for (const value of descriptors) {
         const descriptor = object(value)
         const ns = text(descriptor.ns)
         if (ns !== 'llm-pi-ai' && ns !== 'github-copilot') continue
         if (found.has(ns) || !Number.isSafeInteger(descriptor.revision) || (descriptor.revision as number) < 0) throw new Error('Invalid settings evidence')
         found.add(ns)
+        if (ns === 'llm-pi-ai') providerConfig = descriptor.value
       }
       if (found.size !== 2) throw new Error('Unregistered settings')
-      const config = object(call(settings, 'get', 'llm-pi-ai'))
+      const config = object(typeof settings.get === 'function'
+        ? call(settings, 'get', 'llm-pi-ai') : providerConfig)
       const providers = config.providers === undefined ? undefined : object(config.providers)
       const profile = providers?.[GITHUB_COPILOT_PROVIDER_ID]
       if (profile !== undefined) object(profile)
