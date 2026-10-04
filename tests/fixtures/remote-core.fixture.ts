@@ -56,9 +56,17 @@ it.each(['source', 'strict'] as const)('binds explicit replay recovery through n
     expect(JSON.stringify(result)).not.toContain('synthetic-private')
     busy.add(agent.session)
     await expect(remote.setEnabled(agent.id, result.value.revision, true)).resolves.toMatchObject({ ok: false })
+    await expect(remote.authorize(agent.id, result.value.revision, 'next-turn')).resolves.toMatchObject({ ok: false })
     busy.delete(agent.session)
     await expect(remote.setEnabled(agent.id, result.value.revision, true))
       .resolves.toMatchObject({ ok: true, value: { state: 'enabled' } })
+    await expect(remote.authorize(agent.id, result.value.revision, 'next-turn'))
+      .resolves.toMatchObject({ ok: true, value: { state: 'enabled', duration: 'next-turn' } })
+    const payload = { input: [{ type: 'reasoning', encrypted_content: 'synthetic-private', summary: [] }], store: false }
+    expect(store.prepare(agent.session, 'proof', 'synthetic-model', 7)(payload)).toEqual({ ...payload, input: [] })
+    store.endTurn(agent.session, 7)
+    await expect(remote.get(agent.id)).resolves.toMatchObject({ ok: true, value: { state: 'available' } })
+    await expect(remote.authorize('missing', result.value.revision, 'session')).resolves.toMatchObject({ ok: false })
     await expect(remote.get('missing')).resolves.toMatchObject({ ok: false })
     await expect(remote.setEnabled(agent.id, '00000000-0000-4000-8000-000000000001', false))
       .resolves.toMatchObject({ ok: false })
@@ -225,7 +233,7 @@ it('mounts authorization, role and search-catalog Remotes on the exact target Cl
     expect(remote.descriptors.map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'setEnabled',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'authorize', 'setEnabled',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot' && item.method !== 'setModelExcluded')) {
       expect(descriptor.result.mode).toBe('strict')

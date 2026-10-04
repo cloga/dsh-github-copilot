@@ -396,7 +396,7 @@ describe('tsdown client artifact', () => {
     expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'setEnabled',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'get', 'authorize', 'setEnabled',
     ])
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
@@ -499,6 +499,11 @@ describe('tsdown client artifact', () => {
       .resolves.toEqual({ ok: true, value: { ...recovery, state: 'enabled' } })
     expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotReplayRecovery/setEnabled',
       { args: { agentId: 'explicit-master', revision: recovery.revision, enabled: true } }, expect.any(AbortSignal))
+    rpcCall.mockResolvedValueOnce({ ok: true, value: { ...recovery, state: 'enabled', duration: 'next-turn' } })
+    await expect(ctx.remote.githubCopilotReplayRecovery.authorize('explicit-master', recovery.revision, 'next-turn'))
+      .resolves.toEqual({ ok: true, value: { ...recovery, state: 'enabled', duration: 'next-turn' } })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotReplayRecovery/authorize',
+      { args: { agentId: 'explicit-master', revision: recovery.revision, duration: 'next-turn' } }, expect.any(AbortSignal))
 
     const statusDescriptor = contributions[0]!.descriptors.find(
       descriptor => descriptor.method === 'status',

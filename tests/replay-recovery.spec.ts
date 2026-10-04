@@ -4,6 +4,38 @@ import { ReplayRecoveryStore } from '../src/replay-recovery.ts'
 const item = (value: string) => ({ type: 'reasoning', encrypted_content: value, summary: [] })
 const payload = (...input: unknown[]) => ({ input, store: false })
 describe('explicit replay recovery', () => {
+  it('admits only the next matching native turn, including its steps and retries', () => {
+    const store = new ReplayRecoveryStore(), owner = {}, body = payload(item('synthetic'))
+    store.recordFailure(owner, 'proof', 'model', JSON.stringify(body))
+    const view = store.view(owner, 'proof')
+    if (view.state === 'unavailable') throw new Error('missing evidence')
+    store.authorize(owner, 'proof', view.revision, 'next-turn')
+    expect(store.prepare(owner, 'proof', 'other', 2)(body)).toBe(body)
+    expect(store.prepare(owner, 'proof', 'model')(body)).toBe(body)
+    store.endTurn(owner, 2)
+    expect(store.view(owner, 'proof').state).toBe('enabled')
+    expect(store.prepare(owner, 'proof', 'model', 3)(body)).toEqual(payload())
+    expect(store.prepare(owner, 'proof', 'model', 3)(body)).toEqual(payload())
+    expect(store.prepare(owner, 'proof', 'model', 4)(body)).toBe(body)
+    store.endTurn(owner, 2)
+    expect(store.view(owner, 'proof').state).toBe('enabled')
+    store.endTurn(owner, 3)
+    expect(store.view(owner, 'proof').state).toBe('available')
+    expect(store.prepare(owner, 'proof', 'model', 4)(body)).toBe(body)
+  })
+  it('keeps session consent across turns but requires confirmation for fresh failures', () => {
+    const store = new ReplayRecoveryStore(), owner = {}, body = payload(item('synthetic'))
+    store.recordFailure(owner, 'proof', 'model', JSON.stringify(body))
+    const view = store.view(owner, 'proof')
+    if (view.state === 'unavailable') throw new Error('missing evidence')
+    store.authorize(owner, 'proof', view.revision, 'session')
+    expect(store.prepare(owner, 'proof', 'model', 1)(body)).toEqual(payload())
+    store.endTurn(owner, 1)
+    expect(store.prepare(owner, 'proof', 'model', 2)(body)).toEqual(payload())
+    store.recordFailure(owner, 'proof', 'model', JSON.stringify(body))
+    expect(store.view(owner, 'proof').state).toBe('available')
+    expect(() => store.authorize(owner, 'proof', view.revision, 'next-turn')).toThrow('STALE_EVIDENCE')
+  })
   it('keeps default replay and requires a revision-bound confirmation', () => {
     const store = new ReplayRecoveryStore(), owner = {}, body = payload(item('synthetic-a'))
     store.recordFailure(owner, 'proof', 'model', JSON.stringify(body))
@@ -45,7 +77,7 @@ describe('explicit replay recovery', () => {
     let now = 0
     const store = new ReplayRecoveryStore(() => now), owner = {}
     store.recordFailure(owner, 'proof', 'model', JSON.stringify(payload(item('synthetic-secret'))))
-    expect(Object.keys(store.view(owner, 'proof')).sort()).toEqual(['itemCount', 'model', 'revision', 'state'])
+    expect(Object.keys(store.view(owner, 'proof')).sort()).toEqual(['expiresAt', 'itemCount', 'model', 'revision', 'state'])
     expect(JSON.stringify(store.view(owner, 'proof'))).not.toContain('synthetic-secret')
     now = 3_600_000
     expect(store.view(owner, 'proof')).toEqual({ state: 'unavailable' })

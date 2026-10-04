@@ -132,7 +132,7 @@ HTTP/SSE liveness 默认区分 5 分钟字节 idle 和有界的 10 分钟助手�
 | 选模未知／不可读 | 区分记录丢失与读取失败；Retry 只重读 |
 | 缺失／取消后的 Turn Usage | 查看[用量限制](./docs/copilot-usage.md)，不推断零计费 |
 | 历史加载报 `github-copilot/auto-model-decision` | 使用[独立副本、先检查的恢复](./docs/automatic-model-routing.md#recovering-affected-histories)；未经批准且未停写不得替换实际历史 |
-| AUTH、Responses replay scope 或 TLS 错误 | 查看[请求诊断](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics)及[额度 TLS 边界](./docs/copilot-usage.md#account-data-boundary)。精确 scope 拒绝后，会话的**回放恢复**可在明确接受损失后启用，仅跳过匹配的旧加密项及项内摘要，默认关闭。不改磁盘历史、不自动重试，也不是 408 修复。不自动重置凭据或关闭 TLS。 |
+| AUTH、Responses replay scope 或 TLS 错误 | 查看[请求诊断](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics)及[额度 TLS 边界](./docs/copilot-usage.md#account-data-boundary)。精确 scope 拒绝后，**回放恢复**会在当前轮结束或打开会话时自动提示。查看旧加密项及项内摘要的损失后，可选择**仅下一轮使用恢复**（默认选项）或**在本会话内继续使用**；两者都要求验证状态不变，最长不超过证据产生后一小时。恢复默认关闭，确认授权也不发送消息，需另行使用原生发送或重试。不改磁盘历史，也不是 408 修复。不自动重置凭据或关闭 TLS。 |
 | Hosted search 不可用 | 检查账号／协议／probe 诊断；旧 override 保留至显式 reset |
 
 ## 所有权与深入阅读
