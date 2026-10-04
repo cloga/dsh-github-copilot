@@ -49,6 +49,11 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.context?.tests?.includes('tests/fixtures/turn-usage-core.fixture.ts')
     && contract.tasks.context?.risk?.includes('Never filter or delay shared native usage'),
   'context diagnostics must preserve shared native usage and exact-source accounting evidence')
+  require(Object.values(contract.tasks).some(task => task.read?.includes('src/request-upload-evidence.ts')
+    && task.tests?.includes('tests/request-upload-evidence.spec.ts')
+    && task.requestBodyEvidenceBoundary?.includes('supplier receipt')
+    && task.requestBodyEvidenceBoundary?.includes('dispose subscriptions')),
+  'request upload diagnostics must retain scoped lifecycle ownership and local-only evidence limits')
   for (const [name, task] of Object.entries(contract.tasks)) {
     require(/^[a-z]+$/.test(name), 'invalid task id')
     require(typeof task.purpose === 'string' && typeof task.risk === 'string', `${name} needs purpose and risk`)

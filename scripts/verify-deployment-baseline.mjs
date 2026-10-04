@@ -329,6 +329,9 @@ assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/request-body-
   'managed request-body timeout guidance must retain explicit source evidence')
 assert(publicAdapter.tests.some(item => item.file === 'tests/request-body-timeout.spec.ts'),
   'managed request-body timeout observation must retain bounded/cancellation regression evidence')
+assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/request-upload-evidence.ts' && item.marker === 'createRequestUploadObserver')
+  && publicAdapter.tests.some(item => item.file === 'tests/request-upload-evidence.spec.ts'),
+  'managed upload evidence must retain request-scoped public-event regression evidence')
 assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/copilot-stream-liveness.ts' && item.marker === 'COPILOT_STREAM_IDLE_TIMEOUT'),
   'managed byte-idle handling must retain explicit source evidence')
 for (const name of [

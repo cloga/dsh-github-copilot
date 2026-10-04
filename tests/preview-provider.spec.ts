@@ -19,6 +19,8 @@ import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW } from '../src/copilot-id
 import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
 import { requestBodyEvidence } from '../src/request-body-evidence.ts'
 import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
+import { createServer } from 'node:http'
+import * as uploadEvidence from '../src/request-upload-evidence.ts'
 
 // Preserve the real factory by default; one observer identity test replaces only
 // its returned stream entrypoint, without modifying the installed ESM module.
@@ -398,7 +400,7 @@ describe('managed upload-timeout observation', () => {
         })
         for await (const _event of stream) { /* Native error remains SDK-owned. */ }
         expect((await stream.result()).stopReason).toBe('error')
-        expect(observer.mock.lastCall?.[3]).toEqual({ protocol: api, responseHeadersMs: 75 })
+        expect(observer.mock.lastCall?.[3]).toEqual({ protocol: api, responseHeadersMs: 75, upload: { state: 'unavailable' } })
         expect(diagnostic.mock.lastCall?.[0]).toContain('75 ms (round trip, not upload duration)')
         expect(diagnostic.mock.lastCall?.[0]).toContain(`image blocks ${Buffer.byteLength(JSON.stringify(image))}`)
         expect(diagnostic.mock.lastCall?.[0]).toContain(`opaque replay ${api === 'openai-completions' ? 0 : Buffer.byteLength(JSON.stringify('PRIVATE_OPAQUE'))}`)
@@ -443,6 +445,73 @@ describe('managed upload-timeout observation', () => {
       expect(response.bodyUsed).toBe(true)
     },
   )
+  it('records real local Fetch stages on a verified native timeout and disposes the observer on settlement', async () => {
+    const item = descriptor('openai-responses'), diagnostic = vi.fn()
+    const { provider, models } = createAccountProvider([item], {
+      ...accountGuard(item.id), onRequestBodyTimeout: diagnostic,
+    }, baseURL)
+    const received: Buffer[] = []
+    const failure = { code: 'user_request_timeout',
+      message: 'Timed out reading request body. Try again, or use a smaller request size.' }
+    const server = createServer(async (request, response) => {
+      for await (const chunk of request) received.push(Buffer.from(chunk))
+      response.writeHead(408, { 'content-type': 'application/json' })
+      response.end(JSON.stringify(failure))
+    })
+    const observer = uploadEvidence.createRequestUploadObserver()
+    const close = vi.spyOn(observer, 'close')
+    const factory = vi.spyOn(uploadEvidence, 'createRequestUploadObserver').mockReturnValue(observer)
+    let original: Response | undefined, sent = ''
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const address = server.address()
+      if (address === null || typeof address === 'string') throw new Error('LOCAL_SERVER_ADDRESS')
+      const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        sent = String(init?.body)
+        original = await fetch(`http://127.0.0.1:${address.port}`, init)
+        return original
+      })
+      const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [{
+        role: 'user', content: 'Synthetic local-only request.', timestamp: 0,
+      }] }), { apiKey: 'synthetic-account-token', maxRetries: 0, fetch: fetcher })
+      for await (const _event of stream) { /* Preserve native error delivery. */ }
+      expect((await stream.result()).stopReason).toBe('error')
+      expect(fetcher).toHaveBeenCalledTimes(1)
+      expect(Buffer.concat(received).toString()).toBe(sent)
+      expect(original?.status).toBe(408)
+      expect(original?.bodyUsed).toBe(true)
+      expect(close).toHaveBeenCalledTimes(1)
+      expect(observer.snapshot()).toMatchObject({ state: 'observed', bodyWrite: 'observed' })
+      expect(diagnostic.mock.lastCall?.[0]).toMatch(/local body-write complete at \d+ ms/u)
+      expect(diagnostic.mock.lastCall?.[0]).toContain('not upload duration, kernel ACK, supplier receipt or execution')
+    } finally {
+      observer.close()
+      factory.mockRestore()
+      server.closeAllConnections()
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
+  })
+  it('disposes native upload subscriptions when Fetch rejects without replacing native failure', async () => {
+    const item = descriptor('openai-responses'), diagnostic = vi.fn()
+    const { provider, models } = createAccountProvider([item], {
+      ...accountGuard(item.id), onRequestBodyTimeout: diagnostic,
+    }, baseURL)
+    const observer = uploadEvidence.createRequestUploadObserver()
+    const close = vi.spyOn(observer, 'close')
+    const factory = vi.spyOn(uploadEvidence, 'createRequestUploadObserver').mockReturnValue(observer)
+    const fetcher = vi.fn(async () => { throw new Error('SYNTHETIC_FETCH_FAILURE') })
+    try {
+      const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+        apiKey: 'synthetic-account-token', maxRetries: 0, fetch: fetcher,
+      })
+      for await (const _event of stream) { /* Native SDK owns network failure conversion. */ }
+      expect((await stream.result()).stopReason).toBe('error')
+      expect(fetcher).toHaveBeenCalledTimes(1)
+      expect(close).toHaveBeenCalledTimes(1)
+      expect(diagnostic.mock.calls).toEqual([[undefined]])
+      expect(observer.snapshot()).toEqual({ state: 'unavailable' })
+    } finally { observer.close(); factory.mockRestore() }
+  })
 })
 
 describe('managed Responses replay compatibility', () => {

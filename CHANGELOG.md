@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.97 (prepared)
+
+- Add request-scoped public native body-write/header timing and optional TLS ALPN/Node buffer observations to exact verified Copilot request-body timeout diagnostics (#291).
+- Keep unavailable, ambiguous and bounded-work evidence explicit; dispose subscriptions when Fetch settles. Local submission is not upload duration, kernel ACK or supplier receipt.
+- Preserve Fetch arguments, Response/errors, payload/replay/history, connection/proxy/dispatcher and native retry behavior. This supplies future failure evidence, not a demonstrated supplier 408 cure.
+
 ## 0.4.0-alpha.96 (prepared)
 
 - Surface verified replay-recovery evidence automatically when an eligible Session opens or its native turn settles; ordinary conversations remain uncluttered (#289).
