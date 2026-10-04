@@ -3,7 +3,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { ReplayRecoveryStore } from './replay-recovery.ts'
-import type { ReplayRecoveryView } from './replay-recovery-types.ts'
+import type { ReplayRecoveryDuration, ReplayRecoveryView } from './replay-recovery-types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -22,6 +22,11 @@ export class ReplayRecoveryController extends TypertRemoteService {
   setEnabled(agent: Agent, revision: string, enabled: boolean): ReplayRecoveryView {
     if (this.busy.has(agent.session)) throw new Error('COPILOT_REPLAY_RECOVERY_TURN_ACTIVE')
     return this.store.setEnabled(agent.session, this.proof(), revision, enabled)
+  }
+  @Remote
+  authorize(agent: Agent, revision: string, duration: ReplayRecoveryDuration): ReplayRecoveryView {
+    if (this.busy.has(agent.session)) throw new Error('COPILOT_REPLAY_RECOVERY_TURN_ACTIVE')
+    return this.store.authorize(agent.session, this.proof(), revision, duration)
   }
 }
 
@@ -44,7 +49,10 @@ export function installReplayRecovery(ctx: Context, proof: () => string | undefi
     return result
   })
   const removeEvents = ctx.on('session/event', (session, event) => {
-    if (event.type === 'turn/end') { busy.delete(session); currentRequests.delete(session) }
+    if (event.type === 'turn/end') {
+      store.endTurn(session, event.data.turn)
+      busy.delete(session); currentRequests.delete(session)
+    }
   })
   const removeAgent = ctx.on('agent/disposed', ({ agent }) => {
     store.remove(agent.session); busy.delete(agent.session); currentRequests.delete(agent.session)
@@ -56,8 +64,9 @@ export function installReplayRecovery(ctx: Context, proof: () => string | undefi
         || request.provider !== 'github-copilot-preview') return undefined
       const binding = requests.get(request.signal)
       const currentProof = proof()
-      if (!binding || binding.session.id !== request.sessionId || !busy.has(binding.session) || currentProof === undefined) return undefined
-      const transform = store.prepare(binding.session, currentProof, request.model)
+      if (!binding || binding.session.id !== request.sessionId || !busy.has(binding.session) || currentProof === undefined
+        || currentRequests.get(binding.session) !== request.signal) return undefined
+      const transform = store.prepare(binding.session, currentProof, request.model, binding.turn)
       const current = () => active && !request.signal?.aborted && proof() === currentProof
         && currentRequests.get(binding.session) === request.signal && busy.has(binding.session)
       return {

@@ -460,7 +460,7 @@ describe('plugin-owned account Copilot route', () => {
       expect(firstCache).not.toBe(secondCache)
       await consume(firstSignal.signal, 'synthetic-session-a')
       expect(begin.mock.instances[2]).toBe(firstCache)
-      harness.ctx.emit('session/event', { id: 'synthetic-session-a' } as never, { type: eventType } as never)
+      harness.ctx.emit('session/event', { id: 'synthetic-session-a' } as never, { type: eventType, data: { turn: 1, step: 1 } } as never)
       expect(dispose).toHaveBeenCalledTimes(1)
       await consume(secondSignal.signal, 'synthetic-session-b')
       expect(begin.mock.instances[3]).toBe(secondCache)
@@ -1391,7 +1391,7 @@ describe('plugin-owned account Copilot route', () => {
       await harness.ctx.waterfall(scope, 'agent/request', { agent, turn, step: 1, signal },
         async () => ({ provider: PREVIEW, model: MODEL }))
       const result = await call(harness.ctx, { signal, sessionId: agent.session.id, messages })
-      harness.ctx.emit('session/event', agent.session, { type: 'turn/end' } as never)
+      harness.ctx.emit('session/event', agent.session, { type: 'turn/end', data: { turn: 1 } } as never)
       return result
     }
     expect((await run(1)).assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })

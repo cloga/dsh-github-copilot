@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.96 (prepared)
+
+- Surface verified replay-recovery evidence automatically when an eligible Session opens or its native turn settles; ordinary conversations remain uncluttered (#289).
+- Add explicit next-matching-turn or bounded Session consent, defaulting the choice to one turn. All native steps/retries share that turn's authorization, which is consumed at turn end. Confirmation never sends or retries a message.
+- Preserve exact-item/proof guards, old Remote identities and native history ownership. Add native gateway and desktop/mobile component coverage, local dismissal, explicit read failures and expiry updates. This is not a supplier 408 fix.
+
 ## 0.4.0-alpha.95 (prepared)
 
 - Preserve native usage and chunk order before restoring dispatch-local byte-idle or replay errors (#285). Previously the owned error could be thrown before the SDK's terminal usage, discarding both failed-zero and real nonzero samples.

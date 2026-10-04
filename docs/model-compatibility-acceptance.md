@@ -91,11 +91,26 @@ IDs does not prove encrypted replay is portable.
 ### Explicit session replay recovery
 
 After an exact verified managed Responses scope rejection, **Replay recovery**
-in that session's composer can offer the failed request's old encrypted items.
-Open it, read the evidence, wait for the active turn to finish, choose **Review
-activation**, then **Accept loss and enable**. It does not send a message or
-retry the failed request. The user chooses whether to submit a subsequent turn.
-The default remains complete native replay.
+in that session's composer automatically offers the failed request's old
+encrypted items on opening the eligible session, when its native `running`
+snapshot settles, or when its `lastAgentError` changes while idle. These public
+Session snapshot changes trigger read-only Host evidence reads, not model calls,
+history reads, new durable events or polling. Normal sessions show no notice.
+Dismissal is local to the mounted model/session and evidence revision; a new
+failure can reappear. Read errors remain distinct from missing evidence.
+
+Choose **Review recovery options**, then **Next matching turn only** (the
+default choice) or **Continue in this session**, and **Accept loss and authorize**.
+This does not send a message or retry the failed request. Use the native Send or
+Retry control separately; the plugin adds no competing sender. Complete native
+replay remains the default until explicit consent.
+
+Next-turn consent is admitted on the next bound, matching-model native request
+and covers all steps and native retries of that turn, not just one HTTP attempt.
+It is consumed at that turn's `turn/end`, including cancelled/failed turns.
+Other models, purposes and unbound requests cannot consume it. Session consent
+survives turn endings but shares the same bounded evidence/proof lifetime.
+Controls are disabled during a native turn; Host checks remain authoritative.
 
 This is lossy recovery, not a supplier-scope repair. Only complete normalized
 encrypted reasoning items whose entire serialized fingerprints match that
@@ -107,8 +122,12 @@ requires fresh confirmation rather than broadening enabled omission silently.
 
 Evidence is bounded to 64 sessions, 512 distinct items per session, and one
 hour in the current Host. Only hashes, a model label and confirmation metadata
-are retained, never opaque payloads. The Client receives count/model/state and
-an opaque revision only. Token/account/metadata proof discontinuity, expiry,
+are retained, never opaque payloads. The Client receives count/model/state,
+an opaque revision, optional duration and evidence expiry only. The original
+`get`/`setEnabled` descriptors retain their identities; `setEnabled(true)` still
+means bounded session consent, and additive `authorize` selects a duration.
+A one-shot expiry read updates the mounted notice, not a polling timer.
+Token/account/metadata proof discontinuity, expiry,
 session disposal or Host restart revokes evidence; an old error on disk cannot
 create a candidate. Re-read status after these changes. Disabling affects
 future requests and does not undo answers already generated.

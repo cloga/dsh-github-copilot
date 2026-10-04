@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { requestBodyEvidence } from './request-body-evidence.ts'
-import type { ReplayRecoveryView } from './replay-recovery-types.ts'
+import type { ReplayRecoveryDuration, ReplayRecoveryView } from './replay-recovery-types.ts'
 
 interface Evidence {
   readonly proof: string
@@ -9,6 +9,8 @@ interface Evidence {
   readonly revision: string
   readonly at: number
   enabled: boolean
+  duration?: ReplayRecoveryDuration
+  turn?: number
 }
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -45,7 +47,8 @@ export class ReplayRecoveryStore {
   view(owner: object, proof: string | undefined): ReplayRecoveryView {
     const state = this.current(owner, proof)
     return state ? { state: state.enabled ? 'enabled' : 'available', revision: state.revision,
-      itemCount: state.hashes.size, model: state.model } : { state: 'unavailable' }
+      itemCount: state.hashes.size, model: state.model, expiresAt: state.at + 3_600_000,
+      ...(state.enabled && state.duration ? { duration: state.duration } : {}) } : { state: 'unavailable' }
   }
   recordFailure(owner: object, proof: string, model: string, body: string | undefined): void {
     const hashes = new Set(parsed(body).input.map(hash).filter((value): value is string => value !== undefined))
@@ -57,14 +60,34 @@ export class ReplayRecoveryStore {
     if (this.owners.size > 64) this.owners.delete(this.owners.keys().next().value!)
   }
   setEnabled(owner: object, proof: string | undefined, revision: string, enabled: boolean): ReplayRecoveryView {
+    if (enabled) return this.authorize(owner, proof, revision, 'session')
     const state = this.current(owner, proof)
     if (!state || revision !== state.revision) throw new Error('COPILOT_REPLAY_RECOVERY_STALE_EVIDENCE')
-    state.enabled = enabled
+    state.enabled = false
     return this.view(owner, proof)
   }
-  prepare(owner: object, proof: string, model: string): (payload: unknown) => unknown {
+  authorize(owner: object, proof: string | undefined, revision: string, duration: ReplayRecoveryDuration): ReplayRecoveryView {
     const state = this.current(owner, proof)
-    const admitted = state?.enabled && state.model === model ? state.hashes : undefined
+    if (!state || revision !== state.revision) throw new Error('COPILOT_REPLAY_RECOVERY_STALE_EVIDENCE')
+    state.enabled = true
+    state.duration = duration
+    delete state.turn
+    return this.view(owner, proof)
+  }
+  endTurn(owner: object, turn: number): void {
+    const state = this.owners.get(owner)
+    if (state?.duration === 'next-turn' && state.turn === turn) state.enabled = false
+  }
+  prepare(owner: object, proof: string, model: string, turn?: number): (payload: unknown) => unknown {
+    const state = this.current(owner, proof)
+    let admitted: ReadonlySet<string> | undefined
+    if (state?.enabled && state.model === model) {
+      if (state.duration !== 'next-turn') admitted = state.hashes
+      else if (turn !== undefined && Number.isSafeInteger(turn) && turn >= 0) {
+        state.turn ??= turn
+        if (state.turn === turn) admitted = state.hashes
+      }
+    }
     return payload => {
       if (!admitted) return payload
       if (this.current(owner, proof) !== state) throw new Error('COPILOT_REPLAY_RECOVERY_REVOKED')

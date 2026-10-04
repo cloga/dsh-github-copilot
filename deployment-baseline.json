@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.95"
+    "version": "0.4.0-alpha.96"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -690,13 +690,16 @@
         {"file": "src/replay-recovery-host.ts", "marker": "extends TypertRemoteService"},
         {"file": "src/replay-recovery-host.ts", "marker": "COPILOT_REPLAY_RECOVERY_TURN_ACTIVE"},
         {"file": "src/replay-recovery-remote.ts", "marker": "githubCopilotReplayRecovery.setEnabled"},
-        {"file": "src/replay-recovery-ui.ts", "marker": "Accept loss and enable"}
+        {"file": "src/replay-recovery-remote.ts", "marker": "githubCopilotReplayRecovery.authorize"},
+        {"file": "src/replay-recovery-ui.ts", "marker": "Accept loss and authorize"}
       ],
       "tests": [
         {"file": "tests/replay-recovery.spec.ts", "name": "keeps default replay and requires a revision-bound confirmation"},
         {"file": "tests/replay-recovery.spec.ts", "name": "preserves source, fresh reasoning, tools, other models and other owners"},
         {"file": "tests/replay-recovery-host.spec.ts", "name": "requires the native initiating session and signal, rejects active-turn writes and revokes late requests"},
-        {"file": "tests/replay-recovery-ui.spec.ts", "name": "requires an explicit loss confirmation, never submits a message and sends the read revision"},
+        {"file": "tests/replay-recovery.spec.ts", "name": "admits only the next matching native turn, including its steps and retries"},
+        {"file": "tests/replay-recovery-ui.spec.ts", "name": "automatically shows evidence but requires explicit %s consent, without sending"},
+        {"file": "tests/replay-recovery-ui.spec.ts", "name": "is absent normally, reads on settled turns without polling and resets dismissal only for new evidence"},
         {"file": "tests/preview-route.spec.ts", "name": "offers exact failed replay only to its initiating session and recovers after explicit confirmation"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds explicit replay recovery through native Client and %s Host gateways"}
       ]

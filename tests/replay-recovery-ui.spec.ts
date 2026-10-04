@@ -3,66 +3,117 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 import { ReplayRecoveryCard } from '../src/replay-recovery-ui.ts'
+import type { ReplayRecoveryDuration } from '../src/replay-recovery-types.ts'
 
-afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks() })
-it('requires an explicit loss confirmation, never submits a message and sends the read revision', async () => {
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-  const available = { state: 'available', revision: '12345678-1234-4234-8234-123456789012', itemCount: 12, model: 'synthetic-model' }
-  const remote = { get: vi.fn(async () => ({ ok: true, value: available })),
-    setEnabled: vi.fn(async () => ({ ok: true, value: { ...available, state: 'enabled' } })) }
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); vi.useRealTimers() })
+const available = { state: 'available', revision: '12345678-1234-4234-8234-123456789012', itemCount: 12, model: 'synthetic-model' }
+function fixture(value: unknown = available) {
+  const remote = {
+    get: vi.fn(async (): Promise<{ ok: boolean; value?: unknown }> => ({ ok: true, value })),
+    setEnabled: vi.fn(async () => ({ ok: true, value: available })),
+    authorize: vi.fn(async (_id: string, _revision: string, duration: ReplayRecoveryDuration) =>
+      ({ ok: true, value: { ...available, state: 'enabled', duration } })),
+  }
   const node = document.createElement('div'); document.body.append(node)
   const root = createRoot(node)
+  const render = (props: { running?: boolean; refreshKey?: string; sessionId?: string } = {}) =>
+    act(async () => root.render(createElement(ReplayRecoveryCard, { key: props.sessionId ?? 'viewed',
+      remote, sessionId: 'viewed', ...props })))
   const click = async (text: string) => {
     const button = Array.from(node.querySelectorAll('button')).find(value => value.textContent === text)!
     expect(button.type).toBe('button')
     await act(async () => button.click())
   }
+  return { remote, node, render, click, close: () => act(async () => root.unmount()) }
+}
+it.each(['next-turn', 'session'] as const)('automatically shows evidence but requires explicit %s consent, without sending', async duration => {
+  const f = fixture()
   try {
-    await act(async () => root.render(createElement(ReplayRecoveryCard, { remote, sessionId: 'viewed-session' })))
-    expect(remote.get).not.toHaveBeenCalled()
-    await click('Read status again')
-    expect(node.textContent).toContain('including their hidden reasoning state and item summaries')
-    await click('Review activation')
-    expect(remote.setEnabled).not.toHaveBeenCalled()
-    await click('Cancel')
-    expect(remote.setEnabled).not.toHaveBeenCalled()
-    await click('Review activation')
-    await click('Accept loss and enable')
-    expect(remote.setEnabled).toHaveBeenCalledExactlyOnceWith('viewed-session', available.revision, true)
-    expect(node.textContent).toContain('Recovery enabled.')
-  } finally { await act(async () => root.unmount()) }
+    await f.render()
+    expect(f.remote.get).toHaveBeenCalledExactlyOnceWith('viewed')
+    expect(f.node.textContent).toContain('Old reasoning replay was rejected')
+    await f.click('Review recovery options')
+    expect(f.node.textContent).toContain('including their hidden reasoning state and item summaries')
+    expect(f.remote.authorize).not.toHaveBeenCalled()
+    expect(f.node.querySelector<HTMLInputElement>('input[value=next-turn]')!.checked).toBe(true)
+    await f.click('Cancel')
+    await f.click('Review recovery options')
+    if (duration === 'session') await act(async () => f.node.querySelector<HTMLInputElement>('input[value=session]')!.click())
+    await f.click('Accept loss and authorize')
+    expect(f.remote.authorize).toHaveBeenCalledExactlyOnceWith('viewed', available.revision, duration)
+    expect(f.remote.setEnabled).not.toHaveBeenCalled()
+    expect(f.node.textContent).toContain('No message has been sent.')
+    await f.click('Disable recovery')
+    expect(f.remote.setEnabled).toHaveBeenCalledExactlyOnceWith('viewed', available.revision, false)
+  } finally { await f.close() }
 })
-it('coalesces clicks before render and ignores a departed session read', async () => {
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-  let settle: (value: { ok: boolean; value: unknown }) => void = () => { throw new Error('read not started') }
-  const remote = { get: vi.fn(() => new Promise<{ ok: boolean; value: unknown }>(resolve => { settle = resolve })),
-    setEnabled: vi.fn() }
-  const node = document.createElement('div'); document.body.append(node)
-  const root = createRoot(node)
+it('is absent normally, reads on settled turns without polling and resets dismissal only for new evidence', async () => {
+  const f = fixture({ state: 'unavailable' })
   try {
-    await act(async () => root.render(createElement(ReplayRecoveryCard, { key: 'old', remote, sessionId: 'old' })))
-    await act(async () => { node.querySelector('button')!.click(); node.querySelector('button')!.click() })
-    expect(remote.get).toHaveBeenCalledExactlyOnceWith('old')
-    await act(async () => root.render(createElement(ReplayRecoveryCard, { key: 'new', remote, sessionId: 'new' })))
-    await act(async () => settle({ ok: true, value: {
-      state: 'available', revision: '12345678-1234-4234-8234-123456789012', itemCount: 12, model: 'old-model',
-    } }))
-    expect(node.textContent).not.toContain('old-model')
-    expect(node.textContent).not.toContain('Review activation')
-    expect(remote.setEnabled).not.toHaveBeenCalled()
-  } finally { await act(async () => root.unmount()) }
+    await f.render()
+    expect(f.node.textContent).toBe('')
+    await f.render()
+    expect(f.remote.get).toHaveBeenCalledTimes(1)
+    await f.render({ running: true })
+    expect(f.remote.get).toHaveBeenCalledTimes(1)
+    f.remote.get.mockResolvedValue({ ok: true, value: available })
+    await f.render({ running: false })
+    expect(f.node.textContent).toContain('Old reasoning replay was rejected')
+    await f.click('Not now')
+    expect(f.node.textContent).toBe('Replay recovery · Review')
+    await f.render({ refreshKey: 'native failure changed' })
+    expect(f.node.textContent).toBe('Replay recovery · Review')
+    await f.click('Replay recovery · Review')
+    await f.click('Not now')
+    f.remote.get.mockResolvedValue({ ok: true, value: { ...available, revision: '22345678-1234-4234-8234-123456789012' } })
+    await f.render({ refreshKey: 'new failure' })
+    expect(f.node.textContent).toContain('Old reasoning replay was rejected')
+    expect(f.remote.authorize).not.toHaveBeenCalled()
+  } finally { await f.close() }
 })
-it('distinguishes failed reads from unavailable evidence and removes stale activation', async () => {
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-  const remote = { get: vi.fn(async () => ({ ok: false })), setEnabled: vi.fn() }
-  const node = document.createElement('div'); document.body.append(node)
-  const root = createRoot(node)
+it('coalesces reads and ignores a departed session result', async () => {
+  const f = fixture()
+  let settle: (result: { ok: boolean; value: unknown }) => void = () => { throw new Error('not started') }
+  f.remote.get.mockImplementationOnce(() => new Promise(resolve => { settle = resolve }))
   try {
-    await act(async () => root.render(createElement(ReplayRecoveryCard, { remote, sessionId: 'session' })))
-    await act(async () => node.querySelector('button')!.click())
-    expect(node.querySelector('[role=alert]')).not.toBeNull()
-    expect(node.textContent).not.toContain('No current failure evidence.')
-    expect(node.textContent).not.toContain('Review activation')
-    expect(remote.setEnabled).not.toHaveBeenCalled()
-  } finally { await act(async () => root.unmount()) }
+    await f.render({ sessionId: 'old' })
+    await f.render({ sessionId: 'old', refreshKey: 'changed' })
+    expect(f.remote.get).toHaveBeenCalledExactlyOnceWith('old')
+    f.remote.get.mockResolvedValue({ ok: true, value: { state: 'unavailable' } })
+    await f.render({ sessionId: 'new' })
+    await act(async () => settle({ ok: true, value: { ...available, model: 'old-model' } }))
+    expect(f.node.textContent).toBe('')
+    expect(f.remote.get).toHaveBeenCalledTimes(2)
+    expect(f.remote.authorize).not.toHaveBeenCalled()
+  } finally { await f.close() }
+})
+it('shows failed reads separately and disables writes while the native turn runs', async () => {
+  const f = fixture()
+  f.remote.get.mockResolvedValueOnce({ ok: false })
+  try {
+    await f.render()
+    expect(f.node.querySelector('[role=alert]')).not.toBeNull()
+    expect(f.node.textContent).not.toContain('no current failure evidence')
+    await f.click('Read status again')
+    await f.click('Review recovery options')
+    await f.render({ running: true })
+    expect(f.node.textContent).not.toContain('Accept loss and authorize')
+    expect(Array.from(f.node.querySelectorAll('button')).every(button => button.disabled)).toBe(true)
+    expect(f.remote.authorize).not.toHaveBeenCalled()
+  } finally { await f.close() }
+})
+it('reads once at evidence expiry and drops expired activation', async () => {
+  vi.useFakeTimers()
+  const f = fixture({ ...available, state: 'enabled', duration: 'session', expiresAt: Date.now() + 500 })
+  try {
+    await f.render()
+    f.remote.get.mockResolvedValue({ ok: true, value: { state: 'unavailable' } })
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    expect(f.remote.get).toHaveBeenCalledTimes(2)
+    expect(f.node.textContent).toContain('Authorization or failure evidence expired')
+    expect(f.node.textContent).not.toContain('Disable recovery')
+    await act(async () => vi.advanceTimersByTimeAsync(60_000))
+    expect(f.remote.get).toHaveBeenCalledTimes(2)
+  } finally { await f.close() }
 })

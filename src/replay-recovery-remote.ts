@@ -1,14 +1,15 @@
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 import { strictRemoteCodec } from './remote-codec.ts'
-import { ReplayRecoveryViewSchema } from './replay-recovery-types.ts'
-import type { ReplayRecoveryView } from './replay-recovery-types.ts'
+import { ReplayRecoveryDurationSchema, ReplayRecoveryViewSchema } from './replay-recovery-types.ts'
+import type { ReplayRecoveryDuration, ReplayRecoveryView } from './replay-recovery-types.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
     githubCopilotReplayRecovery: {
       get(agentId: string): Promise<RemoteResult<ReplayRecoveryView>>
       setEnabled(agentId: string, revision: string, enabled: boolean): Promise<RemoteResult<ReplayRecoveryView>>
+      authorize(agentId: string, revision: string, duration: ReplayRecoveryDuration): Promise<RemoteResult<ReplayRecoveryView>>
     }
   }
 }
@@ -21,6 +22,16 @@ const contribution: TypertRemoteContribution = {
       id: 'dsh-github-copilot:githubCopilotReplayRecovery.get',
       namespace: 'githubCopilotReplayRecovery', service: 'githubCopilotReplayRecovery', method: 'get',
       invocation: { kind: 'direct' }, parameters: [agent],
+      result: strictRemoteCodec('dsh-github-copilot#ReplayRecoveryView', ReplayRecoveryViewSchema),
+    },
+    {
+      id: 'dsh-github-copilot:githubCopilotReplayRecovery.authorize',
+      namespace: 'githubCopilotReplayRecovery', service: 'githubCopilotReplayRecovery', method: 'authorize',
+      invocation: { kind: 'direct' }, parameters: [
+        agent,
+        { name: 'revision', wire: 'revision', source: 'json', codec: strictRemoteCodec('dsh-github-copilot#ReplayRecoveryRevision', z.string().uuid()) },
+        { name: 'duration', wire: 'duration', source: 'json', codec: strictRemoteCodec('dsh-github-copilot#ReplayRecoveryDuration', ReplayRecoveryDurationSchema) },
+      ],
       result: strictRemoteCodec('dsh-github-copilot#ReplayRecoveryView', ReplayRecoveryViewSchema),
     },
     {
