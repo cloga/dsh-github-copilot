@@ -44,7 +44,8 @@ it.each(['source', 'strict'] as const)('binds Session account choices and histor
         preferences = operations[0]!.value; revision++
       },
     })
-    host.provide('credentials', { listRecords: async () => [{ key: `github-copilot/account-${A}`, kind: 'grant' }] })
+    host.provide('credentials', { listRecords: async () => [{ key: `github-copilot/account-${A}`, kind: 'grant' }],
+      readRecord: async () => undefined, modifyRecord: vi.fn(), deleteRecord: vi.fn() })
     host.provide('githubCopilotAccounts', { host: accountHost })
     host.provide('githubCopilotSessionAccounts', owner)
     const connection = new HostConnectionService(host, [], {})
@@ -65,6 +66,9 @@ it.each(['source', 'strict'] as const)('binds Session account choices and histor
     await host.plugin({ apply(ctx) { new SessionAccountController(ctx, owner) } })
     await expect(client.remote.githubCopilotSessionAccount.get(master.id)).resolves.toMatchObject({
       ok: true, value: { source: 'global', accountId: 'canonical', globalAccountId: 'canonical' },
+    })
+    await expect(client.remote.githubCopilotSessionAccount.ensureIdentity(master.id)).resolves.toMatchObject({
+      ok: true, value: { accountId: 'canonical', accounts: { diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' } },
     })
     await expect(client.remote.githubCopilotSessionAccount.set(master.id, A, 1)).resolves.toMatchObject({
       ok: true, value: { source: 'session', accountId: A, globalAccountId: 'canonical' },
@@ -333,7 +337,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'get', 'authorize', 'setEnabled',
-      'get', 'set', 'refreshIdentity', 'usage', 'refreshUsage', 'turn',
+      'get', 'set', 'refreshIdentity', 'ensureIdentity', 'usage', 'refreshUsage', 'turn',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot' && item.method !== 'setModelExcluded')) {
       expect(descriptor.result.mode).toBe('strict')
@@ -375,7 +379,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     expect(() => usageDescriptor.result.create().parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
     const accountDescriptors = remote.descriptors.filter(item => item.namespace === 'githubCopilotAccounts')
     expect(accountDescriptors.map(item => item.method).sort()).toEqual([
-      'add', 'cancel', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount',
+      'add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount',
     ])
     for (const descriptor of accountDescriptors) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })

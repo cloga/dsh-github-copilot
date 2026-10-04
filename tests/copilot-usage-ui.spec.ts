@@ -32,6 +32,7 @@ function fixture(spec = { kind: 'list', scope: 'session' }) {
       accounts: [{ id: 'canonical', configured: true, identityState: 'unknown' }], notices: [] } }
   const sessionRemote = { get: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
     set: vi.fn(), refreshIdentity: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
+    ensureIdentity: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
     usage: vi.fn(async (_id: string) => remote.get()), refreshUsage: vi.fn() }
   const capture = vi.fn(() => remote)
   const namespace = Object.defineProperty({}, 'githubCopilotUsage', { get: capture })

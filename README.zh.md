@@ -13,7 +13,9 @@
 在 Credits 内选择本 Session 后续 turn 的账号，或恢复跟随全局默认；正在运行的 turn 保持原账号。
 身份展示支持 GitHub 企业托管账号，包括带下划线企业后缀的用户名。
 
-**源码候选版本：`0.4.0-alpha.105`（尚未发布）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。下方带版本的命令适用于候选版本发布后，不代表对应资产已经存在。
+可见的 Models 和 Credits 会续期已过期身份，不会在每次挂载时强制请求：身份缓存十分钟，同账号共享请求，失败冷却三十秒。显式刷新可立即重试；额度可先于身份续期完成展示。未知或已撤销身份不会作为当前用户名展示，Session 账号隔离保持不变。参见[账号生命周期](./docs/copilot-accounts.md)。
+
+**源码候选版本：`0.4.0-alpha.106`（尚未发布）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。下方带版本的命令适用于候选版本发布后，不代表对应资产已经存在。
 
 ## 你可以做什么
 
@@ -53,10 +55,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.105/dsh-github-copilot-0.4.0-alpha.105.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.106/dsh-github-copilot-0.4.0-alpha.106.tgz
 ```
 
-**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.105`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.106`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -204,14 +206,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.105/dsh-github-copilot-0.4.0-alpha.105.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.105/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.106/dsh-github-copilot-0.4.0-alpha.106.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.106/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.105.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.106.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

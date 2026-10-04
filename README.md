@@ -15,7 +15,9 @@ Inside **Credits**, choose a saved account for this Session's subsequent turns o
 restore **Follow global default**. Running turns retain their original account.
 Identity display accepts GitHub Enterprise Managed User names, including their underscore-separated enterprise suffixes.
 
-**Source candidate: `0.4.0-alpha.105` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+Visible Models and Credits renew expired identity without forcing fresh reads on every mount: ten-minute identity cache, shared per-account requests and a thirty-second failure cooldown. Explicit refresh retries immediately; quota can settle while identity renews. Unknown or revoked identity is never shown as current, and Session account isolation is unchanged. See [account lifecycle](./docs/copilot-accounts.md).
+
+**Source candidate: `0.4.0-alpha.106` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -55,10 +57,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.105/dsh-github-copilot-0.4.0-alpha.105.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.106/dsh-github-copilot-0.4.0-alpha.106.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.105` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.106` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -206,14 +208,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.105/dsh-github-copilot-0.4.0-alpha.105.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.105/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.106/dsh-github-copilot-0.4.0-alpha.106.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.106/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.105.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.106.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

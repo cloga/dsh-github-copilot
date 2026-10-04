@@ -22,6 +22,7 @@ import type { CopilotAccountBinding, CopilotAccountIdentity, CopilotAccountLease
 import type {} from './copilot-accounts-remote.ts'
 
 const IDENTITY_TTL = 600_000
+const IDENTITY_FAILURE_COOLDOWN = 30_000
 const TIMEOUT = 10_000
 const MAX_BODY = 65_536
 interface Settings {
@@ -70,6 +71,8 @@ export class CopilotAccountsHost {
   private readonly accountLeases = new Map<string, Set<() => void>>()
   private readonly identities = new Map<string, { identity: CopilotAccountIdentity; key: string; at: number }>()
   private readonly unavailableIdentities = new Set<string>()
+  private readonly identityFlights = new Map<string, { abort: AbortController; promise: Promise<CopilotAccountsDiagnostic | undefined> }>()
+  private readonly identityFailures = new Map<string, { at: number; diagnostic: CopilotAccountsDiagnostic }>()
   private readonly listeners = new Set<() => void>()
   private readonly abort = new AbortController()
   private operation: 'authorizing' | 'switching' | undefined
@@ -104,6 +107,7 @@ export class CopilotAccountsHost {
   }
   private revoke(clearIdentity = true): void {
     this.generation++
+    for (const accountId of this.identityFlights.keys()) this.invalidateIdentity(accountId)
     if (clearIdentity) { this.identities.clear(); this.unavailableIdentities.clear() }
     for (const listener of this.listeners) listener()
   }
@@ -117,10 +121,16 @@ export class CopilotAccountsHost {
   credentialChanged(key: string): void {
     if (!isCopilotAccountRecord(key)) return
     const accountId = key === GITHUB_COPILOT_CREDENTIAL_KEY ? 'canonical' : key.slice('github-copilot/account-'.length)
+    this.invalidateIdentity(accountId)
     this.identities.delete(accountId)
     this.unavailableIdentities.delete(accountId)
     // Existing proof owners separately observe every record update, including
     // native refresh. Selector generations must not redirect that refresh.
+  }
+  private invalidateIdentity(accountId: string): void {
+    this.identityFlights.get(accountId)?.abort.abort(new AccountsFailure('COPILOT_ACCOUNTS_CHANGED'))
+    this.identityFlights.delete(accountId)
+    this.identityFailures.delete(accountId)
   }
   onChanged(listener: () => void): () => void {
     this.listeners.add(listener)
@@ -280,6 +290,7 @@ export class CopilotAccountsHost {
     const latest = await store.read(GITHUB_COPILOT_PROVIDER_ID)
     if (!latest || copilotAccountKey(normalizeGitHubCopilotOAuthCredential(latest)) !== before) fail('COPILOT_ACCOUNTS_CHANGED')
     binding.assertCurrent()
+    signal.throwIfAborted()
     const previous = this.identities.get(binding.accountId)
     if (previous && previous.identity.userId !== identity.userId) fail('COPILOT_ACCOUNTS_IDENTITY_CHANGED')
     if (!this.identities.has(binding.accountId) && this.identities.size >= COPILOT_ACCOUNTS_MAX) {
@@ -290,6 +301,21 @@ export class CopilotAccountsHost {
     return identity
   }
   private async fetchIdentity(grant: GitHubCopilotOAuthCredential, signal: AbortSignal): Promise<CopilotAccountIdentity> {
+    try { return await this.fetchIdentityResponse(grant, signal) }
+    catch (error) {
+      if (error instanceof AccountsFailure) throw error
+      if (signal.aborted) fail(signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError'
+        ? 'COPILOT_ACCOUNTS_IDENTITY_TIMEOUT' : 'COPILOT_ACCOUNTS_CHANGED')
+      const cause: unknown = object(error) ? error.cause : undefined
+      const tls = object(cause) && typeof cause.code === 'string' && [
+        'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+        'SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT',
+        'CERT_HAS_EXPIRED', 'ERR_TLS_CERT_ALTNAME_INVALID',
+      ].includes(cause.code)
+      fail(tls ? 'COPILOT_ACCOUNTS_IDENTITY_TLS' : 'COPILOT_ACCOUNTS_IDENTITY_NETWORK')
+    }
+  }
+  private async fetchIdentityResponse(grant: GitHubCopilotOAuthCredential, signal: AbortSignal): Promise<CopilotAccountIdentity> {
     if (grant.enterpriseUrl !== undefined) fail('COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED')
     signal.throwIfAborted()
     const response = await abortable((this.dependencies.fetch ?? globalThis.fetch)('https://api.github.com/user', {
@@ -298,7 +324,11 @@ export class CopilotAccountsHost {
     }), signal)
     if (!response.ok || response.redirected || !response.body) {
       void response.body?.cancel().catch(() => undefined)
-      fail('COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
+      fail(response.status === 429 || response.status === 403
+        && (response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after'))
+        ? 'COPILOT_ACCOUNTS_IDENTITY_RATE_LIMITED'
+        : response.status === 401 || response.status === 403 ? 'COPILOT_ACCOUNTS_IDENTITY_AUTH_REJECTED'
+          : 'COPILOT_ACCOUNTS_IDENTITY_HTTP_ERROR')
     }
     const reader = response.body.getReader()
     const chunks: Uint8Array[] = []
@@ -307,7 +337,7 @@ export class CopilotAccountsHost {
     signal.addEventListener('abort', cancel, { once: true })
     try {
       while (true) {
-        if (signal.aborted) fail('COPILOT_ACCOUNTS_CHANGED')
+        signal.throwIfAborted()
         const chunk = await abortable(reader.read(), signal)
         if (chunk.done) break
         bytes += chunk.value.byteLength
@@ -315,7 +345,7 @@ export class CopilotAccountsHost {
         chunks.push(chunk.value)
       }
     } finally { signal.removeEventListener('abort', cancel); reader.releaseLock() }
-    if (signal.aborted) fail('COPILOT_ACCOUNTS_CHANGED')
+    signal.throwIfAborted()
     const buffer = new Uint8Array(bytes)
     let offset = 0
     for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.byteLength }
@@ -328,31 +358,79 @@ export class CopilotAccountsHost {
     return Object.freeze({ login: value.login, userId: value.id })
   }
   async refreshIdentity(): Promise<CopilotAccountsView> {
-    let lease: CopilotAccountLease | undefined
     try {
-      lease = this.acquire(undefined, false)
-      await this.identity(lease.binding, AbortSignal.any([this.abort.signal, AbortSignal.timeout(TIMEOUT)]))
-      this.lastFailure = undefined
+      const view = await this.refreshIdentityFor(this.selection().accountId)
+      if (view.state === 'ready') this.lastFailure = undefined
+      return view
     } catch (error) {
-      if (lease) { this.identities.delete(lease.binding.accountId); this.unavailableIdentities.add(lease.binding.accountId) }
       this.lastFailure = diagnostic(error, 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
-    } finally { lease?.release() }
+    }
     return this.get()
+  }
+  async ensureIdentity(): Promise<CopilotAccountsView> {
+    try { return await this.ensureIdentityFor(this.selection().accountId) }
+    catch (error) {
+      const view = await this.get()
+      return { ...view, state: 'error', switchable: false, diagnostic: diagnostic(error, 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE') }
+    }
   }
   async viewForAccount(accountId: string): Promise<CopilotAccountsView> {
     return this.accountView(accountId)
   }
   async refreshIdentityFor(accountId: string): Promise<CopilotAccountsView> {
-    const lease = this.acquire(undefined, false, accountId)
-    try {
-      await this.identity(lease.binding, AbortSignal.any([this.abort.signal, AbortSignal.timeout(TIMEOUT)]))
-    } catch (error) {
-      this.identities.delete(accountId)
-      this.unavailableIdentities.add(accountId)
-      const view = await this.viewForAccount(accountId)
-      return { ...view, state: 'error', switchable: false, diagnostic: diagnostic(error, 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE') }
-    } finally { lease.release() }
-    return this.viewForAccount(accountId)
+    return this.readIdentity(accountId, true)
+  }
+  async ensureIdentityFor(accountId: string): Promise<CopilotAccountsView> {
+    return this.readIdentity(accountId, false)
+  }
+  private async readIdentity(accountId: string, force: boolean): Promise<CopilotAccountsView> {
+    id(accountId)
+    if (this.disposed) fail('COPILOT_ACCOUNTS_DISPOSED')
+    let flight = this.identityFlights.get(accountId)
+    let problem: CopilotAccountsDiagnostic | undefined
+    const failed = this.identityFailures.get(accountId)
+    if (flight === undefined && !force && this.cachedIdentity(accountId)) return this.viewForAccount(accountId)
+    if (flight === undefined && !force && failed && Date.now() - failed.at < IDENTITY_FAILURE_COOLDOWN) {
+      problem = failed.diagnostic
+    } else {
+      if (flight === undefined) {
+        if (this.identityFlights.size >= COPILOT_ACCOUNTS_MAX) fail('COPILOT_ACCOUNTS_LIMIT')
+        const abort = new AbortController()
+        const signal = AbortSignal.any([abort.signal, this.abort.signal, AbortSignal.timeout(TIMEOUT)])
+        const promise = Promise.resolve().then(async () => {
+          let lease: CopilotAccountLease | undefined
+          try {
+            signal.throwIfAborted()
+            lease = this.acquire(undefined, false, accountId)
+            await abortable(this.identity(lease.binding, signal), signal)
+            this.identityFailures.delete(accountId)
+            return undefined
+          } catch (error) {
+            const problem = signal.aborted
+              ? signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError'
+                ? 'COPILOT_ACCOUNTS_IDENTITY_TIMEOUT' : 'COPILOT_ACCOUNTS_CHANGED'
+              : diagnostic(error, 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
+            if (!abort.signal.aborted && !this.disposed) {
+              this.identities.delete(accountId)
+              this.unavailableIdentities.add(accountId)
+              if (!this.identityFailures.has(accountId) && this.identityFailures.size >= COPILOT_ACCOUNTS_MAX) {
+                this.identityFailures.delete(this.identityFailures.keys().next().value!)
+              }
+              this.identityFailures.set(accountId, { at: Date.now(), diagnostic: problem })
+            }
+            return problem
+          } finally {
+            lease?.release()
+            if (this.identityFlights.get(accountId)?.abort === abort) this.identityFlights.delete(accountId)
+          }
+        })
+        flight = { abort, promise }
+        this.identityFlights.set(accountId, flight)
+      }
+      problem = await flight.promise
+    }
+    const view = await this.viewForAccount(accountId)
+    return problem === undefined ? view : { ...view, state: 'error', switchable: false, diagnostic: problem }
   }
   private async validateModels(binding: CopilotAccountBinding, signal: AbortSignal): Promise<void> {
     try {
@@ -593,6 +671,7 @@ export class CopilotAccountsHost {
     this.authorizationAbort?.abort()
     this.abort.abort()
     this.revoke()
+    this.identityFailures.clear()
     for (const release of this.leases) release()
     for (const leases of this.accountLeases.values()) for (const release of leases) release()
     this.listeners.clear()
@@ -623,6 +702,8 @@ export default class GitHubCopilotAccountsController extends TypertRemoteService
   get(): Promise<CopilotAccountsView> { return this.host.get() }
   @Remote
   refreshIdentity(): Promise<CopilotAccountsView> { return this.host.refreshIdentity() }
+  @Remote
+  ensureIdentity(): Promise<CopilotAccountsView> { return this.host.ensureIdentity() }
   @Remote
   add(): Promise<CopilotAccountsView> { return this.host.add() }
   @Remote

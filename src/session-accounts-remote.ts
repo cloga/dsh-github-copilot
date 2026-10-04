@@ -33,6 +33,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       get(agentId: string): Promise<RemoteResult<SessionAccountView>>
       set(agentId: string, accountId: string | null, revision: number): Promise<RemoteResult<SessionAccountView>>
       refreshIdentity(agentId: string): Promise<RemoteResult<SessionAccountView>>
+      ensureIdentity(agentId: string): Promise<RemoteResult<SessionAccountView>>
       usage(agentId: string): Promise<RemoteResult<CopilotUsageView>>
       refreshUsage(agentId: string): Promise<RemoteResult<CopilotUsageView>>
       turn(agentId: string, turn: number): Promise<RemoteResult<TurnAccountView>>
@@ -43,7 +44,7 @@ const agent = { name: 'agent', wire: 'agentId', source: 'lookup' as const, looku
   codec: strictRemoteCodec('@deepseek-ai/dsh-session/types#SessionId', z.string().min(1).max(256)) }
 const contribution: TypertRemoteContribution = {
   package: 'dsh-github-copilot',
-  descriptors: ['get', 'set', 'refreshIdentity', 'usage', 'refreshUsage', 'turn'].map(method => ({
+  descriptors: ['get', 'set', 'refreshIdentity', 'ensureIdentity', 'usage', 'refreshUsage', 'turn'].map(method => ({
     id: `dsh-github-copilot:githubCopilotSessionAccount.${method}`,
     namespace: 'githubCopilotSessionAccount', service: 'githubCopilotSessionAccount', method,
     invocation: { kind: 'direct' },
