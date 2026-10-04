@@ -5,7 +5,7 @@
 This document records the approved requirements and implementation design for
 issue #297. Multi-account behavior is not released or installed until the
 acceptance gates below complete. The existing single-account behavior remains
-the compatibility baseline. The current source candidate is `0.4.0-alpha.100`;
+the compatibility baseline. The current source candidate is `0.4.0-alpha.101`;
 publication, installation and loaded runtime state are separate evidence.
 
 ## Requirements
@@ -98,6 +98,11 @@ detection, not usernames or token strings. Identity reads are bounded,
 Host-only, redirect-refusing and cancellation-aware. Normalize only required
 public identity fields, discard unrelated `/user` fields, and reject results
 whose credential/selection evidence changed during the read.
+Host normalization and strict Remote decoding share the same bounded login
+pattern. It accepts ordinary names and GitHub.com Enterprise Managed User names
+with underscore-separated shortcodes, including setup admin names. This is not
+support for a custom enterprise OAuth host; `enterpriseUrl` remains unsupported.
+See [GitHub's official username rules](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-iam/iam-configuration-reference/username-considerations-for-external-authentication).
 
 Token refresh remains lazy. Inactive accounts need not hold fresh Copilot
 tokens. Refresh uses native `Models.getAuth()` and the corresponding DSH record
