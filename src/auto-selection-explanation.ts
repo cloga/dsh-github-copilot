@@ -34,7 +34,7 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
         : `This task was assessed as ${demand[explanation.assessment.demand]}; the preference policy selected ${category[explanation.selectedCategory]}.`
   const choice = explanation.method === 'continuity'
     ? zh ? `该分类有 ${explanation.categoryCandidateCount} 个可容纳候选；上一轮模型仍合格，因此按连续性策略保留。这不是语义排名，也不证明它最适合任务。`
-      : `This category has ${explanation.categoryCandidateCount} fitting candidates. Kept the eligible previous model for continuity; this is not a semantic ranking or proof it is best for the task.`
+      : `This category has ${explanation.categoryCandidateCount} fitting candidates. Kept the previous model because it remains eligible, prioritizing continuity; this is not a semantic ranking or proof it is best for the task.`
     : explanation.method === 'only-candidate'
       ? zh ? '该分类只有一个可容纳的合格候选。' : 'Only one eligible fitting candidate remains in this category.'
       : explanation.method === 'equal-distribution'
