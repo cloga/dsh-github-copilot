@@ -32,7 +32,7 @@ describe('session search settings', () => {
   })
 
   it('keeps the account selector hidden, volatile and absent by default', () => {
-    expect(Config.dict?.activeAccountId.meta.hidden).toBe(true)
+    expect(Config.dict?.activeAccountId?.meta.hidden).toBe(true)
     expect(readInlineConfig(Config(base)).activeAccountId).toBeUndefined()
     let accountId: string | undefined
     const live = { ...base, activeAccountId: { get: () => accountId } }
