@@ -1,7 +1,7 @@
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 import { strictRemoteCodec } from './remote-codec.ts'
-import { COPILOT_ACCOUNT_ID_PATTERN, COPILOT_ACCOUNTS_DIAGNOSTICS, COPILOT_ACCOUNTS_MAX } from './copilot-accounts-types.ts'
+import { COPILOT_ACCOUNT_ID_PATTERN, COPILOT_ACCOUNTS_DIAGNOSTICS, COPILOT_ACCOUNTS_MAX, GITHUB_ACCOUNT_LOGIN_PATTERN } from './copilot-accounts-types.ts'
 import type { CopilotAccountsView } from './copilot-accounts-types.ts'
 export type { CopilotAccountsView, CopilotAccountIdentity, CopilotAccountView } from './copilot-accounts-types.ts'
 
@@ -27,7 +27,7 @@ export const CopilotAccountsViewSchema = z.object({
   accounts: z.array(z.object({
     id: CopilotAccountIdSchema, configured: z.boolean(),
     identityState: z.enum(['ready', 'unavailable', 'unknown']),
-    identity: z.object({ login: z.string().min(1).max(39).regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/u),
+    identity: z.object({ login: z.string().min(1).max(39).regex(GITHUB_ACCOUNT_LOGIN_PATTERN),
       userId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict().optional(),
   }).strict()).max(COPILOT_ACCOUNTS_MAX),
   operation: z.enum(['authorizing', 'switching']).optional(),

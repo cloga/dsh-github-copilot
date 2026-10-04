@@ -16,7 +16,7 @@ import { copilotPublicHeaders } from './preview-provider.ts'
 import { migrationStatus } from './migration-status.ts'
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
-import { COPILOT_ACCOUNT_ID_PATTERN, COPILOT_ACCOUNTS_MAX } from './copilot-accounts-types.ts'
+import { COPILOT_ACCOUNT_ID_PATTERN, COPILOT_ACCOUNTS_MAX, GITHUB_ACCOUNT_LOGIN_PATTERN } from './copilot-accounts-types.ts'
 import type { CopilotAccountBinding, CopilotAccountIdentity, CopilotAccountLease, CopilotAccountsDiagnostic,
   CopilotAccountsNotice, CopilotAccountsView, CopilotAccountView } from './copilot-accounts-types.ts'
 import type {} from './copilot-accounts-remote.ts'
@@ -289,7 +289,7 @@ export class CopilotAccountsHost {
     try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer)) }
     catch { fail('COPILOT_ACCOUNTS_IDENTITY_INVALID') }
     if (!object(value) || typeof value.login !== 'string' || value.login.length > 39
-      || !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/u.test(value.login)
+      || !GITHUB_ACCOUNT_LOGIN_PATTERN.test(value.login)
       || typeof value.id !== 'number' || !Number.isSafeInteger(value.id) || value.id <= 0) fail('COPILOT_ACCOUNTS_IDENTITY_INVALID')
     return Object.freeze({ login: value.login, userId: value.id })
   }

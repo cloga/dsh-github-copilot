@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.4.0-alpha.100 (prepared)
+## 0.4.0-alpha.101 (prepared)
+
+- Accept GitHub Enterprise Managed User login names, including underscore-separated enterprise suffixes and setup admin names, in both Host identity normalization and strict Client Remote decoding. Keep bounded JSON, numeric identity, credentials and account-switching safeguards unchanged.
+
+## 0.4.0-alpha.100
 
 - Add independently authorized GitHub Copilot accounts through official OAuth and the existing DSH credentials service (#297). Preserve the canonical compatibility account; inactive-account refresh remains lazy and record-bound.
 - Manage, confirm switches, remove inactive authorizations and reauthorize the same identity in Models. Managed-only evidence, target preflight, activity fencing and path-level selector CAS prevent unsafe switches; no history, selected-model or default rewrites.

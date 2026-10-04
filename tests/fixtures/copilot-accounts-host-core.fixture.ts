@@ -54,6 +54,22 @@ function fixture(activeAccountId: unknown = undefined) {
 }
 
 describe('independent Copilot account ownership', () => {
+  it.each(['mona-cat_octo', 'octo_admin'])('preserves official managed-user identity %s through Host and strict Remote', async login => {
+    const f = fixture(A)
+    f.fetch.mockImplementation(async () => Response.json({ login, id: 1 }))
+    const view = await f.host.refreshIdentity()
+    expect(view.accounts.find(row => row.id === A)).toMatchObject({ identity: { login, userId: 1 }, identityState: 'ready' })
+    expect(CopilotAccountsViewSchema.parse(view)).toEqual(view)
+    expect(f.credentials.modifyRecord).not.toHaveBeenCalled()
+    f.host.dispose()
+  })
+  it.each(['_mona', 'mona_', 'mona/o', 'a'.repeat(40)])('rejects invalid Host identity %s without credential mutation', async login => {
+    const f = fixture(A)
+    f.fetch.mockImplementation(async () => Response.json({ login, id: 1 }))
+    expect(await f.host.refreshIdentity()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_IDENTITY_INVALID' })
+    expect(f.credentials.modifyRecord).not.toHaveBeenCalled()
+    f.host.dispose()
+  })
   it('lists membership from metadata only and defaults an absent selector to canonical', async () => {
     const f = fixture()
     expect(await f.host.get()).toMatchObject({ state: 'ready', activeAccountId: 'canonical', revision: 1 })
