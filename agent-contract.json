@@ -31,6 +31,12 @@
     "attribution": "Assisted-by identifies the actual assisting tool; never infer a co-author from a model provider"
   },
   "tasks": {
+    "autointent": {
+      "purpose": "Preserve owner-explicit Auto intent when native virtual headers consume pending selection",
+      "read": ["src/auto-model-intent.ts", "src/auto-model-host.ts", "src/parent-model-follow.ts", "docs/automatic-model-routing.md"],
+      "tests": ["tests/auto-model-intent.spec.ts", "tests/auto-model-host.spec.ts", "tests/fixtures/session-context-core.fixture.ts"],
+      "risk": "Strict plugin-owned public Session projection of existing native selection events only. Ignore copied fork/child prefixes, preserve native pending and parent-follow precedence, diagnose unavailable/malformed evidence, and freeze admitted Auto request configuration across late explicit choices. Fixed/other-provider choices replace future intent after pending consumption. No Core projection replacement, new durable events, settings/default/history writes, historical decision fabrication or real calls for tests."
+    },
     "autorouting": {
       "purpose": "Choose Auto using supplier categories and bounded contextual task evidence; explain the captured turn choice",
       "read": ["docs/auto-task-routing.md", "src/account-model-catalog.ts", "src/auto-task-assessment.ts", "src/auto-task-classifier.ts", "src/auto-model-routing.ts", "src/auto-model-host.ts", "src/auto-assessment-evidence.ts", "src/auto-task-classifier.ts", "src/auto-task-assessment.ts", "src/preview-route.ts", "src/turn-selection.ts", "src/auto-selection-explanation.ts", "src/turn-selection-card.ts"],

@@ -11,6 +11,7 @@ import { foldFollowState, initialFollowState, PARENT_MODEL_FOLLOW_PROJECTION } f
 import { installAutoModelRouting as installRouting } from '../src/auto-model-host.ts'
 import { TurnSelectionController } from '../src/turn-selection-host.ts'
 import * as routing from '../src/auto-model-routing.ts'
+import { AUTO_MODEL_INTENT_PROJECTION, foldAutoModelIntent, initialAutoModelIntent } from '../src/auto-model-intent.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
   GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID as INTELLIGENCE, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
@@ -52,6 +53,38 @@ function message(text: string) {
 }
 
 describe('Auto model Host integration', () => {
+  it.each([
+    { register: undefined, state: initialAutoModelIntent(), error: 'COPILOT_AUTO_INTENT_PROJECTIONS_UNAVAILABLE' },
+    { register: () => undefined, state: initialAutoModelIntent(), error: 'COPILOT_AUTO_INTENT_DISPOSER_UNAVAILABLE' },
+    { register: () => () => {}, state: undefined, error: 'COPILOT_AUTO_INTENT_UNAVAILABLE' },
+    { register: () => () => {}, state: { ...initialAutoModelIntent(), blocked: true }, error: 'COPILOT_AUTO_INTENT_UNAVAILABLE' },
+  ])('diagnoses unavailable continuity evidence ($error) without blocking a new explicit fixed choice', async fixture => {
+    const ctx = new Context()
+    let pending: { provider: string; model: string } | null = null
+    ctx.provide('sessionProjections', {
+      register: fixture.register,
+      stateOf: (_session: unknown, key: string) => key === AUTO_MODEL_INTENT_PROJECTION ? fixture.state : { pending },
+    } as never)
+    const agent = { ctx, session: {
+      requestHeader: () => ({ config: { provider: PREVIEW, model: 'fixture-real' } }),
+    } } as unknown as Agent
+    const loadModels = vi.fn(async () => [model('fixture-real', 128_000, 'medium')])
+    const dispose = installAutoModelRouting(ctx, { loadModels })
+    const scope = scopeTarget(agent, agent)
+    const signal = new AbortController().signal
+    try {
+      await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: 'fixture-real' }))).rejects.toThrow(fixture.error)
+      pending = { provider: PREVIEW, model: 'fixture-real' }
+      await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 2, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: 'fixture-real' }))).resolves.toMatchObject(pending)
+      expect(loadModels).not.toHaveBeenCalled()
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it.each([true, false, undefined])('uses owning preset recovery availability (%s) for Auto diagnostics', async auto => {
     const ctx = new Context()
     const agent = { ctx, session: { requestHeader: () => undefined } } as unknown as Agent
@@ -96,9 +129,12 @@ describe('Auto model Host integration', () => {
       id: 'parent', header: { id: 'parent' }, requestHeader: () => ({ config: { provider: PREVIEW, model: 'stale-model' } }),
     } } as unknown as Agent
     const removeProjection = vi.fn()
-    const register = vi.fn(() => removeProjection)
+    const removeIntentProjection = vi.fn()
+    const register = vi.fn((definition: { key: string }) =>
+      definition.key === AUTO_MODEL_INTENT_PROJECTION ? removeIntentProjection : removeProjection)
     ctx.provide('sessionProjections', { register, stateOf: (session: { id: string }, key: string) => {
       if (key === 'modelSelection') return { pending: session.id === 'parent' ? { provider: PREVIEW, model: parentModel } : explicit }
+      if (key === AUTO_MODEL_INTENT_PROJECTION) return initialAutoModelIntent()
       if (key !== PARENT_MODEL_FOLLOW_PROJECTION) return undefined
       if (session.id === 'parent') return initialFollowState()
       const state = foldFollowState(initialFollowState(), {
@@ -153,6 +189,7 @@ describe('Auto model Host integration', () => {
     } finally {
       dispose()
       expect(removeProjection).toHaveBeenCalledOnce()
+      expect(removeIntentProjection).toHaveBeenCalledOnce()
       await ctx.fiber.dispose()
       await parentCtx.fiber.dispose()
     }
@@ -300,13 +337,19 @@ describe('Auto model Host integration', () => {
     const ctx = new Context()
     const selection: { pending: { provider: string; model: string } | null } = { pending: null }
     let header: { config: { provider: string; model: string } } | undefined
+    let intent = initialAutoModelIntent()
+    let seq = 0
     const append = vi.fn((type: string, data: { provider: string; model: string }) => {
       if (type === 'model/selection') selection.pending = data
+      intent = foldAutoModelIntent(intent, { type, data, seq: seq++ })
     })
     const agent = { ctx, session: { append, requestHeader: () => header } } as unknown as Agent
     const scope = scopeTarget(agent, agent)
     const promptScope = scopeTarget(new SystemPrompt(ctx, {}), agent)
-    ctx.provide('sessionProjections', { stateOf: () => selection } as never)
+    ctx.provide('sessionProjections', {
+      register: () => () => {},
+      stateOf: (_session: unknown, key: string) => key === AUTO_MODEL_INTENT_PROJECTION ? intent : selection,
+    } as never)
     ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: PREVIEW, model: AUTO }) } as never)
     const loadModels = vi.fn(async () => [
       model('fixture-fast', 64_000, 'low', 'lightweight'),
@@ -340,7 +383,7 @@ describe('Auto model Host integration', () => {
       expect(selection.pending).toEqual({ provider: PREVIEW, model: AUTO })
       expect(append.mock.calls.filter(([type]) => type === 'model/selection')).toHaveLength(1)
 
-      selection.pending = { provider: PREVIEW, model: 'fixture-fast' }
+      append('model/selection', { provider: PREVIEW, model: 'fixture-fast' })
       const manualAssembly = { ...assembly, variables: { provider: PREVIEW, model: 'fixture-fast' } }
       const manual = await ctx.waterfall(promptScope, 'system-prompt/assemble', manualAssembly, {},
         async () => manualAssembly)

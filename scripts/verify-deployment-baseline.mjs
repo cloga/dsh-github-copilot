@@ -321,6 +321,11 @@ assert(!searchCard.includes('GitHubCopilotAuthorizationViewSchema') && !searchCa
 assert(searchCard.includes('data-dsh-copilot-search-reset') && !searchCard.includes('data-dsh-copilot-search-model'),
   'ordinary provider settings must preserve explicit legacy reset without a required model selector')
 const metadata = manifest.capabilities?.find(capability => capability.id === 'account-driven-provider-metadata')
+const autoIntent = manifest.capabilities?.find(capability => capability.id === 'managed-copilot-auto-intent-continuity')
+assert(autoIntent?.required === true
+  && autoIntent.sourceMarkers.some(item => item.file === 'src/auto-model-intent.ts')
+  && autoIntent.tests.some(item => item.file === 'tests/fixtures/session-context-core.fixture.ts'),
+  'Auto intent continuity requires plugin-owned projection and native consumption regression evidence')
 assert(metadata?.activation === 'validated-account-endpoints-and-capabilities', 'managed models must follow account endpoint and capability evidence')
 const publicAdapter = manifest.capabilities?.find(capability => capability.id === 'public-adapter-account-model-route')
 assert(publicAdapter?.activation === 'published-adapter-and-native-sdk', 'managed route must reuse the public adapter and native SDK')

@@ -181,7 +181,11 @@ test('CLI unknown input returns one JSON error with exit 2', () => {
 test('agent contract references actual files and verification gates', async () => {
   const result = await verifyAgentContract()
   assert.equal(result.ok, true)
-  assert.equal(result.taskCount, 12)
+  assert.equal(result.taskCount, 13)
+  const autointent = await planTask('autointent')
+  assert.ok(autointent.read.includes('src/auto-model-intent.ts'))
+  assert.ok(autointent.tests.includes('tests/fixtures/session-context-core.fixture.ts'))
+  assert.ok(autointent.risk.includes('No Core projection replacement'))
   const autorouting = await planTask('autorouting')
   assert.ok(autorouting.read.includes('docs/auto-task-routing.md'))
   assert.ok(autorouting.tests.includes('tests/auto-task-classifier.spec.ts'))

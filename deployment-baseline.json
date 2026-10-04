@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.97"
+    "version": "0.4.0-alpha.98"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1120,6 +1120,23 @@
         {"file": "tests/client-no-model-roles.spec.ts", "name": "does not export the obsolete role card while preserving search and usage components"},
         {"file": "tests/client-no-model-roles.spec.ts", "name": "never registers role entrypoints (footer=$footer, legacyRemote=$legacyRemote)"},
         {"file": "tests/client-no-model-roles.spec.ts", "name": "does not resurrect a role entry when a retained legacy Remote arrives later"}
+      ]
+    },
+    {
+      "id": "managed-copilot-auto-intent-continuity",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/auto-model-intent.ts", "marker": "githubCopilotAutoModelIntent"},
+        {"file": "src/auto-model-intent.ts", "marker": "state.inherited"},
+        {"file": "src/auto-model-host.ts", "marker": "COPILOT_AUTO_INTENT_UNAVAILABLE"},
+        {"file": "src/auto-model-host.ts", "marker": "removeIntentProjection"},
+        {"file": "docs/automatic-model-routing.md", "marker": "Cold refolding restores intent"}
+      ],
+      "tests": [
+        {"file": "tests/auto-model-intent.spec.ts", "name": "retains explicit intent across virtual and concrete execution headers and cold replay"},
+        {"file": "tests/auto-model-intent.spec.ts", "name": "does not infer intent from execution or copied fork/child prefixes"},
+        {"file": "tests/auto-model-host.spec.ts", "name": "diagnoses unavailable continuity evidence ($error) without blocking a new explicit fixed choice"},
+        {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "retains explicit Auto after native virtual-header consumption without relabeling prior turns"}
       ]
     },
     {

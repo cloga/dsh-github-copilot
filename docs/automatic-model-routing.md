@@ -17,8 +17,19 @@ turn can choose differently. Transport, replay, native Usage and billing retain
 the actual model identity. Auto never crosses providers/accounts or changes an
 explicit real-model selection.
 
-The virtual preference remains the Session's pending selection while actual
-request headers record real models. For an otherwise unselected Session that
+The virtual preference normally remains the Session's pending selection while actual
+request headers record real models. A strict plugin-owned public Session projection
+also retains the latest owner-explicit native `model/selection`: if a virtual
+request header consumes native pending, later concrete headers cannot erase that
+Auto intent. Cold refolding restores intent, not old decisions or reasons.
+Copied fork/child prefixes alone do not establish an owner-explicit choice;
+native pending and the existing parent-following rules remain independent.
+Missing or malformed continuity evidence produces a named diagnostic instead of
+guessing Auto from a real model. A new explicit fixed or other-provider selection
+replaces intent for future turns, even after its native pending is consumed.
+Already admitted Auto turns retain their real route through late picker changes.
+This projection neither writes history/settings nor changes native projection ownership.
+For an otherwise unselected Session that
 inherits default Auto, the first request persists the exact virtual
 `model/selection` intent. A later explicit selection wins. Existing fixed
 Sessions are not converted because the global default changes.
