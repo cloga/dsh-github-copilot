@@ -28,6 +28,14 @@ The pinned SDK already has its own context-dependent output clamp. This plugin p
 
 ## Earlier pressure and transaction ownership
 
+For [#280](https://github.com/cloga/dsh-github-copilot/issues/280), a public `agent/pre-step` listener additionally prevents known continuing-step pressure before Core appends `step/start`. It awaits downstream decisions, delegates rejection/cancellation, and requires a committed plugin-owned managed route, no model-selection notice, and a readable native `modelSelection` projection with `pending: null`. First steps and unknown/pending selections delegate: a prior request header is not proof of the next selected route.
+
+The account callback supplies only a current capacity threshold; an empty message array used for this lookup is not an input estimate. The public native token meter measures the existing surface. Above that threshold, the initiating Agent's currently bound engine runs one `compactIfNeeded(agent, 'context-overflow', signal)` transaction, respecting disabled auto and the effective zero/invalid overflow policy. Native failures and cancellation propagate before model-attempt admission; a null/no-progress result delegates to the retained final protections. The next native request is built from the replacement surface. No retry counter, history, usage sample or selected model is rewritten.
+
+This is **partial prevention**, not general accounting repair. In the unchanged rc.2 synthetic AgentLoop fixture, the existing post-start pressure refusal creates an unsampled attempt and the strict native turn aggregate is unavailable, even after successful recovery. With pre-step reduction, the same two real model steps retain their complete native total without that attempt. Native turn-tail matches events by their recorded turn; compaction replacements for an earlier turn are not samples of the current turn. No samples are suppressed to produce the total.
+
+Cold/first-step routes, pending model changes, later system/tool-prefix growth, unavailable evidence, indivisible oversized units and final converted hard-admission errors can still produce missing native turn Usage. Already-recorded totals remain unchanged. The plugin does not fabricate zero usage, display partial sums as full totals, or reinterpret transport failures as compaction pressure.
+
 The public `llm/stream` listener sees a committed, frozen loop request. It requires:
 
 - The exact plugin-owned managed route and an ordinary marked agent-loop call, not an auxiliary purpose.

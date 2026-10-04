@@ -339,7 +339,7 @@ for (const name of [
     `managed liveness must retain unchanged-adapter regression: ${name}`)
 }
 assert(!manifest.capabilities.some(capability => capability.id === 'capability-gated-mixed-copilot-protocols'), 'unshipped Core capability requirement must be retired')
-const genericSources = ['src/account-model-catalog.ts', 'src/account-model-source.ts', 'src/account-model-auth.ts', 'src/preview-provider.ts', 'src/preview-route.ts', 'src/pi-provider-bridge.ts', 'src/request-budget.ts', 'src/compaction-pressure.ts']
+const genericSources = ['src/account-model-catalog.ts', 'src/account-model-source.ts', 'src/account-model-auth.ts', 'src/preview-provider.ts', 'src/preview-route.ts', 'src/pi-provider-bridge.ts', 'src/request-budget.ts', 'src/compaction-pressure.ts', 'src/pre-step-pressure.ts']
 for (const path of genericSources) await verifyGenericSource(path)
 assert(!(await read('src/model-protocol.ts')).includes('llmPiAiModelProtocol'), 'local catalog facts must not depend on an unshipped Core service')
 const legacyRestore = manifest.capabilities.find(capability => capability.id === 'legacy-global-override-restoration')
