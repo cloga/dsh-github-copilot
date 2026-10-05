@@ -1,6 +1,9 @@
 # Copilot account management and continuation experience
 
 Approved account switching reference: [dropdown mock](./mockups/copilot-account-dropdown.html).
+The [Chat account selection mock](./mockups/copilot-chat-account-selection.html)
+supersedes its Chat menu: only configured accounts appear in the list, with
+following controlled separately.
 The [complete continuation mock](./mockups/copilot-account-management.html) retains
 the earlier search-form presentation as historical context; the dropdown replaces it.
 Open the HTML locally; append `?scenario=off-switch` to start with continuation
@@ -12,11 +15,18 @@ It performs no network requests and persists no credentials or settings.
 
 The Credits control opens a compact current-account summary and Switch button.
 Do not render all saved accounts until Switch is opened. A compact anchored dropdown
-marks the current choice, supports bounded internal scrolling, following the global
-account and adding an account. Do not add an account search field or repeat Switch
+marks the effective current account and supports bounded internal scrolling.
+List every configured account, not a hard-coded two-account limit. A separate
+**Follow global default** checkbox clears the Session override when enabled;
+disabling it freezes the currently effective account. Choosing any account,
+including today's default, disables following and creates an explicit override.
+Both paths use the same continuation confirmation, revision readback and CAS,
+and remain disabled while selection is unknown, confirming or saving. Cancelled
+confirmation retains the confirmed checkbox state; failed writes show uncertainty.
+Add accounts only in Models, never in the Chat dropdown. Do not add an account search field or repeat Switch
 buttons per row. Escape closes only the dropdown and restores its trigger; arrows,
 Home and End navigate enabled options. Outside interaction dismisses the list.
-Adding an account does not select it. Quota is account billing-cycle data, not
+Adding an account in Models does not select it. Quota is account billing-cycle data, not
 context occupancy or Session cost; missing and pooled data retain their semantics.
 
 Selection applies to subsequent turns of the viewed Session. An active turn
