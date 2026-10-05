@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.115 (prepared)
+
+- Default automatic segmented recovery on in the explicitly selected compaction recovery engine (#330). Keep fitting summaries native; handle known oversized input or one typed summary context-limit failure inside the same Core transaction.
+- Bound each recovery invocation to 16 physical calls including the first rejected attempt; preserve cancellation, balanced tool pairs, source/shrink checks, native retry ownership and output caps. Never escalate timeout/408/auth/quota/network failures or commit partial summaries.
+- Preserve native `auto: false` and add `automaticRecovery: false` for automatic-segmentation opt-out. Bind summary capacity proof and dispatch to the initiating Agent's account; omit incomplete aggregate accounting after an initial failure.
+- Document explicit same-scope engine migration and rollback without overriding custom engines, presets or live profiles. No Core changes, automatic installation or restart.
+
 ## 0.4.0-alpha.114 (prepared)
 
 - Simplify the Chat account menu to configured accounts only. Move Follow global default into a separate checkbox and keep account addition in Models (#328).

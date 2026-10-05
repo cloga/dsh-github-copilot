@@ -13,7 +13,7 @@ import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import Commands from '@deepseek-ai/dsh-commands'
 import LocalJobs from '@deepseek-ai/dsh-jobs-local'
-import LlmRuntime, { LlmAdapter, ToolCallId, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { LlmAdapter, LlmError, ToolCallId, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -89,6 +89,8 @@ function observeRequest(options: GenerateOptions): RequestObservation {
 
 /** Model double at the public adapter seam; every compaction decision remains Core-owned. */
 class FixtureAdapter extends LlmAdapter {
+  firstSummaryFailure?: string
+  onSummary?: () => void
   nextUsage?: TokenUsage
   defaultUsage?: TokenUsage
   nextTool = false
@@ -107,8 +109,12 @@ class FixtureAdapter extends LlmAdapter {
   override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const summary = options.purpose === 'compaction'
     if (summary) {
+      this.onSummary?.()
       this.summaries.push(observeRequest(options))
       this.summaryStarted.resolve()
+      if (this.summaries.length === 1 && this.firstSummaryFailure) {
+        throw new LlmError('Synthetic summary failure', this.firstSummaryFailure)
+      }
       if (this.summaryMode === 'slow') {
         await new Promise<void>(resolve => {
           const timer = setTimeout(resolve, 360_000)
@@ -234,7 +240,8 @@ afterEach(async () => {
   }
 })
 
-async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmission = false, recoveryEngine = recovery, background = false) {
+async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmission = false, recoveryEngine = recovery, background = false,
+  recoveryConfig: { automaticRecovery?: boolean; auto?: boolean } = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   const forbiddenFetch = vi.fn((): never => { throw new Error('compaction-fixture-network-forbidden') })
@@ -258,6 +265,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
     maxTokens: 8192,
     compactionRetries: 0,
     maxOverflowRetries: 1,
+    ...recoveryConfig,
   }
   const engineMount = recoveryEngine
     ? ctx.plugin(CopilotManualRecoveryCompactionEngine, compactionConfig)
@@ -326,6 +334,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
     ? await ctx.agents.create({ sessionId: id, agentOptions: { provider, model, maxTokens: 8192 } })
     : undefined
   const agent = ownerHandle?.agent ?? await ctx.agentLoop.create(id, { provider, model, maxTokens: 8192 })
+  if (recoveryEngine) adapter.onSummary = () => expect(ctx.agents.currentInitiator()).toBe(agent)
   const send = (text: string): void => {
     agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
   }
@@ -555,7 +564,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
   })
 
   it('recovers oversized manual history with one native transaction and honest multi-call audit', async () => {
-    const f = await fixture('reject-overflow', true)
+    const f = await fixture('reject-overflow', true, false, true, false, { automaticRecovery: false })
     for (let turn = 0; turn < 6; turn++) {
       f.send(`HISTORICAL_TURN_${turn} ${'historical detail '.repeat(100)}`)
       await f.agent.whenIdle()
@@ -575,6 +584,85 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     expect(f.agent.session.surface.replaceGeneration).toBeGreaterThan(before)
     expect(f.forbiddenFetch).not.toHaveBeenCalled()
   })
+
+  it.each(['enabled', 'disabled', 'auto-off'] as const)('defaults automatic oversized recovery on without a manual command, enabled=%s', async mode => {
+    const enabled = mode === 'enabled'
+    const f = await fixture('reject-overflow', true, false, true, false,
+      enabled ? {} : mode === 'disabled' ? { automaticRecovery: false } : { auto: false })
+    for (let turn = 0; turn < 6; turn++) {
+      f.send(`AUTOMATIC_HISTORY_${turn} ${'historical detail '.repeat(100)}`)
+      await f.agent.whenIdle()
+    }
+    const generation = f.agent.session.surface.replaceGeneration
+    const source = JSON.stringify(f.events)
+    const length = f.events.length
+    f.enable(1000, 'fixture-model-A')
+    f.send(currentSentinel)
+    await f.agent.whenIdle()
+    const summaries = f.events.slice(length).filter(event => event.type === 'compaction/summary')
+    expect(summaries).toHaveLength(enabled ? 1 : 0)
+    if (enabled) {
+      expect(f.adapter.summaries.length).toBeGreaterThan(1)
+      expect(f.adapter.summaries.length).toBeLessThanOrEqual(16)
+      expect(f.agent.session.surface.replaceGeneration).toBeGreaterThan(generation)
+      expect(summaries[0]?.data).not.toHaveProperty('llmStreamCall')
+      expect(f.events.at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
+      expect(f.adapter.conversation.at(-1)?.text).toContain(checkpoint)
+      expect(f.adapter.conversation.at(-1)?.text).toContain(currentSentinel)
+    } else {
+      expect(f.adapter.summaries).toHaveLength(mode === 'auto-off' ? 0 : 1)
+      expect(f.agent.session.surface.replaceGeneration).toBe(generation)
+    }
+    expect(JSON.stringify(f.events.slice(0, length))).toBe(source)
+    expect(f.forbiddenFetch).not.toHaveBeenCalled()
+  })
+
+  it('cancels automatic segmented recovery without a partial checkpoint', async () => {
+    const f = await fixture('await-abort', true)
+    for (let turn = 0; turn < 6; turn++) {
+      f.send(`CANCEL_HISTORY_${turn} ${'historical detail '.repeat(100)}`)
+      await f.agent.whenIdle()
+    }
+    const generation = f.agent.session.surface.replaceGeneration
+    f.enable(1000, 'fixture-model-A')
+    f.send(currentSentinel)
+    await Promise.race([f.adapter.summaryStarted.promise, f.agent.whenIdle().then(() => {
+      throw new Error('Expected automatic segmented recovery')
+    })])
+    f.agent.cancel({ kind: 'user' })
+    await f.agent.whenIdle()
+    expect(f.agent.session.surface.replaceGeneration).toBe(generation)
+    expect(f.events.filter(event => event.type === 'compaction/summary')).toHaveLength(0)
+    expect(f.adapter.summaries).toHaveLength(1)
+    expect(f.events.at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'aborted' } } })
+  })
+
+  it.each(['CONTEXT_WINDOW_EXCEEDED', 'TIMEOUT', 'AUTH', 'RATE_LIMIT', 'NETWORK_ERROR'])(
+    'escalates only a typed summary capacity failure once: %s', async code => {
+      const f = await fixture('stop', true)
+      for (let turn = 0; turn < 3; turn++) {
+        f.send(`SMALL_HISTORY_${turn} ${'detail '.repeat(50)}`)
+        await f.agent.whenIdle()
+      }
+      f.adapter.firstSummaryFailure = code
+      const generation = f.agent.session.surface.replaceGeneration
+      f.enable(700, 'fixture-model-A')
+      f.send(currentSentinel)
+      await f.agent.whenIdle()
+      if (code === 'CONTEXT_WINDOW_EXCEEDED') {
+        expect(f.adapter.summaries.length).toBeGreaterThan(2)
+        expect(f.adapter.summaries.length).toBeLessThanOrEqual(16)
+        expect(f.agent.session.surface.replaceGeneration).toBeGreaterThan(generation)
+        const summary = f.events.find(event => event.type === 'compaction/summary')
+        expect(summary?.data).not.toHaveProperty('llmStreamCall')
+        expect(summary?.data).not.toHaveProperty('usage')
+      } else {
+        expect(f.adapter.summaries).toHaveLength(1)
+        expect(f.agent.session.surface.replaceGeneration).toBe(generation)
+        expect(f.events.filter(event => event.type === 'compaction/summary')).toHaveLength(0)
+      }
+      expect(f.forbiddenFetch).not.toHaveBeenCalled()
+    })
 
   it('closes a cancelled oversized manual transaction without replacing its source', async () => {
     const f = await fixture('await-abort', true)

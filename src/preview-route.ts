@@ -70,8 +70,8 @@ export interface GitHubCopilotPreviewView {
 }
 export interface GitHubCopilotPreview {
   getView(): GitHubCopilotPreviewView
-  /** Synchronous, account-proven capacities for an explicit manual summary; never triggers discovery. */
-  recoveryLimits(modelId: string): {
+  /** Synchronous, account-proven summary capacities for the initiating Agent; never triggers discovery. */
+  recoveryLimits(modelId: string, agent?: Agent): {
     readonly limits: Pick<AccountModelDescriptor, 'contextWindow' | 'maxInputTokens' | 'maxTokens'>
     readonly policy: Partial<RequestBudgetPolicy>
     readonly assertCurrent: () => void
@@ -1020,7 +1020,25 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     getView: () => disposed ? initial.preview.getView() : currentRuntime().preview.getView(),
     refresh: async () => currentRuntime().preview.refresh(),
     discover: options => currentRuntime(options?.signal).preview.discover(options),
-    recoveryLimits: model => currentRuntime().preview.recoveryLimits(model),
+    recoveryLimits: (model, agent) => {
+      const accounts = ctx.get('githubCopilotSessionAccounts')
+      const binding = agent !== undefined && accounts !== undefined
+        ? accounts.bindingForAccount((accounts.turns.current(agent.session) ?? accounts.selected(agent)).accountId)
+        : requestBinding()
+      const lease = runtimeFor(binding).preview.recoveryLimits(model)
+      if (lease === undefined) return undefined
+      return {
+        ...lease,
+        assertCurrent: () => {
+          binding?.assertCurrent()
+          if (agent !== undefined && accounts !== undefined
+            && (accounts.turns.current(agent.session) ?? accounts.selected(agent)).accountId !== binding?.accountId) {
+            throw new Error('COPILOT_MANUAL_RECOVERY_ACCOUNT_PROOF_CHANGED')
+          }
+          lease.assertCurrent()
+        },
+      }
+    },
     routeFacts: model => currentRuntime().preview.routeFacts(model),
     captureSearchProof: () => currentRuntime().preview.captureSearchProof(),
     resolveRequestAuth: (model, signal) => currentRuntime(signal).preview.resolveRequestAuth(model, signal),

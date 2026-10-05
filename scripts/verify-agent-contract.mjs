@@ -74,6 +74,11 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.continuation?.tests?.includes('tests/fixtures/compaction-pressure-core.fixture.ts')
     && agentGuide.includes('Continuation processing is reasoning-only'),
   'continuation must retain bounded cancellable reasoning-only work and native compaction evidence')
+  require(contract.tasks.compaction?.automaticRecoveryBoundary?.includes('Default-on only in the explicitly selected replacement')
+    && contract.tasks.compaction?.automaticRecoveryBoundary?.includes('at most 16 calls')
+    && contract.tasks.compaction?.automaticRecoveryBoundary?.includes('No 408/network/auth/quota fallback')
+    && agentGuide.includes('automaticRecovery: false'),
+  'automatic segmented recovery must retain explicit composition, capacity-only escalation and bounded native ownership')
   for (const [name, task] of Object.entries(contract.tasks)) {
     require(/^[a-z]+$/.test(name), 'invalid task id')
     require(typeof task.purpose === 'string' && typeof task.risk === 'string', `${name} needs purpose and risk`)

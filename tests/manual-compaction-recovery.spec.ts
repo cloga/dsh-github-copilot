@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeOversizedManualInput } from '../src/manual-compaction-recovery.ts'
+import { CopilotManualRecoveryCompactionEngine, summarizeOversizedManualInput } from '../src/manual-compaction-recovery.ts'
 
 function message(role: 'user' | 'assistant' | 'tool', text: string, callId?: string) {
   return {
@@ -12,6 +12,14 @@ function message(role: 'user' | 'assistant' | 'tool', text: string, callId?: str
 }
 
 describe('explicit oversized manual summary recovery', () => {
+  it('defaults only the plugin recovery switch while preserving native policies', () => {
+    const config = { auto: false, retainTokens: 321, maxTokens: 4096, maxOverflowRetries: 0,
+      modelPolicies: [{ provider: 'github-copilot-preview', model: 'fixture', maxTokens: 2048 }] }
+    expect(CopilotManualRecoveryCompactionEngine.Config(config)).toEqual({ ...config, automaticRecovery: true })
+    expect(CopilotManualRecoveryCompactionEngine.Config({ ...config, automaticRecovery: false }))
+      .toEqual({ ...config, automaticRecovery: false })
+    expect(() => CopilotManualRecoveryCompactionEngine.Config({ automaticRecovery: 'false' })).toThrow()
+  })
   it('reduces an oversized balanced history with bounded complete calls and an unmarked aggregate audit', async () => {
     const calls: Array<{ messages: readonly ReturnType<typeof message>[] }> = []
     const messages = [

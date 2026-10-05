@@ -1,8 +1,10 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
+import type { BasicCompactionConfig } from '@deepseek-ai/dsh-compaction-basic'
+import z from '@deepseek-ai/schemastery'
 import type { ContentBlock, Message, TokenUsage, ToolSchema } from '@deepseek-ai/dsh-llm'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, LlmError } from '@deepseek-ai/dsh-llm'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
 import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
@@ -58,7 +60,7 @@ function sumUsage(usages: readonly TokenUsage[]): TokenUsage {
 }
 
 /**
- * Bounded, explicit manual-only map/fold. The native engine still owns the only
+ * Bounded map/fold. The native engine still owns the only
  * durable transaction, source-stability check, shrink check and cancellation.
  */
 export async function summarizeOversizedManualInput<M extends RecoveryMessage, R extends RecoveryResult>(
@@ -135,10 +137,19 @@ export async function summarizeOversizedManualInput<M extends RecoveryMessage, R
  * mount both: Cordis compaction is a singleton, not an overridable service.
  */
 export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine {
-  private readonly manual = new WeakMap<Agent, number>()
+  static override Config = z.intersect([
+    BasicCompactionEngine.Config,
+    z.object({ automaticRecovery: z.boolean().default(true) }),
+  ])
 
-  constructor(ctx: Context, config: ConstructorParameters<typeof BasicCompactionEngine>[1] = {}) {
-    super(ctx, config)
+  private readonly manual = new WeakMap<Agent, number>()
+  private readonly automaticRecovery: boolean
+
+  constructor(ctx: Context, config: BasicCompactionConfig & { automaticRecovery?: boolean } = {}) {
+    const { automaticRecovery = true, ...nativeConfig } = config
+    if (typeof automaticRecovery !== 'boolean') throw recoverError('INVALID_POLICY')
+    super(ctx, nativeConfig)
+    this.automaticRecovery = automaticRecovery
     ctx.inject(['commands', 'jobs'], scope => {
       installBackgroundCompaction(scope, (agent, signal) => this.compactNow(agent, signal))
     })
@@ -161,7 +172,8 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
     signal?: AbortSignal,
   ) {
     const routed = agent.session.requestHeader()?.config
-    const policy = this.config.modelPolicies.find(item => item.provider === routed?.provider && item.model === routed.model)
+    const target = routed?.provider && routed.model ? routed : agent.options
+    const policy = this.config.modelPolicies.find(item => item.provider === target.provider && item.model === target.model)
     const configuredProvider = policy?.summarizationProvider ?? this.config.summarizationProvider
     const configuredModel = policy?.summarizationModel ?? this.config.summarizationModel
     const selected = configuredProvider.length > 0 ? { provider: configuredProvider, model: configuredModel }
@@ -169,26 +181,52 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
         : { provider: agent.options.provider, model: agent.options.model }
     const summaryProvider = selected.provider
     const summaryModel = selected.model
-    if (!this.manual.has(agent) || summaryProvider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID || !summaryModel) {
+    if ((!this.manual.has(agent) && !this.automaticRecovery)
+      || summaryProvider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID || !summaryModel) {
       return super.summarize(input, agent, signal)
     }
     const preview = this.ctx.get('githubCopilotPreview')
-    const lease = preview?.recoveryLimits(summaryModel)
+    const lease = preview?.recoveryLimits(summaryModel, agent)
     if (lease === undefined) throw recoverError('ACCOUNT_PROOF_UNAVAILABLE')
+    const agents = this.ctx.get('agents')
+    if (this.ctx.get('githubCopilotSessionAccounts') !== undefined && agents === undefined) {
+      throw recoverError('INITIATOR_UNAVAILABLE')
+    }
+    const summarize = (candidate: RecoveryInput<Message>) => agents === undefined
+      ? super.summarize(candidate, agent, signal)
+      : agents.withInitiator(agent, () => super.summarize(candidate, agent, signal))
     const maxTokens = policy?.maxTokens ?? this.config.maxTokens
     const budget = calculateRequestBudget(lease.limits, maxTokens, resolveRequestBudgetPolicy(lease.policy))
     if (!budget.ok) throw recoverError(budget.code)
     // Reserve space for the Core-added summary directive and estimator
     // variance. The provider's final native guard remains authoritative.
     const toolHistoryBytes = Buffer.byteLength(JSON.stringify(agent.session.toolHistory()), 'utf8')
-    const inputLimit = budget.budget.hardInputLimit - 4096 - toolHistoryBytes
+    let inputLimit = budget.budget.hardInputLimit - 4096 - toolHistoryBytes
     if (inputLimit <= 0) throw recoverError('FIXED_PREFIX')
     const operationSignal = signal ?? new AbortController().signal
     const estimate = (candidate: RecoveryInput<Message>): number =>
       Buffer.byteLength(JSON.stringify(candidate), 'utf8')
-    if (estimate(input) <= inputLimit) return super.summarize(input, agent, signal)
-    return summarizeOversizedManualInput({
+    operationSignal.throwIfAborted()
+    lease.assertCurrent()
+    const originalSize = estimate(input)
+    let failedAttempt = false
+    if (originalSize <= inputLimit) {
+      try {
+        return await summarize(input)
+      } catch (error) {
+        operationSignal.throwIfAborted()
+        if (!(error instanceof LlmError) || error.code !== 'CONTEXT_WINDOW_EXCEEDED') throw error
+        lease.assertCurrent()
+        // A capacity failure is not an exact token measurement. Try one bounded
+        // reduction, never resubmit the rejected input or recursively retry.
+        inputLimit = Math.min(inputLimit, Math.floor(originalSize / 2))
+        failedAttempt = true
+      }
+    }
+    this.ctx.logger.info('[github-copilot] Segmented compaction recovery started; up to %d additional model calls.', failedAttempt ? 15 : 16)
+    const result = await summarizeOversizedManualInput({
       input, inputLimit, signal: operationSignal, estimate,
+      maxCalls: failedAttempt ? 15 : 16,
       assertCurrent: lease.assertCurrent,
       makeCheckpoint: summary => createUserMessage({
         source: { kind: 'user' },
@@ -198,8 +236,14 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
           { type: 'text', text: '</compacted-summary>' },
         ],
       }),
-      summarize: candidate => super.summarize(candidate, agent, signal),
+      summarize,
     })
+    // The rejected first request has no complete accounting in this hook.
+    if (failedAttempt) {
+      const { usage: _usage, ...unaccounted } = result
+      return unaccounted
+    }
+    return result
   }
 }
 

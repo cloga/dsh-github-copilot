@@ -10,6 +10,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import type { GenerateOptions, Message, PreparedAdapterCall, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -334,6 +335,7 @@ describe('account-local managed runtimes', () => {
     contexts.push(ctx)
     let active = 'canonical'
     let initiator: string | undefined
+    let summaryAccount = 'canonical'
     const bound = new WeakMap<AbortSignal, string>()
     const changed = new Set<() => void>()
     const captured = vi.fn()
@@ -364,6 +366,9 @@ describe('account-local managed runtimes', () => {
         onChanged: (listener: () => void) => { changed.add(listener); return () => { changed.delete(listener) } },
       } } as never)
       owner.provide('githubCopilotSessionAccounts', {
+        turns: { current: () => undefined },
+        selected: () => ({ accountId: summaryAccount }),
+        bindingForAccount: captureAccount,
         requestBinding: (signal?: AbortSignal) => captureAccount((signal && bound.get(signal)) ?? initiator ?? active),
         admit: (_agent: Agent, _turn: number, signal: AbortSignal) => captureAccount(bound.get(signal) ?? initiator ?? active),
         recordRequest: captured,
@@ -376,6 +381,7 @@ describe('account-local managed runtimes', () => {
     const adapter = registrations.mock.calls[0]![1]
     registrations.mockRestore()
     return { ctx, adapter, captured,
+      selectSummaryAccount(id: string) { summaryAccount = id },
       bind(id: string) { const signal = new AbortController().signal; bound.set(signal, id); return signal },
       switchDefault(id: string) { active = id; for (const listener of changed) listener() },
       within(id: string | undefined) { initiator = id },
@@ -403,6 +409,20 @@ describe('account-local managed runtimes', () => {
     for await (const chunk of prepared.stream({ provider: PREVIEW, model: prepared.model.id, messages: [], signal })) chunks.push(chunk)
     expect(chunks.some(chunk => chunk.type === 'finish' && chunk.reason.kind === 'stop')).toBe(true)
   }
+  it('binds explicit summary capacity proof to its Agent rather than the current default', async () => {
+    scopedFetch()
+    const harness = await scopedRuntime()
+    await harness.adapter.prepareCall(PREVIEW, 'account-a-model', harness.bind('canonical'))
+    await harness.adapter.prepareCall(PREVIEW, 'account-b-model', harness.bind(second))
+    harness.switchDefault(second)
+    const agent = { session: { id: SessionId('summary-owner') } } as Agent
+    const lease = harness.ctx.githubCopilotPreview.recoveryLimits('account-a-model', agent)
+    expect(lease).toBeDefined()
+    expect(harness.ctx.githubCopilotPreview.recoveryLimits('account-b-model', agent)).toBeUndefined()
+    expect(() => lease!.assertCurrent()).not.toThrow()
+    harness.selectSummaryAccount(second)
+    expect(() => lease!.assertCurrent()).toThrow('COPILOT_MANUAL_RECOVERY_ACCOUNT_PROOF_CHANGED')
+  })
   it('keeps concurrent prepared turns on their own record when the global directory switches', async () => {
     const requests = scopedFetch()
     const harness = await scopedRuntime()
