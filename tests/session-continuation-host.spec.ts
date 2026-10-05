@@ -17,7 +17,7 @@ async function checkPersistence() {
   })
 
   ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', value, revision }], mutate })
-  const session = { id: 'synthetic-session' }
+  const session = { id: 'synthetic-session' as NonNullable<GenerateOptions['sessionId']> }
   const agent = { ctx, session } as unknown as Agent
   const scope = scopeTarget(agent, agent)
   let owner = installSessionContinuation(ctx)

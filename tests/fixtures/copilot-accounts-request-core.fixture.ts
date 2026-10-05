@@ -19,6 +19,7 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
   'binds preparation and native %s dispatch to the active account without copying the canonical grant', async endpoint => {
   const ctx = new Context()
   let selected = A, revision = 1
+  const continuationDefaultHistory = [{ enabled: true, changedAt: 1 }]
   const records = new Map([A, B].map(id => [key(id), { kind: 'grant', payload: {
     type: 'oauth', refresh: `synthetic-github-${id}`, access: `synthetic-access-${id}`,
     expires: Date.now() + 7_200_000, availableModelIds: [MODEL],
@@ -63,7 +64,7 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
     ctx.provide('credentials', { readRecord: read, listRecords: async () => [...records.keys()].map(key => ({ key, kind: 'grant' })),
       modifyRecord: async () => { throw new Error('Valid test tokens must not refresh') },
       deleteRecord: async () => { throw new Error('No fixture deletion') } })
-    ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', revision, value: { activeAccountId: selected } }],
+    ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', revision, value: { activeAccountId: selected, continuationDefaultHistory } }],
       mutate: async (_namespace: string, operations: readonly { value: string }[], expected: number) => {
         expect(expected).toBe(revision)
         selected = operations[0]!.value; revision++

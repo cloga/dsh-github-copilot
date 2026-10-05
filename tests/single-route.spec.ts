@@ -27,13 +27,22 @@ async function runtime(legacy = false) {
     expires: Date.now() + 3_600_000, availableModelIds: ['future-account-model'] } }
   const documents: Record<string, unknown> = {
     'llm-pi-ai': { providers: legacy ? { 'github-copilot': { compat: { supportsStrictMode: false } } } : {} },
-    'github-copilot': companionConfig,
+    'github-copilot': { ...companionConfig },
   }
   const revisions = new Map<string, number>()
   const watchers = new Map<string, () => void>()
   let notifySettings: (namespace: string, revision: number) => void = () => undefined
   notifySettings = (namespace, revision) => ctx.emit('settings/document-updated', namespace as never, revision)
-  const mutate = vi.fn(async (ns: string, operations: readonly { op: string; path: string[] }[]) => {
+  const mutate = vi.fn(async (ns: string, operations: readonly { op: string; path: string[]; value?: unknown }[], expected?: number) => {
+    if (ns === 'github-copilot') {
+      expect(expected).toBe(revisions.get(ns) ?? 0)
+      expect(operations).toEqual([{ op: 'set', path: ['continuationDefaultHistory'],
+        value: [{ enabled: true, changedAt: expect.any(Number) }] }])
+      documents[ns] = { ...documents[ns] as object, continuationDefaultHistory: operations[0]!.value }
+      revisions.set(ns, (revisions.get(ns) ?? 0) + 1)
+      notifySettings(ns, revisions.get(ns)!)
+      return
+    }
     if (ns !== 'llm-pi-ai' || operations.length !== 1 || operations[0]?.op !== 'unset'
       || operations[0].path.join('.') !== 'providers.github-copilot') throw new Error('Unexpected automatic settings mutation')
     documents[ns] = { providers: {} }
@@ -81,7 +90,8 @@ describe('single managed Copilot route with native OAuth', () => {
     const status = await h.ctx.get('githubCopilotAuthorization')!.status()
     expect(status).toMatchObject({ configured: true, phase: 'signed-in', route: { state: 'not-configured' } })
     expect(await Companion.ensureGitHubCopilotProviderProfile(h.ctx)).toBe(false)
-    expect(h.mutate).not.toHaveBeenCalled()
+    expect(h.mutate).toHaveBeenCalledOnce()
+    expect(h.mutate.mock.calls[0]?.[0]).toBe('github-copilot')
     expect(h.deleteRecord).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
   })
@@ -112,7 +122,8 @@ describe('single managed Copilot route with native OAuth', () => {
     const model = await h.ctx.llm.resolveModelInfo(MANAGED, 'future-account-model')
     expect(model.reasoning?.efforts.map(effort => effort.id)).toEqual(['low', 'high'])
     expect(fetch).toHaveBeenCalledTimes(1)
-    expect(h.mutate).not.toHaveBeenCalled()
+    expect(h.mutate).toHaveBeenCalledOnce()
+    expect(h.mutate.mock.calls[0]?.[0]).toBe('github-copilot')
     expect(h.deleteRecord).not.toHaveBeenCalled()
   })
 
@@ -158,7 +169,8 @@ describe('single managed Copilot route with native OAuth', () => {
       expect(updated).toHaveBeenCalledTimes(1)
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(h.modifyRecord).not.toHaveBeenCalled()
-      expect(h.mutate).not.toHaveBeenCalled()
+      expect(h.mutate).toHaveBeenCalledOnce()
+      expect(h.mutate.mock.calls[0]?.[0]).toBe('github-copilot')
     } finally { remove() }
   })
 
@@ -174,7 +186,8 @@ describe('single managed Copilot route with native OAuth', () => {
     expect(h.documents['llm-pi-ai']).toEqual({ providers: {} })
     expect(h.ctx.llm.listProviders().map(provider => provider.id)).toContain(MANAGED)
     expect(h.ctx.authorization.describe(parseCredentialKey(KEY))?.methods.some(method => method.id === 'oauth')).toBe(true)
-    expect(h.mutate).toHaveBeenCalledOnce()
+    expect(h.mutate).toHaveBeenCalledTimes(2)
+    expect(h.mutate.mock.calls.map(([namespace]) => namespace)).toEqual(['github-copilot', 'llm-pi-ai'])
     expect(h.deleteRecord).not.toHaveBeenCalled()
     expect(h.ctx.agentDefaultModel.currentSelection().provider).toBe('github-copilot')
   })

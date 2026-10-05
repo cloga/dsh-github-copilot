@@ -26,7 +26,7 @@ function fixture() {
   }
   return { node, root, remote,
     click: async (label: string) => {
-      const button = [...node.querySelectorAll('button')].find(item => item.textContent === label)
+      const button = Array.from(node.querySelectorAll('button')).find(item => item.textContent === label)
       expect(button?.type).toBe('button')
       await act(async () => button!.click())
     },
