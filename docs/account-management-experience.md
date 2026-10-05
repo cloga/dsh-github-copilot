@@ -99,6 +99,13 @@ light popup backgrounds with dark-theme white text. Dropdowns and long account l
 must remain keyboard-operable, bounded and usable on narrow viewports. Explicit
 loading, unknown, stale, failed-save and cancellation states are required.
 
+The shared Models/Chat account dropdown must composite translucent native menu
+tokens over an opaque system Canvas, so underlying settings and quota text never
+bleed through. Dropdown and Credits panel elevation uses a dark shadow, not
+CanvasText (which becomes a white glow in dark mode). Theme acceptance must
+include translucent tokens, both themes/surfaces and narrow viewports; fixtures
+that replace the token with opaque Canvas alone cannot establish this behavior.
+
 ## Implementation status
 
 This document records the approved target, not a release or runtime attestation.

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.111"
+    "version": "0.4.0-alpha.112"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -326,6 +326,7 @@
       "tests": [
         {"file": "tests/copilot-identity-refresh.spec.ts", "name": "renews expired identity once for account %s without changing metadata-only reads"},
         {"file": "tests/copilot-account-identity-cache.spec.ts", "name": "hydrates saved inactive names without activating them, then reuses them"},
+        {"file": "tests/account-dropdown.spec.ts", "name": "backs translucent native menu tokens with opaque Canvas and uses a dark elevation shadow"},
         {"file": "tests/copilot-account-identity-cache.spec.ts", "name": "retains inactive verified names after freshness expiry without reads or network in status"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "settles quota before a slow identity renewal and uses nonforcing ensure on visible refresh cadence"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "never writes a captured A refresh into B after an external selection change"},

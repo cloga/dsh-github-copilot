@@ -83,8 +83,9 @@ export function AccountDropdown(props: {
       style: { position: 'fixed', inset: 'auto', margin: 0, ...placement, zIndex: 1100,
         width: 300, maxWidth: 'calc(100vw - 24px)', boxSizing: 'border-box', overflowY: 'auto',
         padding: 5, border: '1px solid var(--dsw-alias-border-main, GrayText)', borderRadius: 10,
-        background: 'var(--dsw-specific-menu, Canvas)', color: 'var(--dsw-alias-label-primary, CanvasText)',
-        colorScheme: 'inherit', font: 'inherit', boxShadow: '0 10px 28px color-mix(in srgb, CanvasText 20%, transparent)' },
+        background: 'linear-gradient(var(--dsw-specific-menu, Canvas), var(--dsw-specific-menu, Canvas)), Canvas',
+        color: 'var(--dsw-alias-label-primary, CanvasText)',
+        colorScheme: 'inherit', font: 'inherit', boxShadow: '0 10px 28px rgb(0 0 0 / 24%)' },
       onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
         const buttons = Array.from(menu.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])
         if (event.key === 'Escape') {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.112 (prepared)
+
+- Back the shared Models/Chat account dropdown's translucent native menu token with opaque Canvas. Underlying settings and quota text no longer bleed through in dark mode (#324).
+- Replace CanvasText-based dropdown and Credits shadows with restrained dark elevation in both themes. Preserve account routing, confirmation, continuation consent, keyboard navigation and viewport bounds.
+- Add theme regressions covering opacity and elevation; document translucent-token acceptance. No Core changes, live installation or restart.
+
 ## 0.4.0-alpha.111 (prepared)
 
 - Retain verified saved-account display names beyond the ten-minute revalidation interval in bounded Host memory. Models and Session Credits resolve missing inactive account names without switching accounts; credential changes, removal and failed verification still invalidate names (#322).

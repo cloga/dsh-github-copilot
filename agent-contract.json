@@ -67,7 +67,7 @@
       "purpose": "Compact shared account switching in Models and Chat without account search",
       "read": ["src/account-dropdown.ts", "src/copilot-accounts-card.ts", "src/copilot-usage-card.ts", "docs/account-management-experience.md", "docs/mockups/copilot-account-dropdown.html"],
       "tests": ["tests/account-dropdown.spec.ts", "tests/copilot-accounts-card.spec.ts", "tests/copilot-usage-card.spec.ts"],
-      "risk": "Public native popover and plugin-owned controls only. Mark current choice, bound internal scrolling and keep Add in the footer. Preserve global confirmation, explicit-off continuation consent, revision readback, cancellation and admitted-turn ownership. No account search, repeated per-row Switch actions, Core/private DOM changes, automatic send/retry or profile install."
+      "risk": "Public native popover and plugin-owned controls only. Mark current choice, bound internal scrolling and keep Add in the footer. Back translucent native menu tokens with opaque Canvas; use dark elevation rather than CanvasText shadows and verify Models/Chat in both themes. Preserve global confirmation, explicit-off continuation consent, revision readback, cancellation and admitted-turn ownership. No account search, repeated per-row Switch actions, Core/private DOM changes, automatic send/retry or profile install."
     },
     "accounts": {
       "purpose": "Independent official OAuth grants, truthful multi-account authorization progress, bounded identity renewal and retained inactive account names, active-turn identity capture, global default and Session next-turn overrides inside Credits",
