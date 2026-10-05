@@ -6,6 +6,7 @@
 - Separate saved-account reauthorization/removal from switching. Preserve global confirmation, explicit-off continuation consent, fresh revision readback, cancellation and admitted-turn ownership; selecting never sends or retries.
 - Record the approved dropdown mock and keyboard/mobile behavior. No Core changes, credential migration, live installation or restart.
 - Default failure-recovery consent to **Continue in this session**, including reopening after Cancel. Next-turn-only remains selectable; explicit acceptance, one-hour evidence lifetime, validation and Host-restart expiry stay unchanged.
+- Omit the nonfunctional Chat management entry and unavailable-navigation paragraph when no public Models navigation callback exists; keep full management in Models.
 
 ## 0.4.0-alpha.109 (prepared)
 

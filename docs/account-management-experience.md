@@ -24,12 +24,13 @@ keeps its admitted account and policy. Save failures retain their real uncertain
 and never imply that a change succeeded. Session explicit choices do not change
 other Sessions or the global default.
 
-The same panel includes a collapsible continuation policy and a single
-"Manage accounts and models" entry. Full management belongs in Models.
+The same panel includes a collapsible continuation policy. Full management belongs
+in Models; show a "Manage accounts and models" entry only with a working public
+navigation callback. Do not show a disabled link or unavailable-navigation paragraph.
 Opening and closing Settings must not discard the composer draft or change the
 selected Session. Direct navigation and automatic expansion depend on published
-navigation APIs; absent support requires a named diagnostic and truthful manual
-navigation instructions, not parent DOM manipulation.
+navigation APIs; absent support leaves navigation to ordinary Settings, never
+parent DOM manipulation or a nonfunctional entry.
 
 ## Models: one Manage disclosure, two responsibilities
 

@@ -151,9 +151,7 @@ function Surface({ runtime, remote, accountsRemote, addRemote, sessionRemote, co
     beforeAccountChange: current.provider === 'github-copilot-preview' ? continuation.beforeAccountChange : undefined,
     accountActions: current.provider === 'github-copilot-preview'
       ? createElement(CopilotAccountAdd, { remote: addRemote, locale: language, onChanged: added }) : undefined,
-    navigationDiagnostic: language.startsWith('zh')
-      ? '当前 Core 未提供公开的 Models 直达导航。请打开设置 → 模型 → GitHub Copilot → 管理；返回后草稿与本 Session 设置不变。'
-      : 'This Core has no public Models deep link. Open Settings → Models → GitHub Copilot → Manage; your draft and Session settings remain unchanged.' })
+  })
 }
 
 /** Public additive dock only; native composer, ContextMeter and other features stay owned by Core. */

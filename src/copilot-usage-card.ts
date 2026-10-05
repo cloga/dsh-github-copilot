@@ -25,7 +25,6 @@ export interface CopilotUsageCardProps {
   accountActions?: ReactElement
   continuation?: ReactElement
   onManage?: () => void
-  navigationDiagnostic?: string
   /** Parent-owned consent; check the request signal after awaits and dismiss on abort. */
   beforeAccountChange?: (accountId: string | null, signal: AbortSignal) => Promise<boolean>
   sessionAccount?: {
@@ -61,7 +60,6 @@ const copy = {
     nextAccount: 'Next turn',
     savingAccount: 'Saving account…', manage: 'Manage accounts and models',
     confirmingAccount: 'Reviewing account switch…',
-    navigationUnavailable: 'Account and model settings navigation is unavailable in this deployment.',
   },
   zh: {
     credits: '额度', requests: '高级请求', unknown: 'Copilot 用量',
@@ -89,7 +87,6 @@ const copy = {
     nextAccount: '下一轮',
     savingAccount: '正在保存账号…', manage: '管理账号与模型',
     confirmingAccount: '正在确认账号切换…',
-    navigationUnavailable: '当前部署无法导航至账号与模型设置。',
   },
 } as const
 
@@ -418,7 +415,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       selected: sessionAccount.source === 'session' && sessionAccount.accountId === account.id,
     })),
   ] : []
-  const navigationDiagnostic = props.navigationDiagnostic ?? 'COPILOT_ACCOUNT_MANAGEMENT_NAVIGATION_UNAVAILABLE'
 
   return h('span', { style: { display: 'inline-flex', minWidth: 0, maxWidth: '100%', fontFamily: 'var(--dsw-font-family, inherit)' } },
     h('button', {
@@ -510,16 +506,12 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       style: { color: 'inherit', fontSize: 12 } }, t.plan),
     h('details', { style: muted }, h('summary', { style: { cursor: 'pointer' } }, t.manual),
       h('code', { style: { userSelect: 'all', overflowWrap: 'anywhere' } }, 'https://github.com/settings/copilot')),
-    h('div', { style: { ...separator, display: 'grid', gap: 6 } },
-      h('button', { type: 'button', role: 'link', disabled: props.onManage === undefined,
-        'aria-describedby': props.onManage === undefined ? `${id}-navigation` : undefined,
+    props.onManage === undefined ? null : h('div', { style: { ...separator, display: 'grid', gap: 6 } },
+      h('button', { type: 'button', role: 'link',
         style: { ...button, border: 'none', background: 'transparent', textAlign: 'left', textDecoration: 'underline',
-          padding: 0, color: props.onManage === undefined ? secondary : 'inherit',
-          cursor: props.onManage === undefined ? 'default' : 'pointer' },
+          padding: 0, color: 'inherit', cursor: 'pointer' },
         onClick: () => { if (props.onManage !== undefined) { close(); props.onManage() } },
-      }, t.manage),
-      props.onManage === undefined ? h('p', { id: `${id}-navigation`, style: muted },
-        h('code', null, navigationDiagnostic), ` · ${t.navigationUnavailable}`) : null),
+      }, t.manage)),
     ) : null,
   )
 }
