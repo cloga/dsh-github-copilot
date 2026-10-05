@@ -18,7 +18,7 @@ describe('explicit oversized manual summary recovery', () => {
     expect(CopilotManualRecoveryCompactionEngine.Config(config)).toEqual({ ...config, automaticRecovery: true })
     expect(CopilotManualRecoveryCompactionEngine.Config({ ...config, automaticRecovery: false }))
       .toEqual({ ...config, automaticRecovery: false })
-    expect(() => CopilotManualRecoveryCompactionEngine.Config({ automaticRecovery: 'false' })).toThrow()
+    expect(() => Reflect.apply(CopilotManualRecoveryCompactionEngine.Config, undefined, [{ automaticRecovery: 'false' }])).toThrow()
   })
   it('reduces an oversized balanced history with bounded complete calls and an unmarked aggregate audit', async () => {
     const calls: Array<{ messages: readonly ReturnType<typeof message>[] }> = []
