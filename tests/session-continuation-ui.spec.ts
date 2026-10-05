@@ -32,7 +32,7 @@ function fixture() {
     },
     dispose: async () => { await act(async () => root.unmount()); node.remove() } }
 }
-it('discloses loss beside inline controls, saves persistent and one-turn consent without sending', async () => {
+it('discloses loss beside one persistent policy control without offering one-turn consent', async () => {
   const f = fixture()
   try {
     await act(async () => f.root.render(h(SessionContinuationCard, { sessionId: 's', remote: f.remote })))
@@ -40,13 +40,11 @@ it('discloses loss beside inline controls, saves persistent and one-turn consent
     expect(f.node.textContent).toContain('including on the same account')
     expect(f.node.textContent).toContain('No automatic sending or retries')
     expect(f.remote.set).not.toHaveBeenCalled()
-    await f.click('Next turn only')
-    expect(f.remote.authorizeNext).toHaveBeenCalledWith('s', 1, true)
-    await f.click('Revoke next-turn consent')
-    expect(f.remote.authorizeNext).toHaveBeenLastCalledWith('s', 1, false)
-    await f.click('Enable for this Session')
-    expect(f.remote.set).toHaveBeenCalledExactlyOnceWith('s', 1, true)
+    expect(f.node.textContent).not.toContain('Next turn only')
     const select = f.node.querySelector('select')!
+    await act(async () => { select.value = 'on'; select.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(f.remote.set).toHaveBeenCalledExactlyOnceWith('s', 1, true)
+    expect(f.remote.authorizeNext).not.toHaveBeenCalled()
     await act(async () => { select.value = 'off'; select.dispatchEvent(new Event('change', { bubbles: true })) })
     expect(f.remote.set).toHaveBeenLastCalledWith('s', 2, false)
     expect(select.style.colorScheme).toBe('inherit')
@@ -93,7 +91,6 @@ it.each([
   ['Cancel', false, undefined],
   ['Keep off and switch', true, undefined],
   ['Enable for Session and switch', true, 'session'],
-  ['Next turn only and switch', true, 'next'],
 ] as const)('requires off-switch choice: %s', async (label, approved, authorization) => {
   const f = fixture()
   let begin: (id: string) => Promise<boolean>
@@ -107,11 +104,12 @@ it.each([
     let decision: Promise<boolean>
     await act(async () => { decision = begin!('other'); await Promise.resolve(); await Promise.resolve() })
     expect(f.node.textContent).toContain('failure is not certain')
+    expect(f.node.textContent).not.toContain('Next turn only and switch')
     expect(f.remote.set).not.toHaveBeenCalled()
     await f.click(label)
     expect(await decision!).toBe(approved)
     expect(f.remote.set).toHaveBeenCalledTimes(authorization === 'session' ? 1 : 0)
-    expect(f.remote.authorizeNext).toHaveBeenCalledTimes(authorization === 'next' ? 1 : 0)
+    expect(f.remote.authorizeNext).not.toHaveBeenCalled()
   } finally { await f.dispose() }
 })
 it('closing an outstanding confirmation cancels its account change', async () => {

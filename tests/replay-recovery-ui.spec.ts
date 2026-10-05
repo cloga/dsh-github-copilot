@@ -26,6 +26,15 @@ it('registers recovery only in the public full-width Session input dock', () => 
   expect(dispose).toHaveBeenCalledOnce()
 })
 function fixture(value: unknown = available) {
+  let policy = { enabled: false, source: 'session', revision: 1, nextTurnAuthorized: false }
+  const continuation = {
+    get: vi.fn(async () => ({ ok: true, value: policy })),
+    set: vi.fn(async (_id: string, revision: number, enabled: boolean | null) => {
+      expect(revision).toBe(policy.revision)
+      policy = { ...policy, enabled: enabled === true, revision: revision + 1 }
+      return { ok: true, value: policy }
+    }),
+  }
   const remote = {
     get: vi.fn(async (): Promise<{ ok: boolean; value?: unknown }> => ({ ok: true, value })),
     setEnabled: vi.fn(async () => ({ ok: true, value: available })),
@@ -34,15 +43,16 @@ function fixture(value: unknown = available) {
   }
   const node = document.createElement('div'); document.body.append(node)
   const root = createRoot(node)
-  const render = (props: { running?: boolean; refreshKey?: string; sessionId?: string } = {}) =>
+  const render = (props: { running?: boolean; refreshKey?: string; sessionId?: string;
+    continuation?: typeof continuation } = {}) =>
     act(async () => root.render(createElement(ReplayRecoveryCard, { key: props.sessionId ?? 'viewed',
-      remote, sessionId: 'viewed', ...props })))
+      remote, continuation, sessionId: 'viewed', ...props })))
   const click = async (text: string) => {
     const button = Array.from(node.querySelectorAll('button')).find(value => value.textContent === text)!
     expect(button.type).toBe('button')
     await act(async () => button.click())
   }
-  return { remote, node, render, click, close: () => act(async () => root.unmount()) }
+  return { remote, continuation, node, render, click, close: () => act(async () => root.unmount()) }
 }
 it('uses native auxiliary typography for the entire notice and inherited controls in an independent dock row', async () => {
   const f = fixture()
@@ -61,7 +71,6 @@ it('uses native auxiliary typography for the entire notice and inherited control
     expect(details.querySelector('button')!.textContent).toBe('Read status again')
     expect(notice.querySelectorAll(':scope > button')).toHaveLength(0)
     expect(notice.style.minWidth).toBe('0')
-    await f.click('Review recovery options')
     for (const paragraph of Array.from(f.node.querySelectorAll('p'))) {
       expect(paragraph.style.marginBlock).toBe('8px')
       expect(paragraph.style.maxWidth).toBe('38rem')
@@ -73,25 +82,61 @@ it('uses native auxiliary typography for the entire notice and inherited control
     expect(f.remote.authorize).not.toHaveBeenCalled()
   } finally { await f.close() }
 })
-it.each(['next-turn', 'session'] as const)('automatically shows evidence but requires explicit %s consent, without sending', async duration => {
+it('enables only persistent Session continuation after loss disclosure, without legacy authorization or sending', async () => {
   const f = fixture()
   try {
     await f.render()
     expect(f.remote.get).toHaveBeenCalledExactlyOnceWith('viewed')
     expect(f.node.textContent).toContain('Old reasoning replay was rejected')
-    await f.click('Review recovery options')
-    expect(f.node.textContent).toContain('including their hidden reasoning state and item summaries')
+    expect(f.node.textContent).toContain('implicit details may be lost')
+    expect(f.node.querySelector('input[type=radio]')).toBeNull()
+    expect(f.node.textContent).not.toContain('one hour')
     expect(f.remote.authorize).not.toHaveBeenCalled()
-    expect(f.node.querySelector<HTMLInputElement>('input[value=next-turn]')!.checked).toBe(true)
     await f.click('Cancel')
-    await f.click('Review recovery options')
-    if (duration === 'session') await act(async () => f.node.querySelector<HTMLInputElement>('input[value=session]')!.click())
-    await f.click('Accept loss and authorize')
-    expect(f.remote.authorize).toHaveBeenCalledExactlyOnceWith('viewed', available.revision, duration)
+    expect(f.continuation.set).not.toHaveBeenCalled()
+    await f.click('Replay recovery · Review')
+    await f.click('Enable visible-history continuation')
+    expect(f.continuation.set).toHaveBeenCalledExactlyOnceWith('viewed', 1, true)
+    expect(f.remote.authorize).not.toHaveBeenCalled()
     expect(f.remote.setEnabled).not.toHaveBeenCalled()
-    expect(f.node.textContent).toContain('No message has been sent.')
-    await f.click('Disable recovery')
-    expect(f.remote.setEnabled).toHaveBeenCalledExactlyOnceWith('viewed', available.revision, false)
+    expect(f.node.textContent).toContain('Continuation is already on')
+    expect(f.node.textContent).not.toContain('Enable visible-history continuation')
+  } finally { await f.close() }
+})
+it('does not reauthorize an already enabled policy or change it when failure evidence expires', async () => {
+  const f = fixture()
+  f.continuation.get.mockResolvedValue({ ok: true, value: { enabled: true, source: 'session', revision: 4, nextTurnAuthorized: false } })
+  try {
+    await f.render()
+    expect(f.node.textContent).toContain('Continuation is already on')
+    expect(f.node.textContent).not.toContain('Enable visible-history continuation')
+    f.remote.get.mockResolvedValue({ ok: true, value: { state: 'unavailable' } })
+    await f.render({ refreshKey: 'evidence expired' })
+    expect(f.node.textContent).toContain('does not change the Session continuation policy')
+    expect(f.continuation.set).not.toHaveBeenCalled()
+    expect(f.remote.authorize).not.toHaveBeenCalled()
+    expect(f.remote.setEnabled).not.toHaveBeenCalled()
+  } finally { await f.close() }
+})
+it('fails explicitly without a continuation Remote rather than using temporary recovery', async () => {
+  const f = fixture()
+  try {
+    await f.render({ continuation: undefined })
+    expect(f.node.textContent).toContain('COPILOT_CONTINUATION_STATUS_UNAVAILABLE')
+    expect(f.node.textContent).not.toContain('Enable visible-history continuation')
+    expect(f.remote.authorize).not.toHaveBeenCalled()
+    expect(f.remote.setEnabled).not.toHaveBeenCalled()
+  } finally { await f.close() }
+})
+it('does not claim enablement after a failed CAS or an unchanged off readback', async () => {
+  const f = fixture()
+  f.continuation.set.mockResolvedValue({ ok: true, value: { enabled: false, source: 'session', revision: 2, nextTurnAuthorized: false } })
+  try {
+    await f.render()
+    await f.click('Enable visible-history continuation')
+    expect(f.node.textContent).toContain('COPILOT_CONTINUATION_STATUS_UNAVAILABLE')
+    expect(f.node.textContent).not.toContain('Continuation is already on')
+    expect(f.remote.authorize).not.toHaveBeenCalled()
   } finally { await f.close() }
 })
 it('is absent normally, reads on settled turns without polling and resets dismissal only for new evidence', async () => {
@@ -106,7 +151,7 @@ it('is absent normally, reads on settled turns without polling and resets dismis
     f.remote.get.mockResolvedValue({ ok: true, value: available })
     await f.render({ running: false })
     expect(f.node.textContent).toContain('Old reasoning replay was rejected')
-    await f.click('Not now')
+    await f.click('Cancel')
     expect(f.node.textContent).toBe('Replay recovery · Review')
     const compact = f.node.querySelector('button')!
     expect(compact.style.fontSize).toBe('var(--dsh-content-font-size-secondary, 13px)')
@@ -114,7 +159,7 @@ it('is absent normally, reads on settled turns without polling and resets dismis
     await f.render({ refreshKey: 'native failure changed' })
     expect(f.node.textContent).toBe('Replay recovery · Review')
     await f.click('Replay recovery · Review')
-    await f.click('Not now')
+    await f.click('Cancel')
     f.remote.get.mockResolvedValue({ ok: true, value: { ...available, revision: '22345678-1234-4234-8234-123456789012' } })
     await f.render({ refreshKey: 'new failure' })
     expect(f.node.textContent).toContain('Old reasoning replay was rejected')
@@ -145,9 +190,7 @@ it('shows failed reads separately and disables writes while the native turn runs
     expect(f.node.querySelector('[role=alert]')).not.toBeNull()
     expect(f.node.textContent).not.toContain('no current failure evidence')
     await f.click('Read status again')
-    await f.click('Review recovery options')
     await f.render({ running: true })
-    expect(f.node.textContent).not.toContain('Accept loss and authorize')
     expect(Array.from(f.node.querySelectorAll('button')).every(button => button.disabled)).toBe(true)
     expect(f.remote.authorize).not.toHaveBeenCalled()
   } finally { await f.close() }
@@ -160,7 +203,8 @@ it('reads once at evidence expiry and drops expired activation', async () => {
     f.remote.get.mockResolvedValue({ ok: true, value: { state: 'unavailable' } })
     await act(async () => vi.advanceTimersByTimeAsync(500))
     expect(f.remote.get).toHaveBeenCalledTimes(2)
-    expect(f.node.textContent).toContain('Authorization or failure evidence expired')
+    expect(f.node.textContent).toContain('Failure evidence expired')
+    expect(f.node.textContent).toContain('does not change the Session continuation policy')
     expect(f.node.textContent).not.toContain('Disable recovery')
     await act(async () => vi.advanceTimersByTimeAsync(60_000))
     expect(f.remote.get).toHaveBeenCalledTimes(2)

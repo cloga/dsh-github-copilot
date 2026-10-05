@@ -42,13 +42,6 @@ function button(text: string) {
   return Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent === text)!
 }
 async function click(element: HTMLElement) { await act(async () => { element.click() }) }
-async function searchAccounts(value: string) {
-  const input = document.querySelector<HTMLInputElement>('input[type="search"]')!
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-}
 function text() { return document.body.textContent ?? '' }
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -167,18 +160,17 @@ describe('Copilot account usage chip', () => {
     expect(document.querySelector('[data-copilot-account-options]')).toBeNull()
   })
 
-  it('keeps the account and search unchanged when parent confirmation is cancelled', async () => {
+  it('keeps the account and dropdown unchanged when parent confirmation is cancelled', async () => {
     const fixture = accountSelectorFixture()
     const beforeAccountChange = vi.fn(async () => false)
     await mount({ ...fixture.props, beforeAccountChange })
     await click(trigger())
     await click(button('Switch account'))
-    await searchAccounts('account-24')
     await click(button('@demo-account-24'))
     expect(fixture.set).not.toHaveBeenCalled()
     expect(fixture.quota).toHaveBeenCalledOnce()
     expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-01')
-    expect(document.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('account-24')
+    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
     expect(button('@demo-account-24').disabled).toBe(false)
     expect(document.querySelector('[role="alert"]')).toBeNull()
     beforeAccountChange.mockResolvedValueOnce(true)
@@ -277,17 +269,16 @@ describe('Copilot account usage chip', () => {
     expect(styles).toContain(':disabled')
     expect(document.querySelector('select')?.querySelectorAll('option')).toHaveLength(2)
     await click(button('Switch account'))
-    const search = document.querySelector<HTMLInputElement>('input[type="search"]')!
-    expect(search.style.colorScheme).toBe('inherit')
-    expect(search.style.background).toBe('var(--dsw-alias-bg-layer-1, Canvas)')
-    expect(document.activeElement).toBe(search)
+    expect(document.querySelector('input[type="search"]')).toBeNull()
+    expect(document.querySelector<HTMLElement>('[data-copilot-account-selector]')?.style.colorScheme).toBe('inherit')
+    expect(document.activeElement).toBe(button('Follow global default'))
     await click(button('@demo-account-24'))
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not save')
     expect(button('Switch account').disabled).toBe(true)
     expect(document.querySelector('option:disabled')?.textContent).toBe('Unavailable')
   })
 
-  it('mounts a searchable bounded 24-account selector only after Switch and resets on collapse', async () => {
+  it('mounts a bounded 24-account dropdown without search and closes with Escape', async () => {
     const fixture = accountSelectorFixture()
     await mount({ ...fixture.props, accountActions: createElement('button', null, 'Add account') })
     await click(trigger())
@@ -300,20 +291,16 @@ describe('Copilot account usage chip', () => {
     expect(list.style.maxHeight).toBe('220px')
     expect(list.style.overflowY).toBe('auto')
     expect(list.style.overscrollBehavior).toBe('contain')
-    expect(document.activeElement).toBe(document.querySelector('input[type="search"]'))
+    expect(document.activeElement).toBe(button('Follow global default'))
     expect(button('Add account')).toBeDefined()
-    await searchAccounts('  ACCOUNT-24  ')
-    expect(list.querySelectorAll('button')).toHaveLength(1)
     expect(button('@demo-account-24')).toBeDefined()
-    await searchAccounts('no matching account')
-    expect(list.querySelectorAll('button')).toHaveLength(0)
-    expect(text()).toContain('No matching accounts')
-    await click(button('Cancel'))
+    expect(document.querySelector('input[type=search]')).toBeNull()
+    await act(async () => { document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
     expect(document.querySelector('input[type="search"]')).toBeNull()
     expect(button('Add account')).toBeUndefined()
     expect(document.activeElement).toBe(button('Switch account'))
     await click(button('Switch account'))
-    expect(document.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('')
+    expect(document.querySelector('input[type=search]')).toBeNull()
     expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
     await click(trigger())
     await click(trigger())
@@ -329,7 +316,6 @@ describe('Copilot account usage chip', () => {
     await mount(fixture.props)
     await click(trigger())
     await click(button('Switch account'))
-    await searchAccounts('account-24')
     await click(button('@demo-account-24'))
     expect(text()).toContain('Could not save the Session account')
     expect(text()).not.toContain('PRIVATE_ACCOUNT_SECRET')
@@ -339,7 +325,7 @@ describe('Copilot account usage chip', () => {
     expect(fixture.set).toHaveBeenCalledExactlyOnceWith(fixture.selection().accounts.accounts[23]!.id, 7)
     fixture.set.mockImplementation(success)
     await click(button('Refresh'))
-    expect(document.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('account-24')
+    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
     await click(button('@demo-account-24'))
     expect(fixture.set).toHaveBeenLastCalledWith(fixture.selection().accountId, 7)
     expect(text()).not.toContain('Could not save')
@@ -405,9 +391,7 @@ describe('Copilot account usage chip', () => {
     await click(trigger())
     await click(button('Switch account'))
     expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
-    await searchAccounts('Follow global')
-    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(1)
-    await searchAccounts('')
+    expect(button('Follow global default')).toBeDefined()
     await click(button('@demo-account-01'))
     expect(fixture.set).toHaveBeenCalledExactlyOnceWith('canonical', 7)
     expect(text()).toContain('Session override')
@@ -417,9 +401,9 @@ describe('Copilot account usage chip', () => {
   })
 
   it.each([
-    ['en-US', 'Manage accounts and models', 'Search saved accounts', 'Cancel'],
-    ['zh-CN', '管理账号与模型', '搜索已保存账号', '取消'],
-  ])('exposes parent slots and localized management without implementing navigation (%s)', async (locale, manage, search, cancel) => {
+    ['en-US', 'Manage accounts and models', 'Follow global default'],
+    ['zh-CN', '管理账号与模型', '跟随全局默认'],
+  ])('exposes parent slots and localized management without implementing navigation (%s)', async (locale, manage, follow) => {
     const fixture = accountSelectorFixture()
     const onManage = vi.fn()
     const props = { ...fixture.props, locale, continuation: createElement('p', null, 'Continuation controls'),
@@ -427,13 +411,14 @@ describe('Copilot account usage chip', () => {
     const card = await mount(props)
     await click(trigger())
     expect(text()).toContain('Continuation controls')
-    expect(button(manage).disabled).toBe(true)
-    expect(text()).toContain('COPILOT_ACCOUNT_MANAGEMENT_NAVIGATION_UNAVAILABLE')
+    expect(button(manage)).toBeUndefined()
+    expect(text()).not.toContain('COPILOT_ACCOUNT_MANAGEMENT_NAVIGATION_UNAVAILABLE')
+    expect(text()).not.toContain('navigation is unavailable')
     await card.render({ ...props, onManage })
     expect(text()).not.toContain('COPILOT_ACCOUNT_MANAGEMENT_NAVIGATION_UNAVAILABLE')
     await click(button(locale === 'zh-CN' ? '切换账号' : 'Switch account'))
-    expect(document.querySelector('input')?.getAttribute('aria-label')).toBe(search)
-    expect(button(cancel)).toBeDefined()
+    expect(document.querySelector('input[type=search]')).toBeNull()
+    expect(button(follow)).toBeDefined()
     expect(button('Add account')).toBeDefined()
     const controls = Array.from(document.querySelectorAll('button'))
     expect(controls.some(control => /delete|remove/i.test(control.textContent ?? ''))).toBe(false)

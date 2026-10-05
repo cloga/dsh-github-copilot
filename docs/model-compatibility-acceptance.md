@@ -114,18 +114,19 @@ text and controls. They stack above the composer rather than squeezing into
 its non-wrapping statistics row. Native meters, statistics and parent DOM stay
 unchanged; authorization itself still sends no message.
 
-Choose **Review recovery options**, then **Next matching turn only** (the
-default choice) or **Continue in this session**, and **Accept loss and authorize**.
-This does not send a message or retry the failed request. Use the native Send or
-Retry control separately; the plugin adds no competing sender. Complete native
-replay remains the default until explicit consent.
+The normal Client offers one persistent Session policy. When off, the notice
+explains the loss and offers **Enable visible-history continuation** or Cancel.
+Enabling writes the same revision-checked Session policy used by account controls;
+it persists across accounts/restarts until disabled, without an hourly consent.
+When already on, show status and diagnostic guidance, not another authorization.
+Use native Retry separately. Missing or failed policy reads have an explicit
+diagnostic and Retry read, never a guessed off state or legacy authorization
+fallback. No authorization duration radios or next-turn-only actions are shown.
+Controls are disabled during a native turn.
 
-Next-turn consent is admitted on the next bound, matching-model native request
-and covers all steps and native retries of that turn, not just one HTTP attempt.
-It is consumed at that turn's `turn/end`, including cancelled/failed turns.
-Other models, purposes and unbound requests cannot consume it. Session consent
-survives turn endings but shares the same bounded evidence/proof lifetime.
-Controls are disabled during a native turn; Host checks remain authoritative.
+The following temporary recovery mechanism and strict Remotes remain for
+compatibility, not new normal UI authorization. Their one-hour evidence/proof
+lifetime is not the lifetime of the persistent Session policy:
 
 This is lossy recovery, not a supplier-scope repair. Only complete normalized
 encrypted reasoning items whose entire serialized fingerprints match that

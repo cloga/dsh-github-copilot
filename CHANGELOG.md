@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.110 (prepared)
+
+- Replace searchable account-switch forms with one compact anchored dropdown in Models and Chat: current-choice checkmark, bounded internal scrolling and Add account footer (#320).
+- Separate saved-account reauthorization/removal from switching. Preserve global confirmation, explicit-off continuation consent, fresh revision readback, cancellation and admitted-turn ownership; selecting never sends or retries.
+- Record the approved dropdown mock and keyboard/mobile behavior. No Core changes, credential migration, live installation or restart.
+- Unify normal continuation and failure guidance around the persistent Session policy. Remove duration radios and next-turn-only actions; when off, disclose loss and offer Enable/Cancel, when on, show diagnostics without repeated authorization. Existing temporary recovery contracts remain compatibility-only; their evidence expiry does not expire the persistent policy.
+- Omit the nonfunctional Chat management entry and unavailable-navigation paragraph when no public Models navigation callback exists; keep full management in Models.
+
 ## 0.4.0-alpha.109 (prepared)
 
 - Record the approved synthetic account-management mock and unify current-account/Switch interactions in Chat and Models. Search bounded account lists, add without selecting, and retain guarded full management inside one Models Manage disclosure with shared exact-ID model preferences (#318).

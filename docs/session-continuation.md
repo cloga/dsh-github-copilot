@@ -21,16 +21,19 @@ Enable/disable changes affect future turns; the active turn retains its captured
 policy and account. The UI distinguishes pending changes from the active policy.
 Disabling does not undo answers; it may expose the original replay rejection on
 later requests. When off, switching to a different account pauses for persistent
-enable, next-turn-only authorization, keep off, or cancel. Next-turn authorization
-is consumed at the next managed turn admission, includes its native retries, can
-be revoked beforehand or by changing the Session policy, and is lost on Host restart. It never automatically sends
-or retries. An exact replay rejection also exposes these authorization controls
-beside recovery guidance; retry remains a separate native user action.
+enable, keep off, or cancel. The ordinary UI no longer offers a next-turn-only
+mode. An exact replay rejection offers **Enable visible-history continuation**
+with the loss disclosure and Cancel when off; this saves the same persistent
+Session policy. When already on, show status and diagnostic guidance, not another
+authorization. It never automatically sends or retries; native Retry is separate.
+The failure-evidence lifetime does not limit the persisted policy. Retain old
+one-turn consent and temporary recovery Remote contracts for compatibility only;
+the normal Client does not create these authorizations.
 
 See the [approved account-management experience and mock](./account-management-experience.md).
 On the currently pinned Core, direct Models navigation is not a public Client
-service. Chat provides manual Settings → Models → GitHub Copilot → Manage
-instructions rather than accessing private stores or replacing Settings.
+service. Chat omits the nonfunctional management entry rather than accessing
+private stores or replacing Settings.
 
 ## Loss and retained content
 
