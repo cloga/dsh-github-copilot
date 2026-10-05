@@ -53,7 +53,10 @@ export class TurnSelectionStore {
       turns = new Map()
       this.timestamps.set(agent, new Map())
       this.agents.set(agent, turns)
-      if (this.agents.size > 64) this.agents.delete(this.agents.keys().next().value!)
+      if (this.agents.size > 64) {
+        const oldest = this.agents.keys().next().value!
+        this.agents.delete(oldest); this.timestamps.delete(oldest)
+      }
     }
     // Retries/steps cannot rewrite the decision shown for an earlier dispatch.
     if (!turns.has(turn)) {
