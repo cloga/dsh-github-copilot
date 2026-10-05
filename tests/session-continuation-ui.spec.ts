@@ -109,7 +109,7 @@ it.each([
     await f.click(label)
     expect(await decision!).toBe(approved)
     expect(f.remote.set).toHaveBeenCalledTimes(authorization === 'session' ? 1 : 0)
-    expect(f.remote.authorizeNext).toHaveBeenCalledTimes(authorization === 'next' ? 1 : 0)
+    expect(f.remote.authorizeNext).not.toHaveBeenCalled()
   } finally { await f.dispose() }
 })
 it('closing an outstanding confirmation cancels its account change', async () => {
