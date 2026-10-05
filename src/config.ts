@@ -13,6 +13,7 @@ import { readConfigValue } from './settings-reader.ts'
 import type { LiveSetting } from './settings-reader.ts'
 import type { ParentModelBinding } from './parent-model-follow.ts'
 import type { SessionAccountPreference } from './session-accounts.ts'
+import type { SessionContinuationPreference } from './session-continuation-types.ts'
 
 /** Plugin configuration. Defaults make the current chat route decide. */
 export interface InlineConfig {
@@ -49,6 +50,9 @@ export interface InlineConfig {
   activeAccountId?: string
   /** Explicit Session overrides; absence means follow the profile default. */
   sessionAccounts?: SessionAccountPreference[]
+  /** Explicit lossy continuation consent for exact Sessions, never inherited. */
+  sessionContinuation?: SessionContinuationPreference[]
+  continuationDefaultHistory?: { enabled: boolean; changedAt: number }[]
   /** Explicit native child/direct-parent enrollments; empty preserves native routing. */
   parentModelFollow?: ParentModelBinding[]
   /** Profile-wide next-turn policy for supported native children. */
@@ -73,7 +77,9 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
+  continuationDefaultHistory?: InlineConfig['continuationDefaultHistory'] | LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
+  sessionContinuation?: SessionContinuationPreference[] | LiveSetting<ArrayLike<SessionContinuationPreference>>
   sessionAccounts?: SessionAccountPreference[] | LiveSetting<ArrayLike<SessionAccountPreference>>
   activeAccountId?: string | LiveSetting<string | undefined>
   followParentModel?: boolean | LiveSetting<boolean>
@@ -84,7 +90,9 @@ export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
+  continuationDefaultHistory: LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
+  sessionContinuation: LiveSetting<ArrayLike<SessionContinuationPreference>>
   sessionAccounts: LiveSetting<ArrayLike<SessionAccountPreference>>
   activeAccountId: LiveSetting<string | undefined>
   followParentModel: LiveSetting<boolean>
@@ -100,8 +108,15 @@ export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
   const exclusions = readConfigValue<ArrayLike<string> | undefined>(config.excludedModelIds)
   const bindings = readConfigValue<ArrayLike<ParentModelBinding> | undefined>(config.parentModelFollow)
   const accounts = readConfigValue<ArrayLike<SessionAccountPreference> | undefined>(config.sessionAccounts)
+  const continuation = readConfigValue<ArrayLike<SessionContinuationPreference> | undefined>(config.sessionContinuation)
+  const defaults = readConfigValue<ArrayLike<{ enabled: boolean; changedAt: number }> | undefined>(config.continuationDefaultHistory)
   return {
     ...config,
+    continuationDefaultHistory: defaults === undefined ? undefined : Array.from(defaults,
+      row => ({ enabled: row.enabled, changedAt: row.changedAt })),
+    sessionContinuation: continuation === undefined ? undefined : Array.from(continuation,
+      row => ({ sessionId: row.sessionId, version: row.version, consentedAt: row.consentedAt,
+        ...row.enabled === undefined ? {} : { enabled: row.enabled } })),
     activeAccountId: readConfigValue(config.activeAccountId),
     sessionAccounts: accounts === undefined ? undefined : Array.from(accounts, account => ({
       sessionId: account.sessionId, accountId: account.accountId,
@@ -138,6 +153,14 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   activeAccountId: z.string().hidden().volatile(),
   sessionAccounts: z.array(z.object({
     sessionId: z.string().min(1).max(256), accountId: z.string().min(1).max(36),
+  })).default([]).hidden().volatile(),
+  sessionContinuation: z.array(z.object({
+    sessionId: z.string().min(1).max(256), version: z.const(1),
+    consentedAt: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER),
+    enabled: z.boolean(),
+  })).default([]).hidden().volatile(),
+  continuationDefaultHistory: z.array(z.object({
+    enabled: z.boolean(), changedAt: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER),
   })).default([]).hidden().volatile(),
   followParentModel: z.boolean().default(false).volatile(),
   autoSemanticAssessment: z.boolean().default(true),

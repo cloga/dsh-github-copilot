@@ -34,7 +34,7 @@ function isRuntime(value: unknown): value is Runtime {
 }
 const copy = {
   en: {
-    title: 'Context reading unavailable',
+    title: 'Context unknown · native 0% is not an empty-context reading',
     explanation: 'A failed Copilot attempt reported zero usage. The native 0% is not evidence of an empty context.',
     sample: 'Last valid input sample (including cache)',
     historical: 'Historical sample, not current occupancy. No percentage is inferred.',
@@ -43,7 +43,7 @@ const copy = {
     unknown: 'Context sampling evidence is incomplete. No current occupancy can be inferred.',
   },
   zh: {
-    title: '上下文读数暂不可用',
+    title: '上下文未知 · 原生 0% 不代表上下文为空',
     explanation: '失败的 Copilot 请求记录了零用量。原生 0% 不代表上下文为空。',
     sample: '最后有效输入采样（含缓存）',
     historical: '这是历史采样，不是当前占用；不会据此推算百分比。',

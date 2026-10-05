@@ -18,6 +18,16 @@ export interface CopilotAccountsRemote {
   removeAccount(accountId: string, expectedRevision: number): Promise<AccountResult>
 }
 
+export type CopilotAccountAddRemote = Pick<CopilotAccountsRemote, 'get' | 'add' | 'cancel'>
+
+export function CopilotAccountAdd(props: {
+  remote?: CopilotAccountAddRemote
+  onChanged?: () => void
+  locale?: string
+}): ReactElement {
+  return h(CopilotAccountControls, { ...props, addOnly: true, expanded: true })
+}
+
 /** Copy owned presentation fields before decoding traced Client values. */
 export function accountsViewFrom(value: unknown): CopilotAccountsView | undefined {
   const record = (input: unknown): Record<string, unknown> => {
@@ -55,14 +65,18 @@ const secondary = 'var(--dsw-alias-label-secondary, GrayText)'
 const border = '1px solid var(--dsw-alias-border-main, color-mix(in srgb, currentColor 20%, transparent))'
 const button: CSSProperties = {
   font: 'inherit', color: 'inherit', background: 'transparent', border, borderRadius: 8,
-  padding: '6px 10px', minHeight: 32, cursor: 'pointer',
+  padding: '6px 10px', minHeight: 32, cursor: 'pointer', colorScheme: 'inherit',
 }
 const muted: CSSProperties = { color: secondary, fontSize: 13, lineHeight: 1.5, margin: '6px 0' }
 
 const accountCopy = {
   en: {
     identityChecking: 'Checking GitHub identity…', identityUnavailable: 'GitHub account identity unavailable',
-    accounts: 'GitHub accounts',
+    accounts: 'Account management',
+    searchAccounts: 'Search saved GitHub accounts',
+    noAccountsMatch: 'No saved accounts match this search.',
+    switchTo: (account: string) => `Switch to ${account}`,
+    closeAccounts: 'Close account list',
     scope: 'Global default for new inherited turns. Credits can override this Session’s subsequent turns. Running turns, explicit Session accounts, models and conversation history stay unchanged.',
     remoteUnavailable: 'Account management is unavailable in this deployment.',
     readFailed: 'Could not read account information. Retry before changing accounts.',
@@ -106,11 +120,15 @@ const accountCopy = {
     copyFailed: 'Could not copy the code. Select it above and copy it manually.',
     cancelAdd: 'Cancel adding account', cancelReauthorize: 'Cancel reauthorization',
     cancelling: 'Cancelling…', add: 'Add GitHub account',
-    refresh: 'Refresh account information', refreshing: 'Checking…',
+    refresh: 'Refresh account information', refreshing: 'Checking…', retry: 'Retry',
   },
   zh: {
     identityChecking: '正在检查 GitHub 身份…', identityUnavailable: 'GitHub 账号身份暂不可用',
-    accounts: 'GitHub 账号',
+    accounts: '账号管理',
+    searchAccounts: '搜索已保存的 GitHub 账号',
+    noAccountsMatch: '没有匹配的已保存账号。',
+    switchTo: (account: string) => `切换到 ${account}`,
+    closeAccounts: '关闭账号列表',
     scope: '全局默认账号用于后续继承默认值的新 turn。Credits 可为本 Session 后续 turn 指定账号。正在运行的 turn、Session 已指定账号、模型和对话历史保持不变。',
     remoteUnavailable: '当前部署无法管理账号。',
     readFailed: '无法读取账号信息。更改账号前请重试。',
@@ -154,7 +172,7 @@ const accountCopy = {
     copyFailed: '无法复制授权码。请选中上方代码并手动复制。',
     cancelAdd: '取消添加账号', cancelReauthorize: '取消重新授权',
     cancelling: '正在取消…', add: '添加 GitHub 账号',
-    refresh: '刷新账号信息', refreshing: '正在检查…',
+    refresh: '刷新账号信息', refreshing: '正在检查…', retry: '重试',
   },
 } as const
 
@@ -182,14 +200,25 @@ function accountProblemMessage(code: CopilotAccountsView['diagnostic'],
   }
 }
 
-export function CopilotAccountsPanel(props: {
-  remote?: CopilotAccountsRemote
+interface AccountControlsProps {
   expanded: boolean
+  refreshKey?: number
   onChanged?: () => void
   authorizationBusy?: boolean
   configured?: boolean
+  accountSettings?: ReactElement
+  continuationSettings?: ReactElement
   locale?: string
-}): ReactElement {
+}
+
+export function CopilotAccountsPanel(props: AccountControlsProps & { remote?: CopilotAccountsRemote }): ReactElement {
+  return h(CopilotAccountControls, props)
+}
+
+function CopilotAccountControls(props: AccountControlsProps & (
+  { addOnly: true; remote?: CopilotAccountAddRemote } | { addOnly?: false; remote?: CopilotAccountsRemote }
+)): ReactElement {
+  const managementRemote = props.addOnly ? undefined : props.remote
   const [view, setView] = useState<CopilotAccountsView>()
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -197,8 +226,18 @@ export function CopilotAccountsPanel(props: {
   const [cancelRequested, setCancelRequested] = useState(false)
   const [authorizationIntent, setAuthorizationIntent] = useState<'add' | 'reauthorize'>()
   const [confirmation, setConfirmation] = useState<{ id: string; revision: number; remove: boolean }>()
+  const [accountsOpen, setAccountsOpen] = useState(false)
+  const [accountSearch, setAccountSearch] = useState('')
   const lifetime = useRef({ active: false, generation: 0, busy: false, copyGeneration: 0 })
+  const refreshed = useRef(props.refreshKey)
   const text = props.locale?.toLowerCase().startsWith('zh') ? accountCopy.zh : accountCopy.en
+  useEffect(() => {
+    if (!props.expanded) {
+      setAccountsOpen(false)
+      setAccountSearch('')
+      setConfirmation(undefined)
+    }
+  }, [props.expanded])
   const run = useCallback(async (operation: () => Promise<AccountResult>, changed = false, invalidate = changed) => {
     const owner = lifetime.current
     if (!owner.active || owner.busy) return
@@ -232,18 +271,27 @@ export function CopilotAccountsPanel(props: {
     owner.active = true
     setView(undefined); setConfirmation(undefined); setBusy(false); setFailed(false)
     setCopyState('idle'); setCancelRequested(false); setAuthorizationIntent(undefined)
-    if (props.remote !== undefined && !props.authorizationBusy) void run(() => props.remote!.ensureIdentity())
+    if (props.remote !== undefined && !props.authorizationBusy) {
+      const remote = props.remote
+      void run(() => managementRemote !== undefined ? managementRemote.ensureIdentity() : remote.get())
+    }
     return () => { owner.active = false; owner.generation++; owner.busy = false }
-  }, [props.remote, run, props.authorizationBusy, props.configured])
+  }, [props.remote, managementRemote, run, props.authorizationBusy, props.configured])
   useEffect(() => {
-    if (props.remote === undefined || props.authorizationBusy || view?.operation !== undefined) return
+    if (refreshed.current === props.refreshKey || managementRemote === undefined || busy || props.authorizationBusy) return
+    refreshed.current = props.refreshKey
+    setConfirmation(undefined)
+    void run(() => managementRemote.get())
+  }, [props.refreshKey, managementRemote, busy, props.authorizationBusy, run])
+  useEffect(() => {
+    if (managementRemote === undefined || props.authorizationBusy || view?.operation !== undefined) return
     const ensure = () => {
-      if (document.visibilityState !== 'hidden') void run(() => props.remote!.ensureIdentity())
+      if (document.visibilityState !== 'hidden') void run(() => managementRemote.ensureIdentity())
     }
     const timer = window.setInterval(ensure, 60_000)
     document.addEventListener('visibilitychange', ensure)
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', ensure) }
-  }, [props.remote, props.authorizationBusy, view?.operation, run])
+  }, [managementRemote, props.authorizationBusy, view?.operation, run])
   useEffect(() => {
     if ((view?.operation !== 'authorizing' && view?.operation !== 'verifying') || props.remote === undefined) return
     const timer = window.setTimeout(() => { void run(() => props.remote!.get(), true, false) }, 1500)
@@ -281,14 +329,22 @@ export function CopilotAccountsPanel(props: {
     void run(() => props.remote!.add(), true)
   }
   const startReauthorization = (accountId: string, revision: number) => {
+    if (managementRemote === undefined) return
     setAuthorizationIntent('reauthorize')
     setCancelRequested(false)
-    void run(() => props.remote!.reauthorize(accountId, revision), true)
+    void run(() => managementRemote.reauthorize(accountId, revision), true)
   }
   const identity = accountIdentityLabel(view)
+  const activeAccount = view?.accounts.find(account => account.id === view.activeAccountId)
   const selected = confirmation === undefined ? undefined : view?.accounts.find(item => item.id === confirmation.id)
   const selectedLabel = selected?.identityState === 'ready' && selected.identity !== undefined
     ? `@${selected.identity.login}` : text.savedAuthorization
+  const normalizedSearch = accountSearch.trim().toLocaleLowerCase()
+  const savedAccounts = (view?.accounts ?? []).filter(account => {
+    if (!normalizedSearch) return true
+    const login = account.identityState === 'ready' ? account.identity?.login : undefined
+    return `${login ?? ''} ${account.id}`.toLocaleLowerCase().includes(normalizedSearch)
+  })
   const pending = busy || props.authorizationBusy === true || view?.operation !== undefined
   const authorizationOperation = view?.operation === 'authorizing' || view?.operation === 'verifying'
   const authorizationStatus = cancelRequested ? text.cancelling
@@ -309,14 +365,39 @@ export function CopilotAccountsPanel(props: {
               : view.state === 'error' ? undefined : text.switchUnavailable
     : undefined
   const control = (label: string, onClick: () => void, disabled = false) =>
-    h('button', { type: 'button', style: { ...button, cursor: disabled ? 'default' : 'pointer' },
+    h('button', { type: 'button', style: { ...button, cursor: disabled ? 'not-allowed' : 'pointer',
+      color: disabled ? 'var(--dsw-alias-label-secondary, GrayText)' : 'inherit' },
       onClick, disabled }, label)
+  const savedAccountItems = savedAccounts.map(account => {
+    const accountName = account.identityState === 'ready' && account.identity !== undefined
+      ? `@${account.identity.login}` : text.savedAuthorization
+    return h('li', { key: account.id, 'data-copilot-saved-account': account.id,
+      style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
+        paddingBlock: 10, borderBottom: border } },
+    h('div', { style: { minWidth: 0, flex: '1 1 140px' } },
+      h('strong', null, account.identityState === 'ready' && account.identity !== undefined ? accountName
+        : account.configured ? text.identityUnavailableLabel : text.authorizationUnavailable),
+      h('p', { style: muted }, account.id === view?.activeAccountId ? text.currentDefault
+        : account.configured ? text.savedAuthorization : text.authorizationUnavailable)),
+    account.id === view?.activeAccountId ? null : control(text.switchTo(accountName), () => {
+      if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: false })
+    }, pending || view?.switchable !== true || view?.revision === undefined || !account.configured),
+    account.id === 'canonical' || account.id === view?.activeAccountId ? null : control(text.reauthorize, () => {
+      if (props.remote !== undefined && view?.revision !== undefined) startReauthorization(account.id, view.revision)
+    }, pending || view?.writable !== true || view?.switchable !== true || view?.revision === undefined),
+    account.id === 'canonical' || account.id === view?.activeAccountId ? null : control(text.remove, () => {
+      if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: true })
+    }, pending || view?.writable !== true || view?.revision === undefined))
+  })
   return h('div', { 'data-copilot-accounts': '', 'aria-busy': pending, style: { minWidth: 0, overflowWrap: 'anywhere' } },
-    h('p', { style: muted, role: 'status', 'aria-live': 'polite', 'data-copilot-current-account': '' },
-      identity ?? (busy ? text.identityChecking : text.identityUnavailable)),
-    !props.expanded ? null : h('div', { style: { display: 'grid', gap: 10, marginBlock: 12 } },
-      h('strong', null, text.accounts),
-      h('p', { style: muted }, text.scope),
+    !props.expanded ? h('p', { style: muted, role: 'status', 'aria-live': 'polite', 'data-copilot-current-account': '' },
+      identity ?? (busy ? text.identityChecking : text.identityUnavailable)) : null,
+    !props.expanded ? null : h('section', {
+      'data-copilot-account-management': props.addOnly ? undefined : true,
+      'data-copilot-account-add': props.addOnly ? true : undefined,
+      'aria-label': props.addOnly ? text.add : text.accounts, style: { display: 'grid', gap: 10, marginBlock: 12 } },
+      props.addOnly ? null : h('h3', { style: { margin: 0, fontSize: 16 } }, text.accounts),
+      props.addOnly ? null : h('p', { style: muted }, text.scope),
       props.remote === undefined ? h('p', { role: 'status', style: muted }, text.remoteUnavailable) : null,
       failed ? h('p', { role: 'alert', style: muted }, text.readFailed) : null,
       view?.state === 'error' && view.operation === undefined && view.diagnostic !== undefined
@@ -347,27 +428,40 @@ export function CopilotAccountsPanel(props: {
       view?.diagnostic === undefined ? null : h('details', { 'data-copilot-account-diagnostic': '', style: { color: secondary, fontSize: 13 } },
         h('summary', { style: { cursor: 'pointer' } }, text.technicalDetails),
         h('code', { style: { overflowWrap: 'anywhere' } }, view.diagnostic)),
-      h('ul', { style: { padding: 0, margin: 0, listStyle: 'none' } }, ...(view?.accounts ?? []).map(account =>
-        h('li', { key: account.id, style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
-          paddingBlock: 10, borderBottom: border } },
-        h('div', { style: { minWidth: 0, flex: '1 1 180px' } },
-          h('strong', null, account.identityState === 'ready' && account.identity !== undefined ? `@${account.identity.login}`
-            : account.configured ? text.identityUnavailableLabel : text.authorizationUnavailable),
-          h('p', { style: muted }, account.id === view?.activeAccountId ? text.currentDefault
-            : account.configured ? text.savedAuthorization : text.authorizationUnavailable)),
-        account.id === view?.activeAccountId ? null : control(text.switch, () => {
-          if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: false })
-        }, pending || view?.switchable !== true || view?.revision === undefined || !account.configured),
-        account.id === 'canonical' ? null : control(text.reauthorize, () => {
-          if (props.remote !== undefined && view?.revision !== undefined) {
-            const revision = view.revision
-            startReauthorization(account.id, revision)
-          }
-        }, pending || view?.writable !== true || view?.switchable !== true || view?.revision === undefined),
-        account.id === 'canonical' || account.id === view?.activeAccountId ? null : control(text.remove, () => {
-          if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: true })
-        }, pending || view?.writable !== true || view?.revision === undefined)))),
-      confirmation === undefined ? null : h('div', { role: 'group',
+      props.addOnly && !authorizationOperation ? control(text.add, () => {
+        if (props.remote !== undefined) startAdd()
+      }, pending || view?.writable !== true || view?.switchable !== true) : null,
+      props.addOnly && (failed || !pending && view?.switchable === false) ? control(text.retry, () => {
+        if (props.remote !== undefined) void run(() => props.remote!.get())
+      }, pending || props.remote === undefined) : null,
+      props.addOnly ? null : h('div', { 'data-copilot-current-account-row': true,
+        style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingBlock: 8, borderBottom: border } },
+      h('div', { style: { minWidth: 0, flex: '1 1 180px' } },
+        h('strong', { 'data-copilot-current-account': '', role: 'status', 'aria-live': 'polite' },
+          identity ?? text.identityUnavailableLabel),
+        h('p', { style: muted }, text.currentDefault)),
+      control(accountsOpen ? text.closeAccounts : text.switch, () => {
+        setAccountsOpen(open => !open)
+        setConfirmation(undefined)
+      }, pending || view?.switchable !== true || view?.revision === undefined)),
+      !props.addOnly && accountsOpen ? h('div', { 'data-copilot-account-selector': true, style: { display: 'grid', gap: 8 } },
+        h('label', { style: { display: 'grid', gap: 6, color: secondary, fontSize: 13 } },
+          text.searchAccounts,
+          h('input', {
+            type: 'search', value: accountSearch, 'data-copilot-account-search': true,
+            onChange: (event: { currentTarget: { value: string } }) => setAccountSearch(event.currentTarget.value),
+            style: { ...button, fontSize: 16, width: '100%', boxSizing: 'border-box',
+              background: 'var(--dsw-alias-bg-layer-1, Canvas)', color: 'var(--dsw-alias-label-primary, CanvasText)' },
+            placeholder: text.searchAccounts,
+          })),
+        h('ul', { 'data-copilot-saved-accounts': true, style: {
+          padding: 0, margin: 0, listStyle: 'none', maxHeight: 240, overflowY: 'auto', overscrollBehavior: 'contain',
+        } }, ...(savedAccountItems.length === 0
+          ? [h('li', { key: 'no-matches', style: muted }, text.noAccountsMatch)] : savedAccountItems)),
+        authorizationOperation ? null : control(text.add, () => {
+          if (props.remote !== undefined) startAdd()
+        }, pending || view?.writable !== true || view?.switchable !== true)) : null,
+      props.addOnly || confirmation === undefined ? null : h('div', { role: 'group',
         'aria-label': confirmation.remove ? text.confirmRemoveTitle : text.confirmSwitchTitle,
         style: { border, borderRadius: 8, padding: 12 } },
         h('p', { style: { ...muted, color: 'inherit', marginTop: 0 } }, confirmation.remove
@@ -376,15 +470,17 @@ export function CopilotAccountsPanel(props: {
           control(confirmation.remove ? text.confirmRemove : text.confirmSwitch, () => {
             const target = confirmation
             setConfirmation(undefined)
-            if (props.remote !== undefined) void run(() => target.remove
-              ? props.remote!.removeAccount(target.id, target.revision) : props.remote!.switchAccount(target.id, target.revision), true)
+            if (managementRemote !== undefined) void run(() => target.remove
+              ? managementRemote.removeAccount(target.id, target.revision) : managementRemote.switchAccount(target.id, target.revision), true)
           }, pending),
           control(text.cancel, () => setConfirmation(undefined), pending))),
-      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
-        authorizationOperation ? null : control(text.add, () => {
-          if (props.remote !== undefined) startAdd()
-        }, pending || view?.writable !== true || view?.switchable !== true),
+      props.addOnly ? null : h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
         control(busy ? text.refreshing : text.refresh, () => {
-          if (props.remote !== undefined) void run(() => props.remote!.refreshIdentity())
-        }, pending || props.remote === undefined))))
+          if (managementRemote !== undefined) void run(() => managementRemote.refreshIdentity())
+        }, pending || props.remote === undefined),
+        activeAccount === undefined || activeAccount.id === 'canonical' ? null : control(text.reauthorize, () => {
+          if (props.remote !== undefined && view?.revision !== undefined) startReauthorization(activeAccount.id, view.revision)
+        }, pending || view?.writable !== true || view?.switchable !== true || view?.revision === undefined)),
+      props.accountSettings ?? null,
+      props.continuationSettings ?? null))
 }

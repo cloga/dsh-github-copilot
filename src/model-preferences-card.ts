@@ -6,7 +6,7 @@ import { GitHubCopilotAuthorizationViewSchema, GitHubCopilotModelPreferencesView
 
 const controlStyle: CSSProperties = {
   color: 'inherit', background: 'transparent', font: 'inherit', fontSize: '14px',
-  border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
+  border: '1px solid var(--dsw-alias-border-main, ButtonBorder)', colorScheme: 'inherit',
   borderRadius: '8px', padding: '7px 12px', minHeight: '36px',
 }
 
@@ -35,7 +35,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
   readonly preferences: GitHubCopilotAuthorizationView['modelPreferences']
 }): ReactElement {
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<'all' | 'enabled' | 'excluded'>('all')
+  const [filter, setFilter] = useState<'all' | 'enabled' | 'excluded' | 'available' | 'unavailable'>('all')
   const [preferences, setPreferences] = useState(props.preferences)
   const [models, setModels] = useState(props.models)
   const [busyModel, setBusyModel] = useState<string>()
@@ -51,6 +51,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     return () => { scope.generation++; scope.pending = false }
   }, [props.preferences, props.models, props.remote])
   const available = models?.models ?? []
+  const availabilityKnown = models?.state === 'ready'
   const settingsKnown = preferences !== undefined && preferences.revision !== undefined
   const excluded = new Set(preferences?.excludedModelIds ?? [])
   const diagnostic = error ?? preferences?.error
@@ -58,15 +59,19 @@ export function GitHubCopilotModelPreferencesPanel(props: {
   const writable = preferences?.writable === true && settingsKnown
   const rows = [
     ...available.map(model => ({ id: model.id, name: model.name, available: true })),
-    ...(preferences?.unavailableExcludedModelIds ?? [])
+    ...Array.from(new Set([...(preferences?.excludedModelIds ?? []), ...(preferences?.unavailableExcludedModelIds ?? [])]))
       .filter(id => !available.some(model => model.id === id))
       .map(id => ({ id, name: id, available: false })),
   ]
   const needle = query.trim().toLocaleLowerCase()
   const filtered = rows.filter(model => (filter === 'all'
-    || settingsKnown && (filter === 'excluded' ? excluded.has(model.id) : !excluded.has(model.id)))
+    || filter === 'enabled' && settingsKnown && !excluded.has(model.id)
+    || filter === 'excluded' && settingsKnown && excluded.has(model.id)
+    || filter === 'available' && availabilityKnown && model.available
+    || filter === 'unavailable' && availabilityKnown && !model.available)
     && (needle.length === 0 || model.id.toLocaleLowerCase().includes(needle) || model.name.toLocaleLowerCase().includes(needle)))
   const visibleCount = available.filter(model => !excluded.has(model.id)).length
+  const unavailableCount = rows.filter(model => !model.available).length
   const update = async (modelId?: string, restore = false): Promise<void> => {
     const scope = request.current
     if (scope.pending || modelId !== undefined && !writable) return
@@ -108,7 +113,9 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     createElement('summary', null, settingsKnown
       ? `Model preferences · ${visibleCount} enabled · ${excluded.size} excluded` : 'Model preferences · Read-only'),
     createElement('p', { style: { fontSize: '14px', marginBlock: '12px' } },
-      'Excluded models disappear from the managed picker and cannot start a new turn, including Auto. An admitted turn keeps its model. Fixed selections are not changed; select another model before the next turn. Restoring a model does not select it.'),
+      'Exclusions are shared across GitHub Copilot accounts; availability below reflects the current account. Newly discovered models are enabled by default. Unavailable saved exclusions are retained and apply again if that model returns. Excluded models disappear from the managed picker and cannot start a new turn, including Auto. An admitted turn keeps its model. Fixed selections are not changed; select another model before the next turn. Restoring a model does not select it.'),
+    availabilityKnown ? null : createElement('p', { role: 'status' },
+      'Current account availability unconfirmed. Shown models reflect the last metadata snapshot and saved exclusions, not a current availability check.'),
     diagnostic === undefined ? null : createElement('div', { role: 'alert',
       'data-dsh-github-copilot-model-preferences-error': true, style: { fontSize: '14px', marginBlock: '12px' } },
       createElement('p', null, preferenceMessage(diagnostic)),
@@ -121,20 +128,25 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       'Search models',
       createElement('input', {
         type: 'search', value: query,
-        style: { ...controlStyle, fontSize: '16px', width: '100%', boxSizing: 'border-box', minWidth: 0 },
+        style: { ...controlStyle, fontSize: '16px', width: '100%', boxSizing: 'border-box', minWidth: 0,
+          background: 'var(--dsw-alias-bg-layer-1, Canvas)', color: 'var(--dsw-alias-label-primary, CanvasText)' },
         onChange: (event: { currentTarget: { value: string } }) => setQuery(event.currentTarget.value),
         placeholder: 'Search by name or exact model ID',
         'data-dsh-github-copilot-model-search': true,
       })),
     createElement('div', { role: 'group', 'aria-label': 'Filter models',
       style: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBlock: '12px' } },
-    (['all', 'enabled', 'excluded'] as const).map(value => createElement('button', {
+    (['all', 'enabled', 'excluded', 'available', 'unavailable'] as const).map(value => createElement('button', {
       key: value, type: 'button', 'aria-pressed': filter === value,
-      disabled: value !== 'all' && !settingsKnown, onClick: () => setFilter(value),
+      disabled: (value === 'enabled' || value === 'excluded') && !settingsKnown
+        || (value === 'available' || value === 'unavailable') && !availabilityKnown,
+      onClick: () => setFilter(value),
       style: { ...controlStyle, fontWeight: filter === value ? 600 : 400,
         background: filter === value ? 'color-mix(in srgb, currentColor 12%, transparent)' : 'transparent' },
     }, value === 'all' ? `All (${rows.length})` : value === 'enabled'
-      ? `Enabled (${settingsKnown ? visibleCount : '?'})` : `Excluded (${settingsKnown ? excluded.size : '?'})`))),
+      ? `Enabled (${settingsKnown ? visibleCount : '?'})` : value === 'excluded'
+        ? `Excluded (${settingsKnown ? excluded.size : '?'})` : value === 'available'
+          ? `Available (${availabilityKnown ? available.length : '?'})` : `Unavailable (${availabilityKnown ? unavailableCount : '?'})`))),
     filtered.length === 0 ? createElement('p', { role: 'status' },
       rows.length === 0 ? 'No account models to display. Use Refresh models to read account metadata.' : 'No models match this filter or search.')
       : createElement('ul', { 'aria-label': 'Account models', style: { listStyle: 'none', padding: 0, margin: 0 } },
@@ -147,12 +159,14 @@ export function GitHubCopilotModelPreferencesPanel(props: {
               createElement('strong', null, model.name),
               createElement('br'),
               createElement('code', null, model.id),
-              createElement('span', null, !settingsKnown ? ' · Exclusion status unknown' : isExcluded ? ' · Excluded' : ' · Enabled'),
-              model.available ? null : createElement('span', null, ' · Temporarily absent from account metadata'),
+              createElement('span', null, ` · ${!availabilityKnown ? 'Current account availability unconfirmed'
+                : model.available ? 'Available on current account' : 'Currently unavailable on current account; saved exclusion retained'}`),
+              createElement('span', null, ` · ${!settingsKnown ? 'Exclusion status unknown' : isExcluded ? 'Excluded' : 'Enabled'}`),
               errorModel === model.id && error !== undefined
                 ? createElement('span', { role: 'status', style: { display: 'block', marginTop: '6px' } }, preferenceMessage(error)) : null),
             createElement('button', {
-              type: 'button', style: { ...controlStyle, flexShrink: 0, cursor: disabled ? 'not-allowed' : 'pointer' },
+              type: 'button', style: { ...controlStyle, flexShrink: 0, cursor: disabled ? 'not-allowed' : 'pointer',
+                color: disabled ? 'var(--dsw-alias-label-secondary, GrayText)' : 'inherit' },
               disabled,
               'aria-label': `${isExcluded ? 'Restore' : 'Exclude'} ${model.name}`,
               onClick: () => update(model.id, isExcluded),

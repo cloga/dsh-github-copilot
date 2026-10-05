@@ -397,7 +397,8 @@ describe('tsdown client artifact', () => {
 
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace !== 'githubCopilotAccounts'
-      && descriptor.namespace !== 'githubCopilotSessionAccount').map(descriptor => descriptor.method)).toEqual([
+      && descriptor.namespace !== 'githubCopilotSessionAccount'
+      && descriptor.namespace !== 'githubCopilotSessionContinuation').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'get', 'authorize', 'setEnabled',
@@ -406,6 +407,8 @@ describe('tsdown client artifact', () => {
       .toEqual(['add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionAccount').map(descriptor => descriptor.method).sort())
       .toEqual(['ensureIdentity', 'get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])
+    expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation').map(descriptor => descriptor.method).sort())
+      .toEqual(['authorizeNext', 'defaults', 'get', 'set', 'setDefault'])
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {

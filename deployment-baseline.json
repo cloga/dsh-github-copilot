@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.108"
+    "version": "0.4.0-alpha.109"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -746,6 +746,28 @@
       ]
     },
     {
+      "id": "managed-session-visible-history-continuation",
+      "required": true,
+      "scope": "managed-responses-exact-session-turn-and-signal",
+      "liveEndpointAcceptance": "not-claimed",
+      "sourceMarkers": [
+        {"file": "src/session-continuation.ts", "marker": "class SessionContinuationTurn"},
+        {"file": "src/session-continuation-host.ts", "marker": "path: ['continuationDefaultHistory']"},
+        {"file": "src/session-continuation-host.ts", "marker": "COPILOT_CONTINUATION_TURN_BOUNDARY_UNAVAILABLE"},
+        {"file": "src/session-continuation-remote.ts", "marker": "authorizeNext"},
+        {"file": "src/copilot-usage-ui.ts", "marker": "useSessionContinuationSwitch"},
+        {"file": "docs/account-management-experience.md", "marker": "All accounts, quota"}
+      ],
+      "tests": [
+        {"file": "tests/session-continuation.spec.ts", "name": "continues A-B-B-A by omitting pre-turn reasoning while retaining new tool-loop reasoning"},
+        {"file": "tests/session-continuation.spec.ts", "name": "does not replay baseline ciphertext after its ID or embedded summary changes"},
+        {"file": "tests/session-continuation-host.spec.ts", "name": "captures birth-time defaults and consumes one-turn consent"},
+        {"file": "tests/session-continuation-ui.spec.ts", "name": "requires off-switch choice: %s"},
+        {"file": "tests/preview-route.spec.ts", "name": "filters persistent Session consent through the published adapter on successive turns without history writes"},
+        {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds persistent Session continuation through actual Client and %s Host gateways"}
+      ]
+    },
+    {
       "id": "managed-explicit-replay-recovery",
       "required": true,
       "scope": "managed-responses-initiating-session-only-explicit-loss-confirmation",
@@ -1297,7 +1319,7 @@
         {"file": "tests/compact-account.spec.ts", "name": "renders a neutral checking state then only a compact signed-in row"},
         {"file": "tests/compact-account.spec.ts", "name": "shows signed-out CTA and automatically reveals authorization without opening Manage"},
         {"file": "tests/compact-account.spec.ts", "name": "retains manual management and live actions when toggled during authorization"},
-        {"file": "tests/compact-account.spec.ts", "name": "keeps normal refresh inside Manage and visible Retry outside for actual failures"},
+        {"file": "tests/compact-account.spec.ts", "name": "keeps refresh and Retry inside Manage while discovery failures stay visible when collapsed"},
         {"file": "tests/compact-account.spec.ts", "name": "cleans timers and ignores late requests after detach or Remote replacement"},
         {"file": "tests/compact-account.spec.ts", "name": "keeps cancellation failures visible without reviving a stale code"},
         {"file": "tests/compact-account.spec.ts", "name": "orders cancellation after pending start so a late Host preflight cannot create an abandoned flow"},
