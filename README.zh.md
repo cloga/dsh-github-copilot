@@ -13,11 +13,11 @@
 在 Credits 内选择本 Session 后续 turn 的账号，或恢复跟随全局默认；正在运行的 turn 保持原账号。
 身份展示支持 GitHub 企业托管账号，包括带下划线企业后缀的用户名。
 
-可见的 Models 和 Credits 会续期已过期身份，不会在每次挂载时强制请求：身份缓存十分钟，同账号共享请求，失败冷却三十秒。显式刷新可立即重试；额度可先于身份续期完成展示。未知或已撤销身份不会作为当前用户名展示，Session 账号隔离保持不变。参见[账号生命周期](./docs/copilot-accounts.md)。
+可见的 Models 和 Credits 会补齐已保存账号缺失的名称，不需要先激活账号。已验证名称在 Host 生命周期内缓存，未激活账号也会保留；十分钟是重新验证的间隔，不是名字的显示期限。凭据变更、账号移除及身份验证失败会使名称失效。同账号共享请求、失败冷却三十秒，显式刷新可立即重试。名称不能证明授权有效或模型可用。参见[账号生命周期](./docs/copilot-accounts.md)。
 
 添加账号时，设备授权链接、可选择的网址、一次性授权码、复制授权码和取消操作会同时显示。GitHub 授权完成后，会单独显示身份与可用模型验证阶段。添加账号不会更改全局默认；准备好后仍需显式执行现有的**切换**操作。技术诊断收在次级折叠区；账号／历史 turn 缺少身份时不会暴露不透明账号 ID，也不会根据当前设置推断历史身份。
 
-**源码候选版本：`0.4.0-alpha.110`（尚未发布）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。下方带版本的命令适用于候选版本发布后，不代表对应资产已经存在。
+**源码候选版本：`0.4.0-alpha.111`（尚未发布）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。下方带版本的命令适用于候选版本发布后，不代表对应资产已经存在。
 
 ## 你可以做什么
 
@@ -57,10 +57,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.110/dsh-github-copilot-0.4.0-alpha.110.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.111/dsh-github-copilot-0.4.0-alpha.111.tgz
 ```
 
-**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.110`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.111`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -72,7 +72,7 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 在 **Manage → GitHub accounts**添加账号不会替换全局默认。设备授权期间，卡片会同时保留验证链接、可选择的网址、一次性授权码、**复制授权码**和**取消添加账号**。GitHub 授权成功后，卡片会单独验证身份和可用模型；完成添加仍不会切换默认账号。诊断码位于折叠的技术详情中。**刷新账号信息**只更新身份，不会完成或取消授权。确认切换只影响后续跟随默认的 turn，不影响正在运行的 turn 或 Session 已指定账号。**Credits → 切换账号**只为本 Session 后续 turn 保存选择；**跟随全局默认**清除该选择。即使显式选中的账号恰好等于全局默认，也仍是 Session 覆盖。原生路由尚存或证据不完整时会阻止账号切换。新账号可能没有已选模型，旧加密 replay 也可能绑定原账号；不会自动替换模型或删除历史。**Reauthorize**仅更新同一已存身份的授权；**Remove**仅删除非全局活动授权，正在运行 turn 锁定的授权不能修改。账号缺失／失效不会自动回退到其它账号。
 
-已完成的托管 turn 在原生 Usage 旁显示 **Account**，记录实际请求账号，不是计费归因或子 Agent 汇总。只有该 turn 捕获了 GitHub 登录名时才显示；否则身份不可用，不从当前设置反推。证据仅在 Host 生命周期内有界保留；重启、冷历史或没有原生流返回时显示未知，不从当前选择或全局默认反推历史。Credits 对身份未知的原始／已保存授权显示可读标签，不显示不透明账号 ID。
+已完成的托管 turn 在原生 Usage 旁显示 **Account**，记录实际请求账号，不是计费归因或子 Agent 汇总。准入时冻结已验证名称；缺失时针对本轮固定账号执行现有的有界、非强制查询，不阻塞模型输出，只能在同一 turn 仍运行时补齐身份。没有原生流返回就没有账号执行证据。未查到的身份仍显示不可用；不会根据当前设置补写已完成历史。证据仅在 Host 生命周期内有界保留，重启及冷历史显示未知。Credits 对身份未知的原始／已保存授权显示可读标签，不显示不透明账号 ID。
 
 切换资格通过官方 rc.2 SettingsForms 的配置值读取，不再依赖已退役的 Settings `get()` API。缺失或无效配置仍视为证据不完整；升级不会绕过原生路由或运行中工作的限制。
 
@@ -214,14 +214,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.110/dsh-github-copilot-0.4.0-alpha.110.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.110/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.111/dsh-github-copilot-0.4.0-alpha.111.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.111/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.110.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.111.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

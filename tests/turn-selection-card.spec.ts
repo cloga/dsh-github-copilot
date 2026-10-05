@@ -29,6 +29,35 @@ it('keeps recorded Account details separate from native Usage and current select
   expect(container.querySelector('[role=dialog]')?.textContent).toContain('Host lifetime only')
   expect(container.querySelector('[role=dialog]')?.textContent).not.toContain('Why this model')
 })
+it('rereads same-turn account evidence at native completion after in-turn identity capture', async () => {
+  let component: ComponentType<Record<string, unknown>> | undefined
+  const readAccount = vi.fn()
+    .mockResolvedValueOnce({ ok: true, value: { state: 'recorded', accountId: 'canonical', source: 'global' } })
+    .mockResolvedValueOnce({ ok: true, value: { state: 'recorded', accountId: 'canonical', source: 'global',
+      identity: { login: 'synthetic-first', userId: 1 } } })
+  cleanups.push(installAutoModelPresentation({ diagnostic: vi.fn(), remote: {
+    githubCopilotTurnSelection: { get: async () => ({ ok: true, value: { mode: 'manual' } }) },
+    githubCopilotSessionAccount: { turn: readAccount },
+  }, slots: {
+    spec: () => ({ kind: 'list', scope: 'session' }), inject: (_: string, setup: () => () => void) => setup(),
+    register: (_: unknown, value: ComponentType<Record<string, unknown>>) => { component = value; return () => {} },
+  } }))
+  const turn = { turn: 7, data: { source: () => ({ getSnapshot: () => undefined, subscribe: () => () => {} }) } }
+  let data: Record<string, unknown> = { closing: { finalNode: { messageId: 'reply' } } }
+  const snapshot = { nodes: { values: () => [{ kind: 'turn-tail', location: { kind: 'turn', turn }, data }] } }
+  const props = { sessionId: 'session-a', messageId: 'reply', useChat: (select: (value: unknown) => unknown) => select(snapshot) }
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  await act(async () => root.render(createElement(component!, props)))
+  expect(container.textContent).toBe('')
+  expect(readAccount).toHaveBeenCalledOnce()
+  data = { ...data, turn: 7, seq: 12 }
+  await act(async () => root.render(createElement(component!, props)))
+  expect(container.textContent).toContain('Account · @synthetic-first')
+  expect(readAccount.mock.calls).toEqual([['session-a', 7], ['session-a', 7]])
+  await act(async () => root.render(createElement(component!, { ...props, unrelatedPicker: 'other-account' })))
+  expect(readAccount).toHaveBeenCalledTimes(2)
+})
 it('distinguishes failed Account reads from unknown evidence and retries only the read', async () => {
   const container = document.createElement('div'); document.body.append(container)
   const root = createRoot(container); cleanups.push(() => root.unmount())

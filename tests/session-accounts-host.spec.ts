@@ -23,6 +23,7 @@ function fixture() {
     readRecord: async () => { throw new Error('Preference operations must not read credentials') },
   })
   const host = new CopilotAccountsHost(ctx, { routeDiagnostic: () => undefined })
+  vi.spyOn(host, 'ensureIdentityFor').mockImplementation(accountId => host.viewForAccount(accountId))
   ctx.provide('githubCopilotAccounts', { host })
   const owner = new SessionAccountsHost(ctx)
   ctx.provide('githubCopilotSessionAccounts', owner)
@@ -30,6 +31,60 @@ function fixture() {
     selectGlobal(id: string) { value.activeAccountId = id; revision++; host.selectionChanged() } }
 }
 describe('Session account Host admission and CAS', () => {
+  it('retains admission identity across cache invalidation without querying or recording before delivery', () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    const cached = vi.spyOn(f.host, 'cachedIdentity').mockReturnValue({ login: 'alice', userId: 1 })
+    f.owner.admit(agent, 1, signal)
+    cached.mockReturnValue(undefined)
+    expect(f.owner.turns.evidence(agent.session, 1)).toBeUndefined()
+    expect(f.host.ensureIdentityFor).not.toHaveBeenCalled()
+    f.owner.recordRequest(signal)
+    expect(f.owner.turns.evidence(agent.session, 1)?.identity).toEqual({ login: 'alice', userId: 1 })
+    f.owner.dispose(); f.host.dispose()
+  })
+  it('ensures the admitted inactive account once without blocking delivery or borrowing the default', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    let finish!: () => void
+    const waiting = new Promise<void>(resolve => { finish = resolve })
+    const cached = vi.spyOn(f.host, 'cachedIdentity').mockReturnValue(undefined)
+    vi.mocked(f.host.ensureIdentityFor).mockImplementation(async accountId => {
+      await waiting
+      return f.host.viewForAccount(accountId)
+    })
+    f.owner.admit(agent, 1, signal)
+    f.owner.admit(agent, 1, signal)
+    f.owner.recordRequest(signal)
+    expect(f.owner.turns.evidence(agent.session, 1)?.identity).toBeUndefined()
+    f.selectGlobal(B)
+    cached.mockImplementation(accountId => accountId === A ? { login: 'alice', userId: 1 } : { login: 'bob', userId: 2 })
+    finish()
+    await vi.waitFor(() => expect(f.owner.turns.evidence(agent.session, 1)?.identity?.login).toBe('alice'))
+    expect(f.host.ensureIdentityFor).toHaveBeenCalledExactlyOnceWith(A)
+    f.owner.dispose(); f.host.dispose()
+  })
+  it('ignores identity completion after the turn ends', async () => {
+    const f = fixture(), agent = { session: { id: 'a' } }, signal = new AbortController().signal
+    let finish!: () => void
+    const waiting = new Promise<void>(resolve => { finish = resolve })
+    const cached = vi.spyOn(f.host, 'cachedIdentity').mockReturnValue(undefined)
+    vi.mocked(f.host.ensureIdentityFor).mockImplementation(async accountId => {
+      await waiting
+      return f.host.viewForAccount(accountId)
+    })
+    f.owner.admit(agent, 1, signal)
+    f.owner.recordRequest(signal)
+    f.owner.end(agent.session, 1)
+    vi.mocked(f.host.ensureIdentityFor).mockImplementationOnce(() => new Promise(() => {}))
+    f.owner.admit(agent, 2, signal)
+    f.owner.recordRequest(signal)
+    cached.mockReturnValue({ login: 'alice', userId: 1 })
+    finish()
+    await vi.mocked(f.host.ensureIdentityFor).mock.results[0]?.value
+    await Promise.resolve()
+    expect(f.owner.turns.evidence(agent.session, 1)?.identity).toBeUndefined()
+    expect(f.owner.turns.evidence(agent.session, 2)?.identity).toBeUndefined()
+    f.owner.dispose(); f.host.dispose()
+  })
   it('reports the selected Session record independently of missing global or explicit records', async () => {
     const f = fixture()
     f.records.delete(B)

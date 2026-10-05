@@ -35,6 +35,7 @@ export class SessionAccountsHost {
     try {
       this.turns.admit(agent.session, turn, signal, selected)
       this.leases.set(agent.session, lease)
+      this.captureIdentity(signal, selected.accountId)
       return lease.binding
     } catch (error) { lease.release(); throw error }
   }
@@ -58,6 +59,30 @@ export class SessionAccountsHost {
     const accounts = this.ctx.get('githubCopilotAccounts')
     if (!accounts) throw new Error('COPILOT_SESSION_ACCOUNTS_UNAVAILABLE')
     return accounts.host.captureAccount(accountId)
+  }
+  private captureIdentity(signal: AbortSignal, accountId: string): void {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (!accounts) throw new Error('COPILOT_SESSION_ACCOUNTS_UNAVAILABLE')
+    const cached = accounts.host.cachedIdentity(accountId)
+    if (cached) {
+      this.turns.captureIdentity(signal, cached)
+      return
+    }
+    const admission = this.turns.forSignal(signal)
+    // Non-forcing, account-bound lookup never delays native model delivery.
+    void accounts.host.ensureIdentityFor(accountId).then(view => {
+      if (this.turns.forSignal(signal) !== admission || signal.aborted) return
+      if (view.state === 'error') {
+        this.ctx.logger.warn('[github-copilot] %s', view.diagnostic ?? 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
+        return
+      }
+      const identity = accounts.host.cachedIdentity(accountId)
+      if (identity) this.turns.captureIdentity(signal, identity)
+    }, () => {
+      if (this.turns.forSignal(signal) === admission && !signal.aborted) {
+        this.ctx.logger.warn('[github-copilot] COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
+      }
+    })
   }
   recordRequest(signal?: AbortSignal): void {
     const admission = signal === undefined ? undefined : this.turns.forSignal(signal)

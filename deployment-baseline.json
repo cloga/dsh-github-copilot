@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.110"
+    "version": "0.4.0-alpha.111"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -304,6 +304,7 @@
       "tests": [
         {"file": "tests/session-accounts.spec.ts", "name": "freezes each turn across preference changes, steps and retries"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "holds account mutation fencing through abort until the actual turn boundary"},
+        {"file": "tests/session-accounts-host.spec.ts", "name": "ignores identity completion after the turn ends"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "switches only subsequent Session turns inside Credits and can restore inheritance"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds Session account choices and historical reads through native Client and %s Host gateways"},
         {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent native credentials and SettingsForms CAS across profile restart without cross-account OAuth writes"}
@@ -324,6 +325,8 @@
       ],
       "tests": [
         {"file": "tests/copilot-identity-refresh.spec.ts", "name": "renews expired identity once for account %s without changing metadata-only reads"},
+        {"file": "tests/copilot-account-identity-cache.spec.ts", "name": "hydrates saved inactive names without activating them, then reuses them"},
+        {"file": "tests/copilot-account-identity-cache.spec.ts", "name": "retains inactive verified names after freshness expiry without reads or network in status"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "settles quota before a slow identity renewal and uses nonforcing ensure on visible refresh cadence"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "never writes a captured A refresh into B after an external selection change"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "preserves uncertain commit ahead of missing-slot recovery"},

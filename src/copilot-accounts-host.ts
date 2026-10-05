@@ -137,8 +137,7 @@ export class CopilotAccountsHost {
     return () => { this.listeners.delete(listener) }
   }
   cachedIdentity(accountId: string): CopilotAccountIdentity | undefined {
-    const cached = this.identities.get(accountId)
-    return cached && Date.now() - cached.at < IDENTITY_TTL ? cached.identity : undefined
+    return this.identities.get(accountId)?.identity
   }
   capture(accountId?: string): CopilotAccountBinding {
     const selected = this.selection()
@@ -245,7 +244,7 @@ export class CopilotAccountsHost {
       seen.add(accountId)
       const configured = owned.find(row => row.key === record.key)?.kind === 'grant'
       const cached = this.identities.get(accountId)
-      const identity = configured && cached && Date.now() - cached.at < IDENTITY_TTL ? cached.identity : undefined
+      const identity = configured ? cached?.identity : undefined
       rows.push({ id: accountId, configured, identityState: identity ? 'ready'
         : this.unavailableIdentities.has(accountId) ? 'unavailable' : 'unknown', ...identity ? { identity } : {} })
     }
@@ -368,7 +367,13 @@ export class CopilotAccountsHost {
     return this.get()
   }
   async ensureIdentity(): Promise<CopilotAccountsView> {
-    try { return await this.ensureIdentityFor(this.selection().accountId) }
+    try {
+      const selected = this.selection().accountId
+      const view = await this.ensureAccountNamesFor(selected)
+      if (view.state === 'error') return view
+      if (this.selection().accountId !== selected) fail('COPILOT_ACCOUNTS_CHANGED')
+      return view
+    }
     catch (error) {
       const view = await this.get()
       return { ...view, state: 'error', switchable: false, diagnostic: diagnostic(error, 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE') }
@@ -383,13 +388,26 @@ export class CopilotAccountsHost {
   async ensureIdentityFor(accountId: string): Promise<CopilotAccountsView> {
     return this.readIdentity(accountId, false)
   }
+  async ensureAccountNamesFor(accountId: string): Promise<CopilotAccountsView> {
+    const view = await this.ensureIdentityFor(accountId)
+    if (view.state === 'error') return view
+    // Membership is bounded; each lookup retains its own timeout, cooldown and flight.
+    const missing = view.accounts.filter(row => row.configured && row.id !== accountId && !this.cachedIdentity(row.id))
+    await Promise.all(missing.map(async row => {
+      const result = await this.ensureIdentityFor(row.id)
+      if (result.state === 'error') this.ctx.logger.warn('[github-copilot] %s',
+        result.diagnostic ?? 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
+    }))
+    return this.viewForAccount(accountId)
+  }
   private async readIdentity(accountId: string, force: boolean): Promise<CopilotAccountsView> {
     id(accountId)
     if (this.disposed) fail('COPILOT_ACCOUNTS_DISPOSED')
     let flight = this.identityFlights.get(accountId)
     let problem: CopilotAccountsDiagnostic | undefined
     const failed = this.identityFailures.get(accountId)
-    if (flight === undefined && !force && this.cachedIdentity(accountId)) return this.viewForAccount(accountId)
+    const cached = this.identities.get(accountId)
+    if (flight === undefined && !force && cached && Date.now() - cached.at < IDENTITY_TTL) return this.viewForAccount(accountId)
     if (flight === undefined && !force && failed && Date.now() - failed.at < IDENTITY_FAILURE_COOLDOWN) {
       problem = failed.diagnostic
     } else {

@@ -235,8 +235,13 @@ See [the approved experience and mock](./account-management-experience.md).
 Completed managed turns have a compact **Account** disclosure alongside native
 Usage/selection actions through the public assistant-actions slot. This is
 request-account evidence, not billing attribution or a subagent account rollup.
-It captures an optional cached identity on the first real ordinary native chunk,
-not discovery, preparation or auxiliary Auto assessment. Host memory retains at
+It freezes a verified cached identity at admission. Missing identity starts one
+nonforcing, bounded lookup for the exact admitted account without delaying model
+delivery. A successful lookup may fill missing identity only while that same
+turn/signal remains active and uncancelled, retaining the first verified name.
+Account execution evidence is still created only on the first real ordinary
+native chunk, not discovery, preparation or auxiliary Auto assessment. Late
+lookups never backfill completed turns. Host memory retains at
 most 64 Sessions and 128 turns per Session. Restart, cold history, eviction or a
 request with no native delivery is unknown. Failed reads are distinct from
 unknown evidence; Retry rereads the same turn without inference. Official rc.2
@@ -264,7 +269,15 @@ same-account in-flight work and observes a thirty-second failure cooldown;
 explicit **Refresh account information** bypasses cooldown but joins active
 work. There is no render-driven request loop or background polling after
 unmount. Credential changes revoke identity and pending work; cancelled or
-expired identity is never shown as current. Session ensure retains explicit
+unverified identity is never shown as current. Verified display names remain in
+the bounded Host cache beyond the ten-minute revalidation interval; freshness
+expiry alone never replaces an inactive account name with unknown. Names are
+display metadata, not authorization/model-access proof, and are not persisted
+across Host restarts. Models and Session Credits ensure missing configured
+account names through the same per-account lookup without activating those
+accounts. Membership limits bound the parallel lookups and each retains its
+timeout/single flight/cooldown. Credential invalidation and failed verification
+still clear names. Session ensure retains explicit
 Agent lookup and rechecks account selection before returning.
 
 Quota settles independently of identity renewal only after account-coherent

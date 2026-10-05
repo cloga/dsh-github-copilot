@@ -37,7 +37,7 @@ export class SessionAccountController extends TypertRemoteService {
     const accounts = this.ctx.get('githubCopilotAccounts')
     if (!accounts) throw new Error('COPILOT_SESSION_ACCOUNTS_UNAVAILABLE')
     const identity = await (force ? accounts.host.refreshIdentityFor(selected.accountId)
-      : accounts.host.ensureIdentityFor(selected.accountId))
+      : accounts.host.ensureAccountNamesFor(selected.accountId))
     const latest = await this.get(agent)
     if (latest.accountId !== selected.accountId || latest.source !== selected.source) throw new Error('COPILOT_ACCOUNTS_CHANGED')
     return { ...latest, accounts: identity }

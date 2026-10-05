@@ -15,11 +15,11 @@ Inside **Credits**, choose a saved account for this Session's subsequent turns o
 restore **Follow global default**. Running turns retain their original account.
 Identity display accepts GitHub Enterprise Managed User names, including their underscore-separated enterprise suffixes.
 
-Visible Models and Credits renew expired identity without forcing fresh reads on every mount: ten-minute identity cache, shared per-account requests and a thirty-second failure cooldown. Explicit refresh retries immediately; quota can settle while identity renews. Unknown or revoked identity is never shown as current, and Session account isolation is unchanged. See [account lifecycle](./docs/copilot-accounts.md).
+Visible Models and Credits resolve missing names for saved accounts without activating them. Verified names remain cached for the Host lifetime, including inactive accounts; the ten-minute freshness interval governs revalidation, not name display. Credential changes, removal and failed identity verification invalidate names. Shared per-account requests and a thirty-second failure cooldown remain; explicit refresh retries immediately. Names do not prove authorization or model access. See [account lifecycle](./docs/copilot-accounts.md).
 
 Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
 
-**Source candidate: `0.4.0-alpha.110` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+**Source candidate: `0.4.0-alpha.111` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -59,10 +59,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.110/dsh-github-copilot-0.4.0-alpha.110.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.111/dsh-github-copilot-0.4.0-alpha.111.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.110` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.111` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -74,7 +74,7 @@ Sign-out requires an explicit action and removes only the active account's autho
 
 In **Manage → GitHub accounts**, adding an account never replaces the global default. During device authorization, the card keeps the verification link and selectable URL, one-time code, **Copy authorization code**, and **Cancel adding account** together. Once authorization succeeds, the card separately verifies identity and available models; a completed addition is still not a default switch. Diagnostic codes remain in a collapsed technical-details disclosure. **Refresh account information** renews identity only; it does not complete or cancel authorization. A confirmed switch changes future inherited turns, not running turns or explicit Session overrides. **Credits → Switch account** persists a choice only for this Session's subsequent turns; **Follow global default** clears it. Explicitly choosing today's default still remains a Session override. Native-route or incomplete evidence blocks account switching. The new account may not offer your selected model, and old encrypted replay may be account-bound: no automatic model substitution or history removal occurs. **Reauthorize** renews the same saved identity; **Remove** deletes only an inactive saved authorization and cannot mutate a running turn's pinned account. Missing/revoked accounts never fall back.
 
-Completed managed turns show **Account** beside native Usage. It records the request account, not billing or subagent totals. A GitHub login is shown only if captured for that turn; otherwise identity is unavailable, never reconstructed from current settings. Evidence is bounded to the Host lifetime; restart, cold history or missing delivery displays unknown, never reconstructed from the current picker/default. Credits labels an unidentified original or saved authorization without displaying opaque account IDs.
+Completed managed turns show **Account** beside native Usage. It records the request account, not billing or subagent totals. A verified name is frozen at admission; if missing, an existing bounded non-forcing lookup for that exact account runs without delaying model delivery and can fill identity only while the same turn remains active. No account evidence exists before native delivery. Missing identity remains unavailable; completed history is never backfilled from current settings. Evidence is bounded to the Host lifetime; restart, cold history or missing delivery displays unknown. Credits labels an unidentified original or saved authorization without displaying opaque account IDs.
 
 Account eligibility reads official rc.2 SettingsForms values, without requiring the retired settings `get()` API. Missing or malformed configuration remains incomplete evidence; upgrading does not bypass native-route or activity restrictions.
 
@@ -216,14 +216,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.110/dsh-github-copilot-0.4.0-alpha.110.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.110/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.111/dsh-github-copilot-0.4.0-alpha.111.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.111/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.110.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.111.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
