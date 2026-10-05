@@ -52,6 +52,14 @@ it('uses native auxiliary typography for the entire notice and inherited control
     expect(notice.style.fontSize).toBe('var(--dsh-content-font-size-secondary, 13px)')
     expect(notice.style.lineHeight).toBe('calc(20px + var(--dsh-content-font-delta-secondary, 0px))')
     expect(notice.style.width).toBe('100%')
+    expect(notice.style.maxWidth).toBe('var(--dsh-composer-card-max-width, 100%)')
+    expect(notice.style.marginInline).toBe('auto')
+    const details = notice.querySelector('details')!
+    expect(details.open).toBe(false)
+    expect(details.textContent).toContain('synthetic-model')
+    expect(details.textContent).toContain('not a count of proven invalid items')
+    expect(details.querySelector('button')!.textContent).toBe('Read status again')
+    expect(notice.querySelectorAll(':scope > button')).toHaveLength(0)
     expect(notice.style.minWidth).toBe('0')
     await f.click('Review recovery options')
     for (const paragraph of Array.from(f.node.querySelectorAll('p'))) {

@@ -175,7 +175,7 @@ export class ResponsesRetryReplay {
     let finished = false
     let observed = false
     return {
-      normalize: payload => {
+      normalize: (payload, transform) => {
         if (this.disposed || signal?.aborted) throw new CopilotResponsesReplayError()
         const rawBytes = cacheBytes(payload)
         let normalized: unknown
@@ -216,6 +216,7 @@ export class ResponsesRetryReplay {
           normalized = JSON.parse(eligible.normalized) as unknown
           reused = true
         }
+        if (transform !== undefined) normalized = transform(normalized)
         payloadBytes = cacheBytes(normalized)
         candidate = signal === undefined || !sessionId || !modelId || contextBytes === undefined || rawBytes === undefined || payloadBytes === undefined
           ? undefined : { raw: JSON.parse(rawBytes) as Record<string, unknown>, normalized: payloadBytes,
@@ -240,7 +241,7 @@ export class ResponsesRetryReplay {
 }
 
 export interface ResponsesRetryAttempt {
-  normalize(payload: unknown): unknown
+  normalize(payload: unknown, transform?: (payload: unknown) => unknown): unknown
   observe(body: string | undefined, status: number): void
   finish(): void
 }

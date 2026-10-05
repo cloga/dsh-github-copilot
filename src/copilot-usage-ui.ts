@@ -1,12 +1,18 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
-import { createElement, useEffect, useMemo, useSyncExternalStore } from 'react'
+import { createElement, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
 import { CopilotUsageCard } from './copilot-usage-card.ts'
 import type { CopilotUsageRemote } from './copilot-usage-card.ts'
 import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
+import { CopilotAccountAdd } from './copilot-accounts-card.ts'
+import type { CopilotAccountAddRemote } from './copilot-accounts-card.ts'
+import { accountPresentationChanges } from './copilot-account-presentation.ts'
+import { SessionAccountViewSchema } from './session-accounts-remote.ts'
 import type { SessionAccountView } from './session-accounts-remote.ts'
+import { useSessionContinuationSwitch } from './session-continuation-ui.ts'
+import type { SessionContinuationRemote } from './session-continuation-ui.ts'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { CopilotUsageView } from './copilot-usage-types.ts'
 
@@ -74,23 +80,35 @@ function effectiveCopilot(projection: unknown): { provider: string; model: strin
   return next.provider === 'github-copilot' || next.provider === 'github-copilot-preview' ? next : undefined
 }
 
-function Surface({ runtime, remote, accountsRemote, sessionRemote, locale, diagnostic }: {
+function Surface({ runtime, remote, accountsRemote, addRemote, sessionRemote, continuationRemote, locale, diagnostic }: {
   runtime: RuntimeProps
   remote: CopilotUsageRemote | undefined
   accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'> | undefined
+  addRemote: CopilotAccountAddRemote | undefined
   sessionRemote: SessionAccountRemote | undefined
+  continuationRemote: SessionContinuationRemote | undefined
   locale: LocaleReader | undefined
   diagnostic: (code: string) => void
 }): ReactElement | null {
   const valid = runtime.useSession(session => record(session) && session.sessionId === runtime.sessionId
     && session.removed === false && session.openState === 'open')
   const projection = runtime.useProjection('modelSelection')
+  const running = runtime.useSession(value => !record(value) || value.running !== false)
   const language = useSyncExternalStore(
     locale === undefined ? emptySubscribe : listener => locale.subscribe(listener),
     () => locale?.getLocale().active ?? 'en',
     () => 'en',
   )
   const current = effectiveCopilot(projection)
+  const changesAccount = useCallback(async (accountId: string | null) => {
+    const result = await sessionRemote?.get(runtime.sessionId)
+    const parsed = result?.ok ? SessionAccountViewSchema.safeParse(result.value) : undefined
+    if (!parsed?.success) throw new Error('COPILOT_SESSION_ACCOUNTS_REMOTE_UNAVAILABLE')
+    return (accountId ?? parsed.data.globalAccountId) !== parsed.data.accountId
+  }, [sessionRemote, runtime.sessionId])
+  const continuation = useSessionContinuationSwitch({ sessionId: runtime.sessionId,
+    remote: continuationRemote, locale: language, changesAccount, running })
+  const added = useCallback(() => { const finish = accountPresentationChanges.begin(); finish() }, [])
   const bound = useMemo(() => {
     if (sessionRemote === undefined) return undefined
     const id = runtime.sessionId
@@ -122,7 +140,14 @@ function Surface({ runtime, remote, accountsRemote, sessionRemote, locale, diagn
   return createElement(CopilotUsageCard, { key: contextKey, contextKey,
     remote: current.provider === 'github-copilot-preview' ? bound?.usage : remote,
     accountsRemote: current.provider === 'github-copilot-preview' ? bound?.identity : accountsRemote,
-    sessionAccount: current.provider === 'github-copilot-preview' ? bound?.account : undefined, locale: language })
+    sessionAccount: current.provider === 'github-copilot-preview' ? bound?.account : undefined, locale: language,
+    continuation: current.provider === 'github-copilot-preview' ? continuation.content : undefined,
+    beforeAccountChange: current.provider === 'github-copilot-preview' ? continuation.beforeAccountChange : undefined,
+    accountActions: current.provider === 'github-copilot-preview'
+      ? createElement(CopilotAccountAdd, { remote: addRemote, locale: language, onChanged: added }) : undefined,
+    navigationDiagnostic: language.startsWith('zh')
+      ? '当前 Core 未提供公开的 Models 直达导航。请打开设置 → 模型 → GitHub Copilot → 管理；返回后草稿与本 Session 设置不变。'
+      : 'This Core has no public Models deep link. Open Settings → Models → GitHub Copilot → Manage; your draft and Session settings remain unchanged.' })
 }
 
 /** Public additive dock only; native composer, ContextMeter and other features stay owned by Core. */
@@ -141,6 +166,8 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
   let remote: CopilotUsageRemote | undefined
   let accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'> | undefined
   let sessionRemote: SessionAccountRemote | undefined
+  let continuationRemote: SessionContinuationRemote | undefined
+  let addRemote: CopilotAccountAddRemote | undefined
   try {
     const namespaces: unknown = ctx.remote
     const face = record(namespaces) ? namespaces.githubCopilotUsage : undefined
@@ -152,9 +179,16 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
       && typeof accounts.ensureIdentity === 'function') {
       accountsRemote = accounts as Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'>
     } else diagnostic('COPILOT_ACCOUNTS_REMOTE_UNAVAILABLE')
+    if (record(accounts) && typeof accounts.get === 'function' && typeof accounts.add === 'function' && typeof accounts.cancel === 'function') {
+      addRemote = accounts as CopilotAccountAddRemote
+    } else diagnostic('COPILOT_ACCOUNT_ADD_REMOTE_UNAVAILABLE')
     const session = record(namespaces) ? namespaces.githubCopilotSessionAccount : undefined
     if (isSessionRemote(session)) sessionRemote = session
     else diagnostic('COPILOT_SESSION_ACCOUNTS_REMOTE_UNAVAILABLE')
+    const continuation = record(namespaces) ? namespaces.githubCopilotSessionContinuation : undefined
+    if (record(continuation) && typeof continuation.get === 'function' && typeof continuation.set === 'function') {
+      continuationRemote = continuation as SessionContinuationRemote
+    } else diagnostic('COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
   } catch { diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE') }
   const localeCandidate: unknown = ctx.get('locale')
   const locale = isLocale(localeCandidate) ? localeCandidate : undefined
@@ -177,7 +211,7 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
             return null
           }
           return createElement(Surface, {
-            runtime: props, remote, accountsRemote, sessionRemote, locale, diagnostic,
+            runtime: props, remote, accountsRemote, addRemote, sessionRemote, continuationRemote, locale, diagnostic,
           })
         })
         let removed = false

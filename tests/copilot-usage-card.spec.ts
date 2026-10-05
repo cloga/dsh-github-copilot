@@ -42,6 +42,13 @@ function button(text: string) {
   return Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent === text)!
 }
 async function click(element: HTMLElement) { await act(async () => { element.click() }) }
+async function searchAccounts(value: string) {
+  const input = document.querySelector<HTMLInputElement>('input[type="search"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
 function text() { return document.body.textContent ?? '' }
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -49,7 +56,393 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+function accountSelectorFixture(extra: Partial<SessionAccountView> = {}) {
+  let selection: SessionAccountView = {
+    source: 'global', accountId: 'canonical', globalAccountId: 'canonical',
+    accounts: {
+      state: 'ready', activeAccountId: 'canonical', revision: 7, writable: true, switchable: true, notices: [],
+      accounts: Array.from({ length: 24 }, (_, index) => ({
+        id: index === 0 ? 'canonical' : `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        configured: true, identityState: 'ready',
+        identity: { login: `demo-account-${String(index + 1).padStart(2, '0')}`, userId: index + 1 },
+      })),
+    },
+    ...extra,
+  }
+  const get = vi.fn<NonNullable<CopilotUsageCardProps['sessionAccount']>['get']>(
+    async () => ({ ok: true as const, value: selection }))
+  const set = vi.fn(async (accountId: string | null, revision: number) => {
+    expect(revision).toBe(selection.accounts.revision)
+    selection = { ...selection, source: accountId === null ? 'global' : 'session',
+      accountId: accountId ?? selection.globalAccountId,
+      accounts: { ...selection.accounts, activeAccountId: accountId ?? selection.globalAccountId, revision: revision + 1 } }
+    return { ok: true as const, value: selection }
+  })
+  const quota = vi.fn(async () => ok(view({ accountId: selection.accountId })))
+  const identity = vi.fn(async () => ({ ok: true as const, value: selection.accounts }))
+  const props: CopilotUsageCardProps = {
+    contextKey: 'selector', remote: { get: quota, refresh: quota }, sessionAccount: { get, set },
+    accountsRemote: { get: identity, ensureIdentity: identity, refreshIdentity: identity },
+  }
+  return { props, get, set, quota, selection: () => selection }
+}
+
 describe('Copilot account usage chip', () => {
+  it('rereads the shared revision after consent writes before saving the captured account target', async () => {
+    const fixture = accountSelectorFixture()
+    const target = fixture.selection().accounts.accounts[23]!.id
+    const beforeAccountChange = vi.fn(async () => {
+      Object.assign(fixture.selection().accounts, { revision: 8 })
+      return true
+    })
+    await mount({ ...fixture.props, beforeAccountChange })
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    expect(beforeAccountChange).toHaveBeenCalledExactlyOnceWith(target, expect.any(AbortSignal))
+    expect(fixture.set).toHaveBeenCalledExactlyOnceWith(target, 8)
+    expect(fixture.get).toHaveBeenCalledTimes(3)
+    expect(fixture.get.mock.invocationCallOrder[1]).toBeLessThan(fixture.set.mock.invocationCallOrder[0]!)
+  })
+
+  it.each(['error', 'invalid', 'missing-revision', 'throw'] as const)('does not save when the post-consent reread returns %s', async failure => {
+    const fixture = accountSelectorFixture()
+    const beforeAccountChange = vi.fn(async () => {
+      if (failure === 'throw') fixture.get.mockRejectedValueOnce(new Error('PRIVATE_READ_ERROR'))
+      else if (failure === 'error') fixture.get.mockResolvedValueOnce({ ok: false, error: 'PRIVATE_REMOTE_ERROR' })
+      else fixture.get.mockResolvedValueOnce({ ok: true, value: {
+        ...fixture.selection(),
+        ...(failure === 'invalid' ? { accountId: 'invalid-account' } : {}),
+        accounts: { ...fixture.selection().accounts,
+          ...(failure === 'missing-revision' ? { revision: undefined } : {}) },
+      } })
+      return true
+    })
+    await mount({ ...fixture.props, beforeAccountChange })
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    expect(fixture.set).not.toHaveBeenCalled()
+    expect(fixture.get).toHaveBeenCalledTimes(2)
+    expect(text()).toContain('Could not save the Session account')
+    expect(text()).not.toContain('PRIVATE_')
+    expect(trigger().textContent).not.toContain('42.25')
+  })
+
+  it('revokes a pending post-consent revision reread when the dialog closes', async () => {
+    const fixture = accountSelectorFixture()
+    const read = deferred<{ ok: true; value: SessionAccountView }>()
+    const beforeAccountChange = vi.fn(async () => {
+      fixture.get.mockImplementationOnce(() => read.promise)
+      return true
+    })
+    await mount({ ...fixture.props, beforeAccountChange })
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    expect(fixture.get).toHaveBeenCalledTimes(2)
+    expect(fixture.set).not.toHaveBeenCalled()
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Close usage details"]')!)
+    await act(async () => { read.resolve({ ok: true, value: fixture.selection() }) })
+    expect(fixture.set).not.toHaveBeenCalled()
+  })
+
+  it.each(['account', 'global'] as const)('waits for parent approval before the exact %s account CAS', async target => {
+    const fixture = accountSelectorFixture()
+    const approval = deferred<boolean>()
+    const beforeAccountChange = vi.fn(() => approval.promise)
+    await mount({ ...fixture.props, beforeAccountChange })
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button(target === 'global' ? 'Follow global default' : '@demo-account-24'))
+    const accountId = target === 'global' ? null : fixture.selection().accounts.accounts[23]!.id
+    expect(beforeAccountChange).toHaveBeenCalledExactlyOnceWith(accountId, expect.any(AbortSignal))
+    expect(fixture.set).not.toHaveBeenCalled()
+    expect(button('Switch account').disabled).toBe(true)
+    expect(text()).toContain('Reviewing account switch')
+    expect(text()).not.toContain('Saving account')
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-01')
+    await act(async () => { approval.resolve(true) })
+    expect(fixture.set).toHaveBeenCalledExactlyOnceWith(accountId, 7)
+    expect(document.querySelector('[data-copilot-account-options]')).toBeNull()
+  })
+
+  it('keeps the account and search unchanged when parent confirmation is cancelled', async () => {
+    const fixture = accountSelectorFixture()
+    const beforeAccountChange = vi.fn(async () => false)
+    await mount({ ...fixture.props, beforeAccountChange })
+    await click(trigger())
+    await click(button('Switch account'))
+    await searchAccounts('account-24')
+    await click(button('@demo-account-24'))
+    expect(fixture.set).not.toHaveBeenCalled()
+    expect(fixture.quota).toHaveBeenCalledOnce()
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-01')
+    expect(document.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('account-24')
+    expect(button('@demo-account-24').disabled).toBe(false)
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+    beforeAccountChange.mockResolvedValueOnce(true)
+    await click(button('@demo-account-24'))
+    expect(fixture.set).toHaveBeenCalledExactlyOnceWith(fixture.selection().accounts.accounts[23]!.id, 7)
+  })
+
+  it.each(['close', 'session', 'invalidation', 'unmount'] as const)('ignores late parent approval after %s', async action => {
+    const fixture = accountSelectorFixture()
+    const approval = deferred<boolean>()
+    const beforeAccountChange = vi.fn((_accountId: string | null, _signal: AbortSignal) => approval.promise)
+    const props = { ...fixture.props, beforeAccountChange }
+    const card = await mount(props)
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    const signal = beforeAccountChange.mock.calls[0]![1]
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(signal.aborted).toBe(false)
+    const aborted = vi.fn()
+    signal.addEventListener('abort', aborted)
+    if (action === 'close') {
+      await click(document.querySelector<HTMLButtonElement>('[aria-label="Close usage details"]')!)
+      await click(trigger())
+    } else if (action === 'session') {
+      await card.render({ ...props, contextKey: 'next-session' })
+    } else if (action === 'invalidation') {
+      await act(async () => { const finish = accountPresentationChanges.begin(); finish() })
+    } else await act(async () => { card.unmount() })
+    expect(signal.aborted).toBe(true)
+    expect(aborted).toHaveBeenCalledOnce()
+    await act(async () => { approval.resolve(true) })
+    expect(fixture.set).not.toHaveBeenCalled()
+    expect(fixture.selection().accountId).toBe('canonical')
+  })
+
+  it('aborts parent pre-read on close without creating hidden consent or revoking a new request', async () => {
+    const fixture = accountSelectorFixture()
+    const preRead = deferred<void>()
+    const approval = deferred<boolean>()
+    const showConsent = vi.fn()
+    const beforeAccountChange = vi.fn(async (_accountId: string | null, signal: AbortSignal) => {
+      await preRead.promise
+      if (signal.aborted) return false
+      showConsent()
+      return approval.promise
+    })
+    await mount({ ...fixture.props, beforeAccountChange })
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    const oldSignal = beforeAccountChange.mock.calls[0]![1]
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Close usage details"]')!)
+    expect(oldSignal.aborted).toBe(true)
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button('@demo-account-23'))
+    const newSignal = beforeAccountChange.mock.calls[1]![1]
+    expect(newSignal).not.toBe(oldSignal)
+    expect(newSignal.aborted).toBe(false)
+    await act(async () => { preRead.resolve() })
+    expect(showConsent).toHaveBeenCalledOnce()
+    expect(newSignal.aborted).toBe(false)
+    expect(fixture.set).not.toHaveBeenCalled()
+    await act(async () => { approval.resolve(true) })
+    expect(fixture.set).toHaveBeenCalledExactlyOnceWith(fixture.selection().accounts.accounts[22]!.id, 7)
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('surfaces parent confirmation rejection without saving or leaking its error', async () => {
+    const fixture = accountSelectorFixture()
+    const beforeAccountChange = vi.fn(async () => { throw new Error('PRIVATE_CONFIRMATION_ERROR') })
+    await mount({ ...fixture.props, beforeAccountChange })
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    expect(fixture.set).not.toHaveBeenCalled()
+    expect(text()).toContain('Could not save the Session account')
+    expect(text()).not.toContain('PRIVATE_CONFIRMATION_ERROR')
+    expect(document.querySelector('[role="alert"]')).not.toBeNull()
+  })
+
+  it.each(['light', 'dark'])('themes owned and slotted form controls without replacing native %s dropdowns', async scheme => {
+    const fixture = accountSelectorFixture()
+    fixture.set.mockRejectedValueOnce(new Error('private error'))
+    const card = await mount({ ...fixture.props, continuation: createElement('select', { 'aria-label': 'Continuation' },
+      createElement('option', null, 'Follow default'), createElement('option', { disabled: true }, 'Unavailable')) })
+    card.container.style.colorScheme = scheme
+    await click(trigger())
+    const dialog = document.querySelector<HTMLElement>('[data-copilot-usage-panel]')!
+    expect(dialog.style.colorScheme).toBe('light dark')
+    const styles = dialog.querySelector('style')?.textContent ?? ''
+    expect(styles).toContain('color-scheme: inherit')
+    expect(styles).toContain('background: Canvas; color: CanvasText')
+    expect(styles).toContain(':focus-visible')
+    expect(styles).toContain(':disabled')
+    expect(document.querySelector('select')?.querySelectorAll('option')).toHaveLength(2)
+    await click(button('Switch account'))
+    const search = document.querySelector<HTMLInputElement>('input[type="search"]')!
+    expect(search.style.colorScheme).toBe('inherit')
+    expect(search.style.background).toBe('var(--dsw-alias-bg-layer-1, Canvas)')
+    expect(document.activeElement).toBe(search)
+    await click(button('@demo-account-24'))
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not save')
+    expect(button('Switch account').disabled).toBe(true)
+    expect(document.querySelector('option:disabled')?.textContent).toBe('Unavailable')
+  })
+
+  it('mounts a searchable bounded 24-account selector only after Switch and resets on collapse', async () => {
+    const fixture = accountSelectorFixture()
+    await mount({ ...fixture.props, accountActions: createElement('button', null, 'Add account') })
+    await click(trigger())
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-01')
+    expect(text()).not.toContain('demo-account-24')
+    expect(button('Add account')).toBeUndefined()
+    await click(button('Switch account'))
+    const list = document.querySelector<HTMLElement>('[data-copilot-account-options]')!
+    expect(list.querySelectorAll('button')).toHaveLength(25)
+    expect(list.style.maxHeight).toBe('220px')
+    expect(list.style.overflowY).toBe('auto')
+    expect(list.style.overscrollBehavior).toBe('contain')
+    expect(document.activeElement).toBe(document.querySelector('input[type="search"]'))
+    expect(button('Add account')).toBeDefined()
+    await searchAccounts('  ACCOUNT-24  ')
+    expect(list.querySelectorAll('button')).toHaveLength(1)
+    expect(button('@demo-account-24')).toBeDefined()
+    await searchAccounts('no matching account')
+    expect(list.querySelectorAll('button')).toHaveLength(0)
+    expect(text()).toContain('No matching accounts')
+    await click(button('Cancel'))
+    expect(document.querySelector('input[type="search"]')).toBeNull()
+    expect(button('Add account')).toBeUndefined()
+    expect(document.activeElement).toBe(button('Switch account'))
+    await click(button('Switch account'))
+    expect(document.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('')
+    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
+    await click(trigger())
+    await click(trigger())
+    expect(document.querySelector('[data-copilot-account-options]')).toBeNull()
+    expect(fixture.quota).toHaveBeenCalledOnce()
+    expect(fixture.set).not.toHaveBeenCalled()
+  })
+
+  it('preserves the selector error after a failed save and rereads before retrying exact CAS', async () => {
+    const fixture = accountSelectorFixture()
+    const success = fixture.set.getMockImplementation()!
+    fixture.set.mockRejectedValueOnce(new Error('PRIVATE_ACCOUNT_SECRET'))
+    await mount(fixture.props)
+    await click(trigger())
+    await click(button('Switch account'))
+    await searchAccounts('account-24')
+    await click(button('@demo-account-24'))
+    expect(text()).toContain('Could not save the Session account')
+    expect(text()).not.toContain('PRIVATE_ACCOUNT_SECRET')
+    expect(text()).not.toContain('Session override')
+    expect(trigger().textContent).not.toContain('42.25')
+    expect(fixture.quota).toHaveBeenCalledOnce()
+    expect(fixture.set).toHaveBeenCalledExactlyOnceWith(fixture.selection().accounts.accounts[23]!.id, 7)
+    fixture.set.mockImplementation(success)
+    await click(button('Refresh'))
+    expect(document.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('account-24')
+    await click(button('@demo-account-24'))
+    expect(fixture.set).toHaveBeenLastCalledWith(fixture.selection().accountId, 7)
+    expect(text()).not.toContain('Could not save')
+    expect(document.querySelector('[data-copilot-account-options]')).toBeNull()
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-24')
+  })
+
+  it('keeps a pending save on its old account and rejects late completion after a Session change', async () => {
+    const fixture = accountSelectorFixture()
+    const pending = deferred<{ ok: true; value: SessionAccountView }>()
+    fixture.set.mockImplementationOnce(() => pending.promise)
+    const card = await mount(fixture.props)
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    expect(button('Switch account').disabled).toBe(true)
+    expect(button('@demo-account-24').disabled).toBe(true)
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-01')
+    await card.render({ ...fixture.props, contextKey: 'different-session' })
+    await click(trigger())
+    const nextId = fixture.selection().accounts.accounts[23]!.id
+    await act(async () => { pending.resolve({ ok: true, value: { ...fixture.selection(), source: 'session', accountId: nextId,
+      accounts: { ...fixture.selection().accounts, activeAccountId: nextId } } }) })
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-01')
+    expect(text()).not.toContain('Session override')
+    expect(document.querySelector('[data-copilot-account-options]')).toBeNull()
+  })
+
+  it('labels running and next ownership only after a pending account save succeeds', async () => {
+    const fixture = accountSelectorFixture({ runningAccountId: 'canonical' })
+    const saved = fixture.set.getMockImplementation()!
+    const pending = deferred<void>()
+    fixture.set.mockImplementationOnce(async (accountId, revision) => {
+      await pending.promise
+      return saved(accountId, revision)
+    })
+    await mount(fixture.props)
+    await click(trigger())
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    expect(text()).toContain('Running turn remains on: @demo-account-01 · Next turn: @demo-account-01')
+    expect(text()).toContain('Saving account')
+    expect(fixture.quota).toHaveBeenCalledOnce()
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Close usage details"]')!)
+    await act(async () => { pending.resolve() })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    await click(trigger())
+    expect(text()).toContain('Running turn remains on: @demo-account-01 · Next turn: @demo-account-24')
+    expect(document.querySelector('[data-copilot-account-options]')).toBeNull()
+    expect(fixture.set).toHaveBeenCalledExactlyOnceWith(fixture.selection().accountId, 7)
+    expect(fixture.quota).toHaveBeenCalledTimes(2)
+  })
+
+  it('offers only configured records while keeping an explicit default-equal choice explicit', async () => {
+    const fixture = accountSelectorFixture()
+    const selection = fixture.selection()
+    const snapshot = { ...selection, accounts: { ...selection.accounts, accounts: [
+      ...selection.accounts.accounts,
+      { id: '00000000-0000-4000-8000-000000000099', configured: false, identityState: 'unknown' as const },
+    ] } }
+    fixture.get.mockResolvedValueOnce({ ok: true, value: snapshot })
+    await mount(fixture.props)
+    await click(trigger())
+    await click(button('Switch account'))
+    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
+    await searchAccounts('Follow global')
+    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(1)
+    await searchAccounts('')
+    await click(button('@demo-account-01'))
+    expect(fixture.set).toHaveBeenCalledExactlyOnceWith('canonical', 7)
+    expect(text()).toContain('Session override')
+    await click(button('Switch account'))
+    expect(button('@demo-account-01').getAttribute('aria-pressed')).toBe('true')
+    expect(button('Follow global default').getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it.each([
+    ['en-US', 'Manage accounts and models', 'Search saved accounts', 'Cancel'],
+    ['zh-CN', '管理账号与模型', '搜索已保存账号', '取消'],
+  ])('exposes parent slots and localized management without implementing navigation (%s)', async (locale, manage, search, cancel) => {
+    const fixture = accountSelectorFixture()
+    const onManage = vi.fn()
+    const props = { ...fixture.props, locale, continuation: createElement('p', null, 'Continuation controls'),
+      accountActions: createElement('button', null, 'Add account') }
+    const card = await mount(props)
+    await click(trigger())
+    expect(text()).toContain('Continuation controls')
+    expect(button(manage).disabled).toBe(true)
+    expect(text()).toContain('COPILOT_ACCOUNT_MANAGEMENT_NAVIGATION_UNAVAILABLE')
+    await card.render({ ...props, onManage })
+    expect(text()).not.toContain('COPILOT_ACCOUNT_MANAGEMENT_NAVIGATION_UNAVAILABLE')
+    await click(button(locale === 'zh-CN' ? '切换账号' : 'Switch account'))
+    expect(document.querySelector('input')?.getAttribute('aria-label')).toBe(search)
+    expect(button(cancel)).toBeDefined()
+    expect(button('Add account')).toBeDefined()
+    const controls = Array.from(document.querySelectorAll('button'))
+    expect(controls.some(control => /delete|remove/i.test(control.textContent ?? ''))).toBe(false)
+    expect(controls.at(-1)).toBe(button(manage))
+    await click(button(manage))
+    expect(onManage).toHaveBeenCalledOnce()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
   it('settles quota before a slow identity renewal and uses nonforcing ensure on visible refresh cadence', async () => {
     const snapshot: CopilotAccountsView = {
       state: 'ready', activeAccountId: 'canonical', revision: 1, writable: true, switchable: true,
@@ -107,6 +500,9 @@ describe('Copilot account usage chip', () => {
     expect(set).toHaveBeenCalledExactlyOnceWith(B, 1)
     expect(text()).toContain('Session override')
     expect(text()).toContain('Running turn remains on: @synthetic-a')
+    expect(text()).toContain('Next turn: @synthetic-b')
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@synthetic-b')
+    expect(document.querySelector('[data-copilot-account-options]')).toBeNull()
     expect(trigger().textContent).toContain('12 used')
     await click(button('Switch account'))
     await click(button('Follow global default'))

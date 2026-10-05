@@ -2,7 +2,7 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { accountsViewFrom, CopilotAccountsPanel } from '../src/copilot-accounts-card.ts'
+import { accountsViewFrom, CopilotAccountAdd, CopilotAccountsPanel } from '../src/copilot-accounts-card.ts'
 import type { CopilotAccountsRemote } from '../src/copilot-accounts-card.ts'
 import type { CopilotAccountsView } from '../src/copilot-accounts-types.ts'
 import { CopilotAccountsViewSchema } from '../src/copilot-accounts-remote.ts'
@@ -45,6 +45,126 @@ const text = () => document.body.textContent ?? ''
 const button = (label: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent === label)!
 const click = async (label: string) => { await act(async () => { button(label).click() }) }
 
+it('refreshes the shared settings revision after a continuation-default save without rediscovery', async () => {
+  const api = remote()
+  vi.mocked(api.get).mockResolvedValue(ok(view({ revision: 3 })))
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container)
+  cleanups.push(() => root.unmount())
+  const render = (refreshKey: number) => root.render(createElement(CopilotAccountsPanel, { remote: api, expanded: true, refreshKey }))
+  await act(async () => render(0))
+  expect(api.ensureIdentity).toHaveBeenCalledOnce()
+  expect(api.get).not.toHaveBeenCalled()
+  await act(async () => render(1))
+  expect(api.get).toHaveBeenCalledOnce()
+  expect(api.ensureIdentity).toHaveBeenCalledOnce()
+  await click('Switch')
+  await click('Switch to @demo-b')
+  await click('Confirm switch')
+  expect(api.switchAccount).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000001', 3)
+})
+
+describe('Chat Add-only account authorization', () => {
+  async function mountAdd(api: CopilotAccountsRemote, onChanged = vi.fn()) {
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    cleanups.push(() => root.unmount())
+    await act(async () => { root.render(createElement(CopilotAccountAdd, {
+      remote: { get: api.get, add: api.add, cancel: api.cancel }, onChanged,
+    })) })
+    return root
+  }
+  it('uses only the narrow Remote and never exposes management or identity controls', async () => {
+    const api = remote()
+    await mountAdd(api)
+    expect(api.get).toHaveBeenCalledOnce()
+    expect(api.ensureIdentity).not.toHaveBeenCalled()
+    expect(Array.from(document.querySelectorAll('button')).map(node => node.textContent)).toEqual(['Add GitHub account'])
+    expect(text()).not.toContain('demo-a')
+    expect(document.querySelector('[data-copilot-account-management]')).toBeNull()
+    await click('Add GitHub account')
+    expect(api.add).toHaveBeenCalledOnce()
+    expect(api.switchAccount).not.toHaveBeenCalled()
+    expect(api.removeAccount).not.toHaveBeenCalled()
+    expect(api.reauthorize).not.toHaveBeenCalled()
+  })
+  it('retains code copy, manual verification, cancellation and bounded polling', async () => {
+    vi.useFakeTimers()
+    const api = remote()
+    const pending = view({ operation: 'authorizing', switchable: false, notices: [{
+      message: 'Authorize on GitHub', url: 'https://github.com/login/device', code: 'SYNTHETIC',
+    }] })
+    vi.mocked(api.add).mockResolvedValueOnce(ok(pending))
+    vi.mocked(api.get).mockResolvedValueOnce(ok(view())).mockResolvedValue(ok(pending))
+    const writeText = vi.fn(async () => undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const root = await mountAdd(api)
+    await click('Add GitHub account')
+    expect(text()).toContain('Your current default account will not change.')
+    expect(text()).toContain('https://github.com/login/device')
+    await click('Copy authorization code')
+    expect(writeText).toHaveBeenCalledExactlyOnceWith('SYNTHETIC')
+    await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+    expect(api.get).toHaveBeenCalledTimes(2)
+    await click('Cancel adding account')
+    expect(api.cancel).toHaveBeenCalledOnce()
+    expect(document.querySelector('[data-copilot-account-device-code]')).toBeNull()
+    await act(async () => { root.render(null); await vi.advanceTimersByTimeAsync(60_000) })
+    expect(api.get).toHaveBeenCalledTimes(2)
+  })
+  it('notifies completion after verification and stops polling', async () => {
+    vi.useFakeTimers()
+    const api = remote()
+    const onChanged = vi.fn()
+    vi.mocked(api.add).mockResolvedValueOnce(ok(view({ operation: 'verifying', switchable: false })))
+    await mountAdd(api, onChanged)
+    await click('Add GitHub account')
+    expect(onChanged).not.toHaveBeenCalled()
+    expect(button('Cancel adding account')).toBeUndefined()
+    await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+    expect(onChanged).toHaveBeenCalledOnce()
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+    expect(api.get).toHaveBeenCalledTimes(2)
+  })
+  it('fails closed with a status-only Retry on rejected reads', async () => {
+    const api = remote()
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('private failure'))
+    await mountAdd(api)
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not read account information')
+    expect(text()).not.toContain('private failure')
+    expect(button('Add GitHub account').disabled).toBe(true)
+    await click('Retry')
+    expect(api.get).toHaveBeenCalledTimes(2)
+    expect(api.add).not.toHaveBeenCalled()
+    expect(button('Add GitHub account').disabled).toBe(false)
+  })
+  it('preserves Host admission restrictions and retries status without starting authorization', async () => {
+    const api = remote(view({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_AUTH_FAILED' }))
+    await mountAdd(api)
+    expect(button('Add GitHub account').disabled).toBe(true)
+    expect(text()).toContain('GitHub authorization did not complete')
+    vi.mocked(api.get).mockResolvedValueOnce(ok(view()))
+    await click('Retry')
+    expect(api.add).not.toHaveBeenCalled()
+    expect(button('Add GitHub account').disabled).toBe(false)
+  })
+  it('drops late OAuth results and notifies no completion after unmount', async () => {
+    vi.useFakeTimers()
+    const api = remote(view({ operation: 'authorizing', switchable: false }))
+    const onChanged = vi.fn()
+    const root = await mountAdd(api, onChanged)
+    let finish!: (result: ReturnType<typeof ok>) => void
+    vi.mocked(api.get).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+    await act(async () => { root.render(null) })
+    await act(async () => { finish(ok(view())); await vi.advanceTimersByTimeAsync(60_000) })
+    expect(api.get).toHaveBeenCalledTimes(2)
+    expect(api.cancel).not.toHaveBeenCalled()
+    expect(onChanged).not.toHaveBeenCalled()
+  })
+})
+
 describe('Models account management', () => {
   it('projects owned Client fields without retaining credentials or unrelated identity fields', () => {
     const decoded = CopilotAccountsViewSchema.safeParse(view())
@@ -68,6 +188,8 @@ describe('Models account management', () => {
     const api = remote()
     await mount(api)
     await click('Switch')
+    expect(text()).toContain('@demo-b')
+    await click('Switch to @demo-b')
     expect(api.switchAccount).not.toHaveBeenCalled()
     expect(text()).toContain('encrypted reasoning')
     await click('Confirm switch')
@@ -76,6 +198,7 @@ describe('Models account management', () => {
   it('requires removal confirmation without offering removal of the active compatibility account', async () => {
     const api = remote()
     await mount(api)
+    await click('Switch')
     expect(Array.from(document.querySelectorAll('button')).filter(node => node.textContent === 'Remove')).toHaveLength(1)
     await click('Remove')
     expect(api.removeAccount).not.toHaveBeenCalled()
@@ -88,10 +211,78 @@ describe('Models account management', () => {
   it('reauthorizes the existing slot without requesting a new account or switching', async () => {
     const api = remote()
     await mount(api)
+    await click('Switch')
     await click('Reauthorize')
     expect(api.reauthorize).toHaveBeenCalledExactlyOnceWith(view().accounts[1]!.id, 2)
     expect(api.add).not.toHaveBeenCalled()
     expect(api.switchAccount).not.toHaveBeenCalled()
+  })
+  it('reauthorizes the current additional account without opening the saved list or offering removal', async () => {
+    const accountId = view().accounts[1]!.id
+    const api = remote(view({ activeAccountId: accountId }))
+    await mount(api)
+    expect(document.querySelector('[data-copilot-account-selector]')).toBeNull()
+    await click('Reauthorize')
+    expect(api.reauthorize).toHaveBeenCalledExactlyOnceWith(accountId, 2)
+    expect(button('Remove')).toBeUndefined()
+    expect(api.switchAccount).not.toHaveBeenCalled()
+  })
+  it('closes the selector and discards pending confirmation when Manage closes without restarting identity', async () => {
+    const api = remote()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    cleanups.push(() => root.unmount())
+    const render = async (expanded: boolean) => {
+      await act(async () => { root.render(createElement(CopilotAccountsPanel, { remote: api, expanded })) })
+    }
+    await render(true)
+    await click('Switch')
+    await click('Switch to @demo-b')
+    await render(false)
+    await render(true)
+    expect(document.querySelector('[data-copilot-account-selector]')).toBeNull()
+    expect(button('Confirm switch')).toBeUndefined()
+    expect(api.ensureIdentity).toHaveBeenCalledOnce()
+    expect(api.switchAccount).not.toHaveBeenCalled()
+  })
+  it('opens a bounded searchable saved-account list and keeps only the current account in the summary', async () => {
+    const api = remote()
+    await mount(api)
+    expect(text()).toContain('@demo-a')
+    expect(text()).not.toContain('@demo-b')
+    expect(button('Switch')).toBeDefined()
+    await click('Switch')
+    expect(button('Add GitHub account')).toBeDefined()
+    const list = document.querySelector<HTMLElement>('[data-copilot-saved-accounts]')
+    expect(list?.style.maxHeight).toBe('240px')
+    expect(list?.style.overflowY).toBe('auto')
+    const search = document.querySelector<HTMLInputElement>('[data-copilot-account-search]')!
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(search, 'demo-b')
+      search.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(text()).toContain('@demo-b')
+    expect(list?.textContent).not.toContain('demo-a')
+    expect(document.querySelector('[data-copilot-current-account]')?.textContent).toBe('@demo-a')
+    expect(Array.from(document.querySelectorAll('[data-copilot-saved-account]'))).toHaveLength(1)
+  })
+  it('renders optional continuation settings only inside the expanded account management section', async () => {
+    const api = remote()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    cleanups.push(() => root.unmount())
+    const continuation = createElement('div', { 'data-continuation-settings': true }, 'Continuation settings')
+    await act(async () => { root.render(createElement(CopilotAccountsPanel, {
+      remote: api, expanded: false, continuationSettings: continuation,
+    })) })
+    expect(document.querySelector('[data-continuation-settings]')).toBeNull()
+    await act(async () => { root.render(createElement(CopilotAccountsPanel, {
+      remote: api, expanded: true, continuationSettings: continuation,
+    })) })
+    expect(document.querySelector('[data-continuation-settings]')?.textContent).toBe('Continuation settings')
   })
   it('rejects malformed identity and unknown account identifiers', () => {
     expect(accountsViewFrom({ ...view(), activeAccountId: 'unrecognized-account' })).toBeUndefined()
@@ -107,6 +298,7 @@ describe('Models account management', () => {
     cleanups.push(() => root.unmount())
     await act(async () => { root.render(createElement(CopilotAccountsPanel, { remote: api, expanded: true, configured: true })) })
     expect(text()).toContain('@demo-a')
+    await click('Switch')
     await act(async () => { root.render(createElement(CopilotAccountsPanel, {
       remote: api, expanded: true, authorizationBusy: true, configured: true,
     })) })
@@ -122,7 +314,7 @@ describe('Models account management', () => {
     const api = remote(view({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY' }))
     await mount(api)
     expect(button('Switch').disabled).toBe(true)
-    expect(button('Add GitHub account').disabled).toBe(true)
+    expect(document.querySelector('[data-copilot-account-selector]')).toBeNull()
     expect(text()).toContain('No running work will be cancelled')
   })
   it('presents in-flight authorization as progress and orders verification, copy and cancel actions', async () => {
@@ -133,6 +325,7 @@ describe('Models account management', () => {
     const api = remote()
     vi.mocked(api.add).mockResolvedValueOnce(ok(pending))
     await mount(api)
+    await click('Switch')
     await click('Add GitHub account')
     expect(text()).toContain('Adding account — waiting for GitHub authorization')
     expect(text()).toContain('Your current default account will not change.')
@@ -155,6 +348,7 @@ describe('Models account management', () => {
     const writeText = vi.fn(async () => undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     await mount(api)
+    await click('Switch')
     await click('Add GitHub account')
     await click('Copy authorization code')
     await act(async () => { await Promise.resolve() })
@@ -179,6 +373,7 @@ describe('Models account management', () => {
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     vi.mocked(api.cancel).mockResolvedValueOnce(ok(view()))
     await mount(api)
+    await click('Switch')
     await click('Add GitHub account')
     await click('Copy authorization code')
     expect(button('Copying…').disabled).toBe(true)
@@ -201,6 +396,7 @@ describe('Models account management', () => {
     const api = remote()
     vi.mocked(api.add).mockResolvedValueOnce(ok(verifying))
     await mount(api)
+    await click('Switch')
     await click('Add GitHub account')
     expect(text()).toContain('GitHub authorization complete — verifying account identity and available models')
     expect(text()).toContain('Your current default account will not change.')
@@ -216,6 +412,7 @@ describe('Models account management', () => {
     const api = remote()
     vi.mocked(api.add).mockResolvedValueOnce(ok(pending))
     await mount(api, true, 'zh-CN')
+    await click('切换')
     await click('添加 GitHub 账号')
     expect(text()).toContain('正在添加账号，等待 GitHub 授权')
     expect(button('复制授权码')).not.toBeNull()
@@ -229,6 +426,7 @@ describe('Models account management', () => {
     }))
     await mount(api)
     expect(button('Switch').disabled).toBe(false)
+    await click('Switch')
     expect(button('Add GitHub account').disabled).toBe(false)
     expect(text()).toContain('COPILOT_ACCOUNTS_SELECTED_MISSING')
     expect(api.switchAccount).not.toHaveBeenCalled()

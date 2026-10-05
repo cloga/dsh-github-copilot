@@ -40,7 +40,8 @@ function grant(overrides: Record<string, unknown> = {}): RecordValue {
   return { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-account-a', access: 'synthetic-current-access',
     expires: Date.now() + 3_600_000, availableModelIds: [MODEL, 'gemini-3.5-flash', 'claude-sonnet-4.5'], ...overrides } }
 }
-async function runtime(initial: RecordValue | undefined = grant(), config: PreviewRouteConfig = { accountModelTtlMs: 300_000, accountModelFailureCooldownMs: 0 }) {
+async function runtime(initial: RecordValue | undefined = grant(), config: PreviewRouteConfig = { accountModelTtlMs: 300_000, accountModelFailureCooldownMs: 0 },
+  continuation?: { value: Record<string, unknown>; revision: number }) {
   const ctx = new Context()
   contexts.push(ctx)
   let current: RecordValue | undefined = initial
@@ -60,6 +61,14 @@ async function runtime(initial: RecordValue | undefined = grant(), config: Previ
     return work
   })
   await ctx.plugin({ apply(owner: Context) {
+    if (continuation) owner.provide('settings', {
+      describe: () => [{ ns: 'github-copilot', ...continuation }],
+      mutate: async (_namespace: string, operations: readonly { path: string[]; value: unknown }[], expected: number) => {
+        if (expected !== continuation.revision) throw new Error('Fixture conflict')
+        for (const operation of operations) continuation.value[operation.path[0]!] = operation.value
+        continuation.revision++
+      },
+    })
     owner.provide('credentials', {
       readRecord: reads,
       modifyRecord: modify,
@@ -1595,6 +1604,42 @@ describe('plugin-owned account Copilot route', () => {
     expect(paths.filter(path => path === '/copilot_internal/v2/token')).toHaveLength(1)
     expect(paths.filter(path => path === '/responses')).toHaveLength(2)
     expect(harness.modify).toHaveBeenCalledTimes(1)
+  })
+
+  it('filters persistent Session consent through the published adapter on successive turns without history writes', async () => {
+    const bodies: Array<{ input: Record<string, unknown>[] }> = []
+    stubFetch(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { input: Record<string, unknown>[] }
+      bodies.push(body)
+      if (body.input.some(item => typeof item.encrypted_content === 'string')) {
+        return new Response(JSON.stringify({ error: { message: replayScopeMessages[0] } }), { status: 401 })
+      }
+      const emitted = await response().text()
+      return new Response(emitted.replaceAll('synthetic-opaque-replay', `synthetic-turn-${bodies.length}`),
+        { headers: { 'content-type': 'text/event-stream' } })
+    })
+    const settings = { value: {}, revision: 0 }
+    const harness = await runtime(grant(), undefined, settings)
+    const first = await call(harness.ctx)
+    const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue.' }] }), first.message]
+    const before = JSON.stringify(messages)
+    const agent = { ctx: harness.ctx, session: { id: 'continuation-session' } } as unknown as Agent
+    const current = await harness.ctx.githubCopilotSessionContinuation.get(agent)
+    await harness.ctx.githubCopilotSessionContinuation.set(agent, current.revision, true)
+    const scope = scopeTarget(agent, agent)
+    for (const turn of [1, 2, 3]) {
+      const signal = new AbortController().signal
+      await harness.ctx.waterfall(scope, 'agent/request', { agent, turn, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: MODEL }))
+      const result = await call(harness.ctx, { signal, sessionId: agent.session.id, messages })
+      expect(result.assembler.finish).toEqual({ kind: 'stop' })
+      expect(bodies.at(-1)!.input.some(item => typeof item.encrypted_content === 'string')).toBe(false)
+      harness.ctx.emit('session/event', agent.session, { type: 'turn/end', data: { turn } } as never)
+      messages.push(result.message)
+    }
+    expect(JSON.stringify(messages.slice(0, 2))).toBe(before)
+    expect(harness.modify).not.toHaveBeenCalled()
+    expect(bodies).toHaveLength(4)
   })
 
   it('offers exact failed replay only to its initiating session and recovers after explicit confirmation', async () => {

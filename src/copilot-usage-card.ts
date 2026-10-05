@@ -21,6 +21,12 @@ export interface CopilotUsageCardProps {
   /** Changes revoke every in-flight read, including switches between Copilot routes. */
   contextKey: string
   locale?: string
+  accountActions?: ReactElement
+  continuation?: ReactElement
+  onManage?: () => void
+  navigationDiagnostic?: string
+  /** Parent-owned consent; check the request signal after awaits and dismiss on abort. */
+  beforeAccountChange?: (accountId: string | null, signal: AbortSignal) => Promise<boolean>
   sessionAccount?: {
     get(): Promise<{ ok: true; value: SessionAccountView } | { ok: false; error: unknown }>
     set(accountId: string | null, revision: number): Promise<{ ok: true; value: SessionAccountView } | { ok: false; error: unknown }>
@@ -51,6 +57,11 @@ const copy = {
     accountLoading: 'Loading account selection…', accountMissing: 'Account selection unavailable. Refresh to retry.',
     runningAccount: 'Running turn remains on', identityUnknown: 'Identity unavailable',
     originalAuthorization: 'Original authorization', savedAuthorization: 'Saved authorization',
+    nextAccount: 'Next turn', searchAccounts: 'Search saved accounts', cancel: 'Cancel',
+    noAccounts: 'No matching accounts. Change your search or add an account.',
+    savingAccount: 'Saving account…', manage: 'Manage accounts and models',
+    confirmingAccount: 'Reviewing account switch…',
+    navigationUnavailable: 'Account and model settings navigation is unavailable in this deployment.',
   },
   zh: {
     credits: '额度', requests: '高级请求', unknown: 'Copilot 用量',
@@ -75,6 +86,11 @@ const copy = {
     accountLoading: '正在读取账号选择…', accountMissing: '账号选择暂不可用，请刷新重试。',
     runningAccount: '正在运行的 turn 仍使用', identityUnknown: '身份暂不可用',
     originalAuthorization: '原始授权', savedAuthorization: '已保存授权',
+    nextAccount: '下一轮', searchAccounts: '搜索已保存账号', cancel: '取消',
+    noAccounts: '未找到匹配账号，请修改搜索或添加账号。',
+    savingAccount: '正在保存账号…', manage: '管理账号与模型',
+    confirmingAccount: '正在确认账号切换…',
+    navigationUnavailable: '当前部署无法导航至账号与模型设置。',
   },
 } as const
 
@@ -82,8 +98,16 @@ const secondary = 'var(--dsw-alias-label-secondary, GrayText)'
 const border = '1px solid var(--dsw-alias-border-main, color-mix(in srgb, currentColor 20%, transparent))'
 const button: CSSProperties = {
   font: 'inherit', color: 'inherit', cursor: 'pointer', border, borderRadius: 8,
-  background: 'var(--dsw-alias-bg-layer-1, Canvas)', padding: '5px 9px',
+  background: 'var(--dsw-alias-bg-layer-1, Canvas)', padding: '5px 9px', colorScheme: 'inherit',
 }
+const formStyles = `
+[data-copilot-usage-panel] :is(input, select, textarea, button) { color-scheme: inherit; }
+[data-copilot-usage-panel] option { background: Canvas; color: CanvasText; }
+[data-copilot-usage-panel] :is(input, select, textarea, button, a, summary):focus-visible {
+  outline: 2px solid Highlight; outline-offset: 2px;
+}
+[data-copilot-usage-panel] :is(input, select, textarea, button):disabled { opacity: 0.65; }
+`
 const muted: CSSProperties = { color: secondary, fontSize: 12, lineHeight: 1.5, margin: 0 }
 const row: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }
 const separator: CSSProperties = { borderTop: border, paddingTop: 12 }
@@ -107,7 +131,9 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const [accounts, setAccounts] = useState<CopilotAccountsView>()
   const [sessionAccount, setSessionAccount] = useState<SessionAccountView>()
   const [choosingAccount, setChoosingAccount] = useState(false)
+  const [accountQuery, setAccountQuery] = useState('')
   const [savingAccount, setSavingAccount] = useState(false)
+  const [confirmingAccount, setConfirmingAccount] = useState(false)
   const [accountFailed, setAccountFailed] = useState(false)
   const [accountSaveFailed, setAccountSaveFailed] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -117,11 +143,32 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const trigger = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
-  const lifecycle = useRef<{ active: boolean; generation: number; busy: boolean; save?: symbol }>({ active: false, generation: 0, busy: false })
+  const switchButton = useRef<HTMLButtonElement>(null)
+  const accountSearch = useRef<HTMLInputElement>(null)
+  const lifecycle = useRef<{
+    active: boolean; generation: number; busy: boolean; save?: symbol; confirmation?: symbol; controller?: AbortController
+  }>({ active: false, generation: 0, busy: false })
   const close = useCallback((restore = false) => {
+    const owner = lifecycle.current
+    if (owner.confirmation !== undefined) {
+      owner.generation++
+      owner.confirmation = undefined
+      owner.save = undefined
+      setConfirmingAccount(false)
+      setSavingAccount(false)
+    }
+    owner.controller?.abort()
+    owner.controller = undefined
     setOpen(false)
+    setChoosingAccount(false)
+    setAccountQuery('')
     if (restore) trigger.current?.focus()
   }, [])
+  const collapseAccounts = () => {
+    setChoosingAccount(false)
+    setAccountQuery('')
+    switchButton.current?.focus()
+  }
 
   const load = useCallback(async (force: boolean) => {
     const owner = lifecycle.current
@@ -181,7 +228,9 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     setAccounts(undefined)
     setSessionAccount(undefined)
     setChoosingAccount(false)
+    setAccountQuery('')
     setSavingAccount(false)
+    setConfirmingAccount(false)
     setAccountFailed(false)
     setAccountSaveFailed(false)
     setFailed(false)
@@ -196,7 +245,11 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       owner.generation++
       owner.busy = false
       owner.save = undefined
+      owner.confirmation = undefined
+      owner.controller?.abort()
+      owner.controller = undefined
       setSavingAccount(false)
+      setConfirmingAccount(false)
       setAccounts(undefined)
       setSessionAccount(undefined)
       setView(undefined)
@@ -208,6 +261,10 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       owner.active = false
       owner.generation++
       owner.busy = false
+      owner.save = undefined
+      owner.confirmation = undefined
+      owner.controller?.abort()
+      owner.controller = undefined
       if (timer !== undefined) window.clearInterval(timer)
       document.removeEventListener('visibilitychange', visible)
       unsubscribe()
@@ -216,16 +273,39 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
 
   const chooseAccount = async (accountId: string | null) => {
     const owner = lifecycle.current
-    const revision = sessionAccount?.accounts.revision
+    let revision = sessionAccount?.accounts.revision
     if (!owner.active || owner.save !== undefined || props.sessionAccount === undefined || revision === undefined) return
     const save = Symbol()
+    const controller = new AbortController()
     owner.save = save
+    owner.controller = controller
     const generation = ++owner.generation
     owner.busy = false
     setBusy(false)
     setSavingAccount(true)
     setAccountSaveFailed(false)
     try {
+      if (props.beforeAccountChange !== undefined) {
+        owner.confirmation = save
+        setConfirmingAccount(true)
+        const approved = await props.beforeAccountChange(accountId, controller.signal)
+        if (!owner.active || owner.generation !== generation || owner.save !== save || controller.signal.aborted) return
+        if (approved !== true) return
+        // Consent and account selection share the settings namespace revision.
+        const snapshot = await props.sessionAccount.get()
+        if (!owner.active || owner.generation !== generation || owner.save !== save || controller.signal.aborted) return
+        const selection = snapshot.ok ? SessionAccountViewSchema.safeParse(snapshot.value) : undefined
+        if (!selection?.success || selection.data.accounts.revision === undefined) {
+          setAccountSaveFailed(true); setView(undefined); setAccounts(undefined); setSessionAccount(undefined)
+          return
+        }
+        revision = selection.data.accounts.revision
+        setSessionAccount(selection.data)
+        setAccounts(selection.data.accounts)
+        setView(undefined)
+        owner.confirmation = undefined
+        setConfirmingAccount(false)
+      }
       const result = await props.sessionAccount.set(accountId, revision)
       if (!owner.active || owner.generation !== generation) return
       const parsed = result.ok ? SessionAccountViewSchema.safeParse(result.value) : undefined
@@ -237,15 +317,23 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       setAccounts(parsed.data.accounts)
       setView(undefined)
       setChoosingAccount(false)
+      setAccountQuery('')
       owner.save = undefined
       setSavingAccount(false)
       await load(false)
+      if (owner.active && owner.generation === generation + 1) switchButton.current?.focus()
     } catch {
       if (owner.active && owner.generation === generation) {
         setAccountSaveFailed(true); setView(undefined); setAccounts(undefined); setSessionAccount(undefined)
       }
     } finally {
-      if (owner.active && owner.save === save) { owner.save = undefined; setSavingAccount(false) }
+      if (owner.controller === controller) owner.controller = undefined
+      if (owner.active && owner.save === save) {
+        owner.save = undefined
+        owner.confirmation = undefined
+        setSavingAccount(false)
+        setConfirmingAccount(false)
+      }
     }
   }
 
@@ -273,6 +361,10 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   }, [open])
 
   useEffect(() => {
+    if (open && choosingAccount) accountSearch.current?.focus()
+  }, [open, choosingAccount])
+
+  useEffect(() => {
     if (!open) return
     const outside = (event: Event) => {
       const target = event.target
@@ -281,7 +373,8 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); close(true) }
       if (event.key === 'Tab' && panel.current?.contains(document.activeElement)) {
-        const buttons = Array.from(panel.current.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],summary'))
+        const buttons = Array.from(panel.current.querySelectorAll<HTMLElement>(
+          'button:not(:disabled),a[href],summary,input:not(:disabled),select:not(:disabled),textarea:not(:disabled)'))
         const target = event.shiftKey ? buttons.at(-1) : buttons[0]
         const edge = event.shiftKey ? buttons[0] : buttons.at(-1)
         if (document.activeElement === edge) { event.preventDefault(); target?.focus() }
@@ -296,7 +389,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   }, [open, close])
 
   const available = view?.state === 'ready' || view?.state === 'stale'
-  const unknownSavedAccounts = (sessionAccount?.accounts.accounts ?? [])
+  const unknownSavedAccounts = (open && choosingAccount ? sessionAccount?.accounts.accounts ?? [] : [])
     .filter(account => account.configured && account.id !== 'canonical' && account.identity === undefined)
   const numberedUnknownAccounts = unknownSavedAccounts.length > 1
     ? new Map(unknownSavedAccounts.map((account, index) => [account.id, index + 1] as const))
@@ -323,13 +416,26 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const observed = available ? dateLabel(view.observedAt, language) : undefined
   const reset = available && view.resetAt !== undefined && view.observedAt !== undefined
     && view.resetAt > view.observedAt ? dateLabel(view.resetAt, language) : undefined
-  const runningIdentity = sessionAccount?.accounts.accounts.find(account => account.id === sessionAccount.runningAccountId)?.identity
+  const currentIdentity = accountIdentityLabel(accounts) ?? t.identityUnavailable
+  const runningIdentity = sessionAccount?.runningAccountId === undefined ? undefined
+    : accountIdentityLabel({ ...sessionAccount.accounts, activeAccountId: sessionAccount.runningAccountId })
+  const accountOptions = open && choosingAccount && sessionAccount ? [
+    { id: null, label: t.followGlobal, selected: sessionAccount.source === 'global' },
+    ...sessionAccount.accounts.accounts.filter(account => account.configured).map(account => ({
+      id: account.id,
+      label: account.identity ? `@${account.identity.login}` : account.id === 'canonical'
+        ? `${t.originalAuthorization} · ${t.identityUnknown}`
+        : `${t.savedAuthorization}${numberedUnknownAccounts.has(account.id) ? ` ${numberedUnknownAccounts.get(account.id)}` : ''} · ${t.identityUnknown}`,
+      selected: sessionAccount.source === 'session' && sessionAccount.accountId === account.id,
+    })),
+  ].filter(option => option.label.toLocaleLowerCase(language).includes(accountQuery.trim().toLocaleLowerCase(language))) : []
+  const navigationDiagnostic = props.navigationDiagnostic ?? 'COPILOT_ACCOUNT_MANAGEMENT_NAVIGATION_UNAVAILABLE'
 
   return h('span', { style: { display: 'inline-flex', minWidth: 0, maxWidth: '100%', fontFamily: 'var(--dsw-font-family, inherit)' } },
     h('button', {
       ref: trigger, type: 'button', 'data-copilot-usage-trigger': '', title: triggerText,
       'aria-haspopup': 'dialog', 'aria-expanded': open, 'aria-controls': open ? id : undefined,
-      onClick: () => { setOpen(value => !value) },
+      onClick: () => { if (open) close(); else setOpen(true) },
       style: {
         ...button, border: 'none', background: 'transparent', borderRadius: 24, padding: '1px 8px',
         fontSize: 'var(--dsh-content-font-size-secondary, 13px)', minWidth: 0, maxWidth: '100%',
@@ -340,8 +446,9 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     }, triggerText),
     open ? h('div', {
       id, ref: panel, role: 'dialog', 'aria-labelledby': `${id}-title`, 'aria-describedby': `${id}-scope`,
-      popover: 'manual',
+      popover: 'manual', 'data-copilot-usage-panel': '',
       style: {
+        colorScheme: 'light dark',
         position: 'fixed', inset: 'auto', margin: 0, ...position, width: 336, maxWidth: 'calc(100vw - 24px)',
         maxHeight: `calc(100vh - ${position.bottom + 12}px)`, overflowY: 'auto', boxSizing: 'border-box',
         zIndex: 1000, padding: 16, display: 'grid', gap: 14, border, borderRadius: 14,
@@ -351,11 +458,12 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         boxShadow: '0 8px 32px color-mix(in srgb, CanvasText 16%, transparent)', overflowWrap: 'anywhere',
       },
     },
+    h('style', null, formStyles),
     h('div', { style: row },
       h('div', null,
         h('strong', { id: `${id}-title` }, view?.billing === 'credits' ? t.title : unit),
         h('p', { style: { ...muted, color: 'inherit' }, 'data-copilot-credits-account': '' },
-          accountIdentityLabel(accounts) ?? t.identityUnavailable),
+          currentIdentity),
         props.sessionAccount === undefined ? null : h('p', { style: muted, 'data-copilot-account-source': '' },
           sessionAccount === undefined ? busy ? t.accountLoading : t.accountMissing
             : sessionAccount.source === 'global' ? t.followGlobal : t.sessionSpecified),
@@ -364,23 +472,35 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     props.sessionAccount === undefined ? null : h('div', { style: separator },
       h('div', { style: row },
         h('p', { style: muted }, t.switchScope),
-        h('button', { type: 'button', style: { ...button, flexShrink: 0 },
+        h('button', { ref: switchButton, type: 'button', style: { ...button, flexShrink: 0 },
           disabled: sessionAccount === undefined || sessionAccount.accounts.revision === undefined || busy || savingAccount,
-          'aria-expanded': choosingAccount, onClick: () => setChoosingAccount(value => !value) }, t.switchAccount)),
+          'aria-expanded': choosingAccount, 'aria-controls': choosingAccount ? `${id}-accounts` : undefined,
+          onClick: () => { if (choosingAccount) collapseAccounts(); else setChoosingAccount(true) } }, t.switchAccount)),
       sessionAccount?.runningAccountId === undefined ? null : h('p', { style: muted },
-        `${t.runningAccount}: ${runningIdentity ? '@' + runningIdentity.login : t.identityUnknown}`),
-      choosingAccount && sessionAccount ? h('div', { role: 'group', 'aria-label': t.switchAccount, style: { display: 'grid', gap: 6, marginTop: 10 } },
-        h('button', { type: 'button', style: { ...button, textAlign: 'left' }, disabled: savingAccount,
-          'aria-pressed': sessionAccount.source === 'global', onClick: () => { void chooseAccount(null) } }, t.followGlobal),
-        ...sessionAccount.accounts.accounts.filter(account => account.configured).map(account => h('button', {
-          key: account.id, type: 'button', style: { ...button, textAlign: 'left' }, disabled: savingAccount,
-          'aria-pressed': sessionAccount.source === 'session' && sessionAccount.accountId === account.id,
-          onClick: () => { void chooseAccount(account.id) },
-        }, account.identity ? `@${account.identity.login}` : account.id === 'canonical'
-          ? `${t.originalAuthorization} · ${t.identityUnknown}`
-          : `${t.savedAuthorization}${numberedUnknownAccounts.has(account.id) ? ` ${numberedUnknownAccounts.get(account.id)}` : ''} · ${t.identityUnknown}`))) : null,
+        `${t.runningAccount}: ${runningIdentity ?? t.identityUnknown} · ${t.nextAccount}: ${currentIdentity}`),
+      choosingAccount ? h('div', { id: `${id}-accounts`, role: 'group', 'aria-label': t.switchAccount,
+        'aria-busy': savingAccount, style: { display: 'grid', gap: 8, marginTop: 10 } },
+        h('div', { style: row },
+          h('label', { htmlFor: `${id}-account-search`, style: muted }, t.searchAccounts),
+          h('button', { type: 'button', style: button, disabled: savingAccount, onClick: collapseAccounts }, t.cancel)),
+        h('input', { ref: accountSearch, id: `${id}-account-search`, type: 'search',
+          'aria-label': t.searchAccounts, value: accountQuery, disabled: savingAccount,
+          onChange: event => setAccountQuery(event.currentTarget.value),
+          style: { ...button, cursor: 'text', width: '100%', minWidth: 0, boxSizing: 'border-box' } }),
+        sessionAccount === undefined ? null : h('div', { 'data-copilot-account-options': '',
+          style: { display: 'grid', gap: 4, maxHeight: 220, overflowY: 'auto', overscrollBehavior: 'contain' } },
+          ...accountOptions.map(option => h('button', {
+            key: option.id ?? 'follow-global', type: 'button', disabled: savingAccount,
+            style: { ...button, textAlign: 'left', border: 'none', whiteSpace: 'normal', overflowWrap: 'anywhere',
+              background: option.selected ? 'var(--dsw-alias-bg-layer-2, ButtonFace)' : 'transparent' },
+            'aria-pressed': option.selected, onClick: () => { void chooseAccount(option.id) },
+          }, option.label))),
+        sessionAccount !== undefined && accountOptions.length === 0 ? h('p', { role: 'status', style: muted }, t.noAccounts) : null,
+        savingAccount ? h('p', { role: 'status', style: muted }, confirmingAccount ? t.confirmingAccount : t.savingAccount) : null,
+        props.accountActions === undefined ? null : h('div', { style: separator }, props.accountActions)) : null,
       sessionAccount?.accounts.diagnostic === undefined ? null : h('code', { style: muted }, sessionAccount.accounts.diagnostic),
       accountFailed || accountSaveFailed ? h('p', { role: 'alert', style: muted }, accountSaveFailed ? t.accountSaveFailed : t.accountMissing) : null),
+    props.continuation,
     view?.state === 'stale' ? h('p', { role: 'status', style: muted }, t.stale) : null,
     view?.diagnostic === undefined ? null : h('code', { style: muted }, view.diagnostic),
     props.remote === undefined ? h('p', { role: 'status', style: muted }, t.missing) : null,
@@ -416,6 +536,16 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       style: { color: 'inherit', fontSize: 12 } }, t.plan),
     h('details', { style: muted }, h('summary', { style: { cursor: 'pointer' } }, t.manual),
       h('code', { style: { userSelect: 'all', overflowWrap: 'anywhere' } }, 'https://github.com/settings/copilot')),
+    h('div', { style: { ...separator, display: 'grid', gap: 6 } },
+      h('button', { type: 'button', role: 'link', disabled: props.onManage === undefined,
+        'aria-describedby': props.onManage === undefined ? `${id}-navigation` : undefined,
+        style: { ...button, border: 'none', background: 'transparent', textAlign: 'left', textDecoration: 'underline',
+          padding: 0, color: props.onManage === undefined ? secondary : 'inherit',
+          cursor: props.onManage === undefined ? 'default' : 'pointer' },
+        onClick: () => { if (props.onManage !== undefined) { close(); props.onManage() } },
+      }, t.manage),
+      props.onManage === undefined ? h('p', { id: `${id}-navigation`, style: muted },
+        h('code', null, navigationDiagnostic), ` · ${t.navigationUnavailable}`) : null),
     ) : null,
   )
 }

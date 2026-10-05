@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.109 (prepared)
+
+- Record the approved synthetic account-management mock and unify current-account/Switch interactions in Chat and Models. Search bounded account lists, add without selecting, and retain guarded full management inside one Models Manage disclosure with shared exact-ID model preferences (#318).
+- Add persistent Session on/off/default policies, a creation-time global default for new unseeded Sessions, reversible next-turn consent and cancel-safe explicit-off account-switch confirmation. Existing/unknown/seeded histories are not enrolled retroactively. Authorization never sends or retries.
+- Filter bounded pre-turn encrypted reasoning and embedded summaries through the published native Responses adapter; retain current-turn tool-loop reasoning, visible messages, native retries and durable history. Expose persistent/next-turn controls after exact replay failures; keep the native manual retry action.
+- Preserve account/default/continuation settings revisions, dark/light native control readability, cancellation and stale-response fences. The pinned Core lacks a public Models deep link, so Chat provides manual navigation; no Core patch, credential copying, second transport or live installation.
+
 ## 0.4.0-alpha.108 (prepared)
 
 - Align context evidence and replay recovery with native secondary typography throughout, including explanations and controls. Use the public full-width input dock above the composer instead of the non-wrapping statistics row (#315).

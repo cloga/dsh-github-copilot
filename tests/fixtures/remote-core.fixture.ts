@@ -19,6 +19,81 @@ import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
 import SessionStore from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
+import continuationRemote from '../../src/session-continuation-remote.ts'
+import { installSessionContinuation } from '../../src/session-continuation-host.ts'
+
+it.each(['source', 'strict'] as const)('binds persistent Session continuation through actual Client and %s Host gateways', async mode => {
+  const host = new Context(), client = new Context()
+  const agent = { id: 'continuation-owner', session: { id: 'continuation-owner' } }
+  let revision = 1
+  const value: Record<string, unknown> = {}
+  try {
+    const registry = new TypertRegistry(host)
+    registry.lookups.register('agent', {
+      parameter: 'agent', wire: 'agentId', hostTypeSymbol: '@deepseek-ai/dsh-agent#Agent',
+      wireTypeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
+      resolve: id => { if (id === 'denied') throw new Error('Denied'); return id === agent.id ? agent : undefined },
+    })
+    if (mode === 'strict') registry.register({ package: continuationRemote.package, face: 'host', schemas: [],
+      model: { services: [], events: [], objects: [] }, invocations: continuationRemote.descriptors })
+    host.provide('settings', {
+      describe: () => [{ ns: 'github-copilot', revision, value }],
+      mutate: async (_ns: string, operations: readonly { path: string[]; value: unknown }[], expected: number) => {
+        if (expected !== revision) throw new Error('Fixture conflict')
+        expect(['sessionContinuation', 'continuationDefaultHistory']).toContain(operations[0]?.path[0])
+        value[operations[0]!.path[0]!] = operations[0]!.value; revision++
+      },
+    })
+    const connection = new HostConnectionService(host, [], {})
+    new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
+    const handler = connection.createSharedFetchHandler('/api')
+    let rpcId = 0
+    client.provide('typert', { remotes: { register: () => () => {} }, contexts: { getClient: () => undefined } })
+    client.provide('connection', { rpc: { call: async (_path: string, method: string, payload: unknown) => {
+      const response = await handler.fetch(new Request(`http://fixture.invalid/api/${method}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'client-request', rpcId: `continuation-${++rpcId}`, method, payload }),
+      }))
+      return (await response.json()).result
+    }, open: vi.fn() }, registerGenerationSource: () => () => {}, start: () => ({ stop: () => {} }),
+    generation: { getSnapshot: () => undefined } })
+    Gateway.apply(client)
+    await client.remote.$mount(continuationRemote)
+    await host.plugin({ apply(ctx) {
+      const owner = installSessionContinuation(ctx)
+      ctx.effect(() => () => owner.dispose())
+    } })
+    await expect(client.remote.githubCopilotSessionContinuation.get(agent.id)).resolves.toMatchObject({
+      ok: true, value: { enabled: false, revision: 2 },
+    })
+    await expect(client.remote.githubCopilotSessionContinuation.set(agent.id, 2, true)).resolves.toMatchObject({
+      ok: true, value: { enabled: true, revision: 3 },
+    })
+    await expect(client.remote.githubCopilotSessionContinuation.set(agent.id, 3, false)).resolves.toMatchObject({
+      ok: true, value: { enabled: false, revision: 4 },
+    })
+    await expect(client.remote.githubCopilotSessionContinuation.authorizeNext(agent.id, 4, true)).resolves.toMatchObject({
+      ok: true, value: { enabled: false, nextTurnAuthorized: true, revision: 4 },
+    })
+    await expect(client.remote.githubCopilotSessionContinuation.set(agent.id, 4, null)).resolves.toMatchObject({
+      ok: true, value: { enabled: false, source: 'default', revision: 5 },
+    })
+    await expect(client.remote.githubCopilotSessionContinuation.defaults()).resolves.toMatchObject({
+      ok: true, value: { enabled: true, revision: 5 },
+    })
+    await expect(client.remote.githubCopilotSessionContinuation.setDefault(5, false)).resolves.toMatchObject({
+      ok: true, value: { enabled: false, revision: 6 },
+    })
+    await expect(client.remote.githubCopilotSessionContinuation.get('missing')).resolves.toMatchObject({
+      ok: false, error: { code: 'gateway/lookup-not-found' },
+    })
+    await expect(client.remote.githubCopilotSessionContinuation.get('denied')).resolves.toMatchObject({
+      ok: false, error: { code: 'gateway/lookup-failed' },
+    })
+    if (mode === 'strict') await expect(client.remote.githubCopilotSessionContinuation.set(agent.id, -1, true))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/input-invalid' } })
+  } finally { await client.fiber.dispose(); await host.fiber.dispose() }
+})
 
 it.each(['source', 'strict'] as const)('binds Session account choices and historical reads through native Client and %s Host gateways', async mode => {
   const host = new Context(), client = new Context()
@@ -338,6 +413,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
       'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'get', 'authorize', 'setEnabled',
       'get', 'set', 'refreshIdentity', 'ensureIdentity', 'usage', 'refreshUsage', 'turn',
+      'get', 'set', 'authorizeNext', 'defaults', 'setDefault',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot' && item.method !== 'setModelExcluded')) {
       expect(descriptor.result.mode).toBe('strict')

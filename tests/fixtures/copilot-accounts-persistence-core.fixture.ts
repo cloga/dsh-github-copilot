@@ -18,6 +18,8 @@ import { createGitHubCopilotCredentialStore } from '../../src/copilot-auth.ts'
 import { GitHubCopilotAuthorizationController } from '../../src/authorization-controller.ts'
 import { migrationStatus } from '../../src/migration-status.ts'
 import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
+import { installSessionContinuation } from '../../src/session-continuation-host.ts'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
@@ -85,6 +87,9 @@ it('persists independent native credentials and SettingsForms CAS across profile
       const sessionAccounts = new SessionAccountsHost(ctx)
       ctx.provide('githubCopilotSessionAccounts', sessionAccounts)
       ctx.effect(() => () => sessionAccounts.dispose())
+      const continuation = installSessionContinuation(ctx)
+      ctx.effect(() => () => continuation.dispose())
+      await continuation.ready
       return { ctx, host, sessionAccounts }
     }
     let { ctx, host } = await start()
@@ -103,8 +108,25 @@ it('persists independent native credentials and SettingsForms CAS across profile
     expect(await host.switchAccount(A, revision)).toMatchObject({ state: 'ready', activeAccountId: A })
     expect([...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber).toBe(selectorFiber)
     const viewedSession = { session: { id: 'synthetic-session-override' } }
+    const defaults = await ctx.githubCopilotSessionContinuation.defaults()
+    expect(defaults.enabled).toBe(true)
+    const initialHistory = ctx.settings.describe().find(row => row.ns === 'github-copilot')!.value as {
+      continuationDefaultHistory: { enabled: boolean; changedAt: number }[]
+    }
+    const fresh = { session: { id: 'synthetic-fresh', header: {
+      isSeeded: false, createdAt: initialHistory.continuationDefaultHistory[0]!.changedAt + 1,
+    } } } as unknown as Agent
+    expect((await ctx.githubCopilotSessionContinuation.get(fresh)).enabled).toBe(true)
+    await ctx.githubCopilotSessionContinuation.setDefault(defaults.revision, false)
+    const oneShot = { session: { id: 'synthetic-once' } } as Agent
+    await ctx.githubCopilotSessionContinuation.authorizeNext(oneShot, (await host.get()).revision!, true)
+    await ctx.githubCopilotSessionContinuation.set(viewedSession as Agent, (await host.get()).revision!, true)
     await ctx.githubCopilotSessionAccounts.set(viewedSession, B, (await host.get()).revision!)
     expect(ctx.githubCopilotSessionAccounts.selected(viewedSession)).toEqual({ accountId: B, source: 'session' })
+    expect((await ctx.githubCopilotSessionContinuation.get(viewedSession as Agent)).enabled).toBe(true)
+    expect((await ctx.githubCopilotSessionContinuation.defaults()).enabled).toBe(false)
+    expect((await ctx.githubCopilotSessionContinuation.get(fresh)).enabled).toBe(true)
+    expect((await ctx.githubCopilotSessionContinuation.get(oneShot)).nextTurnAuthorized).toBe(true)
     expect(ctx.githubCopilotSessionAccounts.selected({ session: { id: 'synthetic-inherited' } }))
       .toEqual({ accountId: A, source: 'global' })
     expect([...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber).toBe(selectorFiber)
@@ -116,6 +138,10 @@ it('persists independent native credentials and SettingsForms CAS across profile
     ctx = reopened.ctx
     host = reopened.host
     expect(await host.get()).toMatchObject({ state: 'ready', activeAccountId: A })
+    expect((await ctx.githubCopilotSessionContinuation.get(viewedSession as Agent)).enabled).toBe(true)
+    expect((await ctx.githubCopilotSessionContinuation.defaults()).enabled).toBe(false)
+    expect((await ctx.githubCopilotSessionContinuation.get(fresh)).enabled).toBe(true)
+    expect((await ctx.githubCopilotSessionContinuation.get(oneShot)).nextTurnAuthorized).toBe(false)
     expect(ctx.githubCopilotSessionAccounts.selected(viewedSession)).toEqual({ accountId: B, source: 'session' })
     expect(await ctx.credentials.readRecord(key(A))).toEqual(grant(A))
     const beforeB = await ctx.credentials.readRecord(key(B))

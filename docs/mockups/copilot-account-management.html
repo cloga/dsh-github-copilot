@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat → Models · 完整多账号体验 Mock</title>
+<!-- Shared current-account summary; searchable bounded selector only after Switch.
+Chat owns session selection, Models owns global default. All data is synthetic. -->
+<style>
+:root{color-scheme:dark;--bg:#171717;--panel:#252525;--text:#eee;--muted:#bdbdbd;--line:#555;--hover:#353535;--accent:#b9d5ff}
+*{box-sizing:border-box}body{margin:0;padding:24px;background:var(--bg);color:var(--text);font:13px/1.55 system-ui,"Segoe UI",sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}button,select,input{background:transparent;border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+button{cursor:pointer}button:hover{background:var(--hover)}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+header{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--line)}header span,p,small{color:var(--muted)}
+nav{display:flex;gap:8px;margin:20px 0}nav button[aria-pressed=true]{background:var(--hover)}main{max-width:952px;margin:auto}
+h1{font-size:22px;margin:0 0 18px}h2{font-size:17px;margin:0}p{margin:6px 0}small{font-size:12px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.history{height:160px;display:grid;place-content:center;color:var(--muted)}.composer{border:1px solid var(--line);border-radius:12px;padding:12px}textarea{width:100%;min-height:72px;background:none;border:0;resize:vertical}.toolbar{display:flex;justify-content:space-between;color:var(--muted)}
+.dock{display:flex;justify-content:flex-end;margin:8px 0}.quiet{border:0;color:var(--accent)}.account-surface{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:min(100%,430px);margin-left:auto;box-shadow:0 6px 20px #0003}.models .account-surface{width:100%;margin:0;box-shadow:none}
+.identity{min-width:0}.identity strong{display:block}.identity small{display:block}.account-summary{padding:12px 0}.section{border-top:1px solid var(--line);padding-top:14px;margin-top:10px}
+.selector{border-top:1px solid var(--line);padding-top:12px}.search{width:100%;margin:10px 0}.account-list{max-height:220px;overflow:auto;overscroll-behavior:contain}.account-option{display:flex;justify-content:space-between;align-items:center;gap:12px;border:0;width:100%;text-align:left;padding:9px 8px}.account-option[aria-pressed=true]{background:var(--hover)}.account-option small{display:block}.selected{color:var(--accent);white-space:nowrap}.selector-footer{border-top:1px solid var(--line);padding-top:10px;margin-top:8px}.selector-footer button{width:100%;text-align:left}
+.notice{padding:8px 10px;background:var(--hover);border-radius:6px;margin:10px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.primary{background:#e4e4e4;color:#171717;border-color:#e4e4e4}.primary:hover{background:white}
+details p{font-size:12px}summary{cursor:pointer}.label{display:block;margin-top:10px}input[type=checkbox]{accent-color:#adcfff}
+.models-list{margin-top:20px;border-top:1px solid var(--line)}.model-row{padding:12px 0;border-bottom:1px solid var(--line)}.simulation{margin:24px auto 0;max-width:952px;border-top:1px dashed var(--line);padding-top:14px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;color:var(--muted);font-size:12px}
+[hidden]{display:none!important}.save-error{color:var(--text)}#status{font-size:12px;min-height:18px}
+@media(max-width:480px){body{padding:14px}.history{height:90px}.account-surface{padding:14px}.row{gap:8px}.row select{max-width:150px}.account-list{max-height:190px}header{gap:6px}}
+@media(prefers-color-scheme:light){:root{color-scheme:light;--bg:#fafafa;--panel:#fff;--text:#222;--muted:#555;--line:#bbb;--hover:#f0f0f0;--accent:#24599b}.primary{background:#303030;color:white;border-color:#303030}.primary:hover{background:#444}}
+
+body{background:#191919;padding:24px;color-scheme:dark}
+.app-backdrop{position:fixed;inset:0;z-index:-1;display:grid;grid-template-columns:220px 1fr;opacity:.35;pointer-events:none;color:#bbb}
+.app-sidebar{border-right:1px solid #555;padding:100px 16px 24px}.app-sidebar div{margin:22px 0}.app-chat{padding:100px 60px}
+header{max-width:1100px;margin:0 auto 18px;border:0;padding:0;font-size:12px}
+.settings-shell{display:grid;grid-template-columns:185px minmax(0,1fr);max-width:880px;height:min(820px,calc(100vh - 110px));min-height:480px;margin:auto;border-radius:22px;background:#2a2a2c;box-shadow:0 18px 60px #0006;overflow:hidden;border:1px solid #3b3b3d}
+.settings-nav{padding:24px 12px}.settings-nav strong{display:block;margin:0 12px 22px;font-size:16px}.settings-nav button{display:block;text-align:left;width:100%;margin:6px 0;border:0;padding:10px 12px}.settings-nav .active{background:#444449}
+main{max-width:none;margin:0;padding:20px 24px;overflow:auto;min-width:0;background:#2a2a2c}
+main>nav{display:none}.settings-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px}.settings-actions button{font-size:12px}
+h1{font-size:17px;margin-bottom:12px}h2{font-size:17px}.intro{margin-bottom:20px}
+.native-provider{display:flex;align-items:center;justify-content:space-between;border:1px solid #48484b;border-radius:12px;padding:13px;margin-top:18px}
+.missing{color:#fb7777;font-size:12px}.native-add{width:100%;border-style:dashed;margin:10px 0 24px;padding:12px}
+.models .account-surface{background:transparent;border-color:#48484b;border-radius:12px;padding:14px}
+.account-summary{padding:14px 0}.account-summary strong{font-size:14px}.section{border-color:#48484b}
+.provider-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 14px}.provider-heading span{color:#bdbdbd;font-size:12px}.provider-heading strong{font-size:15px}
+.model-status{border-top:1px solid #48484b;padding-top:14px;margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.model-status small{font-size:12px}.model-status button{margin-left:auto}
+.manage{margin-top:12px;border-top:1px solid #48484b;padding-top:12px}.manage details{padding:8px 0}.manage summary{font-size:13px}.manage .actions button{font-size:12px}
+.preferences{display:grid;gap:6px;max-height:190px;overflow:auto;margin-top:10px}.preference{display:flex;align-items:center;gap:10px;padding:5px}.preference input{accent-color:#adcfff}
+#policy{margin:12px 0 0}#policy-summary{font-size:13px}#models-list{display:none!important}
+.simulation{max-width:880px;margin:16px auto;background:#191919;border:0}
+.account-list{max-height:210px}#policy-details>p{font-size:12px}
+.management-section+.management-section{border-top:1px solid #48484b;margin-top:20px;padding-top:18px}.management-section h3{font-size:15px;margin:0 0 8px}.compact-identity{color:#bdbdbd;font-size:12px;margin-top:4px}.model-status{border:0;padding:0;margin:0}.provider-heading{margin-bottom:8px}.model-owner{font-size:12px;color:#bdbdbd;margin-bottom:10px}.manage{padding-top:18px;margin-top:16px}.manage .account-summary{padding-top:0}.management-section #policy{padding-top:10px}
+.account-entry{display:flex;align-items:center;gap:6px}.account-entry .account-option{flex:1;min-width:0}.remove-account{border:0;color:#ffb3b3;font-size:12px;flex-shrink:0}.remove-review{padding:12px;background:#353535;border-radius:6px;margin:10px 0}.model-search{width:100%;margin:8px 0}.model-filters{display:flex;gap:6px;flex-wrap:wrap}.model-filters button[aria-pressed=true]{background:#444449}.model-preference{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #48484b}.model-preference small{display:block}.model-preference strong{font-size:13px}.model-preference button{flex-shrink:0;font-size:12px}
+@media(max-width:620px){body{padding:12px}.settings-shell{grid-template-columns:1fr;height:calc(100vh - 160px);min-height:450px;border-radius:14px}.settings-nav{display:none}main{padding:16px}.settings-actions{margin-bottom:12px}header{flex-direction:column;align-items:flex-start}.simulation{margin-top:12px}.model-status button{margin-left:0}}
+
+.settings-shell{position:fixed;z-index:10;left:50%;top:80px;transform:translateX(-50%);width:calc(100% - 40px);max-height:calc(100vh - 110px)}
+.modal-shade{position:fixed;inset:0;background:#0009;z-index:9}
+.settings-actions{position:sticky;top:0;z-index:2;background:#2a2a2c;padding:8px 0;border-bottom:1px solid #48484b}
+select{color-scheme:dark;background:#252525;color:#eee}option{background:#252525;color:#eee}
+.switch-review,.replay-guidance{padding:12px;background:#353535;border:1px solid #555;border-radius:8px;margin:12px 0}
+.switch-review strong,.replay-guidance strong{display:block;margin-bottom:6px}.switch-review button,.replay-guidance button{font-size:12px}
+.chat-host .history{height:auto;min-height:210px;display:flex;flex-direction:column;gap:18px;padding:20px 0;color:#eee}.mock-message{max-width:78%;padding:12px 16px;border-radius:10px;background:#252525}.mock-message.user{align-self:flex-end;background:#303036}.mock-message p{margin:5px 0}.mock-message small{display:block;color:#bdbdbd}.mock-message.failure{max-width:100%;border:1px solid #795454;background:#302727}.mock-message .actions{margin-top:10px}.scenario-heading{color:#bdbdbd;font-size:12px}
+.chat-host{max-width:952px;margin:45px auto 0}.chat-host .history{height:210px}
+.chat-host .account-surface{background:#252525;width:min(100%,430px);max-height:62vh;overflow:auto}
+.chat-host .provider-heading{margin-bottom:0}.chat-host .account-summary{padding:12px 0}
+.chat-host .model-status,.chat-host .compact-identity{display:none}
+.chat-host .manage{border:0;padding:0;margin:0}
+.chat-host #policy{border-top:1px solid #555;margin-top:12px;padding-top:12px}
+.chat-host .preferences{display:none}.manage-link{border-top:1px solid #555;margin-top:12px;padding-top:10px;display:flex;justify-content:flex-end}
+.chat-host .account-surface .management-section h3{display:none}
+.mock-caption{max-width:952px;margin:12px auto;color:#bdbdbd;font-size:12px}
+@media(max-width:620px){.settings-shell{top:72px;width:calc(100% - 24px);height:calc(100vh - 100px)}.chat-host{margin-top:20px}.chat-host .history{height:auto;min-height:100px}}
+</style>
+<div class="app-backdrop"><div class="app-sidebar"><strong>deepseek HARNESS</strong><div>＋ New Session</div><div>Plugins</div><div>Automation tasks</div><div>Workspaces</div></div><div class="app-chat">Chat</div></div>
+<header><strong>Chat → Models · 完整多账号体验 Mock</strong><span>参照当前 Desktop Settings；24 个虚构账号，不操作真实账号或设置</span></header>
+<div class="settings-shell"><aside class="settings-nav"><strong>Settings</strong><button>⚙ General</button><button class="active">▤ Models</button><button>Built-in plugins</button><button>Agent presets</button></aside>
+<main><div class="settings-actions"><button disabled>Open configuration file</button><button disabled aria-label="Close Settings">×</button></div>
+<nav aria-label="预览页面"><button id="chat-tab" aria-pressed="true">Chat 页面</button><button id="models-tab" aria-pressed="false">Models 页面</button></nav>
+<div id="chat"><div class="history">聊天区不显示账号列表或续聊设置</div><div class="composer"><textarea aria-label="模拟消息" placeholder="输入消息或任务…（仅模拟）"></textarea><div class="toolbar"><span>＋　Full access⌄</span><span>GPT-6.1 Sol⌄　<button disabled aria-label="发送已禁用">↑</button></span></div></div><div class="dock"><button id="credits" class="quiet">Credits · <span id="dock-account"></span>　⌄</button></div></div>
+<div id="models-heading" hidden><h1>Models</h1><p class="intro">Enter your API keys to use models from the following providers.</p>
+<div class="native-provider"><span><strong>DeepSeek</strong> <span class="missing" title="API key missing">●</span></span><button disabled>Edit</button></div><button class="native-add" disabled>＋ Add model provider</button></div>
+<div id="surface-holder">
+<section class="account-surface" aria-label="Copilot 账号">
+  <div class="provider-heading"><strong>GitHub Copilot</strong><span id="scope">全局默认</span></div>
+  <div class="row account-summary"><div class="identity"><strong id="current-name"></strong><small id="current-credit"></small><small id="source"></small></div><button id="switch" aria-expanded="false" aria-controls="selector">Switch</button></div>
+  <p id="running" class="notice" hidden></p>
+  <div id="selector" class="selector" hidden>
+    <div class="row"><strong id="selector-title">切换本 Session 账号</strong><button id="cancel-switch" class="quiet">取消</button></div>
+    <input id="search" class="search" type="search" aria-label="搜索账号" placeholder="搜索账号名称或标识">
+    <div id="account-list" class="account-list" role="group" aria-label="可选账号"></div>
+    <p id="empty" hidden>未找到匹配账号。可修改搜索，或添加新账号。</p>
+    <p id="save-error" class="save-error" role="alert" hidden>模拟保存失败，原账号保持不变。<button id="retry" class="quiet">重试</button></p>
+    <div class="selector-footer"><button id="add">＋ 添加新账号</button></div>
+    <div id="add-view" hidden><label class="label" for="new-name">账号显示名称</label><input id="new-name" placeholder="例如：备用工作账号"><p><small>正式功能将在 GitHub 授权完成后添加。这里只模拟，不收集 token 或凭据。</small></p><div class="actions"><button id="finish-add">模拟授权完成</button><button id="cancel-add" class="quiet">取消添加</button></div><p id="add-error" role="alert" hidden>请输入账号显示名称。</p></div>
+  </div>
+  <p><small>全局默认用于跟随默认的后续轮次。正在运行的轮次和 Session 显式账号不变。</small></p><div class="section" id="policy">
+    <details id="policy-details"><summary id="policy-summary">降级续聊 · 关闭</summary>
+      <div id="session-policy-view"><div class="row" style="margin-top:12px"><label for="session-policy">本 Session 默认策略</label><select id="session-policy"><option value="follow">沿用创建时默认</option><option value="on">开启</option><option value="off">关闭</option></select></div><p><small>每个新轮次不回放旧加密推理及内嵌摘要，同账号也适用；可见消息、工具记录和磁盘历史不变。</small></p><div id="shortcuts" class="actions"><button id="once">仅下一轮降级</button><button id="enable" class="primary">一键持续开启</button></div><p id="consent"><small>点击即同意上述损失，不自动发送或重试。</small></p><p id="once-state" hidden>已授权仅下一轮降级 <button id="revoke" class="quiet">撤销</button></p></div>
+      <div id="global-policy-view" hidden><label class="label"><input id="global-policy" type="checkbox"> 新 Session 默认开启降级续聊</label><p><small>勾选即同意新 Session 每轮不回放旧加密推理及内嵌摘要，同账号也适用。已有 Session 不批量修改。</small></p></div>
+      <p><small>可能失去旧推理隐含细节。关闭不恢复已生成回答。不解决额度、408 或上下文超限，也不保证请求成功。</small></p>
+    </details>
+  </div>
+  <div class="model-status"><strong>Models</strong><small>Signed in</small><small>19 models</small><small title="Synthetic timestamp">Updated 1 hour ago</small><button id="manage-toggle" aria-expanded="false">Manage</button></div>
+<div id="manage" class="manage" hidden>
+<details><summary>Model preferences · <span id="enabled-count">7</span> enabled · exclusions</summary><p><small>取消勾选将排除模型，不改写已有 Session 的选择。</small></p><div class="preferences">
+<label class="preference"><input class="model-enabled" type="checkbox" checked> GPT-6.1 Sol</label><label class="preference"><input class="model-enabled" type="checkbox" checked> GPT-6 Sol</label><label class="preference"><input class="model-enabled" type="checkbox" checked> Claude Sonnet</label><label class="preference"><input class="model-enabled" type="checkbox" checked> Claude Opus</label><label class="preference"><input class="model-enabled" type="checkbox" checked> Gemini Pro</label><label class="preference"><input class="model-enabled" type="checkbox" checked> GPT-5.4</label><label class="preference"><input class="model-enabled" type="checkbox" checked> GPT-5.4 mini</label></div></details>
+<details><summary>Discovery details</summary><p><small>模拟：账号模型缓存有效。时间戳、账号及模型均为演示数据，不证明线上可用性。</small></p></details>
+<div class="actions"><button id="refresh-models">Refresh models</button><button id="refresh-identity">Refresh account information</button><button id="reauthorize">Reauthorize</button></div>
+<p><small>以上操作作用于当前默认账号。此 mock 仅模拟状态，不发起授权或网络请求。</small></p></div>
+<p id="status" role="status" aria-live="polite"></p>
+</section>
+</div>
+<div id="models-list" class="models-list" hidden><div class="model-row row"><span>GPT-6.1 Sol</span><small>演示模型 · 可用</small></div><div class="model-row row"><span>Claude Sonnet</span><small>演示模型 · 可用</small></div></div>
+</main></div>
+<aside class="simulation"><span>演示专用：</span><button id="turn">开始模拟轮</button><button id="new-session">模拟新 Session</button><label><input id="fail" type="checkbox">下一次切换保存失败</label><span>不属于正式产品控件。</span></aside>
+<script>
+const $=id=>document.getElementById(id)
+const accounts=Array.from({length:24},(_,i)=>({id:String(i+1),name:i===0?'个人账号':i===1?'工作账号':`备用账号 ${String(i+1).padStart(2,'0')}`,handle:`demo-account-${String(i+1).padStart(2,'0')}`,credits:i===0?'180 / 300':i===1?'420 / 1,000':'未读取额度'}))
+let page='chat',globalAccount='1',sessionAccount=null,globalOn=false,initialOn=false,policy='follow',once=false,active=null,saving=false,target=null
+const effective=()=>sessionAccount??globalAccount
+const on=()=>policy==='follow'?initialOn:policy==='on'
+const find=id=>accounts.find(a=>a.id===id)
+function status(s){$('status').textContent=s}
+function closeSelector(){$('selector').hidden=true;$('switch').setAttribute('aria-expanded','false');$('search').value='';$('add-view').hidden=true;$('switch').focus()}
+function render(){
+  const current=find(page==='chat'?effective():globalAccount)
+  $('current-name').textContent=current.name
+  $('current-credit').textContent=current.credits==='未读取额度'?'额度未读取':current.credits+' Credits 剩余 · 演示账期数据'
+  $('source').textContent=page==='models'?'全局默认账号':sessionAccount===null?'跟随全局默认':'本 Session 已指定'
+  $('scope').textContent=page==='chat'?'本 Session':'全局默认'
+  $('dock-account').textContent=active?find(active.account).name+(active.account!==effective()?' → 下轮 '+find(effective()).name:''):find(effective()).name
+  $('running').hidden=page!=='chat'||!active
+  $('running').textContent=active?'本轮：'+find(active.account).name+' · '+(active.on?'降级开启':'降级关闭')+'；下一轮：'+find(effective()).name+' · '+(on()||once?'降级开启':'降级关闭'):''
+  $('policy-summary').textContent=page==='models'?'新 Session 降级默认 · '+(globalOn?'开启':'关闭'):'降级续聊 · '+(on()?'开启':once?'仅下一轮':'关闭')
+  $('shortcuts').hidden=on();$('consent').hidden=on();$('once').disabled=once;$('once-state').hidden=!once
+  $('turn').textContent=active?'结束模拟轮':'开始模拟轮'
+  $('switch').disabled=saving
+  $('cancel-switch').disabled=saving;$('add').disabled=saving
+  renderList()
+}
+function renderList(){
+  const query=$('search').value.trim().toLowerCase(), list=$('account-list');list.replaceChildren()
+  const selected=page==='models'?globalAccount:sessionAccount
+  const entries=[...(page==='chat'?[{id:'follow',name:'跟随全局默认',handle:'当前默认：'+find(globalAccount).name}]:[]),...accounts].filter(a=>(a.name+' '+a.handle).toLowerCase().includes(query))
+  for(const a of entries){
+    const button=document.createElement('button');button.className='account-option';button.dataset.account=a.id;button.disabled=saving
+    const checked=a.id===(selected??'follow');button.setAttribute('aria-pressed',String(checked))
+    const text=document.createElement('span'),name=document.createElement('strong'),sub=document.createElement('small');name.textContent=a.name;sub.textContent=a.handle;text.append(name,sub)
+    const marker=document.createElement('span');marker.className='selected';marker.textContent=saving&&target===a.id?'保存中…':checked?'当前':''
+    button.append(text,marker);button.onclick=()=>choose(a.id);list.append(button)
+  }
+  $('empty').hidden=entries.length>0
+}
+async function choose(id){
+  if(saving)return;saving=true;target=id;$('save-error').hidden=true;render()
+  await new Promise(r=>setTimeout(r,250));saving=false
+  if($('fail').checked){$('fail').checked=false;$('save-error').hidden=false;status('保存失败；账号未改变。');render();return}
+  if(page==='models')globalAccount=id;else sessionAccount=id==='follow'?null:id
+  closeSelector();status(page==='models'?'已模拟设置全局默认；已有 Session 的显式账号不变。':active?'已保存，下一轮生效；当前轮不受影响。':'已保存，下次发送使用所选账号。');render()
+}
+function setPage(next){
+  if(saving)return;page=next;closeSelector()
+  document.querySelector('.account-surface').hidden=false
+  $('chat').hidden=page!=='chat';$('models-heading').hidden=page!=='models';$('models-list').hidden=page!=='models'
+  $('surface-holder').className=page==='models'?'models':''
+  $('chat-tab').setAttribute('aria-pressed',String(page==='chat'));$('models-tab').setAttribute('aria-pressed',String(page==='models'))
+  $('session-policy-view').hidden=page!=='chat';$('global-policy-view').hidden=page!=='models'
+  $('selector-title').textContent=page==='chat'?'切换本 Session 账号':'设置全局默认账号';status('');render()
+}
+$('chat-tab').onclick=()=>setPage('chat');$('models-tab').onclick=()=>setPage('models')
+$('switch').onclick=()=>{$('selector').hidden=!$('selector').hidden;$('switch').setAttribute('aria-expanded',String(!$('selector').hidden));if(!$('selector').hidden)$('search').focus();renderList()}
+$('cancel-switch').onclick=closeSelector;$('search').oninput=renderList;$('retry').onclick=()=>choose(target)
+$('credits').onclick=()=>{const surface=document.querySelector('.account-surface');surface.hidden=!surface.hidden}
+$('add').onclick=()=>{$('add-view').hidden=false;$('new-name').focus()}
+$('cancel-add').onclick=()=>{$('add-view').hidden=true}
+$('finish-add').onclick=()=>{const name=$('new-name').value.trim();$('add-error').hidden=!!name;if(!name)return;accounts.push({id:String(accounts.length+1),name,handle:'demo-new-account',credits:'未读取额度'});$('search').value=name;$('add-view').hidden=true;$('new-name').value='';status('已模拟添加账号，尚未切换；请选择该账号使用。');render()}
+$('session-policy').onchange=e=>{policy=e.target.value;if(on())once=false;status(active?'策略已保存，下一轮生效。':'本 Session 策略已模拟保存。');render()}
+$('global-policy').onchange=e=>{globalOn=e.target.checked;status('新 Session 默认已保存；已有 Session 不变。');render()}
+$('once').onclick=()=>{once=true;status('已同意仅下一轮损失，请手动发送或重试。');render()}
+$('revoke').onclick=()=>{once=false;status('已撤销下一轮授权。');render()}
+$('enable').onclick=()=>{policy='on';once=false;$('session-policy').value='on';status('已同意损失并持续开启；可切回关闭。');render()}
+$('turn').onclick=()=>{if(active){active=null;status('模拟轮结束。')}else{active={account:effective(),on:on()||once};once=false;status('模拟轮已开始，未执行任何推理。')}render()}
+$('new-session').onclick=()=>{if(saving)return;active=null;sessionAccount=null;initialOn=globalOn;policy='follow';once=false;$('session-policy').value='follow';setPage('chat');document.querySelector('.account-surface').hidden=false;status('新模拟 Session 继承全局默认。');render()}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!saving)closeSelector()})
+
+const manage=$('manage'),surface=document.querySelector('.account-surface')
+const accountSection=document.createElement('section');accountSection.className='management-section';accountSection.setAttribute('aria-label','账号管理')
+accountSection.innerHTML='<h3>账号管理</h3>'
+const accountSummary=surface.querySelector('.account-summary')
+const explanation=$('policy').previousElementSibling
+accountSection.append(accountSummary,$('selector'),explanation,$('policy'))
+const accountActions=document.createElement('div');accountActions.className='actions';accountActions.append($('refresh-identity'),$('reauthorize'));accountSection.append(accountActions)
+const modelSection=document.createElement('section');modelSection.className='management-section';modelSection.setAttribute('aria-label','当前账号的模型')
+modelSection.innerHTML='<h3>模型偏好</h3><p class="model-owner" id="model-owner">适用于所有 Copilot 账号；可用性按当前账号判断。</p>'
+while(manage.firstChild)modelSection.append(manage.firstChild)
+manage.append(accountSection,modelSection)
+const compact=document.createElement('p');compact.className='compact-identity';compact.id='compact-identity';surface.querySelector('.provider-heading').after(compact)
+function updateOwnership(){
+ compact.textContent=$('current-name').textContent+' · 全局默认'
+ $('model-owner').textContent='偏好适用于所有 Copilot 账号 · 当前可用性：'+$('current-name').textContent+'（模拟）'
+ renderPreferences()
+}
+new MutationObserver(updateOwnership).observe($('current-name'),{childList:true})
+$('manage-toggle').onclick=()=>{const open=manage.hidden;manage.hidden=!open;$('manage-toggle').setAttribute('aria-expanded',String(open));if(!open)closeSelector()}
+const preferences=modelSection.querySelector('details')
+preferences.innerHTML='<summary>启用与排除 · 跨账号共享</summary><p><small>新发现模型默认启用；账号缺失模型时保留偏好，恢复可用后沿用原设置。不自动切模型或账号。</small></p><input class="model-search" id="model-search" type="search" aria-label="搜索模型" placeholder="搜索模型名称或 ID"><div class="model-filters" id="model-filters"></div><div class="preferences" id="preference-rows"></div>'
+const models=[
+ {id:'gpt-6.1-sol',name:'GPT-6.1 Sol',accounts:['1','2']},
+ {id:'gpt-6-sol',name:'GPT-6 Sol',accounts:['1','2']},
+ {id:'claude-sonnet',name:'Claude Sonnet',accounts:['1']},
+ {id:'claude-opus',name:'Claude Opus',accounts:['2']},
+ {id:'gemini-pro',name:'Gemini Pro',accounts:['1','2'],fresh:true},
+ {id:'gpt-5.4',name:'GPT-5.4',accounts:['1','2']},
+ {id:'gpt-5.4-mini',name:'GPT-5.4 mini',accounts:['1','2']}
+]
+const excluded=new Set(['gpt-5.4-mini']);let filter='all'
+function renderPreferences(){
+ const query=$('model-search').value.trim().toLowerCase(),rows=$('preference-rows');rows.replaceChildren()
+ const filters=$('model-filters');filters.replaceChildren()
+ for(const [id,name] of [['all','全部'],['available','当前可用'],['excluded','已排除'],['unavailable','当前不可用']]){
+  const b=document.createElement('button');b.textContent=name;b.setAttribute('aria-pressed',String(filter===id));b.onclick=()=>{filter=id;renderPreferences()};filters.append(b)
+ }
+ for(const model of models){
+  const available=model.accounts.includes(globalAccount),off=excluded.has(model.id)
+  if(!(model.name+' '+model.id).toLowerCase().includes(query)||filter==='available'&&!available||filter==='excluded'&&!off||filter==='unavailable'&&available)continue
+  const row=document.createElement('div');row.className='model-preference';row.dataset.model=model.id
+  const label=document.createElement('span'),name=document.createElement('strong'),detail=document.createElement('small')
+  name.textContent=model.name+(model.fresh?' · 新发现':'')
+  detail.textContent=(off?'已排除':'已启用')+' · '+(available?'当前账号可用':'当前账号不可用，偏好保留')
+  label.append(name,detail)
+  const action=document.createElement('button');action.textContent=off?'恢复':'排除';action.onclick=()=>{off?excluded.delete(model.id):excluded.add(model.id);status('跨账号偏好已模拟保存；不会自动选择模型。');renderPreferences()}
+  row.append(label,action);rows.append(row)
+ }
+ if(!rows.childElementCount){const empty=document.createElement('p');empty.textContent='没有匹配模型。';rows.append(empty)}
+}
+$('model-search').oninput=renderPreferences
+const removal=document.createElement('div');removal.className='remove-review';removal.hidden=true;removal.setAttribute('role','group');removal.setAttribute('aria-label','确认移除账号')
+removal.innerHTML='<strong id="remove-title"></strong><p><small>仅移除本机保存的授权，不撤销 GitHub 端权限，不删除对话，也不清除共享模型偏好。不会自动切换到其他账号。</small></p><div class="actions"><button id="confirm-remove">确认移除</button><button id="cancel-remove">取消</button></div>'
+$('selector').append(removal)
+let removeTarget=null
+const originalRenderList=renderList
+renderList=function(){
+ originalRenderList()
+ document.querySelectorAll('#account-list .account-option').forEach(button=>{
+  const id=button.dataset.account
+  if(id==='follow')return
+  const wrapper=document.createElement('div');wrapper.className='account-entry'
+  button.replaceWith(wrapper);wrapper.append(button)
+  const remove=document.createElement('button');remove.className='remove-account';remove.textContent='移除';remove.setAttribute('aria-label','移除 '+find(id).name)
+  remove.disabled=saving||id===globalAccount||active?.account===id
+  remove.title=id===globalAccount?'请先切换全局默认账号':active?.account===id?'正在使用的账号不可移除':'移除本机保存的授权'
+  remove.onclick=()=>{removeTarget=id;$('remove-title').textContent='移除 '+find(id).name+'？';removal.hidden=false}
+  wrapper.append(remove)
+ })
+}
+$('search').oninput=()=>renderList()
+$('cancel-remove').onclick=()=>{removal.hidden=true;removeTarget=null}
+$('confirm-remove').onclick=()=>{
+ if(!removeTarget||removeTarget===globalAccount||active?.account===removeTarget)return
+ const id=removeTarget,name=find(id).name,index=accounts.findIndex(a=>a.id===id)
+ accounts.splice(index,1);removal.hidden=true;removeTarget=null
+ status('已模拟移除 '+name+'；共享模型偏好保留。');render()
+}
+$('refresh-models').onclick=()=>status('模拟模型刷新完成；未发起网络请求。')
+$('refresh-identity').onclick=()=>status('模拟账号信息刷新完成；未读取真实账号。')
+$('reauthorize').onclick=()=>status('这里只演示重新授权入口；未打开 GitHub 或修改凭据。')
+setPage('models')
+updateOwnership()
+
+const shell=document.querySelector('.settings-shell')
+const shade=document.createElement('div');shade.className='modal-shade';shade.hidden=true;shell.before(shade)
+const chatHost=document.createElement('div');chatHost.className='chat-host';shell.before(chatHost)
+const chatNode=$('chat'),holder=$('surface-holder'),main=document.querySelector('main')
+chatHost.append(chatNode,holder)
+const link=document.createElement('div');link.className='manage-link';link.innerHTML='<button class="quiet" id="full-management">管理账号与模型 →</button>';surface.append(link)
+const accountTitle=accountSection.querySelector('h3')
+const accountActionsForModels=accountActions
+const explanationForModels=explanation
+const originalSetPage=setPage
+function showChat(){
+ originalSetPage('chat');shell.hidden=true;shade.hidden=true;chatNode.hidden=false
+ chatHost.append(holder);holder.className=''
+ manage.hidden=false;accountSection.hidden=false;modelSection.hidden=true
+ accountActionsForModels.hidden=true;explanationForModels.hidden=true;accountTitle.hidden=true;link.hidden=false
+ compact.hidden=true;$('manage-toggle').hidden=true
+ surface.querySelector('.model-status').hidden=true
+ surface.hidden=false;render()
+}
+function showModels(){
+ closeSelector();originalSetPage('models');chatNode.hidden=false
+ main.insertBefore(holder,$('models-list'));holder.className='models'
+ shell.hidden=false;shade.hidden=false;manage.hidden=false
+ accountActionsForModels.hidden=false;explanationForModels.hidden=false;accountTitle.hidden=false
+ modelSection.hidden=false;link.hidden=true;compact.hidden=false
+ $('manage-toggle').hidden=false;$('manage-toggle').setAttribute('aria-expanded','true')
+ surface.querySelector('.model-status').hidden=false
+ $('scope').textContent='全局默认'
+ main.scrollTop=0
+ $('manage-toggle').focus()
+}
+$('full-management').onclick=showModels
+const closeSettings=document.querySelector('[aria-label="Close Settings"]');closeSettings.disabled=false;closeSettings.onclick=()=>{showChat();$('full-management').focus()}
+$('manage-toggle').onclick=()=>{manage.hidden=!manage.hidden;$('manage-toggle').setAttribute('aria-expanded',String(!manage.hidden));if(manage.hidden)closeSelector()}
+const removeList=renderList
+renderList=function(){removeList();if(page==='chat')document.querySelectorAll('.remove-account').forEach(b=>b.hidden=true);else document.querySelectorAll('.account-entry').forEach(row=>{if(row.querySelector('[data-account]')?.dataset.account===sessionAccount){const button=row.querySelector('.remove-account');button.disabled=true;button.title='此账号被当前 Session 显式绑定，需先解除绑定'}})}
+$('search').oninput=()=>renderList()
+const switchReview=document.createElement('div');switchReview.className='switch-review';switchReview.hidden=true
+switchReview.setAttribute('role','group');switchReview.setAttribute('aria-label','确认关闭降级后切换账号')
+switchReview.innerHTML='<strong>降级续聊已关闭</strong><p id="switch-warning"></p><p><small>旧加密推理可能无法跨账号回放。未发送新请求，不能确认它一定失败；切换不会修改历史。</small></p><div class="actions"><button id="enable-switch" class="primary">开启降级并切换</button><button id="once-switch">仅下一轮降级并切换</button><button id="keep-off-switch">保持关闭并切换</button><button id="cancel-switch-review" class="quiet">取消</button></div>'
+$('selector').append(switchReview)
+let pendingAccount=null
+const originalChoose=choose
+choose=async function(id){
+ const resolved=id==='follow'?globalAccount:id
+ if(page==='chat'&&!on()&&!once&&resolved!==effective()){
+  pendingAccount=id;$('switch-warning').textContent='将从 '+find(effective()).name+' 切换到 '+find(resolved).name+'。'
+  switchReview.hidden=false;return
+ }
+ return originalChoose(id)
+}
+async function applySwitch(mode){
+ const id=pendingAccount;if(id===null)return
+ switchReview.hidden=true;pendingAccount=null
+ if(mode==='on'){policy='on';$('session-policy').value='on'}
+ if(mode==='once')once=true
+ await originalChoose(id)
+}
+$('enable-switch').onclick=()=>applySwitch('on')
+$('once-switch').onclick=()=>applySwitch('once')
+$('keep-off-switch').onclick=()=>applySwitch('off')
+$('cancel-switch-review').onclick=()=>{switchReview.hidden=true;pendingAccount=null;status('已取消切换，账号及降级策略不变。')}
+const guidance=document.createElement('div');guidance.className='replay-guidance';guidance.hidden=true;guidance.setAttribute('role','alert')
+guidance.innerHTML='<strong>旧推理回放被当前账号拒绝（模拟）</strong><p><small>可见消息与工具记录仍保留。开启降级后不回放旧加密推理及内嵌摘要，可能失去隐含细节。不会自动重试。</small></p><div class="actions"><button id="failure-enable" class="primary">开启本 Session 降级</button><button id="failure-once">仅下一轮降级</button><button id="failure-manage" class="quiet">管理账号与模型 →</button></div><p id="failure-next" hidden>已授权。请手动重试原任务；这里没有发送任何请求。</p>'
+accountSection.append(guidance)
+const failButton=document.createElement('button');failButton.id='simulate-replay-mismatch';failButton.textContent='模拟回放不一致';document.querySelector('.simulation').append(failButton)
+failButton.onclick=()=>{if(!shell.hidden)showChat();surface.hidden=false;guidance.hidden=false;status('模拟供应方已明确拒绝旧回放；未执行真实推理。')}
+const scenario=document.createElement('button');scenario.id='off-scenario';scenario.textContent='体验：降级关闭后 A → B'
+document.querySelector('.simulation').prepend(scenario)
+function startOffScenario(){
+ active=null;sessionAccount='1';globalAccount='1';policy='off';once=false
+ $('session-policy').value='off';guidance.hidden=true;$('failure-next').hidden=true
+ showChat();surface.hidden=false;$('policy-details').open=false
+ $('selector').hidden=false;$('switch').setAttribute('aria-expanded','true')
+ $('search').value='demo-account-02';renderList()
+ choose('2')
+ status('演示起点：个人账号 A，降级关闭。你刚选择了工作账号 B；请在确认区选择下一步。')
+ renderConversation('switch')
+ switchReview.scrollIntoView({block:'nearest'})
+}
+scenario.onclick=startOffScenario
+const originalApplySwitch=applySwitch
+applySwitch=async function(mode){
+ await originalApplySwitch(mode)
+ if(mode==='off'){
+  renderConversation('ready')
+  status('已切换到 B，降级仍关闭。下一步可模拟一次发送，观察供应方拒绝旧回放后的引导。')
+  sendSimulation.hidden=false
+ }else{sendSimulation.hidden=true;renderConversation('authorized');status('已授权降级并切换。可手动发送；这里不会执行真实推理。')}
+}
+const sendSimulation=document.createElement('button');sendSimulation.id='simulate-off-send';sendSimulation.textContent='模拟发送：旧回放被拒绝';sendSimulation.hidden=true
+document.querySelector('.simulation').append(sendSimulation)
+sendSimulation.onclick=()=>{guidance.hidden=false;sendSimulation.hidden=true;renderConversation('failed');status('模拟发送已失败：供应方拒绝旧回放。尚未开启降级，也没有自动重试。');document.querySelector('.history').scrollIntoView({block:'start'})}
+function renderConversation(state){
+ const history=chatNode.querySelector('.history')
+ history.innerHTML='<div class="scenario-heading">模拟对话 · 账号 A 的历史保留在同一个 Session</div><div class="mock-message user"><small>你 · 之前使用账号 A</small><p>帮我设计一个支持多账号切换的界面。</p></div><div class="mock-message"><small>助手 · 账号 A · 模拟内容</small><p>建议平时只显示当前账号，用 Switch 打开搜索列表。完整管理放在 Models 页面。</p></div>'
+ if(state==='switch')history.insertAdjacentHTML('beforeend','<p class="scenario-heading">现在你准备切到账号 B。降级关闭，下方先确认切换；还没有发送下一条消息。</p>')
+ else{
+  history.insertAdjacentHTML('beforeend','<div class="mock-message user"><small>你 · 准备使用账号 B</small><p>继续刚才的方案，补上删除账号的确认流程。</p></div>')
+  if(state==='failed')history.insertAdjacentHTML('beforeend','<div class="mock-message failure" role="alert"><strong>这一轮失败 · 未生成回答（模拟）</strong><p>账号 B 拒绝了账号 A 历史中的旧加密推理。可见对话与工具记录仍然保留。</p><small>COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH</small><div class="actions"><button id="message-enable">开启降级续聊</button><button id="message-once">仅下一轮降级</button></div><p><small>这两个操作只授权，不会自动重发这条消息。</small></p></div>')
+  else history.insertAdjacentHTML('beforeend','<p class="scenario-heading">'+(state==='authorized'?'已授权降级。请手动发送上面的后续消息（模拟）。':'已切到账号 B，降级仍关闭。点击下方“模拟发送：旧回放被拒绝”查看失败状态。')+'</p>')
+ }
+ for(const [id,action] of [['message-enable','failure-enable'],['message-once','failure-once']]){
+  const b=document.getElementById(id);if(b)b.onclick=()=>{$(action).click();showRetry()}
+ }
+}
+function showRetry(){
+ const history=chatNode.querySelector('.history')
+ const old=document.getElementById('mock-manual-retry');if(old)return
+ const box=document.createElement('div');box.className='notice';box.innerHTML='<p>降级已授权。原失败消息还没有重发。</p><button id="mock-manual-retry">手动重试刚才的消息（模拟）</button>'
+ history.append(box)
+ $('mock-manual-retry').onclick=()=>{
+  box.innerHTML='<p>你手动重试了原消息 · 使用账号 B · 不回放旧加密推理（模拟）</p>'
+  history.insertAdjacentHTML('beforeend','<div class="mock-message"><small>助手 · 账号 B · 演示回答，不代表真实供应方验收</small><p>可以继续。删除账号前展示确认说明：只移除本机保存的授权，不删除对话或共享模型偏好；当前默认账号需要先切换。</p></div>')
+  guidance.hidden=true;status('模拟重试已完成；未执行真实请求。')
+ }
+ box.scrollIntoView({block:'nearest'})
+}
+$('failure-enable').onclick=()=>{policy='on';once=false;$('session-policy').value='on';$('failure-next').hidden=false;render();showRetry()}
+$('failure-once').onclick=()=>{once=true;$('failure-next').hidden=false;render();showRetry()}
+$('failure-manage').onclick=showModels
+$('new-session').onclick=()=>{if(saving)return;active=null;sessionAccount=null;initialOn=globalOn;policy='follow';once=false;$('session-policy').value='follow';showChat();status('新模拟 Session 已继承全局默认；未创建真实会话。')}
+$('credits').onclick=()=>{surface.hidden=!surface.hidden}
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!saving&&!shell.hidden&&$('selector').hidden){showChat();$('full-management').focus()}})
+globalOn=true;initialOn=true;$('global-policy').checked=true
+showChat()
+status('降级续聊默认开启（模拟）。可展开详情关闭；每轮不回放旧加密推理，同账号也适用。')
+if(new URLSearchParams(location.search).get('scenario')==='off-switch')startOffScenario()
+</script>
+</html>

@@ -4,6 +4,8 @@ import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID } from '../src/copilot-identity.ts'
 import type { GitHubCopilotAuthorizationView } from '../src/authorization-controller.ts'
+import { CopilotAccountsPanel } from '../src/copilot-accounts-card.ts'
+import { ContinuationDefaultCard } from '../src/session-continuation-ui.ts'
 
 // Element/lifecycle evidence, not a browser or live Remote integration. Keep the
 // actual React element implementation and control only hooks exercised below.
@@ -40,6 +42,60 @@ import {
 } from '../src/client.ts'
 
 describe('GitHub Copilot Models client', () => {
+  it('keeps account and model management below the single Manage control with one persistent identity owner', async () => {
+    const { remote, surfaces, provider } = surfaceFixture(accountResult({
+      state: 'ready', models: [], rejected: [],
+    }).value)
+    surfaces.mount(provider, Symbol('provider'), remote as never)
+    await Promise.resolve()
+    const account = surfaces.getSnapshot()!.account
+    const accountsRemote = {} as never
+    const continuationRemote = { get: vi.fn(), set: vi.fn(), defaults: vi.fn(), setDefault: vi.fn() }
+    vi.mocked(React.useMemo).mockImplementation(factory => factory())
+    vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe, snapshot) => snapshot())
+    vi.mocked(React.useEffect).mockImplementation(() => undefined)
+    vi.mocked(React.useId).mockReturnValue('layout-management')
+    vi.mocked(React.useState).mockReturnValue([false, vi.fn()])
+    const closed = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
+    expect(closed.filter(element => element.type === 'button').map(element => element.props.children)).toEqual(['Manage'])
+    expect(closed.filter(element => element.type === CopilotAccountsPanel)).toHaveLength(1)
+    vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
+    const open = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
+    const manageIndex = open.findIndex(element => element.type === 'button' && element.props.children === 'Manage')
+    const accountIndex = open.findIndex(element => element.type === CopilotAccountsPanel)
+    expect(accountIndex).toBeGreaterThan(manageIndex)
+    const region = open.find(element => element.props.id === 'github-copilot-management-layout-management')!
+    expect(descendants(region).some(element => element.type === CopilotAccountsPanel)).toBe(true)
+    expect(descendants(region).some(element => element.props['data-dsh-github-copilot-model-management'])).toBe(true)
+    const settings = open[accountIndex]!.props.continuationSettings
+    expect(settings.type).toBe(ContinuationDefaultCard)
+    expect(settings.props).toMatchObject({ remote: continuationRemote, locale: 'zh-CN' })
+    expect(continuationRemote.defaults).not.toHaveBeenCalled()
+    expect(continuationRemote.setDefault).not.toHaveBeenCalled()
+  })
+
+  it('pairs native dropdown colors and preserves focus, disabled and error visibility in both schemes', async () => {
+    const { remote, surfaces, provider } = surfaceFixture(accountResult().value)
+    surfaces.mount(provider, Symbol('provider'), remote as never)
+    await Promise.resolve()
+    vi.mocked(React.useMemo).mockImplementation(factory => factory())
+    vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe, snapshot) => snapshot())
+    vi.mocked(React.useEffect).mockImplementation(() => undefined)
+    vi.mocked(React.useId).mockReturnValue('theme-management')
+    vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
+    const tree = GitHubCopilotCompactAccount({ remote: remote as never, account: surfaces.getSnapshot()!.account })
+    expect(tree.props.style.colorScheme).toBe('light dark')
+    const css = descendants(tree).find(element => element.type === 'style')?.props.children
+    expect(css).toContain('option')
+    expect(css).toContain('background: Canvas')
+    expect(css).toContain('color: CanvasText')
+    expect(css).toContain('color-scheme: inherit')
+    expect(css).toContain(':focus-visible')
+    expect(css).toContain(':disabled')
+    expect(css).toContain('[role="alert"]')
+    expect(css).not.toContain('outline: none')
+  })
+
   it('keeps preferences through shared account status and the mounted Manage surface', async () => {
     const preferences = { state: 'ready' as const, writable: true, revision: 2,
       excludedModelIds: ['excluded'], lockedModelIds: [], unavailableExcludedModelIds: ['excluded'] }
@@ -52,9 +108,13 @@ describe('GitHub Copilot Models client', () => {
     vi.mocked(React.useEffect).mockImplementation(() => undefined)
     vi.mocked(React.useId).mockReturnValue('fixture-management')
     vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
-    const elements = descendants(GitHubCopilotCompactAccount({ remote: remote as never, account }))
+    const continuation = React.createElement('div', { 'data-continuation-settings': true }, 'Continuation settings')
+    const elements = descendants(GitHubCopilotCompactAccount({ remote: remote as never, account, continuationSettings: continuation }))
     expect(elements.find(element => element.type === GitHubCopilotModelPreferencesPanel)?.props.preferences).toEqual(preferences)
     expect(elements.some(element => element.type === 'summary' && element.props.children === 'Discovery details')).toBe(true)
+    expect(elements.find(element => element.props['data-continuation-settings'])?.props.children).toBe('Continuation settings')
+    expect(elements.some(element => element.props['aria-label'] === 'Account management')).toBe(true)
+    expect(elements.some(element => element.type === 'button' && element.props.children === 'Sign out')).toBe(true)
   })
 
   function preferencesFixture() {
@@ -66,6 +126,48 @@ describe('GitHub Copilot Models client', () => {
       excludedModelIds: ['excluded', 'absent'], lockedModelIds: [], unavailableExcludedModelIds: ['absent'] }
     return { models, preferences }
   }
+
+  it('labels exclusions as shared preferences and filters only evidenced unavailable exclusions', () => {
+    const { models, preferences } = preferencesFixture()
+    const expandedModels = { ...models, models: [
+      ...models.models, { id: 'new-metadata-model', name: 'New metadata model', api: 'openai-responses' as const },
+    ] }
+    const panel = panelHarness(modelRemote(), face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models: expandedModels, preferences,
+    }))
+    const initial = descendants(panel.render())
+    const copy = initial.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
+    expect(copy).toContain('shared across GitHub Copilot accounts')
+    expect(copy).toContain('availability below reflects the current account')
+    expect(initial.some(element => element.type === 'button' && String(element.props.children).startsWith('Unavailable'))).toBe(true)
+    const enabled = initial.find(element => element.props['data-model-id'] === 'enabled')
+    expect(enabled?.props.children).toBe('Exclude')
+    expect(initial.some(element => element.props['data-model-id'] === 'enabled'
+      && String(element.props['aria-label']).includes('Enabled model'))).toBe(true)
+    expect(initial.find(element => element.props['data-model-id'] === 'new-metadata-model')?.props.children).toBe('Exclude')
+    const unavailable = initial.find(element => element.props['data-model-id'] === 'absent')
+    expect(unavailable).toBeDefined()
+    expect(initial.some(element => String(element.props.children).includes('Currently unavailable on current account'))).toBe(true)
+    const unavailableFilter = initial.find(element => element.type === 'button'
+      && String(element.props.children).startsWith('Unavailable'))!
+    unavailableFilter.props.onClick()
+    const filtered = descendants(panel.render())
+    expect(filtered.filter(element => element.props['data-model-id']).map(element => element.props['data-model-id'])).toEqual(['absent'])
+  })
+  it.each(['stale', 'loading', 'error', 'unavailable'] as const)('keeps saved exclusions without claiming current availability from %s metadata', state => {
+    const { models, preferences } = preferencesFixture()
+    const snapshot = { ...models, state }
+    const panel = panelHarness(modelRemote(), face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models: snapshot, preferences,
+    }))
+    const elements = descendants(panel.render())
+    const copy = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
+    expect(copy).not.toContain('Available on current account')
+    expect(copy).not.toContain('Currently unavailable on current account')
+    expect(copy).toContain('Current account availability unconfirmed')
+    expect(elements.find(element => element.type === 'button' && element.props.children === 'Unavailable (?)')?.props.disabled).toBe(true)
+    expect(elements.find(element => element.props['data-model-id'] === 'absent')?.props.children).toBe('Restore')
+  })
 
   it('shows read-only account rows with unknown exclusion status and recovers via status without discovery', async () => {
     const { models, preferences } = preferencesFixture()
@@ -1367,8 +1469,8 @@ describe('GitHub Copilot Models client', () => {
   it('declares account namespace access for both Models and Credits injection scopes', async () => {
     const { ctx } = clientContext(['settings.models.footer'])
     const dispose = await apply(ctx as never)
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
     await dispose()
   })
 
@@ -1381,6 +1483,8 @@ describe('GitHub Copilot Models client', () => {
       const ensureModels = vi.fn(), discoverModels = vi.fn()
       const namespace = vi.fn(() => ({ status, ensureModels, discoverModels }))
       Object.defineProperty(ctx.remote, 'githubCopilot', { get: namespace })
+      const continuation = vi.fn(() => ({ get: vi.fn(), set: vi.fn(), defaults: vi.fn(), setDefault: vi.fn() }))
+      Object.defineProperty(ctx.remote, 'githubCopilotSessionContinuation', { get: continuation })
       const dispose = await apply(ctx as never)
       const render = register.mock.calls.find(([options]) => options.name === slot)?.[1] as (props: object) => ReactElement
       const props = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, settingsNs: 'llm-pi-ai' }, configured: true }
@@ -1398,6 +1502,7 @@ describe('GitHub Copilot Models client', () => {
       for (let i = 0; i < 5; i++) {
         const next = render(props)
         expect(next.props.remote).toBe(first.props.remote)
+        expect(next.props.continuationRemote).toBe(first.props.continuationRemote)
         expect(next.props.seat).toBe(first.props.seat)
         surfaces.mount(next.props.seat, token, next.props.remote)
         expect(surfaces.getSnapshot()!.account).toBe(account)
@@ -1405,6 +1510,7 @@ describe('GitHub Copilot Models client', () => {
         expect(account.getSnapshot().view?.modelPreferences).toEqual(view.modelPreferences)
       }
       expect(namespace).toHaveBeenCalledTimes(1)
+      expect(continuation).toHaveBeenCalledTimes(1)
       expect(status).toHaveBeenCalledTimes(1)
       expect(ensureModels).not.toHaveBeenCalled()
       expect(discoverModels).not.toHaveBeenCalled()

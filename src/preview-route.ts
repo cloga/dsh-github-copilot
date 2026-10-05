@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { installReplayRecovery } from './replay-recovery-host.ts'
+import { installSessionContinuation } from './session-continuation-host.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Config as PiAiConfig, PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
@@ -972,13 +973,23 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   }
   const currentRuntime = (signal?: AbortSignal) => runtimeFor(requestBinding(signal))
   const directoryRuntime = () => runtimeFor(globalBinding())
-  const replayRecovery = installReplayRecovery(ctx, (agent?: Agent, request?: GenerateOptions) => {
+  const temporaryRecovery = installReplayRecovery(ctx, (agent?: Agent, request?: GenerateOptions) => {
     const accounts = ctx.get('githubCopilotSessionAccounts')
     const binding = agent !== undefined && accounts !== undefined
       ? accounts.bindingForAccount((accounts.turns.current(agent.session) ?? accounts.selected(agent)).accountId)
       : requestBinding(request?.signal)
     return runtimeFor(binding).proof()
   })
+  const continuation = installSessionContinuation(ctx)
+  const replayRecovery: ReturnType<typeof installReplayRecovery> = {
+    prepare(request) {
+      const portable = continuation.prepare(request)
+      const temporary = temporaryRecovery.prepare(request)
+      if (!portable) return temporary
+      return { transform: portable, rejected: body => temporary?.rejected(body) }
+    },
+    dispose() { temporaryRecovery.dispose(); continuation.dispose() },
+  }
   const initial = directoryRuntime()
   const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
     new AccountRoutingAdapter(initial.optionsFor(), currentRuntime))
