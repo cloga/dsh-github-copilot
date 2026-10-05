@@ -34,6 +34,7 @@ export function resolveSessionAccount(
 export class SessionAccountTurns {
   private readonly active = new Map<object, Admission>()
   private readonly signals = new WeakMap<AbortSignal, { agent: object; admission: Admission }>()
+  private readonly identities = new WeakMap<Admission, CopilotAccountIdentity>()
   private readonly history = new Map<object, Map<number, TurnAccountEvidence>>()
   admit(agent: object, turn: number, signal: AbortSignal, selection: SessionAccountSelection): Admission {
     if (!Number.isSafeInteger(turn) || turn < 0 || signal.aborted) throw new Error('COPILOT_SESSION_ACCOUNT_TURN_INVALID')
@@ -59,8 +60,10 @@ export class SessionAccountTurns {
       this.history.set(agent, turns)
       if (this.history.size > 64) this.history.delete(this.history.keys().next().value!)
     }
+    if (identity) this.captureIdentity(admission.signal, identity)
+    const captured = this.identities.get(admission)
     if (!turns.has(turn)) turns.set(turn, Object.freeze({ accountId: admission.accountId, source: admission.source,
-      ...identity ? { identity: Object.freeze({ ...identity }) } : {} }))
+      ...captured ? { identity: captured } : {} }))
     if (turns.size > 128) turns.delete(turns.keys().next().value!)
   }
   current(agent: object): Admission | undefined { return this.active.get(agent) }
@@ -88,5 +91,17 @@ export class SessionAccountTurns {
   recordSignal(signal: AbortSignal, identity?: CopilotAccountIdentity): void {
     const entry = this.signals.get(signal)
     if (entry && this.active.get(entry.agent) === entry.admission) this.record(entry.agent, entry.admission.turn, identity)
+  }
+  captureIdentity(signal: AbortSignal, identity: CopilotAccountIdentity): void {
+    const entry = this.signals.get(signal)
+    if (!entry || signal.aborted || this.active.get(entry.agent) !== entry.admission
+      || this.identities.has(entry.admission)) return
+    const captured = Object.freeze({ ...identity })
+    this.identities.set(entry.admission, captured)
+    const turns = this.history.get(entry.agent)
+    const evidence = turns?.get(entry.admission.turn)
+    if (turns && evidence && !evidence.identity) {
+      turns.set(entry.admission.turn, Object.freeze({ ...evidence, identity: captured }))
+    }
   }
 }

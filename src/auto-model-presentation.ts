@@ -173,19 +173,6 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   const [accountFailed, setAccountFailed] = React.useState(false)
   const [accountAttempt, setAccountAttempt] = React.useState(0)
   React.useEffect(() => {
-    setAccount(undefined)
-    setAccountFailed(false)
-    if (turn === undefined || sessionId === undefined || props.accountRemote === undefined) return
-    let active = true
-    void props.accountRemote.turn(sessionId, turn).then(result => {
-      if (!active) return
-      const parsed = result.ok ? TurnAccountViewSchema.safeParse(result.value) : undefined
-      if (parsed?.success) setAccount(parsed.data)
-      else { setAccountFailed(true); props.diagnostic('COPILOT_TURN_ACCOUNT_READ_FAILED') }
-    }, () => { if (active) { setAccountFailed(true); props.diagnostic('COPILOT_TURN_ACCOUNT_READ_FAILED') } })
-    return () => { active = false }
-  }, [props.accountRemote, sessionId, turn, props.diagnostic, accountAttempt])
-  React.useEffect(() => {
     setLive({ mode: 'unknown' })
     if (turn === undefined || sessionId === undefined || props.remote === undefined) {
       setReadState('failed')
@@ -216,6 +203,19 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   const native = record(props.tail) && record(props.tail.data) ? props.tail.data : undefined
   const nativeCompleted = native?.turn === turn && sequence(native?.seq)
   const completed = evidence?.ended === true || nativeCompleted
+  React.useEffect(() => {
+    setAccount(undefined)
+    setAccountFailed(false)
+    if (turn === undefined || sessionId === undefined || props.accountRemote === undefined) return
+    let active = true
+    void props.accountRemote.turn(sessionId, turn).then(result => {
+      if (!active) return
+      const parsed = result.ok ? TurnAccountViewSchema.safeParse(result.value) : undefined
+      if (parsed?.success) setAccount(parsed.data)
+      else { setAccountFailed(true); props.diagnostic('COPILOT_TURN_ACCOUNT_READ_FAILED') }
+    }, () => { if (active) { setAccountFailed(true); props.diagnostic('COPILOT_TURN_ACCOUNT_READ_FAILED') } })
+    return () => { active = false }
+  }, [props.accountRemote, sessionId, turn, props.diagnostic, accountAttempt, completed])
   const nativeRoutes = nativeCompleted && record(native?.tokenUsage) && Array.isArray(native.tokenUsage.routes)
     ? native.tokenUsage.routes : []
   const recorded = evidence?.routes.length ? evidence.routes : nativeRoutes.filter((route): route is { provider: string; model: string } =>

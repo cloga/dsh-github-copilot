@@ -28,7 +28,10 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
   const wireTokens: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input)
-    if (url === 'https://api.github.com/user') return Response.json({ login: 'synthetic-user', id: 2 })
+    if (url === 'https://api.github.com/user') {
+      const alice = new Headers(init?.headers).get('Authorization')?.endsWith(A)
+      return Response.json({ login: alice ? 'synthetic-a' : 'synthetic-b', id: alice ? 1 : 2 })
+    }
     if (url.endsWith('/models')) return Response.json({ data: [{
       id: MODEL, name: MODEL, model_picker_enabled: true, policy: { state: 'enabled' },
       supported_endpoints: [endpoint],
@@ -75,6 +78,7 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
     ctx.provide('githubCopilotSessionAccounts', owner)
     const session = { id: 'native-account-fixture' }
     const firstSignal = new AbortController().signal
+    expect((await accounts.ensureIdentityFor(A)).state).toBe('ready')
     owner.admit({ session }, 1, firstSignal)
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(previewPlugin, {})
@@ -95,7 +99,8 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
     }
     expect(first.finish).toEqual({ kind: 'stop' })
     expect(wireTokens).toEqual([expect.stringContaining(`synthetic-access-${A}`)])
-    expect(owner.turns.evidence(session, 1)).toEqual({ accountId: A, source: 'global' })
+    expect(owner.turns.evidence(session, 1)).toEqual({ accountId: A, source: 'global',
+      identity: { login: 'synthetic-a', userId: 1 } })
     owner.end(session, 1)
     const secondSignal = new AbortController().signal
     owner.admit({ session }, 2, secondSignal)

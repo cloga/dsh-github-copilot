@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.111 (prepared)
+
+- Retain verified saved-account display names beyond the ten-minute revalidation interval in bounded Host memory. Models and Session Credits resolve missing inactive account names without switching accounts; credential changes, removal and failed verification still invalidate names (#322).
+- Capture identity for the frozen admitted account and non-blockingly ensure missing identity once per active turn. Preserve the first verified name, require native delivery for execution evidence, and reject late/aborted/completed-turn enrichment. Refresh the account footer at native completion.
+- Keep existing strict Remote descriptors, credential ownership, model-access validation, history and Usage unchanged. No persistent name store, Core changes, live installation or restart.
+
 ## 0.4.0-alpha.110 (prepared)
 
 - Replace searchable account-switch forms with one compact anchored dropdown in Models and Chat: current-choice checkmark, bounded internal scrolling and Add account footer (#320).
