@@ -87,7 +87,13 @@ test.each([
       }
     }
     root.llm.registerAdapter([provider], new Adapter())
-    root.provide('githubCopilotPreview', { getView: () => ({ provider }) })
+    root.provide('githubCopilotPreview', {
+      getView: () => ({ provider }),
+      recoveryLimits: () => ({
+        limits: { contextWindow: 100000, maxInputTokens: 80000, maxTokens: 8192 },
+        policy: { safetyTokens: 0 }, assertCurrent: () => {},
+      }),
+    })
     let pressure = false
     installCopilotCompactionPressure(root, {
       resolve: () => pressure ? { inputBudgetTokens: 1000 } : undefined,
@@ -105,6 +111,10 @@ test.each([
       expect(agent.ctx.get('compaction')).toBeUndefined()
       const engine = root.agentPresets.serviceFor(agent, 'compaction')
       expect(engine === undefined ? undefined : engine instanceof BasicCompaction && engine.config.auto).toBe(index === 3 ? undefined : index !== 1)
+      if (engine instanceof BasicCompaction) {
+        expect(engine.config).toMatchObject({ ...policy, auto: index !== 1, maxOverflowRetries: index === 2 ? 0 : 1 })
+        expect(engine.config).not.toHaveProperty('automaticRecovery')
+      }
       root.agents.withInitiator(agent, () => {
         const current = root.agentPresets.serviceFor(root.agents.requireInitiator(), 'compaction')
         expect(current === undefined ? undefined : current instanceof BasicCompaction && current.config.auto).toBe(index === 3 ? undefined : index !== 1)

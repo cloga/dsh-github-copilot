@@ -56,7 +56,7 @@ Disabled auto recovery or zero retries are respected. Missing/mismatching option
 
 On official `0.2.0-rc.2`, Desktop presets may isolate `compaction` inside a child group, invisible to both the global plugin context and a plain `agent.ctx.get('compaction')`. The plugin uses the public `agentPresets.composedPreset()` and `serviceFor(agent, 'compaction')` methods to resolve the initiating Agent's current preset engine. A bound preset with no engine remains unavailable; it never borrows another scope's policy. Only an Agent without a bound preset uses its own context lookup. The lookup is repeated rather than caching a replaced engine. Auto's recovery-availability diagnostic uses the same helper.
 
-This fixes scope wiring, not a new automatic command: native pressure and `agent/request-error` still invoke the selected engine. Neither `/compact` nor `/copilot-compact` is called by this listener. If the optional manual recovery engine is selected, its automatic path remains the native single-summary path; segmented recovery stays manual-only. Ordinary timeout/transport failures do not become context overflow.
+This fixes scope wiring, not a new automatic command: native pressure and `agent/request-error` still invoke the selected engine. Neither `/compact` nor `/copilot-compact` is called by this listener. If the recovery engine is selected, automatic segmentation defaults on for known oversized summary input or one exact native summary capacity failure, within the same native transaction. `automaticRecovery: false` restores its automatic single-summary path; native `auto: false` and retry bounds remain authoritative. Ordinary timeout/transport failures do not become context overflow.
 
 ## Summary purpose policy
 
@@ -102,7 +102,7 @@ On official `0.2.0-rc.2`, the stock summarizer uses an explicitly configured sum
 
 Official configuration already supports a separate summary route and output cap. Selecting a suitable authorized route/cap is an explicit deployment choice, not an automatic fallback. Increasing the output cap consumes combined-context headroom; decreasing it can reproduce the observed incomplete-checkpoint failure.
 
-An explicit, separately selected recovery engine for compressible already-oversized **manual** summaries is specified in [manual compaction recovery](./manual-compaction-recovery.md). The default Basic engine and the preventive request guard remain unchanged. No hidden wire interceptor or automatic summary retry is used; the native summary event is unmarked when several real calls contributed to one checkpoint.
+A separately selected recovery engine for compressible already-oversized manual and automatic summaries is specified in [compaction recovery](./manual-compaction-recovery.md). The stock Basic engine and preventive request guard remain unchanged. Selection requires explicit same-scope configuration migration, not installation alone. The selected engine bounds segmentation to 16 physical calls including an initial capacity failure; no hidden wire interceptor, arbitrary-error fallback or recursive retry is used. The native summary event is unmarked when several real calls contributed to one checkpoint.
 
 ## Official-first evidence and retirement
 
