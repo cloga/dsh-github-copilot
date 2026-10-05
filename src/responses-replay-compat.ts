@@ -216,14 +216,18 @@ export class ResponsesRetryReplay {
           normalized = JSON.parse(eligible.normalized) as unknown
           reused = true
         }
-        if (transform !== undefined) normalized = transform(normalized)
-        payloadBytes = cacheBytes(normalized)
-        candidate = signal === undefined || !sessionId || !modelId || contextBytes === undefined || rawBytes === undefined || payloadBytes === undefined
-          ? undefined : { raw: JSON.parse(rawBytes) as Record<string, unknown>, normalized: payloadBytes,
-          context: contextBytes, signal, sessionId, modelId, at: Date.now() }
-        // Keep the full original request, not a reference-only retry, for a subsequent 408.
-        if (reused && eligible) candidate = { ...eligible, at: Date.now() }
-        return normalized
+        const complete = (finalPayload: unknown): unknown => {
+          if (this.disposed || signal?.aborted || finished) throw new CopilotResponsesReplayError()
+          payloadBytes = cacheBytes(finalPayload)
+          candidate = signal === undefined || !sessionId || !modelId || contextBytes === undefined || rawBytes === undefined || payloadBytes === undefined
+            ? undefined : { raw: JSON.parse(rawBytes) as Record<string, unknown>, normalized: payloadBytes,
+            context: contextBytes, signal, sessionId, modelId, at: Date.now() }
+          // Keep the full original request, not a reference-only retry, for a subsequent 408.
+          if (reused && eligible) candidate = { ...eligible, at: Date.now() }
+          return finalPayload
+        }
+        const transformed = transform === undefined ? normalized : transform(normalized)
+        return transformed instanceof Promise ? transformed.then(complete) : complete(transformed)
       },
       observe: (body, status) => {
         observed = true

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.112"
+    "version": "0.4.0-alpha.113"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -756,6 +756,7 @@
       "liveEndpointAcceptance": "not-claimed",
       "sourceMarkers": [
         {"file": "src/session-continuation.ts", "marker": "class SessionContinuationTurn"},
+        {"file": "src/session-continuation.ts", "marker": "COPILOT_CONTINUATION_REASONING_WORK_LIMIT"},
         {"file": "src/session-continuation-host.ts", "marker": "path: ['continuationDefaultHistory']"},
         {"file": "src/session-continuation-host.ts", "marker": "COPILOT_CONTINUATION_TURN_BOUNDARY_UNAVAILABLE"},
         {"file": "src/session-continuation-remote.ts", "marker": "authorizeNext"},
@@ -767,6 +768,10 @@
       "tests": [
         {"file": "tests/account-dropdown.spec.ts", "name": "supports arrows, Home, End and Escape without closing the containing Chat panel"},
         {"file": "tests/session-continuation.spec.ts", "name": "continues A-B-B-A by omitting pre-turn reasoning while retaining new tool-loop reasoning"},
+        {"file": "tests/session-continuation.spec.ts", "name": "does not traverse or serialize ordinary contents when a request exceeds 16 MiB"},
+        {"file": "tests/session-continuation.spec.ts", "name": "omits large historical ciphertext without a whole-request byte cap"},
+        {"file": "tests/session-continuation.spec.ts", "name": "yields during ciphertext hashing and rejects revocation without establishing a baseline"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "compacts and rebuilds an Auto request with large historical continuation reasoning, continuing=%s"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "enables only persistent Session continuation after loss disclosure, without legacy authorization or sending"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "does not reauthorize an already enabled policy or change it when failure evidence expires"},
         {"file": "tests/session-continuation.spec.ts", "name": "does not replay baseline ciphertext after its ID or embedded summary changes"},

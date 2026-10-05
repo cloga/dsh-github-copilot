@@ -258,6 +258,13 @@ Never say GPT-6/search works merely because settings, typecheck or a package imp
 
 ## Changing capabilities
 
+Continuation processing is reasoning-only: never recursively traverse or serialize
+ordinary payload content to impose a whole-request limit. Preserve bounded
+top-level item/ciphertext work, yielding cancellation and turn-revocation checks,
+atomic baseline initialization and awaited final-byte retry evidence. Native token
+admission and automatic-compaction transactions/rebuild stay independent; never
+classify a continuation processing bound as context overflow.
+
 Context evidence and replay recovery use the public full-width `conversation.input.dock`
 above the composer, with shared native secondary typography. Do not restore long
 notices to the nonwrapping statistics row or mutate its parent DOM. Scope errors

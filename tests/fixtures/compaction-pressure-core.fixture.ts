@@ -30,6 +30,7 @@ import { installCopilotCompactionPressure } from '../../src/compaction-pressure.
 import { installCopilotPreStepPressure } from '../../src/pre-step-pressure.ts'
 import { installAutoModelRouting } from '../../src/auto-model-host.ts'
 import { estimateTurnInputTokens } from '../../src/auto-model-routing.ts'
+import { installSessionContinuation } from '../../src/session-continuation-host.ts'
 import CopilotManualRecoveryCompactionEngine from '../../src/manual-compaction-recovery.ts'
 import previewPlugin from '../../src/preview-route.ts'
 import type { AccountModelDescriptor } from '../../src/account-model-catalog.ts'
@@ -94,6 +95,8 @@ class FixtureAdapter extends LlmAdapter {
   readonly conversation: RequestObservation[] = []
   readonly summaries: RequestObservation[] = []
   readonly summaryStarted = Promise.withResolvers<void>()
+  continuation?: ReturnType<typeof installSessionContinuation>
+  readonly continued: unknown[] = []
 
   constructor(readonly summaryMode: SummaryMode) { super() }
 
@@ -123,6 +126,11 @@ class FixtureAdapter extends LlmAdapter {
         }
       }
     } else {
+      const transform = this.continuation?.prepare(options)
+      if (transform) this.continued.push(await transform({ input: [
+        { type: 'reasoning', encrypted_content: 'x'.repeat(17 * 1024 * 1024), summary: [] },
+        { type: 'message', content: requestText(options) },
+      ] }))
       this.conversation.push(observeRequest(options))
     }
     if (options.signal?.aborted) {
@@ -353,18 +361,64 @@ function compactionEvents(events: readonly SessionEvent[]): SessionEvent[] {
   return events.filter(event => event.type === 'compaction/start' || event.type === 'compaction/summary' || event.type === 'compaction/end')
 }
 
+function installController(ctx: Context): void {
+  const forbidden = vi.fn(async (): Promise<never> => { throw new Error('no native open') })
+  const register = () => () => {}
+  ctx.provide('typert', {
+    lookups: { configure: register, register },
+    contexts: { configureHost: register, registerHost: register },
+  })
+  ctx.provide('fileUploads', { registerAgentResolver: register })
+  ctx.provide('agentDefaultModel', { currentSelection: () => undefined, saveSelection: forbidden })
+  new SessionController(ctx, { nativeOpen: false }, { canOpenPath: () => false, openPath: forbidden })
+}
+
 describe('alpha2 stock compaction driven by the Copilot local pressure signal', () => {
+  it.each([false, true])('compacts and rebuilds an Auto request with large historical continuation reasoning, continuing=%s', async continuing => {
+    const f = await fixture()
+    installController(f.ctx)
+    const value = {
+      continuationDefaultHistory: [{ enabled: false, changedAt: 0 }],
+      sessionContinuation: [{ sessionId: f.agent.session.id, version: 1, enabled: true, consentedAt: 1 }],
+    }
+    f.ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', value, revision: 1 }] })
+    const owner = installSessionContinuation(f.ctx)
+    f.ctx.effect(() => () => owner.dispose())
+    await owner.ready
+    f.adapter.continuation = owner
+    const budget = continuing ? f.originalTokens + 200 : 1000
+    const selectedModel = continuing ? 'fixture-model-A' : 'fixture-model-B'
+    f.enable(budget, selectedModel)
+    if (continuing) {
+      f.ctx.tools.register(defineTool({
+        name: 'pressure_fixture_tool', description: 'Synthetic continuation pressure.',
+        parameters: {}, output: { schema: { type: 'string' }, render: (_args, text) => [{ type: 'text', text }] },
+        execute: async () => 'synthetic tool output '.repeat(100),
+      }))
+      f.adapter.nextTool = true
+      installCopilotPreStepPressure(f.ctx, { resolve: () => ({ inputBudgetTokens: budget }) })
+    }
+    f.send(`${currentSentinel}: continue after native compaction`)
+    await f.agent.whenIdle()
+    expect(f.currentEvents().at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
+    expect(f.adapter.summaries).toHaveLength(1)
+    expect(f.adapter.continued).toHaveLength(continuing ? 2 : 1)
+    expect(f.adapter.continued.at(-1)).toEqual({ input: [
+      { type: 'message', content: expect.stringContaining(checkpoint) },
+    ] })
+    expect(f.adapter.conversation.at(-1)?.text).not.toContain(oldSentinel)
+    expect(f.adapter.conversation.at(-1)?.model).toBe(selectedModel)
+    expect(f.agent.session.surface.replaceGeneration).toBeGreaterThan(f.originalGeneration)
+    expect(replacements(f.currentEvents())).toHaveLength(1)
+    expect(compactionEvents(f.currentEvents()).map(event => event.type)).toEqual(['compaction/start', 'compaction/summary', 'compaction/end'])
+    expect(f.failures).toHaveLength(continuing ? 0 : 1)
+    expect(f.failures.every(failure => failure.code === 'CONTEXT_WINDOW_EXCEEDED')).toBe(true)
+    expect(f.forbiddenFetch).not.toHaveBeenCalled()
+  })
+
   it.each([false, true])('prevents continuing-step pressure attempts while retaining complete native turn usage, preStep=%s', async preStep => {
     const f = await fixture()
-    const forbidden = vi.fn(async (): Promise<never> => { throw new Error('no native open') })
-    const register = () => () => {}
-    f.ctx.provide('typert', {
-      lookups: { configure: register, register },
-      contexts: { configureHost: register, registerHost: register },
-    })
-    f.ctx.provide('fileUploads', { registerAgentResolver: register })
-    f.ctx.provide('agentDefaultModel', { currentSelection: () => undefined, saveSelection: forbidden })
-    new SessionController(f.ctx, { nativeOpen: false }, { canOpenPath: () => false, openPath: forbidden })
+    installController(f.ctx)
     f.ctx.tools.register(defineTool({
       name: 'pressure_fixture_tool', description: 'Synthetic pressure output.',
       parameters: {}, output: { schema: { type: 'string' }, render: (_args, text) => [{ type: 'text', text }] },

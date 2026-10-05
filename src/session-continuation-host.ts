@@ -108,7 +108,7 @@ function resolveEnabled(agent: Agent, value: unknown): boolean {
 }
 export function installSessionContinuation(ctx: Context): {
   ready: Promise<void>
-  prepare(request: GenerateOptions): ((payload: unknown) => unknown) | undefined
+  prepare(request: GenerateOptions): ((payload: unknown) => Promise<unknown>) | undefined
   dispose(): void
 } {
   if (!ctx.get('settings')) {
@@ -167,10 +167,10 @@ export function installSessionContinuation(ctx: Context): {
       const current = () => !disposed && !request.signal!.aborted && active.get(session) === admission
         && admission.signal === request.signal
       if (!current()) throw new Error('COPILOT_CONTINUATION_REVOKED')
-      return payload => {
+      const assertCurrent = () => {
         if (!current()) throw new Error('COPILOT_CONTINUATION_REVOKED')
-        return admission.filter.transform(payload)
       }
+      return payload => admission.filter.transform(payload, assertCurrent)
     },
     dispose() { disposed = true; removeRequest(); removeEvents(); removeAgent(); active.clear(); once.clear() },
   }

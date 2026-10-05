@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.113 (prepared)
+
+- Remove the continuation filter's whole-request 16 MiB refusal and recursive payload traversal. Large ordinary tool/image content is preserved; old encrypted reasoning is processed independently (#326).
+- Bound reasoning count and ciphertext work, yield during hashing, and recheck request/turn cancellation before atomically establishing the baseline. Await filtering before exact native 408 retry-byte bookkeeping.
+- Verify first-step and continuing-step native automatic compaction with Auto, durable in-memory summary replacement, fresh request rebuild and large historical reasoning. Preserve native token admission, disabled-auto/missing-engine behavior, summary failures and retry bounds; do not misclassify processing bytes as token pressure.
+- No Core changes, automatic sends, live-history replay, installation or restart.
+
 ## 0.4.0-alpha.112 (prepared)
 
 - Back the shared Models/Chat account dropdown's translucent native menu token with opaque Canvas. Underlying settings and quota text no longer bleed through in dark mode (#324).

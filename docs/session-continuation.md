@@ -67,21 +67,36 @@ published adapter/SDK's payload hook filters the normalized payload. Only
 unbound requests and other protocols remain native. Cold mid-turn recovery
 without a first-step boundary fails explicitly.
 
-The fingerprint baseline is bounded to 4096 distinct items, 65536 traversed
-values, depth 64 and 16 MiB serialized payload. Unsupported reasoning, malformed
-settings, missing boundaries and exhausted limits produce named diagnostics,
-not partial filtering or guessed success. Credentials, account entitlement,
-model capabilities and cancellation remain independently guarded.
+The filter scans at most 65536 top-level input items and 4096 reasoning items
+(including duplicates). Only encrypted reasoning is hashed, with an aggregate
+64 Mi UTF-16-code-unit processing bound per invocation and 64 Ki-code-unit chunks
+that yield to cancellation and turn revocation. These are plugin work bounds,
+not supplier byte/token limits. Ordinary tool output, images, nested content,
+system and tool definitions are neither traversed nor serialized by this filter;
+there is no whole-request 16 MiB continuation cap. Failed, cancelled, overlapping
+or revoked processing cannot partially initialize the baseline. Unsupported
+reasoning, malformed settings, missing boundaries and exhausted work bounds
+produce named diagnostics, not partial filtering or guessed success.
+Credentials, account entitlement and model capabilities remain independently guarded.
 
 Native retry normalization retains raw reference-restoration evidence but records
 the final filtered bytes for exact 408 matching. No new retry loop is introduced.
 Input admission still precedes payload filtering: this is not an oversized-context,
 quota, upload-timeout, compaction or native context-meter repair.
+Actual token pressure still uses the initiating Agent's enabled native compaction
+engine and bounded recovery: commit the native summary, rebuild the request, then
+apply continuation. A continuation work-bound error is not relabeled as context
+overflow. Disabled automatic compaction, missing engines, cancellation, failed or
+insufficient summaries remain explicit limitations, not permission to trim history.
 
 ## Evidence limits
 
 Synthetic account transitions, source/Host/UI tests and exact-source native
 gateway/persistence fixtures are distinct from real supplier acceptance.
+The native compaction fixture covers first-step overflow and continuing-step
+prevention with Auto, a durable in-memory replacement, rebuilt visible history
+and synthetic historical reasoning larger than 16 MiB. It uses an external-model
+double; it does not prove real supplier acceptance or recovery of a live Session.
 Publication, installation, loaded runtime and controlled live A-B-B-A success
 must be reported separately. Enabling this product mode is not authorized by
 implementing it; live existing Sessions still require explicit loss consent.

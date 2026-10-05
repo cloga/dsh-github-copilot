@@ -35,12 +35,14 @@ async function checkPersistence() {
     await ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal: first.signal },
       async () => ({ provider: 'github-copilot-preview', model: 'synthetic-model' }))
     const prepared = owner.prepare(request(first.signal))!
-    expect(prepared(body)).toEqual({ input: [] })
+    expect(await prepared(body)).toEqual({ input: [] })
     await ctx.githubCopilotSessionContinuation.set(agent, revision, false)
     expect(await ctx.githubCopilotSessionContinuation.get(agent)).toMatchObject({ enabled: false, activeTurnEnabled: true })
-    expect(prepared(body)).toEqual({ input: [] })
+    expect(await prepared(body)).toEqual({ input: [] })
+    const inFlight = prepared({ input: [{ ...body.input[0], encrypted_content: 'x'.repeat(17 * 1024 * 1024) }] })
     ctx.emit('session/event', agent.session, { type: 'turn/end', data: { turn: 1 } } as never)
-    expect(() => prepared(body)).toThrow('REVOKED')
+    await expect(inFlight).rejects.toThrow('REVOKED')
+    await expect(prepared(body)).rejects.toThrow('REVOKED')
     const second = new AbortController()
     await ctx.waterfall(scope, 'agent/request', { agent, turn: 2, step: 1, signal: second.signal },
       async () => ({ provider: 'github-copilot-preview', model: 'synthetic-model' }))

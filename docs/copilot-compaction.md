@@ -1,5 +1,12 @@
 # Managed Copilot compaction budgets
 
+Visible-history continuation does not impose a whole-request byte cap. Its
+reasoning-only cancellable work bounds are separate from native token admission;
+neither ciphertext length nor `COPILOT_CONTINUATION_REASONING_WORK_LIMIT` is
+classified as context overflow. Enabled native automatic compaction still owns
+summary commit and request rebuild before continuation filters the new payload.
+See [continuation safety and evidence](./session-continuation.md#public-integration-and-safety).
+
 Tracking: [#146](https://github.com/cloga/dsh-github-copilot/issues/146). This is a plugin-only implementation; publication, loaded-runtime state and live-provider acceptance remain separate evidence.
 
 ## Why two protections are needed
