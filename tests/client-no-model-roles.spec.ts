@@ -24,6 +24,7 @@ const footerSlot = 'settings.models.footer'
 const sectionSlot = 'settings.section'
 const providerSlot = 'settings.models.provider-card'
 const usageSlot = 'conversation.composer.dock'
+const noticeSlot = 'conversation.input.dock'
 
 async function fixture(footer: boolean, legacyRemote: boolean) {
   const root = new Context()
@@ -31,7 +32,7 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
   const registrations = new Map<string, Registration>()
   const attempts: Seat[] = []
   const watchers = new Set<{ name: string; activate: () => void; deactivate: () => void }>()
-  const declared = new Set([sectionSlot, providerSlot, usageSlot, ...footer ? [footerSlot] : []])
+  const declared = new Set([sectionSlot, providerSlot, usageSlot, noticeSlot, ...footer ? [footerSlot] : []])
   const legacyCalls = { view: vi.fn(), save: vi.fn(), create: vi.fn() }
   const disposeRemote = vi.fn()
   class Remote extends NamedService {
@@ -53,7 +54,7 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
   class Slots extends NamedService {
     constructor(ctx: Context) { super(ctx, 'slots') }
     spec(name: string) {
-      return { kind: name === providerSlot ? 'keyed' : 'list', scope: name === usageSlot ? 'session' : 'root' }
+      return { kind: name === providerSlot ? 'keyed' : 'list', scope: name === usageSlot || name === noticeSlot ? 'session' : 'root' }
     }
     inject(name: string, callback: () => () => void) {
       return this.ctx.effect(() => {
@@ -93,7 +94,7 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
   const mounted = root.plugin({ inject: client.inject, apply: client.apply })
   await mounted
   await vi.waitFor(() => expect(registrations.has(`${usageSlot}:github-copilot-usage`)).toBe(true))
-  await vi.waitFor(() => expect(registrations.has(`${usageSlot}:github-copilot-context-evidence`)).toBe(true))
+  await vi.waitFor(() => expect(registrations.has(`${noticeSlot}:github-copilot-context-evidence`)).toBe(true))
   const setFooter = (enabled: boolean) => {
     if (enabled) declared.add(footerSlot)
     else declared.delete(footerSlot)
@@ -114,7 +115,7 @@ function expectOnlyRetainedUi(f: Fixture, footer: boolean) {
   expect([...f.registrations.keys()].sort()).toEqual([
     `${providerSlot}:llm-pi-ai`, `${settingsSlot}:${accountId}`,
     `${settingsSlot}:github-copilot-search-routing`, `${usageSlot}:github-copilot-usage`,
-    `${usageSlot}:github-copilot-context-evidence`,
+    `${noticeSlot}:github-copilot-context-evidence`,
   ].sort())
   // Adjacent positive assertions rule out an unactivated Client or empty registry.
   const account = f.registrations.get(`${settingsSlot}:${accountId}`)!.render({})!
@@ -129,7 +130,7 @@ function expectOnlyRetainedUi(f: Fixture, footer: boolean) {
   expect(f.registrations.get(`${usageSlot}:github-copilot-usage`)!.render({
     sessionId: 'existing-session', useSession: () => undefined, useProjection: () => undefined,
   })).not.toBeNull()
-  expect(f.registrations.get(`${usageSlot}:github-copilot-context-evidence`)!.render({
+  expect(f.registrations.get(`${noticeSlot}:github-copilot-context-evidence`)!.render({
     sessionId: 'existing-session', useSession: () => undefined, useProjection: () => undefined,
   })).not.toBeNull()
   // Inspect every attempted registration, not only the final active map: a

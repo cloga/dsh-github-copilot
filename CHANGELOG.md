@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.108 (prepared)
+
+- Align context evidence and replay recovery with native secondary typography throughout, including explanations and controls. Use the public full-width input dock above the composer instead of the non-wrapping statistics row (#315).
+- Replace verbose replay-scope failure text with concise account/connection guidance, explicit recovery consent and a new-conversation alternative. Retain bounded sanitized dispatch counts separately in Host diagnostics; do not infer which encrypted item failed.
+- Keep recovery default-off and lossy, with unchanged duration, expiry, native Send/Retry and stored-history semantics. No automatic replay, account reset, history deletion or Core change.
+
 ## 0.4.0-alpha.107 (prepared)
 
 - Present an in-flight multi-account device authorization as progress with the verification URL, one-time code, copy action and cancel together; distinguish Host-confirmed post-OAuth identity/model verification from pending authorization. Adding an account never changes the global default.

@@ -768,6 +768,10 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     const enabled = (settings?.chatStreamLiveness ?? streamLiveness ?? true)
       && (template.transport === undefined || template.transport === 'sse')
     const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...hooks,
+      onReplayFailure(error) {
+        if (error.dispatchEvidence !== undefined) ctx.logger.warn(`[github-copilot] ${error.dispatchEvidence}`)
+        hooks.onReplayFailure?.(error)
+      },
       ...enabled ? { streamIdleTimeoutMs: idle } : {},
       onUnauthorized() {
         // A late response from before sign-in, refresh or disposal cannot retire

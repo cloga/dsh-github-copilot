@@ -21,11 +21,15 @@ describe('verified replay scope dispatch evidence', () => {
     const error = new CopilotResponsesReplayError('scope-mismatch', { body,
       sessionHeader: true, clientRequestHeader: false })
     expect(error.message).toContain('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH')
-    expect(error.message).toContain('items=6, directIds=2, references=1, encryptedReasoning=1, otherItems=1')
-    expect(error.message).toContain('previousResponse=present, store=false')
-    expect(error.message).toContain('sessionHeader=present, clientRequestHeader=absent')
+    expect(error.dispatchEvidence).toContain('items=6, directIds=2, references=1, encryptedReasoning=1, otherItems=1')
+    expect(error.dispatchEvidence).toContain('previousResponse=present, store=false')
+    expect(error.dispatchEvidence).toContain('sessionHeader=present, clientRequestHeader=absent')
+    expect(error.message).not.toContain('items=')
+    expect(error.message).toContain('another account or connection')
+    expect(error.message).toContain('Review Replay recovery options')
+    expect(error.message).toContain('stored history is unchanged')
     expect(error.message).not.toContain('secret')
-    expect(error.message.length).toBeLessThan(900)
+    expect(error.message.length).toBeLessThan(260)
     expect(JSON.stringify(error)).not.toContain('secret')
   })
 
@@ -33,9 +37,9 @@ describe('verified replay scope dispatch evidence', () => {
     const error = new CopilotResponsesReplayError('scope-mismatch', { body: JSON.stringify({
       input: [{ type: 'reasoning', encrypted_content: 'secret-opaque' }], store: false,
     }), sessionHeader: false, clientRequestHeader: false })
-    expect(error.message).toContain('directIds=0, references=0, encryptedReasoning=1')
-    expect(error.message).toContain('Counts do not identify the rejected item or prove opaque replay is portable.')
-    expect(error.message).toContain('sessionHeader=absent, clientRequestHeader=absent')
+    expect(error.dispatchEvidence).toContain('directIds=0, references=0, encryptedReasoning=1')
+    expect(error.dispatchEvidence).toContain('Counts do not identify the rejected item or prove opaque replay is portable.')
+    expect(error.dispatchEvidence).toContain('sessionHeader=absent, clientRequestHeader=absent')
   })
 
   it.each([
@@ -48,15 +52,16 @@ describe('verified replay scope dispatch evidence', () => {
     [JSON.stringify({ input: [{ role: 'user', content: 'x'.repeat(16 * 1024 * 1024) }] }), 'size-limit'],
   ])('keeps unavailable or bounded-out dispatch evidence explicit (case %#)', (body, state) => {
     const error = new CopilotResponsesReplayError('scope-mismatch', { body })
-    expect(error.message).toContain(`Replay structure unavailable (${state})`)
-    expect(error.message).not.toContain('directIds=0')
-    expect(error.message).toContain('sessionHeader=unavailable')
+    expect(error.dispatchEvidence).toContain(`Replay structure unavailable (${state})`)
+    expect(error.dispatchEvidence).not.toContain('directIds=0')
+    expect(error.dispatchEvidence).toContain('sessionHeader=unavailable')
     expect(error.message).not.toContain('secret')
   })
 
-  it('does not change historical or non-scope diagnostics without dispatch evidence', () => {
+  it('uses the same concise scope explanation without inventing evidence and preserves non-scope diagnostics', () => {
+    expect(new CopilotResponsesReplayError('scope-mismatch').dispatchEvidence).toBeUndefined()
     expect(new CopilotResponsesReplayError('scope-mismatch').message)
-      .toBe('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: Copilot Responses input references belong to a different connection.')
+      .toBe(new CopilotResponsesReplayError('scope-mismatch', { body: '{"input":[]}' }).message)
     expect(new CopilotResponsesReplayError('unsupported', { body: '{"input":[]}' }).message)
       .toBe(new CopilotResponsesReplayError('unsupported').message)
   })
@@ -66,8 +71,8 @@ describe('verified replay scope dispatch evidence', () => {
       input: [{ type: { toString: null }, role: { toString: 'secret' }, metadata: { id: 'secret' } }],
       previous_response_id: {}, store: 'secret',
     }) })
-    expect(error.message).toContain('items=1, directIds=0, references=0, encryptedReasoning=0, otherItems=1')
-    expect(error.message).toContain('previousResponse=invalid, store=invalid')
+    expect(error.dispatchEvidence).toContain('items=1, directIds=0, references=0, encryptedReasoning=0, otherItems=1')
+    expect(error.dispatchEvidence).toContain('previousResponse=invalid, store=invalid')
     expect(error.message).not.toContain('secret')
   })
 })
@@ -422,7 +427,7 @@ describe('Copilot Responses wire replay normalization', () => {
     expect(new CopilotResponsesReplayError().message).toBe('COPILOT_RESPONSES_REPLAY_UNSUPPORTED: Copilot Responses input cannot be replayed safely without connection-scoped references.')
     expect(new CopilotResponsesReplayError('scope-mismatch')).toMatchObject({
       name: 'CopilotResponsesReplayError',
-      message: 'COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: Copilot Responses input references belong to a different connection.',
+      message: new CopilotResponsesReplayError('scope-mismatch').message,
     })
     expect(new CopilotResponsesReplayError('invalid-payload').message).toBe('COPILOT_RESPONSES_REPLAY_INVALID_PAYLOAD: Copilot Responses payload has an invalid replay structure.')
   })

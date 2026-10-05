@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.107"
+    "version": "0.4.0-alpha.108"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -371,12 +371,16 @@
         {"file": "src/index.ts", "marker": "installContextEvidence(ctx)"},
         {"file": "src/client.ts", "marker": "registerContextEvidenceUi"},
         {"file": "src/context-evidence.ts", "marker": "githubCopilotContextEvidence"},
+        {"file": "src/context-evidence-ui.ts", "marker": "conversation.input.dock"},
+        {"file": "src/replay-recovery-ui.ts", "marker": "conversation.input.dock"},
+        {"file": "src/composer-notice-style.ts", "marker": "var(--dsh-content-font-size-secondary, 13px)"},
         {"file": "docs/copilot-usage.md", "marker": "historical input sample, not current occupancy"}
       ],
       "tests": [
         {"file": "tests/context-usage.spec.ts", "name": "classifies zero only for separate historical evidence without changing the sample"},
         {"file": "tests/context-evidence.spec.ts", "name": "replays failed zero samples without discarding the last valid input sample"},
         {"file": "tests/context-evidence-ui.spec.ts", "name": "labels counts as historical rather than current occupancy in %s"},
+        {"file": "tests/replay-recovery-ui.spec.ts", "name": "uses native auxiliary typography for the entire notice and inherited controls in an independent dock row"},
         {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "cold-folds native model selections independently without replacing the controller projection"},
         {"file": "tests/preview-route.spec.ts", "name": "forwards native SDK failed zero usage without changing the shared accounting stream"},
         {"file": "tests/preview-route.spec.ts", "name": "preserves native cancellation usage on %s (%s input tokens)"},
