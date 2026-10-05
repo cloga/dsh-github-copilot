@@ -10,6 +10,15 @@ const controlStyle: CSSProperties = {
   borderRadius: '8px', padding: '7px 12px', minHeight: '36px',
 }
 
+interface PreferenceEdit {
+  readonly modelId: string
+  readonly restore: boolean
+  readonly marking: boolean | undefined
+  readonly resolve: () => void
+}
+
+const MAX_QUEUED_EDITS = 32
+
 function preferenceMessage(code: string): string {
   switch (code) {
     case 'COPILOT_MODEL_SETTINGS_UNAVAILABLE':
@@ -24,6 +33,10 @@ function preferenceMessage(code: string): string {
       return 'Settings changed elsewhere. Review the current list before trying again.'
     case 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED':
       return 'Could not confirm the change. Retry to read the saved settings before trying again.'
+    case 'COPILOT_MODEL_PREFERENCE_QUEUE_FULL':
+      return 'Too many edits are waiting. Let the current saves finish before changing another model.'
+    case 'COPILOT_MODEL_PREFERENCE_EDITS_CANCELLED':
+      return 'Settings or the connection changed. Waiting edits were not sent. Retry to read saved settings before editing again.'
     default:
       return 'The Host did not provide model preferences. Models are read-only. Retry; if this persists, check that Host and Client are running the same plugin version.'
   }
@@ -39,17 +52,31 @@ export function GitHubCopilotModelPreferencesPanel(props: {
   const [preferences, setPreferences] = useState(props.preferences)
   const [models, setModels] = useState(props.models)
   const [busyModel, setBusyModel] = useState<string>()
+  const [queuedModels, setQueuedModels] = useState<string[]>([])
   const [error, setError] = useState<string>()
   const [errorModel, setErrorModel] = useState<string>()
-  const request = useRef({ generation: 0, pending: false })
+  const request = useRef({ generation: 0, pending: false, failed: false, cancelled: false, queue: [] as PreferenceEdit[], active: '' })
+  const metadata = useRef(props.models)
+  metadata.current = props.models
+  const preferenceKey = JSON.stringify(props.preferences)
   useEffect(() => {
     const scope = request.current
     scope.generation++
     scope.pending = false
-    setPreferences(props.preferences); setModels(props.models)
-    setError(undefined); setErrorModel(undefined); setBusyModel(undefined)
-    return () => { scope.generation++; scope.pending = false }
-  }, [props.preferences, props.models, props.remote])
+    scope.failed = scope.cancelled
+    scope.active = ''
+    setPreferences(props.preferences)
+    setError(scope.cancelled ? 'COPILOT_MODEL_PREFERENCE_EDITS_CANCELLED' : undefined)
+    scope.cancelled = false
+    setErrorModel(undefined); setBusyModel(undefined)
+    setQueuedModels([])
+    return () => {
+      scope.cancelled = scope.pending && scope.queue.length > 0
+      scope.generation++; scope.pending = false
+      for (const edit of scope.queue.splice(0)) edit.resolve()
+    }
+  }, [preferenceKey, props.remote])
+  useEffect(() => { setModels(props.models) }, [props.models])
   const available = models?.models ?? []
   const availabilityKnown = models?.state === 'ready'
   const settingsKnown = preferences !== undefined && preferences.revision !== undefined
@@ -75,43 +102,88 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     && (needle.length === 0 || model.id.toLocaleLowerCase().includes(needle) || model.name.toLocaleLowerCase().includes(needle)))
   const visibleCount = available.filter(model => !excluded.has(model.id)).length
   const unavailableCount = rows.filter(model => !model.available).length
-  const update = async (modelId?: string, restore = false, marking?: boolean): Promise<void> => {
+  const save = async (modelId?: string, restore = false, marking?: boolean): Promise<boolean> => {
     const scope = request.current
-    if (scope.pending || modelId !== undefined && !writable) return
-    scope.pending = true
-    const generation = ++scope.generation
+    const generation = scope.generation
+    const capturedMetadata = metadata.current
     const current = () => scope.generation === generation
     setBusyModel(modelId ?? ''); setError(undefined); setErrorModel(modelId)
     try {
       if (modelId !== undefined) {
         const result = marking === undefined ? await props.remote.setModelExcluded(modelId, !restore)
           : await props.remote.setModelHighCost(modelId, marking)
-        if (!current()) return
-        if (!result.ok) { setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return }
+        if (!current()) return false
+        if (!result.ok) { setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return false }
         const parsed = GitHubCopilotModelPreferencesViewSchema.safeParse(result.value)
-        if (!parsed.success) { setError('COPILOT_MODEL_PREFERENCES_UNAVAILABLE'); return }
+        if (!parsed.success) { setError('COPILOT_MODEL_PREFERENCES_UNAVAILABLE'); return false }
         setPreferences(parsed.data)
-        setError(parsed.data.error)
-        return
+        const confirmed = parsed.data.state === 'ready' && parsed.data.error === undefined
+          && parsed.data.writable && parsed.data.revision !== undefined
+        setError(parsed.data.error ?? (confirmed ? undefined : 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE'))
+        return confirmed
       }
       const result = await props.remote.status()
-      if (!current()) return
-      if (!result.ok) { setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return }
+      if (!current()) return false
+      if (!result.ok) { setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return false }
       const parsed = GitHubCopilotAuthorizationViewSchema.safeParse(result.value)
       if (!parsed.success) {
         setError('COPILOT_MODEL_PREFERENCES_UNAVAILABLE')
-        return
+        return false
       }
       if (!parsed.data.configured || parsed.data.inFlight) {
         setPreferences(undefined); setModels(undefined)
         setError('COPILOT_MODEL_PREFERENCES_UNAVAILABLE')
-        return
+        return false
       }
       setPreferences(parsed.data.modelPreferences)
-      setModels(parsed.data.accountModels)
+      if (metadata.current === capturedMetadata) setModels(parsed.data.accountModels)
       setError(parsed.data.modelPreferences?.error)
-    } catch { if (current()) setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED') }
-    finally { if (current()) { scope.pending = false; setBusyModel(undefined) } }
+      return parsed.data.modelPreferences?.writable === true
+        && parsed.data.modelPreferences.revision !== undefined
+    } catch { if (current()) setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return false }
+    finally { if (current()) setBusyModel(undefined) }
+  }
+  const update = async (modelId?: string, restore = false, marking?: boolean): Promise<void> => {
+    const scope = request.current
+    const generation = scope.generation
+    const current = () => scope.generation === generation
+    if (modelId === undefined) {
+      if (scope.pending) return
+      scope.pending = true
+      const succeeded = await save()
+      if (current()) { scope.pending = false; scope.failed = !succeeded }
+      return
+    }
+    if (!writable || scope.failed || scope.pending && scope.active === '' && scope.queue.length === 0
+      || scope.active === modelId || scope.queue.some(edit => edit.modelId === modelId)) return
+    if (scope.queue.length >= MAX_QUEUED_EDITS) {
+      setError('COPILOT_MODEL_PREFERENCE_QUEUE_FULL'); setErrorModel(modelId)
+      return
+    }
+    const completed = new Promise<void>(resolve => { scope.queue.push({ modelId, restore, marking, resolve }) })
+    setQueuedModels(scope.queue.map(edit => edit.modelId))
+    if (!scope.pending) {
+      scope.pending = true
+      void (async () => {
+        while (current() && scope.queue.length > 0) {
+          const edit = scope.queue.shift()!
+          scope.active = edit.modelId
+          setQueuedModels(scope.queue.map(waiting => waiting.modelId))
+          const succeeded = await save(edit.modelId, edit.restore, edit.marking)
+          edit.resolve()
+          if (!current()) return
+          scope.active = ''
+          if (!succeeded) {
+            scope.failed = true
+            for (const waiting of scope.queue.splice(0)) waiting.resolve()
+            setQueuedModels([])
+            break
+          }
+        }
+        if (current()) scope.pending = false
+      })()
+    }
+    await completed
   }
   return createElement('details', { 'data-dsh-github-copilot-model-preferences': true },
     createElement('summary', null, settingsKnown
@@ -160,7 +232,8 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       : createElement('ul', { 'aria-label': 'Account models', style: { listStyle: 'none', padding: 0, margin: 0 } },
         filtered.map(model => {
           const isExcluded = excluded.has(model.id)
-          const disabled = !writable || busyModel !== undefined
+          const disabled = !writable || request.current.failed || busyModel === '' || busyModel === model.id
+            || queuedModels.includes(model.id)
           return createElement('li', { key: model.id, style: { display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center',
             paddingBlock: '12px', borderBottom: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
             createElement('span', { style: { flex: 1, minWidth: 0, overflowWrap: 'anywhere', fontSize: '14px' } },
@@ -187,6 +260,6 @@ export function GitHubCopilotModelPreferencesPanel(props: {
               onClick: () => update(model.id, isExcluded),
               'data-dsh-github-copilot-model-action': isExcluded ? 'restore' : 'exclude',
               'data-model-id': model.id,
-            }, busyModel === model.id ? 'Saving…' : isExcluded ? 'Restore' : 'Exclude'))
+            }, busyModel === model.id ? 'Saving…' : queuedModels.includes(model.id) ? 'Waiting…' : isExcluded ? 'Restore' : 'Exclude'))
         })))
 }

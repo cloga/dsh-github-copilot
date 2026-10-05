@@ -258,6 +258,50 @@ describe('GitHub Copilot Models client', () => {
     expect(remote.ensureModels).not.toHaveBeenCalled()
   })
 
+  it('serializes independent row intents without disabling unrelated rows or replaying failed writes', async () => {
+    const { models, preferences } = preferencesFixture()
+    const remote = modelRemote()
+    const first = deferred<{ ok: true; value: typeof preferences }>()
+    remote.setModelExcluded.mockReturnValueOnce(first.promise)
+    remote.setModelHighCost.mockResolvedValue({ ok: true, value: { ...preferences, revision: 3,
+      excludedModelIds: [...preferences.excludedModelIds, 'enabled'], highCostModelIds: ['excluded'] } })
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never, models, preferences }))
+    const action = (id: string) => descendants(panel.render()).find(element => element.props['data-model-id'] === id)!
+    const firstSave = action('enabled').props.onClick()
+    expect(action('excluded').props.disabled).toBe(false)
+    const secondSave = descendants(panel.render()).find(element => element.props['data-high-cost-model-id'] === 'excluded')!
+      .props.onChange({ currentTarget: { checked: true } })
+    expect(action('excluded').props.children).toBe('Waiting…')
+    expect(remote.setModelHighCost).not.toHaveBeenCalled()
+    first.resolve({ ok: true, value: { ...preferences, revision: 2,
+      excludedModelIds: [...preferences.excludedModelIds, 'enabled'] } })
+    await Promise.all([firstSave, secondSave])
+    expect(remote.setModelHighCost).toHaveBeenCalledExactlyOnceWith('excluded', true)
+    expect(action('enabled').props.children).toBe('Restore')
+    expect(remote.status).not.toHaveBeenCalled()
+  })
+
+  it('retains confirmed preferences across equivalent parent snapshots and stops queued writes on uncertainty', async () => {
+    const fixture = preferencesFixture()
+    let preferences = fixture.preferences
+    const remote = modelRemote()
+    const first = deferred<{ ok: true; value: typeof preferences }>()
+    remote.setModelExcluded.mockReturnValueOnce(first.promise)
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models: fixture.models, preferences,
+    }))
+    const firstSave = descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')!.props.onClick()
+    preferences = { ...preferences, excludedModelIds: [...preferences.excludedModelIds] }
+    expect(descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')?.props.children).toBe('Saving…')
+    const queued = descendants(panel.render()).find(element => element.props['data-model-id'] === 'excluded')!.props.onClick()
+    first.reject(new Error('PRIVATE_TRANSPORT_FAILURE'))
+    await Promise.all([firstSave, queued])
+    expect(remote.setModelExcluded).toHaveBeenCalledExactlyOnceWith('enabled', true)
+    expect(descendants(panel.render()).filter(element => element.props['data-model-id']).every(element => element.props.disabled)).toBe(true)
+    expect(descendants(panel.render()).find(element => element.props['data-dsh-github-copilot-preferences-retry'])?.props.disabled).toBe(false)
+    expect(remote.status).not.toHaveBeenCalled()
+  })
+
   function descendants(root: unknown): ReactElement[] {
     if (Array.isArray(root)) return root.flatMap(descendants)
     if (!isValidElement(root)) return []

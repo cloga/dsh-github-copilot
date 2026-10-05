@@ -301,6 +301,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
     expect(harness.readRecord).not.toHaveBeenCalled()
     expect(harness.mutate).toHaveBeenCalledOnce()
+    expect(harness.describeSettings).toHaveBeenCalledTimes(2)
     await expect(harness.controller.setModelExcluded('model-a', false)).resolves.toMatchObject({
       state: 'ready', revision: 2, excludedModelIds: [],
     })
@@ -332,6 +333,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     }], 0)
     expect(harness.settingsDocument['github-copilot']).toMatchObject({ other: 'preserved' })
     expect(harness.readRecord).not.toHaveBeenCalled()
+    expect(harness.describeSettings).toHaveBeenCalledTimes(2)
     expect(await harness.controller.setModelHighCost('fast-future-id', false)).toMatchObject({ highCostModelIds: [] })
   })
   it('reads exclusions from the effective settings value rather than a partial user layer', async () => {

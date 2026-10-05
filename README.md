@@ -23,7 +23,7 @@ Visible Models and Credits resolve missing names for saved accounts without acti
 
 Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
 
-**Source candidate: `0.4.0-alpha.117` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+**Source candidate: `0.4.0-alpha.118` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -80,10 +80,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.117/dsh-github-copilot-0.4.0-alpha.117.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.118/dsh-github-copilot-0.4.0-alpha.118.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.117` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.118` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -104,6 +104,10 @@ Account eligibility reads official rc.2 SettingsForms values, without requiring 
 **Desktop lifecycle:** disable/remove/upgrade can require a full cold restart for Web service recomposition. If the plugin is Off and the native manager reports only `pending (waiting for service: web)`, do not repeatedly toggle or reinstall. Obtain restart approval and follow [rc.2 lifecycle guidance](./docs/web-lifecycle-rc2.md).
 
 ## Auto and model preferences
+
+**Saving preferences:** Exclude/Restore and High cost reuse their confirmed narrow save result without a status/model refresh or redundant final settings traversal. Equivalent parent snapshots preserve pending and locally confirmed edits. Other rows remain usable: up to 32 distinct-row edits can wait, marked **Waiting…**, while exactly one is **Saving…**. No change is shown as saved before native CAS readback. An unconfirmed outcome or changed preference scope cancels unsent edits; **Retry** reads saved settings without replaying writes or discovering models. The queue is not persistent and does not survive unmount.
+
+**Provider-directory load failures:** native Models `llm/listProviders failed: Failed to fetch` is a Client-to-Host/gateway transport failure, not proof of forced Copilot model discovery. Use the native page's **Retry** after the connection recovers. The plugin does not intercept that Core-owned request, replace it with stale/empty success, or claim this save optimization repairs transport availability. Synthetic checks prove reduced work and responsive sequencing, not measured live latency.
 
 All three Auto preferences use the same account-verified, non-excluded eligible pool. Hard input/image capability checks run before soft task preferences.
 
@@ -239,14 +243,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.117/dsh-github-copilot-0.4.0-alpha.117.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.117/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.118/dsh-github-copilot-0.4.0-alpha.118.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.118/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.117.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.118.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
