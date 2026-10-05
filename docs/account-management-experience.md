@@ -1,6 +1,8 @@
 # Copilot account management and continuation experience
 
-Approved interaction reference: [standalone mock](./mockups/copilot-account-management.html).
+Approved account switching reference: [dropdown mock](./mockups/copilot-account-dropdown.html).
+The [complete continuation mock](./mockups/copilot-account-management.html) retains
+the earlier search-form presentation as historical context; the dropdown replaces it.
 Open the HTML locally; append `?scenario=off-switch` to start with continuation
 disabled and an account switch awaiting confirmation. All accounts, quota,
 authorization, messages and model availability in this mock are synthetic.
@@ -9,8 +11,11 @@ It performs no network requests and persists no credentials or settings.
 ## Chat: quick selection, not a second settings page
 
 The Credits control opens a compact current-account summary and Switch button.
-Do not render all saved accounts until Switch is opened. The selector supports
-search, bounded scrolling, following the global account and adding an account.
+Do not render all saved accounts until Switch is opened. A compact anchored dropdown
+marks the current choice, supports bounded internal scrolling, following the global
+account and adding an account. Do not add an account search field or repeat Switch
+buttons per row. Escape closes only the dropdown and restores its trigger; arrows,
+Home and End navigate enabled options. Outside interaction dismisses the list.
 Adding an account does not select it. Quota is account billing-cycle data, not
 context occupancy or Session cost; missing and pooled data retain their semantics.
 
@@ -32,7 +37,7 @@ The existing native Settings layout and provider controls remain. The collapsed
 Copilot contribution shows current default identity, model status, cache age and
 one Manage button. Manage expands:
 
-- Account management: current default account, Switch/search/add, identity
+- Account management: current default account, Switch dropdown/add, identity
   refresh, reauthorization, guarded removal, and new-Session continuation default.
 - Model preferences: cross-account shared exclusions, model search and filters,
   account-specific availability, discovery diagnostics and model refresh.
@@ -41,6 +46,11 @@ Removal requires explicit confirmation. It removes only locally saved account
 authorization, not GitHub-side access, conversations or shared model preferences.
 Preserve existing canonical/default/in-use removal guards; do not silently choose
 another account.
+
+Keep saved-account reauthorization/removal in a separate collapsed management
+disclosure, not in the switching menu. The dropdown remains an account choice,
+not another settings page. Global switching retains its explicit confirmation;
+Chat retains the continuation confirmation when the current policy is off.
 
 Model preferences are shared by exact model ID. Availability and capability
 evidence remain account-specific. Missing models retain saved preferences;

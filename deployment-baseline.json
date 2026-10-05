@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.109"
+    "version": "0.4.0-alpha.110"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -756,9 +756,12 @@
         {"file": "src/session-continuation-host.ts", "marker": "COPILOT_CONTINUATION_TURN_BOUNDARY_UNAVAILABLE"},
         {"file": "src/session-continuation-remote.ts", "marker": "authorizeNext"},
         {"file": "src/copilot-usage-ui.ts", "marker": "useSessionContinuationSwitch"},
+        {"file": "src/account-dropdown.ts", "marker": "data-copilot-dropdown-option"},
+        {"file": "docs/mockups/copilot-account-dropdown.html", "marker": "Approved Dropdown Mock"},
         {"file": "docs/account-management-experience.md", "marker": "All accounts, quota"}
       ],
       "tests": [
+        {"file": "tests/account-dropdown.spec.ts", "name": "supports arrows, Home, End and Escape without closing the containing Chat panel"},
         {"file": "tests/session-continuation.spec.ts", "name": "continues A-B-B-A by omitting pre-turn reasoning while retaining new tool-loop reasoning"},
         {"file": "tests/session-continuation.spec.ts", "name": "does not replay baseline ciphertext after its ID or embedded summary changes"},
         {"file": "tests/session-continuation-host.spec.ts", "name": "captures birth-time defaults and consumes one-turn consent"},

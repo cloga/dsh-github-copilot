@@ -1,4 +1,5 @@
 import { createElement as h, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { AccountDropdown } from './account-dropdown.ts'
 import type { CSSProperties, ReactElement } from 'react'
 import { CopilotUsageViewSchema } from './copilot-usage-remote.ts'
 import { externalLinkTarget } from './external-link.ts'
@@ -57,8 +58,7 @@ const copy = {
     accountLoading: 'Loading account selection…', accountMissing: 'Account selection unavailable. Refresh to retry.',
     runningAccount: 'Running turn remains on', identityUnknown: 'Identity unavailable',
     originalAuthorization: 'Original authorization', savedAuthorization: 'Saved authorization',
-    nextAccount: 'Next turn', searchAccounts: 'Search saved accounts', cancel: 'Cancel',
-    noAccounts: 'No matching accounts. Change your search or add an account.',
+    nextAccount: 'Next turn',
     savingAccount: 'Saving account…', manage: 'Manage accounts and models',
     confirmingAccount: 'Reviewing account switch…',
     navigationUnavailable: 'Account and model settings navigation is unavailable in this deployment.',
@@ -86,8 +86,7 @@ const copy = {
     accountLoading: '正在读取账号选择…', accountMissing: '账号选择暂不可用，请刷新重试。',
     runningAccount: '正在运行的 turn 仍使用', identityUnknown: '身份暂不可用',
     originalAuthorization: '原始授权', savedAuthorization: '已保存授权',
-    nextAccount: '下一轮', searchAccounts: '搜索已保存账号', cancel: '取消',
-    noAccounts: '未找到匹配账号，请修改搜索或添加账号。',
+    nextAccount: '下一轮',
     savingAccount: '正在保存账号…', manage: '管理账号与模型',
     confirmingAccount: '正在确认账号切换…',
     navigationUnavailable: '当前部署无法导航至账号与模型设置。',
@@ -131,7 +130,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const [accounts, setAccounts] = useState<CopilotAccountsView>()
   const [sessionAccount, setSessionAccount] = useState<SessionAccountView>()
   const [choosingAccount, setChoosingAccount] = useState(false)
-  const [accountQuery, setAccountQuery] = useState('')
   const [savingAccount, setSavingAccount] = useState(false)
   const [confirmingAccount, setConfirmingAccount] = useState(false)
   const [accountFailed, setAccountFailed] = useState(false)
@@ -144,7 +142,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const panel = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const switchButton = useRef<HTMLButtonElement>(null)
-  const accountSearch = useRef<HTMLInputElement>(null)
   const lifecycle = useRef<{
     active: boolean; generation: number; busy: boolean; save?: symbol; confirmation?: symbol; controller?: AbortController
   }>({ active: false, generation: 0, busy: false })
@@ -161,12 +158,10 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     owner.controller = undefined
     setOpen(false)
     setChoosingAccount(false)
-    setAccountQuery('')
     if (restore) trigger.current?.focus()
   }, [])
   const collapseAccounts = () => {
     setChoosingAccount(false)
-    setAccountQuery('')
     switchButton.current?.focus()
   }
 
@@ -228,7 +223,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     setAccounts(undefined)
     setSessionAccount(undefined)
     setChoosingAccount(false)
-    setAccountQuery('')
     setSavingAccount(false)
     setConfirmingAccount(false)
     setAccountFailed(false)
@@ -317,7 +311,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       setAccounts(parsed.data.accounts)
       setView(undefined)
       setChoosingAccount(false)
-      setAccountQuery('')
       owner.save = undefined
       setSavingAccount(false)
       await load(false)
@@ -359,10 +352,6 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       window.removeEventListener('scroll', place, true)
     }
   }, [open])
-
-  useEffect(() => {
-    if (open && choosingAccount) accountSearch.current?.focus()
-  }, [open, choosingAccount])
 
   useEffect(() => {
     if (!open) return
@@ -428,7 +417,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         : `${t.savedAuthorization}${numberedUnknownAccounts.has(account.id) ? ` ${numberedUnknownAccounts.get(account.id)}` : ''} · ${t.identityUnknown}`,
       selected: sessionAccount.source === 'session' && sessionAccount.accountId === account.id,
     })),
-  ].filter(option => option.label.toLocaleLowerCase(language).includes(accountQuery.trim().toLocaleLowerCase(language))) : []
+  ] : []
   const navigationDiagnostic = props.navigationDiagnostic ?? 'COPILOT_ACCOUNT_MANAGEMENT_NAVIGATION_UNAVAILABLE'
 
   return h('span', { style: { display: 'inline-flex', minWidth: 0, maxWidth: '100%', fontFamily: 'var(--dsw-font-family, inherit)' } },
@@ -472,32 +461,17 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     props.sessionAccount === undefined ? null : h('div', { style: separator },
       h('div', { style: row },
         h('p', { style: muted }, t.switchScope),
-        h('button', { ref: switchButton, type: 'button', style: { ...button, flexShrink: 0 },
+        h(AccountDropdown, { triggerRef: switchButton, triggerStyle: { ...button, flexShrink: 0 },
+          label: t.switchAccount, open: choosingAccount, busy: savingAccount, maxHeight: 220,
           disabled: sessionAccount === undefined || sessionAccount.accounts.revision === undefined || busy || savingAccount,
-          'aria-expanded': choosingAccount, 'aria-controls': choosingAccount ? `${id}-accounts` : undefined,
-          onClick: () => { if (choosingAccount) collapseAccounts(); else setChoosingAccount(true) } }, t.switchAccount)),
+          onOpenChange: (next: boolean) => { if (!next) collapseAccounts(); else setChoosingAccount(true) },
+          options: accountOptions.map(option => ({ ...option, id: option.id ?? 'follow-global' })),
+          onSelect: (accountId: string) => { void chooseAccount(accountId === 'follow-global' ? null : accountId) },
+          listAttribute: 'data-copilot-account-options', footer: props.accountActions,
+        })),
       sessionAccount?.runningAccountId === undefined ? null : h('p', { style: muted },
         `${t.runningAccount}: ${runningIdentity ?? t.identityUnknown} · ${t.nextAccount}: ${currentIdentity}`),
-      choosingAccount ? h('div', { id: `${id}-accounts`, role: 'group', 'aria-label': t.switchAccount,
-        'aria-busy': savingAccount, style: { display: 'grid', gap: 8, marginTop: 10 } },
-        h('div', { style: row },
-          h('label', { htmlFor: `${id}-account-search`, style: muted }, t.searchAccounts),
-          h('button', { type: 'button', style: button, disabled: savingAccount, onClick: collapseAccounts }, t.cancel)),
-        h('input', { ref: accountSearch, id: `${id}-account-search`, type: 'search',
-          'aria-label': t.searchAccounts, value: accountQuery, disabled: savingAccount,
-          onChange: event => setAccountQuery(event.currentTarget.value),
-          style: { ...button, cursor: 'text', width: '100%', minWidth: 0, boxSizing: 'border-box' } }),
-        sessionAccount === undefined ? null : h('div', { 'data-copilot-account-options': '',
-          style: { display: 'grid', gap: 4, maxHeight: 220, overflowY: 'auto', overscrollBehavior: 'contain' } },
-          ...accountOptions.map(option => h('button', {
-            key: option.id ?? 'follow-global', type: 'button', disabled: savingAccount,
-            style: { ...button, textAlign: 'left', border: 'none', whiteSpace: 'normal', overflowWrap: 'anywhere',
-              background: option.selected ? 'var(--dsw-alias-bg-layer-2, ButtonFace)' : 'transparent' },
-            'aria-pressed': option.selected, onClick: () => { void chooseAccount(option.id) },
-          }, option.label))),
-        sessionAccount !== undefined && accountOptions.length === 0 ? h('p', { role: 'status', style: muted }, t.noAccounts) : null,
-        savingAccount ? h('p', { role: 'status', style: muted }, confirmingAccount ? t.confirmingAccount : t.savingAccount) : null,
-        props.accountActions === undefined ? null : h('div', { style: separator }, props.accountActions)) : null,
+      savingAccount ? h('p', { role: 'status', style: muted }, confirmingAccount ? t.confirmingAccount : t.savingAccount) : null,
       sessionAccount?.accounts.diagnostic === undefined ? null : h('code', { style: muted }, sessionAccount.accounts.diagnostic),
       accountFailed || accountSaveFailed ? h('p', { role: 'alert', style: muted }, accountSaveFailed ? t.accountSaveFailed : t.accountMissing) : null),
     props.continuation,

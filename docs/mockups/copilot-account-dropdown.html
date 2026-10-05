@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>账号切换 · Approved Dropdown Mock</title>
+<style>
+:root{color-scheme:dark;--bg:#202020;--panel:#2b2b2b;--popup:#333;--line:#505050;--text:#f2f2f2;--muted:#c0c0c0;--hover:#414141}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,"Segoe UI",sans-serif;padding:28px}
+button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;background:transparent;border:1px solid var(--line);border-radius:8px;padding:8px 14px}button:hover{background:var(--hover)}button:focus-visible,summary:focus-visible,textarea:focus-visible{outline:2px solid #aacfff;outline-offset:3px}
+button:disabled{opacity:.5;cursor:default}[hidden]{display:none!important}h1{font-size:18px;margin:0}h2{font-size:16px;margin:0 0 12px}p{color:var(--muted);margin:8px 0}small{color:var(--muted);font-size:12px}
+.preview{max-width:840px;margin:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:22px}.tabs{display:flex;gap:6px}.tabs button[aria-pressed=true]{background:var(--hover)}
+.provider{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}.provider-head,.account-row{display:flex;align-items:center;justify-content:space-between;gap:16px}.provider-head strong{font-size:19px}.provider-head small{margin-left:10px}.manage{border-top:1px solid var(--line);margin-top:20px;padding-top:22px}
+.account-row{position:relative;margin:16px 0}.identity strong{font-size:17px;display:block}.identity small{display:block;margin-top:2px}.switch{white-space:nowrap}.caret{font-size:11px;margin-left:9px}.account-menu{position:absolute;right:0;top:calc(100% + 8px);width:min(300px,100%);z-index:5;background:var(--popup);border:1px solid #666;border-radius:10px;box-shadow:0 10px 28px #0006;padding:5px}
+.options{max-height:228px;overflow:auto;overscroll-behavior:contain}.option{width:100%;display:flex;align-items:center;gap:10px;text-align:left;border:0;padding:10px;border-radius:5px;min-height:46px}.check{width:18px;flex-shrink:0;color:#c7ddff}.option .name{flex:1;min-width:0;overflow-wrap:anywhere}.option small{display:block}.add{border-top:1px solid var(--line);margin-top:5px;padding-top:5px}.add button{width:100%;text-align:left;border:0}.account-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.quiet{border:0;color:var(--muted);padding-left:0;padding-right:8px}.danger{color:#ffb8b8}
+details{margin-top:18px}summary{cursor:pointer}label{display:flex;align-items:center;gap:9px;margin:12px 0}input{accent-color:#c7ddff}.preferences{border-top:1px solid var(--line);margin-top:24px;padding-top:22px}.model{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)}.model button{font-size:12px;padding:5px 10px}.caption{margin-top:20px;font-size:12px}.status{min-height:22px;font-size:12px;color:#c7ddff;margin-top:12px}
+.chat{min-height:490px;display:flex;flex-direction:column}.messages{flex:1;padding:20px 0}.message{max-width:75%;padding:12px 16px;background:var(--panel);border-radius:12px;margin-bottom:20px}.message.user{margin-left:auto;background:#373737}.composer{border:1px solid var(--line);border-radius:12px;padding:14px}.composer textarea{width:100%;min-height:60px;resize:vertical;border:0;background:none;outline-offset:0}.toolbar{display:flex;justify-content:space-between;color:var(--muted)}.credits{display:flex;justify-content:flex-end;margin-top:8px}.chat-panel{width:min(410px,100%);margin:10px 0 0 auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}.chat-panel .account-row{margin-top:0}.chat-panel .account-menu{top:auto;bottom:calc(100% + 8px)}
+dialog{width:min(420px,calc(100% - 32px));background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:24px}dialog::backdrop{background:#0008}.dialog-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+@media(max-width:520px){body{padding:16px}.preview-head{align-items:flex-start;flex-direction:column}.provider{padding:16px}.provider-head{align-items:flex-start}.provider-head small{display:block;margin:4px 0 0}.message{max-width:90%}.account-actions{gap:4px}.chat{min-height:450px}}
+</style>
+<div class="preview">
+<header class="preview-head"><div><h1>账号切换 · 简化版</h1><small>交互 Mock · 全部为虚构数据，不操作真实账号</small></div><nav class="tabs" aria-label="预览页面"><button id="models-tab" aria-pressed="true">Models</button><button id="chat-tab" aria-pressed="false">Chat</button></nav></header>
+<section id="models" class="provider">
+  <div class="provider-head"><div><strong>GitHub Copilot</strong><small>Signed in · 19 models</small></div><button id="manage-button" aria-expanded="true">Manage</button></div>
+  <div class="manage" id="manage">
+    <h2>账号管理</h2><p>选择全局默认账号。已有 Session 的显式选择不变。</p>
+    <div class="account-row"><div class="identity"><strong id="global-name">@demo-personal</strong><small>全局默认账号</small></div><button class="switch" id="models-switch" aria-expanded="false" aria-controls="models-menu">切换<span class="caret">▾</span></button>
+    <div id="models-menu" class="account-menu" hidden><div class="options" aria-label="全局默认账号"></div><div class="add"><button data-add>＋ 添加账号</button></div></div></div>
+    <div class="account-actions"><button data-action="刷新账号信息">刷新账号信息</button><button data-action="重新授权">重新授权</button><button class="quiet danger" id="remove">删除账号</button></div>
+    <details><summary>新 Session 续聊默认</summary><label><input type="checkbox" checked>默认开启有损续聊</label><p><small>新轮次省略旧加密推理及其内嵌摘要；可见消息、工具记录和磁盘历史不变。仅影响新 Session，不自动发送或重试。</small></p></details>
+    <section class="preferences"><h2>模型偏好</h2><p><small>偏好跨账号共享；可用性按当前账号验证。</small></p><div class="model"><span>GPT-6.1 Sol <small>· 可用</small></span><button data-model>排除</button></div><div class="model"><span>Claude Sonnet <small>· 可用</small></span><button data-model>排除</button></div><div class="model"><span>Gemini Pro <small>· 当前账号不可用</small></span><button data-model>排除</button></div></section>
+  </div>
+</section>
+<section id="chat" class="chat" hidden>
+  <div class="messages"><div class="message user">继续完善账号切换的交互。</div><div class="message">保留当前账号，点击「切换」后用一个紧凑下拉菜单选择，不再展开搜索表单。</div></div>
+  <div class="composer"><textarea aria-label="模拟消息" placeholder="输入消息…（仅模拟）"></textarea><div class="toolbar"><span>＋　Full access ▾</span><span>Auto ▾　↑</span></div></div>
+  <div class="credits"><button id="credits">Credits · <span id="credits-name">@demo-personal</span> ▾</button></div>
+  <div class="chat-panel" id="chat-panel">
+    <div class="account-row"><div class="identity"><strong id="session-name">@demo-personal</strong><small>本 Session 账号</small></div><button class="switch" id="chat-switch" aria-expanded="false" aria-controls="chat-menu">切换<span class="caret">▾</span></button>
+    <div id="chat-menu" class="account-menu" hidden><div class="options" aria-label="本 Session 账号"></div><div class="add"><button data-add>＋ 添加账号</button></div></div></div>
+    <details><summary>本 Session 有损续聊 · 开启</summary><label><input id="session-policy" type="checkbox" checked>持续开启</label><p><small>每轮省略旧加密推理及内嵌摘要；可见历史不变。不自动发送或重试。</small></p></details>
+    <p><small>完整管理：设置 → 模型 → GitHub Copilot → Manage</small></p>
+  </div>
+</section>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<footer class="caption">点击「切换」查看菜单。无搜索框，无逐账号 Switch 按钮；当前账号打勾，长列表内部滚动。<button class="quiet" id="many">模拟 24 个账号</button></footer>
+</div>
+<dialog id="dialog"><h2 id="dialog-title"></h2><p id="dialog-copy"></p><div id="dialog-actions" class="dialog-actions"></div></dialog>
+<script>
+const $=id=>document.getElementById(id);
+let accounts=['@demo-personal','@demo-work','@demo-backup'],globalAccount=accounts[0],sessionAccount=accounts[0],lastTrigger;
+function notice(text){$('status').textContent=text}
+function closeMenus(){for(const scope of ['models','chat']){$(scope+'-menu').hidden=true;$(scope+'-switch').setAttribute('aria-expanded','false')}}
+function dialog(title,copy,actions){closeMenus();$('dialog-title').textContent=title;$('dialog-copy').textContent=copy;$('dialog-actions').replaceChildren();for(const [label,action] of actions){const b=document.createElement('button');b.textContent=label;b.onclick=()=>{$('dialog').close();action?.()};$('dialog-actions').append(b)}$('dialog').showModal()}
+function render(){for(const scope of ['models','chat']){const list=$(scope+'-menu').querySelector('.options'),current=scope==='models'?globalAccount:sessionAccount;list.replaceChildren();for(const account of accounts){const b=document.createElement('button');b.className='option';b.setAttribute('aria-pressed',String(account===current));const check=document.createElement('span');check.className='check';check.textContent=account===current?'✓':'';check.setAttribute('aria-hidden','true');const name=document.createElement('span');name.className='name';name.textContent=account;b.append(check,name);if(account===current){const tag=document.createElement('small');tag.textContent='当前';b.append(tag)}b.onclick=()=>{if(scope==='chat'&&!$('session-policy').checked&&account!==current){dialog('切换账号前确认','有损续聊会省略旧加密推理及其内嵌摘要。可见消息、工具记录和磁盘历史不变。授权不会自动发送或重试。',[['开启并切换',()=>{$('session-policy').checked=true;choose(scope,account)}],['仅下一轮并切换',()=>choose(scope,account)],['保持关闭并切换',()=>choose(scope,account)],['取消']])}else choose(scope,account)};list.append(b)}}$('global-name').textContent=globalAccount;$('session-name').textContent=sessionAccount;$('credits-name').textContent=sessionAccount;$('session-policy').closest('details').querySelector('summary').textContent='本 Session 有损续聊 · '+($('session-policy').checked?'开启':'关闭')}
+function choose(scope,account){if(scope==='models')globalAccount=account;else sessionAccount=account;closeMenus();render();notice('模拟：'+(scope==='models'?'全局默认':'本 Session')+'已切换至 '+account+'；没有发送消息。');lastTrigger?.focus()}
+for(const scope of ['models','chat'])$(scope+'-switch').onclick=()=>{const open=$(scope+'-menu').hidden;closeMenus();lastTrigger=$(scope+'-switch');$(scope+'-menu').hidden=!open;lastTrigger.setAttribute('aria-expanded',String(open));if(open)$(scope+'-menu').querySelector('.option').focus()};
+document.addEventListener('click',e=>{if(!e.target.closest('.account-row'))closeMenus()});
+document.addEventListener('keydown',e=>{const menu=e.target.closest('.account-menu');if(e.key==='Escape'){closeMenus();lastTrigger?.focus()}if(menu&&['ArrowDown','ArrowUp','Home','End'].includes(e.key)){const buttons=Array.from(menu.querySelectorAll('button'));let index=buttons.indexOf(document.activeElement);index=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[index].focus();e.preventDefault()}});
+for(const page of ['models','chat'])$(page+'-tab').onclick=()=>{closeMenus();for(const p of ['models','chat']){$(p).hidden=p!==page;$(p+'-tab').setAttribute('aria-pressed',String(p===page))}notice('')};
+$('manage-button').onclick=()=>{$('manage').hidden=!$('manage').hidden;$('manage-button').setAttribute('aria-expanded',String(!$('manage').hidden))};
+$('credits').onclick=()=>{$('chat-panel').hidden=!$('chat-panel').hidden;closeMenus()};
+$('session-policy').onchange=render;
+$('many').onclick=()=>{accounts=accounts.slice(0,3);for(let n=4;n<=24;n++)accounts.push('@demo-account-'+n);render();notice('已模拟 24 个账号。打开菜单后在内部滚动。')};
+document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>dialog('添加账号','正式功能将进入 GitHub 授权。这里仅模拟添加，不访问网络，也不会自动切换账号。',[['模拟授权完成',()=>{accounts.push('@demo-new-'+accounts.length);render();notice('已添加模拟账号，当前账号不变。')}],['取消']]));
+document.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>notice('模拟：'+b.dataset.action+'，未执行网络请求。'));
+document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>{b.textContent=b.textContent==='排除'?'恢复':'排除';notice('仅修改模拟偏好。')});
+$('remove').onclick=()=>dialog('删除 '+globalAccount+'？','当前全局默认账号不能直接删除。请先切换至其他账号；这里不会删除真实账号或凭据。',[['知道了']]);
+render();
+</script>
+</html>

@@ -114,8 +114,8 @@ text and controls. They stack above the composer rather than squeezing into
 its non-wrapping statistics row. Native meters, statistics and parent DOM stay
 unchanged; authorization itself still sends no message.
 
-Choose **Review recovery options**, then **Next matching turn only** (the
-default choice) or **Continue in this session**, and **Accept loss and authorize**.
+Choose **Review recovery options**, then **Continue in this session** (the
+default choice) or **Next matching turn only**, and **Accept loss and authorize**.
 This does not send a message or retry the failed request. Use the native Send or
 Retry control separately; the plugin adds no competing sender. Complete native
 replay remains the default until explicit consent.

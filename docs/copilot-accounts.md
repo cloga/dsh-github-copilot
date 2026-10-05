@@ -14,7 +14,7 @@ publication, installation and loaded runtime state are separate evidence.
   profile. Models retains the global default. Sessions without an override
   inherit that default at each new turn; explicit Session choices take priority.
 - Models manages reauthorization/removal and the global default; Credits supports
-  add-only authorization without selection. Its searchable account selector
+  add-only authorization without selection. Its compact no-search dropdown
   applies to this Session's subsequent turns. No standalone
   composer selector, one-turn override or DSH application identity replacement.
 - Persist OAuth grants through the existing DSH credentials service. Use
@@ -219,8 +219,9 @@ cannot be named `remove`: official rc.2 reserves that inherited service name
 and rejects the entire Client contribution.
 
 Credits shows the Session's next-turn account and quota under the existing title.
-Its **Switch** disclosure searches saved authorizations and offers **Follow global
-default** plus add-only authorization. Reauthorization, removal and global
+Its **Switch** dropdown marks the current choice, scrolls long lists internally
+and offers **Follow global default** plus add-only authorization at the bottom.
+Reauthorization, removal and global
 selection remain in Models. Changing
 the preference while a turn runs leaves that turn's old account pinned; the
 popover identifies it separately. Other Sessions are unchanged. Unknown identity

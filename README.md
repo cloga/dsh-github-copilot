@@ -19,7 +19,7 @@ Visible Models and Credits renew expired identity without forcing fresh reads on
 
 Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
 
-**Source candidate: `0.4.0-alpha.109` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+**Source candidate: `0.4.0-alpha.110` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -59,10 +59,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.109/dsh-github-copilot-0.4.0-alpha.109.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.110/dsh-github-copilot-0.4.0-alpha.110.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.109` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.110` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -169,10 +169,10 @@ Configuration is under `github-copilot`. Credentials, endpoint definitions and a
 | Selection unknown/unavailable | Distinguish lost evidence from read failure; Retry only rereads |
 | Missing/cancelled Turn Usage | Read [usage limitations](./docs/copilot-usage.md); do not infer zero billing |
 | History fails on `github-copilot/auto-model-decision` | Use [detached, check-first recovery](./docs/automatic-model-routing.md#recovering-affected-histories); never replace live history without stopped writers and approval |
-| AUTH, Responses replay-scope or TLS failure | Review [request diagnostics](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics) and [usage TLS boundaries](./docs/copilot-usage.md#account-data-boundary). After an exact scope rejection, **Replay recovery** appears automatically when the session's turn ends or the session opens. Review the loss of matching old encrypted items and their summaries, then authorize **Next matching turn only** (default choice) or **Continue in this session**. Both expire within one hour of the evidence and require the same validation state. Recovery itself stays off until confirmed; use native Send/Retry separately. It never rewrites history or retries automatically, and is not a 408 fix. Never reset credentials or disable TLS as an automatic repair. |
+| AUTH, Responses replay-scope or TLS failure | Review [request diagnostics](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics) and [usage TLS boundaries](./docs/copilot-usage.md#account-data-boundary). After an exact scope rejection, **Replay recovery** appears automatically when the session's turn ends or the session opens. Review the loss of matching old encrypted items and their summaries, then authorize **Continue in this session** (default choice) or **Next matching turn only**. Both expire within one hour of the evidence and require the same validation state. Recovery itself stays off until confirmed; use native Send/Retry separately. It never rewrites history or retries automatically, and is not a 408 fix. Never reset credentials or disable TLS as an automatic repair. |
 | Hosted search unavailable | Check account/protocol/probe diagnostics; a legacy override stays authoritative until explicitly reset |
 
-The Credits account panel shows the current account and **Switch**; Models has one **Manage** disclosure for account management and shared model preferences. Search saved accounts, add without selecting, and confirm guarded local removal in Models. Exact-ID exclusions are shared across accounts; availability is account-specific. See the [approved experience and interactive mock](./docs/account-management-experience.md).
+The Credits account panel shows the current account and **Switch**; Models has one **Manage** disclosure for account management and shared model preferences. Both use a compact dropdown without account search: the current choice is checked, long lists scroll internally, and Add sits at the bottom without selecting the new account. Models retains guarded local removal and reauthorization in a separate management disclosure. Exact-ID exclusions are shared across accounts; availability is account-specific. See the [approved experience and interactive mock](./docs/account-management-experience.md).
 
 [Visible-history continuation](./docs/session-continuation.md) is configured beside account switching, not permanently above the composer. New unseeded Sessions default on after the feature's first successful activation; existing Sessions and inherited histories remain off unless explicitly authorized. Global defaults affect new Sessions only; Session on/off overrides persist. With continuation off, a different-account switch offers persistent enable, next-turn-only, keep off or cancel. Each new enabled turn omits prior encrypted reasoning and embedded summaries, even on the same account; current-turn reasoning, visible messages, tools and disk history remain unchanged. Authorization never auto-sends/retries and is not a quota/context cure. Next-turn-only consent is lost on Host restart. Exact replay failures expose authorization guidance and require a separate native retry. The pinned Core lacks a public Models deep link; Chat gives manual navigation instructions.
 
@@ -216,14 +216,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.109/dsh-github-copilot-0.4.0-alpha.109.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.109/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.110/dsh-github-copilot-0.4.0-alpha.110.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.110/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.109.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.110.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

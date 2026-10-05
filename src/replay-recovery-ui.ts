@@ -27,7 +27,7 @@ export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = '
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
   const [confirm, setConfirm] = useState(false)
-  const [duration, setDuration] = useState<ReplayRecoveryDuration>('next-turn')
+  const [duration, setDuration] = useState<ReplayRecoveryDuration>('session')
   const [dismissed, setDismissed] = useState<string>()
   const [hadEvidence, setHadEvidence] = useState(false)
   const latest = useRef(view)
@@ -133,7 +133,7 @@ export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = '
         h('button', { type: 'button', style: composerNoticeQuietButtonStyle, disabled, onClick: () => setConfirm(false) }, zh ? '取消' : 'Cancel'))) :
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
         h('button', { type: 'button', style: button, disabled,
-          onClick: () => evidence.state === 'enabled' ? void perform(false) : (setDuration('next-turn'), setConfirm(true)) },
+          onClick: () => evidence.state === 'enabled' ? void perform(false) : (setDuration('session'), setConfirm(true)) },
         evidence.state === 'enabled' ? zh ? '关闭恢复' : 'Disable recovery' : zh ? '查看恢复选项' : 'Review recovery options'),
         evidence.state === 'available' ? h('button', { type: 'button', style: composerNoticeQuietButtonStyle, disabled,
           onClick: () => setDismissed(evidence.revision) }, zh ? '暂不处理' : 'Not now') : null),

@@ -5,6 +5,7 @@ import type { CopilotAccountsView } from './copilot-accounts-types.ts'
 import { externalLinkTarget } from './external-link.ts'
 import { accountPresentationChanges } from './copilot-account-presentation.ts'
 import { copyAuthorizationCode } from './authorization-code-clipboard.ts'
+import { AccountDropdown } from './account-dropdown.ts'
 
 type AccountResult = { ok: true; value: CopilotAccountsView } | { ok: false; error: unknown }
 export interface CopilotAccountsRemote {
@@ -73,10 +74,7 @@ const accountCopy = {
   en: {
     identityChecking: 'Checking GitHub identity…', identityUnavailable: 'GitHub account identity unavailable',
     accounts: 'Account management',
-    searchAccounts: 'Search saved GitHub accounts',
-    noAccountsMatch: 'No saved accounts match this search.',
-    switchTo: (account: string) => `Switch to ${account}`,
-    closeAccounts: 'Close account list',
+    savedAccounts: 'Manage saved authorizations',
     scope: 'Global default for new inherited turns. Credits can override this Session’s subsequent turns. Running turns, explicit Session accounts, models and conversation history stay unchanged.',
     remoteUnavailable: 'Account management is unavailable in this deployment.',
     readFailed: 'Could not read account information. Retry before changing accounts.',
@@ -125,10 +123,7 @@ const accountCopy = {
   zh: {
     identityChecking: '正在检查 GitHub 身份…', identityUnavailable: 'GitHub 账号身份暂不可用',
     accounts: '账号管理',
-    searchAccounts: '搜索已保存的 GitHub 账号',
-    noAccountsMatch: '没有匹配的已保存账号。',
-    switchTo: (account: string) => `切换到 ${account}`,
-    closeAccounts: '关闭账号列表',
+    savedAccounts: '管理已保存授权',
     scope: '全局默认账号用于后续继承默认值的新 turn。Credits 可为本 Session 后续 turn 指定账号。正在运行的 turn、Session 已指定账号、模型和对话历史保持不变。',
     remoteUnavailable: '当前部署无法管理账号。',
     readFailed: '无法读取账号信息。更改账号前请重试。',
@@ -227,14 +222,12 @@ function CopilotAccountControls(props: AccountControlsProps & (
   const [authorizationIntent, setAuthorizationIntent] = useState<'add' | 'reauthorize'>()
   const [confirmation, setConfirmation] = useState<{ id: string; revision: number; remove: boolean }>()
   const [accountsOpen, setAccountsOpen] = useState(false)
-  const [accountSearch, setAccountSearch] = useState('')
   const lifetime = useRef({ active: false, generation: 0, busy: false, copyGeneration: 0 })
   const refreshed = useRef(props.refreshKey)
   const text = props.locale?.toLowerCase().startsWith('zh') ? accountCopy.zh : accountCopy.en
   useEffect(() => {
     if (!props.expanded) {
       setAccountsOpen(false)
-      setAccountSearch('')
       setConfirmation(undefined)
     }
   }, [props.expanded])
@@ -339,12 +332,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
   const selected = confirmation === undefined ? undefined : view?.accounts.find(item => item.id === confirmation.id)
   const selectedLabel = selected?.identityState === 'ready' && selected.identity !== undefined
     ? `@${selected.identity.login}` : text.savedAuthorization
-  const normalizedSearch = accountSearch.trim().toLocaleLowerCase()
-  const savedAccounts = (view?.accounts ?? []).filter(account => {
-    if (!normalizedSearch) return true
-    const login = account.identityState === 'ready' ? account.identity?.login : undefined
-    return `${login ?? ''} ${account.id}`.toLocaleLowerCase().includes(normalizedSearch)
-  })
+  const savedAccounts = view?.accounts ?? []
   const pending = busy || props.authorizationBusy === true || view?.operation !== undefined
   const authorizationOperation = view?.operation === 'authorizing' || view?.operation === 'verifying'
   const authorizationStatus = cancelRequested ? text.cancelling
@@ -371,7 +359,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
   const savedAccountItems = savedAccounts.map(account => {
     const accountName = account.identityState === 'ready' && account.identity !== undefined
       ? `@${account.identity.login}` : text.savedAuthorization
-    return h('li', { key: account.id, 'data-copilot-saved-account': account.id,
+    return h('li', { key: account.id,
       style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
         paddingBlock: 10, borderBottom: border } },
     h('div', { style: { minWidth: 0, flex: '1 1 140px' } },
@@ -379,9 +367,6 @@ function CopilotAccountControls(props: AccountControlsProps & (
         : account.configured ? text.identityUnavailableLabel : text.authorizationUnavailable),
       h('p', { style: muted }, account.id === view?.activeAccountId ? text.currentDefault
         : account.configured ? text.savedAuthorization : text.authorizationUnavailable)),
-    account.id === view?.activeAccountId ? null : control(text.switchTo(accountName), () => {
-      if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: false })
-    }, pending || view?.switchable !== true || view?.revision === undefined || !account.configured),
     account.id === 'canonical' || account.id === view?.activeAccountId ? null : control(text.reauthorize, () => {
       if (props.remote !== undefined && view?.revision !== undefined) startReauthorization(account.id, view.revision)
     }, pending || view?.writable !== true || view?.switchable !== true || view?.revision === undefined),
@@ -440,27 +425,24 @@ function CopilotAccountControls(props: AccountControlsProps & (
         h('strong', { 'data-copilot-current-account': '', role: 'status', 'aria-live': 'polite' },
           identity ?? text.identityUnavailableLabel),
         h('p', { style: muted }, text.currentDefault)),
-      control(accountsOpen ? text.closeAccounts : text.switch, () => {
-        setAccountsOpen(open => !open)
-        setConfirmation(undefined)
-      }, pending || view?.switchable !== true || view?.revision === undefined)),
-      !props.addOnly && accountsOpen ? h('div', { 'data-copilot-account-selector': true, style: { display: 'grid', gap: 8 } },
-        h('label', { style: { display: 'grid', gap: 6, color: secondary, fontSize: 13 } },
-          text.searchAccounts,
-          h('input', {
-            type: 'search', value: accountSearch, 'data-copilot-account-search': true,
-            onChange: (event: { currentTarget: { value: string } }) => setAccountSearch(event.currentTarget.value),
-            style: { ...button, fontSize: 16, width: '100%', boxSizing: 'border-box',
-              background: 'var(--dsw-alias-bg-layer-1, Canvas)', color: 'var(--dsw-alias-label-primary, CanvasText)' },
-            placeholder: text.searchAccounts,
-          })),
-        h('ul', { 'data-copilot-saved-accounts': true, style: {
-          padding: 0, margin: 0, listStyle: 'none', maxHeight: 240, overflowY: 'auto', overscrollBehavior: 'contain',
-        } }, ...(savedAccountItems.length === 0
-          ? [h('li', { key: 'no-matches', style: muted }, text.noAccountsMatch)] : savedAccountItems)),
-        authorizationOperation ? null : control(text.add, () => {
+      h(AccountDropdown, { label: text.switch, open: accountsOpen, triggerStyle: button,
+        disabled: pending || view?.switchable !== true || view?.revision === undefined, busy: pending,
+        onOpenChange: (open: boolean) => { setAccountsOpen(open); setConfirmation(undefined) },
+        options: savedAccounts.map(account => ({
+          id: account.id, label: account.identityState === 'ready' && account.identity
+            ? `@${account.identity.login}` : `${text.savedAuthorization}${account.id === 'canonical' ? '' : ` ${savedAccounts.indexOf(account) + 1}`} · ${text.identityUnavailableLabel}`,
+          selected: account.id === view?.activeAccountId, disabled: !account.configured,
+        })),
+        onSelect: (id: string) => {
+          setAccountsOpen(false)
+          if (id !== view?.activeAccountId && view?.revision !== undefined) setConfirmation({ id, revision: view.revision, remove: false })
+        },
+        listAttribute: 'data-copilot-saved-accounts',
+        footer: authorizationOperation ? null : control(text.add, () => {
+          setAccountsOpen(false)
           if (props.remote !== undefined) startAdd()
-        }, pending || view?.writable !== true || view?.switchable !== true)) : null,
+        }, pending || view?.writable !== true || view?.switchable !== true),
+      })),
       props.addOnly || confirmation === undefined ? null : h('div', { role: 'group',
         'aria-label': confirmation.remove ? text.confirmRemoveTitle : text.confirmSwitchTitle,
         style: { border, borderRadius: 8, padding: 12 } },
@@ -481,6 +463,9 @@ function CopilotAccountControls(props: AccountControlsProps & (
         activeAccount === undefined || activeAccount.id === 'canonical' ? null : control(text.reauthorize, () => {
           if (props.remote !== undefined && view?.revision !== undefined) startReauthorization(activeAccount.id, view.revision)
         }, pending || view?.writable !== true || view?.switchable !== true || view?.revision === undefined)),
+      props.addOnly || savedAccounts.every(account => account.id === 'canonical' || account.id === view?.activeAccountId) ? null
+        : h('details', null, h('summary', { style: { cursor: 'pointer' } }, text.savedAccounts),
+          h('ul', { style: { listStyle: 'none', padding: 0, maxHeight: 240, overflowY: 'auto' } }, ...savedAccountItems)),
       props.accountSettings ?? null,
       props.continuationSettings ?? null))
 }
