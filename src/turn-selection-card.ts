@@ -11,6 +11,11 @@ export interface TurnModelEvidence {
   readonly incomplete: boolean
 }
 
+function turnAccountLabel(account: TurnAccountView, zh: boolean): string {
+  if (account.state !== 'recorded' || account.identity === undefined) return zh ? '身份暂不可用' : 'identity unavailable'
+  return `@${account.identity.login}`
+}
+
 export function TurnSelectionCard({ selection, locale = 'en', incomplete = false, readState = 'ready', retry,
   account, accountFailed = false, retryAccount, models, modelsFailed = false, retryModels }: {
   selection: TurnSelection; locale?: string; incomplete?: boolean
@@ -63,7 +68,7 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
     'aria-expanded': open && accountOpen, onClick: () => { setAccountOpen(true); setOpen(true) } },
     accountFailed ? zh ? '账号记录读取失败' : 'Account unavailable'
       : account?.state === 'recorded'
-        ? `Account · ${account.identity ? '@' + account.identity.login : account.accountId === 'canonical' ? 'Canonical' : account.accountId.slice(0, 8)}`
+        ? `${zh ? '账号' : 'Account'} · ${turnAccountLabel(account, zh)}`
         : zh ? 'Account · 未知' : 'Account · unknown'),
   h('span', { role: readState === 'ready' ? undefined : 'status',
     title: readState === 'ready' && selection.mode === 'unknown' ? zh ? '本轮选择记录未保留；不从当前选择推断历史。' : 'No retained selection evidence; the current picker is not historical evidence.' : undefined },
@@ -101,7 +106,7 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
     ) : null,
     accountOpen ? h('div', null,
       h('p', null, accountFailed ? zh ? '无法读取本轮账号记录，不等同于没有记录。' : 'Could not read account evidence; this is not proof of missing evidence.'
-        : account?.state === 'recorded' ? `${zh ? '账号' : 'Account'}: ${account.identity ? '@' + account.identity.login : account.accountId}`
+        : account?.state === 'recorded' ? `${zh ? '账号' : 'Account'}: ${turnAccountLabel(account, zh)}`
           : zh ? '本轮没有保留账号证据，不从当前账号选择推断历史。' : 'No retained account evidence; the current account selection cannot reconstruct history.'),
       account?.state === 'recorded' ? h('p', null, account.source === 'global'
         ? zh ? '本轮发送时跟随全局默认，账号已锁定。' : 'Inherited the global default at turn admission; account was frozen.'

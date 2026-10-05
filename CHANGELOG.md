@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.107 (prepared)
+
+- Present an in-flight multi-account device authorization as progress with the verification URL, one-time code, copy action and cancel together; distinguish Host-confirmed post-OAuth identity/model verification from pending authorization. Adding an account never changes the global default.
+- Keep technical account diagnostics secondary, show only supported blocker evidence, and clarify that account-information refresh is identity-only.
+- Show turn identity only when captured for that turn and replace opaque unknown account IDs in Credits selectors with localized readable authorization labels (#313).
+
 ## 0.4.0-alpha.106 (prepared)
 
 - Show truthful failed-turn model evidence inside the existing Auto/Manual info dialog, with selection reasons disclosed below (#310). Preserve successful same-turn models/providers and explicit incomplete failed-attempt attribution without changing native Usage.

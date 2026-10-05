@@ -5,7 +5,7 @@
 This document records the approved requirements and implementation design for
 issues #297 and #305. Candidate behavior is not released or installed until the
 acceptance gates below complete. The existing single-account behavior remains
-the compatibility baseline. The current source candidate is `0.4.0-alpha.104`;
+the compatibility baseline. The current source candidate is `0.4.0-alpha.107`;
 publication, installation and loaded runtime state are separate evidence.
 
 ## Requirements
@@ -122,6 +122,17 @@ overwrite or change the active account. Identity and model metadata validation
 must complete before the new slot can be selected. Partial authorization is
 reported truthfully and can be retried or explicitly removed.
 
+The Models card keeps the GitHub verification link, selectable manual URL,
+one-time authorization code, copy action and cancellation together while
+device authorization is pending. A confirmed OAuth completion is followed by
+a separately reported identity-and-model verification phase; neither phase
+changes the global default. The Host's operation state, not a Client guess,
+proves when that verification phase begins. Normal pending authorization is
+progress, not a terminal busy error; technical diagnostics remain available in
+a collapsed disclosure. Unknown blockers are not replaced with a speculative
+list. **Refresh account information** remains an identity refresh only and
+does not complete or cancel authorization.
+
 Switching has a preparation phase and a commit phase:
 
 Route eligibility reads official rc.2 SettingsForms through redacted
@@ -222,6 +233,11 @@ most 64 Sessions and 128 turns per Session. Restart, cold history, eviction or a
 request with no native delivery is unknown. Failed reads are distinct from
 unknown evidence; Retry rereads the same turn without inference. Official rc.2
 has no ignorable account-history event seam: no new durable event is emitted.
+Only a login captured for that turn is shown; otherwise identity is explicitly
+unavailable, never inferred from current settings or today's account selector.
+Credits selector labels unknown original/saved authorizations without exposing
+opaque record identifiers; these presentation labels do not fetch identity or
+change account selection.
 
 Identity and quota have separate error states but must share account evidence.
 Models account mutations invalidate mounted Credits presentation before the

@@ -52,12 +52,23 @@ describe('account Remote public gateway binding', () => {
         generation: { getSnapshot: () => undefined } })
       Gateway.apply(client)
       await client.remote.$mount(contribution)
-      await host.plugin({ apply(ctx) { new AccountsController(ctx) } })
+      let accountsController: AccountsController | undefined
+      await host.plugin({ apply(ctx) { accountsController = new AccountsController(ctx) } })
       await expect(client.remote.githubCopilotAccounts.get()).resolves.toMatchObject({
         ok: true, value: { state: 'error', activeAccountId: 'canonical', revision: 4,
           diagnostic: 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE',
           accounts: [{ id: 'canonical', configured: false, identityState: 'unknown' }] },
       })
+      const originalGet = accountsController!.host.get.bind(accountsController!.host)
+      accountsController!.host.get = async () => ({
+        state: 'error', activeAccountId: 'canonical', revision: 4, writable: true, switchable: false,
+        accounts: [{ id: 'canonical', configured: false, identityState: 'unknown' }],
+        operation: 'verifying', notices: [], diagnostic: 'COPILOT_ACCOUNTS_BUSY',
+      })
+      await expect(client.remote.githubCopilotAccounts.get()).resolves.toMatchObject({
+        ok: true, value: { operation: 'verifying', diagnostic: 'COPILOT_ACCOUNTS_BUSY', notices: [] },
+      })
+      accountsController!.host.get = originalGet
       await expect(client.remote.githubCopilotAccounts.ensureIdentity()).resolves.toMatchObject({
         ok: true, value: { state: 'error', activeAccountId: 'canonical',
           diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' },

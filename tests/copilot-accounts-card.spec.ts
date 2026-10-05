@@ -12,6 +12,7 @@ beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 afterEach(async () => {
   await act(async () => { cleanups.splice(0).forEach(dispose => dispose()) })
   vi.useRealTimers()
+  vi.unstubAllGlobals()
   document.body.replaceChildren()
 })
 const view = (extra: Partial<CopilotAccountsView> = {}): CopilotAccountsView => ({
@@ -33,12 +34,12 @@ function remote(value = view()): CopilotAccountsRemote {
     reauthorize: vi.fn(async () => ok(value)),
   }
 }
-async function mount(api: CopilotAccountsRemote, expanded = true) {
+async function mount(api: CopilotAccountsRemote, expanded = true, locale = 'en-US') {
   const container = document.createElement('div')
   document.body.append(container)
   const root = createRoot(container)
   cleanups.push(() => root.unmount())
-  await act(async () => { root.render(createElement(CopilotAccountsPanel, { remote: api, expanded })) })
+  await act(async () => { root.render(createElement(CopilotAccountsPanel, { remote: api, expanded, locale })) })
 }
 const text = () => document.body.textContent ?? ''
 const button = (label: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent === label)!
@@ -124,6 +125,103 @@ describe('Models account management', () => {
     expect(button('Add GitHub account').disabled).toBe(true)
     expect(text()).toContain('No running work will be cancelled')
   })
+  it('presents in-flight authorization as progress and orders verification, copy and cancel actions', async () => {
+    const pending = view({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY',
+      operation: 'authorizing', notices: [{
+        message: 'Complete GitHub device authorization.', url: 'https://github.com/login/device', code: 'SYNTHETIC',
+      }] })
+    const api = remote()
+    vi.mocked(api.add).mockResolvedValueOnce(ok(pending))
+    await mount(api)
+    await click('Add GitHub account')
+    expect(text()).toContain('Adding account — waiting for GitHub authorization')
+    expect(text()).toContain('Your current default account will not change.')
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+    const details = document.querySelector<HTMLDetailsElement>('[data-copilot-account-diagnostic]')!
+    expect(details.open).toBe(false)
+    const authorization = document.querySelector('[data-copilot-account-authorization]')!
+    expect(Array.from(authorization.querySelectorAll('a,button')).map(node => node.textContent)).toEqual([
+      'Open GitHub verification', 'Copy authorization code', 'Cancel adding account',
+    ])
+    expect(document.querySelector('[data-copilot-current-account]')?.textContent).toBe('@demo-a')
+  })
+  it('copies only the displayed authorization code and announces clipboard failure with manual recovery', async () => {
+    const pending = view({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY',
+      operation: 'authorizing', notices: [{
+        message: 'Complete GitHub device authorization.', url: 'https://github.com/login/device', code: 'SYNTHETIC',
+      }] })
+    const api = remote()
+    vi.mocked(api.add).mockResolvedValueOnce(ok(pending))
+    const writeText = vi.fn(async () => undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    await mount(api)
+    await click('Add GitHub account')
+    await click('Copy authorization code')
+    await act(async () => { await Promise.resolve() })
+    expect(writeText).toHaveBeenCalledExactlyOnceWith('SYNTHETIC')
+    expect(text()).toContain('Authorization code copied to clipboard.')
+    writeText.mockRejectedValueOnce(new Error('clipboard failure'))
+    await click('Code copied')
+    await act(async () => { await Promise.resolve() })
+    expect(document.querySelector('[role="alert"]')?.textContent)
+      .toBe('Could not copy the code. Select it above and copy it manually.')
+    expect(document.querySelector('[data-copilot-account-device-code]')?.textContent).toBe('SYNTHETIC')
+  })
+  it('clears copied code feedback on cancel and ignores a late clipboard result', async () => {
+    const pending = view({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY',
+      operation: 'authorizing', notices: [{
+        message: 'Complete GitHub device authorization.', url: 'https://github.com/login/device', code: 'SYNTHETIC',
+      }] })
+    const api = remote()
+    vi.mocked(api.add).mockResolvedValueOnce(ok(pending))
+    let finish!: () => void
+    const writeText = vi.fn(() => new Promise<void>(resolve => { finish = resolve }))
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    vi.mocked(api.cancel).mockResolvedValueOnce(ok(view()))
+    await mount(api)
+    await click('Add GitHub account')
+    await click('Copy authorization code')
+    expect(button('Copying…').disabled).toBe(true)
+    await click('Cancel adding account')
+    expect(document.querySelector('[data-copilot-account-device-code]')).toBeNull()
+    finish()
+    await act(async () => { await Promise.resolve() })
+    expect(text()).not.toContain('Authorization code copied to clipboard.')
+    expect(document.querySelector('[data-copilot-current-account]')?.textContent).toBe('@demo-a')
+  })
+  it('shows a real authorization failure as an actionable error, not a busy status', async () => {
+    await mount(remote(view({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_AUTH_FAILED' })))
+    expect(document.querySelector('[role="alert"]')?.textContent)
+      .toBe('GitHub authorization did not complete. Try adding the account again.')
+    expect(text()).not.toContain('or unbound preparation')
+  })
+  it('shows verification as a distinct completed-OAuth phase without implying cancellation or switching', async () => {
+    const verifying = view({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY',
+      operation: 'verifying', notices: [] })
+    const api = remote()
+    vi.mocked(api.add).mockResolvedValueOnce(ok(verifying))
+    await mount(api)
+    await click('Add GitHub account')
+    expect(text()).toContain('GitHub authorization complete — verifying account identity and available models')
+    expect(text()).toContain('Your current default account will not change.')
+    expect(button('Cancel adding account')).toBeUndefined()
+    expect(button('Add GitHub account')).toBeUndefined()
+    expect(api.switchAccount).not.toHaveBeenCalled()
+  })
+  it('localizes authorization progress and controls in Chinese', async () => {
+    const pending = view({ state: 'error', switchable: false, diagnostic: 'COPILOT_ACCOUNTS_BUSY',
+      operation: 'authorizing', notices: [{
+        message: 'Complete GitHub device authorization.', url: 'https://github.com/login/device', code: 'SYNTHETIC',
+      }] })
+    const api = remote()
+    vi.mocked(api.add).mockResolvedValueOnce(ok(pending))
+    await mount(api, true, 'zh-CN')
+    await click('添加 GitHub 账号')
+    expect(text()).toContain('正在添加账号，等待 GitHub 授权')
+    expect(button('复制授权码')).not.toBeNull()
+    expect(button('取消添加账号')).not.toBeNull()
+    expect(text()).not.toContain('COPILOT_ACCOUNTS_BUSY ·')
+  })
   it('offers explicit recovery from a missing selected slot without automatic switching', async () => {
     const api = remote(view({
       state: 'error', activeAccountId: '00000000-0000-4000-8000-000000000002',
@@ -154,7 +252,7 @@ describe('Models account management', () => {
     expect(text()).toContain('SYNTHETIC')
     await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
     expect(api.get).toHaveBeenCalledOnce()
-    await click('Cancel account sign-in')
+    await click('Cancel adding account')
     expect(api.cancel).toHaveBeenCalledOnce()
   })
 })

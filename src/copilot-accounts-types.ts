@@ -33,7 +33,7 @@ export interface CopilotAccountsView {
   readonly writable: boolean
   readonly switchable: boolean
   readonly accounts: readonly CopilotAccountView[]
-  readonly operation?: 'authorizing' | 'switching'
+  readonly operation?: 'authorizing' | 'verifying' | 'switching'
   readonly notices: readonly CopilotAccountsNotice[]
   readonly diagnostic?: CopilotAccountsDiagnostic
 }

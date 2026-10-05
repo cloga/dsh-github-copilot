@@ -27,6 +27,8 @@ import { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
 import { CopilotAccountsPanel } from './copilot-accounts-card.ts'
 import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
 import { accountPresentationChanges } from './copilot-account-presentation.ts'
+import { copyAuthorizationCode } from './authorization-code-clipboard.ts'
+export { copyAuthorizationCode }
 export { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
 import {
   GITHUB_COPILOT_PROVIDER_ID,
@@ -41,6 +43,13 @@ interface GitHubCopilotProviderCardProps extends ProviderCardExtrasOwnerProps {
 
 interface GitHubCopilotSettingsSectionProps extends SettingsSectionOwnerProps {
   readonly remote: ClientContext['remote']['githubCopilot']
+  readonly locale?: string
+}
+interface LocaleReader { getLocale(): { active: string }; subscribe(listener: () => void): () => void }
+function isLocaleReader(value: unknown): value is LocaleReader {
+  return typeof value === 'object' && value !== null
+    && 'getLocale' in value && typeof value.getLocale === 'function'
+    && 'subscribe' in value && typeof value.subscribe === 'function'
 }
 
 function messageOf(result: Awaited<ReturnType<GitHubCopilotProviderCardProps['remote']['status']>>): string {
@@ -172,7 +181,6 @@ export function activeAuthorizationNotice(
   return status?.inFlight === true ? status.notices.at(-1) : undefined
 }
 
-type ClipboardWriter = Pick<Clipboard, 'writeText'>
 type CopyState = 'idle' | 'copying' | 'copied' | 'failed'
 
 const noticePanelStyle: CSSProperties = {
@@ -206,13 +214,6 @@ const deviceCodeStyle: CSSProperties = {
   lineHeight: 1.2,
   textAlign: 'center',
   userSelect: 'all',
-}
-
-/** Copy a one-time authorization code through the browser clipboard boundary. */
-export async function copyAuthorizationCode(code: string, clipboard?: ClipboardWriter): Promise<void> {
-  const writer = clipboard ?? globalThis.navigator?.clipboard
-  if (writer === undefined) throw new Error('Clipboard access is unavailable')
-  await writer.writeText(code)
 }
 
 interface AuthorizationNoticeProps {
@@ -628,6 +629,7 @@ export function GitHubCopilotAccountModelsPanel(props: { readonly remote: Client
 interface GitHubCopilotPreviewFooterProps {
   readonly remote: ClientContext['remote']['githubCopilot']
   readonly accountsRemote?: CopilotAccountsRemote
+  readonly locale?: string
   /** A slot coordinator owns this controller's attachment across surface handoffs. */
   readonly account?: ReturnType<typeof createCompactAccount>
   readonly embedded?: boolean
@@ -701,7 +703,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
   },
   props.accountsRemote === undefined ? null : createElement(CopilotAccountsPanel, {
     remote: props.accountsRemote, expanded: manageOpen, onChanged: account.retryStatus,
-    authorizationBusy, configured: view?.configured,
+    authorizationBusy, configured: view?.configured, locale: props.locale,
   }),
   createElement('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', minHeight: '42px' } },
     createElement('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', minWidth: 0 } },
@@ -746,7 +748,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
 /** Standalone footer presentation; registered Models seats use the shared surface coordinator. */
 export function GitHubCopilotPreviewFooter(props: GitHubCopilotPreviewFooterProps): ReactElement {
   return createElement('div', { 'data-dsh-github-copilot-preview-footer': true },
-    createElement(GitHubCopilotCompactAccount, { remote: props.remote, accountsRemote: props.accountsRemote }))
+    createElement(GitHubCopilotCompactAccount, { remote: props.remote, accountsRemote: props.accountsRemote, locale: props.locale }))
 }
 
 type AccountSurfaceKind = 'provider' | 'footer' | 'settings'
@@ -830,15 +832,19 @@ export function GitHubCopilotAccountSurface(props: GitHubCopilotPreviewFooterPro
   readonly surfaces: ReturnType<typeof createAccountSurfaces>
   readonly seat: AccountSurfaceSeat
   readonly eligible?: boolean
+  readonly localeReader?: LocaleReader
 }): ReactElement | null {
   const token = useMemo(() => Symbol('github-copilot-account-surface'), [])
   const owner = useSyncExternalStore(props.surfaces.subscribe, props.surfaces.getSnapshot, props.surfaces.getSnapshot)
+  const subscribeLocale = useCallback((listener: () => void) => props.localeReader?.subscribe(listener) ?? (() => {}), [props.localeReader])
+  const getLocale = useCallback(() => props.localeReader?.getLocale().active ?? 'en', [props.localeReader])
+  const locale = useSyncExternalStore(subscribeLocale, getLocale, () => 'en')
   useLayoutEffect(() => props.eligible === false ? undefined : props.surfaces.mount(props.seat, token, props.remote),
     [props.surfaces, props.seat, props.remote, props.eligible, token])
   if (props.eligible === false || owner?.token !== token) return null
   const embedded = props.seat.kind === 'provider'
   return createElement('div', { 'data-dsh-github-copilot-account-surface': props.seat.kind },
-    createElement(GitHubCopilotCompactAccount, { remote: props.remote, accountsRemote: props.accountsRemote, account: owner.account, embedded }))
+    createElement(GitHubCopilotCompactAccount, { remote: props.remote, accountsRemote: props.accountsRemote, account: owner.account, embedded, locale }))
 }
 
 /** Unified fallback when the Models footer extension is absent or incompatible. */
@@ -846,7 +852,7 @@ export function GitHubCopilotSettingsSection(
   props: GitHubCopilotSettingsSectionProps,
 ): ReturnType<typeof createElement> {
   return createElement('section', { 'data-dsh-github-copilot-settings': true },
-    createElement(GitHubCopilotCompactAccount, { remote: props.remote }))
+    createElement(GitHubCopilotCompactAccount, { remote: props.remote, locale: props.locale }))
 }
 
 function registerUi(ctx: ClientContext): () => void {
@@ -854,6 +860,8 @@ function registerUi(ctx: ClientContext): () => void {
   // Native namespace lookups create traced proxies; capture once per registration.
   const remote = ctx.remote.githubCopilot
   const accountsRemote = ctx.remote.githubCopilotAccounts
+  const localeCandidate: unknown = ctx.get('locale')
+  const localeReader = isLocaleReader(localeCandidate) ? localeCandidate : undefined
   const disposeCredentials = ctx.remote.$on('credentials/reference-updated', () => surfaces.invalidate())
   const disposeReset = ctx.on('connection/reset', () => surfaces.invalidate())
   let active = true
@@ -870,7 +878,7 @@ function registerUi(ctx: ClientContext): () => void {
           id: 'github-copilot',
           order: 11,
           label: 'GitHub Copilot',
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote, localeReader }))
         disposeFallback = () => { surfaces.revoke(seat); dispose() }
       }
       return
@@ -891,7 +899,7 @@ function registerUi(ctx: ClientContext): () => void {
         'GitHub Copilot account models are already managed by the account panel. Saving this additional provider profile enables another model group; it does not connect a second account. Use the account panel instead. This plugin cannot disable the native Save action.')
       }
       return createElement(GitHubCopilotAccountSurface, {
-        surfaces, seat, remote, accountsRemote, eligible: isGitHubCopilotAccountRow(props),
+        surfaces, seat, remote, accountsRemote, eligible: isGitHubCopilotAccountRow(props), localeReader,
       })
     })
     return () => { surfaces.revoke(seat); dispose() }
@@ -913,7 +921,7 @@ function registerUi(ctx: ClientContext): () => void {
           name: 'settings.models.footer',
           id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
           order: 10,
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote, localeReader }))
       } catch {
         // Do not withdraw working fallback authorization until footer registration succeeds.
         reportFooterUnavailable()

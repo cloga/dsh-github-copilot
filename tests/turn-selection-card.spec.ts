@@ -44,6 +44,24 @@ it('distinguishes failed Account reads from unknown evidence and retries only th
   expect(container.textContent).toContain('Account · unknown')
   expect(container.querySelector('[role=dialog]')?.textContent).toContain('cannot reconstruct history')
 })
+it.each([
+  ['en', 'Account · identity unavailable', 'Account: identity unavailable'],
+  ['zh', '账号 · 身份暂不可用', '账号: 身份暂不可用'],
+] as const)('shows missing captured turn identity as unknown without exposing internal account IDs (%s)', async (locale, summary, detail) => {
+  const accountId = '00000000-0000-4000-8000-000000000001'
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  await act(async () => root.render(createElement(TurnSelectionCard, {
+    selection: { mode: 'manual' }, locale,
+    account: { state: 'recorded', accountId, source: 'global' },
+  })))
+  expect(container.textContent).toContain(summary)
+  expect(container.textContent).not.toContain(accountId)
+  expect(container.textContent).not.toContain('Canonical')
+  await act(async () => container.querySelector('button')!.click())
+  expect(container.querySelector('[role=dialog]')?.textContent).toContain(detail)
+  expect(container.querySelector('[role=dialog]')?.textContent).not.toContain(accountId)
+})
 it.each(['en', 'zh'])('keeps captured auxiliary timing inside progressive evidence and explains timeout fallback (%s)', async locale => {
   const container = await mount({ ...auto, explanation: {
     assessment: { demand: 'unknown', source: 'local', signals: ['insufficient-evidence'], diagnostic: 'timeout',

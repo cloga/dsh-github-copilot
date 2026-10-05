@@ -31,7 +31,7 @@ export const CopilotAccountsViewSchema = z.object({
     identity: z.object({ login: z.string().min(1).max(39).regex(GITHUB_ACCOUNT_LOGIN_PATTERN),
       userId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict().optional(),
   }).strict()).max(COPILOT_ACCOUNTS_MAX),
-  operation: z.enum(['authorizing', 'switching']).optional(),
+  operation: z.enum(['authorizing', 'verifying', 'switching']).optional(),
   notices: z.array(z.object({
     message: z.string().min(1).max(512),
     url: z.literal('https://github.com/login/device').optional(),

@@ -153,6 +153,9 @@ describe('tsdown client artifact', () => {
         if (!previous || deps.some((value, at) => !Object.is(value, previous.deps[at]))) current.memos[index] = { deps, value: factory() }
         return current.memos[index]!.value as T
       },
+      useCallback<T extends (...args: never[]) => unknown>(callback: T, deps: React.DependencyList): T {
+        return hooks.useMemo(() => callback, deps)
+      },
       useSyncExternalStore<T>(_subscribe: unknown, snapshot: () => T): T { return snapshot() },
       useLayoutEffect(setup: React.EffectCallback, deps?: React.DependencyList) {
         const instance = current, index = effectIndex++, previous = instance.effects[index]

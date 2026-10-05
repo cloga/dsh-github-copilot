@@ -50,6 +50,7 @@ const copy = {
     accountSaveFailed: 'Could not save the Session account. Refresh and try again.',
     accountLoading: 'Loading account selection…', accountMissing: 'Account selection unavailable. Refresh to retry.',
     runningAccount: 'Running turn remains on', identityUnknown: 'Identity unavailable',
+    originalAuthorization: 'Original authorization', savedAuthorization: 'Saved authorization',
   },
   zh: {
     credits: '额度', requests: '高级请求', unknown: 'Copilot 用量',
@@ -73,6 +74,7 @@ const copy = {
     accountSaveFailed: '无法保存 Session 账号，请刷新后重试。',
     accountLoading: '正在读取账号选择…', accountMissing: '账号选择暂不可用，请刷新重试。',
     runningAccount: '正在运行的 turn 仍使用', identityUnknown: '身份暂不可用',
+    originalAuthorization: '原始授权', savedAuthorization: '已保存授权',
   },
 } as const
 
@@ -294,6 +296,11 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   }, [open, close])
 
   const available = view?.state === 'ready' || view?.state === 'stale'
+  const unknownSavedAccounts = (sessionAccount?.accounts.accounts ?? [])
+    .filter(account => account.configured && account.id !== 'canonical' && account.identity === undefined)
+  const numberedUnknownAccounts = unknownSavedAccounts.length > 1
+    ? new Map(unknownSavedAccounts.map((account, index) => [account.id, index + 1] as const))
+    : new Map<string, number>()
   const knownUnits = view?.billing === 'credits' || view?.billing === 'requests'
   const numbers = available && knownUnits
   const used = numbers && amount(view.used) ? view.used : undefined
@@ -369,7 +376,9 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
           key: account.id, type: 'button', style: { ...button, textAlign: 'left' }, disabled: savingAccount,
           'aria-pressed': sessionAccount.source === 'session' && sessionAccount.accountId === account.id,
           onClick: () => { void chooseAccount(account.id) },
-        }, account.identity ? `@${account.identity.login}` : `${t.identityUnknown} · ${account.id === 'canonical' ? 'Canonical' : account.id.slice(0, 8)}`))) : null,
+        }, account.identity ? `@${account.identity.login}` : account.id === 'canonical'
+          ? `${t.originalAuthorization} · ${t.identityUnknown}`
+          : `${t.savedAuthorization}${numberedUnknownAccounts.has(account.id) ? ` ${numberedUnknownAccounts.get(account.id)}` : ''} · ${t.identityUnknown}`))) : null,
       sessionAccount?.accounts.diagnostic === undefined ? null : h('code', { style: muted }, sessionAccount.accounts.diagnostic),
       accountFailed || accountSaveFailed ? h('p', { role: 'alert', style: muted }, accountSaveFailed ? t.accountSaveFailed : t.accountMissing) : null),
     view?.state === 'stale' ? h('p', { role: 'status', style: muted }, t.stale) : null,
