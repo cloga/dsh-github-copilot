@@ -81,23 +81,38 @@ exact verified scope rejection: total items, direct ID fields, reference items,
 encrypted reasoning items, unrecognized items, `previous_response_id`/`store`
 state and presence of the two native session/request headers. It observes the
 final HTTP dispatch, not the earlier SDK payload before caller replacement.
-Only fixed labels and counts enter the existing error; no IDs, header values,
-message text, arguments, results or opaque bytes are retained. The shared
+Only fixed labels and counts enter the separate `dispatchEvidence` diagnostic
+and Host warning; the main error stays concise and points to explicit recovery
+or a new conversation. No IDs, header values, message text, arguments, results
+or opaque bytes are retained. The shared
 16 MiB/depth/work diagnostic limits apply; unavailable evidence never becomes
-zero counts. Historical errors without this suffix have no such evidence.
+zero counts. Historical errors are not rewritten; absence of captured evidence
+is not zero counts.
 Structure counts alone do not repair cross-turn scope rejection: zero direct
 IDs does not prove encrypted replay is portable.
+
+Switching from account A to B does not make old account/connection-bound
+encrypted reasoning portable. An exact scope rejection is not proof that
+sign-in failed or that a particular encrypted item was rejected. Recovery
+is an explicitly authorized, lossy continuation, not a portability repair.
+Starting a new conversation avoids replaying the old history.
 
 ### Explicit session replay recovery
 
 After an exact verified managed Responses scope rejection, **Replay recovery**
-in that session's composer automatically offers the failed request's old
+above that session's composer automatically offers the failed request's old
 encrypted items on opening the eligible session, when its native `running`
 snapshot settles, or when its `lastAgentError` changes while idle. These public
 Session snapshot changes trigger read-only Host evidence reads, not model calls,
 history reads, new durable events or polling. Normal sessions show no notice.
 Dismissal is local to the mounted model/session and evidence revision; a new
 failure can reappear. Read errors remain distinct from missing evidence.
+
+Context evidence and recovery use the public full-width
+`conversation.input.dock` with shared native secondary typography for body
+text and controls. They stack above the composer rather than squeezing into
+its non-wrapping statistics row. Native meters, statistics and parent DOM stay
+unchanged; authorization itself still sends no message.
 
 Choose **Review recovery options**, then **Next matching turn only** (the
 default choice) or **Continue in this session**, and **Accept loss and authorize**.

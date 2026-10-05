@@ -3,6 +3,7 @@ import { createElement as h, useCallback, useEffect, useId, useRef, useState, us
 import type { ReactElement } from 'react'
 import { ReplayRecoveryViewSchema } from './replay-recovery-types.ts'
 import type { ReplayRecoveryDuration, ReplayRecoveryView } from './replay-recovery-types.ts'
+import { composerNoticeStyle, composerNoticeParagraphStyle, composerNoticeButtonStyle } from './composer-notice-style.ts'
 
 export interface ReplayRecoveryRemote {
   get(agentId: string): Promise<{ ok: boolean; value?: unknown }>
@@ -75,39 +76,40 @@ export function ReplayRecoveryCard({ sessionId, remote, locale = 'en', running =
     const timer = setTimeout(() => void perform(), Math.max(0, expiresAt - Date.now()))
     return () => clearTimeout(timer)
   }, [expiresAt, perform])
-  const button = { font: 'inherit', color: 'inherit', background: 'transparent',
-    border: '1px solid var(--dsw-alias-border-main, GrayText)', borderRadius: 6, padding: '6px 10px' }
+  const button = composerNoticeButtonStyle
   const disabled = busy || running
   const evidence = view && view.state !== 'unavailable' ? view : undefined
   if (!error && !evidence && !hadEvidence) return null
   if (!error && evidence?.state === 'available' && dismissed === evidence.revision) {
-    return h('button', { type: 'button', style: button, disabled, onClick: () => setDismissed(undefined) },
+    return h('button', { type: 'button', style: { ...button, ...composerNoticeStyle,
+      width: 'auto', alignSelf: 'flex-start', color: button.color },
+      disabled, onClick: () => setDismissed(undefined) },
       zh ? '回放恢复 · 查看' : 'Replay recovery · Review')
   }
   return h('section', { 'aria-label': zh ? '回放恢复' : 'Replay recovery',
-    'aria-busy': busy, style: { maxWidth: 'min(100%, 38rem)', overflowWrap: 'anywhere', paddingBlock: 8 } },
-  h('strong', { role: 'status' }, evidence?.state === 'enabled'
+    'data-copilot-composer-notice': 'replay', 'aria-busy': busy, style: { ...composerNoticeStyle, paddingBlock: 8 } },
+  h('strong', { role: 'status', style: { color: 'var(--dsw-alias-label-primary, CanvasText)', fontWeight: 600 } }, evidence?.state === 'enabled'
     ? zh ? '回放恢复已授权' : 'Replay recovery authorized'
     : evidence ? zh ? '旧推理回放被拒绝' : 'Old reasoning replay was rejected'
       : zh ? '回放恢复' : 'Replay recovery'),
-  error ? h('p', { role: 'alert' }, zh
+  error ? h('p', { role: 'alert', style: composerNoticeParagraphStyle }, zh
     ? '无法读取或更改恢复状态。请等当前轮结束后重新读取；旧确认可能已过期。'
     : 'Recovery could not be read or changed. Wait for the active turn to end and read again; the prior confirmation may have expired.') : null,
-  view?.state === 'unavailable' ? h('p', null, zh
+  view?.state === 'unavailable' ? h('p', { style: composerNoticeParagraphStyle }, zh
     ? '授权或失败证据已失效。恢复未启用；没有当前可用的失败证据。'
     : 'Authorization or failure evidence expired. Recovery is off; no current failure evidence is available.') : null,
   evidence ? h('div', null,
-    h('p', null, zh ? `${evidence.model}：${evidence.itemCount} 条已识别的旧加密推理项。`
+    h('p', { style: composerNoticeParagraphStyle }, zh ? `${evidence.model}：${evidence.itemCount} 条已识别的旧加密推理项。`
       : `${evidence.model}: ${evidence.itemCount} identified old encrypted reasoning items.`),
-    evidence.state === 'enabled' ? h('p', null,
+    evidence.state === 'enabled' ? h('p', { style: composerNoticeParagraphStyle },
       evidence.duration === 'next-turn'
         ? zh ? '仅下一轮使用恢复，覆盖该轮的全部步骤与原生重试，轮结束即关闭。' : 'Authorized for the next matching turn only, including all its steps and native retries; turns off when that turn ends.'
         : zh ? '本会话继续使用恢复，直到关闭或验证状态失效。' : 'Authorized for this session until disabled or validation expires.',
       ' ', zh ? '尚未发送消息。请使用原生发送或重试按钮继续。' : 'No message has been sent. Use the native Send or Retry control to continue.') :
-      h('p', null, zh ? '恢复未启用。确认损失后才能跳过这些旧项；不会自动重试。'
+      h('p', { style: composerNoticeParagraphStyle }, zh ? '恢复未启用。确认损失后才能跳过这些旧项；不会自动重试。'
         : 'Recovery is off. Review the loss before skipping these old items; nothing is retried automatically.'),
     confirm ? h('div', null,
-      h('p', null, zh
+      h('p', { style: composerNoticeParagraphStyle }, zh
         ? '恢复会跳过已识别的旧项，包括对应隐藏推理状态及项内摘要。磁盘历史、界面可见消息及工具调用保持不变；新推理照常保留。关闭不能撤销已生成的回答。'
         : 'Recovery skips the identified old items, including their hidden reasoning state and item summaries. Stored history, displayed messages and tool calls stay unchanged; new reasoning is retained. Disabling cannot undo generated answers.'),
       h('fieldset', { disabled, style: { border: 0, padding: 0, marginBlock: 12 } },
@@ -116,7 +118,7 @@ export function ReplayRecoveryCard({ sessionId, remote, locale = 'en', running =
           h('input', { type: 'radio', name: durationName, value, checked: duration === value, onChange: () => setDuration(value) }),
           ' ', value === 'next-turn' ? zh ? '仅下一轮使用恢复' : 'Next matching turn only'
             : zh ? '在本会话内继续使用' : 'Continue in this session'))),
-      h('p', null, zh ? '两种授权都只适用于相同模型及验证状态，最长不超过失败证据产生后一小时；Host 重启后失效。不会处理 408、额度或上下文超限。'
+      h('p', { style: composerNoticeParagraphStyle }, zh ? '两种授权都只适用于相同模型及验证状态，最长不超过失败证据产生后一小时；Host 重启后失效。不会处理 408、额度或上下文超限。'
         : 'Both options require the same model and validation state, expire within one hour of the failure, and are lost on Host restart. Not a remedy for 408, quota or context limits.'),
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
         h('button', { type: 'button', style: button, disabled, onClick: () => void perform(duration) },
@@ -129,7 +131,7 @@ export function ReplayRecoveryCard({ sessionId, remote, locale = 'en', running =
         evidence.state === 'available' ? h('button', { type: 'button', style: button, disabled,
           onClick: () => setDismissed(evidence.revision) }, zh ? '暂不处理' : 'Not now') : null),
   ) : null,
-  running ? h('p', { role: 'status' }, zh ? '当前轮进行中，结束后自动更新。' : 'Turn in progress; status updates when it ends.') : null,
+  running ? h('p', { role: 'status', style: composerNoticeParagraphStyle }, zh ? '当前轮进行中，结束后自动更新。' : 'Turn in progress; status updates when it ends.') : null,
   h('button', { type: 'button', style: { ...button, marginBlock: 8 }, disabled, onClick: () => void perform() },
     busy ? zh ? '正在读取…' : 'Reading…' : zh ? '重新读取状态' : 'Read status again'))
 }
@@ -176,7 +178,7 @@ export function registerReplayRecoveryUi(ctx: Context): () => void {
   const remote = ctx.remote.githubCopilotReplayRecovery
   const language: unknown = ctx.get('locale')
   const locale = isLocale(language) ? language : undefined
-  const name = 'conversation.composer.dock'
+  const name = 'conversation.input.dock'
   return slots.inject(name, () => {
     const spec = slots.spec(name)
     if (spec?.kind !== 'list' || spec.scope !== 'session') { ctx.logger.warn('COPILOT_REPLAY_RECOVERY_SLOT_UNAVAILABLE'); return noop }

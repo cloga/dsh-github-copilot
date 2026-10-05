@@ -1,13 +1,30 @@
 // @vitest-environment jsdom
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
+import type { Context } from '@deepseek-ai/cordis'
 import { afterEach, expect, it, vi } from 'vitest'
-import { ReplayRecoveryCard } from '../src/replay-recovery-ui.ts'
+import { ReplayRecoveryCard, registerReplayRecoveryUi } from '../src/replay-recovery-ui.ts'
 import type { ReplayRecoveryDuration } from '../src/replay-recovery-types.ts'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); vi.useRealTimers() })
 const available = { state: 'available', revision: '12345678-1234-4234-8234-123456789012', itemCount: 12, model: 'synthetic-model' }
+it('registers recovery only in the public full-width Session input dock', () => {
+  const dispose = vi.fn()
+  const slots = {
+    spec: vi.fn(() => ({ kind: 'list', scope: 'session' })),
+    inject: vi.fn((_name: string, activate: () => () => void) => activate()),
+    register: vi.fn(() => dispose),
+  }
+  const ctx = { get: (name: string) => name === 'slots' ? slots : undefined,
+    remote: { githubCopilotReplayRecovery: {} }, logger: { warn: vi.fn() } }
+  const cleanup = registerReplayRecoveryUi(ctx as unknown as Context)
+  expect(slots.inject).toHaveBeenCalledWith('conversation.input.dock', expect.any(Function))
+  expect(slots.register).toHaveBeenCalledWith(
+    { name: 'conversation.input.dock', id: 'github-copilot-replay-recovery', order: 30 }, expect.any(Function))
+  cleanup()
+  expect(dispose).toHaveBeenCalledOnce()
+})
 function fixture(value: unknown = available) {
   const remote = {
     get: vi.fn(async (): Promise<{ ok: boolean; value?: unknown }> => ({ ok: true, value })),
@@ -27,6 +44,27 @@ function fixture(value: unknown = available) {
   }
   return { remote, node, render, click, close: () => act(async () => root.unmount()) }
 }
+it('uses native auxiliary typography for the entire notice and inherited controls in an independent dock row', async () => {
+  const f = fixture()
+  try {
+    await f.render()
+    const notice = f.node.querySelector('section')!
+    expect(notice.style.fontSize).toBe('var(--dsh-content-font-size-secondary, 13px)')
+    expect(notice.style.lineHeight).toBe('calc(20px + var(--dsh-content-font-delta-secondary, 0px))')
+    expect(notice.style.width).toBe('100%')
+    expect(notice.style.minWidth).toBe('0')
+    await f.click('Review recovery options')
+    for (const paragraph of Array.from(f.node.querySelectorAll('p'))) {
+      expect(paragraph.style.marginBlock).toBe('8px')
+      expect(paragraph.style.maxWidth).toBe('38rem')
+    }
+    for (const button of Array.from(f.node.querySelectorAll('button'))) {
+      expect(button.style.fontSize).toBe('inherit')
+      expect(button.style.fontFamily).toBe('inherit')
+    }
+    expect(f.remote.authorize).not.toHaveBeenCalled()
+  } finally { await f.close() }
+})
 it.each(['next-turn', 'session'] as const)('automatically shows evidence but requires explicit %s consent, without sending', async duration => {
   const f = fixture()
   try {
@@ -62,6 +100,9 @@ it('is absent normally, reads on settled turns without polling and resets dismis
     expect(f.node.textContent).toContain('Old reasoning replay was rejected')
     await f.click('Not now')
     expect(f.node.textContent).toBe('Replay recovery · Review')
+    const compact = f.node.querySelector('button')!
+    expect(compact.style.fontSize).toBe('var(--dsh-content-font-size-secondary, 13px)')
+    expect(compact.style.lineHeight).toBe('calc(20px + var(--dsh-content-font-delta-secondary, 0px))')
     await f.render({ refreshKey: 'native failure changed' })
     expect(f.node.textContent).toBe('Replay recovery · Review')
     await f.click('Replay recovery · Review')

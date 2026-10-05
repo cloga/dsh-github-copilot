@@ -4,8 +4,9 @@ import type { ReactElement } from 'react'
 import { autoModelPreference } from './copilot-identity.ts'
 import { COPILOT_CONTEXT_EVIDENCE, ContextEvidenceSchema } from './context-evidence.ts'
 import type { ContextEvidence } from './context-evidence.ts'
+import { composerNoticeStyle, composerNoticeParagraphStyle } from './composer-notice-style.ts'
 
-const slot = 'conversation.composer.dock'
+const slot = 'conversation.input.dock'
 const noop = () => {}
 interface Locale { getLocale(): { active: string }; subscribe(listener: () => void): () => void }
 interface Runtime {
@@ -58,18 +59,18 @@ export function ContextEvidenceNotice({ evidence, locale = 'en', applicable = tr
   if (evidence !== undefined && !evidence.invalid) return null
   const text = locale.startsWith('zh') ? copy.zh : copy.en
   const sample = applicable ? evidence?.sample : null
-  return h('details', { style: { maxWidth: 'min(100%, 38rem)', fontSize: 'inherit', overflowWrap: 'anywhere' } },
+  return h('details', { 'data-copilot-composer-notice': 'context', style: composerNoticeStyle },
     h('summary', { style: {
       cursor: 'pointer', fontFamily: 'var(--dsw-font-family, inherit)',
       fontSize: 'var(--dsh-content-font-size-secondary, 13px)', fontWeight: 400,
       lineHeight: 'calc(20px + var(--dsh-content-font-delta-secondary, 0px))',
       color: 'var(--dsw-alias-label-tertiary, GrayText)',
     } }, text.title),
-    h('p', { style: { marginBlock: '0.5rem' } }, evidence === undefined ? text.missing
+    h('p', { style: composerNoticeParagraphStyle }, evidence === undefined ? text.missing
       : evidence.reason === 'unknown' ? text.unknown : text.explanation),
-    sample ? h('p', { style: { marginBlock: '0.5rem' } },
+    sample ? h('p', { style: composerNoticeParagraphStyle },
       `${text.sample}: ${new Intl.NumberFormat(locale.startsWith('zh') ? 'zh-CN' : 'en-US').format(sample.tokens)} tokens`) : null,
-    evidence === undefined ? null : h('p', { style: { marginBlock: '0.5rem' } }, sample ? text.historical : text.revoked))
+    evidence === undefined ? null : h('p', { style: composerNoticeParagraphStyle }, sample ? text.historical : text.revoked))
 }
 
 function Surface({ runtime, locale, diagnostic }: {

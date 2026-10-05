@@ -4,7 +4,7 @@ import { requestBodyEvidence } from './request-body-evidence.ts'
 type ReplayFailure = 'scope-mismatch' | 'unsupported' | 'invalid-payload'
 
 const replayDiagnostics: Record<ReplayFailure, string> = {
-  'scope-mismatch': 'COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: Copilot Responses input references belong to a different connection.',
+  'scope-mismatch': 'COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: Copilot rejected history tied to another account or connection. Review Replay recovery options, or start a new conversation. Recovery requires consent; stored history is unchanged.',
   unsupported: 'COPILOT_RESPONSES_REPLAY_UNSUPPORTED: Copilot Responses input cannot be replayed safely without connection-scoped references.',
   'invalid-payload': 'COPILOT_RESPONSES_REPLAY_INVALID_PAYLOAD: Copilot Responses payload has an invalid replay structure.',
 }
@@ -17,9 +17,10 @@ interface ReplayDispatch {
 
 /** Fixed diagnostics and bounded counts only; never retain request or replay content. */
 export class CopilotResponsesReplayError extends Error {
+  readonly dispatchEvidence?: string
   constructor(reason: ReplayFailure = 'unsupported', dispatch?: ReplayDispatch) {
-    super(replayDiagnostics[reason] + (reason === 'scope-mismatch' && dispatch !== undefined
-      ? ` ${replayDispatchEvidence(dispatch)}` : ''))
+    super(replayDiagnostics[reason])
+    if (reason === 'scope-mismatch' && dispatch !== undefined) this.dispatchEvidence = replayDispatchEvidence(dispatch)
     this.name = 'CopilotResponsesReplayError'
   }
 }

@@ -61,6 +61,15 @@ describe('additive historical context notice', () => {
     const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence: invalid, locale })
     await view.render()
     const summary = view.container.querySelector('summary')!
+    const notice = view.container.querySelector('details')!
+    expect(notice.style.fontSize).toBe(summary.style.fontSize)
+    expect(notice.style.lineHeight).toBe(summary.style.lineHeight)
+    expect(notice.style.width).toBe('100%')
+    expect(notice.style.minWidth).toBe('0')
+    for (const paragraph of Array.from(view.container.querySelectorAll('p'))) {
+      expect(paragraph.style.marginBlock).toBe('8px')
+      expect(paragraph.style.maxWidth).toBe('38rem')
+    }
     expect(summary.style.fontFamily).toBe('var(--dsw-font-family, inherit)')
     expect(summary.style.fontSize).toBe('var(--dsh-content-font-size-secondary, 13px)')
     expect(summary.style.lineHeight).toBe('calc(20px + var(--dsh-content-font-delta-secondary, 0px))')
@@ -100,7 +109,7 @@ describe('additive historical context notice', () => {
     const f = fixture()
     f.declare()
     expect(f.ctx.slots.register).toHaveBeenCalledWith(
-      { name: 'conversation.composer.dock', id: 'github-copilot-context-evidence', order: 25 }, expect.any(Function),
+      { name: 'conversation.input.dock', id: 'github-copilot-context-evidence', order: 25 }, expect.any(Function),
     )
     const selection = source<unknown>({ next: route })
     const evidence = source<unknown>(invalid)
