@@ -22,7 +22,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
   document.body.replaceChildren()
 })
-function fixture(spec = { kind: 'list', scope: 'session' }) {
+function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unknown) {
   let component: ComponentType<Record<string, unknown>> | undefined
   let injection: (() => () => void) | undefined
   let release: (() => void) | undefined
@@ -37,6 +37,7 @@ function fixture(spec = { kind: 'list', scope: 'session' }) {
   const capture = vi.fn(() => remote)
   const namespace = Object.defineProperty({}, 'githubCopilotUsage', { get: capture })
   Object.defineProperty(namespace, 'githubCopilotSessionAccount', { value: sessionRemote })
+  Object.defineProperty(namespace, 'githubCopilotSessionContinuation', { value: continuation })
   const ctx = {
     remote: namespace, get: vi.fn(() => undefined), logger: { warn: vi.fn() },
     slots: {
@@ -88,6 +89,16 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
     f.declare()
     expect(f.ctx.slots.register).not.toHaveBeenCalled()
     expect(f.ctx.logger.warn).toHaveBeenCalledWith('[github-copilot] COPILOT_USAGE_SLOT_UNAVAILABLE')
+  })
+
+  it.each(['authorizeNext', 'defaults', 'setDefault'])('rejects a malformed optional continuation method: %s', method => {
+    const f = fixture(undefined, { get: vi.fn(), set: vi.fn(), [method]: true })
+    expect(f.ctx.logger.warn).toHaveBeenCalledWith('[github-copilot] COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
+  })
+
+  it('accepts the narrow continuation Remote without optional methods', () => {
+    const f = fixture(undefined, { get: vi.fn(), set: vi.fn() })
+    expect(f.ctx.logger.warn).not.toHaveBeenCalledWith('[github-copilot] COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
   })
 
   it('follows durable next selection instead of last-used, defaults or another session', async () => {

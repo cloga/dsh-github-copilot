@@ -55,6 +55,12 @@ function isSessionRemote(value: unknown): value is SessionAccountRemote {
     && typeof value.refreshIdentity === 'function' && typeof value.ensureIdentity === 'function'
     && typeof value.usage === 'function' && typeof value.refreshUsage === 'function'
 }
+function isContinuationRemote(value: unknown): value is SessionContinuationRemote {
+  return record(value) && typeof value.get === 'function' && typeof value.set === 'function'
+    && (value.authorizeNext === undefined || typeof value.authorizeNext === 'function')
+    && (value.defaults === undefined || typeof value.defaults === 'function')
+    && (value.setDefault === undefined || typeof value.setDefault === 'function')
+}
 function isLocale(value: unknown): value is LocaleReader {
   return record(value) && typeof value.getLocale === 'function' && typeof value.subscribe === 'function'
 }
@@ -186,8 +192,8 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
     if (isSessionRemote(session)) sessionRemote = session
     else diagnostic('COPILOT_SESSION_ACCOUNTS_REMOTE_UNAVAILABLE')
     const continuation = record(namespaces) ? namespaces.githubCopilotSessionContinuation : undefined
-    if (record(continuation) && typeof continuation.get === 'function' && typeof continuation.set === 'function') {
-      continuationRemote = continuation as SessionContinuationRemote
+    if (isContinuationRemote(continuation)) {
+      continuationRemote = continuation
     } else diagnostic('COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
   } catch { diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE') }
   const localeCandidate: unknown = ctx.get('locale')
