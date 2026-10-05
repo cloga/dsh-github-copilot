@@ -38,6 +38,7 @@ async function mount(props: CopilotUsageCardProps = { remote: remote(), contextK
   return { render, unmount, container }
 }
 function trigger() { return document.querySelector<HTMLButtonElement>('[data-copilot-usage-trigger]')! }
+function follow() { return document.querySelector<HTMLInputElement>('[data-copilot-follow-global]')! }
 function button(text: string) {
   return Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent === text)!
 }
@@ -141,13 +142,13 @@ describe('Copilot account usage chip', () => {
   })
 
   it.each(['account', 'global'] as const)('waits for parent approval before the exact %s account CAS', async target => {
-    const fixture = accountSelectorFixture()
+    const fixture = accountSelectorFixture({ source: 'session' })
     const approval = deferred<boolean>()
     const beforeAccountChange = vi.fn(() => approval.promise)
     await mount({ ...fixture.props, beforeAccountChange })
     await click(trigger())
     await click(button('Switch account'))
-    await click(button(target === 'global' ? 'Follow global default' : '@demo-account-24'))
+    await click(target === 'global' ? follow() : button('@demo-account-24'))
     const accountId = target === 'global' ? null : fixture.selection().accounts.accounts[23]!.id
     expect(beforeAccountChange).toHaveBeenCalledExactlyOnceWith(accountId, expect.any(AbortSignal))
     expect(fixture.set).not.toHaveBeenCalled()
@@ -170,7 +171,7 @@ describe('Copilot account usage chip', () => {
     expect(fixture.set).not.toHaveBeenCalled()
     expect(fixture.quota).toHaveBeenCalledOnce()
     expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-01')
-    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
+    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(24)
     expect(button('@demo-account-24').disabled).toBe(false)
     expect(document.querySelector('[role="alert"]')).toBeNull()
     beforeAccountChange.mockResolvedValueOnce(true)
@@ -271,7 +272,7 @@ describe('Copilot account usage chip', () => {
     await click(button('Switch account'))
     expect(document.querySelector('input[type="search"]')).toBeNull()
     expect(document.querySelector<HTMLElement>('[data-copilot-account-selector]')?.style.colorScheme).toBe('inherit')
-    expect(document.activeElement).toBe(button('Follow global default'))
+    expect(document.activeElement).toBe(button('@demo-account-01'))
     await click(button('@demo-account-24'))
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not save')
     expect(button('Switch account').disabled).toBe(true)
@@ -280,19 +281,21 @@ describe('Copilot account usage chip', () => {
 
   it('mounts a bounded 24-account dropdown without search and closes with Escape', async () => {
     const fixture = accountSelectorFixture()
-    await mount({ ...fixture.props, accountActions: createElement('button', null, 'Add account') })
+    await mount(fixture.props)
     await click(trigger())
     expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-01')
     expect(text()).not.toContain('demo-account-24')
     expect(button('Add account')).toBeUndefined()
     await click(button('Switch account'))
     const list = document.querySelector<HTMLElement>('[data-copilot-account-options]')!
-    expect(list.querySelectorAll('button')).toHaveLength(25)
+    expect(list.querySelectorAll('button')).toHaveLength(24)
     expect(list.style.maxHeight).toBe('220px')
     expect(list.style.overflowY).toBe('auto')
     expect(list.style.overscrollBehavior).toBe('contain')
-    expect(document.activeElement).toBe(button('Follow global default'))
-    expect(button('Add account')).toBeDefined()
+    expect(document.activeElement).toBe(button('@demo-account-01'))
+    expect(button('Add account')).toBeUndefined()
+    expect(follow().checked).toBe(true)
+    expect(list.querySelector('input')).toBeNull()
     expect(button('@demo-account-24')).toBeDefined()
     expect(document.querySelector('input[type=search]')).toBeNull()
     await act(async () => { document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
@@ -301,7 +304,7 @@ describe('Copilot account usage chip', () => {
     expect(document.activeElement).toBe(button('Switch account'))
     await click(button('Switch account'))
     expect(document.querySelector('input[type=search]')).toBeNull()
-    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
+    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(24)
     await click(trigger())
     await click(trigger())
     expect(document.querySelector('[data-copilot-account-options]')).toBeNull()
@@ -325,7 +328,7 @@ describe('Copilot account usage chip', () => {
     expect(fixture.set).toHaveBeenCalledExactlyOnceWith(fixture.selection().accounts.accounts[23]!.id, 7)
     fixture.set.mockImplementation(success)
     await click(button('Refresh'))
-    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
+    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(24)
     await click(button('@demo-account-24'))
     expect(fixture.set).toHaveBeenLastCalledWith(fixture.selection().accountId, 7)
     expect(text()).not.toContain('Could not save')
@@ -390,14 +393,56 @@ describe('Copilot account usage chip', () => {
     await mount(fixture.props)
     await click(trigger())
     await click(button('Switch account'))
-    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(25)
-    expect(button('Follow global default')).toBeDefined()
+    expect(document.querySelectorAll('[data-copilot-account-options] button')).toHaveLength(24)
+    expect(follow().checked).toBe(true)
     await click(button('@demo-account-01'))
     expect(fixture.set).toHaveBeenCalledExactlyOnceWith('canonical', 7)
     expect(text()).toContain('Session override')
     await click(button('Switch account'))
     expect(button('@demo-account-01').getAttribute('aria-pressed')).toBe('true')
-    expect(button('Follow global default').getAttribute('aria-pressed')).toBe('false')
+    expect(follow().checked).toBe(false)
+  })
+
+  it('freezes the effective account when following is unchecked and restores following through the same CAS', async () => {
+    const fixture = accountSelectorFixture()
+    const beforeAccountChange = vi.fn(async () => true)
+    await mount({ ...fixture.props, beforeAccountChange })
+    await click(trigger())
+    expect(follow().checked).toBe(true)
+    await click(follow())
+    expect(beforeAccountChange).toHaveBeenLastCalledWith('canonical', expect.any(AbortSignal))
+    expect(fixture.set).toHaveBeenLastCalledWith('canonical', 7)
+    expect(follow().checked).toBe(false)
+    expect(document.activeElement).toBe(follow())
+    await click(follow())
+    expect(beforeAccountChange).toHaveBeenLastCalledWith(null, expect.any(AbortSignal))
+    expect(fixture.set).toHaveBeenLastCalledWith(null, 8)
+    expect(follow().checked).toBe(true)
+    expect(document.activeElement).toBe(follow())
+  })
+
+  it('retains confirmed following when consent is cancelled and disables it during confirmation', async () => {
+    const fixture = accountSelectorFixture()
+    const approval = deferred<boolean>()
+    await mount({ ...fixture.props, beforeAccountChange: () => approval.promise })
+    await click(trigger())
+    await click(follow())
+    expect(follow().disabled).toBe(true)
+    expect(follow().checked).toBe(true)
+    await act(async () => { approval.resolve(false) })
+    expect(fixture.set).not.toHaveBeenCalled()
+    expect(follow().checked).toBe(true)
+    expect(follow().disabled).toBe(false)
+  })
+
+  it('disables following when the Session selection cannot be read instead of treating it as a fixed account', async () => {
+    const fixture = accountSelectorFixture()
+    fixture.get.mockResolvedValue({ ok: false, error: 'unavailable' })
+    await mount(fixture.props)
+    await click(trigger())
+    expect(follow().disabled).toBe(true)
+    expect(text()).toContain('Account selection unavailable')
+    expect(fixture.set).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -406,8 +451,7 @@ describe('Copilot account usage chip', () => {
   ])('exposes parent slots and localized management without implementing navigation (%s)', async (locale, manage, follow) => {
     const fixture = accountSelectorFixture()
     const onManage = vi.fn()
-    const props = { ...fixture.props, locale, continuation: createElement('p', null, 'Continuation controls'),
-      accountActions: createElement('button', null, 'Add account') }
+    const props = { ...fixture.props, locale, continuation: createElement('p', null, 'Continuation controls') }
     const card = await mount(props)
     await click(trigger())
     expect(text()).toContain('Continuation controls')
@@ -418,8 +462,8 @@ describe('Copilot account usage chip', () => {
     expect(text()).not.toContain('COPILOT_ACCOUNT_MANAGEMENT_NAVIGATION_UNAVAILABLE')
     await click(button(locale === 'zh-CN' ? '切换账号' : 'Switch account'))
     expect(document.querySelector('input[type=search]')).toBeNull()
-    expect(button(follow)).toBeDefined()
-    expect(button('Add account')).toBeDefined()
+    expect(document.querySelector('[data-copilot-follow-global]')?.parentElement?.textContent).toBe(follow)
+    expect(button('Add account')).toBeUndefined()
     const controls = Array.from(document.querySelectorAll('button'))
     expect(controls.some(control => /delete|remove/i.test(control.textContent ?? ''))).toBe(false)
     expect(controls.at(-1)).toBe(button(manage))
@@ -490,7 +534,7 @@ describe('Copilot account usage chip', () => {
     expect(document.querySelector('[data-copilot-account-options]')).toBeNull()
     expect(trigger().textContent).toContain('12 used')
     await click(button('Switch account'))
-    await click(button('Follow global default'))
+    await click(follow())
     expect(set).toHaveBeenLastCalledWith(null, 2)
     expect(text()).not.toContain('Session override')
     expect(trigger().textContent).toContain('42.25 used')

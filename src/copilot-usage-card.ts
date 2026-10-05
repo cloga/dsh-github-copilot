@@ -1,6 +1,6 @@
 import { createElement as h, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { AccountDropdown } from './account-dropdown.ts'
-import type { CSSProperties, ReactElement } from 'react'
+import type { ChangeEvent, CSSProperties, ReactElement } from 'react'
 import { CopilotUsageViewSchema } from './copilot-usage-remote.ts'
 import { externalLinkTarget } from './external-link.ts'
 import type { CopilotUsageView } from './copilot-usage-types.ts'
@@ -22,7 +22,6 @@ export interface CopilotUsageCardProps {
   /** Changes revoke every in-flight read, including switches between Copilot routes. */
   contextKey: string
   locale?: string
-  accountActions?: ReactElement
   continuation?: ReactElement
   onManage?: () => void
   /** Parent-owned consent; check the request signal after awaits and dismiss on abort. */
@@ -52,6 +51,8 @@ const copy = {
     rounding: 'Amounts rounded for display. GitHub billing is authoritative.', low: 'Low remaining budget',
     missing: 'COPILOT_USAGE_REMOTE_UNAVAILABLE · Account usage is unavailable in this deployment.',
     switchAccount: 'Switch account', followGlobal: 'Follow global default', sessionSpecified: 'Session override',
+    sessionAccount: 'Session account',
+    followHint: 'Choosing an account fixes it for this Session. Enable following to use the global default again.',
     switchScope: 'Applies to this Session’s subsequent turns. Running turns and other Sessions are unchanged.',
     accountSaveFailed: 'Could not save the Session account. Refresh and try again.',
     accountLoading: 'Loading account selection…', accountMissing: 'Account selection unavailable. Refresh to retry.',
@@ -79,6 +80,8 @@ const copy = {
     rounding: '显示数值经过四舍五入，账单以 GitHub 为准。', low: '剩余额度较低',
     missing: 'COPILOT_USAGE_REMOTE_UNAVAILABLE · 当前部署无法提供账号用量。',
     switchAccount: '切换账号', followGlobal: '跟随全局默认', sessionSpecified: 'Session 已指定',
+    sessionAccount: '本会话账号',
+    followHint: '选择账号后固定用于本会话。重新开启跟随可恢复使用全局默认。',
     switchScope: '用于本 Session 后续 turn，不影响正在运行的 turn 或其他 Session。',
     accountSaveFailed: '无法保存 Session 账号，请刷新后重试。',
     accountLoading: '正在读取账号选择…', accountMissing: '账号选择暂不可用，请刷新重试。',
@@ -134,11 +137,13 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(false)
+  const [restoreAccountFocus, setRestoreAccountFocus] = useState<'switch' | 'follow'>()
   const [position, setPosition] = useState({ left: 12, bottom: 12 })
   const trigger = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const switchButton = useRef<HTMLButtonElement>(null)
+  const followCheckbox = useRef<HTMLInputElement>(null)
   const lifecycle = useRef<{
     active: boolean; generation: number; busy: boolean; save?: symbol; confirmation?: symbol; controller?: AbortController
   }>({ active: false, generation: 0, busy: false })
@@ -154,6 +159,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     owner.controller?.abort()
     owner.controller = undefined
     setOpen(false)
+    setRestoreAccountFocus(undefined)
     setChoosingAccount(false)
     if (restore) trigger.current?.focus()
   }, [])
@@ -262,7 +268,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     }
   }, [load, props.remote])
 
-  const chooseAccount = async (accountId: string | null) => {
+  const chooseAccount = async (accountId: string | null, focus: 'switch' | 'follow' = 'switch') => {
     const owner = lifecycle.current
     let revision = sessionAccount?.accounts.revision
     if (!owner.active || owner.save !== undefined || props.sessionAccount === undefined || revision === undefined) return
@@ -311,7 +317,9 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       owner.save = undefined
       setSavingAccount(false)
       await load(false)
-      if (owner.active && owner.generation === generation + 1) switchButton.current?.focus()
+      if (owner.active && owner.generation === generation + 1) {
+        setRestoreAccountFocus(focus)
+      }
     } catch {
       if (owner.active && owner.generation === generation) {
         setAccountSaveFailed(true); setView(undefined); setAccounts(undefined); setSessionAccount(undefined)
@@ -326,6 +334,13 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       }
     }
   }
+
+  useLayoutEffect(() => {
+    if (!open || busy || savingAccount || restoreAccountFocus === undefined) return
+    if (restoreAccountFocus === 'follow') followCheckbox.current?.focus()
+    else switchButton.current?.focus()
+    setRestoreAccountFocus(undefined)
+  }, [open, busy, savingAccount, restoreAccountFocus])
 
   useLayoutEffect(() => {
     if (!open) return
@@ -406,13 +421,12 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const runningIdentity = sessionAccount?.runningAccountId === undefined ? undefined
     : accountIdentityLabel({ ...sessionAccount.accounts, activeAccountId: sessionAccount.runningAccountId })
   const accountOptions = open && choosingAccount && sessionAccount ? [
-    { id: null, label: t.followGlobal, selected: sessionAccount.source === 'global' },
     ...sessionAccount.accounts.accounts.filter(account => account.configured).map(account => ({
       id: account.id,
       label: account.identity ? `@${account.identity.login}` : account.id === 'canonical'
         ? `${t.originalAuthorization} · ${t.identityUnknown}`
         : `${t.savedAuthorization}${numberedUnknownAccounts.has(account.id) ? ` ${numberedUnknownAccounts.get(account.id)}` : ''} · ${t.identityUnknown}`,
-      selected: sessionAccount.source === 'session' && sessionAccount.accountId === account.id,
+      selected: sessionAccount.accountId === account.id,
     })),
   ] : []
 
@@ -456,15 +470,27 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       h('button', { ref: closeButton, type: 'button', 'aria-label': t.close, style: button, onClick: () => { close(true) } }, '×')),
     props.sessionAccount === undefined ? null : h('div', { style: separator },
       h('div', { style: row },
-        h('p', { style: muted }, t.switchScope),
+        h('div', null, h('strong', null, t.sessionAccount), h('p', { style: muted }, currentIdentity)),
         h(AccountDropdown, { triggerRef: switchButton, triggerStyle: { ...button, flexShrink: 0 },
           label: t.switchAccount, open: choosingAccount, busy: savingAccount, maxHeight: 220,
           disabled: sessionAccount === undefined || sessionAccount.accounts.revision === undefined || busy || savingAccount,
           onOpenChange: (next: boolean) => { if (!next) collapseAccounts(); else setChoosingAccount(true) },
-          options: accountOptions.map(option => ({ ...option, id: option.id ?? 'follow-global' })),
-          onSelect: (accountId: string) => { void chooseAccount(accountId === 'follow-global' ? null : accountId) },
-          listAttribute: 'data-copilot-account-options', footer: props.accountActions,
+          options: accountOptions,
+          onSelect: (accountId: string) => { void chooseAccount(accountId) },
+          listAttribute: 'data-copilot-account-options',
         })),
+      h('label', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h('input', { ref: followCheckbox, type: 'checkbox', 'data-copilot-follow-global': '',
+          checked: sessionAccount?.source === 'global',
+          disabled: sessionAccount === undefined || sessionAccount.accounts.revision === undefined || busy || savingAccount,
+          'aria-describedby': `${id}-follow-hint`,
+          onChange: (event: ChangeEvent<HTMLInputElement>) => {
+            const accountId = event.currentTarget.checked ? null : sessionAccount?.accountId
+            if (accountId !== undefined) void chooseAccount(accountId, 'follow')
+          },
+        }), t.followGlobal),
+      h('p', { id: `${id}-follow-hint`, style: muted }, t.followHint),
+      h('p', { style: muted }, t.switchScope),
       sessionAccount?.runningAccountId === undefined ? null : h('p', { style: muted },
         `${t.runningAccount}: ${runningIdentity ?? t.identityUnknown} · ${t.nextAccount}: ${currentIdentity}`),
       savingAccount ? h('p', { role: 'status', style: muted }, confirmingAccount ? t.confirmingAccount : t.savingAccount) : null,

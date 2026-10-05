@@ -6,9 +6,6 @@ import type { ReactElement } from 'react'
 import { CopilotUsageCard } from './copilot-usage-card.ts'
 import type { CopilotUsageRemote } from './copilot-usage-card.ts'
 import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
-import { CopilotAccountAdd } from './copilot-accounts-card.ts'
-import type { CopilotAccountAddRemote } from './copilot-accounts-card.ts'
-import { accountPresentationChanges } from './copilot-account-presentation.ts'
 import { SessionAccountViewSchema } from './session-accounts-remote.ts'
 import type { SessionAccountView } from './session-accounts-remote.ts'
 import { useSessionContinuationSwitch } from './session-continuation-ui.ts'
@@ -86,11 +83,10 @@ function effectiveCopilot(projection: unknown): { provider: string; model: strin
   return next.provider === 'github-copilot' || next.provider === 'github-copilot-preview' ? next : undefined
 }
 
-function Surface({ runtime, remote, accountsRemote, addRemote, sessionRemote, continuationRemote, locale, diagnostic }: {
+function Surface({ runtime, remote, accountsRemote, sessionRemote, continuationRemote, locale, diagnostic }: {
   runtime: RuntimeProps
   remote: CopilotUsageRemote | undefined
   accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'> | undefined
-  addRemote: CopilotAccountAddRemote | undefined
   sessionRemote: SessionAccountRemote | undefined
   continuationRemote: SessionContinuationRemote | undefined
   locale: LocaleReader | undefined
@@ -114,7 +110,6 @@ function Surface({ runtime, remote, accountsRemote, addRemote, sessionRemote, co
   }, [sessionRemote, runtime.sessionId])
   const continuation = useSessionContinuationSwitch({ sessionId: runtime.sessionId,
     remote: continuationRemote, locale: language, changesAccount, running })
-  const added = useCallback(() => { const finish = accountPresentationChanges.begin(); finish() }, [])
   const bound = useMemo(() => {
     if (sessionRemote === undefined) return undefined
     const id = runtime.sessionId
@@ -149,8 +144,6 @@ function Surface({ runtime, remote, accountsRemote, addRemote, sessionRemote, co
     sessionAccount: current.provider === 'github-copilot-preview' ? bound?.account : undefined, locale: language,
     continuation: current.provider === 'github-copilot-preview' ? continuation.content : undefined,
     beforeAccountChange: current.provider === 'github-copilot-preview' ? continuation.beforeAccountChange : undefined,
-    accountActions: current.provider === 'github-copilot-preview'
-      ? createElement(CopilotAccountAdd, { remote: addRemote, locale: language, onChanged: added }) : undefined,
   })
 }
 
@@ -171,7 +164,6 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
   let accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'> | undefined
   let sessionRemote: SessionAccountRemote | undefined
   let continuationRemote: SessionContinuationRemote | undefined
-  let addRemote: CopilotAccountAddRemote | undefined
   try {
     const namespaces: unknown = ctx.remote
     const face = record(namespaces) ? namespaces.githubCopilotUsage : undefined
@@ -183,9 +175,6 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
       && typeof accounts.ensureIdentity === 'function') {
       accountsRemote = accounts as Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'>
     } else diagnostic('COPILOT_ACCOUNTS_REMOTE_UNAVAILABLE')
-    if (record(accounts) && typeof accounts.get === 'function' && typeof accounts.add === 'function' && typeof accounts.cancel === 'function') {
-      addRemote = accounts as CopilotAccountAddRemote
-    } else diagnostic('COPILOT_ACCOUNT_ADD_REMOTE_UNAVAILABLE')
     const session = record(namespaces) ? namespaces.githubCopilotSessionAccount : undefined
     if (isSessionRemote(session)) sessionRemote = session
     else diagnostic('COPILOT_SESSION_ACCOUNTS_REMOTE_UNAVAILABLE')
@@ -215,7 +204,7 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
             return null
           }
           return createElement(Surface, {
-            runtime: props, remote, accountsRemote, addRemote, sessionRemote, continuationRemote, locale, diagnostic,
+            runtime: props, remote, accountsRemote, sessionRemote, continuationRemote, locale, diagnostic,
           })
         })
         let removed = false

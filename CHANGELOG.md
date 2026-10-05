@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.114 (prepared)
+
+- Simplify the Chat account menu to configured accounts only. Move Follow global default into a separate checkbox and keep account addition in Models (#328).
+- Freeze the current effective account when following is disabled; restore inheritance when enabled. Explicit account choices, including the current default, remain Session overrides.
+- Preserve continuation consent, cancellation, revision-checked saving, running-turn ownership and quota isolation; restore focus after controls become enabled. Record the approved interactive mock and localized experience.
+- No Core changes, automatic sends, installation or restart.
+
 ## 0.4.0-alpha.113 (prepared)
 
 - Remove the continuation filter's whole-request 16 MiB refusal and recursive payload traversal. Large ordinary tool/image content is preserved; old encrypted reasoning is processed independently (#326).
