@@ -86,6 +86,25 @@ it('uses the latest parent callback without resetting a pending switch or repeat
   expect(document.querySelector('[data-copilot-current-account]')?.textContent).toBe('@demo-b')
 })
 
+it('distinguishes failed identity display hydration from unread account metadata', async () => {
+  const api = remote()
+  vi.mocked(api.ensureIdentity).mockRejectedValue(new Error('Synthetic identity read failure'))
+  await mount(api)
+  expect(text()).toContain('Could not verify the GitHub account identity. Try again.')
+  expect(text()).not.toContain('Retry before changing accounts.')
+  expect(button('Switch').disabled).toBe(false)
+  expect(text()).toContain('@demo-a')
+})
+
+it('does not hydrate identity or enable switching after the initial metadata read fails', async () => {
+  const api = remote()
+  vi.mocked(api.get).mockRejectedValue(new Error('Synthetic metadata read failure'))
+  await mount(api)
+  expect(api.ensureIdentity).not.toHaveBeenCalled()
+  expect(text()).toContain('Could not read account information. Retry before changing accounts.')
+  expect(button('Switch').disabled).toBe(true)
+})
+
 it('ignores identity hydration after the account Remote lifetime is replaced', async () => {
   const api = remote(), replacement = remote(view({ accounts: [], state: 'error', switchable: false,
     diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' }))

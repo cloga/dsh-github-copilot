@@ -416,7 +416,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
       props.addOnly || !identityChecking ? null : h('p', { role: 'status', 'aria-live': 'polite',
         'data-copilot-identity-checking': true, style: muted }, text.identityChecking),
       props.remote === undefined ? h('p', { role: 'status', style: muted }, text.remoteUnavailable) : null,
-      failed ? h('p', { role: 'alert', style: muted }, text.readFailed) : null,
+      failed ? h('p', { role: 'alert', style: muted }, view === undefined ? text.readFailed : text.identityFailed) : null,
       view?.state === 'error' && view.operation === undefined && view.diagnostic !== undefined
         ? h('p', { role: 'alert', style: muted }, accountProblemMessage(view.diagnostic, text)) : null,
       switchBlocker === undefined ? null : h('p', { role: 'status', 'aria-live': 'polite', style: muted }, switchBlocker),
