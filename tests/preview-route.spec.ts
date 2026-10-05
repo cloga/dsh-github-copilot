@@ -1624,10 +1624,17 @@ describe('plugin-owned account Copilot route', () => {
     const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue.' }] }), first.message]
     const before = JSON.stringify(messages)
     const agent = { ctx: harness.ctx, session: { id: 'continuation-session' } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const failedSignal = new AbortController().signal
+    await harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal: failedSignal },
+      async () => ({ provider: PREVIEW, model: MODEL }))
+    const failed = await call(harness.ctx, { signal: failedSignal, sessionId: agent.session.id, messages })
+    expect(failed.assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    harness.ctx.emit('session/event', agent.session, { type: 'turn/end', data: { turn: 1 } } as never)
     const current = await harness.ctx.githubCopilotSessionContinuation.get(agent)
     await harness.ctx.githubCopilotSessionContinuation.set(agent, current.revision, true)
-    const scope = scopeTarget(agent, agent)
-    for (const turn of [1, 2, 3]) {
+    expect(harness.ctx.githubCopilotReplayRecovery.get(agent).state).not.toBe('enabled')
+    for (const turn of [2, 3, 4]) {
       const signal = new AbortController().signal
       await harness.ctx.waterfall(scope, 'agent/request', { agent, turn, step: 1, signal },
         async () => ({ provider: PREVIEW, model: MODEL }))
@@ -1639,7 +1646,7 @@ describe('plugin-owned account Copilot route', () => {
     }
     expect(JSON.stringify(messages.slice(0, 2))).toBe(before)
     expect(harness.modify).not.toHaveBeenCalled()
-    expect(bodies).toHaveLength(4)
+    expect(bodies).toHaveLength(5)
   })
 
   it('offers exact failed replay only to its initiating session and recovers after explicit confirmation', async () => {

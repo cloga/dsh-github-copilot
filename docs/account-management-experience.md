@@ -78,13 +78,15 @@ or oversized context and does not guarantee supplier acceptance.
 
 When continuation is off and the user switches accounts, stop before saving the
 selection and disclose the potential replay risk. Offer persistent enable and
-switch, next-turn-only enable and switch, keep off and switch, or cancel.
+switch, keep off and switch, or cancel. Do not offer next-turn-only authorization.
 Account differences alone do not prove supplier rejection. Never guess encrypted
 item origin or silently filter history.
 
 After an exact supplier replay rejection, retain the native failed turn and
-surface persistent enable or next-turn-only authorization plus full management
-navigation. Authorization never sends or retries. The user explicitly retries
+surface the same persistent Session policy: when off, disclose loss and offer
+Enable/Cancel; when on, show diagnostic guidance without repeated authorization.
+Do not show duration radios or unavailable Models navigation. Failure-evidence
+expiry does not disable the persistent policy. Authorization never sends or retries. The user explicitly retries
 the task through the native mechanism. Mock assistant answers are demonstrations,
 not evidence of real cross-account success. Do not fabricate durable messages,
 errors, replay or assistant content to imitate the mock.
@@ -93,7 +95,7 @@ errors, replay or assistant content to imitate the mock.
 
 Use native theme tokens for surfaces, text, borders, focus and errors. Native
 select popup options must remain readable in dark and light themes; do not inherit
-light popup backgrounds with dark-theme white text. Search and long account lists
+light popup backgrounds with dark-theme white text. Dropdowns and long account lists
 must remain keyboard-operable, bounded and usable on narrow viewports. Explicit
 loading, unknown, stale, failed-save and cancellation states are required.
 

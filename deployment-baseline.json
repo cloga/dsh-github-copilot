@@ -763,6 +763,8 @@
       "tests": [
         {"file": "tests/account-dropdown.spec.ts", "name": "supports arrows, Home, End and Escape without closing the containing Chat panel"},
         {"file": "tests/session-continuation.spec.ts", "name": "continues A-B-B-A by omitting pre-turn reasoning while retaining new tool-loop reasoning"},
+        {"file": "tests/replay-recovery-ui.spec.ts", "name": "enables only persistent Session continuation after loss disclosure, without legacy authorization or sending"},
+        {"file": "tests/replay-recovery-ui.spec.ts", "name": "does not reauthorize an already enabled policy or change it when failure evidence expires"},
         {"file": "tests/session-continuation.spec.ts", "name": "does not replay baseline ciphertext after its ID or embedded summary changes"},
         {"file": "tests/session-continuation-host.spec.ts", "name": "captures birth-time defaults and consumes one-turn consent"},
         {"file": "tests/session-continuation-ui.spec.ts", "name": "requires off-switch choice: %s"},
@@ -781,14 +783,15 @@
         {"file": "src/replay-recovery-host.ts", "marker": "COPILOT_REPLAY_RECOVERY_TURN_ACTIVE"},
         {"file": "src/replay-recovery-remote.ts", "marker": "githubCopilotReplayRecovery.setEnabled"},
         {"file": "src/replay-recovery-remote.ts", "marker": "githubCopilotReplayRecovery.authorize"},
-        {"file": "src/replay-recovery-ui.ts", "marker": "Accept loss and authorize"}
+        {"file": "src/replay-recovery-ui.ts", "marker": "recovery: true"},
+        {"file": "src/session-continuation-ui.ts", "marker": "Enable visible-history continuation"}
       ],
       "tests": [
         {"file": "tests/replay-recovery.spec.ts", "name": "keeps default replay and requires a revision-bound confirmation"},
         {"file": "tests/replay-recovery.spec.ts", "name": "preserves source, fresh reasoning, tools, other models and other owners"},
         {"file": "tests/replay-recovery-host.spec.ts", "name": "requires the native initiating session and signal, rejects active-turn writes and revokes late requests"},
         {"file": "tests/replay-recovery.spec.ts", "name": "admits only the next matching native turn, including its steps and retries"},
-        {"file": "tests/replay-recovery-ui.spec.ts", "name": "automatically shows evidence but requires explicit %s consent, without sending"},
+        {"file": "tests/replay-recovery-ui.spec.ts", "name": "enables only persistent Session continuation after loss disclosure, without legacy authorization or sending"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "is absent normally, reads on settled turns without polling and resets dismissal only for new evidence"},
         {"file": "tests/preview-route.spec.ts", "name": "offers exact failed replay only to its initiating session and recovers after explicit confirmation"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds explicit replay recovery through native Client and %s Host gateways"}

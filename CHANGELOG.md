@@ -5,7 +5,7 @@
 - Replace searchable account-switch forms with one compact anchored dropdown in Models and Chat: current-choice checkmark, bounded internal scrolling and Add account footer (#320).
 - Separate saved-account reauthorization/removal from switching. Preserve global confirmation, explicit-off continuation consent, fresh revision readback, cancellation and admitted-turn ownership; selecting never sends or retries.
 - Record the approved dropdown mock and keyboard/mobile behavior. No Core changes, credential migration, live installation or restart.
-- Default failure-recovery consent to **Continue in this session**, including reopening after Cancel. Next-turn-only remains selectable; explicit acceptance, one-hour evidence lifetime, validation and Host-restart expiry stay unchanged.
+- Unify normal continuation and failure guidance around the persistent Session policy. Remove duration radios and next-turn-only actions; when off, disclose loss and offer Enable/Cancel, when on, show diagnostics without repeated authorization. Existing temporary recovery contracts remain compatibility-only; their evidence expiry does not expire the persistent policy.
 - Omit the nonfunctional Chat management entry and unavailable-navigation paragraph when no public Models navigation callback exists; keep full management in Models.
 
 ## 0.4.0-alpha.109 (prepared)

@@ -229,7 +229,7 @@ is unavailable, not a stale username presented as current.
 
 One Models **Manage** groups account management and shared exact-ID model
 preferences. The Credits account panel contains continuation policy; when off,
-an account change pauses for explicit persistent/next-turn/off/cancel consent.
+an account change pauses for explicit persistent-enable/keep-off/cancel consent.
 See [the approved experience and mock](./account-management-experience.md).
 
 Completed managed turns have a compact **Account** disclosure alongside native
