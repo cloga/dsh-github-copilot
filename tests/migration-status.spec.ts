@@ -285,7 +285,7 @@ describe('read-only live migration evidence', () => {
       phase: 'signed-out', configured: false, writable: true, inFlight: false, notices: [],
       modelPreferences: {
         state: 'ready', writable: true, revision: 5,
-        excludedModelIds: [], lockedModelIds: [], unavailableExcludedModelIds: [],
+        excludedModelIds: [], highCostModelIds: [], lockedModelIds: [], unavailableExcludedModelIds: [],
       },
       route: { state: 'not-configured' },
     })
