@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.115"
+    "version": "0.4.0-alpha.116"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1229,6 +1229,27 @@
       ]
     },
     {
+      "id": "managed-copilot-high-cost-allocation",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/auto-allocation.ts", "marker": "high-cost-v1"},
+        {"file": "src/config.ts", "marker": "highCostModelIds"},
+        {"file": "src/model-preferences-card.ts", "marker": "High cost"},
+        {"file": "src/turn-selection-host.ts", "marker": "allocationSummary"},
+        {"file": "src/auto-allocation-evidence.ts", "marker": "completeHistory: z.literal(false)"},
+        {"file": "scripts/agent.mjs", "marker": "iterationReview"},
+        {"file": "docs/auto-high-cost.md", "marker": "separate acceptance"}
+      ],
+      "tests": [
+        {"file": "tests/auto-allocation.spec.ts", "name": "gives every candidate opportunity without an absolute previous-model shortcut"},
+        {"file": "tests/auto-allocation-evidence.spec.ts", "name": "counts each turn once, bounds retention and never recovers missing evidence after removal"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "keeps costly Fast models eligible and evidence opt-out independent of the selected route"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "saves orthogonal high-cost preferences narrowly without credential or Session reads"},
+        {"file": "tests/client.spec.ts", "name": "saves a high-cost row through its narrow Remote without discovery and retains exclusion state"},
+        {"file": "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "name": "persists independent native credentials and SettingsForms CAS across profile restart without cross-account OAuth writes"}
+      ]
+    },
+    {
       "id": "managed-copilot-auto-intent-continuity",
       "required": true,
       "sourceMarkers": [
@@ -1282,7 +1303,7 @@
         {"file": "tests/scripts/parent-model-follow.test.mjs", "name": "explicit same-model and different-model child selections both win"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "retains legacy length evidence but does not use it as task or supplier category evidence"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "uses the task/category policy with one hard-eligible pool for all preferences"},
-        {"file": "tests/auto-model-routing.spec.ts", "name": "preserves suitable continuity but never lets it override task category or input fit"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "uses finite continuity but never lets it override task category or input fit"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "discloses category fallbacks and never guesses missing category from ID or capacity"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "bounds context, never reads attachment/reasoning bodies, and does not downshift omitted context"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "inherits difficult-task evidence only through explicit bounded continuations"},

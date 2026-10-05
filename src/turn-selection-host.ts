@@ -22,6 +22,11 @@ export class TurnSelectionController extends TypertRemoteService {
   }
 
   @Remote
+  allocationSummary(agent: Agent) {
+    return this.selections.allocationSummary(agent)
+  }
+
+  @Remote
   requestedModels(agent: Agent, turn: number): RequestedModels {
     if (!Number.isSafeInteger(turn) || turn < 0) throw new Error('COPILOT_TURN_SELECTION_INVALID_TURN')
     const registry: unknown = this.ctx.get('sessionProjections')

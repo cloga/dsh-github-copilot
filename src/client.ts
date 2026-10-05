@@ -129,6 +129,7 @@ export function authorizationViewFrom(value: unknown): GitHubCopilotAuthorizatio
       for (const key of ['excludedModelIds', 'lockedModelIds', 'unavailableExcludedModelIds']) {
         next[key] = viewStrings(fields[key])
       }
+      if (fields.highCostModelIds !== undefined) next.highCostModelIds = viewStrings(fields.highCostModelIds)
       owned.modelPreferences = next
     }
     const parsed = GitHubCopilotAuthorizationViewSchema.safeParse(owned)

@@ -17,11 +17,12 @@ function turnAccountLabel(account: TurnAccountView, zh: boolean): string {
 }
 
 export function TurnSelectionCard({ selection, locale = 'en', incomplete = false, readState = 'ready', retry,
-  account, accountFailed = false, retryAccount, models, modelsFailed = false, retryModels }: {
+  account, accountFailed = false, retryAccount, models, modelsFailed = false, retryModels, allocationEvidence }: {
   selection: TurnSelection; locale?: string; incomplete?: boolean
   readState?: 'loading' | 'ready' | 'failed'; retry?: () => void
   account?: TurnAccountView; accountFailed?: boolean; retryAccount?: () => void
   models?: TurnModelEvidence; modelsFailed?: boolean; retryModels?: () => void
+  allocationEvidence?: ReactElement
 }): ReactElement {
   const zh = locale.startsWith('zh')
   const id = useId()
@@ -130,6 +131,7 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
           : 'An explicit manual selection was captured for this turn; selection is not execution proof.'
           : zh ? '本轮选择记录未保留；不使用当前设置反推历史。' : 'Selection evidence was not retained; today’s settings cannot reconstruct it.')),
     !accountOpen && incomplete && models === undefined ? h('p', null, zh ? '模型归属不完整：部分尝试或历史未记录模型。原生 Usage 保持不变。' : 'Model attribution is incomplete: some attempts or history have no recorded model. Native Usage is unchanged.') : null,
+    !accountOpen ? allocationEvidence : null,
     accountOpen ? null : h('p', null, zh ? '模型记录与计费归属不同。选择记录不是执行证明；原生 Usage、失败状态和重试保持不变。'
       : 'Model evidence is not billing attribution. Selection is not execution proof; native Usage is unchanged, as are failures and retries.'),
     h('button', { ref: close, type: 'button', style: button, onClick: () => { setOpen(false); trigger.current?.focus() } }, zh ? '关闭' : 'Close'),

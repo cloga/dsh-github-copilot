@@ -107,6 +107,10 @@ it('persists independent native credentials and SettingsForms CAS across profile
     const revision = (await host.get()).revision!
     expect(await host.switchAccount(A, revision)).toMatchObject({ state: 'ready', activeAccountId: A })
     expect([...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber).toBe(selectorFiber)
+    const preferences = new GitHubCopilotAuthorizationController(ctx)
+    expect(await preferences.setModelHighCost('synthetic-costly-fast', true))
+      .toMatchObject({ state: 'ready', highCostModelIds: ['synthetic-costly-fast'] })
+    expect([...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber).toBe(selectorFiber)
     const viewedSession = { session: { id: 'synthetic-session-override' } }
     const defaults = await ctx.githubCopilotSessionContinuation.defaults()
     expect(defaults.enabled).toBe(true)
@@ -138,6 +142,8 @@ it('persists independent native credentials and SettingsForms CAS across profile
     ctx = reopened.ctx
     host = reopened.host
     expect(await host.get()).toMatchObject({ state: 'ready', activeAccountId: A })
+    expect((await new GitHubCopilotAuthorizationController(ctx).status()).modelPreferences)
+      .toMatchObject({ highCostModelIds: ['synthetic-costly-fast'] })
     expect((await ctx.githubCopilotSessionContinuation.get(viewedSession as Agent)).enabled).toBe(true)
     expect((await ctx.githubCopilotSessionContinuation.defaults()).enabled).toBe(false)
     expect((await ctx.githubCopilotSessionContinuation.get(fresh)).enabled).toBe(true)

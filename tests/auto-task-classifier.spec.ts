@@ -29,6 +29,11 @@ describe('concrete managed task classifier', () => {
     expect(taskClassifierModel([{ ...off, category: 'powerful' }, model])).toBe(model)
     expect(taskClassifierModel([{ ...off, contextWindow: 2000 }, model])).toBe(model)
   })
+  it('prefers an eligible unmarked classifier but preserves a marked-only pool', () => {
+    const marked = { ...model, id: 'marked-off', reasoning: { advertisedEfforts: ['off'], unmappedEfforts: [] } }
+    expect(taskClassifierModel([marked, model], [marked.id])).toBe(model)
+    expect(taskClassifierModel([marked], [marked.id])).toBe(marked)
+  })
   it('makes one concrete native call with no tools, history identity, fake purpose or recursive Auto', async () => {
     const stream = vi.fn(async function* (request: GenerateOptions): AsyncIterable<StreamChunk> {
       expect(request.model).toBe(model.id)

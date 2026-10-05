@@ -6,12 +6,17 @@ import { TASK_ASSESSMENT_INSTRUCTION } from './auto-task-assessment.ts'
 import type { AssessmentInput } from './auto-task-assessment.ts'
 import { calculateRequestBudget } from './request-budget.ts'
 import type { TaskClassifierObserver } from './auto-assessment-evidence.ts'
+import { normalizeHighCostModelIds } from './auto-allocation.ts'
 
 export const TASK_CLASSIFIER_MAX_TOKENS = 128
 
-export function taskClassifierModel(models: readonly AccountModelDescriptor[]): AccountModelDescriptor | undefined {
+export function taskClassifierModel(
+  models: readonly AccountModelDescriptor[], highCostModelIds?: readonly string[],
+): AccountModelDescriptor | undefined {
+  const highCost = new Set(normalizeHighCostModelIds(highCostModelIds))
   return models.filter(model => model.category === 'lightweight' && model.input.includes('text'))
-    .toSorted((left, right) => Number(right.reasoning.advertisedEfforts.includes('off'))
+    .toSorted((left, right) => Number(highCost.has(left.id)) - Number(highCost.has(right.id))
+      || Number(right.reasoning.advertisedEfforts.includes('off'))
       - Number(left.reasoning.advertisedEfforts.includes('off')) || left.id.localeCompare(right.id, 'en'))
     .find(model => {
       const budget = calculateRequestBudget(model, TASK_CLASSIFIER_MAX_TOKENS)

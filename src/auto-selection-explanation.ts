@@ -32,7 +32,15 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
           : `Task assessment timed out; demand remains uncertain. The preference policy selected ${category[explanation.selectedCategory]} as a fallback.`
       : zh ? `本轮判断为${demand[explanation.assessment.demand]}；按当前偏好选择 ${category[explanation.selectedCategory]} 类模型。`
         : `This task was assessed as ${demand[explanation.assessment.demand]}; the preference policy selected ${category[explanation.selectedCategory]}.`
-  const choice = explanation.method === 'continuity'
+  const allocation = explanation.allocation
+  const selected = allocation?.candidates.find(row => row.modelId === allocation.selectedModelId)
+  const choice = explanation.method === 'weighted-distribution'
+    ? selected === undefined
+      ? zh ? '按同类正权重政策分配；本轮候选观察未保留，不从当前设置推断。连续性仅为有限加权。'
+        : 'Allocated by positive within-category weights. Candidate observations were not retained; current settings cannot reconstruct them. Continuity is a finite bonus.'
+      : zh ? `在 ${explanation.categoryCandidateCount} 个同类可容纳候选中按正权重分配；选中模型${selected.highCost ? '已标记高成本' : '未标记高成本'}，有效权重 ${selected.weight}，本轮条件份额 ${(selected.expectedShare * 100).toFixed(1)}%。连续性仅为有限加权，不保证保留；这不是质量排名或实际费用。`
+      : `Positive weighted allocation among ${explanation.categoryCandidateCount} fitting category candidates. Selected model is ${selected.highCost ? 'marked high cost' : 'unmarked'}, effective weight ${selected.weight}, conditional share ${(selected.expectedShare * 100).toFixed(1)}%. Continuity is a finite bonus, not a lock; this is not quality ranking or actual cost.`
+    : explanation.method === 'continuity'
     ? zh ? `该分类有 ${explanation.categoryCandidateCount} 个可容纳候选；上一轮模型仍合格，因此按连续性策略保留。这不是语义排名，也不证明它最适合任务。`
       : `This category has ${explanation.categoryCandidateCount} fitting candidates. Kept the previous model because it remains eligible, prioritizing continuity; this is not a semantic ranking or proof it is best for the task.`
     : explanation.method === 'only-candidate'

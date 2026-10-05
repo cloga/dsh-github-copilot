@@ -13,6 +13,7 @@ import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { estimateContextTokens, estimateMessageTokens } from '@earendil-works/pi-ai/utils/estimate'
 import { createGitHubCopilotCredentialStore, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
+import { normalizeHighCostModelIds } from './auto-allocation.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import {
   autoModelPreference, GITHUB_COPILOT_AUTO_MODEL_ID, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID,
@@ -51,7 +52,7 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   & {
     readonly streamLiveness?: boolean
     readonly chatRequestSettings?: () => Pick<InlineConfig, 'chatStreamIdleTimeoutMs' | 'chatStreamLiveness' | 'chatMaxRequestImageBytes'>
-    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment'>
+    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment' | 'autoAllocationEvidence'>
     readonly requestBudget?: Partial<RequestBudgetPolicy>
     readonly requestBudgetSettings?: () => Partial<RequestBudgetPolicy>
   }
@@ -571,7 +572,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
   publish: () => void) {
   const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings,
     requestBudget, requestBudgetSettings, streamLiveness, chatRequestSettings, ...requestConfig } = config
-  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment'>
+  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment' | 'autoAllocationEvidence'>
     = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs, excludedModelIds: [] }))
   const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
   const excludedModels = () => excludedModelSet(cacheSettings().excludedModelIds)
@@ -810,13 +811,15 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     parentModelBindings: () => cacheSettings().parentModelFollow ?? [],
     followParentModel: () => cacheSettings().followParentModel === true,
     semanticAssessment: () => cacheSettings().autoSemanticAssessment ?? true,
+    highCostModelIds: () => normalizeHighCostModelIds(cacheSettings().highCostModelIds),
     assessmentDiagnostic: (code: string) => ctx.logger.warn(code),
     async classifyTask(...args: Parameters<NonNullable<Parameters<typeof installAutoModelRouting>[1]['classifyTask']>>) {
       const [input, signal, observe, checkpoint] = args
       checkpoint?.()
       const snapshot = await discoverSnapshot({ signal })
       checkpoint?.()
-      const model = taskClassifierModel(snapshot.models.filter(model => !excludedModels().has(model.id)))
+      const model = taskClassifierModel(snapshot.models.filter(model => !excludedModels().has(model.id)),
+        normalizeHighCostModelIds(cacheSettings().highCostModelIds))
       if (model === undefined) throw failure('COPILOT_AUTO_CLASSIFIER_UNAVAILABLE')
       observe?.({ stage: 'model-selected', modelId: model.id })
       const revision = lifetime.revision
@@ -1008,6 +1011,8 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     parentModelBindings: () => currentRuntime().auto.parentModelBindings(),
     followParentModel: () => currentRuntime().auto.followParentModel(),
     semanticAssessment: () => currentRuntime().auto.semanticAssessment(),
+    highCostModelIds: () => normalizeHighCostModelIds(config.accountModelSettings?.().highCostModelIds),
+    allocationEvidence: () => config.accountModelSettings?.().autoAllocationEvidence !== false,
     assessmentDiagnostic: code => ctx.logger.warn(code),
     admitModel: (agent, turn, model, signal) => currentRuntime(signal).auto.admitModel(agent, turn, model, signal),
   })

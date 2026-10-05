@@ -319,6 +319,21 @@ describe('GitHubCopilotAuthorizationController', () => {
     })
     expect(harness.settingsDocument['github-copilot']).toEqual({})
   })
+  it('saves orthogonal high-cost preferences narrowly without credential or Session reads', async () => {
+    const harness = runtime({ configured: true, githubCopilotEffectiveSettings: {
+      excludedModelIds: ['excluded'], other: 'preserved',
+    } })
+    harness.services.delete('agents'); harness.services.delete('sessionProjections')
+    harness.readRecord.mockImplementation(() => { throw new Error('UNRELATED_CREDENTIAL_READ') })
+    expect(await harness.controller.setModelHighCost('fast-future-id', true))
+      .toMatchObject({ state: 'ready', highCostModelIds: ['fast-future-id'], excludedModelIds: ['excluded'] })
+    expect(harness.mutate).toHaveBeenCalledWith('github-copilot', [{
+      op: 'set', path: ['highCostModelIds'], value: ['fast-future-id'],
+    }], 0)
+    expect(harness.settingsDocument['github-copilot']).toMatchObject({ other: 'preserved' })
+    expect(harness.readRecord).not.toHaveBeenCalled()
+    expect(await harness.controller.setModelHighCost('fast-future-id', false)).toMatchObject({ highCostModelIds: [] })
+  })
   it('reads exclusions from the effective settings value rather than a partial user layer', async () => {
     const harness = runtime({
       configured: true,

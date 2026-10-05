@@ -5,6 +5,8 @@ import { autoModelPreference } from './copilot-identity.ts'
 import type { AutoModelPreference } from './copilot-identity.ts'
 import { calculateRequestBudget, DEFAULT_REQUEST_BUDGET_POLICY } from './request-budget.ts'
 import type { RequestBudgetPolicy } from './request-budget.ts'
+import { allocateAutoModel } from './auto-allocation.ts'
+import type { AutoAllocation } from './auto-allocation.ts'
 
 export type AutoModelClass = 'fast' | 'balanced' | 'strong'
 
@@ -40,8 +42,9 @@ export interface AutoSelectionExplanation {
   readonly targetCategory: AccountModelCategory
   readonly selectedCategory: AccountModelCategory | 'unknown'
   readonly categoryCandidateCount: number
-  readonly method: 'continuity' | 'equal-distribution' | 'only-candidate' | 'no-fit'
+  readonly method: 'continuity' | 'equal-distribution' | 'weighted-distribution' | 'only-candidate' | 'no-fit'
   readonly fallback: boolean
+  readonly allocation?: AutoAllocation
 }
 
 export interface AutoModelRoutingContext {
@@ -56,6 +59,8 @@ export interface AutoModelRoutingContext {
   readonly hasCompactionSummary?: boolean
   readonly assessment?: TaskAssessment
   readonly previousModelId?: string
+  readonly highCostModelIds?: readonly string[]
+  readonly collectAllocationEvidence?: boolean
 }
 
 export class AutoModelRoutingError extends Error {
@@ -179,7 +184,7 @@ function targetCategory(assessment: TaskAssessment, preference: AutoModelPrefere
 
 /**
  * Filter input headroom before task-aware supplier categories.
- * Preserve suitable continuity; distribute only equally classified candidates.
+ * Apply finite continuity and positive cost weights within the fitting category.
  * Preserves Core compaction ownership if no candidate currently fits.
  */
 export function selectAutoModel(
@@ -223,12 +228,13 @@ export function selectAutoModel(
   if (fitting.length > 0) {
     const selectedCategory = order.find(category => fitting.some(model => (model.category ?? 'unknown') === category))!
     const pool = fitting.filter(model => (model.category ?? 'unknown') === selectedCategory)
-    const previous = pool.find(model => model.id === context?.previousModelId)
-    selectedModel = previous ?? pool[seed % pool.length]!
+    const allocation = allocateAutoModel(pool, context?.highCostModelIds, context?.previousModelId, seed)
+    selectedModel = pool.find(model => model.id === allocation.selectedModelId)!
     explanation = {
       assessment, targetCategory: target, selectedCategory, categoryCandidateCount: pool.length,
-      method: previous ? 'continuity' : pool.length === 1 ? 'only-candidate' : 'equal-distribution',
+      method: pool.length === 1 ? 'only-candidate' : 'weighted-distribution',
       fallback: selectedCategory !== target,
+      ...context?.collectAllocationEvidence === false ? {} : { allocation },
     }
     selectedInputBudget = candidateInputLimit(selectedModel, requestedMaxTokens, policy)
     inputFitDiagnostic = 'fitting-candidate-selected'

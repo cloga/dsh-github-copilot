@@ -188,7 +188,7 @@ describe('Auto model routing policy', () => {
       })
       chosen.add(decision.model.id)
       expect([m3.id, m4.id, m5.id]).toContain(decision.model.id)
-      expect(decision.explanation).toMatchObject({ selectedCategory: 'powerful', method: 'equal-distribution', categoryCandidateCount: 3 })
+      expect(decision.explanation).toMatchObject({ selectedCategory: 'powerful', method: 'weighted-distribution', categoryCandidateCount: 3 })
     }
     expect(chosen.size).toBeGreaterThan(1)
   })
@@ -212,10 +212,10 @@ describe('Auto model routing policy', () => {
     expect(selectAutoModel([fast, balanced, strong], [message('Continue.')], 'intelligence').model).toBe(strong)
   })
 
-  it('preserves suitable continuity but never lets it override task category or input fit', () => {
+  it('uses finite continuity but never lets it override task category or input fit', () => {
     const second = { ...balanced, id: 'second-versatile' }
     expect(selectAutoModel([fast, balanced, second, strong], [message('Continue.')], 'balance',
-      { previousModelId: second.id }).explanation.method).toBe('continuity')
+      { previousModelId: second.id }).explanation.method).toBe('weighted-distribution')
     expect(selectAutoModel([fast, balanced, strong], [message('Prove it.')], 'balance',
       { previousModelId: balanced.id }).model).toBe(strong)
     expect(selectAutoModel([fast, balanced, strong], [message('Hello!')], 'intelligence',
@@ -230,6 +230,19 @@ describe('Auto model routing policy', () => {
       .toMatchObject({ model: balanced, explanation: { fallback: true, selectedCategory: 'versatile', targetCategory: 'powerful' } })
     expect(selectAutoModel([unknown], [message('Hello!')], 'intelligence').explanation)
       .toMatchObject({ fallback: true, selectedCategory: 'unknown' })
+  })
+
+  it('keeps costly Fast models eligible and evidence opt-out independent of the selected route', () => {
+    const peer = { ...fast, id: 'ordinary-fast' }
+    const context = { sessionId: 'weighted-fast', turn: 3, highCostModelIds: [fast.id], previousModelId: fast.id }
+    const captured = selectAutoModel([fast, peer, strong], [message('Hello!')], 'intelligence', context)
+    expect(captured.explanation.selectedCategory).toBe('lightweight')
+    expect(captured.explanation.allocation?.candidates.find(row => row.modelId === fast.id))
+      .toMatchObject({ highCost: true, previous: true, weight: 0.3 })
+    const optedOut = selectAutoModel([fast, peer, strong], [message('Hello!')], 'intelligence',
+      { ...context, collectAllocationEvidence: false })
+    expect(optedOut.model).toBe(captured.model)
+    expect(optedOut.explanation.allocation).toBeUndefined()
   })
 
   it('preserves single candidate unchanged across all preferences', () => {

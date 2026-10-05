@@ -32,6 +32,8 @@ export interface AutoModelHostDependencies {
   followParentModel?: () => boolean
   admitModel?: (agent: Agent, turn: number, model: string, signal: AbortSignal) => void
   semanticAssessment?: () => boolean
+  highCostModelIds?: () => readonly string[]
+  allocationEvidence?: () => boolean
   classifyTask?: TaskAssessmentDependencies['classify']
   assessmentDiagnostic?: (code: string) => void
 }
@@ -66,7 +68,9 @@ async function decide(
       diagnostic: dependencies.assessmentDiagnostic ?? (() => { throw failure('COPILOT_AUTO_ASSESSMENT_DIAGNOSTIC_UNAVAILABLE') }),
     })
     if (signal.aborted) throw signal.reason
-    return selectAutoModel(await dependencies.loadModels(signal), messages, preference, { ...context, assessment })
+    return selectAutoModel(await dependencies.loadModels(signal), messages, preference,
+      { ...context, assessment, highCostModelIds: dependencies.highCostModelIds?.(),
+        collectAllocationEvidence: dependencies.allocationEvidence?.() !== false })
   }
   catch (cause) {
     if (cause instanceof AutoModelRoutingError) throw failure(cause.code)

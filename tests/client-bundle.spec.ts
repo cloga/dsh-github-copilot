@@ -400,8 +400,8 @@ describe('tsdown client artifact', () => {
       && descriptor.namespace !== 'githubCopilotSessionAccount'
       && descriptor.namespace !== 'githubCopilotSessionContinuation').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'get', 'authorize', 'setEnabled',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())
       .toEqual(['add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])
@@ -415,7 +415,7 @@ describe('tsdown client artifact', () => {
         expect(descriptor.parameters).toHaveLength(1)
         expect(descriptor.parameters[0]?.codec.mode).toBe('strict')
       }
-      else if (descriptor.method === 'setModelExcluded') {
+      else if (descriptor.method === 'setModelExcluded' || descriptor.method === 'setModelHighCost') {
         expect(descriptor.parameters).toHaveLength(2)
         expect(descriptor.parameters.every(parameter => parameter.codec.mode === 'strict')).toBe(true)
       }
@@ -428,7 +428,7 @@ describe('tsdown client artifact', () => {
         mode: 'strict',
         typeSymbol: descriptor.method === 'migrationStatus'
           ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
-          : descriptor.method === 'setModelExcluded' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
+          : descriptor.method === 'setModelExcluded' || descriptor.method === 'setModelHighCost' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
           : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })
     }

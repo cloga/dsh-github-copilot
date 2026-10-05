@@ -43,6 +43,7 @@ export async function planTask(task, root = repositoryRoot) {
   const scriptTests = area.tests.filter(path => path.startsWith('tests/scripts/'))
   const unitTests = area.tests.filter(path => !path.startsWith('tests/scripts/'))
   const commands = [
+    ...area.iterationReview ? [['node', 'scripts/iteration-review.mjs', '--report', area.iterationReview.report]] : [],
     ['pnpm', 'install', '--frozen-lockfile'],
     ...(area.tests.length === 0 ? [['pnpm', 'test:scripts']] : []),
     ...(unitTests.length ? [['pnpm', 'exec', 'vitest', 'run', ...unitTests]] : []),

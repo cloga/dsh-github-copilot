@@ -127,6 +127,23 @@ describe('GitHub Copilot Models client', () => {
     return { models, preferences }
   }
 
+  it('saves a high-cost row through its narrow Remote without discovery and retains exclusion state', async () => {
+    const { models, preferences } = preferencesFixture()
+    const known = { ...preferences, highCostModelIds: [] }
+    const remote = modelRemote()
+    remote.setModelHighCost.mockResolvedValue({ ok: true, value: { ...known, highCostModelIds: ['enabled'], revision: 2 } })
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never,
+      models, preferences: known }))
+    await descendants(panel.render()).find(element => element.props['data-high-cost-model-id'] === 'enabled')!
+      .props.onChange({ currentTarget: { checked: true } })
+    expect(remote.setModelHighCost).toHaveBeenCalledExactlyOnceWith('enabled', true)
+    expect(descendants(panel.render()).find(element => element.props['data-high-cost-model-id'] === 'enabled')?.props.checked).toBe(true)
+    expect(descendants(panel.render()).find(element => element.props['data-model-id'] === 'excluded')?.props.children).toBe('Restore')
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.ensureModels).not.toHaveBeenCalled()
+  })
+
   it('labels exclusions as shared preferences and filters only evidenced unavailable exclusions', () => {
     const { models, preferences } = preferencesFixture()
     const expandedModels = { ...models, models: [
@@ -263,7 +280,7 @@ describe('GitHub Copilot Models client', () => {
   function modelRemote(discoverModels: ReturnType<typeof vi.fn> = vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] }))) {
     return { discoverModels, ensureModels: vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] })),
       status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(),
-      excludeModel: vi.fn(), restoreModel: vi.fn(), setModelExcluded: vi.fn() }
+      excludeModel: vi.fn(), restoreModel: vi.fn(), setModelExcluded: vi.fn(), setModelHighCost: vi.fn() }
   }
   // Tiny deterministic hook host: component state/ref identity and effect cleanup,
   // without mounting a browser or invoking any real Remote implementation.

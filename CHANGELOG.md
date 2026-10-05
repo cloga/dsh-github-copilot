@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-alpha.116 (prepared)
+
+- Add immediate, cross-account High cost marking to existing model-preference rows through strict narrow Remotes and public SettingsForms CAS/readback (#333).
+- Keep cost orthogonal to task difficulty and supplier category. Use positive weights 1/0.2 and finite previous-model multiplier 1.5 within the fitting category, preserving exclusion, capacity, fallback and admitted-turn ownership. Auxiliary classifiers separately prefer eligible unmarked Lightweight models.
+- Expose bounded current-Session Host-lifetime allocation observations through native Agent lookup and the existing selection dialog, with candidate opportunities, conditional expected selections, actual selections and local JSON export. No automatic upload, durable history, quality/billing inference or native Usage changes.
+- Require the previous Auto review in task plans, Agent contract and PR evidence; explicitly record missing live data and post-delivery owner/sample triggers (#332). Record controlled advisor requirements without shipping unverified extra calls.
+- No Core changes, automatic installation, restart or live model calls for validation.
+
 ## 0.4.0-alpha.115 (prepared)
 
 - Default automatic segmented recovery on in the explicitly selected compaction recovery engine (#330). Keep fitting summaries native; handle known oversized input or one typed summary context-limit failure inside the same Core transaction.

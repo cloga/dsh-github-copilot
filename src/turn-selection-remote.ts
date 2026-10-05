@@ -5,6 +5,8 @@ import type { TurnSelection } from './turn-selection.ts'
 import { TurnSelectionSchema } from './turn-selection.ts'
 import { RequestedModelsSchema } from './turn-request-models.ts'
 import type { RequestedModels } from './turn-request-models.ts'
+import { AutoAllocationSummarySchema } from './auto-allocation-evidence.ts'
+import type { AutoAllocationSummary } from './auto-allocation-evidence.ts'
 export { TurnSelectionSchema } from './turn-selection.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
@@ -12,6 +14,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     githubCopilotTurnSelection: {
       get(agentId: string, turn: number): Promise<RemoteResult<TurnSelection>>
       requestedModels(agentId: string, turn: number): Promise<RemoteResult<RequestedModels>>
+      allocationSummary(agentId: string): Promise<RemoteResult<AutoAllocationSummary>>
     }
   }
 }
@@ -40,6 +43,15 @@ const contribution: TypertRemoteContribution = {
         codec: strictRemoteCodec('dsh-github-copilot#TurnSelectionTurn', z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)) },
     ],
     result: strictRemoteCodec('dsh-github-copilot#RequestedModels', RequestedModelsSchema),
+  }, {
+    id: 'dsh-github-copilot:githubCopilotTurnSelection.allocationSummary',
+    namespace: 'githubCopilotTurnSelection', service: 'githubCopilotTurnSelection', method: 'allocationSummary',
+    invocation: { kind: 'direct' },
+    parameters: [{
+      name: 'agent', wire: 'agentId', source: 'lookup', lookup: 'agent',
+      codec: strictRemoteCodec('@deepseek-ai/dsh-session/types#SessionId', z.string().min(1).max(256)),
+    }],
+    result: strictRemoteCodec('dsh-github-copilot#AutoAllocationSummary', AutoAllocationSummarySchema),
   }],
 }
 export default contribution
