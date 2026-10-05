@@ -66,6 +66,21 @@ test('upload evidence retains request scope, cleanup and local-only observation 
   await verifyAgentContract()
 })
 
+test('automatic recovery plan preserves explicit composition and bounded capacity-only escalation', async () => {
+  const plan = await planTask('compaction')
+  for (const file of ['tests/preview-route.spec.ts', 'tests/fixtures/scoped-compaction-core.fixture.ts']) {
+    assert.ok(plan.commands.some(command => command.argv.includes(file)))
+  }
+  assert.match(plan.automaticRecoveryBoundary, /Default-on only in the explicitly selected replacement/)
+  assert.match(plan.automaticRecoveryBoundary, /at most 16 calls including the failed first attempt/)
+  assert.match(plan.automaticRecoveryBoundary, /No 408\/network\/auth\/quota fallback/)
+  assert.match(plan.automaticRecoveryBoundary, /no automatic live composition migration/)
+  const guide = await readFile(join(repositoryRoot, 'docs/manual-compaction-recovery.md'), 'utf8')
+  assert.match(guide, /matching guard, not a replacement/)
+  assert.match(guide, /Existing Agents may retain the older preset generation/)
+  await verifyAgentContract()
+})
+
 test('important updates carry release follow-through without a second approval prompt', async () => {
   const plan = await planTask('release')
   const policy = plan.boundaries.releaseDelivery
