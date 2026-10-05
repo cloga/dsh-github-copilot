@@ -16,6 +16,10 @@
 
 <!-- List what was not checked: actual DSH activation, browser interaction, account availability, model stream, search, remote release, local installation. Synthetic screenshots must say so. -->
 
+### Iteration evidence
+
+<!-- Auto routing/assessment/cost/continuity/assistance changes: reference the prior review; evidence status, policy version, window, sample/opportunity denominator and limitations; retain/change/defer decision; actual validation; follow-up owner, trigger, metric and action. Unrelated changes: N/A. Never attach raw live exports or imply CI proves the conclusions. See docs/evidence-driven-iteration.md. -->
+
 ## Contract checklist
 
 - [ ] **plugin-only**: no Core source/artifact changes, `node_modules` patches, private-registry/prototype/shared-catalog mutation, or Core commit/PR/release work.

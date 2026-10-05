@@ -13,9 +13,9 @@ const controlStyle: CSSProperties = {
 function preferenceMessage(code: string): string {
   switch (code) {
     case 'COPILOT_MODEL_SETTINGS_UNAVAILABLE':
-      return 'Cannot read model exclusion settings. Models are read-only. Retry to read settings again.'
+      return 'Cannot read model preference settings. Models are read-only. Retry to read settings again.'
     case 'COPILOT_MODEL_SETTINGS_INVALID':
-      return 'Model exclusion settings are invalid. No settings were changed. Review the settings before retrying.'
+      return 'Model preference settings are invalid. No settings were changed. Review the settings before retrying.'
     case 'COPILOT_MODEL_SELECTION_UNAVAILABLE':
       return 'Cannot confirm the models selected by sessions or the default. Changes are disabled to protect those selections. Retry to check again.'
     case 'COPILOT_MODEL_EXCLUSION_SELECTED':
@@ -30,7 +30,7 @@ function preferenceMessage(code: string): string {
 }
 
 export function GitHubCopilotModelPreferencesPanel(props: {
-  readonly remote: ClientContext['remote']['githubCopilot']
+  readonly remote: Pick<ClientContext['remote']['githubCopilot'], 'status' | 'setModelExcluded' | 'setModelHighCost'>
   readonly models: GitHubCopilotAuthorizationView['accountModels']
   readonly preferences: GitHubCopilotAuthorizationView['modelPreferences']
 }): ReactElement {
@@ -54,12 +54,15 @@ export function GitHubCopilotModelPreferencesPanel(props: {
   const availabilityKnown = models?.state === 'ready'
   const settingsKnown = preferences !== undefined && preferences.revision !== undefined
   const excluded = new Set(preferences?.excludedModelIds ?? [])
+  const highCost = new Set(preferences?.highCostModelIds ?? [])
+  const highCostKnown = settingsKnown && preferences?.highCostModelIds !== undefined
   const diagnostic = error ?? preferences?.error
     ?? (preferences === undefined ? 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE' : undefined)
   const writable = preferences?.writable === true && settingsKnown
   const rows = [
     ...available.map(model => ({ id: model.id, name: model.name, available: true })),
-    ...Array.from(new Set([...(preferences?.excludedModelIds ?? []), ...(preferences?.unavailableExcludedModelIds ?? [])]))
+    ...Array.from(new Set([...(preferences?.excludedModelIds ?? []), ...(preferences?.unavailableExcludedModelIds ?? []),
+      ...(preferences?.highCostModelIds ?? [])]))
       .filter(id => !available.some(model => model.id === id))
       .map(id => ({ id, name: id, available: false })),
   ]
@@ -72,7 +75,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     && (needle.length === 0 || model.id.toLocaleLowerCase().includes(needle) || model.name.toLocaleLowerCase().includes(needle)))
   const visibleCount = available.filter(model => !excluded.has(model.id)).length
   const unavailableCount = rows.filter(model => !model.available).length
-  const update = async (modelId?: string, restore = false): Promise<void> => {
+  const update = async (modelId?: string, restore = false, marking?: boolean): Promise<void> => {
     const scope = request.current
     if (scope.pending || modelId !== undefined && !writable) return
     scope.pending = true
@@ -81,7 +84,8 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     setBusyModel(modelId ?? ''); setError(undefined); setErrorModel(modelId)
     try {
       if (modelId !== undefined) {
-        const result = await props.remote.setModelExcluded(modelId, !restore)
+        const result = marking === undefined ? await props.remote.setModelExcluded(modelId, !restore)
+          : await props.remote.setModelHighCost(modelId, marking)
         if (!current()) return
         if (!result.ok) { setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return }
         const parsed = GitHubCopilotModelPreferencesViewSchema.safeParse(result.value)
@@ -114,8 +118,12 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       ? `Model preferences · ${visibleCount} enabled · ${excluded.size} excluded` : 'Model preferences · Read-only'),
     createElement('p', { style: { fontSize: '14px', marginBlock: '12px' } },
       'Exclusions are shared across GitHub Copilot accounts; availability below reflects the current account. Newly discovered models are enabled by default. Unavailable saved exclusions are retained and apply again if that model returns. Excluded models disappear from the managed picker and cannot start a new turn, including Auto. An admitted turn keeps its model. Fixed selections are not changed; select another model before the next turn. Restoring a model does not select it.'),
+    createElement('p', { style: { fontSize: '14px', marginBlock: '12px' } },
+      'High cost is your preference, not a price or quality rating. Auto gives marked models a smaller, nonzero allocation weight within their fitting category, including Fast models. Continuity is a small bonus, not a lock. Markings are shared across accounts, save immediately and affect new Auto turns only; fixed selections and admitted turns are unchanged.'),
+    highCostKnown ? null : createElement('p', { role: 'status' },
+      'High-cost preferences are unknown. Retry to read settings; marking is disabled.'),
     availabilityKnown ? null : createElement('p', { role: 'status' },
-      'Current account availability unconfirmed. Shown models reflect the last metadata snapshot and saved exclusions, not a current availability check.'),
+      'Current account availability unconfirmed. Shown models reflect the last metadata snapshot and saved preferences, not a current availability check.'),
     diagnostic === undefined ? null : createElement('div', { role: 'alert',
       'data-dsh-github-copilot-model-preferences-error': true, style: { fontSize: '14px', marginBlock: '12px' } },
       createElement('p', null, preferenceMessage(diagnostic)),
@@ -153,17 +161,24 @@ export function GitHubCopilotModelPreferencesPanel(props: {
         filtered.map(model => {
           const isExcluded = excluded.has(model.id)
           const disabled = !writable || busyModel !== undefined
-          return createElement('li', { key: model.id, style: { display: 'flex', gap: '12px', alignItems: 'center',
+          return createElement('li', { key: model.id, style: { display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center',
             paddingBlock: '12px', borderBottom: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
             createElement('span', { style: { flex: 1, minWidth: 0, overflowWrap: 'anywhere', fontSize: '14px' } },
               createElement('strong', null, model.name),
               createElement('br'),
               createElement('code', null, model.id),
               createElement('span', null, ` · ${!availabilityKnown ? 'Current account availability unconfirmed'
-                : model.available ? 'Available on current account' : 'Currently unavailable on current account; saved exclusion retained'}`),
+                : model.available ? 'Available on current account' : 'Currently unavailable on current account; saved preferences retained'}`),
               createElement('span', null, ` · ${!settingsKnown ? 'Exclusion status unknown' : isExcluded ? 'Excluded' : 'Enabled'}`),
               errorModel === model.id && error !== undefined
                 ? createElement('span', { role: 'status', style: { display: 'block', marginTop: '6px' } }, preferenceMessage(error)) : null),
+            createElement('label', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px',
+              fontSize: '14px', minHeight: '36px' } },
+              createElement('input', { type: 'checkbox', checked: highCost.has(model.id),
+                disabled: disabled || !highCostKnown, 'aria-label': `High cost ${model.name}`,
+                'data-dsh-github-copilot-high-cost': true, 'data-high-cost-model-id': model.id,
+                onChange: (event: { currentTarget: { checked: boolean } }) => update(model.id, false, event.currentTarget.checked) }),
+              'High cost'),
             createElement('button', {
               type: 'button', style: { ...controlStyle, flexShrink: 0, cursor: disabled ? 'not-allowed' : 'pointer',
                 color: disabled ? 'var(--dsw-alias-label-secondary, GrayText)' : 'inherit' },

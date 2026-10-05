@@ -2,12 +2,19 @@ import { access, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { repositoryRoot } from './agent.mjs'
+import { validateIterationReview } from './iteration-review.mjs'
 
 export async function verifyAgentContract(root = repositoryRoot) {
   const contract = JSON.parse(await readFile(resolve(root, 'agent-contract.json'), 'utf8'))
   const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
   const require = (condition, message) => { if (!condition) throw new Error(`Agent contract: ${message}`) }
   require(contract.schemaVersion === 1, 'unsupported schemaVersion')
+  const review = contract.tasks?.autorouting?.iterationReview
+  require(review?.report === 'docs/auto-iteration-review.json'
+    && review.policy === 'docs/evidence-driven-iteration.md'
+    && review.requiredBeforeImplementation === true && review.missingEvidenceMustBeExplicit === true
+    && review.automaticUpload === false && review.followUpRequired === true,
+  'Auto iteration review must require prior evidence, explicit missing data, local-only sharing and follow-up')
   const implementation = contract.boundaries?.implementationScope
   require(implementation?.mode === 'plugin-only', 'plugin-only implementation policy is missing')
   const implementationKeys = ['mode', 'coreInspection', 'allowedIntegration', 'coreSourceChanges', 'coreArtifactPatching', 'coreRuntimeMonkeyPatching', 'corePatchDependency', 'coreCommitPrRelease', 'unsupportedCapability', 'scopeException']
@@ -88,6 +95,10 @@ export async function verifyAgentContract(root = repositoryRoot) {
   for (const script of ['agent:describe', 'agent:doctor', 'agent:plan', 'verify:agent', 'test:scripts', 'typecheck:tests', 'verify:tarball']) {
     require(typeof pkg.scripts[script] === 'string', `missing package script ${script}`)
   }
+  validateIterationReview(JSON.parse(await readFile(resolve(root, review.report), 'utf8')))
+  await file(review.policy)
+  const template = await readFile(resolve(root, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
+  require(template.includes('### Iteration evidence'), 'PR iteration evidence is missing')
   for (const script of ['verify:agent', 'typecheck:tests', 'test:scripts']) {
     require(pkg.scripts.verify.includes(`pnpm ${script}`), `${script} is absent from the full gate`)
   }

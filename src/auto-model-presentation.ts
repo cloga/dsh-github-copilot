@@ -12,6 +12,7 @@ import { TURN_USAGE_EVIDENCE_KEY, isTurnUsageEvidence, turnUsageDiagnostic, turn
 import { TurnUsageNotice } from './turn-usage-notice.ts'
 import { TurnAccountViewSchema } from './session-accounts-remote.ts'
 import type { TurnAccountView } from './session-accounts-remote.ts'
+import { AutoAllocationCard } from './auto-allocation-card.ts'
 
 export const AUTO_MODEL_ATTRIBUTION_KEY = 'github-copilot-auto-model-attribution'
 const SLOT = 'conversation.chat.assistant-actions'
@@ -135,6 +136,7 @@ function sourceOf(props: Record<string, unknown>, key: string, diagnostic: (code
 interface SelectionRemote {
   get(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }>
   requestedModels?(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }>
+  allocationSummary?(agentId: string): Promise<{ ok: boolean; value?: unknown }>
 }
 interface AccountRemote { turn(agentId: string, turn: number): Promise<{ ok: boolean; value?: unknown }> }
 interface LocaleReader { getLocale(): { active: string }; subscribe(listener: () => void): Dispose }
@@ -172,6 +174,8 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   const [account, setAccount] = React.useState<TurnAccountView>()
   const [accountFailed, setAccountFailed] = React.useState(false)
   const [accountAttempt, setAccountAttempt] = React.useState(0)
+  const readAllocation = React.useMemo(() => sessionId === undefined || props.remote?.allocationSummary === undefined
+    ? undefined : () => props.remote!.allocationSummary!(sessionId), [sessionId, props.remote])
   React.useEffect(() => {
     setLive({ mode: 'unknown' })
     if (turn === undefined || sessionId === undefined || props.remote === undefined) {
@@ -264,6 +268,8 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
       models, modelsFailed: modelsFailed || provenanceSource.failed === true,
       retryModels: props.remote?.requestedModels === undefined && provenanceSource.failed !== true ? undefined : () => setModelsAttempt(value => value + 1),
       account, accountFailed, retryAccount: () => setAccountAttempt(value => value + 1),
+      allocationEvidence: readAllocation === undefined ? undefined
+        : React.createElement(AutoAllocationCard, { read: readAllocation, locale: language }),
       retry: props.remote === undefined ? undefined : () => setReadAttempt(value => value + 1) }),
     usageDiagnostic === undefined ? null : React.createElement(TurnUsageNotice, { diagnostic: usageDiagnostic, locale: language }))
 }
@@ -328,9 +334,11 @@ export function installAutoModelPresentation(capabilities: {
   const face = record(capabilities.remote) ? capabilities.remote.githubCopilotTurnSelection : undefined
   const getSelection = record(face) ? face.get : undefined
   const getRequested = record(face) ? face.requestedModels : undefined
+  const getAllocation = record(face) ? face.allocationSummary : undefined
   const remote: SelectionRemote | undefined = typeof getSelection === 'function' ? {
     get: (agentId, turn) => getSelection(agentId, turn),
     ...typeof getRequested === 'function' ? { requestedModels: (agentId: string, turn: number) => getRequested(agentId, turn) } : {},
+    ...typeof getAllocation === 'function' ? { allocationSummary: (agentId: string) => getAllocation(agentId) } : {},
   } : undefined
   const accountFace = record(capabilities.remote) ? capabilities.remote.githubCopilotSessionAccount : undefined
   const readAccount = record(accountFace) ? accountFace.turn : undefined

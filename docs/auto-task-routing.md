@@ -188,12 +188,14 @@ lightweight -> versatile -> powerful. Unclassified candidates are a final
 explicit fallback only, not fabricated categories. Unknown/new category values
 remain unclassified with a bounded catalog diagnostic.
 
-Within the first available category, retain the previous managed model only
-when it remains eligible and suitable. Otherwise use stable equal-weight
-Session/turn selection with deterministic ID ordering as a tie breaker. Do not
-infer quality from that ordering or assign fabricated weights. Once admitted,
-all steps/retries share the turn decision. Continuity reduces unnecessary
-switches but is not a claim of supplier cache savings.
+Within the first fitting category, use stable positive weighted Session/turn
+allocation: ordinary weight 1, user-marked high-cost weight 0.2, eligible previous
+model multiplier 1.5. Cost is independent of task difficulty and supplier
+category. There is no absolute continuity shortcut or extreme-only gate.
+These are reviewed policy parameters, not measured quality or prices. Once
+admitted, all steps/retries share the decision. No supplier cache savings are
+claimed. See [high-cost requirements](./auto-high-cost.md) and
+[evidence-driven iteration](./evidence-driven-iteration.md).
 
 If no model fits, preserve the existing largest-admissible-input recovery
 branch and its native compaction diagnostics. Explain that no candidate fits;

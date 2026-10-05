@@ -6,6 +6,7 @@ import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
 import { HostConnectionService } from '@deepseek-ai/dsh-client-connection'
 import { TurnSelectionController } from '../../src/turn-selection-host.ts'
 import { TurnSelectionStore } from '../../src/turn-selection.ts'
+import { allocateAutoModel } from '../../src/auto-allocation.ts'
 import { it, expect, vi } from 'vitest'
 import remote from '../../src/remote.ts'
 import selectionRemote from '../../src/turn-selection-remote.ts'
@@ -21,6 +22,57 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import continuationRemote from '../../src/session-continuation-remote.ts'
 import { installSessionContinuation } from '../../src/session-continuation-host.ts'
+import { GitHubCopilotAuthorizationController } from '../../src/authorization-controller.ts'
+
+it.each(['source', 'strict'] as const)('saves high-cost preferences through actual Client and %s Host gateways without discovery', async mode => {
+  const host = new Context(), client = new Context()
+  let revision = 1
+  const value: Record<string, unknown> = { excludedModelIds: ['other'], highCostModelIds: [], unrelated: 'retained' }
+  const discovery = vi.fn()
+  try {
+    const registry = new TypertRegistry(host)
+    if (mode === 'strict') registry.register({ package: remote.package, face: 'host', schemas: [],
+      model: { services: [], events: [], objects: [] }, invocations: remote.descriptors })
+    host.provide('settings', {
+      describe: () => [{ ns: 'github-copilot', revision, value }],
+      mutate: async (ns: string, operations: readonly { path: string[]; value: unknown }[], expected: number) => {
+        expect(ns).toBe('github-copilot'); expect(expected).toBe(revision)
+        expect(operations).toHaveLength(1); expect(operations[0]?.path).toEqual(['highCostModelIds'])
+        value.highCostModelIds = operations[0]!.value; revision++
+      },
+    })
+    host.provide('githubCopilotPreview', {
+      getView: () => ({ state: 'ready', models: [], rejected: [] }), discoverModels: discovery,
+    })
+    const connection = new HostConnectionService(host, [], {})
+    new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
+    const handler = connection.createSharedFetchHandler('/api')
+    let rpcId = 0
+    client.provide('typert', { remotes: { register: () => () => {} }, contexts: { getClient: () => undefined } })
+    client.provide('connection', { rpc: { call: async (_path: string, method: string, payload: unknown) => {
+      const response = await handler.fetch(new Request(`http://fixture.invalid/api/${method}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'client-request', rpcId: `high-cost-${++rpcId}`, method, payload }),
+      }))
+      return (await response.json()).result
+    }, open: vi.fn() }, registerGenerationSource: () => () => {}, start: () => ({ stop: () => {} }),
+    generation: { getSnapshot: () => undefined } })
+    Gateway.apply(client)
+    await client.remote.$mount(remote)
+    new GitHubCopilotAuthorizationController(host)
+    await expect(client.remote.githubCopilot.setModelHighCost('costly-fast', true)).resolves.toMatchObject({
+      ok: true, value: { revision: 2, highCostModelIds: ['costly-fast'], excludedModelIds: ['other'] },
+    })
+    await expect(client.remote.githubCopilot.setModelHighCost('costly-fast', false)).resolves.toMatchObject({
+      ok: true, value: { revision: 3, highCostModelIds: [], excludedModelIds: ['other'] },
+    })
+    expect(value.unrelated).toBe('retained')
+    expect(discovery).not.toHaveBeenCalled()
+    if (mode === 'strict') await expect(Reflect.apply(client.remote.githubCopilot.setModelHighCost, undefined, ['costly-fast', 'true']))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/input-invalid' } })
+    expect(revision).toBe(3)
+  } finally { await client.fiber.dispose(); await host.fiber.dispose() }
+})
 
 it.each(['source', 'strict'] as const)('binds persistent Session continuation through actual Client and %s Host gateways', async mode => {
   const host = new Context(), client = new Context()
@@ -307,6 +359,19 @@ it.each(['source', 'strict'] as const)('reads retained selection through actual 
     const auto = { mode: 'auto', preference: 'balance', reason: 'standard-turn', candidateCount: 2 } as const
     store.record(master, 7, auto)
     store.record(master, 8, { mode: 'manual' })
+    store.record(master, 10, { ...auto, explanation: {
+      assessment: { demand: 'complex', source: 'local', signals: ['investigation'] },
+      targetCategory: 'powerful', selectedCategory: 'powerful', categoryCandidateCount: 2,
+      method: 'weighted-distribution', fallback: false,
+      allocation: allocateAutoModel([{ id: 'regular' }, { id: 'marked' }], ['marked'], undefined, 7),
+    } })
+    await expect(client.remote.githubCopilotTurnSelection.allocationSummary(master.id))
+      .resolves.toMatchObject({ ok: true, value: { retainedDecisions: 1, completeHistory: false,
+        rows: [{ modelId: 'regular', opportunities: 1 }, { modelId: 'marked', opportunities: 1 }] } })
+    await expect(client.remote.githubCopilotTurnSelection.allocationSummary('missing-master'))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-not-found' } })
+    await expect(client.remote.githubCopilotTurnSelection.allocationSummary('denied-master'))
+      .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-failed' } })
     await expect(client.remote.githubCopilotTurnSelection.get(master.id, 7))
       .resolves.toEqual({ ok: true, value: auto })
     await expect(client.remote.githubCopilotTurnSelection.get(master.id, 8))
@@ -410,12 +475,13 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     expect(registered).toEqual([remote])
     expect(remote.descriptors.filter(item => item.namespace !== 'githubCopilotAccounts').map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'setModelExcluded', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'get', 'authorize', 'setEnabled',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
       'get', 'set', 'refreshIdentity', 'ensureIdentity', 'usage', 'refreshUsage', 'turn',
       'get', 'set', 'authorizeNext', 'defaults', 'setDefault',
     ])
-    for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot' && item.method !== 'setModelExcluded')) {
+    for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot'
+      && item.method !== 'setModelExcluded' && item.method !== 'setModelHighCost')) {
       expect(descriptor.result.mode).toBe('strict')
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {

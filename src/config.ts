@@ -46,6 +46,8 @@ export interface InlineConfig {
   accountModelFailureCooldownMs?: number
   /** Exact account model IDs hidden from the managed directory and every Auto candidate pool. */
   excludedModelIds?: string[]
+  /** User-marked costly IDs; reduced positive Auto weight, independent of category. */
+  highCostModelIds?: string[]
   /** Opaque profile-wide account selector; absence retains canonical compatibility. */
   activeAccountId?: string
   /** Explicit Session overrides; absence means follow the profile default. */
@@ -59,6 +61,8 @@ export interface InlineConfig {
   followParentModel?: boolean
   /** Default-on bounded task assessment; explicit false opts out of auxiliary inference. */
   autoSemanticAssessment?: boolean
+  /** Capture bounded local candidate opportunities for future policy review. */
+  autoAllocationEvidence?: boolean
   /** Estimated managed-route input headroom, separate from truthful catalog capacities. */
   requestBudgetSafetyTokens?: number
   /** Fraction of admissible input used by eligible automatic-compaction requests. */
@@ -77,26 +81,28 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
   continuationDefaultHistory?: InlineConfig['continuationDefaultHistory'] | LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
   sessionContinuation?: SessionContinuationPreference[] | LiveSetting<ArrayLike<SessionContinuationPreference>>
   sessionAccounts?: SessionAccountPreference[] | LiveSetting<ArrayLike<SessionAccountPreference>>
   activeAccountId?: string | LiveSetting<string | undefined>
   followParentModel?: boolean | LiveSetting<boolean>
   parentModelFollow?: ParentModelBinding[] | LiveSetting<ArrayLike<ParentModelBinding>>
+  highCostModelIds?: string[] | LiveSetting<ArrayLike<string>>
   excludedModelIds?: string[] | LiveSetting<ArrayLike<string>>
   searchModel?: string | LiveSetting<string | undefined>
   searchRouting?: WebSearchRoutingConfig | LiveSetting<WebSearchRoutingConfig | undefined>
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
   continuationDefaultHistory: LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
   sessionContinuation: LiveSetting<ArrayLike<SessionContinuationPreference>>
   sessionAccounts: LiveSetting<ArrayLike<SessionAccountPreference>>
   activeAccountId: LiveSetting<string | undefined>
   followParentModel: LiveSetting<boolean>
   parentModelFollow: LiveSetting<ArrayLike<ParentModelBinding>>
+  highCostModelIds: LiveSetting<ArrayLike<string>>
   excludedModelIds: LiveSetting<ArrayLike<string>>
   searchModel: LiveSetting<string | undefined>
   searchRouting: LiveSetting<WebSearchRoutingConfig>
@@ -106,6 +112,7 @@ export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRou
 /** Keep native live references at the boundary; request code consumes plain snapshots. */
 export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
   const exclusions = readConfigValue<ArrayLike<string> | undefined>(config.excludedModelIds)
+  const highCost = readConfigValue<ArrayLike<string> | undefined>(config.highCostModelIds)
   const bindings = readConfigValue<ArrayLike<ParentModelBinding> | undefined>(config.parentModelFollow)
   const accounts = readConfigValue<ArrayLike<SessionAccountPreference> | undefined>(config.sessionAccounts)
   const continuation = readConfigValue<ArrayLike<SessionContinuationPreference> | undefined>(config.sessionContinuation)
@@ -122,6 +129,7 @@ export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
       sessionId: account.sessionId, accountId: account.accountId,
     })),
     excludedModelIds: exclusions === undefined ? undefined : Array.from(exclusions),
+    highCostModelIds: highCost === undefined ? undefined : Array.from(highCost),
     parentModelFollow: bindings === undefined ? undefined : Array.from(bindings, binding => ({
       childSessionId: binding.childSessionId, parentSessionId: binding.parentSessionId,
     })),
@@ -150,6 +158,7 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   accountModelTtlMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(86_400_000),
   accountModelFailureCooldownMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(300_000),
   excludedModelIds: z.array(z.string()).default([]).hidden().volatile(),
+  highCostModelIds: z.array(z.string()).default([]).hidden().volatile(),
   activeAccountId: z.string().hidden().volatile(),
   sessionAccounts: z.array(z.object({
     sessionId: z.string().min(1).max(256), accountId: z.string().min(1).max(36),
@@ -164,6 +173,7 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   })).default([]).hidden().volatile(),
   followParentModel: z.boolean().default(false).volatile(),
   autoSemanticAssessment: z.boolean().default(true),
+  autoAllocationEvidence: z.boolean().default(true),
   parentModelFollow: z.array(z.object({
     childSessionId: z.string().min(1), parentSessionId: z.string().min(1),
   })).default([]).hidden().volatile(),

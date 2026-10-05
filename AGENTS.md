@@ -258,6 +258,14 @@ Never say GPT-6/search works merely because settings, typecheck or a package imp
 
 ## Changing capabilities
 
+Auto routing, assessment, cost weights, continuity and assistance changes must
+first read and validate `docs/auto-iteration-review.json` using
+`scripts/iteration-review.mjs`. Follow `docs/evidence-driven-iteration.md`:
+missing data stays explicit, PRs record the decision and validation, and the
+post-delivery review has an owner, sample trigger, metric and action. Never
+upload local diagnostics automatically. See `docs/auto-high-cost.md` for the
+orthogonal user-cost policy and separately gated advisor acceptance.
+
 Continuation processing is reasoning-only: never recursively traverse or serialize
 ordinary payload content to impose a whole-request limit. Preserve bounded
 top-level item/ciphertext work, yielding cancellation and turn-revocation checks,
@@ -276,8 +284,9 @@ Completed-turn Usage diagnostics (#259) are read-only plugin conversation data a
 Auto task routing (#258) uses current `model_picker_category` facts, never model
 names, effort or context capacity as a quality category. Hard eligibility/input
 fit precede task/preference policy; unknown category and uncertain task evidence
-remain explicit. Keep suitable previous-model continuity and equal-weight
-tie-breaking within the first available category. Capture actual reasons once
+remain explicit. Within the first fitting category, apply positive cost weights
+(ordinary 1, marked 0.2) and finite continuity (previous model multiplier 1.5),
+never unconditional retention or extreme-only cost gating. Capture actual reasons once
 per turn without durable decision events or changing Usage.
 `autoSemanticAssessment` is default-on by explicit user rollout request (#267),
 only for locally unknown demand; preserve explicit false opt-out. One bounded concrete

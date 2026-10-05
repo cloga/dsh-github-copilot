@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "feature": "autorouting",
+  "status": "not-collected",
+  "policyVersion": "high-cost-v1",
+  "observation": {
+    "start": null,
+    "end": null,
+    "sampleCount": 0,
+    "limitations": "No live weighted-allocation dataset collected. Initial synthetic tests do not establish real workload quality, billing, cost savings or live Desktop activation."
+  },
+  "previousReview": "Issue #332 workflow pilot and #333 high-cost requirements; prior category policy used unconditional continuity.",
+  "findings": "Unconditional continuity prevents allocation opportunities. Hard-prioritizing unmarked peers nearly excludes high-cost candidates; extreme-only gating wrongly couples cost to difficulty.",
+  "decision": "Implement positive main-turn weights ordinary=1, marked=0.2 and finite previous-model multiplier=1.5 within the fitting supplier category. Capture local bounded opportunities and expected shares. Defer advisor calls until public evidence/authorization/account seams pass their own acceptance.",
+  "validation": "342 focused tests and 19 focused tooling tests passed with a supplemental unchanged pinned resolver. Native Client/Host gateways and SettingsForms fiber/restart persistence included. Synthetic source-component browser checks passed at widths 1280/390/195 in both themes. Normal pnpm verify blocked by configured mirror HTTP 404 for exact rc.2 dependency; full required CI, build, tarball and publication remain pending. This is not live Desktop/model/billing evidence.",
+  "followUp": {
+    "owner": "Maintainer or Agent assigned to post-delivery review issue #334",
+    "trigger": "Before the next policy change, or after at least 200 eligible opportunities per compared model across at least 20 Sessions, keeping policy/candidate-set windows separate",
+    "metric": "Opportunity-adjusted actual versus expected selections, marked replacement/retention, within-pool switching, assessment latency/failures; outcomes and costs only when independently attributable",
+    "action": "Review local sanitized aggregates, check missing/evicted coverage, and retain/change/defer with reasons. This threshold is not statistical significance. No automatic upload, quality inference from completion, or credit inference from balance deltas."
+  }
+}

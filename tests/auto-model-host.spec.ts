@@ -412,10 +412,11 @@ describe('Auto model Host integration', () => {
     const agent = { ctx, session: { append, requestHeader: () => undefined } } as unknown as Agent
     const scope = scopeTarget(agent, agent)
     const loadModels = vi.fn(async () => [
-      model('fixture-fast', 64_000, 'low'),
-      model('fixture-strong', 256_000, 'high'),
+      model('fixture-fast', 64_000, 'low', 'lightweight'),
+      model('fixture-strong', 256_000, 'high', 'powerful'),
     ])
-    const dispose = installAutoModelRouting(ctx, { loadModels })
+    let marked = ['fixture-fast']
+    const dispose = installAutoModelRouting(ctx, { loadModels, highCostModelIds: () => marked })
     ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
     ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider: PREVIEW, model: AUTO }))
     const signal = new AbortController().signal
@@ -427,14 +428,20 @@ describe('Auto model Host integration', () => {
     const request = (turn: number, step = 1) => ctx.waterfall(scope, 'agent/request',
       { agent, turn, step, signal }, async () => ({ provider: 'fixture-seed', model: 'fixture-seed' }))
     try {
-      await enter(1, 'Explain this symbol.')
+      await enter(1, 'Hello!')
       await expect(request(1)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
+      const first = ctx.githubCopilotTurnSelection.get(agent, 1)
+      expect(first.mode === 'auto' && first.explanation?.allocation?.candidates[0]?.highCost).toBe(true)
+      marked = ['fixture-strong']
       await enter(1, 'detail '.repeat(1_000))
       await expect(request(1, 2)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
       expect(loadModels).toHaveBeenCalledTimes(1)
+      expect(ctx.githubCopilotTurnSelection.get(agent, 1)).toBe(first)
 
-      await enter(2, 'detail '.repeat(1_000))
+      await enter(2, 'Prove this theorem.')
       await expect(request(2)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-strong' })
+      const second = ctx.githubCopilotTurnSelection.get(agent, 2)
+      expect(second.mode === 'auto' && second.explanation?.allocation?.candidates[0]?.highCost).toBe(true)
       expect(loadModels).toHaveBeenCalledTimes(2)
       // Optional attribution must not add unknown required events to the durable log.
       expect(append).not.toHaveBeenCalled()

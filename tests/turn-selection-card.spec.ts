@@ -7,6 +7,8 @@ import { AUTO_MODEL_ATTRIBUTION_KEY, installAutoModelPresentation } from '../src
 import { TURN_MODEL_PROVENANCE_KEY } from '../src/turn-model-provenance.ts'
 import type { ComponentType } from 'react'
 import type { TurnSelection } from '../src/turn-selection.ts'
+import { AutoAllocationCard } from '../src/auto-allocation-card.ts'
+import { summarizeAutoAllocations } from '../src/auto-allocation-evidence.ts'
 const cleanups: Array<() => void> = []
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }) })
 afterEach(async () => { await act(async () => cleanups.splice(0).forEach(fn => fn())); document.body.replaceChildren() })
@@ -17,6 +19,37 @@ async function mount(selection: TurnSelection, locale = 'en') {
   return container
 }
 const auto = { mode: 'auto', preference: 'intelligence', reason: 'large-structured-turn', candidateCount: 3 } as const
+it('keeps allocation read errors distinct from empty evidence and exports only strict read-only data', async () => {
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  const read = vi.fn().mockResolvedValueOnce({ ok: false })
+    .mockResolvedValueOnce({ ok: true, value: summarizeAutoAllocations([]) })
+  await act(async () => root.render(createElement(AutoAllocationCard, { read, locale: 'en' })))
+  expect(container.querySelector('[role=alert]')?.textContent).toContain('Could not read')
+  expect(container.textContent).not.toContain('No retained samples')
+  await act(async () => container.querySelector('button')!.click())
+  expect(read).toHaveBeenCalledTimes(2)
+  expect(container.textContent).toContain('No retained samples')
+  const field = container.querySelector('textarea')!
+  expect(field.readOnly).toBe(true)
+  expect(JSON.parse(field.value)).toMatchObject({ status: 'not-collected', completeHistory: false })
+  await act(async () => root.render(createElement(AutoAllocationCard, { read, locale: 'zh' })))
+  expect(read).toHaveBeenCalledTimes(2)
+  expect(container.textContent).toContain('不会自动上传')
+})
+
+it('shows pending allocation reads and rejects unknown sensitive export fields', async () => {
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  let settle: ((value: { ok: boolean; value: unknown }) => void) | undefined
+  const read = () => new Promise<{ ok: boolean; value: unknown }>(resolve => { settle = resolve })
+  await act(async () => root.render(createElement(AutoAllocationCard, { read, locale: 'en' })))
+  expect(container.querySelector('[role=status]')?.textContent).toBe('Reading…')
+  await act(async () => settle!({ ok: true, value: { ...summarizeAutoAllocations([]), credential: 'synthetic-forbidden' } }))
+  expect(container.querySelector('[role=alert]')).not.toBeNull()
+  expect(container.textContent).not.toContain('synthetic-forbidden')
+  expect(container.querySelector('textarea')).toBeNull()
+})
 it('keeps recorded Account details separate from native Usage and current selection', async () => {
   const container = document.createElement('div'); document.body.append(container)
   const root = createRoot(container); cleanups.push(() => root.unmount())

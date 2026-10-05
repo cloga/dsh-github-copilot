@@ -30,6 +30,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       excludeModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       restoreModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       setModelExcluded(modelId: string, excluded: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
+      setModelHighCost(modelId: string, highCost: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       cancel(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       signOut(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -74,6 +75,7 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
     excludedModelIds: z.array(z.string().min(1).max(512)).max(512),
     lockedModelIds: z.array(z.string().min(1).max(512)).max(512),
     unavailableExcludedModelIds: z.array(z.string().min(1).max(512)).max(512),
+    highCostModelIds: z.array(z.string().min(1).max(512)).max(512).optional(),
     error: z.enum([
       'COPILOT_MODEL_PREFERENCES_UNAVAILABLE',
       'COPILOT_MODEL_SETTINGS_UNAVAILABLE',
@@ -165,6 +167,18 @@ const contribution: TypertRemoteContribution = {
           codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelId', z.string().min(1).max(512)) },
         { name: 'excluded', wire: 'excluded', source: 'json',
           codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelExcluded', z.boolean()) },
+      ],
+      result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelPreferencesView', GitHubCopilotModelPreferencesViewSchema),
+    },
+    {
+      id: 'dsh-github-copilot:githubCopilot.setModelHighCost',
+      service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'setModelHighCost',
+      invocation: direct,
+      parameters: [
+        { name: 'modelId', wire: 'modelId', source: 'json',
+          codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelId', z.string().min(1).max(512)) },
+        { name: 'highCost', wire: 'highCost', source: 'json',
+          codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelHighCost', z.boolean()) },
       ],
       result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelPreferencesView', GitHubCopilotModelPreferencesViewSchema),
     },
