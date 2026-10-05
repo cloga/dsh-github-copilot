@@ -137,7 +137,7 @@ export async function summarizeOversizedManualInput<M extends RecoveryMessage, R
  * mount both: Cordis compaction is a singleton, not an overridable service.
  */
 export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine {
-  static override Config = z.intersect([
+  static override Config: z<BasicCompactionConfig & { automaticRecovery?: boolean }> = z.intersect([
     BasicCompactionEngine.Config,
     z.object({ automaticRecovery: z.boolean().default(true) }),
   ])
