@@ -54,11 +54,11 @@ it('uses native auxiliary typography for the entire notice and inherited control
     expect(notice.style.width).toBe('100%')
     expect(notice.style.minWidth).toBe('0')
     await f.click('Review recovery options')
-    for (const paragraph of f.node.querySelectorAll('p')) {
+    for (const paragraph of Array.from(f.node.querySelectorAll('p'))) {
       expect(paragraph.style.marginBlock).toBe('8px')
       expect(paragraph.style.maxWidth).toBe('38rem')
     }
-    for (const button of f.node.querySelectorAll('button')) {
+    for (const button of Array.from(f.node.querySelectorAll('button'))) {
       expect(button.style.fontSize).toBe('inherit')
       expect(button.style.fontFamily).toBe('inherit')
     }

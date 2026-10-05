@@ -66,7 +66,7 @@ describe('additive historical context notice', () => {
     expect(notice.style.lineHeight).toBe(summary.style.lineHeight)
     expect(notice.style.width).toBe('100%')
     expect(notice.style.minWidth).toBe('0')
-    for (const paragraph of view.container.querySelectorAll('p')) {
+    for (const paragraph of Array.from(view.container.querySelectorAll('p'))) {
       expect(paragraph.style.marginBlock).toBe('8px')
       expect(paragraph.style.maxWidth).toBe('38rem')
     }
