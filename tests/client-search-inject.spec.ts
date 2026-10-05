@@ -60,6 +60,7 @@ async function fixture(footer: boolean, routingAvailable = true, bundle = true, 
     new Slots(ctx)
     new NamedService(ctx, 'remote.githubCopilot')
     new NamedService(ctx, 'remote.githubCopilotAccounts')
+    new NamedService(ctx, 'remote.githubCopilotSessionContinuation')
     new SettingsRemote(ctx)
   } })
   const addRouting = () => root.plugin({ apply(ctx) { new RoutingRemote(ctx) } })

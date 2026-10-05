@@ -85,6 +85,7 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
     new NamedService(ctx, 'remote.githubCopilot')
     new NamedService(ctx, 'remote.githubCopilotAccounts')
     new NamedService(ctx, 'remote.githubCopilotSessionAccount')
+    new NamedService(ctx, 'remote.githubCopilotSessionContinuation')
     new NamedService(ctx, 'remote.settings')
     new NamedService(ctx, 'remote.githubCopilotSearchRouting')
     new UsageRemote(ctx)
