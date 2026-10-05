@@ -68,3 +68,9 @@ it('dismisses on outside pointer interaction without making an account write', a
   expect(node.querySelector('[data-copilot-account-selector]')).toBeNull()
   expect(select).not.toHaveBeenCalled()
 })
+it('backs translucent native menu tokens with opaque Canvas and uses a dark elevation shadow', async () => {
+  const { node } = await fixture()
+  const menu = node.querySelector<HTMLElement>('[data-copilot-account-selector]')!
+  expect(menu.style.background).toBe('linear-gradient(var(--dsw-specific-menu, Canvas), var(--dsw-specific-menu, Canvas)), Canvas')
+  expect(menu.style.boxShadow).toBe('0 10px 28px rgb(0 0 0 / 24%)')
+})

@@ -733,6 +733,7 @@ describe('Copilot account usage chip', () => {
     expect(dialog.querySelectorAll('strong')).toHaveLength(1)
     expect(dialog.style.background).toBe(
       'linear-gradient(var(--dsw-specific-menu, Canvas), var(--dsw-specific-menu, Canvas)), Canvas')
+    expect(dialog.style.boxShadow).toBe('0 8px 32px rgb(0 0 0 / 24%)')
   })
 
   it('does not round a positive sub-cent credit amount to zero in the compact control', async () => {

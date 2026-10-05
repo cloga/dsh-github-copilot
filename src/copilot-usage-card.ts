@@ -440,7 +440,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         color: 'var(--dsw-alias-label-primary, CanvasText)',
         background: 'linear-gradient(var(--dsw-specific-menu, Canvas), var(--dsw-specific-menu, Canvas)), Canvas',
         fontFamily: 'var(--dsw-font-family, inherit)', fontSize: 13,
-        boxShadow: '0 8px 32px color-mix(in srgb, CanvasText 16%, transparent)', overflowWrap: 'anywhere',
+        boxShadow: '0 8px 32px rgb(0 0 0 / 24%)', overflowWrap: 'anywhere',
       },
     },
     h('style', null, formStyles),
