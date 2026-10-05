@@ -23,7 +23,7 @@ Visible Models and Credits resolve missing names for saved accounts without acti
 
 Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
 
-**Source candidate: `0.4.0-alpha.116` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+**Source candidate: `0.4.0-alpha.117` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -80,10 +80,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.116/dsh-github-copilot-0.4.0-alpha.116.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.117/dsh-github-copilot-0.4.0-alpha.117.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.116` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.117` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -193,6 +193,8 @@ Configuration is under `github-copilot`. Credentials, endpoint definitions and a
 | AUTH, Responses replay-scope or TLS failure | Review [request diagnostics](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics) and [usage TLS boundaries](./docs/copilot-usage.md#account-data-boundary). After an exact scope rejection, **Replay recovery** shows the same persistent Session continuation policy: when off, disclose loss and offer **Enable visible-history continuation** or Cancel; when already on, show diagnostic guidance without repeated authorization. No duration or next-turn-only choice. Evidence expiry does not disable the policy. Use native Retry separately; no automatic send/retry or history rewrite, and not a 408 fix. Never reset credentials or disable TLS as an automatic repair. |
 | Hosted search unavailable | Check account/protocol/probe diagnostics; a legacy override stays authoritative until explicitly reset |
 
+Confirmed account saves restore controls immediately, independently of quota loading. Changing only follow mode for the same account retains its attributed quota without another read. Switching accounts clears the old quota and loads the new snapshot without blocking further account edits; quota errors do not undo a confirmed selection.
+
 The Credits account panel shows the current account and **Switch**. Its dropdown lists only configured accounts, marks the effective account and scrolls long lists internally. **Follow global default** is a separate checkbox: enabling it clears the Session override; disabling it fixes the current account. Choosing any account also fixes it, even if it is today's default. Both actions retain continuation confirmation and revision-checked saving. Account addition belongs only in Models, where one **Manage** disclosure contains account management and shared model preferences. Models retains Add in its dropdown footer without selecting the new account, plus guarded local removal and reauthorization. Neither surface has account search. Exact-ID exclusions are shared across accounts; availability is account-specific. See the [approved experience and interactive mock](./docs/account-management-experience.md).
 
 [Visible-history continuation](./docs/session-continuation.md) is configured beside account switching, not permanently above the composer. New unseeded Sessions default on after the feature's first successful activation; existing Sessions and inherited histories remain off unless explicitly authorized. Global defaults affect new Sessions only; Session on/off overrides persist across accounts/restarts until disabled. With continuation off, a different-account switch offers persistent enable, keep off or cancel, without a one-turn mode. Each new enabled turn omits prior encrypted reasoning and embedded summaries, even on the same account; current-turn reasoning, visible messages, tools and disk history remain unchanged. Authorization never auto-sends/retries and is not a quota/context cure. Exact replay failures expose the same policy and require a separate native retry. The pinned Core lacks a public Models deep link; Chat omits the nonfunctional management entry. Full management remains in Settings → Models → GitHub Copilot → Manage.
@@ -237,14 +239,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.116/dsh-github-copilot-0.4.0-alpha.116.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.116/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.117/dsh-github-copilot-0.4.0-alpha.117.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.117/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.116.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.117.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

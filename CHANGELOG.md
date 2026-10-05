@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.117 (prepared)
+
+- Separate confirmed Session account selection from quota loading (#337). Preserve correctly attributed quota for follow-mode-only changes without duplicate account or quota reads.
+- Reuse the strict save response, immediately restore account controls and focus, and load a different account's quota independently. Slow or failed quota cannot undo a confirmed save; newer selections and invalidations revoke late responses.
+- Keep continuation consent, post-consent revision reread, native CAS, account isolation and running-turn ownership unchanged. No forced model refresh, Core changes, live calls, installation or restart.
+
 ## 0.4.0-alpha.116 (prepared)
 
 - Add immediate, cross-account High cost marking to existing model-preference rows through strict narrow Remotes and public SettingsForms CAS/readback (#333).

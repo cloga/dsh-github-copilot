@@ -21,7 +21,7 @@ Models 和 Chat 共用不透明、随主题适配的账号下拉层；原生菜�
 
 添加账号时，设备授权链接、可选择的网址、一次性授权码、复制授权码和取消操作会同时显示。GitHub 授权完成后，会单独显示身份与可用模型验证阶段。添加账号不会更改全局默认；准备好后仍需显式执行现有的**切换**操作。技术诊断收在次级折叠区；账号／历史 turn 缺少身份时不会暴露不透明账号 ID，也不会根据当前设置推断历史身份。
 
-**源码候选版本：`0.4.0-alpha.116`（尚未发布）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。下方带版本的命令适用于候选版本发布后，不代表对应资产已经存在。
+**源码候选版本：`0.4.0-alpha.117`（尚未发布）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。下方带版本的命令适用于候选版本发布后，不代表对应资产已经存在。
 
 ## 你可以做什么
 
@@ -73,10 +73,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.116/dsh-github-copilot-0.4.0-alpha.116.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.117/dsh-github-copilot-0.4.0-alpha.117.tgz
 ```
 
-**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.116`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.117`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -186,6 +186,8 @@ HTTP/SSE liveness 默认区分 5 分钟字节 idle 和有界的 10 分钟助手�
 | AUTH、Responses replay scope 或 TLS 错误 | 查看[请求诊断](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics)及[额度 TLS 边界](./docs/copilot-usage.md#account-data-boundary)。精确 scope 拒绝后，**回放恢复**使用同一个持久 Session 降级续聊策略：关闭时说明损失并提供**开启降级续聊**／取消，已开启时只显示诊断，不重复授权。不再选择授权范围或仅下一轮；失败证据过期不会关闭策略。需另行使用原生重试，不自动发送／重试、不改磁盘历史，也不是 408 修复。不自动重置凭据或关闭 TLS。 |
 | Hosted search 不可用 | 检查账号／协议／probe 诊断；旧 override 保留至显式 reset |
 
+账号保存确认后立即恢复控件，不等待额度读取。同账号仅改变跟随方式时保留已确认归属的额度，不重复读取；真正换账号时清除旧额度，独立加载新快照，不阻塞后续账号编辑。额度读取失败不会撤销已经确认的账号选择。
+
 Credits 账号面板显示当前账号和 **切换**，下拉菜单只列已有账号，为当前实际账号打勾，长列表内部滚动。**跟随全局默认**是独立复选框：开启时清除本会话指定，关闭时固定当前账号；手动选择账号也会固定，即使所选恰好是当前全局默认。两种操作均保持续聊确认和 revision 校验保存。添加账号只留在 Models，其 **管理** 展开账号管理与共享模型偏好，菜单底部添加账号但不自动选中，并保留重新授权与受保护的本地账号移除。两处都没有账号搜索框。按精确模型 ID 共享排除偏好，可用性仍按账号验证。参见[已确认体验与交互 mock](./docs/account-management-experience.md)。
 
 [可见历史续聊模式](./docs/session-continuation.md)放在账号切换旁，不再常驻输入框上方。功能首次成功激活后创建的非继承 Session 默认开启；已有 Session、继承历史仍需明确授权。全局默认只影响新 Session，Session 开关跨账号及重启保留，直到关闭。关闭时切换到不同账号，提供持续开启、保持关闭或取消，不再提供仅下一轮模式。启用后的每个新 turn 省略旧加密推理及其内嵌摘要，同账号也适用；当前轮新推理、可见消息、工具记录和磁盘历史不变。授权不自动发送或重试，不解决额度或上下文超限。精确回放失败使用同一个持久策略，用户另行点击原生重试。当前 Core 没有公开 Models 直达 API，Chat 不展示不可用的管理入口；完整管理仍在设置 → 模型 → GitHub Copilot → 管理。
@@ -230,14 +232,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.116/dsh-github-copilot-0.4.0-alpha.116.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.116/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.117/dsh-github-copilot-0.4.0-alpha.117.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.117/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.116.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.117.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
