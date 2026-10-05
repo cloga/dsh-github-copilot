@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.119 (prepared)
+
+- Show Models global account metadata before background identity-name hydration, keeping Switch available when metadata and route/activity evidence allow it (#342). Hydration never authorizes a switch and late results cannot undo a confirmed change.
+- Capture the latest parent callback without rebuilding the account card lifetime, avoiding duplicate identity ensures and lost switch responses.
+- Overlap fresh switch identity/model validation under one bounded mutation fence. Both must succeed before CAS; failures cancel and drain sibling work before releasing the fence. Preserve credential identity, membership, route/activity, revision and post-commit checks.
+- Keep Session account/Follows global default ownership, real running turns, native directory transport and account-bound discovery unchanged. No live latency claim, automatic write retry, Core changes, installation or restart.
+
 ## 0.4.0-alpha.118 (prepared)
 
 - Reuse confirmed model-preference CAS readback instead of describing all settings a third time for successful Exclude/Restore/High cost saves (#339).

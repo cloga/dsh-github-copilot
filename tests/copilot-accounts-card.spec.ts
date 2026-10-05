@@ -45,6 +45,61 @@ const text = () => document.body.textContent ?? ''
 const button = (label: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent === label)!
 const click = async (label: string) => { await act(async () => { button(label).click() }) }
 
+it('renders metadata and permits a confirmed switch while unrelated identity names remain pending', async () => {
+  const api = remote()
+  let finish!: (value: { ok: true; value: CopilotAccountsView }) => void
+  vi.mocked(api.ensureIdentity).mockReturnValue(new Promise(resolve => { finish = resolve }))
+  const selected = view({ activeAccountId: view().accounts[1]!.id, revision: 3 })
+  vi.mocked(api.switchAccount).mockResolvedValue(ok(selected))
+  await mount(api)
+  expect(api.get).toHaveBeenCalledOnce()
+  expect(button('Switch').disabled).toBe(false)
+  expect(text()).toContain('@demo-a')
+  await click('Switch')
+  await click('@demo-b')
+  await click('Confirm switch')
+  expect(document.querySelector('[data-copilot-current-account]')?.textContent).toBe('@demo-b')
+  expect(button('Switch').disabled).toBe(false)
+  await act(async () => { finish(ok(view())) })
+  expect(document.querySelector('[data-copilot-current-account]')?.textContent).toBe('@demo-b')
+  expect(api.switchAccount).toHaveBeenCalledOnce()
+})
+
+it('uses the latest parent callback without resetting a pending switch or repeating initial reads', async () => {
+  const api = remote()
+  let finish!: (value: { ok: true; value: CopilotAccountsView }) => void
+  vi.mocked(api.switchAccount).mockReturnValue(new Promise(resolve => { finish = resolve }))
+  const first = vi.fn(), latest = vi.fn()
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  const render = async (onChanged: () => void) => {
+    await act(async () => { root.render(createElement(CopilotAccountsPanel, { remote: api, expanded: true, onChanged })) })
+  }
+  await render(first)
+  await click('Switch'); await click('@demo-b'); await click('Confirm switch')
+  await render(latest)
+  expect(button('Switch').disabled).toBe(true)
+  expect(api.ensureIdentity).toHaveBeenCalledOnce()
+  await act(async () => { finish(ok(view({ activeAccountId: view().accounts[1]!.id, revision: 3 }))) })
+  expect(latest).toHaveBeenCalledOnce()
+  expect(first).not.toHaveBeenCalled()
+  expect(document.querySelector('[data-copilot-current-account]')?.textContent).toBe('@demo-b')
+})
+
+it('ignores identity hydration after the account Remote lifetime is replaced', async () => {
+  const api = remote(), replacement = remote(view({ accounts: [], state: 'error', switchable: false,
+    diagnostic: 'COPILOT_ACCOUNTS_SELECTED_MISSING' }))
+  let finish!: (value: { ok: true; value: CopilotAccountsView }) => void
+  vi.mocked(api.ensureIdentity).mockReturnValue(new Promise(resolve => { finish = resolve }))
+  const container = document.createElement('div'); document.body.append(container)
+  const root = createRoot(container); cleanups.push(() => root.unmount())
+  await act(async () => { root.render(createElement(CopilotAccountsPanel, { remote: api, expanded: true })) })
+  await act(async () => { root.render(createElement(CopilotAccountsPanel, { remote: replacement, expanded: true })) })
+  await act(async () => { finish(ok(view())) })
+  expect(text()).not.toContain('@demo-a')
+  expect(button('Switch').disabled).toBe(true)
+})
+
 it('refreshes the shared settings revision after a continuation-default save without rediscovery', async () => {
   const api = remote()
   vi.mocked(api.get).mockResolvedValue(ok(view({ revision: 3 })))
@@ -54,9 +109,9 @@ it('refreshes the shared settings revision after a continuation-default save wit
   const render = (refreshKey: number) => root.render(createElement(CopilotAccountsPanel, { remote: api, expanded: true, refreshKey }))
   await act(async () => render(0))
   expect(api.ensureIdentity).toHaveBeenCalledOnce()
-  expect(api.get).not.toHaveBeenCalled()
-  await act(async () => render(1))
   expect(api.get).toHaveBeenCalledOnce()
+  await act(async () => render(1))
+  expect(api.get).toHaveBeenCalledTimes(2)
   expect(api.ensureIdentity).toHaveBeenCalledOnce()
   await click('Switch')
   await click('@demo-b')
@@ -444,7 +499,7 @@ describe('Models account management', () => {
     await mount(api)
     expect(text()).toContain('SYNTHETIC')
     await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
-    expect(api.get).toHaveBeenCalledOnce()
+    expect(api.get).toHaveBeenCalledTimes(2)
     await click('Cancel adding account')
     expect(api.cancel).toHaveBeenCalledOnce()
   })

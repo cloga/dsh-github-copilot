@@ -482,10 +482,20 @@ export class CopilotAccountsHost {
       const rows = await this.membership()
       if (!rows.some(row => row.id === accountId && row.configured)) fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
       const binding = this.capture(accountId)
-      const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(60_000)])
-      await this.identity(binding, signal)
-      const identityKey = this.identities.get(accountId)?.key
-      await this.validateModels(binding, signal)
+      const preflightAbort = new AbortController()
+      const signal = AbortSignal.any([this.abort.signal, preflightAbort.signal, AbortSignal.timeout(60_000)])
+      const identity = (async () => {
+        await this.identity(binding, signal)
+        return this.identities.get(accountId)?.key
+      })()
+      const models = this.validateModels(binding, signal)
+      let identityKey: string | undefined
+      try { [identityKey] = await Promise.all([identity, models]) }
+      catch (error) {
+        preflightAbort.abort(error)
+        await Promise.allSettled([identity, models])
+        throw error
+      }
       await this.assertIdentityCurrent(binding, identityKey)
       binding.assertCurrent()
       const finalRoute = this.routeDiagnostic()
