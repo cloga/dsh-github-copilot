@@ -82,6 +82,96 @@ function accountSelectorFixture(extra: Partial<SessionAccountView> = {}) {
 }
 
 describe('Copilot account usage chip', () => {
+  it('preserves same-account quota without rereading after changing follow mode', async () => {
+    const fixture = accountSelectorFixture()
+    await mount(fixture.props)
+    await click(trigger())
+    await click(follow())
+    expect(follow().checked).toBe(false)
+    expect(document.activeElement).toBe(follow())
+    expect(follow().disabled).toBe(false)
+    expect(trigger().textContent).toContain('42.25')
+    expect(fixture.quota).toHaveBeenCalledOnce()
+    expect(fixture.get).toHaveBeenCalledOnce()
+    await click(follow())
+    expect(follow().checked).toBe(true)
+    expect(fixture.quota).toHaveBeenCalledOnce()
+    expect(fixture.set).toHaveBeenCalledTimes(2)
+  })
+
+  it('commits account selection before slow quota and ignores its response after a newer selection', async () => {
+    const fixture = accountSelectorFixture()
+    await mount(fixture.props)
+    await click(trigger())
+    const pending = deferred<ReturnType<typeof ok>>()
+    fixture.quota.mockImplementationOnce(() => pending.promise)
+    await click(button('Switch account'))
+    const target = fixture.selection().accounts.accounts[23]!.id
+    await click(button('@demo-account-24'))
+    expect(follow().disabled).toBe(false)
+    expect(button('Switch account').disabled).toBe(false)
+    expect(document.activeElement).toBe(button('Switch account'))
+    expect(follow().checked).toBe(false)
+    expect(trigger().textContent).not.toContain('42.25')
+    expect(fixture.get).toHaveBeenCalledOnce()
+    await click(follow())
+    expect(follow().checked).toBe(true)
+    expect(fixture.set).toHaveBeenCalledTimes(2)
+    expect(trigger().textContent).toContain('42.25')
+    await act(async () => { pending.resolve(ok(view({ accountId: target, used: 99, remaining: 1 }))) })
+    expect(trigger().textContent).not.toContain('99')
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-01')
+  })
+
+  it('retains the confirmed selection when its independent quota read fails', async () => {
+    const fixture = accountSelectorFixture()
+    await mount(fixture.props)
+    await click(trigger())
+    fixture.quota.mockRejectedValueOnce(new Error('PRIVATE_QUOTA_ERROR'))
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    expect(follow().disabled).toBe(false)
+    expect(follow().checked).toBe(false)
+    expect(text()).not.toContain('Could not save the Session account')
+    expect(text()).not.toContain('PRIVATE_QUOTA_ERROR')
+    expect(document.querySelector('[role="alert"]')).not.toBeNull()
+  })
+
+  it('rejects wrong-account quota without undoing the saved selection', async () => {
+    const fixture = accountSelectorFixture()
+    await mount(fixture.props)
+    await click(trigger())
+    fixture.quota.mockResolvedValueOnce(ok(view({ accountId: 'canonical' })))
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    expect(follow().disabled).toBe(false)
+    expect(follow().checked).toBe(false)
+    expect(trigger().textContent).not.toContain('42.25')
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-24')
+    expect(document.querySelector('[role="alert"]')).not.toBeNull()
+  })
+
+  it('clears old quota when the post-consent snapshot reveals an intervening account change', async () => {
+    const fixture = accountSelectorFixture()
+    const saved = deferred<{ ok: true; value: SessionAccountView }>()
+    const target = fixture.selection().accounts.accounts[23]!.id
+    const beforeAccountChange = vi.fn(async () => {
+      Object.assign(fixture.selection(), { source: 'session', accountId: target })
+      Object.assign(fixture.selection().accounts, { activeAccountId: target, revision: 8 })
+      return true
+    })
+    await mount({ ...fixture.props, beforeAccountChange })
+    await click(trigger())
+    fixture.set.mockImplementationOnce(() => saved.promise)
+    await click(button('Switch account'))
+    await click(button('@demo-account-24'))
+    expect(trigger().textContent).not.toContain('42.25')
+    expect(document.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@demo-account-24')
+    await act(async () => { saved.resolve({ ok: true, value: fixture.selection() }) })
+    expect(fixture.quota).toHaveBeenCalledTimes(2)
+    expect(follow().disabled).toBe(false)
+  })
+
   it('rereads the shared revision after consent writes before saving the captured account target', async () => {
     const fixture = accountSelectorFixture()
     const target = fixture.selection().accounts.accounts[23]!.id
@@ -95,7 +185,7 @@ describe('Copilot account usage chip', () => {
     await click(button('@demo-account-24'))
     expect(beforeAccountChange).toHaveBeenCalledExactlyOnceWith(target, expect.any(AbortSignal))
     expect(fixture.set).toHaveBeenCalledExactlyOnceWith(target, 8)
-    expect(fixture.get).toHaveBeenCalledTimes(3)
+    expect(fixture.get).toHaveBeenCalledTimes(2)
     expect(fixture.get.mock.invocationCallOrder[1]).toBeLessThan(fixture.set.mock.invocationCallOrder[0]!)
   })
 

@@ -168,7 +168,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     switchButton.current?.focus()
   }
 
-  const load = useCallback(async (force: boolean) => {
+  const load = useCallback(async (force: boolean, confirmed?: SessionAccountView) => {
     const owner = lifecycle.current
     if (!owner.active || owner.busy || owner.save !== undefined || accountPresentationChanges.pending()
       || props.remote === undefined || document.visibilityState === 'hidden') return
@@ -182,8 +182,9 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         : (force ? props.accountsRemote.refreshIdentity() : props.accountsRemote.ensureIdentity()).catch(() => undefined)
       const [result, identityResult, sessionResult] = await Promise.all([
         force ? props.remote.refresh() : props.remote.get(),
-        props.accountsRemote?.get().catch(() => undefined),
-        props.sessionAccount?.get(),
+        confirmed === undefined ? props.accountsRemote?.get().catch(() => undefined)
+          : { ok: true as const, value: confirmed.accounts },
+        confirmed === undefined ? props.sessionAccount?.get() : { ok: true as const, value: confirmed },
       ])
       if (!current()) return
       const sessionView = sessionResult?.ok ? SessionAccountViewSchema.safeParse(sessionResult.value) : undefined
@@ -212,8 +213,14 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         if (renewedView !== undefined) { setView(undefined); setFailed(true) }
       }
     } catch {
-      if (current()) { setView(undefined); setAccounts(undefined); setSessionAccount(undefined);
-        setAccountFailed(props.sessionAccount !== undefined); setFailed(true) }
+      if (current()) {
+        setView(undefined)
+        if (confirmed === undefined) {
+          setAccounts(undefined); setSessionAccount(undefined)
+          setAccountFailed(props.sessionAccount !== undefined)
+        }
+        setFailed(true)
+      }
     } finally {
       if (current()) { owner.busy = false; setBusy(false) }
     }
@@ -271,6 +278,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const chooseAccount = async (accountId: string | null, focus: 'switch' | 'follow' = 'switch') => {
     const owner = lifecycle.current
     let revision = sessionAccount?.accounts.revision
+    let quota = view
     if (!owner.active || owner.save !== undefined || props.sessionAccount === undefined || revision === undefined) return
     const save = Symbol()
     const controller = new AbortController()
@@ -299,7 +307,10 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         revision = selection.data.accounts.revision
         setSessionAccount(selection.data)
         setAccounts(selection.data.accounts)
-        setView(undefined)
+        if (quota?.accountId !== selection.data.accountId) {
+          quota = undefined
+          setView(undefined)
+        }
         owner.confirmation = undefined
         setConfirmingAccount(false)
       }
@@ -312,14 +323,16 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       }
       setSessionAccount(parsed.data)
       setAccounts(parsed.data.accounts)
-      setView(undefined)
+      setAccountFailed(false)
+      setFailed(false)
+      const retainedQuota = quota !== undefined && quota.accountId === parsed.data.accountId
+        && sessionAccount?.accountId === parsed.data.accountId
+      if (!retainedQuota) setView(undefined)
       setChoosingAccount(false)
       owner.save = undefined
       setSavingAccount(false)
-      await load(false)
-      if (owner.active && owner.generation === generation + 1) {
-        setRestoreAccountFocus(focus)
-      }
+      setRestoreAccountFocus(focus)
+      if (!retainedQuota) void load(false, parsed.data)
     } catch {
       if (owner.active && owner.generation === generation) {
         setAccountSaveFailed(true); setView(undefined); setAccounts(undefined); setSessionAccount(undefined)
@@ -336,11 +349,11 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   }
 
   useLayoutEffect(() => {
-    if (!open || busy || savingAccount || restoreAccountFocus === undefined) return
+    if (!open || savingAccount || restoreAccountFocus === undefined) return
     if (restoreAccountFocus === 'follow') followCheckbox.current?.focus()
     else switchButton.current?.focus()
     setRestoreAccountFocus(undefined)
-  }, [open, busy, savingAccount, restoreAccountFocus])
+  }, [open, savingAccount, restoreAccountFocus])
 
   useLayoutEffect(() => {
     if (!open) return
@@ -473,7 +486,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
         h('div', null, h('strong', null, t.sessionAccount), h('p', { style: muted }, currentIdentity)),
         h(AccountDropdown, { triggerRef: switchButton, triggerStyle: { ...button, flexShrink: 0 },
           label: t.switchAccount, open: choosingAccount, busy: savingAccount, maxHeight: 220,
-          disabled: sessionAccount === undefined || sessionAccount.accounts.revision === undefined || busy || savingAccount,
+          disabled: sessionAccount === undefined || sessionAccount.accounts.revision === undefined || savingAccount,
           onOpenChange: (next: boolean) => { if (!next) collapseAccounts(); else setChoosingAccount(true) },
           options: accountOptions,
           onSelect: (accountId: string) => { void chooseAccount(accountId) },
@@ -482,7 +495,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       h('label', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
         h('input', { ref: followCheckbox, type: 'checkbox', 'data-copilot-follow-global': '',
           checked: sessionAccount?.source === 'global',
-          disabled: sessionAccount === undefined || sessionAccount.accounts.revision === undefined || busy || savingAccount,
+          disabled: sessionAccount === undefined || sessionAccount.accounts.revision === undefined || savingAccount,
           'aria-describedby': `${id}-follow-hint`,
           onChange: (event: ChangeEvent<HTMLInputElement>) => {
             const accountId = event.currentTarget.checked ? null : sessionAccount?.accountId
