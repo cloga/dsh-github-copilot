@@ -2,6 +2,7 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { GitHubCopilotModelPreferencesPanel } from '../src/model-preferences-card.ts'
 import type { GitHubCopilotAuthorizationView, GitHubCopilotModelPreferencesView } from '../src/authorization-controller.ts'
 
@@ -65,14 +66,14 @@ it('keeps a real mounted row saving across equivalent parent snapshots and appli
 
 it('sends one CAS intent at a time and never sends a queued intent after an unconfirmed response', async () => {
   const face = remote()
-  const write = deferred<{ ok: false }>()
+  const write = deferred<Awaited<ReturnType<Props['remote']['setModelExcluded']>>>()
   face.setModelExcluded.mockReturnValue(write.promise)
   await mount({ remote: face, models, preferences })
   await click(row('first'))
   await click(row('second'))
   expect(row('second').textContent).toBe('Waiting…')
   expect(face.setModelExcluded).toHaveBeenCalledTimes(1)
-  await act(async () => { write.resolve({ ok: false }) })
+  await act(async () => { write.resolve({ ok: false, error: new RemoteError('gateway/internal', 'Synthetic failure', {}) }) })
   expect(row('first').disabled).toBe(true)
   expect(row('second').disabled).toBe(true)
   face.status.mockResolvedValue({ ok: true, value: {
@@ -87,7 +88,7 @@ it('sends one CAS intent at a time and never sends a queued intent after an unco
 
 it('bounds waiting intents without dispatching past the active save or claiming persistence', async () => {
   const face = remote()
-  const write = deferred<{ ok: false }>()
+  const write = deferred<Awaited<ReturnType<Props['remote']['setModelExcluded']>>>()
   face.setModelExcluded.mockReturnValue(write.promise)
   const many = { ...models, models: Array.from({ length: 34 }, (_, index) => ({
     id: `model-${index}`, name: `Model ${index}`, api: 'openai-responses',
@@ -98,7 +99,7 @@ it('bounds waiting intents without dispatching past the active save or claiming 
   expect(row('model-32').textContent).toBe('Waiting…')
   expect(row('model-33').textContent).toBe('Exclude')
   expect(document.body.textContent).toContain('Too many edits are waiting')
-  await act(async () => { write.resolve({ ok: false }) })
+  await act(async () => { write.resolve({ ok: false, error: new RemoteError('gateway/internal', 'Synthetic failure', {}) }) })
   expect(face.setModelExcluded).toHaveBeenCalledTimes(1)
 })
 
