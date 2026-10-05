@@ -103,11 +103,11 @@ const accountDescriptors = remote.descriptors.filter(descriptor => descriptor.na
 const sessionAccountDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionAccount')
 const continuationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 42 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 44 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
-  || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get', 'requestedModels'])
+  || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get', 'requestedModels', 'allocationSummary'])
   || JSON.stringify(replayDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorize', 'get', 'setEnabled'])
   || JSON.stringify(accountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])
   || JSON.stringify(sessionAccountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['ensureIdentity', 'get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])
@@ -178,6 +178,23 @@ for (const descriptor of replayDescriptors) {
 }
 const selection = selectionDescriptors[0]
 const requested = selectionDescriptors[1]
+const allocation = selectionDescriptors[2]
+if (allocation.id !== 'dsh-github-copilot:githubCopilotTurnSelection.allocationSummary'
+  || allocation.service !== 'githubCopilotTurnSelection' || allocation.invocation.kind !== 'direct'
+  || allocation.scope !== undefined || allocation.parameters.length !== 1
+  || allocation.parameters[0].source !== 'lookup' || allocation.parameters[0].lookup !== 'agent'
+  || allocation.parameters[0].wire !== 'agentId' || allocation.result.mode !== 'strict'
+  || allocation.result.typeSymbol !== 'dsh-github-copilot#AutoAllocationSummary') {
+  throw new Error('allocation observations must retain explicit native Agent lookup')
+}
+const emptyAllocation = { policyVersion: 'high-cost-v1', scope: 'viewed-session-host-lifetime',
+  status: 'not-collected', retainedDecisions: 0, noFitDecisions: 0, rowsTruncated: false,
+  completeHistory: false, observationStart: null, observationEnd: null, rows: [] }
+allocation.result.schema.parse(emptyAllocation)
+if (allocation.result.schema.safeParse({ ...emptyAllocation, credentials: 'private' }).success
+  || allocation.result.schema.safeParse({ ...emptyAllocation, completeHistory: true }).success) {
+  throw new Error('allocation observations accept sensitive fields or fabricated complete history')
+}
 if (requested.id !== 'dsh-github-copilot:githubCopilotTurnSelection.requestedModels'
   || requested.invocation.kind !== 'direct' || requested.scope !== undefined
   || requested.parameters[0].source !== 'lookup' || requested.parameters[0].lookup !== 'agent'
@@ -226,7 +243,8 @@ for (const descriptor of authorizationDescriptors) {
     || descriptor.service !== 'githubCopilotAuthorization' || descriptor.namespace !== 'githubCopilot') {
     throw new Error('built Remote descriptor identity must match its exact owned service and namespace')
   }
-  const narrowPreference = descriptor.method === 'setModelExcluded'
+  const highCostPreference = descriptor.method === 'setModelHighCost'
+  const narrowPreference = descriptor.method === 'setModelExcluded' || highCostPreference
   const modelPreference = narrowPreference || descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel'
   if (descriptor.invocation.kind !== 'direct'
     || descriptor.parameters.length !== (narrowPreference ? 2 : modelPreference ? 1 : 0)) {
@@ -254,15 +272,17 @@ for (const descriptor of authorizationDescriptors) {
   }
   if (narrowPreference) {
     const parameter = descriptor.parameters[1]
-    if (parameter.name !== 'excluded' || parameter.wire !== 'excluded' || parameter.source !== 'json'
+    const field = highCostPreference ? 'highCost' : 'excluded'
+    if (parameter.name !== field || parameter.wire !== field || parameter.source !== 'json'
       || parameter.codec.mode !== 'strict'
-      || parameter.codec.typeSymbol !== 'dsh-github-copilot#GitHubCopilotModelExcluded'
+      || parameter.codec.typeSymbol !== (highCostPreference
+        ? 'dsh-github-copilot#GitHubCopilotModelHighCost' : 'dsh-github-copilot#GitHubCopilotModelExcluded')
       || parameter.codec.schema.parse(true) !== true || parameter.codec.schema.parse(false) !== false
       || parameter.codec.schema.safeParse('false').success) {
-      throw new Error('narrow exclusion Remote must retain its strict boolean argument')
+      throw new Error('narrow model preference Remote must retain its strict boolean argument')
     }
     const preferences = { state: 'ready', writable: true, revision: 1,
-      excludedModelIds: ['gpt-5.4'], lockedModelIds: [], unavailableExcludedModelIds: [] }
+      excludedModelIds: ['gpt-5.4'], highCostModelIds: ['gpt-5.4'], lockedModelIds: [], unavailableExcludedModelIds: [] }
     descriptor.result.schema.parse(preferences)
     if (descriptor.result.schema.safeParse({ ...preferences, credentials: 'private' }).success
       || descriptor.result.schema.safeParse({ ...preferences, revision: -1 }).success) {
