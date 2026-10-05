@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.118 (prepared)
+
+- Reuse confirmed model-preference CAS readback instead of describing all settings a third time for successful Exclude/Restore/High cost saves (#339).
+- Keep pending and confirmed preference edits across equivalent parent snapshots. Account metadata can update independently without discarding a shared-preference save or restoring an old availability snapshot.
+- Allow distinct model rows to wait in a bounded, mounted-only queue, while issuing only one narrow write at a time. Show Saving/Waiting explicitly; cancel unsent edits after unconfirmed outcomes or scope replacement and require saved-settings Retry, never automatic write replay.
+- Native Models `llm/listProviders failed: Failed to fetch` remains a separate Host/gateway transport limitation, not evidence of forced account discovery. No Core changes, transport workaround, live latency claim, installation or restart.
+
 ## 0.4.0-alpha.117 (prepared)
 
 - Separate confirmed Session account selection from quota loading (#337). Preserve correctly attributed quota for follow-mode-only changes without duplicate account or quota reads.

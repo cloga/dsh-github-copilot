@@ -761,7 +761,9 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       if (!saved.writable || readback === undefined || readback.length !== next.length
         || readback.some((id, index) => id !== next[index])) {
         this.modelPreferenceFailure = 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
+        return { ...saved, state: 'error', error: this.modelPreferenceFailure }
       }
+      return saved
     } catch (cause) {
       const record = object(cause)
       this.modelPreferenceFailure = record?.code === 'SETTINGS_CONFLICT'
