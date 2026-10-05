@@ -1615,7 +1615,8 @@ describe('plugin-owned account Copilot route', () => {
         return new Response(JSON.stringify({ error: { message: replayScopeMessages[0] } }), { status: 401 })
       }
       const emitted = await response().text()
-      return new Response(emitted.replaceAll('synthetic-opaque-replay', `synthetic-turn-${bodies.length}`),
+      const replay = bodies.length === 3 ? 'x'.repeat(17 * 1024 * 1024) : `synthetic-turn-${bodies.length}`
+      return new Response(emitted.replaceAll('synthetic-opaque-replay', replay),
         { headers: { 'content-type': 'text/event-stream' } })
     })
     const settings = { value: {}, revision: 0 }

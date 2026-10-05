@@ -69,6 +69,11 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && task.requestBodyEvidenceBoundary?.includes('supplier receipt')
     && task.requestBodyEvidenceBoundary?.includes('dispose subscriptions')),
   'request upload diagnostics must retain scoped lifecycle ownership and local-only evidence limits')
+  require(contract.tasks.continuation?.processingBoundary?.includes('never recursively traverse')
+    && contract.tasks.continuation?.processingBoundary?.includes('atomic baseline commit')
+    && contract.tasks.continuation?.tests?.includes('tests/fixtures/compaction-pressure-core.fixture.ts')
+    && agentGuide.includes('Continuation processing is reasoning-only'),
+  'continuation must retain bounded cancellable reasoning-only work and native compaction evidence')
   for (const [name, task] of Object.entries(contract.tasks)) {
     require(/^[a-z]+$/.test(name), 'invalid task id')
     require(typeof task.purpose === 'string' && typeof task.risk === 'string', `${name} needs purpose and risk`)

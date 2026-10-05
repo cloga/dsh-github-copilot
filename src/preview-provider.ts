@@ -240,9 +240,9 @@ export function createAccountProvider(
         if (lease.signal.aborted || options.signal?.aborted) throw new Error('COPILOT_MANAGED_ABORTED')
         try {
           const effective = replacement === undefined ? payload : replacement
-          if (retry !== undefined) return retry.normalize(effective, guard.recoverReplay)
+          if (retry !== undefined) return await retry.normalize(effective, guard.recoverReplay)
           const normalized = normalizeCopilotResponsesPayload(effective)
-          return guard.recoverReplay === undefined ? normalized : guard.recoverReplay(normalized)
+          return guard.recoverReplay === undefined ? normalized : await guard.recoverReplay(normalized)
         }
         catch (error) {
           if (error instanceof CopilotResponsesReplayError) reportReplayFailure(error)
