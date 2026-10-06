@@ -183,8 +183,7 @@ describe('account-driven native provider', () => {
     }
     const { provider, models } = createAccountProvider([item], guard, baseURL)
     const stream = provider.streamSimple(models[0]!, normalizeContext({
-      messages: [createUserMessage({ source: { kind: 'user' },
-        content: [{ type: 'text', text: 'Synthetic context. '.repeat(15_000) }] })],
+      messages: [{ role: 'user', content: 'Synthetic context. '.repeat(15_000), timestamp: 0 }],
     }), { apiKey: 'synthetic-account-token', maxRetries: 0 })
     for await (const _event of stream) { /* Preserve the native terminal cancellation. */ }
     expect(checkpoints).toBe(2)
@@ -242,7 +241,7 @@ describe('account-driven native provider', () => {
       }, baseURL)
       const text = 'Synthetic local Fetch upload. '.repeat(15_000)
       const stream = provider.streamSimple(models[0]!, normalizeContext({
-        messages: [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] })],
+        messages: [{ role: 'user', content: text, timestamp: 0 }],
       }), { apiKey: 'synthetic-account-token', maxRetries: 0 })
       for await (const _event of stream) { /* Drain the native SDK response. */ }
       expect((await stream.result()).stopReason).toBe('stop')
@@ -271,7 +270,7 @@ describe('account-driven native provider', () => {
       onUnauthorized: unauthorized, onReplayScopeRejected: rejected, onReplayFailure: replayFailure }
     const { provider, models } = createAccountProvider([item], guard, baseURL)
     const stream = provider.streamSimple(models[0]!, normalizeContext({
-      messages: [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] })],
+      messages: [{ role: 'user', content: text, timestamp: 0 }],
     }), { apiKey: 'synthetic-account-token', maxRetries: 0 })
     for await (const _event of stream) { /* Drain the native terminal failure. */ }
     expect((await stream.result()).stopReason).toBe('error')
