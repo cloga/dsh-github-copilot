@@ -72,7 +72,9 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
         expect(expected).toBe(revision)
         selected = operations[0]!.value; revision++
       } })
-    const accounts = new CopilotAccountsHost(ctx, { routeDiagnostic: () => undefined })
+    let finishSwitch!: () => void
+    const accounts = new CopilotAccountsHost(ctx, { routeDiagnostic: () => undefined,
+      validateModels: () => new Promise(resolve => { finishSwitch = resolve }) })
     ctx.provide('githubCopilotAccounts', { host: accounts })
     const owner = new SessionAccountsHost(ctx)
     ctx.provide('githubCopilotSessionAccounts', owner)
@@ -85,7 +87,8 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
     const request = { provider: 'github-copilot-preview', model: MODEL }
     const messages = [createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })]
     const pending = await ctx.llm.prepareCall(request)
-    expect(await accounts.switchAccount(B, 1)).toMatchObject({ state: 'ready', activeAccountId: B })
+    const switching = accounts.switchAccount(B, 1)
+    await vi.waitFor(() => expect(finishSwitch).toBeDefined())
     const first = new BlockAssembler()
     let checkedStream = false
     for await (const chunk of pending.stream({ ...pending.config, messages, signal: firstSignal })) {
@@ -93,14 +96,17 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
       if (!checkedStream) {
         checkedStream = true
         ctx.emit('credentials/record-updated', credentialKey('github-copilot', `account-${B}`))
-        expect(await accounts.get()).toMatchObject({ state: 'ready', activeAccountId: B })
-        expect(await accounts.remove(A, revision)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY' })
+        expect(await accounts.get()).toMatchObject({ operation: 'switching', activeAccountId: A })
+        expect(await accounts.remove(A, revision)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ACTIVE_REMOVE_BLOCKED' })
       }
     }
     expect(first.finish).toEqual({ kind: 'stop' })
     expect(wireTokens).toEqual([expect.stringContaining(`synthetic-access-${A}`)])
     expect(owner.turns.evidence(session, 1)).toEqual({ accountId: A, source: 'global',
       identity: { login: 'synthetic-a', userId: 1 } })
+    finishSwitch()
+    expect(await switching).toMatchObject({ state: 'ready', activeAccountId: B })
+    expect(await accounts.remove(A, revision)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY' })
     owner.end(session, 1)
     const secondSignal = new AbortController().signal
     owner.admit({ session }, 2, secondSignal)
