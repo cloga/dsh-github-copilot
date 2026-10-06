@@ -46,6 +46,11 @@ prefers unmarked eligible Lightweight models separately. Advisor calls are not
 implemented. See [requirements](./docs/auto-high-cost.md) and the
 [required iteration review](./docs/evidence-driven-iteration.md).
 
+The [diagnostics phase-0 proposal](./docs/plugin-diagnostics.md) inventories
+account/Checking and compaction observation boundaries, safe aggregate fields,
+and storage/scheduling gaps. It does not enable collection, persistence,
+uploads or daily analysis; the runtime pilot requires a separate reviewed change.
+
 | Task | Where to start |
 |---|---|
 | Sign in and manage account models | **Settings → Models → GitHub Copilot → Sign in** |
