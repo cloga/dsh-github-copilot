@@ -28,7 +28,7 @@ describe('strict Remote factory compatibility', () => {
         checked++
       }
     }
-    expect(checked).toBe(89)
+    expect(checked).toBe(95)
   })
   it('keeps explicit replay recovery arguments and output strict', () => {
     const descriptors = remote.descriptors.filter(value => value.namespace === 'githubCopilotReplayRecovery')

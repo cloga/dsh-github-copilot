@@ -7,6 +7,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { DiagnosticsController } from './diagnostics-host.ts'
 import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import GitHubCopilotDualModel from './dual-model-host.ts'
 import SearchRoutingController from './search-routing-host.ts'
@@ -158,6 +159,7 @@ function observeSettingsNamespace(
  * @param config - the composition entry config, used as the settings base layer.
  */
 export function apply(ctx: Context, config: LiveInlineConfig): void {
+  ctx.plugin({ apply(scope) { new DiagnosticsController(scope) } })
   // Register before dependency-gated activation so every Agent-scoped model
   // selection listener remains downstream. The filter must observe the
   // provider/model variables that model selection adds while unwinding.

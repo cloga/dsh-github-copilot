@@ -31,6 +31,12 @@
     "attribution": "Assisted-by identifies the actual assisting tool; never infer a co-author from a model provider"
   },
   "tasks": {
+    "diagnostics": {
+      "purpose": "Default-off bounded local account, Checking and compaction reliability aggregates",
+      "read": ["src/diagnostics-types.ts", "src/diagnostics-collector.ts", "src/diagnostics-host.ts", "src/diagnostics-remote.ts", "src/diagnostics-client.ts", "src/diagnostics-card.ts", "src/config.ts", "src/client.ts", "docs/plugin-diagnostics.md"],
+      "tests": ["tests/diagnostics-collector.spec.ts", "tests/diagnostics-client.spec.ts", "tests/diagnostics-card.spec.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/remote-codec.spec.ts"],
+      "risk": "Plugin-only public storage-domain and native gateways. Default off, hidden volatile path-level diagnosticsEnabled CAS/readback, profile-isolated home-wide backend and one writer per profile. Fixed codes/counts only: no identities, account/Session hashes, contents, credentials, replay, paths or raw errors in aggregates. 14 days, 4096 rows, 2 MiB UTF-8, 128 live handles and Client report rows; explicit dropped/unconfirmed/interrupted/clock evidence. Client and Host and logical/physical denominators remain separate. Native matching checkpoint plus end is observed success, not disk durability; missing checkpoint/cancellation proof stays unknown. Epoch fences protect clear/pause/enable, failed writes never reject/retry observed business operations. No filesystem fallback, Settings log, corrupt backup/reset, uploads, scheduling, automatic repair or live-profile installation/activation without approval."
+    },
     "continuation": {
       "processingBoundary": "Inspect bounded top-level input and reasoning only, never recursively traverse or serialize ordinary payload content. Hash bounded ciphertext in yielding chunks with request/turn revocation fences and atomic baseline commit. Await final filtering before native 408 byte evidence. Work bounds are not supplier byte/token limits; preserve prior token admission and native automatic-compaction transaction/rebuild, never relabel processing errors as context overflow.",
       "purpose": "Unified account management and failure guidance with persistent, birth-time-default Session lossy continuation; old one-turn contracts remain compatibility-only",

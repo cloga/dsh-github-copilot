@@ -1,7 +1,6 @@
 name: CI
 
 on:
-  workflow_dispatch:
   workflow_call:
   pull_request:
   push:
@@ -12,21 +11,6 @@ permissions:
   contents: read
 
 jobs:
-  prepare-lockfile:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          package-manager-cache: false
-      - run: pnpm install --lockfile-only --ignore-scripts
-      - uses: actions/upload-artifact@v4
-        with:
-          name: diagnostics-lockfile
-          path: pnpm-lock.yaml
   verify:
     strategy:
       fail-fast: false
@@ -152,6 +136,7 @@ jobs:
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
           node node_modules/typescript/bin/tsc -p tsconfig.tests.json
           node node_modules/vitest/vitest.mjs run tests/copilot-stream-liveness.spec.ts tests/copilot-stream-adapter.spec.ts tests/config.spec.ts tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts tests/search-routing.spec.ts tests/routed-web.spec.ts tests/deepseek-search-fallback.spec.ts tests/context-usage.spec.ts tests/context-evidence.spec.ts tests/context-evidence-runtime.spec.ts tests/context-evidence-ui.spec.ts tests/background-compaction.spec.ts tests/manual-compaction-recovery.spec.ts
+          node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts
 
   release-ready:
     name: release-ready

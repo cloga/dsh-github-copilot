@@ -182,6 +182,9 @@ it('persists independent native credentials and SettingsForms CAS across profile
     expect((await ctx.githubCopilotSessionContinuation.get(oneShot)).nextTurnAuthorized).toBe(true)
     expect(ctx.githubCopilotSessionAccounts.selected({ session: { id: 'synthetic-inherited' } }))
       .toEqual({ accountId: A, source: 'global' })
+    await ctx.settings.mutate('github-copilot', [{ op: 'set', path: ['diagnosticsEnabled'], value: true }],
+      ctx.settings.describe().find(row => row.ns === 'github-copilot')!.revision)
+    expect(readInlineConfig(configs.at(-1)!).diagnosticsEnabled).toBe(true)
     expect([...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber).toBe(selectorFiber)
     await expect(ctx.settings.mutate('github-copilot', [{ op: 'set', path: ['activeAccountId'], value: B }], revision))
       .rejects.toThrow('changed since it was read')
@@ -194,6 +197,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
     expect((await new GitHubCopilotAuthorizationController(ctx).status()).modelPreferences)
       .toMatchObject({ highCostModelIds: ['synthetic-costly-fast'] })
     expect(readInlineConfig(configs.at(-1)!).highCostModelIds).toEqual(['synthetic-costly-fast'])
+    expect(readInlineConfig(configs.at(-1)!).diagnosticsEnabled).toBe(true)
     await verifySavedAutoPreferences(ctx, configs.at(-1)!)
     expect((await ctx.githubCopilotSessionContinuation.get(viewedSession as Agent)).enabled).toBe(true)
     expect((await ctx.githubCopilotSessionContinuation.defaults()).enabled).toBe(false)

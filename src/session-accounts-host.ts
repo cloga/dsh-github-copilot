@@ -103,10 +103,12 @@ export class SessionAccountsHost {
     if (!binding) throw new Error('COPILOT_SESSION_ACCOUNTS_UNAVAILABLE')
     return this.bindingForAccount(binding.accountId)
   }
-  async set(agent: SessionOwner, accountId: string | null, revision: number): Promise<void> {
+  async set(agent: SessionOwner, accountId: string | null, revision: number,
+    observed?: import('./diagnostics-collector.ts').DiagnosticsHandle): Promise<void> {
     const accounts = this.ctx.get('githubCopilotAccounts')
     if (!accounts) throw new Error('COPILOT_SESSION_ACCOUNTS_UNAVAILABLE')
     if (accountId !== null) {
+      observed?.stage('identity-validation')
       const binding = this.bindingForAccount(accountId)
       await accounts.host.validateAccount(binding)
     }
@@ -119,7 +121,9 @@ export class SessionAccountsHost {
     const next = previous.filter(row => row.sessionId !== agent.session.id)
     if (accountId !== null) next.push({ sessionId: agent.session.id, accountId })
     if (next.length > SESSION_ACCOUNTS_MAX) throw new Error('COPILOT_SESSION_ACCOUNTS_LIMIT')
+    observed?.stage('cas')
     await settings.mutate('github-copilot', [{ op: 'set', path: ['sessionAccounts'], value: next }], revision)
+    observed?.stage('readback')
     const actual = this.selected(agent)
     if (actual.source !== (accountId === null ? 'global' : 'session')
       || accountId !== null && actual.accountId !== accountId) throw new Error('COPILOT_SESSION_ACCOUNTS_COMMIT_UNCERTAIN')
