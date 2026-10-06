@@ -1,15 +1,128 @@
-# Diagnostics phase 0: boundaries and collection proposal
+# Local diagnostics: account and compaction pilot
 
 Roadmap: [#347](https://github.com/cloga/dsh-github-copilot/issues/347).
-Phase tracking: [#354](https://github.com/cloga/dsh-github-copilot/issues/354).
-Reviewed source baseline: plugin alpha.122 and official DSH
+Phase 0: [#354](https://github.com/cloga/dsh-github-copilot/issues/354).
+Phases 1–2: [#356](https://github.com/cloga/dsh-github-copilot/issues/356).
+Reviewed source baseline: plugin alpha.123 and official DSH
 `0.2.0-rc.2`, commit `639ed015397290b3745d163aafe02ffee4aa3f84`.
 
-**Status: phase-0 qualification and proposal, not enabled collection.**
-No collector, storage domain, timer, daily task, export, issue publisher or
-live-profile migration is installed by this document. Existing ephemeral
-presentation evidence and sanitized errors are not a complete reliability
-dataset. No historical failure rate is reconstructed.
+**Runtime pilot, default off. Publication, installation, loaded Host and enabled
+collection are separate states.** This feature does not install itself, restart
+Desktop, enable a live profile, create a daily task or upload observations.
+No historical failure rate is reconstructed.
+
+## Enable, read, pause and clear
+
+After installing and loading the published build, open the plugin's detail
+settings page and find **Local diagnostics**. On hosts without that page the
+same additive control accompanies the existing Models/footer or settings-section
+search-routing fallback. **Read status** must show ready storage; choose
+**Enable local collection** to persist only `github-copilot.diagnosticsEnabled`
+through native path-level Settings CAS and confirm readback. This enables
+collection **and bounded local aggregate persistence**, not exports or uploads.
+The normal installation does not change this default-off setting.
+
+Use the plugin normally: account selection, Identity/Checking and compaction
+will contribute independent Client/Host populations. **Read status** returns a
+strict aggregate snapshot; **Review aggregate-only JSON → Prepare current JSON**
+prepares a read-only copy for explicit review/sharing, never a download or upload.
+The coding session does not automatically gain access to the running Host.
+Pause preserves retained evidence and closes active observations as interrupted.
+It remains available for a configured-on collector when storage is unavailable;
+enabling still requires ready storage.
+Clear requires a separate confirmation, advances an epoch and removes this
+domain's aggregates without changing the enabled setting, accounts or history.
+An uncertain write is not automatically replayed by the UI.
+
+## Storage and limits
+
+The Host uses only the public storage-domain `global.get/set/close` seam and the
+configured backend. The plugin pins Zod to the qualified published storage
+type contract; no shared schemas, prototypes or Core artifacts are adapted.
+The official JSON backend root is **DSH-home shared**, so
+the plugin addresses a separate domain using the public `profileContext.name`,
+encoded as a bounded storage-unit suffix. The technical profile name is used
+only for addressing, never included in rows, Remotes or exported JSON. Names
+must be 1–48 ASCII letters, digits, underscores or hyphens; missing/unsupported
+profile context fails explicitly rather than sharing another profile's data.
+One writer per profile is required: the public JSON backend does not establish
+cross-process locking for simultaneous Hosts writing the same domain.
+
+Retain UTC-hour rows for 14 days, at most 4,096 rows, 128 live Host handles,
+128 live Client handles and a 128-row Client report buffer. Strict fixed ASCII
+dimensions make the encoded snapshot ceiling an exact **2 MiB UTF-8** bound.
+Evict oldest-hour rows first and expose eviction, drops, saturation, Client
+unconfirmed acknowledgements and clock rollback. Rollback does not silently
+erase already observed future-hour rows. Counts across a window boundary or
+an eviction cannot establish a precise failure rate.
+
+The Host coalesces writes on a ten-second cadence; the Client reports safe
+rows/pending-age samples and reads collection status on a ten-second cadence.
+These lifecycle-bound timers do **not** perform analysis, query credentials,
+change request deadlines or trigger repair. Abrupt process loss can lose the
+unflushed tail. Saved unfinished Host groups become interrupted on reopen,
+attributed to their starting build, not resumable work. Client pending samples
+are historical periodic samples, **not** an outstanding-operation gauge.
+Clear/pause/enable epoch fences prevent late accepted reports or handles from
+restoring pre-control evidence.
+Epoch exhaustion blocks enabling explicitly; pause/close still stop collection
+and record saturation even when the fence cannot advance.
+
+`dirty` and `persistedAt` distinguish in-memory from confirmed persistence.
+Missing backend/profile, corruption and failed writes remain named unavailable
+or error evidence; account/compaction work is not rejected or retried for a
+diagnostics failure. No ad-hoc file, Settings log or fallback backend is used.
+Corrupt media is neither backed up nor silently reset; Clear cannot repair a
+domain that cannot open. Public domain open loads external media before schema
+validation: plugin-owned snapshots are bounded, but this is **not** a disk quota
+or a pre-read bound on externally tampered files.
+
+## Coverage and interpretation
+
+Host coverage includes global switch, Session select/inherit, logical identity
+reads and shared physical identity flights, native compaction brackets and
+managed physical summary calls inside the separately selected recovery engine.
+Cache, cooldown and joined-flight stages remain distinct. A global-switch
+preflight identity validation is a stage, not another shared-flight denominator.
+Only the wrapped Client account/identity operations are reported, independently
+of Host observations; no IDs correlate the layers and no end-to-end latency or
+paint completion is inferred. Component teardown settles its own pending
+Checking observations, without cancelling the actual business request.
+
+Outcomes distinguish success, cancellation with actual signal evidence, policy
+rejection, revocation, environment fault, failure, interruption and unknown.
+Concurrent validation stages record cumulative operation age, not exclusive
+phase duration. A fulfilled error-shaped account view is not success.
+Compaction success requires a matching observed compact-checkpoint **and**
+successful end; summary fulfillment alone is not recovery success. No-checkpoint
+ends are unknown, not guessed no-op/prune-only success. Commit evidence remains
+separate if the end later fails. Selected managed-summary cancellation supplies
+signal evidence; arbitrary native error text cannot establish cancellation.
+
+Stock/custom-engine physical summaries, recovery opt-out/native-only summary
+branches, OAuth Add/reauthorization/removal, quota, ordinary model refresh,
+managed chat/search/classifier transport and unwrapped RPCs remain uncovered.
+Native checkpoint observation is not filesystem durability evidence. Reporting
+loss, crashes, disabled intervals and paging/coverage gaps must never be treated
+as zero failures. No automatic daily analysis, issue creation, account/model
+switch, policy change, retry, compaction, restart or upload is introduced.
+
+The tests exercise bounded codecs, once-only settlement, control epochs,
+component teardown, actual Client/Host gateway binding, unchanged public JSON
+storage reopen/isolation/write failure/corruption and native SettingsForms
+hidden-leaf persistence. Compaction observer envelopes are synthetic; they are
+not production reliability measurements or proof of live recovery. Complete
+release CI and installed/loaded/collection evidence remain separate.
+The published Client gateway fixture captures the unchanged registration-bundle
+factory in its own isolated realm, sharing the actual public Cordis identity.
+It does not substitute tagged source for published bytes or attach to a live
+Client module registry; factory qualification is not Desktop activation proof.
+
+## Archived phase-0 qualification and proposals
+
+The remaining sections preserve the reviewed phase-0 inventory. Their proposed
+limits and future-tense acceptance steps are historical, superseded by the
+runtime contract above; they do not enable any additional collection or schedule.
 
 ## Decision and evidence levels
 

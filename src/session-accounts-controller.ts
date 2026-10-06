@@ -4,6 +4,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionAccountsHost } from './session-accounts-host.ts'
 import type { SessionAccountView, TurnAccountView } from './session-accounts-remote.ts'
 import type { CopilotUsageView } from './copilot-usage-types.ts'
+import { beginDiagnostics } from './diagnostics-host.ts'
+import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
 
 export class SessionAccountController extends TypertRemoteService {
   constructor(ctx: Context, private readonly owner: SessionAccountsHost) { super(ctx, 'githubCopilotSessionAccount') }
@@ -21,8 +23,20 @@ export class SessionAccountController extends TypertRemoteService {
   }
   @Remote
   async set(agent: Agent, accountId: string | null, revision: number): Promise<SessionAccountView> {
-    await this.owner.set(agent, accountId, revision)
-    return this.get(agent)
+    const operation = beginDiagnostics(this.ctx, accountId === null ? 'account-session-inherit' : 'account-session-select')
+    operation?.stage('host-received')
+    try {
+      await this.owner.set(agent, accountId, revision, operation)
+      operation?.stage('readback')
+      const result = await this.get(agent)
+      const reason = result.accounts.state === 'error' ? diagnosticsReason(new Error(result.accounts.diagnostic)) : 'none'
+      operation?.finish(result.accounts.state === 'error' ? diagnosticsOutcome(reason) : 'success', reason)
+      return result
+    } catch (error) {
+      const reason = diagnosticsReason(error)
+      operation?.finish(diagnosticsOutcome(reason), reason)
+      throw error
+    }
   }
   @Remote
   async refreshIdentity(agent: Agent): Promise<SessionAccountView> {

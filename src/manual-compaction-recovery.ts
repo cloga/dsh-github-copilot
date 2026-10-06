@@ -1,4 +1,6 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
+import type {} from './diagnostics-host.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import type { BasicCompactionConfig } from '@deepseek-ai/dsh-compaction-basic'
@@ -214,9 +216,22 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
     if (this.ctx.get('githubCopilotSessionAccounts') !== undefined && agents === undefined) {
       throw recoverError('INITIATOR_UNAVAILABLE')
     }
-    const summarize = (candidate: RecoveryInput<Message>) => agents === undefined
-      ? super.summarize(candidate, agent, operationSignal)
-      : agents.withInitiator(agent, () => super.summarize(candidate, agent, operationSignal))
+    const summarize = async (candidate: RecoveryInput<Message>) => {
+      const observed = this.ctx.get('githubCopilotDiagnostics')?.collector.begin('compaction-summary')
+      observed?.stage('summary-attempt')
+      try {
+        const result = await (agents === undefined
+          ? super.summarize(candidate, agent, operationSignal)
+          : agents.withInitiator(agent, () => super.summarize(candidate, agent, operationSignal)))
+        observed?.finish('success')
+        return result
+      } catch (error) {
+        const reason = diagnosticsReason(error)
+        if (operationSignal.aborted) this.ctx.get('githubCopilotDiagnostics')?.markCompactionCancelled(agent.session)
+        observed?.finish(operationSignal.aborted ? 'cancelled' : diagnosticsOutcome(reason), reason)
+        throw error
+      }
+    }
     const budget = calculateRequestBudget(lease.limits, maxTokens, resolveRequestBudgetPolicy(lease.policy))
     if (!budget.ok) throw recoverError(budget.code)
     // Reserve space for the Core-added summary directive and estimator

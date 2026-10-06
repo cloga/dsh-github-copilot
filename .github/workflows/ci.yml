@@ -75,6 +75,9 @@ jobs:
       - name: Install native account persistence verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-credentials-local...' --filter '@deepseek-ai/dsh-app-boot...' --filter '@deepseek-ai/dsh-config-editor...' --filter '@deepseek-ai/dsh-settings...' --filter '@deepseek-ai/dsh-authorization...'
+      - name: Install native diagnostic storage verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'
       - name: Prepare exact DSH 0.2.0-rc.2 tagged-source runtime verification
         shell: bash
         run: |
@@ -133,6 +136,7 @@ jobs:
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
           node node_modules/typescript/bin/tsc -p tsconfig.tests.json
           node node_modules/vitest/vitest.mjs run tests/copilot-stream-liveness.spec.ts tests/copilot-stream-adapter.spec.ts tests/config.spec.ts tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts tests/search-routing.spec.ts tests/routed-web.spec.ts tests/deepseek-search-fallback.spec.ts tests/context-usage.spec.ts tests/context-evidence.spec.ts tests/context-evidence-runtime.spec.ts tests/context-evidence-ui.spec.ts tests/background-compaction.spec.ts tests/manual-compaction-recovery.spec.ts
+          node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts
 
   release-ready:
     name: release-ready

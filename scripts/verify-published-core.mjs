@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.0-rc.2'])
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
 const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
+  'vitest.diagnostics-published.config.ts',
   'README.md', 'README.zh.md', 'AGENTS.md', 'CONTRIBUTING.md', 'SECURITY.md', 'LICENSE',
   'deployment-baseline.json', 'agent-contract.json']
 const excluded = new Set(['node_modules', 'lib', 'artifacts', 'coverage', 'tmp', 'dist'])

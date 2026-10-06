@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "DSH companion for GitHub Copilot sign-in, account-aware model profiles, tool compatibility, and provider-hosted search.",
-  "version": "0.4.0-alpha.122",
+  "version": "0.4.0-alpha.123",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/",
@@ -75,6 +75,7 @@
     "docs/auto-task-routing.md",
     "docs/auto-high-cost.md",
     "docs/evidence-driven-iteration.md",
+    "docs/plugin-diagnostics.md",
     "docs/auto-iteration-review.json",
     "scripts/iteration-review.mjs",
     "docs/image-input-compatibility.md",
@@ -175,7 +176,7 @@
   "dependencies": {
     "@earendil-works/pi-ai": "0.87.1",
     "undici": "6.28.1",
-    "zod": "^4.4.3"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
@@ -205,6 +206,9 @@
     "@deepseek-ai/dsh-session-format-catalog": "0.2.0-rc.2",
     "@deepseek-ai/dsh-session-projection": "0.2.0-rc.2",
     "@deepseek-ai/dsh-settings": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-json": "0.2.0-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tool-web": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",

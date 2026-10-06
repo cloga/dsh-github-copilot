@@ -22,7 +22,7 @@ Models 和 Chat 共用不透明、随主题适配的账号下拉层；原生菜�
 
 添加账号时，设备授权链接、可选择的网址、一次性授权码、复制授权码和取消操作会同时显示。GitHub 授权完成后，会单独显示身份与可用模型验证阶段。添加账号不会更改全局默认；准备好后仍需显式执行现有的**切换**操作。技术诊断收在次级折叠区；账号／历史 turn 缺少身份时不会暴露不透明账号 ID，也不会根据当前设置推断历史身份。
 
-**源码候选版本：`0.4.0-alpha.122`（尚未发布）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。下方带版本的命令适用于候选版本发布后，不代表对应资产已经存在。
+**包版本：`0.4.0-alpha.123`。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。执行下方带版本的命令前须核验正式发布与资产；这些说明不证明已发布或已安装。
 
 ## 你可以做什么
 
@@ -38,9 +38,12 @@ Models 和 Chat 共用不透明、随主题适配的账号下拉层；原生菜�
 合格 Lightweight 模型。顾问求助尚未实现。参见[完整需求](./docs/auto-high-cost.md)
 与[强制迭代评审流程](./docs/evidence-driven-iteration.md)。
 
-[诊断阶段 0 提案](./docs/plugin-diagnostics.md)盘点账号／Checking 与压缩的观测
-边界、安全汇总字段及存储／调度缺口。不启用采集、持久化、上传或每日分析；运行时
-试点需另行评审与实现。
+[本地诊断试点](./docs/plugin-diagnostics.md)记录有界的账号／Checking 与压缩
+汇总，**默认关闭**。安装并加载已发布版本后，进入插件详情设置页 →
+**Local diagnostics → Read status → Enable local collection**，开启本地持久化；
+不上传，不启用每日分析。暂停保留证据，清除需单独确认。Client／Host 分开统计，
+未覆盖路径、报告丢失与存储故障明确显示。正常使用产生后续优化所需的证据，
+不会重建历史错误率，也不表示优化效果已被验证。
 
 | 任务 | 入口 |
 |---|---|
@@ -78,10 +81,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.122/dsh-github-copilot-0.4.0-alpha.122.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.123/dsh-github-copilot-0.4.0-alpha.123.tgz
 ```
 
-**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.122`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.123`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -245,14 +248,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.122/dsh-github-copilot-0.4.0-alpha.122.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.122/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.123/dsh-github-copilot-0.4.0-alpha.123.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.123/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.122.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.123.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

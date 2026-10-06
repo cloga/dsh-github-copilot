@@ -17,6 +17,8 @@ import type { SessionContinuationPreference } from './session-continuation-types
 
 /** Plugin configuration. Defaults make the current chat route decide. */
 export interface InlineConfig {
+  /** Opt-in local aggregate diagnostics; no uploads or scheduled analysis. */
+  diagnosticsEnabled?: boolean
   /** Hosted-search switch; managed chat requests remain enabled. */
   enabled: boolean
   /**
@@ -81,10 +83,11 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
   continuationDefaultHistory?: InlineConfig['continuationDefaultHistory'] | LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
   sessionContinuation?: SessionContinuationPreference[] | LiveSetting<ArrayLike<SessionContinuationPreference>>
   sessionAccounts?: SessionAccountPreference[] | LiveSetting<ArrayLike<SessionAccountPreference>>
+  diagnosticsEnabled?: boolean | LiveSetting<boolean>
   activeAccountId?: string | LiveSetting<string | undefined>
   followParentModel?: boolean | LiveSetting<boolean>
   parentModelFollow?: ParentModelBinding[] | LiveSetting<ArrayLike<ParentModelBinding>>
@@ -95,7 +98,8 @@ export type LiveInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
+  diagnosticsEnabled: LiveSetting<boolean>
   continuationDefaultHistory: LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
   sessionContinuation: LiveSetting<ArrayLike<SessionContinuationPreference>>
   sessionAccounts: LiveSetting<ArrayLike<SessionAccountPreference>>
@@ -119,6 +123,7 @@ export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
   const defaults = readConfigValue<ArrayLike<{ enabled: boolean; changedAt: number }> | undefined>(config.continuationDefaultHistory)
   return {
     ...config,
+    diagnosticsEnabled: readConfigValue(config.diagnosticsEnabled),
     continuationDefaultHistory: defaults === undefined ? undefined : Array.from(defaults,
       row => ({ enabled: row.enabled, changedAt: row.changedAt })),
     sessionContinuation: continuation === undefined ? undefined : Array.from(continuation,
@@ -145,6 +150,7 @@ const MAX_TIMEOUT_MS = 2_147_483_647
 
 /** Schema of the plugin's settings section. */
 export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
+  diagnosticsEnabled: z.boolean().default(false).hidden().volatile(),
   enabled: z.boolean().default(true),
   providers: z.array(z.string()).default([]),
   includeSources: z.boolean().default(true),

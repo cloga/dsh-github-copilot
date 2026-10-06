@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import { beginDiagnostics } from './diagnostics-host.ts'
+import { diagnosticsOutcome, diagnosticsReason } from './diagnostics-types.ts'
+import type { DiagnosticsHandle } from './diagnostics-collector.ts'
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
@@ -403,33 +406,56 @@ export class CopilotAccountsHost {
     return this.viewForAccount(accountId)
   }
   private async readIdentity(accountId: string, force: boolean): Promise<CopilotAccountsView> {
+    const operation = beginDiagnostics(this.ctx, 'identity-read')
+    try {
+      const view = await this.readIdentityObserved(accountId, force, operation)
+      const reason = view.state === 'error' ? diagnosticsReason(new Error(view.diagnostic)) : 'none'
+      operation?.finish(reason === 'none' ? 'success' : diagnosticsOutcome(reason), reason)
+      return view
+    } catch (error) {
+      const reason = diagnosticsReason(error)
+      operation?.finish(diagnosticsOutcome(reason), reason)
+      throw error
+    }
+  }
+  private async readIdentityObserved(accountId: string, force: boolean, operation?: DiagnosticsHandle): Promise<CopilotAccountsView> {
     id(accountId)
     if (this.disposed) fail('COPILOT_ACCOUNTS_DISPOSED')
     let flight = this.identityFlights.get(accountId)
     let problem: CopilotAccountsDiagnostic | undefined
     const failed = this.identityFailures.get(accountId)
     const cached = this.identities.get(accountId)
-    if (flight === undefined && !force && cached && Date.now() - cached.at < IDENTITY_TTL) return this.viewForAccount(accountId)
+    if (flight === undefined && !force && cached && Date.now() - cached.at < IDENTITY_TTL) {
+      operation?.stage('cache-hit')
+      return this.viewForAccount(accountId)
+    }
     if (flight === undefined && !force && failed && Date.now() - failed.at < IDENTITY_FAILURE_COOLDOWN) {
       problem = failed.diagnostic
+      operation?.stage('cooldown')
     } else {
+      if (flight !== undefined) operation?.stage('joined-flight')
       if (flight === undefined) {
         if (this.identityFlights.size >= COPILOT_ACCOUNTS_MAX) fail('COPILOT_ACCOUNTS_LIMIT')
         const abort = new AbortController()
         const signal = AbortSignal.any([abort.signal, this.abort.signal, AbortSignal.timeout(TIMEOUT)])
         const promise = Promise.resolve().then(async () => {
+          const observed = beginDiagnostics(this.ctx, 'identity-flight')
+          observed?.stage('identity-validation')
           let lease: CopilotAccountLease | undefined
           try {
             signal.throwIfAborted()
             lease = this.acquire(undefined, false, accountId)
             await abortable(this.identity(lease.binding, signal), signal)
             this.identityFailures.delete(accountId)
+            observed?.finish('success')
             return undefined
           } catch (error) {
             const problem = signal.aborted
               ? signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError'
                 ? 'COPILOT_ACCOUNTS_IDENTITY_TIMEOUT' : 'COPILOT_ACCOUNTS_CHANGED'
               : diagnostic(error, 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
+            const reason = diagnosticsReason(new Error(problem))
+            observed?.finish(diagnosticsOutcome(reason), reason)
             if (!abort.signal.aborted && !this.disposed) {
               this.identities.delete(accountId)
               this.unavailableIdentities.add(accountId)
@@ -472,6 +498,8 @@ export class CopilotAccountsHost {
     }
   }
   async switchAccount(accountId: string, expectedRevision: number): Promise<CopilotAccountsView> {
+    const observed = beginDiagnostics(this.ctx, 'account-global-switch')
+    observed?.stage('host-received')
     let committed = false, fenced = false
     try {
       id(accountId)
@@ -487,9 +515,11 @@ export class CopilotAccountsHost {
       const preflightAbort = new AbortController()
       const signal = AbortSignal.any([this.abort.signal, preflightAbort.signal, AbortSignal.timeout(60_000)])
       const identity = (async () => {
+        observed?.stage('identity-validation')
         await this.identity(binding, signal)
         return this.identities.get(accountId)?.key
       })()
+      observed?.stage('model-validation')
       const models = this.validateModels(binding, signal)
       let identityKey: string | undefined
       try { [identityKey] = await Promise.all([identity, models]) }
@@ -507,6 +537,7 @@ export class CopilotAccountsHost {
       }
       const current = this.selection()
       if (current.revision !== expectedRevision || current.accountId !== before.accountId) fail('COPILOT_ACCOUNTS_CONFLICT')
+      observed?.stage('cas')
       try { await this.settings().mutate('github-copilot', [{ op: 'set', path: ['activeAccountId'], value: accountId }], expectedRevision) }
       catch {
         try {
@@ -516,6 +547,7 @@ export class CopilotAccountsHost {
         fail('COPILOT_ACCOUNTS_CONFLICT')
       }
       committed = true
+      observed?.stage('readback')
       const after = this.selection()
       if (after.accountId !== accountId || after.revision === expectedRevision) fail('COPILOT_ACCOUNTS_COMMIT_UNCERTAIN')
       await this.assertIdentityCurrent(this.capture(accountId), identityKey)
@@ -523,8 +555,19 @@ export class CopilotAccountsHost {
       this.lastFailure = undefined
     } catch (error) {
       this.lastFailure = committed ? 'COPILOT_ACCOUNTS_COMMIT_UNCERTAIN' : diagnostic(error, 'COPILOT_ACCOUNTS_CHANGED')
+      const reason = diagnosticsReason(new Error(this.lastFailure))
+      observed?.finish(diagnosticsOutcome(reason), reason)
     } finally { if (fenced) this.operation = undefined }
-    return this.get()
+    try {
+      const view = await this.get()
+      const reason = view.state === 'error' ? diagnosticsReason(new Error(view.diagnostic)) : 'none'
+      observed?.finish(view.state === 'error' ? diagnosticsOutcome(reason) : 'success', reason)
+      return view
+    } catch (error) {
+      const reason = diagnosticsReason(error)
+      observed?.finish(diagnosticsOutcome(reason), reason)
+      throw error
+    }
   }
   async add(): Promise<CopilotAccountsView> { return this.authorize(randomUUID()) }
   async reauthorize(accountId: string, expectedRevision: number): Promise<CopilotAccountsView> {

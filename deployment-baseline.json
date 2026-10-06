@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.122"
+    "version": "0.4.0-alpha.123"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -252,7 +252,7 @@
     "piAi": "0.87.1",
     "runtimeDependencies": {
       "@earendil-works/pi-ai": "0.87.1",
-      "zod": "^4.4.3"
+      "zod": "4.6.5"
     },
     "sharedPeerDependencies": {
       "@deepseek-ai/dsh-authorization": "0.2.0-rc.2",
@@ -288,6 +288,28 @@
     ]
   },
   "capabilities": [
+    {
+      "id": "copilot-local-diagnostics",
+      "required": true,
+      "evidenceScope": "synthetic-collector-ui-native-gateway-storage-and-settings-not-live-reliability",
+      "activation": "default-off-explicit-profile-local-enable",
+      "sourceMarkers": [
+        {"file": "src/diagnostics-types.ts", "marker": "DIAGNOSTICS_MAX_BYTES = 2 * 1024 * 1024"},
+        {"file": "src/diagnostics-collector.ts", "marker": "noteClientGaps"},
+        {"file": "src/diagnostics-host.ts", "marker": "diagnosticsDomainForProfile"},
+        {"file": "src/diagnostics-client.ts", "marker": "createClientDiagnosticsScope"},
+        {"file": "src/remote.ts", "marker": "...diagnosticsRemote.descriptors"},
+        {"file": "src/config.ts", "marker": "diagnosticsEnabled:"},
+        {"file": "AGENTS.md", "marker": "Default-off local account/Checking/compaction diagnostics"}
+      ],
+      "tests": [
+        {"file": "tests/diagnostics-collector.spec.ts", "name": "is disabled until enabled, records success denominators and settles once"},
+        {"file": "tests/diagnostics-client.spec.ts", "name": "rejects stale status responses and settles an unmounted Checking operation once"},
+        {"file": "tests/diagnostics-card.spec.ts", "name": "requires a confirmed durable enable and a separate destructive clear confirmation"},
+        {"file": "tests/fixtures/diagnostics-storage-core.fixture.ts", "name": "isolates profiles on the home-wide backend and preserves memory on a real publish failure"},
+        {"file": "tests/fixtures/diagnostics-gateway-core.fixture.ts", "name": "binds diagnostics through actual strict Client and Host gateways with durable enable and clear fences"}
+      ]
+    },
     {
       "id": "copilot-session-accounts",
       "required": true,

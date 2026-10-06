@@ -122,7 +122,10 @@ function expectOnlyRetainedUi(f: Fixture, footer: boolean) {
   const account = f.registrations.get(`${settingsSlot}:${accountId}`)!.render({})!
   expect(account.type).toBe(client.GitHubCopilotAccountSurface)
   const search = f.registrations.get(`${settingsSlot}:github-copilot-search-routing`)!.render({})!
-  expect(search.type).toBe(client.WebSearchRoutingCard)
+  expect(search.type).toBe('div')
+  const [routing, diagnostics] = search.props.children as ReactElement[]
+  expect(routing?.type).toBe(client.WebSearchRoutingCard)
+  expect(diagnostics?.type).toBeTypeOf('function')
   const provider = f.registrations.get(`${providerSlot}:llm-pi-ai`)!.render({
     provider: { provider: 'github-copilot', settingsNs: 'llm-pi-ai' }, configured: true,
   })!

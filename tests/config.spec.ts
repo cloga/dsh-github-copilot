@@ -23,12 +23,25 @@ describe('session search settings', () => {
 
   it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['diagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
     expect(parsed.searchRouting.get()).toMatchObject({ defaultSearchProvider: 'deepseek-official' })
     expect(readInlineConfig(parsed)).toMatchObject({ searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
+  })
+
+  it('keeps diagnostics default-off and reads the hidden live collection setting', () => {
+    expect(Config.dict?.diagnosticsEnabled?.meta.hidden).toBe(true)
+    expect(Config.dict?.diagnosticsEnabled?.meta.volatile).toBe(true)
+    expect(readInlineConfig(Config(base)).diagnosticsEnabled).toBe(false)
+    let enabled = false
+    const live = { ...base, diagnosticsEnabled: { get: () => enabled } }
+    expect(readInlineConfig(live).diagnosticsEnabled).toBe(false)
+    enabled = true
+    expect(readInlineConfig(live).diagnosticsEnabled).toBe(true)
+    const untrusted = { ...base, diagnosticsEnabled: 'true' } as unknown as InlineConfig
+    expect(() => Config(untrusted)).toThrow()
   })
 
   it('keeps the account selector hidden, volatile and absent by default', () => {

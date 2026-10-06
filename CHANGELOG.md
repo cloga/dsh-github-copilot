@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.123 (prepared)
+
+- Add default-off local account/Checking/compaction diagnostics with strict fixed-dimension counts, elapsed/unfinished age bins, separate Client/Host populations and explicit cancellation, rejection, interruption and reporting gaps (#347, #356).
+- Persist a 14-day, 4,096-row/2 MiB aggregate snapshot through the public storage-domain service, isolating profiles on the home-wide backend. Add enable/pause, separately confirmed clear and aggregate-only JSON review; preserve restart interruption, control epochs, business ownership and named storage failures.
+- No account/Session identity, content, replay, raw errors or credentials enter aggregates. No automatic uploads, daily tasks, repair, retries, live-profile install or activation; native/custom-engine and other unwrapped paths remain explicit coverage gaps.
+
 ## 0.4.0-alpha.121 (prepared)
 
 - Add explicit `/copilot-compact visible-history` consent for one lossy managed Responses summary operation after replay-scope rejection (#349). Preserve visible messages/tool pairs, native directive, route/cap, cancellation, source history and single transactional commit; no automatic retry, hidden settings change or live execution.
