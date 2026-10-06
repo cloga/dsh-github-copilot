@@ -33,6 +33,8 @@ import { estimateTurnInputTokens } from '../../src/auto-model-routing.ts'
 import { installSessionContinuation } from '../../src/session-continuation-host.ts'
 import CopilotManualRecoveryCompactionEngine from '../../src/manual-compaction-recovery.ts'
 import previewPlugin from '../../src/preview-route.ts'
+import { installCompactionReplay } from '../../src/compaction-replay.ts'
+import type { CompactionReplayRecovery } from '../../src/compaction-replay.ts'
 import type { AccountModelDescriptor } from '../../src/account-model-catalog.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as autoModel, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as provider,
@@ -99,6 +101,7 @@ class FixtureAdapter extends LlmAdapter {
   readonly summaryStarted = Promise.withResolvers<void>()
   continuation?: ReturnType<typeof installSessionContinuation>
   readonly continued: unknown[] = []
+  compactionReplay?: CompactionReplayRecovery
 
   constructor(readonly summaryMode: SummaryMode) { super() }
 
@@ -109,6 +112,16 @@ class FixtureAdapter extends LlmAdapter {
   override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const summary = options.purpose === 'compaction'
     if (summary) {
+      if (this.compactionReplay) {
+        const payload = { input: [
+          { type: 'reasoning', encrypted_content: 'synthetic-old-replay', summary: [] },
+          { type: 'message', role: 'user', content: requestText(options) },
+        ] }
+        const transform = this.compactionReplay.prepare(options)
+        const dispatched = transform ? await transform(payload) : payload
+        if (JSON.stringify(dispatched).includes('synthetic-old-replay'))
+          throw new LlmError('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: synthetic scope rejection', 'INVALID_REQUEST')
+      }
       this.onSummary?.()
       this.summaries.push(observeRequest(options))
       this.summaryStarted.resolve()
@@ -165,6 +178,49 @@ class FixtureAdapter extends LlmAdapter {
 }
 
 describe('native background compaction lifetime', () => {
+  it('refuses explicit replay recovery for unsupported account-bound summary protocols', async () => {
+    const f = await fixture('stop', true, false, true, true)
+    installCompactionReplay(f.ctx)
+    const original = f.ctx.githubCopilotPreview.recoveryLimits
+    f.ctx.githubCopilotPreview.recoveryLimits = (...args) => {
+      const lease = original(...args)
+      return lease ? { ...lease, api: 'anthropic-messages' } : undefined
+    }
+    await f.ctx.commands.execute(f.agent, '/copilot-compact visible-history', [], new AbortController().signal)
+    const job = f.ctx.jobs.list(f.agent.id).find(item => item.kind === 'copilot-compaction')!
+    await f.ctx.jobs.wait(job.id, 10000, f.agent.id)
+    expect(f.ctx.jobs.get(job.id, f.agent.id)).toMatchObject({
+      status: 'failed', detail: expect.stringContaining('COPILOT_COMPACTION_REPLAY_UNAVAILABLE'),
+    })
+    expect(f.adapter.summaries).toHaveLength(0)
+    expect(f.events.filter(event => event.type === 'compaction/summary')).toHaveLength(0)
+    expect(f.agent.session.surface.replaceGeneration).toBe(f.originalGeneration)
+  })
+
+  it('recovers only an explicitly authorized manual job through one native transaction', async () => {
+    const f = await fixture('stop', true, false, true, true)
+    f.adapter.compactionReplay = installCompactionReplay(f.ctx)
+    const source = JSON.stringify(f.events)
+    const sourceCount = f.events.length
+    await f.ctx.commands.execute(f.agent, '/copilot-compact', [], new AbortController().signal)
+    const failed = f.ctx.jobs.list(f.agent.id).find(job => job.kind === 'copilot-compaction')!
+    await f.ctx.jobs.wait(failed.id, 10000, f.agent.id)
+    expect(f.ctx.jobs.get(failed.id, f.agent.id)).toMatchObject({
+      status: 'failed', detail: expect.stringContaining('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH'),
+    })
+    expect(f.agent.session.surface.replaceGeneration).toBe(f.originalGeneration)
+    expect(f.events.filter(event => event.type === 'compaction/summary')).toHaveLength(0)
+    await f.ctx.commands.execute(f.agent, '/copilot-compact visible-history', [], new AbortController().signal)
+    const recovered = f.ctx.jobs.list(f.agent.id).find(job => job.kind === 'copilot-compaction' && job.id !== failed.id)!
+    await f.ctx.jobs.wait(recovered.id, 10000, f.agent.id)
+    expect(f.ctx.jobs.get(recovered.id, f.agent.id).status).toBe('completed')
+    expect(f.events.filter(event => event.type === 'compaction/summary')).toHaveLength(1)
+    expect(f.agent.session.surface.replaceGeneration).toBeGreaterThan(f.originalGeneration)
+    expect(JSON.stringify(f.events.slice(0, sourceCount))).toBe(source)
+    expect(f.adapter.conversation).toHaveLength(1)
+    expect(f.forbiddenFetch).not.toHaveBeenCalled()
+  })
+
   it('commits beyond the carrier deadline without a model wakeup and keeps status owner-scoped', async () => {
     const f = await fixture('slow', true, false, true, true)
     const settlements: boolean[] = []
@@ -293,6 +349,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   if (!nativeAdmission) ctx.provide('githubCopilotPreview', {
     getView: () => ({ provider }),
     recoveryLimits: () => ({
+      api: 'openai-responses',
       limits: { contextWindow, maxInputTokens: 12000, maxTokens: 8192 },
       policy: { safetyTokens: 0 },
       assertCurrent: () => {},

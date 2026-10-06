@@ -11,6 +11,7 @@ import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { calculateRequestBudget, resolveRequestBudgetPolicy } from './request-budget.ts'
 import type {} from './preview-route.ts'
 import { installBackgroundCompaction } from './background-compaction.ts'
+import type {} from './compaction-replay.ts'
 
 interface RecoveryMessage {
   readonly role: string
@@ -143,6 +144,7 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
   ])
 
   private readonly manual = new WeakMap<Agent, number>()
+  private readonly visibleHistory = new WeakSet<Agent>()
   private readonly automaticRecovery: boolean
 
   constructor(ctx: Context, config: BasicCompactionConfig & { automaticRecovery?: boolean } = {}) {
@@ -151,7 +153,12 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
     super(ctx, nativeConfig)
     this.automaticRecovery = automaticRecovery
     ctx.inject(['commands', 'jobs'], scope => {
-      installBackgroundCompaction(scope, (agent, signal) => this.compactNow(agent, signal))
+      installBackgroundCompaction(scope, (agent, signal, visibleHistory) => {
+        if (!visibleHistory) return this.compactNow(agent, signal)
+        if (this.manual.has(agent)) throw recoverError('BUSY')
+        this.visibleHistory.add(agent)
+        return this.compactNow(agent, signal).finally(() => this.visibleHistory.delete(agent))
+      })
     })
   }
 
@@ -183,19 +190,33 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
     const summaryModel = selected.model
     if ((!this.manual.has(agent) && !this.automaticRecovery)
       || summaryProvider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID || !summaryModel) {
+      if (this.visibleHistory.has(agent)) throw new Error('COPILOT_COMPACTION_REPLAY_UNAVAILABLE')
       return super.summarize(input, agent, signal)
     }
+    const maxTokens = policy?.maxTokens ?? this.config.maxTokens
+    const operationSignal = signal ?? new AbortController().signal
+    const summarize = () => this.summarizeManaged(input, agent, summaryModel, maxTokens, operationSignal)
+    if (!this.visibleHistory.has(agent)) return summarize()
+    const recovery = this.ctx.get('githubCopilotCompactionReplay')
+    if (!recovery) throw new Error('COPILOT_COMPACTION_REPLAY_UNAVAILABLE')
+    return recovery.run(agent.session.id, summaryModel, operationSignal, summarize)
+  }
+
+  private async summarizeManaged(
+    input: RecoveryInput<Message>, agent: Agent, summaryModel: string, maxTokens: number, operationSignal: AbortSignal,
+  ) {
     const preview = this.ctx.get('githubCopilotPreview')
     const lease = preview?.recoveryLimits(summaryModel, agent)
     if (lease === undefined) throw recoverError('ACCOUNT_PROOF_UNAVAILABLE')
+    if (this.visibleHistory.has(agent) && lease.api !== 'openai-responses')
+      throw new Error('COPILOT_COMPACTION_REPLAY_UNAVAILABLE')
     const agents = this.ctx.get('agents')
     if (this.ctx.get('githubCopilotSessionAccounts') !== undefined && agents === undefined) {
       throw recoverError('INITIATOR_UNAVAILABLE')
     }
     const summarize = (candidate: RecoveryInput<Message>) => agents === undefined
-      ? super.summarize(candidate, agent, signal)
-      : agents.withInitiator(agent, () => super.summarize(candidate, agent, signal))
-    const maxTokens = policy?.maxTokens ?? this.config.maxTokens
+      ? super.summarize(candidate, agent, operationSignal)
+      : agents.withInitiator(agent, () => super.summarize(candidate, agent, operationSignal))
     const budget = calculateRequestBudget(lease.limits, maxTokens, resolveRequestBudgetPolicy(lease.policy))
     if (!budget.ok) throw recoverError(budget.code)
     // Reserve space for the Core-added summary directive and estimator
@@ -203,7 +224,6 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
     const toolHistoryBytes = Buffer.byteLength(JSON.stringify(agent.session.toolHistory()), 'utf8')
     let inputLimit = budget.budget.hardInputLimit - 4096 - toolHistoryBytes
     if (inputLimit <= 0) throw recoverError('FIXED_PREFIX')
-    const operationSignal = signal ?? new AbortController().signal
     const estimate = (candidate: RecoveryInput<Message>): number =>
       Buffer.byteLength(JSON.stringify(candidate), 'utf8')
     operationSignal.throwIfAborted()

@@ -20,8 +20,32 @@ interface Running {
   done: Promise<JobOutcome>
 }
 const WAIT_MS = 2_147_483_647
-const USAGE = 'Usage: /copilot-compact [status|cancel]'
+const USAGE = 'Usage: /copilot-compact [status|cancel|visible-history]. visible-history authorizes one lossy summary without old encrypted reasoning or its embedded summaries; stored source history is unchanged.'
 const FAILED = 'COPILOT_BACKGROUND_COMPACTION_FAILED: inspect the native compaction/end record; no success is implied.'
+
+function failureDetail(cause: unknown): string {
+  const allowed = new Set([
+    'COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH', 'COPILOT_RESPONSES_REPLAY_UNSUPPORTED',
+    'COPILOT_RESPONSES_REPLAY_INVALID_PAYLOAD', 'CONTEXT_WINDOW_EXCEEDED',
+    'COPILOT_MANUAL_RECOVERY_ACCOUNT_PROOF_UNAVAILABLE', 'COPILOT_MANUAL_RECOVERY_FIXED_PREFIX',
+    'COPILOT_MANUAL_RECOVERY_INDIVISIBLE', 'COPILOT_MANUAL_RECOVERY_CALL_LIMIT',
+    'COPILOT_MANUAL_RECOVERY_EMPTY_SUMMARY', 'COPILOT_MANUAL_RECOVERY_UNBALANCED',
+    'COPILOT_COMPACTION_REPLAY_UNAVAILABLE', 'COPILOT_COMPACTION_REPLAY_REVOKED',
+  ])
+  const visited = new Set<Error>()
+  for (let depth = 0; depth < 8 && cause instanceof Error && !visited.has(cause); depth++) {
+    visited.add(cause)
+    const code = /^[A-Z][A-Z_]+(?=:|$)/.exec(cause.message)?.[0]
+    if (code && allowed.has(code)) {
+      const guidance = code === 'COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH'
+        ? ' Review loss of hidden context before explicitly using /copilot-compact visible-history. No automatic retry.'
+        : ''
+      return `${code}: compaction failed; stored source history is unchanged.${guidance} Inspect the native compaction/end record.`
+    }
+    cause = cause.cause
+  }
+  return FAILED
+}
 
 /** Own only admission and job lifetime; the selected engine owns all history transactions. */
 export class BackgroundCompaction<A extends { readonly id: SessionId }> {
@@ -31,7 +55,7 @@ export class BackgroundCompaction<A extends { readonly id: SessionId }> {
 
   constructor(
     private readonly jobs: Jobs,
-    private readonly compact: (agent: A, signal: AbortSignal) => Promise<Result>,
+    private readonly compact: (agent: A, signal: AbortSignal, visibleHistory: boolean) => Promise<Result>,
     private readonly warn: (message: string) => void,
   ) {}
 
@@ -39,9 +63,9 @@ export class BackgroundCompaction<A extends { readonly id: SessionId }> {
     if (this.closed) return { kind: 'error', text: 'COPILOT_BACKGROUND_COMPACTION_DISPOSED' }
     if (signal.aborted) return { kind: 'error', text: 'Compaction admission cancelled.' }
     const action = rawInput.trim()
-    if (action !== '' && action !== 'status' && action !== 'cancel') return { kind: 'error', text: USAGE }
+    if (action !== '' && action !== 'status' && action !== 'cancel' && action !== 'visible-history') return { kind: 'error', text: USAGE }
     const id = this.latest.get(agent)
-    if (action !== '') {
+    if (action === 'status' || action === 'cancel') {
       if (id === undefined) return { kind: 'error', text: 'No background compaction job for this Session.' }
       try {
         if (action === 'cancel') {
@@ -65,13 +89,14 @@ export class BackgroundCompaction<A extends { readonly id: SessionId }> {
           done = Promise.resolve().then(async (): Promise<JobOutcome> => {
             try {
               cancel.signal.throwIfAborted()
-              const result = await this.compact(agent, cancel.signal)
+              const result = await this.compact(agent, cancel.signal, action === 'visible-history')
               return { status: 'completed', detail: result === null ? 'No compactable history.'
                 : `Compacted ${result.shadowedSeqs.length} history items (~${result.shadowedTokenCount} tokens).` }
-            } catch {
+            } catch (cause) {
               if (cancel.signal.aborted) return { status: 'killed', detail: 'Compaction cancelled; inspect native history for its transaction outcome.' }
-              this.warn(FAILED)
-              return { status: 'failed', detail: FAILED }
+              const detail = failureDetail(cause)
+              this.warn(detail)
+              return { status: 'failed', detail }
             } finally { this.active.delete(agent) }
           })
           return { cancel: () => { cancel.abort() }, done }
@@ -109,7 +134,7 @@ export class BackgroundCompaction<A extends { readonly id: SessionId }> {
 
 export function installBackgroundCompaction(
   ctx: Context,
-  compact: (agent: Agent, signal: AbortSignal) => Promise<CompactionResult | null>,
+  compact: (agent: Agent, signal: AbortSignal, visibleHistory: boolean) => Promise<CompactionResult | null>,
 ): void {
   const controller = new BackgroundCompaction(ctx.jobs, compact, message => ctx.logger.warn(message))
   ctx.effect(function* () {
@@ -119,7 +144,7 @@ export function installBackgroundCompaction(
       definitionId: CommandDefinitionId('dsh-github-copilot/background-compaction'),
       name: 'copilot-compact',
       description: 'Start background manual compaction, inspect status, or cancel',
-      input: { hint: 'status | cancel (omit to start)' },
+      input: { hint: 'status | cancel | visible-history (explicit lossy recovery; omit for normal compaction)' },
       handler: invocation => controller.execute(invocation.agent, invocation.rawInput, invocation.signal),
     })
   }, 'Copilot background compaction')

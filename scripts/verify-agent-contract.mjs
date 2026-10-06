@@ -86,6 +86,13 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.compaction?.automaticRecoveryBoundary?.includes('No 408/network/auth/quota fallback')
     && agentGuide.includes('automaticRecovery: false'),
   'automatic segmented recovery must retain explicit composition, capacity-only escalation and bounded native ownership')
+  require(contract.tasks.compaction?.visibleHistoryBoundary?.includes('Only explicit /copilot-compact visible-history')
+    && contract.tasks.compaction?.visibleHistoryBoundary?.includes('revoked after settlement or teardown')
+    && contract.tasks.compaction?.visibleHistoryBoundary?.includes('no inherited chat consent')
+    && contract.tasks.compaction?.read?.includes('src/compaction-replay.ts')
+    && contract.tasks.compaction?.tests?.includes('tests/compaction-replay.spec.ts')
+    && /Never\s+inherit chat continuation consent/.test(agentGuide),
+  'visible-history summary consent must remain explicit, operation-scoped and independent of chat/automatic recovery')
   for (const [name, task] of Object.entries(contract.tasks)) {
     require(/^[a-z]+$/.test(name), 'invalid task id')
     require(typeof task.purpose === 'string' && typeof task.risk === 'string', `${name} needs purpose and risk`)

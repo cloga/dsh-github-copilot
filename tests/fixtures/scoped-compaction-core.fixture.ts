@@ -90,6 +90,7 @@ test.each([
     root.provide('githubCopilotPreview', {
       getView: () => ({ provider }),
       recoveryLimits: () => ({
+        api: 'openai-responses',
         limits: { contextWindow: 100000, maxInputTokens: 80000, maxTokens: 8192 },
         policy: { safetyTokens: 0 }, assertCurrent: () => {},
       }),

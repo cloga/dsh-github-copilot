@@ -67,6 +67,10 @@ published adapter/SDK's payload hook filters the normalized payload. Only
 unbound requests and other protocols remain native. Cold mid-turn recovery
 without a first-step boundary fails explicitly.
 
+Explicit manual summary recovery is separate: `/copilot-compact visible-history`
+authorizes only one selected-engine operation, never inherited chat consent.
+See [summary recovery](./manual-compaction-recovery.md#explicit-visible-history-summary-recovery).
+
 The filter scans at most 65536 top-level input items and 4096 reasoning items
 (including duplicates). Only encrypted reasoning is hashed, with an aggregate
 64 Mi UTF-16-code-unit processing bound per invocation and 64 Ki-code-unit chunks

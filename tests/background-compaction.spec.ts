@@ -114,6 +114,29 @@ describe('background manual compaction admission', () => {
     await f.controller.dispose()
   })
 
+  it('requires an explicit command argument for lossy recovery', async () => {
+    const f = fixture()
+    f.controller.execute(f.owner, 'visible-history', new AbortController().signal)
+    await Promise.resolve()
+    expect(f.compact).toHaveBeenCalledWith(f.owner, expect.any(AbortSignal), true)
+    f.finish()
+    await f.controller.dispose()
+  })
+
+  it('reports only allowlisted causes through native error wrappers', async () => {
+    const f = fixture()
+    f.compact.mockRejectedValueOnce(new Error('native wrapper', {
+      cause: new Error('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: secret details'),
+    }))
+    f.controller.execute(f.owner, '', new AbortController().signal)
+    await [...f.jobs.values()][0]!.hooks.done
+    const text = f.controller.execute(f.owner, 'status', new AbortController().signal).text
+    expect(text).toContain('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH')
+    expect(text).toContain('/copilot-compact visible-history')
+    expect(text).not.toContain('secret')
+    await f.controller.dispose()
+  })
+
   it('fails explicitly when admission is unavailable', async () => {
     const f = fixture()
     f.registry.start.mockImplementationOnce(() => { throw new Error('raw internal error') })

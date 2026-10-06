@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { attribution, describeRepository, doctor, planTask, repositoryRoot } from '../../scripts/agent.mjs'
@@ -103,6 +103,34 @@ test('important updates carry release follow-through without a second approval p
   }
   assert.match(plan.delivery, /reviewed merge without a separate approval prompt; important updates continue to verified Release/)
   assert.ok(plan.commands.every(command => command.executed === false))
+})
+
+test('manual replay recovery plan retains explicit consent and rejects weakened boundaries', async () => {
+  const plan = await planTask('compaction')
+  assert.ok(plan.read.includes('src/compaction-replay.ts'))
+  assert.ok(plan.tests.includes('tests/compaction-replay.spec.ts'))
+  assert.match(plan.visibleHistoryBoundary, /Only explicit \/copilot-compact visible-history/)
+  assert.match(plan.visibleHistoryBoundary, /no inherited chat consent/)
+  const root = await mkdtemp(join(tmpdir(), 'copilot-compaction-consent-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    for (const file of original.entrypoints) {
+      await mkdir(dirname(join(root, file)), { recursive: true })
+      await writeFile(join(root, file), '')
+    }
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    await writeFile(join(root, 'AGENTS.md'), await readFile(join(repositoryRoot, 'AGENTS.md')))
+    for (const mutate of [
+      contract => { delete contract.tasks.compaction.visibleHistoryBoundary },
+      contract => { contract.tasks.compaction.visibleHistoryBoundary = 'Automatic fallback is permitted' },
+      contract => { contract.tasks.compaction.tests = contract.tasks.compaction.tests.filter(file => file !== 'tests/compaction-replay.spec.ts') },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /visible-history summary consent/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test('contract validation rejects a redundant release prompt or weakened release prerequisites', async () => {
