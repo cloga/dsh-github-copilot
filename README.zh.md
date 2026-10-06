@@ -38,6 +38,10 @@ Models 和 Chat 共用不透明、随主题适配的账号下拉层；原生菜�
 合格 Lightweight 模型。顾问求助尚未实现。参见[完整需求](./docs/auto-high-cost.md)
 与[强制迭代评审流程](./docs/evidence-driven-iteration.md)。
 
+[诊断阶段 0 提案](./docs/plugin-diagnostics.md)盘点账号／Checking 与压缩的观测
+边界、安全汇总字段及存储／调度缺口。不启用采集、持久化、上传或每日分析；运行时
+试点需另行评审与实现。
+
 | 任务 | 入口 |
 |---|---|
 | 登录并管理账号模型 | **设置 → 模型 → GitHub Copilot → Sign in** |
