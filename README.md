@@ -25,7 +25,7 @@ Visible Models and Credits resolve missing names for saved accounts without acti
 
 Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
 
-**Source candidate: `0.4.0-alpha.120` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+**Source candidate: `0.4.0-alpha.121` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -82,10 +82,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.120/dsh-github-copilot-0.4.0-alpha.120.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.121/dsh-github-copilot-0.4.0-alpha.121.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.120` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.121` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -161,6 +161,8 @@ Owned timeout/replay errors preserve native usage before terminal failure restor
 Managed request admission preserves truthful input/output limits and native transactions. Automatic pressure uses the initiating Agent's actual bound compaction service; a preset without an engine cannot borrow global recovery. The separately selected [recovery engine](./docs/manual-compaction-recovery.md) defaults to automatic segmented fallback for oversized summaries or an explicit summary context-limit failure. Fitting summaries stay native; timeout/408/auth/quota failures do not trigger segmentation. Up to 16 calls may add time and charges; cancellation or incomplete recovery never commits a partial summary. `automaticRecovery: false` disables this fallback; native `auto: false` still disables automatic compaction. Installation alone does not select the engine: follow the explicit same-scope configuration migration, preserving preset/custom-engine ownership and existing policies.
 
 For continuing steps with a committed managed route and no pending model change, known input pressure is reduced before Core opens the next model attempt. Successful native reduction avoids an unsampled local-pressure attempt that would make whole-turn Usage unavailable. First steps, pending selections, new fixed-prefix growth and final hard-budget refusals retain existing admission; this does not repair historical totals or invent missing usage.
+
+If compaction fails with `COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH`, the selected recovery engine supports explicit `/copilot-compact visible-history` for one lossy manual summary: old encrypted reasoning and its embedded summaries are omitted from outgoing Responses input, visible messages/tool pairs remain, and only the native transaction can commit a smaller checkpoint. Hidden context may be lost; ordinary and automatic compaction do not gain this consent. Background status exposes safe allowlisted failure reasons. Read [recovery consent and limits](./docs/manual-compaction-recovery.md#explicit-visible-history-summary-recovery) before invoking; installation alone neither selects the engine nor runs recovery.
 
 For exact verified `408 / user_request_timeout`, diagnostics describe bounded request composition and observable timing, not a proven payload limit or root cause. Image counts include native Responses tool outputs; older stored diagnostics may have counted those images as residual history. Bytes are not tokens; timing is not upload duration. Small, image-free requests can also time out. Follow [request-budget and timeout guidance](./docs/copilot-compaction.md); do not automatically trim history, disable proof, switch models or add retries.
 
@@ -247,14 +249,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.120/dsh-github-copilot-0.4.0-alpha.120.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.120/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.121/dsh-github-copilot-0.4.0-alpha.121.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.121/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.120.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.121.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { installReplayRecovery } from './replay-recovery-host.ts'
 import { installSessionContinuation } from './session-continuation-host.ts'
+import { installCompactionReplay } from './compaction-replay.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Config as PiAiConfig, PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
@@ -73,6 +74,7 @@ export interface GitHubCopilotPreview {
   getView(): GitHubCopilotPreviewView
   /** Synchronous, account-proven summary capacities for the initiating Agent; never triggers discovery. */
   recoveryLimits(modelId: string, agent?: Agent): {
+    readonly api: AccountModelDescriptor['api']
     readonly limits: Pick<AccountModelDescriptor, 'contextWindow' | 'maxInputTokens' | 'maxTokens'>
     readonly policy: Partial<RequestBudgetPolicy>
     readonly assertCurrent: () => void
@@ -866,6 +868,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
       const revision = lifetime.revision
       const proof = snapshotProof
       return Object.freeze({
+        api: descriptor.api,
         limits: Object.freeze({
           contextWindow: descriptor.contextWindow, maxTokens: descriptor.maxTokens,
           ...descriptor.maxInputTokens === undefined ? {} : { maxInputTokens: descriptor.maxInputTokens },
@@ -984,14 +987,15 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     return runtimeFor(binding).proof()
   })
   const continuation = installSessionContinuation(ctx)
+  const compactionReplay = installCompactionReplay(ctx)
   const replayRecovery: ReturnType<typeof installReplayRecovery> = {
     prepare(request) {
-      const portable = continuation.prepare(request)
+      const portable = compactionReplay.prepare(request) ?? continuation.prepare(request)
       const temporary = temporaryRecovery.prepare(request)
       if (!portable) return temporary
       return { transform: portable, rejected: body => temporary?.rejected(body) }
     },
-    dispose() { temporaryRecovery.dispose(); continuation.dispose() },
+    dispose() { temporaryRecovery.dispose(); continuation.dispose(); compactionReplay.dispose() },
   }
   const initial = directoryRuntime()
   const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],

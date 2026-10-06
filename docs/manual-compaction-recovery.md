@@ -28,6 +28,7 @@ With this engine selected and the public `commands` and `jobs` services availabl
 /copilot-compact
 /copilot-compact status
 /copilot-compact cancel
+/copilot-compact visible-history
 ```
 
 The jobs package is a development-only type dependency: the plugin imports no jobs runtime implementation, and the engine's public declaration does not expose its types. Runtime access is through the optionally injected Host service; no jobs package is bundled, installed as a new peer, or registered by this plugin.
@@ -35,6 +36,16 @@ The jobs package is a development-only type dependency: the plugin imports no jo
 The first command acknowledges **job admission**, not a completed summary. The existing native `/compact` command remains unchanged. Desktop rc.2 forwards unary command requests through Node `fetch`; a long synchronous compact can exceed the default 300-second response-header wait and lose its caller connection. The background command returns promptly and transfers work to a Session-owned native job with its own cancellation controller. A later HTTP disconnect does not cancel admitted work.
 
 Status and cancellation apply only to the invoking Agent's latest job. Duplicate starts return the current running job rather than starting another transaction. The selected engine still acquires Core's maintenance lock and owns the only native transaction; another active turn or compaction can cause the admitted job to fail. Job status distinguishes running, completed, failed and cancelled work. Failure details are sanitized; consult the native compaction/end record for the underlying summary/transaction diagnostic. Provider timeout, truncation, capacity and account-proof failures remain failures.
+
+### Explicit visible-history summary recovery
+
+For a verified `COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH`, repeating the same summary cannot repair supplier-scoped encrypted replay. `/copilot-compact visible-history` is explicit consent for **one lossy manual compaction operation**: its managed Responses summary requests omit historical encrypted reasoning items **and their embedded summaries**, while retaining visible messages, tool calls/results, the system head and native final directive. Hidden reasoning may contain details absent from visible messages. Review this loss before issuing the command. Ordinary `/compact`, `/copilot-compact`, automatic compaction and persistent chat continuation remain unchanged; enabling chat continuation alone does not authorize summary recovery.
+
+Consent is local to the native summarizer's exact cancellation signal, Session and summary model, including its bounded segments. It is revoked on completion, failure, cancellation or teardown. No unrelated request, subsequent command or automatic retry inherits it. Unknown or incomplete reasoning fails closed. No replay is decrypted, fabricated or written back; original source events remain unchanged and only Core can commit the final smaller checkpoint. The command adds no retry or model/account switch, and does not repair supplier scope. Missing managed integration or an unsupported summary route fails explicitly.
+
+The original conservative input/segmentation estimate still includes native history before outgoing filtering. Giant indivisible units, fixed prefixes, bounded-work/call limits, truncation and failure to shrink can still prevent recovery. This command is not guaranteed to rescue every history, and summary calls may incur charges. Installation alone neither selects the engine nor runs this command.
+
+Background status now exposes only allowlisted fixed failure codes through bounded native Error cause chains, including replay-scope rejection; raw exception text, response bodies and history remain excluded. Unknown failures retain `COPILOT_BACKGROUND_COMPACTION_FAILED` with guidance to the native `compaction/end` record. An admission receipt is not success; check status and the native transaction.
 
 The plugin collects the job's native settlement with `jobs.wait`, so the ordinary job reporter does not wake the model or resume its Goal. It never calls followup or inject. Explicit cancellation, owner disposal and plugin/Host teardown cancel and drain the producer. Owner teardown can fail native maintenance before the job receives cancellation; that outcome remains failed rather than being relabeled successful or cancelled. Jobs are process-local: status does not survive a Host restart, and the plugin does not silently restart interrupted work. Durable Core compaction events remain the outcome evidence. Merely installing the main plugin does not select this engine or make this command available; missing commands/jobs services leave the background entry unavailable without changing ordinary compaction.
 

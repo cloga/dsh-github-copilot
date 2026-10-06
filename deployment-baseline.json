@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.120"
+    "version": "0.4.0-alpha.121"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -576,6 +576,8 @@
         {"file": "src/manual-compaction-recovery.ts", "marker": "maxCalls: failedAttempt ? 15 : 16"},
         {"file": "src/manual-compaction-recovery.ts", "marker": "COPILOT_MANUAL_RECOVERY_"},
         {"file": "src/background-compaction.ts", "marker": "copilot-compact"},
+        {"file": "src/compaction-replay.ts", "marker": "request.purpose !== 'compaction'"},
+        {"file": "src/background-compaction.ts", "marker": "visible-history"},
         {"file": "src/background-compaction.ts", "marker": "this.jobs.wait(jobId"},
         {"file": "src/preview-route.ts", "marker": "recoveryLimits(modelId)"},
         {"file": "docs/manual-compaction-recovery.md", "marker": "separately selected"}
@@ -585,6 +587,9 @@
         {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects an indivisible span before dispatch and leaves recovery to native failure handling"},
         {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects unmatched tool calls before dispatch instead of splitting a call and result"},
         {"file": "tests/background-compaction.spec.ts", "name": "acknowledges before completion and outlives a five-minute caller deadline"},
+        {"file": "tests/compaction-replay.spec.ts", "name": "authorizes only the exact manual summary operation and preserves visible tool content"},
+        {"file": "tests/background-compaction.spec.ts", "name": "reports only allowlisted causes through native error wrappers"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "recovers only an explicitly authorized manual job through one native transaction"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "commits beyond the carrier deadline without a model wakeup and keeps status owner-scoped"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "recovers oversized manual history with one native transaction and honest multi-call audit"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "defaults automatic oversized recovery on without a manual command, enabled=%s"},

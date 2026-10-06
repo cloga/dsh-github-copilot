@@ -45,6 +45,19 @@ This repository owns eleven narrow surfaces:
 10. Managed-route estimated input/output admission, optional exact-request pressure signalling through official compaction recovery, and supported low summary effort only when no effort is already resolved. See [compaction budgets](./docs/copilot-compaction.md). Preserve truthful capacities, requested output caps, native errors/replay and transaction ownership; no hidden history trimming, wire chunking, competing compaction service or automatic model switch. The separately selected, single-service [recovery engine](./docs/manual-compaction-recovery.md) defaults to automatic segmented recovery for known oversized summaries or one typed native capacity failure through the public subclass hook. Preserve `automaticRecovery: false`, native `auto: false`, scopes and custom engines; at most 16 physical calls including a failed first attempt, no recursive retry or 408/network/auth/quota fallback. Installation alone never selects or migrates an engine.
 11. Optional account quota reads and a session-scoped composer usage control through public credentials, strict Remotes and additive slots. Keep account billing-cycle credits separate from context tokens and session cost. Missing, pooled, legacy and stale data must retain their real semantics; never infer credits from token estimates or account deltas. A separate plugin-owned historical context projection may diagnose failed-zero readings, never filter shared native usage, replace Core's meter, infer current occupancy/percentages or rewrite history. See [quota boundaries](./docs/copilot-usage.md).
 
+## Explicit compaction replay consent (#349)
+
+`/copilot-compact visible-history` explicitly authorizes one lossy managed Responses
+summary operation through the separately selected recovery engine. Scope consent
+to the native summarizer signal, Session and account-proven model protocol; revoke
+on settlement/cancellation/teardown. Remove historical reasoning and its embedded
+summaries only from outgoing payloads, preserve visible tool relations and native
+source/transaction ownership, and fail explicitly for unsupported routes. Never
+inherit chat continuation consent or silently enable it for automatic compaction.
+Safe background diagnostics use bounded Error cause chains and fixed allowlisted
+codes, never raw errors. Installation alone neither selects nor invokes recovery.
+See `src/compaction-replay.ts` and `docs/manual-compaction-recovery.md` (#349).
+
 ## Approved multi-account ownership extension (#297)
 
 Identity presentation uses additive `ensureIdentity` Remotes, including explicit-Agent Session lookup. Keep `get` metadata-only; visible surfaces may ensure on their sixty-second cadence. Fresh ten-minute cache avoids requests, same-account consumers join a bounded flight, and failures cool down thirty seconds unless explicitly refreshed. Credential notifications revoke pending work even when token bytes are unchanged; no late cache publication. Quota may settle independently only with account-coherent metadata. Presentation cache never replaces fresh identity validation for switch, reauthorization or duplicate checks. Preserve strict sanitized diagnostics and Session/turn ownership (#309).

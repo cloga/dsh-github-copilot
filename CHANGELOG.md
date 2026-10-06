@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.121 (prepared)
+
+- Add explicit `/copilot-compact visible-history` consent for one lossy managed Responses summary operation after replay-scope rejection (#349). Preserve visible messages/tool pairs, native directive, route/cap, cancellation, source history and single transactional commit; no automatic retry, hidden settings change or live execution.
+- Show safe allowlisted background-compaction failure reasons through bounded native Error cause chains rather than only a generic failure. Unknown causes remain explicit and private.
+- Keep ordinary/manual/automatic compaction and chat continuation consent independent; installation alone neither selects an engine nor runs recovery.
+
 ## 0.4.0-alpha.120 (prepared)
 
 - Let explicitly account-bound model preparation, native dispatch and subsequent turn steps continue during global selector switching, fixing `COPILOT_ACCOUNTS_BUSY` from the overly broad acquisition fence (#344).

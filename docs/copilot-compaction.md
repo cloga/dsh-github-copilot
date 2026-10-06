@@ -60,6 +60,15 @@ This fixes scope wiring, not a new automatic command: native pressure and `agent
 
 ## Summary purpose policy
 
+Replay-scope rejection is not input overflow: a smaller summary request can still
+carry old encrypted reasoning that the supplier refuses. Ordinary and automatic
+compaction never inherit chat continuation consent. The selected recovery engine's
+explicit `/copilot-compact visible-history` authorizes one lossy Responses summary
+operation, with safe failure-code reporting and unchanged native transaction
+ownership. Review [consent and bounded limitations](./manual-compaction-recovery.md#explicit-visible-history-summary-recovery)
+before invoking. This does not decrypt or repair replay, rewrite source history,
+retry a failed message or guarantee capacity recovery.
+
 Official `GenerateOptions.purpose` permits adapter-specific generation policy. For `purpose: 'compaction'`, `prefer-low` selects supported `minimal`, otherwise supported `low`, only when no effort was supplied or materialized by Core/the configured native profile. Explicit and resolved defaults win; unsupported low controls preserve the provider default. `preserve` disables this purpose default. Normal conversations and other purposes keep their existing reasoning behavior.
 
 The stock summary record takes its requested output cap from the owning compaction configuration. Therefore the plugin does not silently increase/decrease that cap in middleware or alter summary route identity. It preserves native `max-tokens` output truncation as failure, distinct from input overflow. Public summaries, encrypted replay and native stop reasons remain native-owned.

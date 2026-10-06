@@ -112,6 +112,7 @@ function response(tool = false, phase?: 'commentary' | 'final_answer', text = 'h
 async function call(ctx: Context, options: Partial<GenerateOptions> = {}) {
   const model = options.model ?? MODEL
   const prepared = await ctx.llm.prepareCall({ provider: PREVIEW, model,
+    ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
     ...options.reasoningEffort === undefined ? {} : { reasoningEffort: options.reasoningEffort } })
   const assembler = new BlockAssembler()
   const input: GenerateOptions = { ...prepared.config,
@@ -1624,6 +1625,46 @@ describe('plugin-owned account Copilot route', () => {
     expect(paths.filter(path => path === '/copilot_internal/v2/token')).toHaveLength(1)
     expect(paths.filter(path => path === '/responses')).toHaveLength(2)
     expect(harness.modify).toHaveBeenCalledTimes(1)
+  })
+
+  it('recovers a summary replay rejection only with operation-scoped explicit authorization', async () => {
+    const bodies: Array<{ input: Record<string, unknown>[]; max_output_tokens?: number }> = []
+    stubFetch(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as typeof bodies[number]
+      bodies.push(body)
+      if (body.input.some(item => typeof item.encrypted_content === 'string')) {
+        return new Response(JSON.stringify({ error: { message: replayScopeMessages[0] } }), { status: 401 })
+      }
+      return response(bodies.length === 1)
+    })
+    const harness = await runtime()
+    const first = await call(harness.ctx)
+    const tool = first.message.content.find(block => block.type === 'tool-call')!
+    if (tool.type !== 'tool-call') throw new Error('expected native tool call')
+    const messages: Message[] = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Summarize.' }] }), first.message, {
+      id: 'summary-tool' as Message['id'], role: 'tool', source: { kind: 'tool', callId: tool.id },
+      toolCallId: tool.id, content: [{ type: 'text', text: 'visible result' }], isError: false,
+    }]
+    const source = JSON.stringify(messages)
+    const sessionId = 'summary-replay' as NonNullable<GenerateOptions['sessionId']>
+    const signal = new AbortController().signal
+    const options: Partial<GenerateOptions> = { purpose: 'compaction', signal, sessionId, messages, maxTokens: 4096 }
+    const rejected = await call(harness.ctx, options)
+    expect(rejected.assembler.finish).toMatchObject({ kind: 'error',
+      failure: { message: expect.stringContaining('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH') } })
+    await harness.ctx.githubCopilotCompactionReplay.run(sessionId, MODEL, signal, async () => {
+      const recovered = await call(harness.ctx, options)
+      expect(recovered.assembler.finish).toEqual({ kind: 'stop' })
+      expect(bodies.at(-1)!.input.some(item => item.type === 'reasoning')).toBe(false)
+      expect(bodies.at(-1)!.input.some(item => item.type === 'function_call')).toBe(true)
+      expect(bodies.at(-1)!.input.some(item => item.type === 'function_call_output')).toBe(true)
+      expect(bodies.at(-1)!.max_output_tokens).toBe(4096)
+    })
+    const unchanged = await call(harness.ctx, options)
+    expect(unchanged.assembler.finish).toMatchObject({ kind: 'error' })
+    expect(JSON.stringify(messages)).toBe(source)
+    expect(harness.modify).not.toHaveBeenCalled()
+    expect(bodies).toHaveLength(4)
   })
 
   it('filters persistent Session consent through the published adapter on successive turns without history writes', async () => {
