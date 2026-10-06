@@ -156,7 +156,7 @@ describe('managed request-body timeout guidance', () => {
   })
 
   it('does not let compressed wire bytes bypass native hard context admission', async () => {
-    const fetch = vi.fn(async () => response())
+    const fetch = vi.fn(async (_input: unknown, _init?: RequestInit) => response())
     const limited = catalogItem(MODEL, '/responses', { capabilities: {
       supports: { streaming: true, tool_calls: true, vision: true, reasoning_effort: ['low', 'medium', 'high', 'xhigh', 'max'] },
       limits: { max_context_window_tokens: 64_000, max_prompt_tokens: 32_000, max_output_tokens: 8_192 },
