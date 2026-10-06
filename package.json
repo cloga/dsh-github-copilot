@@ -69,7 +69,6 @@
     "docs/copilot-accounts.md",
     "docs/session-continuation.md",
     "docs/account-management-experience.md",
-    "docs/current-client-provenance.json",
     "docs/mockups/copilot-account-management.html",
     "docs/mockups/copilot-account-dropdown.html",
     "docs/automatic-model-routing.md",

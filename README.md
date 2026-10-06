@@ -68,7 +68,7 @@ Current alpha.130 built Client components in an isolated browser, with synthetic
 
 ![Session account selection and account-wide quota in Credits](./docs/images/copilot-accounts-credits.png)
 
-These captures use the same current built components and synthetic identities/quota. Models changes the global default; Credits changes only this Session's subsequent turns. They do not show real accounts or billing data. [Capture provenance](./docs/current-client-provenance.json).
+These captures use the same current built components and synthetic identities/quota. Models changes the global default; Credits changes only this Session's subsequent turns. They do not show real accounts or billing data. [Capture provenance](./docs/images/copilot-current-provenance.json) accompanies the images.
 
 ## Install and sign in
 

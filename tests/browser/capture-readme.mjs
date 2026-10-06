@@ -80,7 +80,7 @@ try {
   const provenance = {
     clientVersion: pkg.version,
     sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-    source: 'Local pnpm build from the unchanged current release source; not extracted published archive bytes',
+    source: 'Local pnpm build from the unchanged current release source; not extracted published archive bytes. Provenance accompanies packaged image assets.',
     builtClientSha256: hash(await readFile(resolve(root, 'lib/client.js'))),
     synthetic: true,
     fixture: 'tests/browser/readme.html',
@@ -96,6 +96,6 @@ try {
       horizontalOverflow: false, pageErrors: errors, externalRequests: false },
     limits: 'Actual current built Client components with synthetic settings, identities, models and quota. No live OAuth, model availability, search, billing, collection, persistence or loaded Desktop proof. Credits captures only the usage/account component, not its parent-owned continuation disclosure. Desktop images are committed; narrow/light states were checked for overflow and menu dismissal, not native Desktop integration.',
   }
-  await writeFile(resolve(root, 'docs/current-client-provenance.json'), JSON.stringify(provenance, null, 2) + '\n')
+  await writeFile(resolve(root, 'docs/images/copilot-current-provenance.json'), JSON.stringify(provenance, null, 2) + '\n')
   console.log('Captured four current-component images; desktop/narrow, dark/light checks passed.')
 } finally { await browser.close() }

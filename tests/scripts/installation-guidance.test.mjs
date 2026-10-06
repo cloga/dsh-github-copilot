@@ -56,7 +56,7 @@ test('current user guides retain task-oriented entry points and honest screensho
     assert.ok(text.includes('./CHANGELOG.md'), path)
     assert.ok(text.includes('./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics'), path)
   }
-  const provenance = JSON.parse(await doc('docs/current-client-provenance.json'))
+  const provenance = JSON.parse(await doc('docs/images/copilot-current-provenance.json'))
   assert.equal(provenance.synthetic, true)
   assert.equal(provenance.capture.externalRequests, false)
   assert.deepEqual(provenance.capture.pageErrors, [])
@@ -69,14 +69,13 @@ test('current user guides retain task-oriented entry points and honest screensho
 
 test('current screenshot provenance covers every packaged README capture', async () => {
   const pkg = JSON.parse(await doc('package.json'))
-  const provenance = JSON.parse(await doc('docs/current-client-provenance.json'))
+  const provenance = JSON.parse(await doc('docs/images/copilot-current-provenance.json'))
   assert.match(provenance.clientVersion, /^\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/)
   assert.match(provenance.sourceCommit, /^[a-f0-9]{40}$/)
   assert.match(provenance.builtClientSha256, /^[a-f0-9]{64}$/)
   assert.match(provenance.source, /Local pnpm build/)
   assert.doesNotMatch(provenance.source, /Actual published archive/)
   assert.ok(pkg.files.includes('docs/images/'))
-  assert.ok(pkg.files.includes('docs/current-client-provenance.json'))
   assert.deepEqual(provenance.capture.viewports, [920, 375])
   assert.deepEqual(provenance.capture.themes, ['dark', 'light'])
   assert.equal(provenance.capture.horizontalOverflow, false)
@@ -102,7 +101,7 @@ test('README contracts stay bilingual, current and separate native summary route
       'High cost', 'autoSemanticAssessment: false', 'automaticRecovery: false',
       'auto: false', '--mode persisted-unit', '--mode reviewed-view', '--profile-name',
       './docs/dual-model.md', './docs/session-continuation.md',
-      './docs/current-client-provenance.json']) assert.ok(text.includes(marker), marker)
+      './docs/images/copilot-current-provenance.json']) assert.ok(text.includes(marker), marker)
     assert.doesNotMatch(text, /prepared.*0\.4\.0-alpha\.130|0\.4\.0-alpha\.88/i)
   }
   assert.match(texts[0], /finite continuity bonus/)

@@ -1,7 +1,7 @@
 {
   "clientVersion": "0.4.0-alpha.130",
   "sourceCommit": "eb49c0c49933406d29d560e88c66469bae25e1b3",
-  "source": "Local pnpm build from the unchanged current release source; not extracted published archive bytes",
+  "source": "Local pnpm build from the unchanged current release source; not extracted published archive bytes. Provenance accompanies packaged image assets.",
   "builtClientSha256": "fc2c3b9a237bbb8e7f58f83152f76bd958d645e8258d6370c1320dcf8441cdf0",
   "synthetic": true,
   "fixture": "tests/browser/readme.html",

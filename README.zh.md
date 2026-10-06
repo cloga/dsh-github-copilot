@@ -59,7 +59,7 @@ node scripts/analyze-diagnostics.mjs --input "ABSOLUTE_UNIT_FILE.json" --mode pe
 
 ![Credits 中的会话账号选择与账号周期额度](./docs/images/copilot-accounts-credits.png)
 
-这两张截图使用相同的当前构建组件及模拟身份／额度。Models 更改全局默认，Credits 仅更改本 Session 后续 turn 的账号；不包含真实账号或账单数据。参见[截图来源](./docs/current-client-provenance.json)。
+这两张截图使用相同的当前构建组件及模拟身份／额度。Models 更改全局默认，Credits 仅更改本 Session 后续 turn 的账号；不包含真实账号或账单数据。[截图来源](./docs/images/copilot-current-provenance.json)随图片一同分发。
 
 ## 安装与登录
 
