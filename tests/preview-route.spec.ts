@@ -157,15 +157,20 @@ describe('managed request-body timeout guidance', () => {
 
   it('does not let compressed wire bytes bypass native hard context admission', async () => {
     const fetch = vi.fn(async () => response())
-    stubFetch(fetch)
+    const limited = catalogItem(MODEL, '/responses', { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: true, reasoning_effort: ['low', 'medium', 'high', 'xhigh', 'max'] },
+      limits: { max_context_window_tokens: 64_000, max_prompt_tokens: 32_000, max_output_tokens: 8_192 },
+    } })
+    stubFetch(async (input, init) => String(input).endsWith('/models')
+      ? catalogResponse([limited]) : fetch(input, init), true)
     const harness = await runtime(grant(), {
       chatRequestSettings: () => ({ responsesRequestCompression: true }),
     })
     const message = createUserMessage({
-      content: [{ type: 'text', text: 'synthetic oversized context '.repeat(80_000) }],
+      content: [{ type: 'text', text: 'x'.repeat(300_000) }],
       source: { kind: 'user' },
     })
-    const result = await call(harness.ctx, { messages: [message] })
+    const result = await call(harness.ctx, { messages: [message], maxTokens: 8_192 })
     expect(result.assembler.finish).toMatchObject({
       kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED' },
     })
