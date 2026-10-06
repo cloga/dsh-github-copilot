@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.129
+
+- Keep ordinary post-compaction steps and requests without a fresh usage sample quiet instead of repeatedly showing context-sampling uncertainty (#367).
+- Notify only for a concrete failed-zero or invalid-sample incident. Bind dismissal to the Session and incident across ordinary remounts/switches; a later applicable valid sample clears the incident and a newer incident can notify.
+- Preserve the existing eight-second native-confirmed compaction result, historical-count labeling, unknown-evidence diagnostics, native usage/context meters and Core-owned compaction/accounting without replacement percentages, retries or live installation.
+
 ## 0.4.0-alpha.128
 
 - Separate native compaction commit, subsequent ordinary-request outcome and applicable historical input sampling in one composer disclosure (#364).

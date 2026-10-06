@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.128"
+    "version": "0.4.0-alpha.129"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -406,7 +406,7 @@
         {"file": "src/index.ts", "marker": "installContextEvidence(ctx)"},
         {"file": "src/client.ts", "marker": "registerContextEvidenceUi"},
         {"file": "src/context-evidence.ts", "marker": "githubCopilotContextEvidence"},
-        {"file": "src/context-evidence-ui.ts", "marker": "conversation.input.dock"},
+        {"file": "src/context-evidence-ui.ts", "marker": "ContextIncidentPresentation"},
         {"file": "src/replay-recovery-ui.ts", "marker": "conversation.input.dock"},
         {"file": "src/composer-notice-style.ts", "marker": "var(--dsh-content-font-size-secondary, 13px)"},
         {"file": "docs/copilot-usage.md", "marker": "historical input sample, not current occupancy"}
@@ -416,7 +416,10 @@
         {"file": "tests/context-evidence.spec.ts", "name": "replays failed zero samples without discarding the last valid input sample"},
         {"file": "tests/context-evidence.spec.ts", "name": "separates committed compaction, subsequent request success and applicable input sampling"},
         {"file": "tests/context-evidence.spec.ts", "name": "tracks unchanged-header native steps and reads only the settled message source leaves"},
+        {"file": "tests/context-evidence.spec.ts", "name": "keeps ordinary repeated steps and unsampled success quiet after compaction"},
         {"file": "tests/context-evidence-ui.spec.ts", "name": "labels counts as historical rather than current occupancy in %s"},
+        {"file": "tests/context-evidence-ui.spec.ts", "name": "reacts to only the current open Session and pending selection, preserving the native meter"},
+        {"file": "tests/context-evidence-ui.spec.ts", "name": "keeps unknown projection evidence diagnostic-only"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "uses native auxiliary typography for the entire notice and inherited controls in an independent dock row"},
         {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "cold-folds native model selections independently without replacing the controller projection"},
         {"file": "tests/preview-route.spec.ts", "name": "forwards native SDK failed zero usage without changing the shared accounting stream"},

@@ -20,7 +20,8 @@ describe('separate bounded historical context evidence', () => {
     let state = compact()
     expect(state.compaction).toMatchObject({ id: 'compact', state: 'completed', request: 'idle', endSeq: 5 })
     expect(state.sample).toBeNull()
-    expect(state.invalid).toBe(true)
+    expect(state.invalid).toBe(false)
+    expect(state.incident).toBeNull()
     state = fold(state, { seq: 6, type: 'step/start', data: { turn: 1, step: 1 } })
     state = fold(state, { ...header(), seq: 7 })
     state = fold(state, { ...usage(0), seq: 8, data: { turn: 1, step: 1, source: route, stream: [
@@ -28,6 +29,7 @@ describe('separate bounded historical context evidence', () => {
     ] } })
     expect(state.compaction?.request).toBe('succeeded')
     expect(state.sample).toBeNull()
+    expect(state.incident).toBeNull()
     state = fold(state, { seq: 9, type: 'step/start', data: { turn: 1, step: 1 } })
     state = fold(state, { ...header(), seq: 10 })
     state = fold(state, usage(40, 'assistant/message', 'stop', 11))
@@ -39,12 +41,14 @@ describe('separate bounded historical context evidence', () => {
     expect(state.compaction?.request).toBe('failed')
     expect(state.invalid).toBe(true)
     expect(state.sample?.tokens).toBe(40)
+    expect(state.incident).toEqual({ kind: 'failed-zero', seq: 14 })
     state = fold(state, { seq: 15, type: 'step/start', data: { turn: 1, step: 1 } })
     state = fold(state, { seq: 16, type: 'assistant/message', data: { turn: 1, step: 1, source: route,
       stream: [{ type: 'chunk', chunk: { type: 'finish', reason: { kind: 'stop' } } }] } })
     expect(state.compaction?.request).toBe('succeeded')
     expect(state.invalid).toBe(true)
     expect(state.sample?.tokens).toBe(40)
+    expect(state.incident).toEqual({ kind: 'failed-zero', seq: 14 })
   })
   it('requires matching native checkpoint and settlement before claiming compaction completed', () => {
     const start = fold(initial(), { seq: 1, type: 'compaction/start', data: { compactionId: 'c' } })
@@ -74,6 +78,7 @@ describe('separate bounded historical context evidence', () => {
     const state = [header(), sample, usage(0, 'assistant/attempt', 'error', 3), usage(0, 'assistant/attempt', 'aborted', 4)].reduce(fold, initial())
     expect(state.invalid).toBe(true)
     expect(state.sample).toEqual({ tokens: 671_709, seq: 2, route })
+    expect(state.incident).toEqual({ kind: 'failed-zero', seq: 4 })
     expect(ContextEvidenceSchema.parse(JSON.parse(JSON.stringify(state)))).toEqual(state)
     expect(contextEvidenceDefinition.key).not.toBe('contextPressure')
   })
@@ -87,13 +92,29 @@ describe('separate bounded historical context evidence', () => {
     state = fold(state, usage(30, 'assistant/attempt', 'error'))
     expect(state.invalid).toBe(false)
     expect(state.sample?.tokens).toBe(30)
+    expect(state.incident).toBeNull()
+  })
+  it('keeps ordinary repeated steps and unsampled success quiet after compaction', () => {
+    let state = compact()
+    for (let step = 1; step <= 3; step++) {
+      state = fold(state, { seq: 5 + step * 2, type: 'step/start', data: { turn: 2, step } })
+      state = fold(state, {
+        seq: 6 + step * 2, type: 'assistant/message',
+        data: { turn: 2, step, message: { source: route },
+          stream: [{ type: 'chunk', chunk: { type: 'finish', reason: { kind: 'stop' } } }] },
+      })
+      expect(state.compaction?.request).toBe('succeeded')
+      expect(state.invalid).toBe(false)
+      expect(state.incident).toBeNull()
+    }
   })
   it.each(['compaction/start', 'compaction/summary', 'compaction/end'])('revokes historical counts on %s', type => {
     let state = [header(), usage(20), usage(0, 'assistant/attempt', 'error')].reduce(fold, initial())
     state = fold(state, { seq: 4, type, data: {} })
     expect(state.sample).toBeNull()
-    expect(state.invalid).toBe(true)
+    expect(state.invalid).toBe(false)
     expect(state.reason).toBe('compaction')
+    expect(state.incident).toBeNull()
   })
   it('revokes samples on model changes and never borrows another provider', () => {
     let state = [header(), usage(20)].reduce(fold, initial())
@@ -139,8 +160,11 @@ describe('separate bounded historical context evidence', () => {
   it('rejects invalid and overflowing counts instead of guessing', () => {
     let state = fold(initial(), header())
     state = fold(state, usage(-1))
-    expect(state.reason).toBe('unknown')
+    expect(state.reason).toBe('invalid-sample')
     expect(state.invalid).toBe(true)
+    expect(state.incident).toEqual({ kind: 'invalid-sample', seq: 2 })
+    state = fold(fold(initial(), header()), { ...usage(20), seq: -1 })
+    expect(state).toMatchObject({ sample: null, invalid: true, reason: 'unknown', incident: null })
     expect(ContextEvidenceSchema.safeParse({ ...state, secret: 'synthetic' }).success).toBe(false)
   })
   it('revokes samples on native surface replacements but not ordinary appends', () => {
@@ -149,10 +173,14 @@ describe('separate bounded historical context evidence', () => {
     const replaced = fold(state, { seq: 4, type: 'user/message', surfaceOp: { replace: [2] }, data: {} })
     expect(replaced.sample).toBeNull()
     expect(replaced.reason).toBe('compaction')
+    expect(replaced.invalid).toBe(false)
   })
   it('does not attribute a conflicting settled source to the last header', () => {
     const event = { ...usage(20), data: { ...usage(20).data, source: { provider: 'other', model: 'other' } } }
-    expect(fold(fold(initial(), header()), event)).toMatchObject({ sample: null, invalid: true, reason: 'unknown' })
+    expect(fold(fold(initial(), header()), event)).toMatchObject({
+      sample: null, invalid: true, reason: 'invalid-sample',
+      incident: { kind: 'invalid-sample', seq: 2 },
+    })
   })
   it('uses the last stream sample and preserves settled message-level precedence', () => {
     const event = usage(20)

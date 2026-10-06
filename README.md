@@ -27,7 +27,7 @@ Visible Models and Credits resolve missing names for saved accounts without acti
 
 Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
 
-**Package version: `0.4.0-alpha.128` (prepared). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. Verify the published Release and assets before using the versioned commands below; these instructions do not prove publication or installation.
+**Package version: `0.4.0-alpha.129` (prepared). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. Verify the published Release and assets before using the versioned commands below; these instructions do not prove publication or installation.
 
 ## What you can do
 
@@ -93,10 +93,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.128/dsh-github-copilot-0.4.0-alpha.128.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.129/dsh-github-copilot-0.4.0-alpha.129.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.128` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.129` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -165,7 +165,7 @@ canonical inline path; it is not a third routed fallback. Fetch is unchanged.
 
 **Credits** shows validated account billing-cycle data, not context tokens or Session cost. Stale, pooled and unavailable readings keep their real meanings. The quota request alone uses Node plus system CA roots with TLS verification enabled; it does not change trust for sign-in, models, search or Desktop globally.
 
-Native context occupancy and Turn Usage remain Core-owned. The plugin forwards usage unchanged, including zero samples on failure/cancellation. Its separate context disclosure reports historical evidence, never current occupancy or a replacement `0%` meter. **Turn Usage incomplete** explains missing samples/lifecycle and recorded local blocks; it invents neither zero usage nor partial totals. Cancellation can retain usage, but does not guarantee a final supplier receipt. [Usage boundaries](./docs/copilot-usage.md).
+Native context occupancy and Turn Usage remain Core-owned. The plugin forwards usage unchanged, including zero samples on failure/cancellation. Ordinary in-progress requests and missing new samples stay quiet; only a concrete failed-zero or invalid-sample incident opens the separate, dismissible context warning. Any retained count is labeled historical evidence, never current occupancy or a replacement percentage. **Turn Usage incomplete** explains missing samples/lifecycle and recorded local blocks; it invents neither zero usage nor partial totals. Cancellation can retain usage, but does not guarantee a final supplier receipt. [Usage boundaries](./docs/copilot-usage.md).
 
 Owned timeout/replay errors preserve native usage before terminal failure restoration, including nonzero samples. A failed zero can still make the native ring show `0%`; this is not proof of an empty request. Retry-entry times describe backoff, not the failed request's duration. These accounting fixes do not cure supplier HTTP 408 or change retry policy.
 
@@ -177,7 +177,7 @@ For continuing steps with a committed managed route and no pending model change,
 
 **Visible-history continuation also covers this Session's native managed Responses compaction**, including automatic summaries: no extra manual recovery command or failure-first retry is required when enabled. Old encrypted reasoning and embedded summaries are omitted from outgoing input; hidden context may be lost. Visible messages/tool pairs and source history remain intact, and only the native transaction commits a smaller checkpoint. A composer notice identifies degradation and distinguishes committed, failed and cancelled outcomes. When off, an exact replay-scope rejection offers the same loss-disclosed enable control; unknown failures do not authorize loss. `/copilot-compact visible-history` remains a one-time alternative through the selected recovery engine. Read [recovery consent and limits](./docs/manual-compaction-recovery.md#explicit-visible-history-summary-recovery); this does not enable an absent engine or repair capacity, quota or timeout failures.
 
-Compaction feedback separates **compaction completed**, **subsequent request succeeded** and **applicable input sampling** in one composer disclosure. A native `0%` is not proof of empty context; even a successful subsequent request with a valid historical input sample does not establish exact current occupancy. The plugin sends no extra test request, adds no retry and leaves the native context ring, Usage accounting and expandable compaction history unchanged. See [context evidence](./docs/copilot-usage.md#historical-context-evidence).
+Compaction feedback separates **compaction completed** and **subsequent request succeeded** during the existing eight-second result window. It does not turn ordinary request progress or absence of a fresh sample into a persistent composer warning. A later concrete sampling incident can appear independently and may include a labeled historical count, but never an occupancy percentage. The plugin sends no extra test request, adds no retry and leaves the native context ring, Usage accounting and expandable compaction history unchanged. See [context evidence](./docs/copilot-usage.md#historical-context-evidence).
 
 Running visible-history compaction notices stay visible. Confirmed success disappears eight seconds after first observation; settled failures, cancellation, unavailable status and enable prompts stay until **Close** (or the existing **Cancel**). Closing only hides this Session/operation/status notice, never changes consent, history or native proof, and never sends or retries. A bounded Client registration retains expiry/dismissal across incidental remounts and Session switches, not across teardown or eviction.
 
@@ -229,7 +229,7 @@ The Credits account panel shows the current account and **Switch**. Its dropdown
 
 [Visible-history continuation](./docs/session-continuation.md) is configured beside account switching, not permanently above the composer. New unseeded Sessions default on after the feature's first successful activation; existing Sessions and inherited histories remain off unless explicitly authorized. Global defaults affect new Sessions only; Session on/off overrides persist across accounts/restarts until disabled. With continuation off, a different-account switch offers persistent enable, keep off or cancel, without a one-turn mode. Each new enabled turn omits prior encrypted reasoning and embedded summaries, even on the same account; current-turn reasoning, visible messages, tools and disk history remain unchanged. Authorization never auto-sends/retries and is not a quota/context cure. Exact replay failures expose the same policy and require a separate native retry. The pinned Core lacks a public Models deep link; Chat omits the nonfunctional management entry. Full management remains in Settings → Models → GitHub Copilot → Manage.
 
-Context evidence and Replay recovery use compact, centered notices bounded by the native composer width. Model/item counts and status refresh live in collapsed technical details; loss consent remains explicit. The context notice explains that native 0% does not establish an empty context; native statistics stay unchanged. Switching accounts does not make old encrypted reasoning portable. The concise scope error points to explicit recovery or a new conversation; bounded, sanitized dispatch counts stay in Host diagnostics, not the main error. **Authorized** means permission is ready, not that a message was sent or recovery succeeded.
+Context evidence and Replay recovery use compact, centered notices bounded by the native composer width. Model/item counts and status refresh live in collapsed technical details; loss consent remains explicit. Context sampling warns only for a concrete incident, can be dismissed for that Session/incident, and never asserts the native meter's current value; native statistics stay unchanged. Switching accounts does not make old encrypted reasoning portable. The concise scope error points to explicit recovery or a new conversation; bounded, sanitized dispatch counts stay in Host diagnostics, not the main error. **Authorized** means permission is ready, not that a message was sent or recovery succeeded.
 
 ## Ownership and further reading
 
@@ -269,14 +269,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.128/dsh-github-copilot-0.4.0-alpha.128.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.128/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.129/dsh-github-copilot-0.4.0-alpha.129.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.129/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.128.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.129.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
