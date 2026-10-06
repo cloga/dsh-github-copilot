@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.130 (prepared)
+
+- Add explicit offline analysis for a caller-selected persisted diagnostics unit or reviewed aggregate view (#368). Bound reads, reject unsafe/changed inputs, and write strict reports only to a new explicitly selected local file.
+- Keep version, Client/Host, operation, terminal outcome and duration populations distinct. Preserve overflow and collection gaps; do not infer failure rates, live pending state, root cause or improvement from unmatched or persisted-only evidence.
+- Synthetic tests cover read safety and report semantics; the first descriptive report remains private local evidence. No live profile read, collection change, upload, schedule, install or restart is part of release validation.
+
 ## 0.4.0-alpha.129
 
 - Keep ordinary post-compaction steps and requests without a fresh usage sample quiet instead of repeatedly showing context-sampling uncertainty (#367).
