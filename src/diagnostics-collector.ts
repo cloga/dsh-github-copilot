@@ -38,14 +38,24 @@ export class DiagnosticsCollector {
   }
   setEnabled(enabled: boolean): void {
     if (enabled === this.enabled) return
+    if (enabled) this.assertCanEnable()
     if (this.enabled && !enabled) {
       for (const live of this.live) this.settle(live, 'interrupted', 'unknown')
       this.add('collection', 'admitted', 'paused', 'none', 0)
     }
-    if (this.data.epoch >= Number.MAX_SAFE_INTEGER) throw new Error('COPILOT_DIAGNOSTICS_EPOCH_LIMIT')
+    if (this.data.epoch >= Number.MAX_SAFE_INTEGER) {
+      this.enabled = false
+      this.increment('saturated')
+      this.changed()
+      return
+    }
     this.data.epoch++
     this.enabled = enabled
     this.changed()
+  }
+  assertCanEnable(): void {
+    if (!this.enabled && this.data.epoch >= Number.MAX_SAFE_INTEGER)
+      throw new Error('COPILOT_DIAGNOSTICS_EPOCH_LIMIT')
   }
   clear(): void {
     const epoch = this.data.epoch + 1

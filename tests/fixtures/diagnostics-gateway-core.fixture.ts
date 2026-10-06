@@ -101,6 +101,11 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     expect(rows.some(row => row.metric === 'no-op')).toBe(false)
     expect(JSON.stringify(diagnostics.get())).not.toContain('synthetic-sensitive-error')
     await expect(remote.setEnabled(false)).resolves.toMatchObject({ ok: true, value: { enabled: false } })
+    diagnostics.collector.restore({ ...diagnostics.get().snapshot, epoch: Number.MAX_SAFE_INTEGER })
+    const beforeLimit = revision
+    await expect(remote.setEnabled(true)).resolves.toMatchObject({ ok: false })
+    expect(revision).toBe(beforeLimit)
+    expect(enabled).toBe(false)
   } finally {
     await client.fiber.dispose()
     await host.fiber.dispose()

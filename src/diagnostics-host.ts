@@ -167,6 +167,7 @@ export class DiagnosticsController extends TypertRemoteService {
     if (typeof enabled !== 'boolean') throw new Error('COPILOT_DIAGNOSTICS_INVALID_CONTROL')
     if (this.settingsBusy) throw new Error('COPILOT_DIAGNOSTICS_CONTROL_BUSY')
     if (enabled && !this.domain) throw new Error('COPILOT_DIAGNOSTICS_STORAGE_UNAVAILABLE')
+    if (enabled) this.collector.assertCanEnable()
     this.settingsBusy = true
     try {
       const settings = this.ctx.get('settings')

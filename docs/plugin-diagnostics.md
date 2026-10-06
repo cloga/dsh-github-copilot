@@ -63,6 +63,8 @@ attributed to their starting build, not resumable work. Client pending samples
 are historical periodic samples, **not** an outstanding-operation gauge.
 Clear/pause/enable epoch fences prevent late accepted reports or handles from
 restoring pre-control evidence.
+Epoch exhaustion blocks enabling explicitly; pause/close still stop collection
+and record saturation even when the fence cannot advance.
 
 `dirty` and `persistedAt` distinguish in-memory from confirmed persistence.
 Missing backend/profile, corruption and failed writes remain named unavailable
