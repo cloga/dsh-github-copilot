@@ -38,6 +38,8 @@ export interface InlineConfig {
   chatStreamLiveness?: boolean
   /** Native request image projection budget; changing it can offload older images. */
   chatMaxRequestImageBytes?: number
+  /** Default-off lossless gzip for eligible managed Responses HTTP requests. */
+  responsesRequestCompression?: boolean
   /** Verify the endpoint executes native search before serving. */
   probe: boolean
   /** Bound on one probe request, in milliseconds. */
@@ -159,6 +161,7 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   chatStreamIdleTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(300_000),
   chatStreamLiveness: z.boolean().default(true),
   chatMaxRequestImageBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(20_971_520),
+  responsesRequestCompression: z.boolean().default(false),
   probe: z.boolean().default(true),
   probeTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(30_000),
   accountModelTtlMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(86_400_000),
