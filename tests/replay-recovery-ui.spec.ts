@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, createElement } from 'react'
+import type { ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Context } from '@deepseek-ai/cordis'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -24,6 +25,43 @@ it('registers recovery only in the public full-width Session input dock', () => 
     { name: 'conversation.input.dock', id: 'github-copilot-replay-recovery', order: 30 }, expect.any(Function))
   cleanup()
   expect(dispose).toHaveBeenCalledOnce()
+})
+it('retains compaction success expiry in the real slot registration across surface remounts', async () => {
+  vi.useFakeTimers()
+  let surface!: (props: Record<string, unknown>) => ReactElement | null
+  const slots = {
+    spec: () => ({ kind: 'list', scope: 'session' }),
+    inject: (_name: string, activate: () => () => void) => activate(),
+    register: (_options: unknown, component: typeof surface) => { surface = component; return vi.fn() },
+  }
+  const continuation = { get: vi.fn(async () => ({ ok: true, value: {
+    enabled: true, revision: 1, compaction: { id: 'compaction', state: 'completed' },
+  } })), set: vi.fn() }
+  const ctx = { get: (name: string) => name === 'slots' ? slots : undefined, logger: { warn: vi.fn() },
+    remote: { githubCopilotReplayRecovery: { get: async () => ({ ok: true, value: { state: 'unavailable' } }) },
+      githubCopilotSessionContinuation: continuation } }
+  const cleanup = registerReplayRecoveryUi(ctx as unknown as Context)
+  const node = document.createElement('div'); document.body.append(node)
+  const root = createRoot(node)
+  const runtime = {
+    sessionId: 'viewed',
+    useSession: (selector: (snapshot: unknown) => unknown) => selector({
+      sessionId: 'viewed', removed: false, openState: 'open', running: false,
+    }),
+    useProjection: (key: string) => key === 'modelSelection'
+      ? { next: { provider: 'github-copilot-preview', model: 'synthetic' } }
+      : { id: 'compaction', running: false },
+  }
+  try {
+    await act(async () => root.render(surface(runtime)))
+    expect(node.textContent).toContain('compaction committed')
+    await act(async () => root.render(null))
+    expect(vi.getTimerCount()).toBe(0)
+    await act(async () => vi.advanceTimersByTimeAsync(8000))
+    await act(async () => root.render(surface(runtime)))
+    expect(node.textContent).toBe('')
+    expect(continuation.set).not.toHaveBeenCalled()
+  } finally { await act(async () => root.unmount()); cleanup(); node.remove() }
 })
 function fixture(value: unknown = available) {
   let policy = { enabled: false, source: 'session', revision: 1, nextTurnAuthorized: false }

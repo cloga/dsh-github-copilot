@@ -44,6 +44,7 @@ function fixture(spec = { kind: 'list', scope: 'session' }) {
     enabled: true, revision: 1, compaction: { id: 'c', state: 'completed' },
   } })), set: vi.fn() }
   const ctx = {
+    remote: { githubCopilotSessionContinuation: continuation },
     get: (name: string): unknown => name === 'slots' ? ctx.slots
       : name === 'remote' ? { githubCopilotSessionContinuation: continuation } : undefined, logger: { warn: vi.fn() },
     slots: {
@@ -98,6 +99,7 @@ describe('additive historical context notice', () => {
     expect(view.container.textContent).not.toContain('input sample is recorded')
   })
   it('mounts one combined disclosure and reads native commit status without policy writes', async () => {
+    vi.useFakeTimers()
     const f = fixture()
     f.declare()
     const useProjection = (key: string) => key === COPILOT_CONTEXT_EVIDENCE ? completed()
@@ -105,13 +107,21 @@ describe('additive historical context notice', () => {
     const useSession = <T,>(select: (value: unknown) => T): T =>
       select({ sessionId: 'a', removed: false, openState: 'open' })
     const view = mount(f.component(), { sessionId: 'a', useProjection, useSession })
-    await view.render()
-    expect(view.container.querySelectorAll('[data-copilot-composer-notice]')).toHaveLength(1)
-    expect(view.container.querySelector('summary')?.textContent).toContain('Compaction completed')
-    expect(view.container.textContent).toContain('Hidden reasoning context was omitted')
-    expect(f.continuation.get).toHaveBeenCalledTimes(1)
-    expect(f.continuation.get).toHaveBeenCalledWith('a')
-    expect(f.continuation.set).not.toHaveBeenCalled()
+    try {
+      await view.render()
+      expect(view.container.querySelectorAll('[data-copilot-composer-notice]')).toHaveLength(1)
+      expect(view.container.querySelector('summary')?.textContent).toContain('Compaction completed')
+      expect(view.container.textContent).toContain('Hidden reasoning context was omitted')
+      expect(f.continuation.get).toHaveBeenCalledTimes(1)
+      expect(f.continuation.get).toHaveBeenCalledWith('a')
+      expect(f.continuation.set).not.toHaveBeenCalled()
+      await act(async () => { await vi.advanceTimersByTimeAsync(8000) })
+      expect(view.container.querySelector('summary')?.textContent).not.toContain('Compaction completed')
+      expect(view.container.textContent).toContain('Context occupancy awaiting confirmation')
+      expect(view.container.textContent).toContain('Native 0% does not prove an empty context')
+      expect(view.container.querySelector('[aria-label="Close compaction notice"]')).toBeNull()
+      expect(f.continuation.get).toHaveBeenCalledTimes(1)
+    } finally { vi.useRealTimers() }
   })
   it.each(['en', 'zh-CN'])('matches composer statistics typography without changing disclosure behavior in %s', async locale => {
     const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence: invalid, locale })

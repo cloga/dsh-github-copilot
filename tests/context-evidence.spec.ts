@@ -114,6 +114,22 @@ describe('separate bounded historical context evidence', () => {
       ...data, message: { source: { provider: 'other', model: 'other' } },
     } }).compaction?.request).toBe('unknown')
   })
+  it('binds a resumed request to the native step already open before compaction', () => {
+    let state = fold(initial(), { seq: 0, type: 'step/start', data: { turn: 1, step: 1 } })
+    state = [
+      header(),
+      { seq: 2, type: 'compaction/start', data: { compactionId: 'c' } },
+      { seq: 3, type: 'user/message', data: { source: { kind: 'compact-checkpoint', compactionId: 'c' } } },
+      { seq: 4, type: 'compaction/end', data: { compactionId: 'c' } },
+      { ...header(), seq: 5 },
+      usage(40, 'assistant/message', 'stop', 6),
+    ].reduce(fold, state)
+    expect(state.compaction?.request).toBe('succeeded')
+    expect(state.sample?.tokens).toBe(40)
+    state = fold(state, { seq: 7, type: 'step/end', data: { turn: 1, step: 1 } })
+    state = fold(state, { ...header(), seq: 8 })
+    expect(fold(state, usage(40, 'assistant/message', 'stop', 9)).compaction?.request).toBe('unknown')
+  })
   it('rejects invalid and overflowing counts instead of guessing', () => {
     let state = fold(initial(), header())
     state = fold(state, usage(-1))

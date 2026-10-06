@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.126"
+    "version": "0.4.0-alpha.128"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -605,12 +605,16 @@
         {"file": "src/compaction-replay.ts", "marker": "request.purpose !== 'compaction'"},
         {"file": "src/compaction-continuation.ts", "marker": "COPILOT_CONTINUATION_COMPACTION_BOUNDARY_UNAVAILABLE"},
         {"file": "src/compaction-continuation-ui.ts", "marker": "Compacting with visible history"},
+        {"file": "src/compaction-continuation-ui.ts", "marker": "const successLifetimeMs = 8000"},
+        {"file": "src/context-evidence-ui.ts", "marker": "presentation.dispose()"},
         {"file": "src/background-compaction.ts", "marker": "visible-history"},
         {"file": "src/background-compaction.ts", "marker": "this.jobs.wait(jobId"},
         {"file": "src/preview-route.ts", "marker": "recoveryLimits(modelId)"},
         {"file": "docs/manual-compaction-recovery.md", "marker": "separately selected"}
       ],
       "tests": [
+        {"file": "tests/compaction-continuation-ui.spec.ts", "name": "expires eight seconds after first confirmed completion, not rerender, reread or remount"},
+        {"file": "tests/compaction-continuation-ui.spec.ts", "name": "keeps unavailable distinct and dismissible without hiding a later failure"},
         {"file": "tests/manual-compaction-recovery.spec.ts", "name": "reduces an oversized balanced history with bounded complete calls and an unmarked aggregate audit"},
         {"file": "tests/compaction-input-estimate.spec.ts", "name": "avoids metadata-driven sixteen-call exhaustion without changing dispatched messages"},
         {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects an indivisible span before dispatch and leaves recovery to native failure handling"},

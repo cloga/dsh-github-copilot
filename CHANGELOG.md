@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0-alpha.128
+
+- Separate native compaction commit, subsequent ordinary-request outcome and applicable historical input sampling in one composer disclosure (#364).
+- Preserve transient completion expiry/Close without hiding independent context uncertainty; keep native compaction history, context ring and usage accounting unchanged.
+- Track same-step retries and compaction resumed inside an already-open native step through strict bounded public projections, without an extra request, history write or replacement percentage.
+
+## 0.4.0-alpha.127 (prepared)
+
+- Expire the confirmed visible-history compaction success notice eight seconds after its first Client observation; keep running loss disclosure visible and add localized, accessible Close to settled, unavailable and authorization-required results (#363).
+- Retain expiry and presentation-only dismissal across incidental remounts and Session switches within a registration-owned 128-record bound. Scope by Session, operation and status; ignore late reads and clean up timers without changing consent, native proof/history, sending or retries.
+- Synthetic Client lifecycle evidence is not live Desktop or provider acceptance; no installation, restart or settings enablement.
+
 ## 0.4.0-alpha.126 (prepared)
 
 - Align plugin-owned Models, account management, model preferences, continuation disclosures, Credits details and plugin settings with the unchanged official rc.2 font family, type scale, themed neutral controls and focus states (#361).

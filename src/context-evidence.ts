@@ -7,11 +7,12 @@ export const COPILOT_CONTEXT_EVIDENCE = 'githubCopilotContextEvidence'
 const count = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
 const routeSchema = z.object({ provider: z.string().min(1), model: z.string().min(1) }).strict()
 const sampleSchema = z.object({ tokens: count, seq: count, route: routeSchema }).strict()
+const stepSchema = z.object({ turn: count, step: count }).strict()
 const compactionSchema = z.object({
   id: z.string().min(1).max(256), startSeq: count, endSeq: count.nullable(),
   state: z.enum(['running', 'completed', 'failed', 'unknown']), checkpoint: z.boolean(),
   headerSeq: count.nullable(), requestRoute: routeSchema.nullable(),
-  step: z.object({ turn: count, step: count }).strict().nullable(),
+  step: stepSchema.nullable(),
   request: z.enum(['idle', 'pending', 'succeeded', 'failed', 'cancelled', 'unknown']),
 }).strict()
 export const ContextEvidenceSchema = z.object({
@@ -20,6 +21,7 @@ export const ContextEvidenceSchema = z.object({
   invalid: z.boolean(),
   reason: z.enum(['none', 'failed-zero', 'compaction', 'selection', 'unknown']),
   compaction: compactionSchema.nullable().optional(),
+  activeStep: stepSchema.nullable().optional(),
 }).strict()
 export type ContextEvidence = z.infer<typeof ContextEvidenceSchema>
 // Registry parsing is unary; optional Zod options/augmentations are copy-local.
@@ -51,12 +53,16 @@ function copilot(route: ContextEvidence['route']): boolean {
   return route?.provider === 'github-copilot' || route?.provider === 'github-copilot-preview'
 }
 export function initialContextEvidence(): ContextEvidence {
-  return { route: null, sample: null, invalid: false, reason: 'none', compaction: null }
+  return { route: null, sample: null, invalid: false, reason: 'none', compaction: null, activeStep: null }
 }
 
 /** Read only counts and routing leaves; never message content or opaque replay. */
 export function foldContextEvidence(state: ContextEvidence, event: unknown): ContextEvidence {
   if (!record(event) || typeof event.type !== 'string' || !record(event.data)) return state
+  if (event.type === 'step/start') {
+    const step = stepSchema.safeParse({ turn: event.data.turn, step: event.data.step })
+    state = { ...state, activeStep: step.success ? step.data : null }
+  }
   if (event.type === 'compaction/start') {
     const id = compactionSchema.shape.id.safeParse(event.data.compactionId)
     const seq = count.safeParse(event.seq)
@@ -77,7 +83,11 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
   if ((event.type === 'step/end' || event.type === 'turn/end') && state.compaction?.request === 'pending'
     && event.data.turn === state.compaction.step?.turn
     && (event.type === 'turn/end' || event.data.step === state.compaction.step?.step)) {
-    return { ...state, compaction: { ...state.compaction, request: 'unknown' } }
+    state = { ...state, compaction: { ...state.compaction, request: 'unknown' } }
+  }
+  if ((event.type === 'step/end' || event.type === 'turn/end') && event.data.turn === state.activeStep?.turn
+    && (event.type === 'turn/end' || event.data.step === state.activeStep?.step)) {
+    return { ...state, activeStep: null }
   }
   const operation = state.compaction
   if (operation?.state === 'running' && count.safeParse(event.seq).success && Number(event.seq) > operation.startSeq) {
@@ -104,7 +114,8 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
     if (compact?.state === 'completed') {
       if (event.type === 'request/header' && compact.endSeq !== null
         && count.safeParse(event.seq).success && Number(event.seq) > compact.endSeq && copilot(route)) {
-        state = { ...state, compaction: { ...compact, headerSeq: count.parse(event.seq), requestRoute: route, request: 'pending' } }
+        state = { ...state, compaction: { ...compact, headerSeq: count.parse(event.seq), requestRoute: route,
+          step: state.activeStep ?? null, request: 'pending' } }
       } else if (!sameRoute(state.route, route)) state = { ...state, compaction: revoke() }
     }
     if (sameRoute(state.route, route)) return state
