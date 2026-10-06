@@ -8,23 +8,7 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-[账号需求与技术方案](./docs/copilot-accounts.md)说明如何在现有凭据服务中
-分别保存独立官方授权。**模型 → Manage → GitHub accounts**管理授权和全局默认；
-在 Credits 内选择本 Session 后续 turn 的账号，或恢复跟随全局默认；正在运行的 turn 保持原账号。
-仅切换全局选择期间，已绑定账号的模型准备和发送可以继续；未绑定请求及授权记录变更仍受锁保护。
-身份展示支持 GitHub 企业托管账号，包括带下划线企业后缀的用户名。
-
-Models 和 Chat 共用不透明、随主题适配的账号下拉层；原生菜单 token 即使半透明，也不会透出底下的按钮或额度文字。明暗主题均使用克制的深色投影，不产生白色光晕。
-
-插件的 Models、账号、模型偏好和设置控件统一使用 DSH 原生字体、设置／辅助文字层级、中性圆角及键盘焦点样式。紧凑操作与原生 Edit 对齐；Manage 内的操作按钮不再铺满整行。这些外观调整不会改变授权、模型偏好或降级续聊策略。
-
-可见历史续聊不再按整包 16 MiB 拒绝请求。过滤只对加密推理做有界、可取消的处理，普通工具输出和图片内容保持不变。真实 token 压力仍交给已启用的原生自动 compact 引擎，完成摘要后重建请求；处理工作量上限不会被误报为上下文溢出。参见[续聊边界](./docs/session-continuation.md)。
-
-可见的 Models 和 Credits 会补齐已保存账号缺失的名称，不需要先激活账号。已验证名称在 Host 生命周期内缓存，未激活账号也会保留；十分钟是重新验证的间隔，不是名字的显示期限。凭据变更、账号移除及身份验证失败会使名称失效。同账号共享请求、失败冷却三十秒，显式刷新可立即重试。名称不能证明授权有效或模型可用。参见[账号生命周期](./docs/copilot-accounts.md)。
-
-添加账号时，设备授权链接、可选择的网址、一次性授权码、复制授权码和取消操作会同时显示。GitHub 授权完成后，会单独显示身份与可用模型验证阶段。添加账号不会更改全局默认；准备好后仍需显式执行现有的**切换**操作。技术诊断收在次级折叠区；账号／历史 turn 缺少身份时不会暴露不透明账号 ID，也不会根据当前设置推断历史身份。
-
-**包版本：`0.4.0-alpha.130`（准备中）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。执行下方带版本的命令前须核验正式发布与资产；这些说明不证明已发布或已安装。
+**当前发布：[`0.4.0-alpha.130`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.130)。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 仍为 alpha 版本，未升级为稳定发布通道。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
 
 ## 你可以做什么
 
@@ -48,10 +32,18 @@ Models 和 Chat 共用不透明、随主题适配的账号下拉层；原生菜�
 暂停保留证据，清除需单独确认。Client／Host 分开统计，未覆盖路径、报告丢失与存储
 故障明确显示。描述性计数不是历史重建、错误率，也不表示优化效果已被验证。
 
+在已构建的包或源码 checkout 内，显式分析已核验的文件：
+
+```sh
+node scripts/analyze-diagnostics.mjs --input "ABSOLUTE_UNIT_FILE.json" --mode persisted-unit --profile-name "PROFILE_NAME" --output "NEW_LOCAL_REPORT.json"
+```
+
+请把占位符替换为经审阅的文件／profile 和新的绝对输出路径。分析经审阅的聚合视图导出时，使用 `--mode reviewed-view`，不传 `--profile-name`。[读取核验与解释限制](./docs/plugin-diagnostics.md#explicit-offline-analysis-368)说明格式、边界及仅持久化证据的含义；不包含每日定时任务。
+
 | 任务 | 入口 |
 |---|---|
 | 登录并管理账号模型 | **设置 → 模型 → GitHub Copilot → Sign in** |
-| 添加／切换 GitHub 账号 | **Manage → GitHub accounts**；仅限托管路由 profile |
+| 添加／切换 GitHub 账号 | **Manage → 账号管理 → 切换**；仅限托管路由 profile |
 | 指定本 Session 后续 turn 的账号 | **Credits → Switch account**；仅选择已保存授权 |
 | 排除／恢复单个模型 | **Manage → Model preferences** |
 | 自动选择模型 | 选择 **Auto · Balance / Efficiency / Intelligence** |
@@ -59,15 +51,15 @@ Models 和 Chat 共用不透明、随主题适配的账号下拉层；原生菜�
 | 设置搜索主 provider 与最终 fallback | **插件详情 → Web search** |
 | 查看账号 Credits 与上下文证据 | Copilot 会话输入框；原生 Turn Usage 独立保留 |
 
-![已发布 Client 的账号控件与模型偏好](./docs/images/copilot-model-preferences.png)
+![当前构建 Client 的账号控件与模型偏好](./docs/images/copilot-model-preferences.png)
 
-图片来自实际已发布 Client 组件和隔离浏览器中的模拟模型，仅说明界面，不证明真实登录、模型可用性、搜索或 Desktop 已加载。
+当前 alpha.130 构建的真实 Client 组件，运行于隔离浏览器，账号与模型均为模拟。Manage 包含账号控件、续聊默认值和模型偏好（包括 High cost）。图片仅说明界面，不证明真实登录、模型可用性或 Desktop 已加载。
 
 ![在 Models 中切换已保存的 GitHub 账号](./docs/images/copilot-accounts.png)
 
-![Credits 中只读展示当前 GitHub 身份](./docs/images/copilot-accounts-credits.png)
+![Credits 中的会话账号选择与账号周期额度](./docs/images/copilot-accounts-credits.png)
 
-账号图片来自较早的账号管理组件和隔离浏览器中的模拟账号及额度。当前 Session 切换入口位于 Credits 内；这些图片仅说明账号管理与身份展示，不证明真实授权、供应方可用性、真实账号数据或 Desktop 已加载。
+这两张截图使用相同的当前构建组件及模拟身份／额度。Models 更改全局默认，Credits 仅更改本 Session 后续 turn 的账号；不包含真实账号或账单数据。参见[截图来源](./docs/current-client-provenance.json)。
 
 ## 安装与登录
 
@@ -97,23 +89,19 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 退出须显式操作，只删除活动账号的授权，保留其它授权与路由设置。升级保留已有原生 Copilot profile；在[显式单路由迁移](./docs/single-route-migration.md)前，仍可能存在两个分组。安装不迁移会话或默认模型。
 
-在 **Manage → GitHub accounts**添加账号不会替换全局默认。设备授权期间，卡片会同时保留验证链接、可选择的网址、一次性授权码、**复制授权码**和**取消添加账号**。GitHub 授权成功后，卡片会单独验证身份和可用模型；完成添加仍不会切换默认账号。诊断码位于折叠的技术详情中。**刷新账号信息**只更新身份，不会完成或取消授权。确认切换只影响后续跟随默认的 turn，不影响正在运行的 turn 或 Session 已指定账号。**Credits → 切换账号**只为本 Session 后续 turn 保存选择；**跟随全局默认**清除该选择。即使显式选中的账号恰好等于全局默认，也仍是 Session 覆盖。原生路由尚存或证据不完整时会阻止账号切换。新账号可能没有已选模型，旧加密 replay 也可能绑定原账号；不会自动替换模型或删除历史。**Reauthorize**仅更新同一已存身份的授权；**Remove**仅删除非全局活动授权，正在运行 turn 锁定的授权不能修改。账号缺失／失效不会自动回退到其它账号。
+在 **Manage → 账号管理**内，**切换**下拉菜单列出已保存账号，底部为**添加 GitHub 账号**。添加不会替换全局默认。设备授权期间显示验证网址、一次性授权码、**复制授权码**和**取消添加账号**；随后单独验证身份和模型。确认切换只影响后续继承默认的新 turn，不改变运行中 turn 或 Session 已指定账号。**管理已保存授权**包含**重新授权**和**移除**；移除仅影响非默认的本地已保存授权，不改变运行中 turn 锁定的账号或 GitHub 端访问。**刷新账号信息**只更新身份，不操作授权。原生路由或不完整证据阻止切换；账号缺失／失效不会自动回退。新账号可能缺少已选模型，旧加密 replay 也可能绑定原账号；不自动替换模型或删除历史。参见[账号需求](./docs/copilot-accounts.md)。
 
 已完成的托管 turn 在原生 Usage 旁显示 **Account**，记录实际请求账号，不是计费归因或子 Agent 汇总。准入时冻结已验证名称；缺失时针对本轮固定账号执行现有的有界、非强制查询，不阻塞模型输出，只能在同一 turn 仍运行时补齐身份。没有原生流返回就没有账号执行证据。未查到的身份仍显示不可用；不会根据当前设置补写已完成历史。证据仅在 Host 生命周期内有界保留，重启及冷历史显示未知。Credits 对身份未知的原始／已保存授权显示可读标签，不显示不透明账号 ID。
 
-切换资格通过官方 rc.2 SettingsForms 的配置值读取，不再依赖已退役的 Settings `get()` API。缺失或无效配置仍视为证据不完整；升级不会绕过原生路由或运行中工作的限制。
-
-**全局切换等待：**Models 先显示账号元数据，再独立补齐身份名称；后台名称查询不再锁住满足路由／活动证据条件的 Switch。真正切换仍需新鲜身份和模型校验，两项并行但必须都成功，之后才能 CAS 保存并严格读回。失败会取消并收尾另一项，不自动重试；身份展示缓存不授权切换。父组件更换回调不再丢弃已确认结果，旧名称响应也不能覆盖新账号。这与 Session **Follow global default** 是不同路径，不意味着省略必要网络校验或已测得真实毫秒级提速。
-
-`COPILOT_ACCOUNTS_BUSY` 根据当前活动重新判断，不会在工作结束后保留旧拒绝。授权进行中会显示为进度状态，而不是终止性 busy 错误；其它未知阻塞因素仍明确保持未知。相关工作结束后，点击 **Refresh account information** 更新已打开的卡片。如果只列出活动账号，需先 **Add GitHub account**；另一个已保存账号旁才会出现 **Switch**。
+读取已保存账号名称不必激活账号。名称在 Host 生命周期内缓存，凭据变更或验证失败会失效，也不证明授权或模型可用。全局切换需要新鲜身份／模型验证及设置持久化确认。切换被阻止时，等待授权或锁定工作结束，再**刷新账号信息**；未知路由／活动证据仍是阻塞。选择入口是下拉菜单，不是每个已保存账号旁的按钮。
 
 **Desktop 生命周期：**停用、移除、升级后的 Web 服务重组可能需要完整冷重启。若插件已 Off，而原生 manager 仅提示 `pending (waiting for service: web)`，不要反复切换或重装。先取得重启许可，遵循[rc.2 生命周期说明](./docs/web-lifecycle-rc2.md)。
 
 ## Auto 与模型偏好
 
-**保存偏好：**Exclude/Restore 和 High cost 复用严格确认的单模型保存结果，不重读账号状态／模型，也不重复执行最后一次完整设置遍历。内容相同的父组件快照不会清掉待保存操作或已确认结果。其它模型行仍可操作：最多 32 个不同行的意图显示 **Waiting…**，同时只发出一个 **Saving…** 请求。原生 CAS 读回确认前不会显示保存成功。结果无法确认或偏好作用域变化时取消尚未发送的操作；**Retry** 只重读已保存设置，不重放写入或发现模型。队列仅在当前组件内，卸载后不保留。
+**保存偏好：**Exclude/Restore 和 High cost 即时保存，并等待设置读回确认。其它行仍可操作：最多 32 个不同行的修改显示 **Waiting…**，同时只有一个 **Saving…**。结果不明确或作用域变更时取消尚未发送的修改；**Retry** 只读取已保存设置，不重放写入。卸载后不保留队列。
 
-**模型目录加载失败：**原生 Models 的 `llm/listProviders failed: Failed to fetch` 属于 Client 到 Host／网关的请求传输失败，不能证明 Copilot 强制刷新。连接恢复后使用原生页面的 **Retry**。插件不拦截 Core 拥有的请求、不用过期／空目录伪装成功，也不声称本次保存优化已修复连接可用性。合成验证证明减少工作与响应式串行操作，不证明真实环境毫秒级提速。
+**模型目录加载失败：**原生 Models 的 `llm/listProviders failed: Failed to fetch` 属于 Client 到 Host／网关的传输失败，不能证明强制 Copilot 发现。连接恢复后使用原生页面的 **Retry**；插件不以过期或空目录替代。
 
 三档 Auto 共用账号验证、未排除的合格模型池。输入／图片能力等硬门槛先于任务偏好。
 
@@ -124,7 +112,7 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 | 复杂 | Powerful | Powerful | Powerful |
 | 未知 | Versatile | Versatile | Powerful |
 
-分类来自认证后的供应方元数据，不按模型名、上下文容量或臆测质量排名。上一模型仍合适时保持，否则在合格分类内稳定等权分配；分类回退明确说明。同一已准入 turn 的工具步骤、重试和压缩保持同一真实模型。
+分类来自认证后的供应方元数据，不按模型名、上下文容量或臆测质量排名。在第一个可容纳输入的分类内，按前述正成本权重和有限连续性加权选择；上一模型合适也不会无条件保留。分类回退明确说明。同一已准入 turn 的工具步骤和重试保持同一真实回答模型；压缩保留独立解析的原生摘要路由。
 
 语义判断**默认开启，仅用于本地需求未知的任务**。最多一次辅助请求，**8 秒端到端期限、128 tokens 输出预算**。可用 `github-copilot.autoSemanticAssessment: false` 关闭。超时／无效结果保留未知，再按偏好兜底，不解释为简单，也不换分类模型重试。用户取消和账号失效仍终止请求。辅助调用增加延迟与供应方费用，不计入原生回答 Usage。
 
@@ -143,6 +131,8 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 ## 子代理与搜索
 
 ![当前父模型跟随及 Web search 控件](./docs/images/copilot-search-routing.png)
+
+当前 alpha.130 构建的插件详情页，设置／provider 为模拟，诊断为暂停且无数据。截图没有发起搜索、采集或调用真实服务。
 
 **Follow parent model**默认关闭，在当前 profile 内作用于托管 Copilot 父会话的受支持原生子代理／Team mate。固定父模型从子会话下一 turn 生效；Auto 父会话传递准确偏好，子会话按自己的上下文选模。子会话的显式选择优先。运行中 turn、root、fork、其它 provider、旧专用策略不被改写；关闭宽泛开关也不移除旧绑定。[父模型跟随合同](./docs/parent-model-follow.md)。
 
@@ -224,7 +214,7 @@ Credits 账号面板显示当前账号和 **切换**，下拉菜单只列已有�
 
 ## 所有权与深入阅读
 
-DSH Core 所有会话、工具、sandbox、附件、原生计量和其它 provider；`llm-pi-ai`所有 OAuth、token 交换／刷新和普通模型传输。插件以认证后的账号元数据组合公开适配器，受支持的新模型 ID 无需名称路由补丁。凭据仅在 Host，key 为 `llm-pi-ai/github-copilot`。
+DSH Core 所有会话、工具、sandbox、附件、原生计量和其它 provider；`llm-pi-ai`所有 OAuth、token 交换／刷新和普通模型传输。插件以认证后的账号元数据组合公开适配器，受支持的新模型 ID 无需名称路由补丁。凭据仅在 Host：`llm-pi-ai/github-copilot` 是 canonical 兼容记录；额外账号在同一 DSH 凭据服务的插件所有记录中独立授权，不复制 grant。
 
 公开接口不能替换 Core Edit/Delete、重构平铺 picker 或把原生 Add 变成单路由强制机制。已退役的[Model roles](./docs/dual-model.md)仅保留兼容。修复须遵循[plugin-only](./AGENTS.md#plugin-only-implementation-boundary)。
 

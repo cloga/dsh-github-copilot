@@ -8,6 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const require = createRequire(resolve(root, 'package.json'))
 const routes = new Map([
   ['/', { path: resolve(root, 'tests/browser/search-routing.html'), type: 'text/html; charset=utf-8' }],
+  ['/readme', { path: resolve(root, 'tests/browser/readme.html'), type: 'text/html; charset=utf-8' }],
   ['/client.js', { path: resolve(root, 'lib/client.js'), type: 'text/javascript; charset=utf-8' }],
   ['/react.js', { path: resolve(dirname(require.resolve('react/package.json')), 'umd/react.development.js'), type: 'text/javascript; charset=utf-8' }],
   ['/react-dom.js', { path: resolve(dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), type: 'text/javascript; charset=utf-8' }],

@@ -1,18 +1,36 @@
 {
-  "clientVersion": "0.4.0-alpha.88",
-  "releaseCommit": "0c69c4cafe9f1e95f87ecd2fb114638202800d1a",
-  "releaseArchiveSha256": "5fd0bf9c6210ef625f2b06aeb681a456f8b8d9501f826def0f1355043ff132e4",
+  "clientVersion": "0.4.0-alpha.130",
+  "sourceCommit": "eb49c0c49933406d29d560e88c66469bae25e1b3",
+  "source": "Local pnpm build from the unchanged current release source; not extracted published archive bytes",
+  "builtClientSha256": "fc2c3b9a237bbb8e7f58f83152f76bd958d645e8258d6370c1320dcf8441cdf0",
   "synthetic": true,
+  "fixture": "tests/browser/readme.html",
+  "reproduce": "pnpm build; node tests/browser/serve-search-routing.mjs; set PLAYWRIGHT_MODULE to an existing Playwright index.mjs; node tests/browser/capture-readme.mjs <printed-loopback-URL>",
   "components": {
     "copilot-model-preferences.png": "GitHubCopilotCompactAccount",
+    "copilot-accounts.png": "GitHubCopilotCompactAccount",
+    "copilot-accounts-credits.png": "CopilotUsageCard",
     "copilot-search-routing.png": "CopilotPluginSettingsPage"
   },
+  "imageSha256": {
+    "copilot-model-preferences.png": "4939f865e1c52d7a599af83cd5fe6547c3a012e1a4213134f024b00afb19f752",
+    "copilot-accounts.png": "f5b0fc126cdf8f48dadb79a9e7db74ce862310396f6549883f452e1ed9391b77",
+    "copilot-accounts-credits.png": "ab725db863334297e8a3e77c3aa38a4a0c8966519ec04b7055aed0b15e5157e6",
+    "copilot-search-routing.png": "ae9e20ecb480a517c218d70e179c8cf0680ef59b71874ef4467561c5fa81076a"
+  },
   "capture": {
-    "browser": "Microsoft Edge 154.0.4258.53",
-    "viewports": [920, 375],
+    "browser": "Microsoft Edge 154.0.4258.62",
+    "viewports": [
+      920,
+      375
+    ],
+    "themes": [
+      "dark",
+      "light"
+    ],
     "horizontalOverflow": false,
     "pageErrors": [],
     "externalRequests": false
   },
-  "limits": "Actual published Client components with synthetic settings/account models. No live OAuth, model availability, hosted search or loaded Desktop proof. Repository images are the desktop captures; narrow captures remain review evidence."
+  "limits": "Actual current built Client components with synthetic settings, identities, models and quota. No live OAuth, model availability, search, billing, collection, persistence or loaded Desktop proof. Credits captures only the usage/account component, not its parent-owned continuation disclosure. Desktop images are committed; narrow/light states were checked for overflow and menu dismissal, not native Desktop integration."
 }

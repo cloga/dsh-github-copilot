@@ -8,26 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-The [account requirements and design](./docs/copilot-accounts.md) cover
-independent official authorizations in the existing credentials service.
-**Models → Manage → GitHub accounts** manages authorizations and the global default.
-Inside **Credits**, choose a saved account for this Session's subsequent turns or
-restore **Follow global default**. Running turns retain their original account.
-Selector-only switching permits their account-bound model preparation and
-dispatch to continue; unbound requests and credential mutations remain fenced.
-Identity display accepts GitHub Enterprise Managed User names, including their underscore-separated enterprise suffixes.
-
-Models and Chat share an opaque, theme-aware account dropdown; translucent native menu tokens cannot reveal underlying controls or quota text. Both use restrained dark elevation in light and dark mode.
-
-Plugin-owned Models, account, preferences and settings controls use DSH's native font family, setting/caption hierarchy, neutral control radii and keyboard focus treatment. Compact provider actions stay aligned with native Edit; Manage actions no longer stretch across the row. These presentation changes do not change authorization, model preferences or continuation policy.
-
-Visible-history continuation no longer rejects entire requests at 16 MiB. It processes only bounded encrypted reasoning, yields to cancellation, and preserves ordinary tool/image content. Real token pressure still uses the enabled native automatic-compaction engine and request rebuild; processing limits are not context overflow. See [continuation boundaries](./docs/session-continuation.md).
-
-Visible Models and Credits resolve missing names for saved accounts without activating them. Verified names remain cached for the Host lifetime, including inactive accounts; the ten-minute freshness interval governs revalidation, not name display. Credential changes, removal and failed identity verification invalidate names. Shared per-account requests and a thirty-second failure cooldown remain; explicit refresh retries immediately. Names do not prove authorization or model access. See [account lifecycle](./docs/copilot-accounts.md).
-
-Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
-
-**Package version: `0.4.0-alpha.130` (prepared). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. Verify the published Release and assets before using the versioned commands below; these instructions do not prove publication or installation.
+**Current release: [`0.4.0-alpha.130`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.130). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** This is still an alpha release, not a stable-channel promotion. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
 
 ## What you can do
 
@@ -60,10 +41,18 @@ separate confirmation. Client/Host populations, uncovered paths and
 reporting/storage gaps remain explicit. Descriptive counts are not reconstructed
 history, failure rates or proof of an improvement.
 
+To analyze an explicitly qualified file from a built package or source checkout:
+
+```sh
+node scripts/analyze-diagnostics.mjs --input "ABSOLUTE_UNIT_FILE.json" --mode persisted-unit --profile-name "PROFILE_NAME" --output "NEW_LOCAL_REPORT.json"
+```
+
+Replace the placeholders with the reviewed file/profile and a new absolute output path. For a reviewed aggregate view export, use `--mode reviewed-view` without `--profile-name`. [Read qualification and interpretation limits](./docs/plugin-diagnostics.md#explicit-offline-analysis-368) explain the accepted envelope, bounds and persisted-only evidence; no daily schedule is included.
+
 | Task | Where to start |
 |---|---|
 | Sign in and manage account models | **Settings → Models → GitHub Copilot → Sign in** |
-| Add or switch GitHub accounts | **Manage → GitHub accounts**; managed-only profiles |
+| Add or switch GitHub accounts | **Manage → Account management → Switch**; managed-only profiles |
 | Select this Session's next-turn account | **Credits → Switch account**; saved authorizations only |
 | Exclude or restore individual models | **Manage → Model preferences** |
 | Choose models automatically | Pick **Auto · Balance**, **Auto · Efficiency** or **Auto · Intelligence** |
@@ -71,15 +60,15 @@ history, failure rates or proof of an improvement.
 | Choose primary/fallback search providers | **Plugin details → Web search** |
 | Read account Credits and context evidence | Copilot Session composer; native Turn Usage stays separate |
 
-![Account controls and model preferences from the published Client](./docs/images/copilot-model-preferences.png)
+![Current built Client account controls and model preferences](./docs/images/copilot-model-preferences.png)
 
-Actual published Client components with synthetic models in an isolated browser. This screenshot demonstrates presentation, not live sign-in, model availability, search or loaded Desktop state.
+Current alpha.130 built Client components in an isolated browser, with synthetic accounts and models. Manage contains account controls, continuation defaults and model preferences, including High cost. This is presentation evidence, not live sign-in, model availability or loaded Desktop proof.
 
 ![Switching between saved GitHub accounts in Models](./docs/images/copilot-accounts.png)
 
-![Read-only current GitHub identity in Credits](./docs/images/copilot-accounts-credits.png)
+![Session account selection and account-wide quota in Credits](./docs/images/copilot-accounts-credits.png)
 
-The account images show the earlier account-management components with synthetic accounts and quota in an isolated browser. The current Session switcher is inside Credits; these images show account management and identity presentation, not real authorization, supplier availability, live account data or loaded Desktop state.
+These captures use the same current built components and synthetic identities/quota. Models changes the global default; Credits changes only this Session's subsequent turns. They do not show real accounts or billing data. [Capture provenance](./docs/current-client-provenance.json).
 
 ## Install and sign in
 
@@ -109,23 +98,19 @@ After an approved reload/restart:
 
 Sign-out requires an explicit action and removes only the active account's authorization, not other saved grants or route settings. Upgrades preserve existing native Copilot profiles; two groups can remain until [explicit single-route migration](./docs/single-route-migration.md). Installation never migrates conversations or defaults.
 
-In **Manage → GitHub accounts**, adding an account never replaces the global default. During device authorization, the card keeps the verification link and selectable URL, one-time code, **Copy authorization code**, and **Cancel adding account** together. Once authorization succeeds, the card separately verifies identity and available models; a completed addition is still not a default switch. Diagnostic codes remain in a collapsed technical-details disclosure. **Refresh account information** renews identity only; it does not complete or cancel authorization. A confirmed switch changes future inherited turns, not running turns or explicit Session overrides. **Credits → Switch account** persists a choice only for this Session's subsequent turns; **Follow global default** clears it. Explicitly choosing today's default still remains a Session override. Native-route or incomplete evidence blocks account switching. The new account may not offer your selected model, and old encrypted replay may be account-bound: no automatic model substitution or history removal occurs. **Reauthorize** renews the same saved identity; **Remove** deletes only an inactive saved authorization and cannot mutate a running turn's pinned account. Missing/revoked accounts never fall back.
+In **Manage → Account management**, the **Switch** dropdown lists saved accounts and **Add GitHub account** at the bottom. Adding never replaces the global default. During device authorization, the card keeps the verification URL, one-time code, **Copy authorization code** and **Cancel adding account** together; identity/model verification follows separately. A confirmed switch changes future inherited turns, not running turns or explicit Session overrides. **Manage saved authorizations** contains **Reauthorize** and **Remove**; removal affects only a nondefault saved authorization, never a running turn's pinned account or GitHub-side access. **Refresh account information** updates identity, not authorization. Native-route or incomplete evidence blocks switching; missing/revoked accounts never fall back. A new account may lack your selected model, and encrypted replay may be account-bound: no automatic model substitution or history removal occurs. See [account requirements](./docs/copilot-accounts.md).
 
 Completed managed turns show **Account** beside native Usage. It records the request account, not billing or subagent totals. A verified name is frozen at admission; if missing, an existing bounded non-forcing lookup for that exact account runs without delaying model delivery and can fill identity only while the same turn remains active. No account evidence exists before native delivery. Missing identity remains unavailable; completed history is never backfilled from current settings. Evidence is bounded to the Host lifetime; restart, cold history or missing delivery displays unknown. Credits labels an unidentified original or saved authorization without displaying opaque account IDs.
 
-Account eligibility reads official rc.2 SettingsForms values, without requiring the retired settings `get()` API. Missing or malformed configuration remains incomplete evidence; upgrading does not bypass native-route or activity restrictions.
-
-**Global switch waiting:** Models shows metadata first and hydrates identity names independently; background name checks do not lock Switch when route/activity evidence permits it. Fresh identity and model validation overlap, but both must succeed before CAS and strict readback. Failures cancel/drain outstanding preflight without retry; identity-cache display never authorizes switching. The confirmed account result is not discarded when parent callbacks change, and late name reads cannot roll it back. This is separate from Session **Follow global default**, and does not remove necessary network checks or establish live millisecond savings.
-
-`COPILOT_ACCOUNTS_BUSY` is reevaluated from current activity, not retained after work ends. The authorization-in-progress state is presented as progress rather than a terminal busy error; unrelated unknown blockers remain unknown. Use **Refresh account information** to update the open card after relevant work settles. If only the active account is listed, first **Add GitHub account**; **Switch** appears beside another saved account.
+Saved account names can load without activating the account. Names are cached for the Host lifetime, invalidated by credential changes or failed verification, and never prove authorization or model access. A global switch requires fresh identity/model validation and confirmed settings persistence. If switching is blocked, let authorization or pinned work settle and use **Refresh account information**; unknown route/activity evidence remains a blocker. The dropdown, not a button beside each saved account, is the selection control.
 
 **Desktop lifecycle:** disable/remove/upgrade can require a full cold restart for Web service recomposition. If the plugin is Off and the native manager reports only `pending (waiting for service: web)`, do not repeatedly toggle or reinstall. Obtain restart approval and follow [rc.2 lifecycle guidance](./docs/web-lifecycle-rc2.md).
 
 ## Auto and model preferences
 
-**Saving preferences:** Exclude/Restore and High cost reuse their confirmed narrow save result without a status/model refresh or redundant final settings traversal. Equivalent parent snapshots preserve pending and locally confirmed edits. Other rows remain usable: up to 32 distinct-row edits can wait, marked **Waiting…**, while exactly one is **Saving…**. No change is shown as saved before native CAS readback. An unconfirmed outcome or changed preference scope cancels unsent edits; **Retry** reads saved settings without replaying writes or discovering models. The queue is not persistent and does not survive unmount.
+**Saving preferences:** Exclude/Restore and High cost save immediately with confirmed settings readback. Other rows remain usable: up to 32 distinct-row edits can wait, marked **Waiting…**, while one is **Saving…**. An unconfirmed result or changed scope cancels unsent edits; **Retry** reads saved settings without replaying writes. The queue does not survive unmount.
 
-**Provider-directory load failures:** native Models `llm/listProviders failed: Failed to fetch` is a Client-to-Host/gateway transport failure, not proof of forced Copilot model discovery. Use the native page's **Retry** after the connection recovers. The plugin does not intercept that Core-owned request, replace it with stale/empty success, or claim this save optimization repairs transport availability. Synthetic checks prove reduced work and responsive sequencing, not measured live latency.
+**Provider-directory load failures:** native Models `llm/listProviders failed: Failed to fetch` is a Client-to-Host/gateway transport failure, not proof of forced Copilot discovery. Use the native page's **Retry** after the connection recovers; the plugin does not substitute a stale or empty catalog.
 
 All three Auto preferences use the same account-verified, non-excluded eligible pool. Hard input/image capability checks run before soft task preferences.
 
@@ -136,7 +121,7 @@ All three Auto preferences use the same account-verified, non-excluded eligible 
 | Complex | Powerful | Powerful | Powerful |
 | Unknown | Versatile | Versatile | Powerful |
 
-Categories come from authenticated supplier metadata, not model names, context capacity or measured quality rankings. A suitable previous model is retained; otherwise the plugin uses stable equal-weight allocation within the eligible category. Category fallback is explained explicitly. One real model stays fixed throughout each admitted turn's steps, retries and compaction.
+Categories come from authenticated supplier metadata, not model names, context capacity or measured quality rankings. Within the first fitting category, positive cost weights and the finite continuity bonus described above choose the model; a suitable previous model is not unconditionally retained. Category fallback is explained explicitly. One real answer model stays fixed throughout each admitted turn's steps and retries; compaction preserves its independently resolved native summary route.
 
 Semantic assessment is **enabled by default only for locally unknown tasks**. It makes at most one bounded auxiliary call with an **8-second end-to-end deadline** and **128-token output budget**. Set `github-copilot.autoSemanticAssessment: false` to opt out. Timeout/invalid output leaves demand unknown and uses the preference fallback; it never means simple or triggers another classifier. Caller cancellation and account invalidation remain terminal. Auxiliary calls add latency and supplier charges outside native answer Usage.
 
@@ -155,6 +140,8 @@ Explicit Auto intent survives native pending-selection consumption and cold rest
 ## Subagents and search
 
 ![Current parent-following and Web search controls](./docs/images/copilot-search-routing.png)
+
+Current alpha.130 built plugin-detail page with synthetic settings/providers and paused, empty diagnostics. No search, collection or live service was invoked for this capture.
 
 **Follow parent model** defaults Off and applies profile-wide to supported native children/Team mates of managed Copilot parents. Fixed parents apply on each child's next turn; Auto parents pass the exact preference while each child evaluates its own context. Child-owned explicit selections win. Running turns, roots, forks, other providers and dedicated legacy policies are not rewritten. Existing legacy bindings remain independent when the broad switch is Off. [Parent-following contract](./docs/parent-model-follow.md).
 
@@ -228,7 +215,7 @@ Configuration is under `github-copilot`. Credentials, endpoint definitions and a
 
 Confirmed account saves restore controls immediately, independently of quota loading. Changing only follow mode for the same account retains its attributed quota without another read. Switching accounts clears the old quota and loads the new snapshot without blocking further account edits; quota errors do not undo a confirmed selection.
 
-The Credits account panel shows the current account and **Switch**. Its dropdown lists only configured accounts, marks the effective account and scrolls long lists internally. **Follow global default** is a separate checkbox: enabling it clears the Session override; disabling it fixes the current account. Choosing any account also fixes it, even if it is today's default. Both actions retain continuation confirmation and revision-checked saving. Account addition belongs only in Models, where one **Manage** disclosure contains account management and shared model preferences. Models retains Add in its dropdown footer without selecting the new account, plus guarded local removal and reauthorization. Neither surface has account search. Exact-ID exclusions are shared across accounts; availability is account-specific. See the [approved experience and interactive mock](./docs/account-management-experience.md).
+The Credits account panel shows the current account and **Switch account**. Its dropdown lists only configured accounts, marks the effective account and scrolls long lists internally. **Follow global default** is a separate checkbox: enabling it clears the Session override; disabling it fixes the current account. Choosing any account also fixes it, even if it is today's default. Both actions retain continuation confirmation and revision-checked saving. Account addition belongs only in Models, where one **Manage** disclosure contains account management and shared model preferences. Models retains Add in its dropdown footer without selecting the new account, plus guarded local removal and reauthorization. Neither surface has account search. Exact-ID exclusions are shared across accounts; availability is account-specific. See the [approved experience and interactive mock](./docs/account-management-experience.md).
 
 [Visible-history continuation](./docs/session-continuation.md) is configured beside account switching, not permanently above the composer. New unseeded Sessions default on after the feature's first successful activation; existing Sessions and inherited histories remain off unless explicitly authorized. Global defaults affect new Sessions only; Session on/off overrides persist across accounts/restarts until disabled. With continuation off, a different-account switch offers persistent enable, keep off or cancel, without a one-turn mode. Each new enabled turn omits prior encrypted reasoning and embedded summaries, even on the same account; current-turn reasoning, visible messages, tools and disk history remain unchanged. Authorization never auto-sends/retries and is not a quota/context cure. Exact replay failures expose the same policy and require a separate native retry. The pinned Core lacks a public Models deep link; Chat omits the nonfunctional management entry. Full management remains in Settings → Models → GitHub Copilot → Manage.
 
@@ -236,7 +223,7 @@ Context evidence and Replay recovery use compact, centered notices bounded by th
 
 ## Ownership and further reading
 
-DSH Core owns Sessions, tools, sandboxing, attachments, native accounting and other providers. `llm-pi-ai` owns OAuth, token exchange/refresh and normal model transport. This plugin composes the published adapter with authenticated account metadata; new supported account model IDs need no name-based routing patch. Credentials stay Host-only under `llm-pi-ai/github-copilot`.
+DSH Core owns Sessions, tools, sandboxing, attachments, native accounting and other providers. `llm-pi-ai` owns OAuth, token exchange/refresh and normal model transport. This plugin composes the published adapter with authenticated account metadata; new supported account model IDs need no name-based routing patch. Credentials stay Host-only: `llm-pi-ai/github-copilot` is the canonical compatibility record; additional accounts are independently authorized plugin-owned records in the same DSH credentials service, never copied grants.
 
 Public APIs cannot replace Core Edit/Delete, restructure its flat picker or make native Add a single-route enforcement mechanism. Retired [Model roles](./docs/dual-model.md) remain compatibility-only. Fixes must stay [plugin-only](./AGENTS.md#plugin-only-implementation-boundary).
 

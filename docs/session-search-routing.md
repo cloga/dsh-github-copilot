@@ -21,7 +21,7 @@ Reload sees newly registered IDs.
 
 ![Actual parent-following and search controls with synthetic settings](images/copilot-search-routing.png)
 
-The picture uses actual published Client components in an isolated browser.
+The picture uses current built Client components in an isolated synthetic browser fixture.
 It does not demonstrate a live search or loaded Desktop runtime.
 
 ## Routing and fallback

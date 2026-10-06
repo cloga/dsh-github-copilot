@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Current Copilot Client — synthetic README captures</title><link rel="icon" href="data:,">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'">
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;background:#111214;color:#ededed}
+*{box-sizing:border-box}body{--dsw-font-family:system-ui;--dsw-alias-bg-layer-1:#202124;--dsw-alias-label-primary:#ededed;--dsw-alias-label-secondary:#b8b8b8;--dsw-alias-border-l2:#666;--dsw-alias-border-l3:#666;--dsw-alias-border-l4:#666;--dsw-alias-border-main:#555;--dsw-alias-settings-card-fill:#17181a;--dsw-alias-settings-card-stroke:#444;--dsw-radius-sm:8px;--dsw-radius-md:12px;--dsw-radius-xl:20px;margin:0;padding:24px;min-height:100vh}
+main{max-width:760px;margin:auto}h1{font-size:20px;font-weight:500;margin:0 0 8px}.fixture-note{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin:0 0 24px}body[data-surface=credits] #app{min-height:calc(100vh - 130px);display:flex;align-items:flex-end}body[data-theme=light]{color-scheme:light;--dsw-alias-bg-layer-1:#fff;--dsw-alias-label-primary:#242424;--dsw-alias-label-secondary:#595959;--dsw-alias-border-l2:#999;--dsw-alias-settings-card-fill:#fff;--dsw-alias-settings-card-stroke:#bbb;background:#fafafa;color:#242424}@media(max-width:480px){body{padding:16px 12px}}
+</style></head><body><main>
+<h1 id="title">GitHub Copilot · Models</h1>
+<p class="fixture-note">Built alpha.130 Client · synthetic accounts, models and quota · no live services.</p>
+<div id="app"></div>
+</main>
+<script src="/react.js"></script><script src="/react-dom.js"></script>
+<script>window.__ModuleLoader__={load:entry=>{window.CopilotUI=entry.factory(id=>{if(id==='react')return window.React;throw new Error('Unexpected dependency: '+id)})}};</script>
+<script src="/client.js"></script>
+<script>
+const h=React.createElement, UI=window.CopilotUI, q=new URLSearchParams(location.search);
+document.body.dataset.theme=q.get('theme')||'dark';
+document.body.dataset.surface=q.get('surface')||'models';
+const now=Date.now(), ok=value=>Promise.resolve({ok:true,value});
+const forbidden=()=>{throw new Error('Fixture action not authorized for screenshot capture')};
+const accounts={state:'ready',activeAccountId:'canonical',revision:7,writable:true,switchable:true,notices:[],accounts:[
+  {id:'canonical',configured:true,identityState:'ready',identity:{login:'demo-personal',userId:1}},
+  {id:'00000000-0000-4000-8000-000000000002',configured:true,identityState:'ready',identity:{login:'demo-work',userId:2}},
+]};
+const preferences={state:'ready',writable:true,revision:7,excludedModelIds:['fixture-powerful'],lockedModelIds:[],unavailableExcludedModelIds:[],highCostModelIds:['fixture-versatile']};
+const view={phase:'signed-in',configured:true,writable:true,inFlight:false,notices:[],modelPreferences:preferences,
+  accountModels:{state:'ready',discoveredAt:now-120000,models:[
+    {id:'fixture-lightweight',name:'Example Lightweight',api:'openai-responses'},
+    {id:'fixture-versatile',name:'Example Versatile',api:'openai-responses'},
+    {id:'fixture-powerful',name:'Example Powerful',api:'openai-responses'},
+  ],rejected:[]}};
+const snapshot={view,checking:false,operation:undefined,error:undefined,copyState:'idle'};
+const account={getSnapshot:()=>snapshot,subscribe:()=>()=>{},retryStatus:forbidden,refreshModels:forbidden,signOut:forbidden,start:forbidden,cancel:forbidden};
+const remote={status:()=>ok(view),getModelPreferences:()=>ok(preferences),setModelExcluded:forbidden,setModelHighCost:forbidden};
+const accountsRemote={get:()=>ok(accounts),ensureIdentity:()=>ok(accounts),refreshIdentity:()=>ok(accounts),
+  add:forbidden,cancel:forbidden,switchAccount:forbidden,reauthorize:forbidden,removeAccount:forbidden};
+const continuationRemote={defaults:()=>ok({enabled:true,revision:7}),setDefault:forbidden};
+const sessionView={source:'global',accountId:'canonical',globalAccountId:'canonical',accounts};
+const usage={accountId:'canonical',state:'ready',billing:'credits',budget:'individual',used:42.25,remaining:57.75,limit:100,percentUsed:42.25,observedAt:now};
+const root=ReactDOM.createRoot(document.getElementById('app'));
+if(q.get('surface')==='settings'){
+  document.getElementById('title').textContent='GitHub Copilot · Plugin details';
+  const namespace={ns:'github-copilot',revision:7,value:{followParentModel:false,searchRouting:{searchProvider:'auto',defaultSearchProvider:'deepseek-official'}},schema:{},applies:'live',secrets:[]};
+  const diagnostics={enabled:false,state:'ready',diagnostic:'none',dirty:false,persistedAt:now,snapshot:{schemaVersion:1,coverageVersion:1,epoch:1,updatedAt:now,rows:[],pending:[],dropped:0,clientDropped:0,clientUnconfirmed:0,saturated:0,evicted:0,interrupted:0}};
+  root.render(h(UI.CopilotPluginSettingsPage,{settings:{describe:()=>ok({writable:true,hasDocument:true,namespaces:[namespace]}),mutate:forbidden},
+    routing:{providers:()=>ok({supported:true,providers:[{id:'deepseek-official'},{id:'github-copilot-hosted'}]})},
+    diagnostics:{get:()=>ok(diagnostics),setEnabled:forbidden,clear:forbidden}}));
+}else if(q.get('surface')==='credits'){
+  document.getElementById('title').textContent='GitHub Copilot · Session Credits';
+  root.render(h(UI.CopilotUsageCard,{contextKey:'synthetic-session',locale:'en-US',
+    remote:{get:()=>ok(usage),refresh:()=>ok(usage)},accountsRemote,
+    sessionAccount:{get:()=>ok(sessionView),set:forbidden}}));
+}else root.render(h(UI.GitHubCopilotCompactAccount,{remote,account,accountsRemote,continuationRemote,locale:'en-US'}));
+window.fixture={synthetic:true,version:'0.4.0-alpha.130'};
+</script></body></html>
