@@ -20,6 +20,28 @@ global default. Unknown preference state is read-only, not an empty marking
 list. Fixed selection is unaffected. An admitted Auto turn retains its captured
 decision across steps, retries and subsequent preference changes.
 
+The snapshot is taken when Auto allocates a model, after bounded assessment and
+model loading, not necessarily at `turn/start`. Once allocated, the same turn
+cannot be reweighted by a later save. The current checkbox/configuration is not
+historical evidence of a previous decision. A retained observation window can
+contain several different turns and models; its end timestamp is not the
+timestamp of the selected message's decision.
+
+For #348, read-only native header evidence identifies the reported Astra
+selection at 06:25:58 local time, while the second allocation around 06:42:18
+selected a different model. The retained pre-install configuration had no mark,
+and a later configuration contains it. Whole-file modification time does not
+prove the high-cost leaf's save time. No decision-time saved revision or exact
+save receipt was retained, so the historical cause remains unconfirmed.
+
+`tests/fixtures/copilot-accounts-persistence-core.fixture.ts` now exercises the
+native SettingsForms save, preserved volatile configuration, the production Auto
+Host's captured candidate weight/share, and profile restart using synthetic
+models and settings only. It proves saved marks reach new allocations in that
+unchanged official Core fixture, not that the affected live Host read the mark
+before the historical Astra decision. Do not hardcode a model, change live
+preferences or rewrite a frozen explanation to manufacture a repair.
+
 ## Routing policy v1
 
 1. Account ownership, metadata validity, exclusion, input modality and input
