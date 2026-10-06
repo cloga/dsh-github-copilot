@@ -85,7 +85,7 @@ function nativeEvents(api: AccountModelApi): Response {
   return new Response(events.map(value => `event: ${value.type}\n${sse(value)}`).join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
 async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>, streamIdleTimeoutMs?: number,
-  compression?: { enabled: boolean; text: string }, customFetch?: StreamOptions['fetch']) {
+  compression?: { enabled: boolean; text: string }) {
   const item = descriptor(api)
   const guarded = { ...accountGuard(item.id), ...streamIdleTimeoutMs === undefined ? {} : { streamIdleTimeoutMs },
     ...compression === undefined ? {} : { responsesRequestCompression: compression.enabled } }
@@ -112,7 +112,6 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
       source: { kind: 'user' }, content: [{ type: 'text', text: compression.text }],
     })],
     ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
-    ...customFetch === undefined ? {} : { fetch: customFetch },
   })) assembler.push(chunk)
   return { assembler, model: prepared.model, env }
 }
@@ -146,14 +145,20 @@ describe('account-driven native provider', () => {
 
   it('keeps caller-owned Fetch unchanged and does not resend a gzip 415 response', async () => {
     const text = 'Synthetic context. '.repeat(15_000)
+    const item = descriptor('openai-responses')
     const customFetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
       expect(typeof init?.body).toBe('string')
       expect(new Headers(init?.headers).has('content-encoding')).toBe(false)
       return nativeEvents('openai-responses')
     })
-    const custom = await accountCall('openai-responses', undefined, undefined, undefined,
-      { enabled: true, text }, customFetch)
-    expect(custom.assembler.finish).toEqual({ kind: 'stop' })
+    const direct = createAccountProvider([item], {
+      ...accountGuard(item.id), responsesRequestCompression: true,
+    }, baseURL)
+    const customStream = direct.provider.streamSimple(direct.models[0]!, normalizeContext({
+      messages: [{ role: 'user', content: text, timestamp: 0 }],
+    }), { apiKey: 'synthetic-account-token', maxRetries: 0, fetch: customFetch })
+    for await (const _event of customStream) { /* Drain the native SDK response. */ }
+    expect((await customStream.result()).stopReason).toBe('stop')
     expect(customFetch).toHaveBeenCalledOnce()
 
     const unsupported = vi.fn(async (_input: unknown, init?: RequestInit) => {
