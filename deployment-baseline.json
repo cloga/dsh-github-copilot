@@ -252,7 +252,7 @@
     "piAi": "0.87.1",
     "runtimeDependencies": {
       "@earendil-works/pi-ai": "0.87.1",
-      "zod": "^4.4.3"
+      "zod": "4.6.5"
     },
     "sharedPeerDependencies": {
       "@deepseek-ai/dsh-authorization": "0.2.0-rc.2",

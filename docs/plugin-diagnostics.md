@@ -35,7 +35,9 @@ An uncertain write is not automatically replayed by the UI.
 ## Storage and limits
 
 The Host uses only the public storage-domain `global.get/set/close` seam and the
-configured backend. The official JSON backend root is **DSH-home shared**, so
+configured backend. The plugin pins Zod to the qualified published storage
+type contract; no shared schemas, prototypes or Core artifacts are adapted.
+The official JSON backend root is **DSH-home shared**, so
 the plugin addresses a separate domain using the public `profileContext.name`,
 encoded as a bounded storage-unit suffix. The technical profile name is used
 only for addressing, never included in rows, Remotes or exported JSON. Names

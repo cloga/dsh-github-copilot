@@ -40,7 +40,8 @@ describe('session search settings', () => {
     expect(readInlineConfig(live).diagnosticsEnabled).toBe(false)
     enabled = true
     expect(readInlineConfig(live).diagnosticsEnabled).toBe(true)
-    expect(() => Config({ ...base, diagnosticsEnabled: 'true' })).toThrow()
+    const untrusted = { ...base, diagnosticsEnabled: 'true' } as unknown as InlineConfig
+    expect(() => Config(untrusted)).toThrow()
   })
 
   it('keeps the account selector hidden, volatile and absent by default', () => {

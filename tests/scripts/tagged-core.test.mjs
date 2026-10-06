@@ -23,6 +23,13 @@ test('admits the exact 0.2.0-rc.2 source pin while retaining prior tagged baseli
 })
 
 const release = '0.1.3-alpha.1'
+test('installs the same unchanged diagnostic storage closure for CI and release qualification', async () => {
+  for (const workflow of ['ci.yml', 'release.yml']) {
+    const content = await readFile(join(process.cwd(), '.github', 'workflows', workflow), 'utf8')
+    assert.ok(content.includes("run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'"), workflow)
+  }
+})
+
 async function fixture(release = '0.1.3-alpha.1') {
   const base = await realpath(await mkdtemp(join(await realpath(tmpdir()), 'copilot-tagged-test-')))
   const root = join(base, 'plugin')
