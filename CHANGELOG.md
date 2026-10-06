@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.124 (prepared)
+
+- Plan compaction from model-facing content and tools instead of serializing native IDs, provenance and opaque replay envelopes, fixing metadata-driven exhaustion of the unchanged 16-call bound (#352).
+- Retain fixed system/tools and balanced tool units when reducing the budget after one typed native capacity failure; reject an indivisible unchanged retry. Preserve actual messages, final native admission, cancellation, account proof, diagnostics and single native checkpoint commit.
+- Add exact-source native admission/transaction regression with synthetic metadata-heavy history. Synthetic tests do not establish live recovery; no automatic Session replay, engine migration or new timeout/network retry.
+
 ## 0.4.0-alpha.123 (prepared)
 
 - Add default-off local account/Checking/compaction diagnostics with strict fixed-dimension counts, elapsed/unfinished age bins, separate Client/Host populations and explicit cancellation, rejection, interruption and reporting gaps (#347, #356).

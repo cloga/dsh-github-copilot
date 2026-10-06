@@ -25,7 +25,7 @@ Visible Models and Credits resolve missing names for saved accounts without acti
 
 Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
 
-**Package version: `0.4.0-alpha.123`. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. Verify the published Release and assets before using the versioned commands below; these instructions do not prove publication or installation.
+**Package version: `0.4.0-alpha.124`. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. Verify the published Release and assets before using the versioned commands below; these instructions do not prove publication or installation.
 
 ## What you can do
 
@@ -91,10 +91,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.123/dsh-github-copilot-0.4.0-alpha.123.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.124/dsh-github-copilot-0.4.0-alpha.124.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.123` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.124` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -166,6 +166,8 @@ canonical inline path; it is not a third routed fallback. Fetch is unchanged.
 Native context occupancy and Turn Usage remain Core-owned. The plugin forwards usage unchanged, including zero samples on failure/cancellation. Its separate context disclosure reports historical evidence, never current occupancy or a replacement `0%` meter. **Turn Usage incomplete** explains missing samples/lifecycle and recorded local blocks; it invents neither zero usage nor partial totals. Cancellation can retain usage, but does not guarantee a final supplier receipt. [Usage boundaries](./docs/copilot-usage.md).
 
 Owned timeout/replay errors preserve native usage before terminal failure restoration, including nonzero samples. A failed zero can still make the native ring show `0%`; this is not proof of an empty request. Retry-entry times describe backoff, not the failed request's duration. These accounting fixes do not cure supplier HTTP 408 or change retry policy.
+
+Compaction planning prices model-facing content and tools, not native IDs/provenance or opaque replay envelopes, avoiding metadata-driven exhaustion of the 16-call limit. The original messages/replay remain unchanged; final native admission still checks converted input. A typed capacity fallback keeps fixed prefixes and balanced tool units, never repeats an indivisible rejected input. This is conservative planning, not provider-exact token accounting.
 
 Managed request admission preserves truthful input/output limits and native transactions. Automatic pressure uses the initiating Agent's actual bound compaction service; a preset without an engine cannot borrow global recovery. The separately selected [recovery engine](./docs/manual-compaction-recovery.md) defaults to automatic segmented fallback for oversized summaries or an explicit summary context-limit failure. Fitting summaries stay native; timeout/408/auth/quota failures do not trigger segmentation. Up to 16 calls may add time and charges; cancellation or incomplete recovery never commits a partial summary. `automaticRecovery: false` disables this fallback; native `auto: false` still disables automatic compaction. Installation alone does not select the engine: follow the explicit same-scope configuration migration, preserving preset/custom-engine ownership and existing policies.
 
@@ -258,14 +260,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.123/dsh-github-copilot-0.4.0-alpha.123.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.123/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.124/dsh-github-copilot-0.4.0-alpha.124.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.124/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.123.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.124.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

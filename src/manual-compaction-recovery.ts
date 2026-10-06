@@ -14,6 +14,7 @@ import { calculateRequestBudget, resolveRequestBudgetPolicy } from './request-bu
 import type {} from './preview-route.ts'
 import { installBackgroundCompaction } from './background-compaction.ts'
 import type {} from './compaction-replay.ts'
+import { compactionSafeBoundaries, estimateCompactionInputBytes, reduceCompactionInputLimit } from './compaction-input-estimate.ts'
 
 interface RecoveryMessage {
   readonly role: string
@@ -76,24 +77,7 @@ export async function summarizeOversizedManualInput<M extends RecoveryMessage, R
   const prefix = input.messages[0]?.role === 'system' ? input.messages.slice(0, 1) : []
   const messages = input.messages.slice(prefix.length)
   if (messages.length === 0) throw recoverError('NO_HISTORY')
-  const pending = new Set<string>()
-  const safeBoundaries = new Set<number>([0])
-  for (let index = 0; index < messages.length; index++) {
-    const message = messages[index]!
-    if (message.role === 'assistant') {
-      for (const block of message.content) {
-        if (block.type === 'tool-call') {
-          if (!block.id || pending.has(block.id)) throw recoverError('UNBALANCED')
-          pending.add(block.id)
-        }
-      }
-    }
-    if (message.role === 'tool') {
-      if (!message.toolCallId || !pending.delete(message.toolCallId)) throw recoverError('UNBALANCED')
-    }
-    if (pending.size === 0) safeBoundaries.add(index + 1)
-  }
-  if (pending.size !== 0) throw recoverError('UNBALANCED')
+  const safeBoundaries = new Set(compactionSafeBoundaries(messages))
 
   let previous: RecoveryResult | undefined
   let offset = 0
@@ -239,8 +223,7 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
     const toolHistoryBytes = Buffer.byteLength(JSON.stringify(agent.session.toolHistory()), 'utf8')
     let inputLimit = budget.budget.hardInputLimit - 4096 - toolHistoryBytes
     if (inputLimit <= 0) throw recoverError('FIXED_PREFIX')
-    const estimate = (candidate: RecoveryInput<Message>): number =>
-      Buffer.byteLength(JSON.stringify(candidate), 'utf8')
+    const estimate = estimateCompactionInputBytes
     operationSignal.throwIfAborted()
     lease.assertCurrent()
     const originalSize = estimate(input)
@@ -252,9 +235,9 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
         operationSignal.throwIfAborted()
         if (!(error instanceof LlmError) || error.code !== 'CONTEXT_WINDOW_EXCEEDED') throw error
         lease.assertCurrent()
-        // A capacity failure is not an exact token measurement. Try one bounded
-        // reduction, never resubmit the rejected input or recursively retry.
-        inputLimit = Math.min(inputLimit, Math.floor(originalSize / 2))
+        // A capacity failure is not a measurement. Reduce partitionable
+        // history once while retaining fixed prefixes and balanced units.
+        inputLimit = reduceCompactionInputLimit(input, inputLimit)
         failedAttempt = true
       }
     }
