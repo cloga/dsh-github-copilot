@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createElement, useEffect, useId, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import { nativeButtonStyle, nativeHeadingStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 
 type Settings = Context['remote']['settings']
@@ -46,7 +46,7 @@ export async function saveParentFollowSettings(settings: Settings, saved: Snapsh
     revision: { previous: current.revision, next: result.value.revision } }
 }
 
-export function ParentModelFollowCard({ settings, onSaved }: Props) {
+export function ParentModelFollowCard({ settings, onSaved }: Props): ReactElement {
   const [saved, setSaved] = useState<Snapshot>()
   const [enabled, setEnabled] = useState(false)
   const [busy, setBusy] = useState(true)
