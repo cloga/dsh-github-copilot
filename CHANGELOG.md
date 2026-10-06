@@ -6,6 +6,12 @@
 - Match compact provider actions to native Edit; keep Sign out and Refresh content-sized, and wrap model actions below long names/IDs on narrow layouts. Preserve authorization, CAS, preferences, continuation, quota and native UI ownership.
 - Isolated real-component browser comparisons cover desktop/narrow widths and light/dark themes; they do not prove live Desktop activation or authorize installation/restart.
 
+## 0.4.0-alpha.125 (prepared)
+
+- Add the experimental, default-off `github-copilot.responsesRequestCompression` option: account-proven managed HTTP Responses JSON may use bounded, lossless gzip at the existing public Fetch boundary (#358).
+- Retain the original JSON for native admission, retries, replay and diagnostics; skip unsuitable bodies, preserve caller-owned Fetch and native failure handling, and never resend uncompressed or trim history.
+- Distinguish original composition bytes from prepared gzip body bytes in verified 408 guidance. Synthetic transport evidence is not proof of delivery, provider capability or universal timeout mitigation; no live install or enablement.
+
 ## 0.4.0-alpha.124 (prepared)
 
 - Plan compaction from model-facing content and tools instead of serializing native IDs, provenance and opaque replay envelopes, fixing metadata-driven exhaustion of the unchanged 16-call bound (#352).

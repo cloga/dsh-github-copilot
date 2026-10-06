@@ -35,6 +35,25 @@ describe('verified request-body timeout diagnostics', () => {
       expect(text).not.toContain('SECRET')
     } finally { observer.mockRestore() }
   })
+  it('distinguishes original JSON composition from compressed HTTP body bytes', async () => {
+    const body = JSON.stringify({ input: [{ role: 'user', content: [{ type: 'input_text', text: 'synthetic' }] }] })
+    const originalBytes = Buffer.byteLength(body, 'utf8')
+    const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408 }), body,
+      undefined, { protocol: 'openai-responses', responseHeadersMs: 20,
+        compression: { encoding: 'gzip', reason: 'compressed', originalBytes, wireBytes: 64 } })
+    expect(text).toContain(`Request body (original JSON): ${originalBytes} UTF-8 bytes`)
+    expect(text).toContain('Encoded body: 64 gzip bytes')
+    expect(text).toContain('Original JSON composition (UTF-8 bytes, not gzip wire bytes)')
+    expect(text).not.toContain('Composition (wire UTF-8 bytes)')
+  })
+  it('reports a skipped opt-in compression reason without changing identity diagnostics', async () => {
+    const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408 }), '{"input":[]}',
+      undefined, { protocol: 'openai-responses', responseHeadersMs: 20,
+        compression: { encoding: 'identity', reason: 'work-limit' } })
+    expect(text).toContain('Request compression not applied: work-limit; original request retained.')
+    expect(text).toContain('Composition (wire UTF-8 bytes)')
+    expect(text).not.toContain('Encoded body:')
+  })
   it.each([error, { error }])('recognizes the observed structured 408 without leaking body text', async body => {
     const response = new Response(JSON.stringify({ ...body, private: 'SECRET_RESPONSE' }), { status: 408 })
     const text = await requestBodyTimeoutDiagnostic(response, '{"input":"中文"}')

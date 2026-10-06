@@ -21,10 +21,16 @@ export async function requestBodyTimeoutDiagnostic(
   if (!record(error) || error.code !== 'user_request_timeout' || error.message !== observedMessage
     || value.code !== undefined && value.code !== error.code
     || value.message !== undefined && value.message !== error.message) return undefined
+  const compression = dispatch?.compression
+  const encoding = compression?.encoding === 'gzip'
+    ? ` Encoded body: ${compression.wireBytes} gzip bytes (prepared HTTP body, excluding transport framing; not confirmed delivered bytes). Lossless content encoding does not reduce context tokens or prove remote receipt.`
+    : compression !== undefined && compression.reason !== 'disabled'
+      ? ` Request compression not applied: ${compression.reason}; original request retained.`
+      : ''
   const size = body === undefined ? 'Request body size unavailable.'
-    : `Request body: ${Buffer.byteLength(body, 'utf8')} UTF-8 bytes (not context tokens).`
+    : `Request body${compression?.encoding === 'gzip' ? ' (original JSON)' : ''}: ${Buffer.byteLength(body, 'utf8')} UTF-8 bytes (not context tokens).`
   const composition = formatRequestBodyEvidence(dispatch === undefined ? { state: 'unavailable' }
-    : requestBodyEvidence(body, dispatch.protocol), dispatch?.responseHeadersMs)
+    : requestBodyEvidence(body, dispatch.protocol), dispatch?.responseHeadersMs, compression)
   const upload = formatRequestUploadEvidence(dispatch?.upload)
-  return `${REQUEST_BODY_TIMEOUT_MARKER} ${size} ${composition} ${upload} Native retry policy is unchanged. If retries exhaust, use these numbers to choose an explicit attachment/image-offload budget change or native compaction for compressible history; tool definitions and opaque replay may remain. Also check network/proxy health and GitHub service status. Composition alone does not establish a cause or supplier size limit. A larger client timeout does not change this server timeout. No history was trimmed or model switched.`
+  return `${REQUEST_BODY_TIMEOUT_MARKER} ${size}${encoding} ${composition} ${upload} Native retry policy is unchanged. If retries exhaust, use these numbers to choose an explicit attachment/image-offload budget change or native compaction for compressible history; tool definitions and opaque replay may remain. Also check network/proxy health and GitHub service status. Composition alone does not establish a cause or supplier size limit. A larger client timeout does not change this server timeout. No history was trimmed or model switched.`
 }

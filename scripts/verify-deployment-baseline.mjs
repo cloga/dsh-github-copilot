@@ -334,6 +334,32 @@ assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/request-body-
   'managed request-body timeout guidance must retain explicit source evidence')
 assert(publicAdapter.tests.some(item => item.file === 'tests/request-body-timeout.spec.ts'),
   'managed request-body timeout observation must retain bounded/cancellation regression evidence')
+assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/responses-request-compression.ts' && item.marker === 'MAXIMUM_WORK_BYTES')
+  && publicAdapter.sourceMarkers.some(item => item.file === 'src/responses-request-compression.ts'
+    && item.marker === 'satisfiesCompressionSavings')
+  && (await read('src/responses-request-compression.ts')).includes('Z_BEST_SPEED')
+  && publicAdapter.tests.some(item => item.file === 'tests/responses-request-compression.spec.ts'
+    && item.name === 'losslessly gzips eligible JSON and sets exact HTTP encoding and length without mutating headers'),
+  'managed Responses compression must retain bounded lossless encoding and native admission evidence')
+for (const [file, name] of [
+  ['tests/responses-request-compression.spec.ts', 'skips bodies above the compression work limit'],
+  ['tests/responses-request-compression.spec.ts', 'requires both the absolute and proportional savings thresholds'],
+  ['tests/config.spec.ts', 'keeps managed Responses request compression default-off and boolean-only'],
+  ['tests/preview-provider.spec.ts', 'preserves published-adapter JSON and usage across identity and gzip encoding'],
+  ['tests/preview-provider.spec.ts', 'keeps caller-owned Fetch unchanged and does not resend a gzip 415 response'],
+  ['tests/preview-provider.spec.ts', 'rechecks the request/account fence after compression and never dispatches revoked work'],
+  ['tests/preview-provider.spec.ts', 'keeps native %s transport when the option is enabled'],
+  ['tests/preview-provider.spec.ts', 'sends gzip with correct framing through Node Fetch'],
+  ['tests/preview-provider.spec.ts', 'keeps original JSON for replay-scope checks after gzip without retiring the account'],
+  ['tests/preview-provider.spec.ts', 'recompresses identical native JSON after HTTP 408 retries without an identity resend'],
+  ['tests/preview-route.spec.ts', 'reads compression policy when a prepared Responses call reaches lazy HTTP dispatch'],
+  ['tests/preview-route.spec.ts', 'does not let compressed wire bytes bypass native hard context admission'],
+  ['tests/request-body-timeout.spec.ts', 'distinguishes original JSON composition from compressed HTTP body bytes'],
+  ['tests/request-body-timeout.spec.ts', 'reports a skipped opt-in compression reason without changing identity diagnostics'],
+]) {
+  assert(publicAdapter.tests.some(item => item.file === file && item.name === name),
+    `managed Responses compression must retain acceptance case: ${file}: ${name}`)
+}
 assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/request-upload-evidence.ts' && item.marker === 'createRequestUploadObserver')
   && publicAdapter.tests.some(item => item.file === 'tests/request-upload-evidence.spec.ts'),
   'managed upload evidence must retain request-scoped public-event regression evidence')
