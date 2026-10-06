@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import test from 'node:test'
 
 const doc = path => readFile(new URL(`../../${path}`, import.meta.url), 'utf8')
@@ -46,7 +47,8 @@ test('current user guides retain task-oriented entry points and honest screensho
   for (const path of ['README.md', 'README.zh.md']) {
     const text = await doc(path)
     assert.ok(text.includes(pkg.version), path)
-    for (const image of ['copilot-model-preferences.png', 'copilot-search-routing.png']) {
+    for (const image of ['copilot-model-preferences.png', 'copilot-search-routing.png',
+      'copilot-accounts.png', 'copilot-accounts-credits.png']) {
       assert.ok(text.includes(`./docs/images/${image}`), `${path}: ${image}`)
       const bytes = await readFile(new URL(`../../docs/images/${image}`, import.meta.url))
       assert.deepEqual(bytes.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
@@ -54,7 +56,7 @@ test('current user guides retain task-oriented entry points and honest screensho
     assert.ok(text.includes('./CHANGELOG.md'), path)
     assert.ok(text.includes('./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics'), path)
   }
-  const provenance = JSON.parse(await doc('docs/current-client-provenance.json'))
+  const provenance = JSON.parse(await doc('docs/images/copilot-current-provenance.json'))
   assert.equal(provenance.synthetic, true)
   assert.equal(provenance.capture.externalRequests, false)
   assert.deepEqual(provenance.capture.pageErrors, [])
@@ -63,4 +65,70 @@ test('current user guides retain task-oriented entry points and honest screensho
   assert.doesNotMatch(migration, /planned `0\.4\.0-alpha\.9`/)
   assert.match(migration, /live-agents-only/)
   assert.match(migration, /does not attest its publication or execution/)
+})
+
+test('current screenshot provenance covers every packaged README capture', async () => {
+  const pkg = JSON.parse(await doc('package.json'))
+  const provenance = JSON.parse(await doc('docs/images/copilot-current-provenance.json'))
+  assert.match(provenance.clientVersion, /^\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/)
+  assert.match(provenance.sourceCommit, /^[a-f0-9]{40}$/)
+  assert.match(provenance.builtClientSha256, /^[a-f0-9]{64}$/)
+  assert.match(provenance.source, /Local pnpm build/)
+  assert.doesNotMatch(provenance.source, /Actual published archive/)
+  assert.ok(pkg.files.includes('docs/images/'))
+  assert.deepEqual(provenance.capture.viewports, [920, 375])
+  assert.deepEqual(provenance.capture.themes, ['dark', 'light'])
+  assert.equal(provenance.capture.horizontalOverflow, false)
+  assert.equal(Object.keys(provenance.components).length, 4)
+  for (const image of Object.keys(provenance.components)) {
+    const bytes = await readFile(new URL(`../../docs/images/${image}`, import.meta.url))
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), provenance.imageSha256[image], image)
+    assert.ok(bytes.readUInt32BE(20) > 400, `${image}: meaningful capture, not a clipped popup`)
+  }
+  const fixture = await doc(provenance.fixture)
+  assert.ok(fixture.includes(`version:'${provenance.clientVersion}'`))
+  assert.match(fixture, /connect-src 'none'/)
+  assert.match(fixture, /src="\/client\.js"/)
+  assert.match(fixture, /UI\.GitHubCopilotCompactAccount/)
+  assert.match(fixture, /UI\.CopilotUsageCard/)
+  assert.match(fixture, /UI\.CopilotPluginSettingsPage/)
+})
+
+test('README contracts stay bilingual, current and separate native summary routes', async () => {
+  const texts = await Promise.all(['README.md', 'README.zh.md'].map(doc))
+  for (const text of texts) {
+    for (const marker of ['0.2.0-rc.2', '0.2', '1.5×', 'Switch account',
+      'High cost', 'autoSemanticAssessment: false', 'automaticRecovery: false',
+      'auto: false', '--mode persisted-unit', '--mode reviewed-view', '--profile-name',
+      './docs/dual-model.md', './docs/session-continuation.md',
+      './docs/images/copilot-current-provenance.json']) assert.ok(text.includes(marker), marker)
+    assert.doesNotMatch(text, /prepared.*0\.4\.0-alpha\.130|0\.4\.0-alpha\.88/i)
+  }
+  assert.match(texts[0], /finite continuity bonus/)
+  assert.match(texts[0], /independently resolved native summary route/)
+  assert.match(texts[0], /additional accounts are independently authorized/)
+  assert.match(texts[1], /独立解析的原生摘要路由/)
+  assert.match(texts[1], /独立授权/)
+})
+
+test('README local Markdown links and target anchors exist', async () => {
+  for (const path of ['README.md', 'README.zh.md']) {
+    const text = await doc(path)
+    for (const match of text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)\)/g)) {
+      const target = match[1]
+      if (/^[a-z]+:/i.test(target)) continue
+      const [file, anchor] = target.split('#')
+      const content = await doc(file || path)
+      if (!anchor) continue
+      const counts = new Map()
+      const anchors = new Set([...content.matchAll(/^#{1,6}\s+(.+)$/gm)].map(heading => {
+        const slug = heading[1].toLowerCase().replace(/[`*_]/g, '')
+          .replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-')
+        const count = counts.get(slug) || 0
+        counts.set(slug, count + 1)
+        return count ? `${slug}-${count}` : slug
+      }))
+      assert.ok(anchors.has(decodeURIComponent(anchor)), `${path}: ${target}`)
+    }
+  }
 })

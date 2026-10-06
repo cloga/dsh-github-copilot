@@ -102,6 +102,12 @@ export async function verifyTarball(path, root = repositoryRoot) {
   const required = ['cordis.patch.yml', 'README.md', 'README.zh.md', 'LICENSE', 'deployment-baseline.json',
     ...expected.files.filter(path => !path.includes('*') && !path.endsWith('/')),
   ]
+  for (const doc of ['README.md', 'README.zh.md']) {
+    const source = files.get(`package/${doc}`)?.toString('utf8') ?? ''
+    for (const match of source.matchAll(/\[[^\]]*\]\(\.\/(docs\/images\/[a-z0-9-]+-provenance\.json)\)/gu)) {
+      required.push(match[1])
+    }
+  }
   for (const target of Object.values(pkg.exports)) {
     required.push(...(typeof target === 'string' ? [target] : Object.values(target)))
   }

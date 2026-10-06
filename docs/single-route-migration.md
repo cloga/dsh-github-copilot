@@ -4,7 +4,7 @@
 
 ## Result and boundaries
 
-One Host-owned OAuth account supplies many account models. The stable managed
+The selected Host-owned OAuth account supplies many account models. The stable managed
 route ID is `github-copilot-preview`, displayed as **GitHub Copilot**.
 Fresh installations need no native provider definition. Upgrades preserve
 existing `llm-pi-ai.providers.github-copilot`; two real groups can remain until
@@ -15,8 +15,9 @@ single-route enforcement; Core Edit/Delete remains. Model discovery/UI lifecycle
 is described in the [current README](../README.md#install-and-sign-in), not a
 prerequisite to removing a route.
 
-Keep `llm-pi-ai` and authorization mounted and preserve the sole credential
-record `llm-pi-ai/github-copilot`. Do not sign out, delete credentials or remove
+Keep `llm-pi-ai` and authorization mounted and preserve the canonical credential
+record `llm-pi-ai/github-copilot` and any independently authorized saved accounts.
+Do not sign out, delete credentials or remove
 authorization to hide a group. `models: []` can mean the default catalog, not
 disabled models.
 
@@ -111,7 +112,7 @@ may recreate canonical, not a second account.
 
 新安装无需原生 provider；升级保留已有 canonical 配置，两组都是真实路由，
 不是两个账号。迁移只在明确批准后移除审核过的
-`llm-pi-ai.providers.github-copilot`；唯一凭据、`llm-pi-ai`、授权服务及其它配置保留。
+`llm-pi-ai.providers.github-copilot`；canonical 凭据、独立授权的已保存账号、`llm-pi-ai`、授权服务及其它配置保留。
 不要退出登录、删除凭据或使用 `models: []` 来隐藏分组。
 
 先验证发布版本已实际加载，再调用无参数 `githubCopilot.migrationStatus()`。

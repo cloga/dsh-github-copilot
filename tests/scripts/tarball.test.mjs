@@ -43,11 +43,12 @@ test('archive validation catches missing exports, stale builds and absent README
     const data = new Map([
       ['package.json', JSON.stringify(pkg)],
       ['deployment-baseline.json', JSON.stringify({ package: { version: '1.0.0' } })],
-      ['README.md', '![preview](./docs/images/example.png)'],
+      ['README.md', '![preview](./docs/images/example.png)\n[Capture](./docs/images/example-provenance.json)'],
       ['README.zh.md', 'guide'], ['LICENSE', 'license'], ['cordis.patch.yml', '[]'],
       ['lib/index.js', 'host'], ['lib/client.js', 'client'], ['lib/remote.js', 'remote'],
       ['lib/search-routing-QwEr_123.js', 'shared chunk'], ['scripts/check-search-composition.mjs', 'readonly preflight'],
       ['lib/types/index.d.ts', 'types'], ['docs/images/example.png', 'synthetic'],
+      ['docs/images/example-provenance.json', '{"synthetic":true}'],
     ])
     for (const [path, content] of data) {
       const full = join(root, path)
@@ -58,6 +59,14 @@ test('archive validation catches missing exports, stale builds and absent README
     const save = async () => writeFile(archive, pack([...data].map(([path, content]) => entry('package/' + path, content))))
     await save()
     assert.equal((await verifyTarball(archive, root)).ok, true)
+    data.delete('docs/images/example-provenance.json')
+    await save()
+    await assert.rejects(verifyTarball(archive, root), /Missing archive export or document/)
+    data.set('docs/images/example-provenance.json', '{"synthetic":true}')
+    data.set('docs/images/unreviewed.json', '{"synthetic":true}')
+    await save()
+    await assert.rejects(verifyTarball(archive, root), /Unexpected file/)
+    data.delete('docs/images/unreviewed.json')
     for (const mutation of [
       { scripts: { postinstall: 'echo unexpected-install-behavior' } },
       { type: 'commonjs' },
