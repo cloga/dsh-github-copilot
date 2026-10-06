@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   workflow_call:
   pull_request:
   push:
@@ -11,6 +12,21 @@ permissions:
   contents: read
 
 jobs:
+  prepare-lockfile:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: pnpm install --lockfile-only --ignore-scripts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-lockfile
+          path: pnpm-lock.yaml
   verify:
     strategy:
       fail-fast: false
@@ -75,6 +91,9 @@ jobs:
       - name: Install native account persistence verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-credentials-local...' --filter '@deepseek-ai/dsh-app-boot...' --filter '@deepseek-ai/dsh-config-editor...' --filter '@deepseek-ai/dsh-settings...' --filter '@deepseek-ai/dsh-authorization...'
+      - name: Install native diagnostic storage verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'
       - name: Prepare exact DSH 0.2.0-rc.2 tagged-source runtime verification
         shell: bash
         run: |
