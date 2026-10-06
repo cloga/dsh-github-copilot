@@ -106,6 +106,7 @@ describe('additive historical context notice', () => {
     })
     await view.render()
     expect(view.container.textContent).toContain('No applicable valid post-compaction input sample')
+    expect(view.container.textContent).not.toContain('Last valid input')
     expect(view.container.textContent).not.toContain('input sample is recorded')
     expect(view.container.querySelector('summary')?.textContent).toBe('Context occupancy awaiting confirmation')
   })

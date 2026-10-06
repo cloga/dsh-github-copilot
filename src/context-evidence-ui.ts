@@ -151,9 +151,9 @@ export function ContextEvidenceNotice({ evidence, locale = 'en', applicable = tr
     evidence === undefined || evidence.reason === 'unknown' || evidence.reason === 'failed-zero'
       ? h('p', { style: composerNoticeParagraphStyle }, evidence === undefined ? text.missing
         : evidence.reason === 'unknown' ? text.unknown : text.explanation) : null,
-    sample ? h('p', { style: composerNoticeParagraphStyle },
+    sample && sample.tokens > 0 ? h('p', { style: composerNoticeParagraphStyle },
       `${text.sample}: ${new Intl.NumberFormat(locale.startsWith('zh') ? 'zh-CN' : 'en-US').format(sample.tokens)} tokens`) : null,
-    evidence === undefined ? null : h('p', { style: composerNoticeParagraphStyle }, sample ? text.historical : text.revoked))
+    evidence === undefined ? null : h('p', { style: composerNoticeParagraphStyle }, sample && sample.tokens > 0 ? text.historical : text.revoked))
   return controls === undefined ? disclosure : h('section', {
     'data-copilot-composer-notice': 'context', style: composerNoticeStyle }, disclosure, controls)
 }
