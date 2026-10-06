@@ -5,7 +5,7 @@ import { ReplayRecoveryViewSchema } from './replay-recovery-types.ts'
 import type { ReplayRecoveryDuration, ReplayRecoveryView } from './replay-recovery-types.ts'
 import { SessionContinuationCard } from './session-continuation-ui.ts'
 import type { SessionContinuationRemote } from './session-continuation-ui.ts'
-import { CompactionContinuationNotice } from './compaction-continuation-ui.ts'
+import { CompactionContinuationNotice, CompactionNoticePresentation } from './compaction-continuation-ui.ts'
 import { COMPACTION_CONTINUATION } from './session-continuation-types.ts'
 import { composerNoticeStyle, composerNoticeSurfaceStyle,
   composerNoticeParagraphStyle, composerNoticeButtonStyle } from './composer-notice-style.ts'
@@ -126,8 +126,8 @@ function isRuntime(value: unknown): value is Runtime {
   return record(value) && typeof value.sessionId === 'string' && value.sessionId !== ''
     && typeof value.useSession === 'function' && typeof value.useProjection === 'function'
 }
-function Surface({ runtime, remote, continuation, locale }: { runtime: Runtime; remote: ReplayRecoveryRemote;
-  continuation?: SessionContinuationRemote; locale: Locale | undefined }): ReactElement | null {
+function Surface({ runtime, remote, continuation, locale, presentation }: { runtime: Runtime; remote: ReplayRecoveryRemote;
+  continuation?: SessionContinuationRemote; locale: Locale | undefined; presentation: CompactionNoticePresentation }): ReactElement | null {
   const valid = runtime.useSession(value => record(value) && value.sessionId === runtime.sessionId
     && value.removed === false && value.openState === 'open')
   const selected = runtime.useProjection('modelSelection')
@@ -138,7 +138,7 @@ function Surface({ runtime, remote, continuation, locale }: { runtime: Runtime; 
     () => locale?.getLocale().active ?? 'en', () => 'en')
   if (!valid || !record(selected) || !record(selected.next) || selected.next.provider !== 'github-copilot-preview') return null
   return h('div', null,
-    h(CompactionContinuationNotice, { sessionId: runtime.sessionId, remote: continuation, lifecycle: compaction, locale: language }),
+    h(CompactionContinuationNotice, { sessionId: runtime.sessionId, remote: continuation, lifecycle: compaction, locale: language, presentation }),
     h(ReplayRecoveryCard, { key: JSON.stringify([runtime.sessionId, selected.next.model]),
       sessionId: runtime.sessionId, remote, continuation, locale: language, running, refreshKey: lastError }))
 }
@@ -148,11 +148,12 @@ export function registerReplayRecoveryUi(ctx: Context): () => void {
     ctx.logger.warn('COPILOT_REPLAY_RECOVERY_SLOT_UNAVAILABLE'); return noop
   }
   const slots = candidate
+  const presentation = new CompactionNoticePresentation()
   let faces: { remote: ReplayRecoveryRemote; continuation: SessionContinuationRemote } | undefined
   const language: unknown = ctx.get('locale')
   const locale = isLocale(language) ? language : undefined
   const name = 'conversation.input.dock'
-  return slots.inject(name, () => {
+  const remove = slots.inject(name, () => {
     const spec = slots.spec(name)
     if (spec?.kind !== 'list' || spec.scope !== 'session') { ctx.logger.warn('COPILOT_REPLAY_RECOVERY_SLOT_UNAVAILABLE'); return noop }
     faces ??= { remote: ctx.remote.githubCopilotReplayRecovery, continuation: ctx.remote.githubCopilotSessionContinuation }
@@ -161,7 +162,8 @@ export function registerReplayRecoveryUi(ctx: Context): () => void {
       if (!isRuntime(props)) {
         ctx.logger.warn('COPILOT_REPLAY_RECOVERY_SESSION_UNAVAILABLE'); return null
       }
-      return h(Surface, { runtime: props, remote, continuation, locale })
+      return h(Surface, { runtime: props, remote, continuation, locale, presentation })
     })
   })
+  return () => { remove(); presentation.dispose() }
 }
