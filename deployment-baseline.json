@@ -414,6 +414,8 @@
       "tests": [
         {"file": "tests/context-usage.spec.ts", "name": "classifies zero only for separate historical evidence without changing the sample"},
         {"file": "tests/context-evidence.spec.ts", "name": "replays failed zero samples without discarding the last valid input sample"},
+        {"file": "tests/context-evidence.spec.ts", "name": "separates committed compaction, subsequent request success and applicable input sampling"},
+        {"file": "tests/context-evidence.spec.ts", "name": "tracks unchanged-header native steps and reads only the settled message source leaves"},
         {"file": "tests/context-evidence-ui.spec.ts", "name": "labels counts as historical rather than current occupancy in %s"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "uses native auxiliary typography for the entire notice and inherited controls in an independent dock row"},
         {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "cold-folds native model selections independently without replacing the controller projection"},

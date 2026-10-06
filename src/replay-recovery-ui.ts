@@ -5,8 +5,6 @@ import { ReplayRecoveryViewSchema } from './replay-recovery-types.ts'
 import type { ReplayRecoveryDuration, ReplayRecoveryView } from './replay-recovery-types.ts'
 import { SessionContinuationCard } from './session-continuation-ui.ts'
 import type { SessionContinuationRemote } from './session-continuation-ui.ts'
-import { CompactionContinuationNotice } from './compaction-continuation-ui.ts'
-import { COMPACTION_CONTINUATION } from './session-continuation-types.ts'
 import { composerNoticeStyle, composerNoticeSurfaceStyle,
   composerNoticeParagraphStyle, composerNoticeButtonStyle } from './composer-notice-style.ts'
 
@@ -131,14 +129,12 @@ function Surface({ runtime, remote, continuation, locale }: { runtime: Runtime; 
   const valid = runtime.useSession(value => record(value) && value.sessionId === runtime.sessionId
     && value.removed === false && value.openState === 'open')
   const selected = runtime.useProjection('modelSelection')
-  const compaction = runtime.useProjection(COMPACTION_CONTINUATION)
   const running = runtime.useSession(value => !record(value) || value.running !== false)
   const lastError = runtime.useSession(value => record(value) && typeof value.lastAgentError === 'string' ? value.lastAgentError : '')
   const language = useSyncExternalStore(listener => locale?.subscribe(listener) ?? noop,
     () => locale?.getLocale().active ?? 'en', () => 'en')
   if (!valid || !record(selected) || !record(selected.next) || selected.next.provider !== 'github-copilot-preview') return null
   return h('div', null,
-    h(CompactionContinuationNotice, { sessionId: runtime.sessionId, remote: continuation, lifecycle: compaction, locale: language }),
     h(ReplayRecoveryCard, { key: JSON.stringify([runtime.sessionId, selected.next.model]),
       sessionId: runtime.sessionId, remote, continuation, locale: language, running, refreshKey: lastError }))
 }
