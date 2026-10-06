@@ -6,6 +6,13 @@ const base: InlineConfig = { enabled: true, providers: [], includeSources: true,
   idleTimeoutMs: 300_000, probe: true, probeTimeoutMs: 30_000 }
 
 describe('session search settings', () => {
+  it('keeps managed Responses request compression default-off and boolean-only', () => {
+    expect(readInlineConfig(Config(base)).responsesRequestCompression).toBe(false)
+    expect(readInlineConfig(Config({ ...base, responsesRequestCompression: true })).responsesRequestCompression).toBe(true)
+    expect(readInlineConfig(Config({ ...base, responsesRequestCompression: false })).responsesRequestCompression).toBe(false)
+    expect(() => Config({ ...base, responsesRequestCompression: 'true' } as unknown as InlineConfig)).toThrow()
+  })
+
   it('defaults to session routing with automatic disclosed DeepSeek fallback', () => {
     expect(Config(base)).toMatchObject({ routeWebSearch: true, searchFallback: 'deepseek' })
   })
@@ -100,11 +107,12 @@ describe('managed request and compaction settings', () => {
   it('separates managed chat liveness and image projection from search deadlines', () => {
     expect(readInlineConfig(Config(base))).toMatchObject({
       chatStreamIdleTimeoutMs: 300_000, chatStreamLiveness: true, chatMaxRequestImageBytes: 20_971_520,
+      responsesRequestCompression: false,
     })
     expect(readInlineConfig(Config({ ...base, chatStreamIdleTimeoutMs: 400_000,
-      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608 }))).toMatchObject({
+      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608, responsesRequestCompression: true }))).toMatchObject({
       idleTimeoutMs: 300_000, chatStreamIdleTimeoutMs: 400_000,
-      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608,
+      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608, responsesRequestCompression: true,
     })
   })
   it.each(['chatStreamIdleTimeoutMs', 'chatMaxRequestImageBytes'] as const)('rejects unsafe managed request setting %s', key => {

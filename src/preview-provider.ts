@@ -12,6 +12,8 @@ import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { CopilotResponsesReplayError, isCopilotInputItemScopeError, normalizeCopilotResponsesPayload } from './responses-replay-compat.ts'
 import type { ResponsesRetryReplay } from './responses-replay-compat.ts'
 import { requestBodyTimeoutDiagnostic } from './request-body-timeout.ts'
+import { prepareResponsesRequest } from './responses-request-compression.ts'
+import type { RequestCompressionEvidence } from './responses-request-compression.ts'
 import { createRequestUploadObserver } from './request-upload-evidence.ts'
 import { CopilotStreamIdleError, CopilotStreamLiveness } from './copilot-stream-liveness.ts'
 
@@ -47,6 +49,8 @@ export interface PreviewProviderGuard {
 
 /** Guard for one selected model in an account-bound descriptor snapshot. */
 export interface AccountProviderGuard extends PreviewProviderGuard {
+  /** Explicit lossless HTTP encoding; default-off and independent of context admission. */
+  readonly responsesRequestCompression?: boolean
   /** Explicit, request-admitted recovery; absent by default. */
   recoverReplay?(payload: unknown): unknown
   /** Only exact verified scope HTTP failures may offer recovery evidence. */
@@ -253,25 +257,45 @@ export function createAccountProvider(
       const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
         guard.requestCheckpoint?.()
         guard.onRequestBodyTimeout?.(undefined)
-        liveness?.beginRequest(typeof init?.body === 'string' ? init.body : undefined)
+        const originalBody = typeof init?.body === 'string' ? init.body : undefined
         const replayHeaders = responses && init?.headers !== undefined ? new Headers(init.headers) : undefined
         const replayDispatch = responses ? {
-          body: typeof init?.body === 'string' ? init.body : undefined,
+          body: originalBody,
           sessionHeader: replayHeaders?.has('session_id'),
           clientRequestHeader: replayHeaders?.has('x-client-request-id'),
         } : undefined
+        let dispatchInput = input
+        let dispatchInit = init
+        let compression: RequestCompressionEvidence | undefined
+        if (responses && guard.responsesRequestCompression === true) {
+          const signals = [lease.signal]
+          if (options.signal != null) signals.push(options.signal)
+          if (init?.signal != null) signals.push(init.signal)
+          const signal = AbortSignal.any(signals)
+          const prepared = await prepareResponsesRequest(input, init, model.baseUrl, true,
+            options.fetch !== undefined, signal, entry.api)
+          guard.assertActive()
+          guard.requestCheckpoint?.()
+          signal.throwIfAborted()
+          dispatchInput = prepared.input
+          dispatchInit = prepared.init
+          compression = prepared.evidence
+        }
+        liveness?.beginRequest(originalBody)
         let response: Response
         const upload = guard.onRequestBodyTimeout === undefined ? undefined : createRequestUploadObserver()
         const startedAt = performance.now()
-        try { response = await (upload === undefined ? fetch(input, init) : upload.run(() => fetch(input, init))) }
+        try { response = await (upload === undefined
+          ? fetch(dispatchInput, dispatchInit)
+          : upload.run(() => fetch(dispatchInput, dispatchInit))) }
         catch (error) { retry?.observe(undefined, 0); throw error }
         finally { upload?.close() }
         const responseHeadersMs = performance.now() - startedAt
-        retry?.observe(typeof init?.body === 'string' ? init.body : undefined, response.status)
+        retry?.observe(originalBody, response.status)
         if (response.status === 408 && guard.onRequestBodyTimeout !== undefined) {
-          const diagnostic = await requestBodyTimeoutDiagnostic(response,
-            typeof init?.body === 'string' ? init.body : undefined, lease.signal,
-            { protocol: entry.api, responseHeadersMs, ...upload === undefined ? {} : { upload: upload.snapshot() } })
+          const diagnostic = await requestBodyTimeoutDiagnostic(response, originalBody, lease.signal,
+            { protocol: entry.api, responseHeadersMs, ...upload === undefined ? {} : { upload: upload.snapshot() },
+              ...compression === undefined ? {} : { compression } })
           if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout(diagnostic)
         }
         // A bounded clone identifies only the observed request-scope rejection.

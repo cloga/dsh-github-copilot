@@ -1,4 +1,5 @@
 import type { RequestUploadEvidence } from './request-upload-evidence.ts'
+import type { RequestCompressionEvidence } from './responses-request-compression.ts'
 
 export type RequestBodyProtocol = 'openai-responses' | 'openai-completions' | 'anthropic-messages'
 export const REQUEST_BODY_EVIDENCE_LIMITS = Object.freeze({
@@ -30,16 +31,24 @@ export interface RequestBodyDispatchEvidence {
   /** Fetch invocation to response headers, not upload duration or clone-observation time. */
   readonly responseHeadersMs: number
   readonly upload?: RequestUploadEvidence
+  readonly compression?: RequestCompressionEvidence
 }
 
-export function formatRequestBodyEvidence(evidence: RequestBodyEvidence, responseHeadersMs?: number): string {
+export function formatRequestBodyEvidence(
+  evidence: RequestBodyEvidence,
+  responseHeadersMs?: number,
+  compression?: RequestCompressionEvidence,
+): string {
   const elapsed = responseHeadersMs === undefined ? undefined : Math.round(responseHeadersMs)
   const timing = responseHeadersMs !== undefined && responseHeadersMs >= 0
     && elapsed !== undefined && Number.isSafeInteger(elapsed)
     ? `Fetch-to-response-headers: ${elapsed} ms (round trip, not upload duration).`
     : 'Fetch-to-response-headers timing unavailable.'
   if (evidence.state !== 'complete') return `Composition unavailable (${evidence.state}); no partial totals inferred. ${timing}`
-  return `Composition (wire UTF-8 bytes): conversation ${evidence.conversationBytes}, tool definitions ${evidence.toolSchemaBytes}, top-level system/instructions ${evidence.systemBytes}, other/framing ${evidence.otherBytes}. Within conversation (disjoint subsets): image blocks ${evidence.imageBlockBytes}, opaque replay ${evidence.opaqueReplayBytes}, remaining ${evidence.remainingConversationBytes} (text/tool history, framing and unrecognized fields). Image blocks include URLs/references, not decoded image sizes; unknown encodings stay in remaining/other. ${timing}`
+  const label = compression?.encoding === 'gzip'
+    ? 'Original JSON composition (UTF-8 bytes, not gzip wire bytes)'
+    : 'Composition (wire UTF-8 bytes)'
+  return `${label}: conversation ${evidence.conversationBytes}, tool definitions ${evidence.toolSchemaBytes}, top-level system/instructions ${evidence.systemBytes}, other/framing ${evidence.otherBytes}. Within conversation (disjoint subsets): image blocks ${evidence.imageBlockBytes}, opaque replay ${evidence.opaqueReplayBytes}, remaining ${evidence.remainingConversationBytes} (text/tool history, framing and unrecognized fields). Image blocks include URLs/references, not decoded image sizes; unknown encodings stay in remaining/other. ${timing}`
 }
 
 type JsonObject = { [key: string]: unknown }
