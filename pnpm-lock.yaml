@@ -15,8 +15,8 @@ importers:
         specifier: 6.28.1
         version: 6.28.1
       zod:
-        specifier: ^4.4.3
-        version: 4.5.4
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ~4.0.4

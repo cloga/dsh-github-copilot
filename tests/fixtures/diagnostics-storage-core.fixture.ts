@@ -10,9 +10,9 @@ import { diagnosticsDomain, diagnosticsDomainForProfile } from '../../src/diagno
 import { DiagnosticsCollector, emptyDiagnostics } from '../../src/diagnostics-collector.ts'
 import { DiagnosticsSnapshotSchema } from '../../src/diagnostics-types.ts'
 
-it('adapts the owned storage schema across published Zod minors without weakening strict parsing', async () => {
+it('uses the strict owned schema with the published storage validation contract', async () => {
   const schema = diagnosticsDomain.global.schema
-  expect(schema).not.toBe(DiagnosticsSnapshotSchema)
+  expect(schema).toBe(DiagnosticsSnapshotSchema)
   expect(schema.validate(emptyDiagnostics())).toBe(true)
   expect(await schema.validateAsync(emptyDiagnostics())).toBe(true)
   const invalid = { ...emptyDiagnostics(), accountId: 'synthetic-sensitive-sentinel' }

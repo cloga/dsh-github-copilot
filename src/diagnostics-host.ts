@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-storage-domain'
-import type { Domain } from '@deepseek-ai/dsh-storage-domain'
+import type { Domain, DomainGlobalSpec } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import { DiagnosticsCollector, emptyDiagnostics } from './diagnostics-collector.ts'
 import { DiagnosticsSnapshotSchema, diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
@@ -12,19 +12,13 @@ import { ClientDiagnosticsBatchSchema } from './diagnostics-remote.ts'
 import type { ClientDiagnosticsBatch } from './diagnostics-remote.ts'
 import packageJson from '#package.json'
 
-// Published storage declarations may use a newer Zod minor than the plugin.
-// Adapt only this owned clone; never change shared schemas or prototypes.
-const diagnosticsStorageSchema = Object.assign(DiagnosticsSnapshotSchema.clone(), {
-  validate(value: unknown): value is DiagnosticsSnapshot {
-    return DiagnosticsSnapshotSchema.safeParse(value).success
-  },
-  async validateAsync(value: unknown): Promise<boolean> {
-    return (await DiagnosticsSnapshotSchema.safeParseAsync(value)).success
-  },
-})
+const diagnosticsStorageGlobal: DomainGlobalSpec<DiagnosticsSnapshot> = {
+  schema: DiagnosticsSnapshotSchema,
+  initial: emptyDiagnostics(),
+}
 export const diagnosticsDomain = {
   name: 'github_copilot_diagnostics', version: 1, tables: {},
-  global: { schema: diagnosticsStorageSchema, initial: emptyDiagnostics() },
+  global: diagnosticsStorageGlobal,
 }
 export function diagnosticsDomainForProfile(profileId: string): typeof diagnosticsDomain {
   if (!/^[a-zA-Z0-9_-]{1,48}$/.test(profileId)) throw new Error('COPILOT_DIAGNOSTICS_PROFILE_UNAVAILABLE')
