@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { COPILOT_CONTEXT_EVIDENCE, initialContextEvidence } from '../src/context-evidence.ts'
 import type { ContextEvidence } from '../src/context-evidence.ts'
 import { ContextEvidenceNotice, registerContextEvidenceUi } from '../src/context-evidence-ui.ts'
+import { foldContextEvidence } from '../src/context-evidence.ts'
+import { COMPACTION_CONTINUATION } from '../src/session-continuation-types.ts'
 
 const cleanups: Array<() => void> = []
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }) })
@@ -23,7 +25,8 @@ function mount<P extends object>(component: ComponentType<P>, props: P) {
   document.body.append(container)
   const root = createRoot(container)
   cleanups.push(() => root.unmount())
-  return { container, render: async (next = props) => { await act(async () => { root.render(h(component, next)) }) } }
+  return { container, render: async (next = props) => { await act(async () => { root.render(h(component, next)) }) },
+    hide: async () => { await act(async () => { root.render(null) }) } }
 }
 function source<T>(initial: T) {
   let value = initial
@@ -38,8 +41,13 @@ function fixture(spec = { kind: 'list', scope: 'session' }) {
   let declare: (() => () => void) | undefined
   let remove: (() => void) | undefined
   const released = vi.fn()
+  const continuation = { get: vi.fn(async () => ({ ok: true, value: {
+    enabled: true, revision: 1, compaction: { id: 'c', state: 'completed' },
+  } })), set: vi.fn() }
   const ctx = {
-    get: (name: string): unknown => name === 'slots' ? ctx.slots : undefined, logger: { warn: vi.fn() },
+    remote: { githubCopilotSessionContinuation: continuation },
+    get: (name: string): unknown => name === 'slots' ? ctx.slots
+      : name === 'remote' ? { githubCopilotSessionContinuation: continuation } : undefined, logger: { warn: vi.fn() },
     slots: {
       spec: () => spec,
       inject: vi.fn((_name: string, callback: () => () => void) => {
@@ -54,9 +62,85 @@ function fixture(spec = { kind: 'list', scope: 'session' }) {
   }
   const dispose = registerContextEvidenceUi(ctx as unknown as Context)
   cleanups.push(dispose)
-  return { ctx, released, component: () => component!, declare: () => { remove = declare?.() }, dispose }
+  return { ctx, continuation, released, component: () => component!, declare: () => { remove = declare?.() }, dispose }
 }
 describe('additive historical context notice', () => {
+  const completed = (): ContextEvidence => [
+    { seq: 1, type: 'request/header', data: { header: { config: route } } },
+    { seq: 2, type: 'compaction/start', data: { compactionId: 'c' } },
+    { seq: 3, type: 'user/message', data: { source: { kind: 'compact-checkpoint', compactionId: 'c' } } },
+    { seq: 4, type: 'compaction/end', data: { compactionId: 'c' } },
+  ].reduce(foldContextEvidence, initialContextEvidence())
+  it.each(['en', 'zh-CN'])('separates native commit, subsequent success and missing sampling in %s', async locale => {
+    let evidence = completed()
+    const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence, locale })
+    await view.render()
+    expect(view.container.querySelector('summary')?.textContent).toContain(locale === 'en' ? 'Compaction completed' : '压缩已完成')
+    expect(view.container.textContent).toContain(locale === 'en' ? 'No subsequent normal request' : '尚无已完成的普通请求')
+    evidence = foldContextEvidence(evidence, { seq: 5, type: 'step/start', data: { turn: 1, step: 1 } })
+    evidence = foldContextEvidence(evidence, { seq: 6, type: 'assistant/message', data: { turn: 1, step: 1,
+      message: { source: route }, stream: [{ type: 'chunk', chunk: { type: 'finish', reason: { kind: 'stop' } } }] } })
+    await view.render({ evidence, locale })
+    expect(view.container.querySelector('summary')?.textContent).toContain(locale === 'en' ? 'subsequent request succeeded' : '后续请求已成功')
+    expect(view.container.textContent).toContain(locale === 'en' ? 'No applicable valid post-compaction' : '尚未确认仍适用的有效压缩后输入采样')
+    expect(view.container.querySelector('details')?.open).toBe(false)
+    expect(view.container.querySelector('[role="progressbar"]')).toBeNull()
+  })
+  it('keeps sampling separate from a subsequent failure and respects route applicability', async () => {
+    const evidence = { ...completed(), sample: { tokens: 42, seq: 6, route }, invalid: false }
+    const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence })
+    await view.render()
+    expect(view.container.textContent).toContain('input sample is recorded')
+    await view.render({ evidence: { ...evidence, invalid: true,
+      compaction: evidence.compaction ? { ...evidence.compaction, request: 'failed' } : null } })
+    expect(view.container.querySelector('summary')?.textContent).toContain('subsequent request failed')
+    expect(view.container.textContent).not.toContain('input sample is recorded')
+    await view.render({ evidence, applicable: false })
+    expect(view.container.textContent).not.toContain('42 tokens')
+    expect(view.container.textContent).not.toContain('input sample is recorded')
+  })
+  it('does not certify a successful zero input sample or expire its uncertainty explanation', async () => {
+    const evidence = { ...completed(), sample: { tokens: 0, seq: 6, route }, invalid: false }
+    const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, {
+      evidence, showCompactionResult: false,
+    })
+    await view.render()
+    expect(view.container.textContent).toContain('No applicable valid post-compaction input sample')
+    expect(view.container.textContent).not.toContain('Last valid input')
+    expect(view.container.textContent).not.toContain('input sample is recorded')
+    expect(view.container.querySelector('summary')?.textContent).toBe('Context occupancy awaiting confirmation')
+  })
+  it('mounts one combined disclosure and reads native commit status without policy writes', async () => {
+    vi.useFakeTimers()
+    const f = fixture()
+    f.declare()
+    const useProjection = (key: string) => key === COPILOT_CONTEXT_EVIDENCE ? completed()
+      : key === COMPACTION_CONTINUATION ? { id: 'c', running: false } : { next: route }
+    const useSession = <T,>(select: (value: unknown) => T): T =>
+      select({ sessionId: 'a', removed: false, openState: 'open' })
+    const view = mount(f.component(), { sessionId: 'a', useProjection, useSession })
+    try {
+      await view.render()
+      expect(view.container.querySelectorAll('[data-copilot-composer-notice]')).toHaveLength(1)
+      expect(view.container.querySelector('summary')?.textContent).toContain('Compaction completed')
+      expect(view.container.textContent).toContain('Hidden reasoning context was omitted')
+      expect(f.continuation.get).toHaveBeenCalledTimes(1)
+      expect(f.continuation.get).toHaveBeenCalledWith('a')
+      expect(f.continuation.set).not.toHaveBeenCalled()
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+      await view.hide()
+      expect(vi.getTimerCount()).toBe(0)
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      await view.render({ sessionId: 'a', useProjection, useSession })
+      expect(view.container.querySelector('summary')?.textContent).toContain('Compaction completed')
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+      expect(view.container.querySelector('summary')?.textContent).not.toContain('Compaction completed')
+      expect(view.container.textContent).toContain('Context occupancy awaiting confirmation')
+      expect(view.container.textContent).toContain('Native 0% does not prove an empty context')
+      expect(view.container.querySelector('[aria-label="Close compaction notice"]')).toBeNull()
+      expect(f.continuation.get).toHaveBeenCalledTimes(2)
+    } finally { vi.useRealTimers() }
+  })
   it.each(['en', 'zh-CN'])('matches composer statistics typography without changing disclosure behavior in %s', async locale => {
     const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence: invalid, locale })
     await view.render()
@@ -114,7 +198,8 @@ describe('additive historical context notice', () => {
     const selection = source<unknown>({ next: route })
     const evidence = source<unknown>(invalid)
     const session = source({ sessionId: 'a', removed: false, openState: 'open' })
-    const useProjection = (key: string) => key === COPILOT_CONTEXT_EVIDENCE ? evidence.use() : selection.use()
+    const useProjection = (key: string) => key === COPILOT_CONTEXT_EVIDENCE ? evidence.use()
+      : key === COMPACTION_CONTINUATION ? undefined : selection.use()
     const useSession = <T,>(select: (value: unknown) => T): T => select(session.use())
     const view = mount(f.component(), { sessionId: 'a', useProjection, useSession })
     await view.render()

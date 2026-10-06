@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.127"
+    "version": "0.4.0-alpha.128"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -414,6 +414,8 @@
       "tests": [
         {"file": "tests/context-usage.spec.ts", "name": "classifies zero only for separate historical evidence without changing the sample"},
         {"file": "tests/context-evidence.spec.ts", "name": "replays failed zero samples without discarding the last valid input sample"},
+        {"file": "tests/context-evidence.spec.ts", "name": "separates committed compaction, subsequent request success and applicable input sampling"},
+        {"file": "tests/context-evidence.spec.ts", "name": "tracks unchanged-header native steps and reads only the settled message source leaves"},
         {"file": "tests/context-evidence-ui.spec.ts", "name": "labels counts as historical rather than current occupancy in %s"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "uses native auxiliary typography for the entire notice and inherited controls in an independent dock row"},
         {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "cold-folds native model selections independently without replacing the controller projection"},
@@ -604,7 +606,7 @@
         {"file": "src/compaction-continuation.ts", "marker": "COPILOT_CONTINUATION_COMPACTION_BOUNDARY_UNAVAILABLE"},
         {"file": "src/compaction-continuation-ui.ts", "marker": "Compacting with visible history"},
         {"file": "src/compaction-continuation-ui.ts", "marker": "const successLifetimeMs = 8000"},
-        {"file": "src/replay-recovery-ui.ts", "marker": "presentation.dispose()"},
+        {"file": "src/context-evidence-ui.ts", "marker": "presentation.dispose()"},
         {"file": "src/background-compaction.ts", "marker": "visible-history"},
         {"file": "src/background-compaction.ts", "marker": "this.jobs.wait(jobId"},
         {"file": "src/preview-route.ts", "marker": "recoveryLimits(modelId)"},

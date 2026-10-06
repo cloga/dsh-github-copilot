@@ -26,8 +26,7 @@ it('registers recovery only in the public full-width Session input dock', () => 
   cleanup()
   expect(dispose).toHaveBeenCalledOnce()
 })
-it('retains compaction success expiry in the real slot registration across surface remounts', async () => {
-  vi.useFakeTimers()
+it('keeps replay recovery separate from independently registered compaction feedback', async () => {
   let surface!: (props: Record<string, unknown>) => ReactElement | null
   const slots = {
     spec: () => ({ kind: 'list', scope: 'session' }),
@@ -54,12 +53,8 @@ it('retains compaction success expiry in the real slot registration across surfa
   }
   try {
     await act(async () => root.render(surface(runtime)))
-    expect(node.textContent).toContain('compaction committed')
-    await act(async () => root.render(null))
-    expect(vi.getTimerCount()).toBe(0)
-    await act(async () => vi.advanceTimersByTimeAsync(8000))
-    await act(async () => root.render(surface(runtime)))
     expect(node.textContent).toBe('')
+    expect(continuation.get).not.toHaveBeenCalled()
     expect(continuation.set).not.toHaveBeenCalled()
   } finally { await act(async () => root.unmount()); cleanup(); node.remove() }
 })

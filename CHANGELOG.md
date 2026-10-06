@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.128
+
+- Separate native compaction commit, subsequent ordinary-request outcome and applicable historical input sampling in one composer disclosure (#364).
+- Preserve transient completion expiry/Close without hiding independent context uncertainty; keep native compaction history, context ring and usage accounting unchanged.
+- Track same-step retries and compaction resumed inside an already-open native step through strict bounded public projections, without an extra request, history write or replacement percentage.
+
 ## 0.4.0-alpha.127 (prepared)
 
 - Expire the confirmed visible-history compaction success notice eight seconds after its first Client observation; keep running loss disclosure visible and add localized, accessible Close to settled, unavailable and authorization-required results (#363).

@@ -1455,6 +1455,7 @@ describe('GitHub Copilot Models client', () => {
       const cleanup = callback(ctx)
       if (services.includes('remote.settings') || services.includes('remote.githubCopilotTurnSelection')
         || services.includes('remote.githubCopilotReplayRecovery')
+        || services.length === 2 && services[0] === 'remote.githubCopilotSessionContinuation' && services[1] === 'slots'
         || services.length === 1 && services[0] === 'slots') {
         return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })
       }
@@ -1534,6 +1535,7 @@ describe('GitHub Copilot Models client', () => {
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
     await dispose()
   })
 

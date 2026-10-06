@@ -1,4 +1,5 @@
 import { createElement as h, useEffect, useState, useSyncExternalStore } from 'react'
+import type { ReactElement } from 'react'
 import type { SessionContinuationRemote } from './session-continuation-ui.ts'
 import { SessionContinuationCard } from './session-continuation-ui.ts'
 import { CompactionContinuationLifecycleSchema, SessionContinuationViewSchema } from './session-continuation-types.ts'
@@ -43,9 +44,11 @@ export class CompactionNoticePresentation {
   dispose() { this.entries.clear(); this.listeners.clear() }
 }
 
-export function CompactionContinuationNotice({ sessionId, remote, lifecycle, locale = 'en', presentation: sharedPresentation }: {
+export function CompactionContinuationNotice({ sessionId, remote, lifecycle, locale = 'en', renderEvidence,
+  presentation: sharedPresentation }: {
   sessionId: string; remote?: SessionContinuationRemote; lifecycle: unknown; locale?: string
   presentation?: CompactionNoticePresentation
+  renderEvidence?: (status?: CompactionContinuationStatus, controls?: ReactElement | null, transient?: boolean) => ReactElement | null
 }) {
   const [localPresentation] = useState(() => new CompactionNoticePresentation())
   const presentation = sharedPresentation ?? localPresentation
@@ -94,7 +97,8 @@ export function CompactionContinuationNotice({ sessionId, remote, lifecycle, loc
     return () => clearTimeout(timer)
   }, [sessionId, id, state, running, presentation, version])
   const zh = locale.startsWith('zh')
-  if (!id || !state || !running && !presentation.visible(sessionId, id, state)) return null
+  if (!id || !state || !running && !presentation.visible(sessionId, id, state))
+    return renderEvidence?.(undefined, null, false) ?? null
   const dismiss = () => { if (!running) presentation.dismiss(sessionId, id, state) }
   const close = !running && state !== 'running' ? h('button', {
     type: 'button', style: composerNoticeQuietButtonStyle, onClick: dismiss,
@@ -107,6 +111,7 @@ export function CompactionContinuationNotice({ sessionId, remote, lifecycle, loc
       : 'Old reasoning replay was rejected; compaction did not commit. Enabling continuation lets subsequent chat and compaction use visible history.'),
     h(SessionContinuationCard, { sessionId, remote, locale, recovery: true,
       running, onCancel: dismiss }), close)
+  if (renderEvidence && !error) return renderEvidence(status, close, true)
   const text = error ? zh ? '无法确认压缩降级状态；请查看原生压缩结果。' : 'Compaction recovery status is unavailable; check the native compaction result.'
     : status?.state === 'running' ? zh ? '正在使用可见历史降级压缩，隐藏推理上下文可能丢失。' : 'Compacting with visible history; hidden reasoning context may be lost.'
       : status?.state === 'completed' ? zh ? '可见历史压缩已提交；隐藏推理上下文未带入摘要。' : 'Visible-history compaction committed; hidden reasoning context was omitted from the summary.'
@@ -114,5 +119,6 @@ export function CompactionContinuationNotice({ sessionId, remote, lifecycle, loc
           : zh ? '可见历史压缩失败；Session 尚未恢复。请查看原生失败原因。' : 'Visible-history compaction failed; the Session is not recovered. Check the native failure.'
   return h('section', { 'data-copilot-composer-notice': 'compaction-continuation',
     role: error || status?.state === 'failed' ? 'alert' : 'status', 'aria-live': 'polite',
-    style: composerNoticeSurfaceStyle }, h('p', { style: composerNoticeParagraphStyle }, text), close)
+    style: composerNoticeSurfaceStyle }, h('p', { style: composerNoticeParagraphStyle }, text),
+    close, error ? renderEvidence?.(undefined, null, false) : null)
 }
