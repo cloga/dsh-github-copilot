@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import vm from 'node:vm'
+import * as Cordis from '@deepseek-ai/cordis'
 import { Context } from '@deepseek-ai/cordis'
-import * as Gateway from '@deepseek-ai/dsh-api-gateway/client'
 import { TypertGatewayService } from '@deepseek-ai/dsh-api-gateway'
 import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
 import * as HostConnection from '@deepseek-ai/dsh-client-connection'
@@ -15,8 +17,39 @@ import { expect, it, vi } from 'vitest'
 import { DiagnosticsController } from '../../src/diagnostics-host.ts'
 import contribution from '../../src/diagnostics-remote.ts'
 
+async function loadClientGateway(): Promise<{ apply(ctx: Context): void }> {
+  if (process.env.DSH_CORE_EVIDENCE === 'tagged-source-runtime') {
+    return import('@deepseek-ai/dsh-api-gateway/client')
+  }
+  // Published Client entries register a factory, rather than exporting Node ESM.
+  // Capture the unchanged artifact in a fixture-owned realm, not a live loader.
+  const require = createRequire(import.meta.url)
+  let registration: unknown
+  vm.runInNewContext(await readFile(require.resolve('@deepseek-ai/dsh-api-gateway/client'), 'utf8'), {
+    window: { __ModuleLoader__: { load(value: unknown) { registration = value } } },
+    AbortController, Error, TextEncoder, TextDecoder, URL, console, performance,
+    setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask,
+  })
+  if (typeof registration !== 'object' || registration === null
+    || !('id' in registration) || registration.id !== '@deepseek-ai/dsh-api-gateway'
+    || !('factory' in registration) || typeof registration.factory !== 'function') {
+    throw new Error('Published Client gateway registration is unavailable')
+  }
+  const exports: unknown = registration.factory((specifier: string) => {
+    if (specifier === '@deepseek-ai/cordis') return Cordis
+    throw new Error(`Unexpected published Client gateway external: ${specifier}`)
+  })
+  if (typeof exports !== 'object' || exports === null
+    || !('apply' in exports) || typeof exports.apply !== 'function') {
+    throw new Error('Published Client gateway apply export is unavailable')
+  }
+  const apply = exports.apply
+  return { apply(ctx) { apply(ctx) } }
+}
+
 it('binds diagnostics through actual strict Client and Host gateways with durable enable and clear fences', async () => {
   expect(['tagged-source-runtime', 'published-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
+  const Gateway = await loadClientGateway()
   const path = await mkdtemp(join(tmpdir(), 'copilot-diagnostics-gateway-'))
   const host = new Context(), client = new Context()
   try {

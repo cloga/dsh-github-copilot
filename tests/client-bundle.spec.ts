@@ -398,7 +398,8 @@ describe('tsdown client artifact', () => {
     expect(contributions).toHaveLength(1)
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace !== 'githubCopilotAccounts'
       && descriptor.namespace !== 'githubCopilotSessionAccount'
-      && descriptor.namespace !== 'githubCopilotSessionContinuation').map(descriptor => descriptor.method)).toEqual([
+      && descriptor.namespace !== 'githubCopilotSessionContinuation'
+      && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
@@ -409,6 +410,24 @@ describe('tsdown client artifact', () => {
       .toEqual(['ensureIdentity', 'get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation').map(descriptor => descriptor.method).sort())
       .toEqual(['authorizeNext', 'defaults', 'get', 'set', 'setDefault'])
+    const diagnosticsDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
+    expect(diagnosticsDescriptors.map(descriptor => descriptor.method).sort()).toEqual(['clear', 'get', 'recordClient', 'setEnabled'])
+    const diagnosticsView = { enabled: false, state: 'ready', diagnostic: 'none', dirty: false,
+      snapshot: { schemaVersion: 1, coverageVersion: 1, epoch: 0, updatedAt: 0, rows: [], pending: [],
+        dropped: 0, clientDropped: 0, clientUnconfirmed: 0, saturated: 0, evicted: 0, interrupted: 0 } }
+    for (const descriptor of diagnosticsDescriptors) {
+      expect(descriptor).toMatchObject({
+        id: `${PLUGIN_ID}:githubCopilotDiagnostics.${descriptor.method}`,
+        service: 'githubCopilotDiagnostics', invocation: { kind: 'direct' },
+        result: { mode: 'strict', typeSymbol: `${PLUGIN_ID}#DiagnosticsView` },
+      })
+      expect(descriptor.scope).toBeUndefined()
+      if (descriptor.result.mode !== 'strict') throw new Error('expected independent strict diagnostics codec')
+      const schema = descriptor.result.create()
+      expect(schema.parse(diagnosticsView)).toEqual(diagnosticsView)
+      expect(() => schema.parse({ ...diagnosticsView, credentials: 'private' })).toThrow()
+      expect(() => schema.parse({ ...diagnosticsView, snapshot: { ...diagnosticsView.snapshot, sessionId: 'private' } })).toThrow()
+    }
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
       if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {

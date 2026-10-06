@@ -113,6 +113,10 @@ storage reopen/isolation/write failure/corruption and native SettingsForms
 hidden-leaf persistence. Compaction observer envelopes are synthetic; they are
 not production reliability measurements or proof of live recovery. Complete
 release CI and installed/loaded/collection evidence remain separate.
+The published Client gateway fixture captures the unchanged registration-bundle
+factory in its own isolated realm, sharing the actual public Cordis identity.
+It does not substitute tagged source for published bytes or attach to a live
+Client module registry; factory qualification is not Desktop activation proof.
 
 ## Archived phase-0 qualification and proposals
 

@@ -1447,7 +1447,7 @@ describe('GitHub Copilot Models client', () => {
       if (services.includes('uiConversation')) {
         return Object.assign(new Promise<void>(() => {}), { dispose: disposePresentation })
       }
-      if (services.includes('remote.githubCopilotUsage')) {
+      if (services.includes('remote.githubCopilotUsage') || services.includes('remote.githubCopilotDiagnostics')) {
         return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
       }
       const cleanup = callback(ctx)
