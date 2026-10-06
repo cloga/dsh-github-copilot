@@ -23,7 +23,7 @@ Visible Models and Credits resolve missing names for saved accounts without acti
 
 Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
 
-**Source candidate: `0.4.0-alpha.118` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+**Source candidate: `0.4.0-alpha.119` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -80,10 +80,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.118/dsh-github-copilot-0.4.0-alpha.118.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.119/dsh-github-copilot-0.4.0-alpha.119.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.118` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.119` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -98,6 +98,8 @@ In **Manage → GitHub accounts**, adding an account never replaces the global d
 Completed managed turns show **Account** beside native Usage. It records the request account, not billing or subagent totals. A verified name is frozen at admission; if missing, an existing bounded non-forcing lookup for that exact account runs without delaying model delivery and can fill identity only while the same turn remains active. No account evidence exists before native delivery. Missing identity remains unavailable; completed history is never backfilled from current settings. Evidence is bounded to the Host lifetime; restart, cold history or missing delivery displays unknown. Credits labels an unidentified original or saved authorization without displaying opaque account IDs.
 
 Account eligibility reads official rc.2 SettingsForms values, without requiring the retired settings `get()` API. Missing or malformed configuration remains incomplete evidence; upgrading does not bypass native-route or activity restrictions.
+
+**Global switch waiting:** Models shows metadata first and hydrates identity names independently; background name checks do not lock Switch when route/activity evidence permits it. Fresh identity and model validation overlap, but both must succeed before CAS and strict readback. Failures cancel/drain outstanding preflight without retry; identity-cache display never authorizes switching. The confirmed account result is not discarded when parent callbacks change, and late name reads cannot roll it back. This is separate from Session **Follow global default**, and does not remove necessary network checks or establish live millisecond savings.
 
 `COPILOT_ACCOUNTS_BUSY` is reevaluated from current activity, not retained after work ends. The authorization-in-progress state is presented as progress rather than a terminal busy error; unrelated unknown blockers remain unknown. Use **Refresh account information** to update the open card after relevant work settles. If only the active account is listed, first **Add GitHub account**; **Switch** appears beside another saved account.
 
@@ -243,14 +245,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.118/dsh-github-copilot-0.4.0-alpha.118.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.118/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.119/dsh-github-copilot-0.4.0-alpha.119.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.119/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.118.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.119.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

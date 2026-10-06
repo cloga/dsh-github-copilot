@@ -216,6 +216,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
   const managementRemote = props.addOnly ? undefined : props.remote
   const [view, setView] = useState<CopilotAccountsView>()
   const [busy, setBusy] = useState(false)
+  const [identityChecking, setIdentityChecking] = useState(false)
   const [failed, setFailed] = useState(false)
   const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'failed'>('idle')
   const [cancelRequested, setCancelRequested] = useState(false)
@@ -223,6 +224,9 @@ function CopilotAccountControls(props: AccountControlsProps & (
   const [confirmation, setConfirmation] = useState<{ id: string; revision: number; remove: boolean }>()
   const [accountsOpen, setAccountsOpen] = useState(false)
   const lifetime = useRef({ active: false, generation: 0, busy: false, copyGeneration: 0 })
+  const changedCallback = useRef(props.onChanged)
+  changedCallback.current = props.onChanged
+  const identityRead = useRef<Promise<void>>()
   const refreshed = useRef(props.refreshKey)
   const text = props.locale?.toLowerCase().startsWith('zh') ? accountCopy.zh : accountCopy.en
   useEffect(() => {
@@ -249,7 +253,8 @@ function CopilotAccountControls(props: AccountControlsProps & (
         setAuthorizationIntent(undefined)
         setCancelRequested(false)
       }
-      if (next !== undefined && changed && next.operation === undefined) props.onChanged?.()
+      if (next !== undefined && changed && next.operation === undefined) changedCallback.current?.()
+      return next
     } catch {
       if (current()) {
         setView(undefined); setFailed(true); setAuthorizationIntent(undefined); setCancelRequested(false)
@@ -258,18 +263,43 @@ function CopilotAccountControls(props: AccountControlsProps & (
       if (current()) { owner.busy = false; setBusy(false) }
       finishChange?.()
     }
-  }, [props.onChanged])
+  }, [])
+  const hydrateIdentity = useCallback(() => {
+    const owner = lifetime.current
+    if (!owner.active || owner.busy || managementRemote === undefined || identityRead.current !== undefined) return
+    const generation = owner.generation
+    const current = () => owner.active && owner.generation === generation
+    setIdentityChecking(true)
+    const reading = Promise.resolve().then(async () => {
+      try {
+        if (!current()) return
+        const result = await managementRemote.ensureIdentity()
+        if (!current()) return
+        const next = result.ok ? accountsViewFrom(result.value) : undefined
+        if (next === undefined) { setFailed(true); return }
+        setView(next); setFailed(false)
+      } catch { if (current()) setFailed(true) }
+    }).finally(() => {
+      if (identityRead.current === reading) { identityRead.current = undefined; setIdentityChecking(false) }
+    })
+    identityRead.current = reading
+  }, [managementRemote])
   useEffect(() => {
     const owner = lifetime.current
     owner.active = true
     setView(undefined); setConfirmation(undefined); setBusy(false); setFailed(false)
     setCopyState('idle'); setCancelRequested(false); setAuthorizationIntent(undefined)
+    identityRead.current = undefined
+    setIdentityChecking(false)
     if (props.remote !== undefined && !props.authorizationBusy) {
       const remote = props.remote
-      void run(() => managementRemote !== undefined ? managementRemote.ensureIdentity() : remote.get())
+      const generation = owner.generation + 1
+      void run(() => remote.get()).then(next => {
+        if (owner.active && owner.generation === generation && next !== undefined && next.operation === undefined) hydrateIdentity()
+      })
     }
-    return () => { owner.active = false; owner.generation++; owner.busy = false }
-  }, [props.remote, managementRemote, run, props.authorizationBusy, props.configured])
+    return () => { owner.active = false; owner.generation++; owner.busy = false; identityRead.current = undefined }
+  }, [props.remote, managementRemote, run, hydrateIdentity, props.authorizationBusy, props.configured])
   useEffect(() => {
     if (refreshed.current === props.refreshKey || managementRemote === undefined || busy || props.authorizationBusy) return
     refreshed.current = props.refreshKey
@@ -279,12 +309,12 @@ function CopilotAccountControls(props: AccountControlsProps & (
   useEffect(() => {
     if (managementRemote === undefined || props.authorizationBusy || view?.operation !== undefined) return
     const ensure = () => {
-      if (document.visibilityState !== 'hidden') void run(() => managementRemote.ensureIdentity())
+      if (document.visibilityState !== 'hidden') hydrateIdentity()
     }
     const timer = window.setInterval(ensure, 60_000)
     document.addEventListener('visibilitychange', ensure)
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', ensure) }
-  }, [managementRemote, props.authorizationBusy, view?.operation, run])
+  }, [managementRemote, props.authorizationBusy, view?.operation, hydrateIdentity])
   useEffect(() => {
     if ((view?.operation !== 'authorizing' && view?.operation !== 'verifying') || props.remote === undefined) return
     const timer = window.setTimeout(() => { void run(() => props.remote!.get(), true, false) }, 1500)
@@ -376,15 +406,17 @@ function CopilotAccountControls(props: AccountControlsProps & (
   })
   return h('div', { 'data-copilot-accounts': '', 'aria-busy': pending, style: { minWidth: 0, overflowWrap: 'anywhere' } },
     !props.expanded ? h('p', { style: muted, role: 'status', 'aria-live': 'polite', 'data-copilot-current-account': '' },
-      identity ?? (busy ? text.identityChecking : text.identityUnavailable)) : null,
+      identity ?? (busy || identityChecking ? text.identityChecking : text.identityUnavailable)) : null,
     !props.expanded ? null : h('section', {
       'data-copilot-account-management': props.addOnly ? undefined : true,
       'data-copilot-account-add': props.addOnly ? true : undefined,
       'aria-label': props.addOnly ? text.add : text.accounts, style: { display: 'grid', gap: 10, marginBlock: 12 } },
       props.addOnly ? null : h('h3', { style: { margin: 0, fontSize: 16 } }, text.accounts),
       props.addOnly ? null : h('p', { style: muted }, text.scope),
+      props.addOnly || !identityChecking ? null : h('p', { role: 'status', 'aria-live': 'polite',
+        'data-copilot-identity-checking': true, style: muted }, text.identityChecking),
       props.remote === undefined ? h('p', { role: 'status', style: muted }, text.remoteUnavailable) : null,
-      failed ? h('p', { role: 'alert', style: muted }, text.readFailed) : null,
+      failed ? h('p', { role: 'alert', style: muted }, view === undefined ? text.readFailed : text.identityFailed) : null,
       view?.state === 'error' && view.operation === undefined && view.diagnostic !== undefined
         ? h('p', { role: 'alert', style: muted }, accountProblemMessage(view.diagnostic, text)) : null,
       switchBlocker === undefined ? null : h('p', { role: 'status', 'aria-live': 'polite', style: muted }, switchBlocker),

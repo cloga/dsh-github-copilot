@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.118"
+    "version": "0.4.0-alpha.119"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -333,6 +333,11 @@
         {"file": "tests/copilot-usage-card.spec.ts", "name": "retains confirmed following when consent is cancelled and disables it during confirmation"},
         {"file": "tests/copilot-usage-card.spec.ts", "name": "disables following when the Session selection cannot be read instead of treating it as a fixed account"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "never writes a captured A refresh into B after an external selection change"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "runs fresh switch identity and model preflight concurrently but commits only after both settle"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "cancels and drains sibling switch preflight before releasing its mutation fence"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "rejects a changed credential identity during overlapping switch checks without saving"},
+        {"file": "tests/copilot-accounts-card.spec.ts", "name": "renders metadata and permits a confirmed switch while unrelated identity names remain pending"},
+        {"file": "tests/copilot-accounts-card.spec.ts", "name": "uses the latest parent callback without resetting a pending switch or repeating initial reads"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "preserves uncertain commit ahead of missing-slot recovery"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "rechecks externally started canonical authorization before selector CAS"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "retains canonical admission through polling and cancellation settlement"},

@@ -21,7 +21,7 @@ Models 和 Chat 共用不透明、随主题适配的账号下拉层；原生菜�
 
 添加账号时，设备授权链接、可选择的网址、一次性授权码、复制授权码和取消操作会同时显示。GitHub 授权完成后，会单独显示身份与可用模型验证阶段。添加账号不会更改全局默认；准备好后仍需显式执行现有的**切换**操作。技术诊断收在次级折叠区；账号／历史 turn 缺少身份时不会暴露不透明账号 ID，也不会根据当前设置推断历史身份。
 
-**源码候选版本：`0.4.0-alpha.118`（尚未发布）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。下方带版本的命令适用于候选版本发布后，不代表对应资产已经存在。
+**源码候选版本：`0.4.0-alpha.119`（尚未发布）。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。下方带版本的命令适用于候选版本发布后，不代表对应资产已经存在。
 
 ## 你可以做什么
 
@@ -73,10 +73,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.118/dsh-github-copilot-0.4.0-alpha.118.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.119/dsh-github-copilot-0.4.0-alpha.119.tgz
 ```
 
-**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.118`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.119`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -91,6 +91,8 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 已完成的托管 turn 在原生 Usage 旁显示 **Account**，记录实际请求账号，不是计费归因或子 Agent 汇总。准入时冻结已验证名称；缺失时针对本轮固定账号执行现有的有界、非强制查询，不阻塞模型输出，只能在同一 turn 仍运行时补齐身份。没有原生流返回就没有账号执行证据。未查到的身份仍显示不可用；不会根据当前设置补写已完成历史。证据仅在 Host 生命周期内有界保留，重启及冷历史显示未知。Credits 对身份未知的原始／已保存授权显示可读标签，不显示不透明账号 ID。
 
 切换资格通过官方 rc.2 SettingsForms 的配置值读取，不再依赖已退役的 Settings `get()` API。缺失或无效配置仍视为证据不完整；升级不会绕过原生路由或运行中工作的限制。
+
+**全局切换等待：**Models 先显示账号元数据，再独立补齐身份名称；后台名称查询不再锁住满足路由／活动证据条件的 Switch。真正切换仍需新鲜身份和模型校验，两项并行但必须都成功，之后才能 CAS 保存并严格读回。失败会取消并收尾另一项，不自动重试；身份展示缓存不授权切换。父组件更换回调不再丢弃已确认结果，旧名称响应也不能覆盖新账号。这与 Session **Follow global default** 是不同路径，不意味着省略必要网络校验或已测得真实毫秒级提速。
 
 `COPILOT_ACCOUNTS_BUSY` 根据当前活动重新判断，不会在工作结束后保留旧拒绝。授权进行中会显示为进度状态，而不是终止性 busy 错误；其它未知阻塞因素仍明确保持未知。相关工作结束后，点击 **Refresh account information** 更新已打开的卡片。如果只列出活动账号，需先 **Add GitHub account**；另一个已保存账号旁才会出现 **Switch**。
 
@@ -236,14 +238,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.118/dsh-github-copilot-0.4.0-alpha.118.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.118/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.119/dsh-github-copilot-0.4.0-alpha.119.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.119/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.118.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.119.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

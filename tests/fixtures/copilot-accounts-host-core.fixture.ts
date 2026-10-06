@@ -5,6 +5,7 @@ import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import { createModels } from '@earendil-works/pi-ai'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
+import type { CopilotAccountBinding } from '../../src/copilot-accounts-types.ts'
 import { CopilotAccountsViewSchema } from '../../src/copilot-accounts-remote.ts'
 import { createGitHubCopilotCredentialStore } from '../../src/copilot-auth.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY } from '../../src/copilot-identity.ts'
@@ -48,13 +49,70 @@ function fixture(activeAccountId: unknown = undefined) {
     id: new Headers(init?.headers).get('Authorization')?.endsWith(A) ? 1 : 2,
     email: 'must-not-leak@example.invalid',
   }))
-  const validateModels = vi.fn(async (): Promise<void> => undefined)
+  const validateModels = vi.fn(async (_binding: CopilotAccountBinding, _signal: AbortSignal): Promise<void> => undefined)
   const host = new CopilotAccountsHost(ctx, { fetch, validateModels, routeDiagnostic: () => undefined })
   return { ctx, host, records, credentials, settings, fetch, validateModels,
     externalSelect(id: unknown) { activeAccountId = id; revision++; host.selectionChanged() } }
 }
 
 describe('independent Copilot account ownership', () => {
+  it('runs fresh switch identity and model preflight concurrently but commits only after both settle', async () => {
+    const f = fixture(A)
+    let identityDone!: () => void, modelsDone!: () => void
+    f.fetch.mockImplementation(() => new Promise(resolve => {
+      identityDone = () => resolve(Response.json({ login: 'bob', id: 2 }))
+    }))
+    f.validateModels.mockImplementation(() => new Promise(resolve => { modelsDone = resolve }))
+    const pending = f.host.switchAccount(B, 1)
+    await vi.waitFor(() => {
+      expect(identityDone).toBeDefined()
+      expect(modelsDone).toBeDefined()
+    })
+    expect(f.settings.mutate).not.toHaveBeenCalled()
+    modelsDone()
+    expect(f.settings.mutate).not.toHaveBeenCalled()
+    identityDone()
+    expect(await pending).toMatchObject({ state: 'ready', activeAccountId: B })
+    expect(f.fetch).toHaveBeenCalledOnce()
+    expect(f.validateModels).toHaveBeenCalledOnce()
+    expect(f.settings.mutate).toHaveBeenCalledOnce()
+    f.host.dispose()
+  })
+  it('cancels and drains sibling switch preflight before releasing its mutation fence', async () => {
+    const f = fixture(A)
+    let rejectIdentity!: (cause: Error) => void, modelsDone!: () => void
+    let modelsSignal!: AbortSignal
+    f.fetch.mockImplementation(() => new Promise((_resolve, reject) => { rejectIdentity = reject }))
+    f.validateModels.mockImplementation((_binding, signal) => new Promise(resolve => {
+      modelsSignal = signal; modelsDone = resolve
+    }))
+    const pending = f.host.switchAccount(B, 1)
+    await vi.waitFor(() => { expect(rejectIdentity).toBeDefined(); expect(modelsDone).toBeDefined() })
+    rejectIdentity(new Error('Synthetic network failure'))
+    await vi.waitFor(() => expect(modelsSignal.aborted).toBe(true))
+    expect(() => f.host.acquire()).toThrow('COPILOT_ACCOUNTS_BUSY')
+    expect(f.settings.mutate).not.toHaveBeenCalled()
+    modelsDone()
+    expect(await pending).toMatchObject({ state: 'error', activeAccountId: A,
+      diagnostic: 'COPILOT_ACCOUNTS_IDENTITY_NETWORK' })
+    const lease = f.host.acquire(); lease.release()
+    f.host.dispose()
+  })
+  it('rejects a changed credential identity during overlapping switch checks without saving', async () => {
+    const f = fixture(A)
+    let identityDone!: () => void, modelsDone!: () => void
+    f.fetch.mockImplementation(() => new Promise(resolve => {
+      identityDone = () => resolve(Response.json({ login: 'bob', id: 2 }))
+    }))
+    f.validateModels.mockImplementation(() => new Promise(resolve => { modelsDone = resolve }))
+    const pending = f.host.switchAccount(B, 1)
+    await vi.waitFor(() => { expect(identityDone).toBeDefined(); expect(modelsDone).toBeDefined() })
+    f.records.set(key(B), grant('replacement'))
+    modelsDone(); identityDone()
+    expect(await pending).toMatchObject({ state: 'error', activeAccountId: A, diagnostic: 'COPILOT_ACCOUNTS_CHANGED' })
+    expect(f.settings.mutate).not.toHaveBeenCalled()
+    f.host.dispose()
+  })
   it.each(['mona-cat_octo', 'octo_admin'])('preserves official managed-user identity %s through Host and strict Remote', async login => {
     const f = fixture(A)
     f.fetch.mockImplementation(async () => Response.json({ login, id: 1 }))

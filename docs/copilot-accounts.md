@@ -10,6 +10,27 @@ publication, installation and loaded runtime state are separate evidence.
 
 ## Requirements
 
+### Global switch responsiveness (#342)
+
+Models first reads metadata-only `get()` and separately hydrates display names
+with nonforcing `ensureIdentity()`. Slow inactive-name queries do not hold the
+Switch control. Unknown names remain unknown; route/activity/membership evidence
+still gates controls and the Host independently verifies any requested switch.
+An identity hydration result captured before a mutation or actual Remote/
+authorization/credential lifecycle replacement cannot overwrite newer state.
+Parent callback identity changes alone do not recreate the account lifetime.
+
+The Host overlaps fresh identity and available-model preflight under one
+60-second operation signal. It never replaces fresh verification with the
+ten-minute display cache. Both must finish successfully before selector CAS;
+identity key, membership, route/activity, canonical authorization and revision
+checks remain, including post-commit confirmation. A failed branch aborts the
+other and drains both before releasing the mutation fence, without automatic
+retry or another account fallback. The strict save result updates the account
+card; parent status refresh remains separate. This reduces a serial preflight
+critical path to overlapping work, not zero network latency or proven live
+timing. Synthetic deferred tests establish ordering, not production speed.
+
 - Keep multiple independently authorized GitHub Copilot accounts in one DSH
   profile. Models retains the global default. Sessions without an override
   inherit that default at each new turn; explicit Session choices take priority.
