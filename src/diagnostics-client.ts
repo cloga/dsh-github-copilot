@@ -5,7 +5,7 @@ import type { DiagnosticsHandle } from './diagnostics-collector.ts'
 import { diagnosticsBucket, DiagnosticsViewSchema } from './diagnostics-types.ts'
 import type { DiagnosticsOperation, DiagnosticsOutcome, DiagnosticsReason, DiagnosticsRow, DiagnosticsStage,
   DiagnosticsView } from './diagnostics-types.ts'
-import packageJson from '#package.json'
+import packageJson from '#package.json' with { type: 'json' }
 
 interface Live { operation: DiagnosticsOperation; stage: DiagnosticsStage; start: number; epoch: number }
 interface Owner {

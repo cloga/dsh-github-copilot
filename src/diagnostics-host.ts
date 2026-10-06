@@ -10,7 +10,7 @@ import type { DiagnosticsOperation, DiagnosticsSnapshot, DiagnosticsView } from 
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
 import { ClientDiagnosticsBatchSchema } from './diagnostics-remote.ts'
 import type { ClientDiagnosticsBatch } from './diagnostics-remote.ts'
-import packageJson from '#package.json'
+import packageJson from '#package.json' with { type: 'json' }
 
 const diagnosticsStorageGlobal: DomainGlobalSpec<DiagnosticsSnapshot> = {
   schema: DiagnosticsSnapshotSchema,
