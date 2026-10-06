@@ -118,6 +118,70 @@ factory in its own isolated realm, sharing the actual public Cordis identity.
 It does not substitute tagged source for published bytes or attach to a live
 Client module registry; factory qualification is not Desktop activation proof.
 
+## Explicit offline analysis (#368)
+
+The package provides a separate, read-only analyzer for one explicitly selected
+aggregate file. Build the package first, then provide an absolute input path, an
+input mode, and a new local output path. The output is created exclusively and
+is never printed to stdout or sent over the network:
+
+```sh
+node scripts/analyze-diagnostics.mjs --input "ABSOLUTE_UNIT_FILE.json" --mode persisted-unit --profile-name "PROFILE_NAME" --output "NEW_LOCAL_REPORT.json"
+```
+
+Replace the quoted placeholders before running; the input must be an absolute
+path whose basename matches the profile-qualified unit filename.
+
+For an explicitly reviewed Client/Host Remote view export, use
+`--mode reviewed-view` and omit `--profile-name`. The persisted-unit mode
+requires the unit basename and unit envelope to match the supplied 1–48
+character ASCII DSH profile name; the name is mapped using the same public
+profile-qualified storage-domain convention as the collector. The operator
+must identify the file and profile. The tool never searches DSH homes,
+enumerates storage units, opens a storage-domain writer or RPC, reads Settings,
+credentials or history, or falls back between modes.
+
+Both modes reuse the collector's strict Zod snapshot/view vocabulary. The
+reader rejects symlinks and non-files, caps input at 8 MiB, opens only for
+reading, decodes fatal UTF-8, and checks file identity, size and modification
+metadata before and after reading. These checks bound and detect ordinary
+concurrent changes; they do not attest the active Host's backend and cannot
+eliminate every filesystem race. Errors expose fixed diagnostic codes, not
+paths, rejected values or raw filesystem details. The strict versioned report
+contains only validated dimensions, bounded counts and explicit gaps. An
+existing output is never overwritten.
+
+Populations stay separate by build version, Client/Host layer and operation,
+including logical/physical pairs. Starts and terminal counters are reported
+independently because UTC-hour aggregation and retention can censor either
+side; pending-start subtraction and exact operation failure rates are never
+calculated. Only terminal observations enter duration bins. Stage-age bins are
+cumulative operation ages, not exclusive phase timings. Client pending samples
+are repeated historical observations, not an outstanding-work gauge; persisted
+Host pending rows describe the stored snapshot, not current live work.
+
+Outcomes remain separate, including policy rejection, revocation,
+environment-fault, unknown and interrupted. Safe sums that exceed JavaScript's
+exact integer range become `null` with an overflow gap. Fixed semantic candidate
+fingerprints contain only coverage version, layer, operation, metric and
+allowlisted reason—never identity hashes. Candidates do not prove a regression,
+persistent fault, unique impact or root cause. Reports do not claim calibrated
+thresholds, trends, percentiles, effectiveness or live collection status from
+a persisted-only file. Empty, stale, paused, dirty, saturated, dropped,
+evicted, interrupted and clock-discontinuous evidence remains explicit;
+missing account-switch or compaction observations are gaps, not zero failures.
+A physical summary-call success is explicitly not a native checkpoint commit;
+only the logical compaction population can label a matching checkpoint and end
+as observed success.
+
+The first locally qualified persisted snapshot produced a private descriptive
+report outside the repository. It is not a release artifact, CI fixture, issue
+attachment or proof that alpha.128 is installed, loaded, collecting now, or
+representative of current behavior. Do not publish that report or its counts
+without separate sharing approval. Synthetic tests never read production
+storage. There is no scheduler, automatic analysis, upload, issue creation,
+repair or live-profile mutation in this milestone.
+
 ## Archived phase-0 qualification and proposals
 
 The remaining sections preserve the reviewed phase-0 inventory. Their proposed

@@ -52,10 +52,13 @@ The [local diagnostics pilot](./docs/plugin-diagnostics.md) records bounded
 account/Checking and compaction aggregates, **default off**. After installing
 and loading the published build, open the plugin detail settings page →
 **Local diagnostics → Read status → Enable local collection**. This enables
-local persistence, not uploads or daily analysis. Pause preserves evidence;
-Clear requires separate confirmation. Client/Host populations, uncovered paths
-and reporting/storage gaps remain explicit. Normal use supplies future evidence,
-not reconstructed history or proof of an improvement.
+local persistence, not uploads or scheduled analysis. The package also has an
+explicit offline analyzer for a caller-selected persisted unit or reviewed
+aggregate view; it writes only to a new local report file and never scans,
+uploads or changes collection. Pause preserves evidence; Clear requires
+separate confirmation. Client/Host populations, uncovered paths and
+reporting/storage gaps remain explicit. Descriptive counts are not reconstructed
+history, failure rates or proof of an improvement.
 
 | Task | Where to start |
 |---|---|
