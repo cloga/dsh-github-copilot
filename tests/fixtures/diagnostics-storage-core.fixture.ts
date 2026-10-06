@@ -10,6 +10,17 @@ import { diagnosticsDomain, diagnosticsDomainForProfile } from '../../src/diagno
 import { DiagnosticsCollector, emptyDiagnostics } from '../../src/diagnostics-collector.ts'
 import { DiagnosticsSnapshotSchema } from '../../src/diagnostics-types.ts'
 
+it('adapts the owned storage schema across published Zod minors without weakening strict parsing', async () => {
+  const schema = diagnosticsDomain.global.schema
+  expect(schema).not.toBe(DiagnosticsSnapshotSchema)
+  expect(schema.validate(emptyDiagnostics())).toBe(true)
+  expect(await schema.validateAsync(emptyDiagnostics())).toBe(true)
+  const invalid = { ...emptyDiagnostics(), accountId: 'synthetic-sensitive-sentinel' }
+  expect(schema.validate(invalid)).toBe(false)
+  expect(await schema.validateAsync(invalid)).toBe(false)
+  expect(() => schema.parse(invalid)).toThrow()
+})
+
 it('persists strictly bounded aggregate snapshots across actual public JSON/domain reopen and rejects corruption', async () => {
   expect(['tagged-source-runtime', 'published-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
   const path = await mkdtemp(join(tmpdir(), 'copilot-diagnostics-'))

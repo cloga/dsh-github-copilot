@@ -22,7 +22,7 @@ describe('local diagnostics control', () => {
     const root = createRoot(element)
     document.body.append(element)
     const click = async (text: string) => {
-      const button = [...element.querySelectorAll('button')].find(node => node.textContent === text)
+      const button = Array.from(element.querySelectorAll('button')).find(node => node.textContent === text)
       if (!button) throw new Error(`Missing control ${text}`)
       await act(async () => { button.click() })
     }
@@ -54,7 +54,7 @@ describe('local diagnostics control', () => {
     try {
       await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
       expect(element.textContent).toContain('storage-unavailable')
-      expect([...element.querySelectorAll('button')].find(node => node.textContent === 'Enable local collection')?.disabled).toBe(true)
+      expect(Array.from(element.querySelectorAll('button')).find(node => node.textContent === 'Enable local collection')?.disabled).toBe(true)
     } finally { await act(async () => root.unmount()) }
   })
 })
