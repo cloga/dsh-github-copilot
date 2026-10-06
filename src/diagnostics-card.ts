@@ -2,17 +2,16 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { nativeButtonStyle, nativeHeadingStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 import { DiagnosticsViewSchema } from './diagnostics-types.ts'
 import type { DiagnosticsView } from './diagnostics-types.ts'
 import { updateDiagnosticsClient, clientDiagnosticsReportingFailed } from './diagnostics-client.ts'
 
 export type DiagnosticsRemote = Context['remote']['githubCopilotDiagnostics']
-const section: CSSProperties = { marginTop: 24, paddingTop: 18,
+const section: CSSProperties = { ...nativeSettingsStyle, marginTop: 24, paddingTop: 12,
   borderTop: '1px solid color-mix(in srgb, currentColor 20%, transparent)',
   display: 'grid', gap: 12, minWidth: 0 }
-const button: CSSProperties = { font: 'inherit', color: 'inherit', cursor: 'pointer',
-  padding: '8px 12px', minHeight: 44, borderRadius: 8, border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
-  background: 'color-mix(in srgb, currentColor 6%, transparent)' }
+const button: CSSProperties = nativeButtonStyle
 export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
   const [view, setView] = useState<DiagnosticsView>()
   const [busy, setBusy] = useState(false)
@@ -52,8 +51,9 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
     .reduce((sum, row) => sum + row.count, 0)
   const control = (label: string, action: () => void, disabled = false) =>
     h('button', { type: 'button', style: button, onClick: action, disabled: busy || disabled }, label)
-  return h('section', { 'aria-label': 'Local diagnostics', style: section },
-    h('h3', { style: { margin: 0 } }, 'Local diagnostics'),
+  return h('section', { 'aria-label': 'Local diagnostics', 'data-copilot-native-ui': true, style: section },
+    h('style', null, nativeSettingsCss),
+    h('h3', { style: nativeHeadingStyle }, 'Local diagnostics'),
     h('p', { style: { margin: 0, lineHeight: 1.5, maxWidth: '70ch' } },
       'Account, Checking and compaction counts stay in this profile. No identities, conversation content or raw errors. No upload, scheduled analysis or automatic repair.'),
     h('p', { role: 'status', style: { margin: 0 } },
@@ -87,7 +87,7 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
           h('td', { style: { padding: 6 } },
             count(['no-op', 'policy-rejected', 'revoked', 'environment-fault', 'unknown'], population))))))) : null,
     view && !populations.length ? h('p', null, 'No retained operation observations. This is not evidence of zero failures.') : null,
-    view ? h('p', { style: { margin: 0, fontSize: 13, lineHeight: 1.5 } },
+    view ? h('p', { style: { margin: 0, fontSize: 12, lineHeight: '18px' } },
       `Host pending: ${view.snapshot.pending.reduce((sum, row) => sum + row.count, 0)}. `
       + `Host dropped: ${view.snapshot.dropped}; Client dropped: ${view.snapshot.clientDropped}; Client unconfirmed: ${view.snapshot.clientUnconfirmed}; `
       + `evicted/expired: ${view.snapshot.evicted}; saturated: ${view.snapshot.saturated}. `

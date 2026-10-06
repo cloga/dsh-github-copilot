@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.126 (prepared)
+
+- Align plugin-owned Models, account management, model preferences, continuation disclosures, Credits details and plugin settings with the unchanged official rc.2 font family, type scale, themed neutral controls and focus states (#361).
+- Match compact provider actions to native Edit; keep Sign out and Refresh content-sized, and wrap model actions below long names/IDs on narrow layouts. Preserve authorization, CAS, preferences, continuation, quota and native UI ownership.
+- Isolated real-component browser comparisons cover desktop/narrow widths and light/dark themes; they do not prove live Desktop activation or authorize installation/restart.
+
 ## 0.4.0-alpha.124 (prepared)
 
 - Plan compaction from model-facing content and tools instead of serializing native IDs, provenance and opaque replay envelopes, fixing metadata-driven exhaustion of the unchanged 16-call bound (#352).

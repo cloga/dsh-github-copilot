@@ -6,6 +6,7 @@ import { externalLinkTarget } from './external-link.ts'
 import { accountPresentationChanges } from './copilot-account-presentation.ts'
 import { copyAuthorizationCode } from './authorization-code-clipboard.ts'
 import { AccountDropdown } from './account-dropdown.ts'
+import { nativeCompactButtonStyle, nativeCaptionStyle, nativeHeadingStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 import { createClientDiagnosticsScope } from './diagnostics-client.ts'
 import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
 
@@ -66,11 +67,8 @@ export function accountIdentityLabel(view: CopilotAccountsView | undefined): str
 
 const secondary = 'var(--dsw-alias-label-secondary, GrayText)'
 const border = '1px solid var(--dsw-alias-border-main, color-mix(in srgb, currentColor 20%, transparent))'
-const button: CSSProperties = {
-  font: 'inherit', color: 'inherit', background: 'transparent', border, borderRadius: 8,
-  padding: '6px 10px', minHeight: 32, cursor: 'pointer', colorScheme: 'inherit',
-}
-const muted: CSSProperties = { color: secondary, fontSize: 13, lineHeight: 1.5, margin: '6px 0' }
+const button = nativeCompactButtonStyle
+const muted: CSSProperties = { ...nativeCaptionStyle, margin: '6px 0' }
 
 const accountCopy = {
   en: {
@@ -423,14 +421,16 @@ function CopilotAccountControls(props: AccountControlsProps & (
       if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: true })
     }, pending || view?.writable !== true || view?.revision === undefined))
   })
-  return h('div', { 'data-copilot-accounts': '', 'aria-busy': pending, style: { minWidth: 0, overflowWrap: 'anywhere' } },
+  return h('div', { 'data-copilot-accounts': '', 'data-copilot-native-ui': true, 'aria-busy': pending,
+    style: { ...nativeSettingsStyle, overflowWrap: 'anywhere' } },
+    h('style', null, nativeSettingsCss),
     !props.expanded ? h('p', { style: muted, role: 'status', 'aria-live': 'polite', 'data-copilot-current-account': '' },
       identity ?? (busy || identityChecking ? text.identityChecking : text.identityUnavailable)) : null,
     !props.expanded ? null : h('section', {
       'data-copilot-account-management': props.addOnly ? undefined : true,
       'data-copilot-account-add': props.addOnly ? true : undefined,
       'aria-label': props.addOnly ? text.add : text.accounts, style: { display: 'grid', gap: 10, marginBlock: 12 } },
-      props.addOnly ? null : h('h3', { style: { margin: 0, fontSize: 16 } }, text.accounts),
+      props.addOnly ? null : h('h3', { style: nativeHeadingStyle }, text.accounts),
       props.addOnly ? null : h('p', { style: muted }, text.scope),
       props.addOnly || !identityChecking ? null : h('p', { role: 'status', 'aria-live': 'polite',
         'data-copilot-identity-checking': true, style: muted }, text.identityChecking),
@@ -448,7 +448,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
       activeNotice?.url === undefined ? null : h('p', { style: { ...muted, overflowWrap: 'anywhere', userSelect: 'all' } },
         text.manualUrl, ' ', activeNotice.url),
       activeNotice?.code === undefined ? null : h('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 } },
-        h('span', { style: { color: secondary, fontSize: 13 } }, text.codeLabel),
+        h('span', { style: nativeCaptionStyle }, text.codeLabel),
         h('code', { 'data-copilot-account-device-code': '', style: {
           userSelect: 'all', overflowWrap: 'anywhere', fontSize: 17, fontWeight: 700, letterSpacing: '0.08em',
         } }, activeNotice.code),
@@ -461,7 +461,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
         control(cancelRequested ? text.cancelling
           : authorizationIntent === 'reauthorize' ? text.cancelReauthorize : text.cancelAdd,
         cancelAuthorization, busy || cancelRequested)) : null),
-      view?.diagnostic === undefined ? null : h('details', { 'data-copilot-account-diagnostic': '', style: { color: secondary, fontSize: 13 } },
+      view?.diagnostic === undefined ? null : h('details', { 'data-copilot-account-diagnostic': '', style: nativeCaptionStyle },
         h('summary', { style: { cursor: 'pointer' } }, text.technicalDetails),
         h('code', { style: { overflowWrap: 'anywhere' } }, view.diagnostic)),
       props.addOnly && !authorizationOperation ? control(text.add, () => {

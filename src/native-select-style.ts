@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { nativeInputStyle } from './native-settings-style.ts'
 
 // Native popups do not reliably inherit the select's surface. Pair each option's
 // opaque surface and foreground using app-theme tokens, not OS theme detection.
@@ -12,11 +13,9 @@ const disabledOptionStyle: CSSProperties = {
   color: 'var(--dsw-alias-label-secondary, GrayText)',
 }
 const selectStyle: CSSProperties = {
+  ...nativeInputStyle,
   ...optionStyle,
   width: '100%', minWidth: 0, boxSizing: 'border-box',
-  padding: '9px 11px', borderRadius: '9px',
-  border: '1px solid var(--dsw-alias-border-l2, ButtonBorder)',
-  font: 'inherit',
 }
 const disabledSelectStyle: CSSProperties = {
   ...selectStyle,

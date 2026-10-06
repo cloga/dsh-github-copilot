@@ -3,6 +3,7 @@ import type { CSSProperties, ReactElement } from 'react'
 import { ContinuationDefaultViewSchema, SessionContinuationViewSchema } from './session-continuation-types.ts'
 import type { SessionContinuationView } from './session-continuation-types.ts'
 import { composerNoticeParagraphStyle, composerNoticeButtonStyle } from './composer-notice-style.ts'
+import { nativeCompactButtonStyle, nativeCaptionStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 
 export interface SessionContinuationRemote {
   get(agentId: string): Promise<{ ok: boolean; value?: unknown }>
@@ -11,10 +12,8 @@ export interface SessionContinuationRemote {
   defaults?(): Promise<{ ok: boolean; value?: unknown }>
   setDefault?(revision: number, enabled: boolean): Promise<{ ok: boolean; value?: unknown }>
 }
-const control: CSSProperties = { font: 'inherit', color: 'var(--dsw-alias-label-primary, CanvasText)',
-  background: 'var(--dsw-alias-bg-layer-1, Canvas)', colorScheme: 'inherit',
-  border: '1px solid var(--dsw-alias-border-main, GrayText)', borderRadius: 6, padding: '6px 10px' }
-const paragraph: CSSProperties = { color: 'var(--dsw-alias-label-secondary, GrayText)', fontSize: 13, lineHeight: 1.5 }
+const control: CSSProperties = nativeCompactButtonStyle
+const paragraph: CSSProperties = nativeCaptionStyle
 
 export function SessionContinuationCard({ sessionId, remote, locale = 'en', running = false, onEnabledChange, expanded = false,
   recovery = false, onCancel }: {
@@ -80,7 +79,9 @@ export function SessionContinuationCard({ sessionId, remote, locale = 'en', runn
         zh ? '开启降级续聊' : 'Enable visible-history continuation')) : null,
     unavailable,
     h('button', { type: 'button', style: button, disabled: busy || running, onClick: onCancel }, zh ? '取消' : 'Cancel'))
-  return h('details', { open: expanded || undefined, 'data-copilot-continuation-settings': '', style: { fontSize: 13 } },
+  return h('details', { open: expanded || undefined, 'data-copilot-continuation-settings': '',
+    'data-copilot-native-ui': true, style: nativeSettingsStyle },
+    h('style', null, nativeSettingsCss),
     h('summary', { style: { cursor: 'pointer' } }, zh ? '降级续聊' : 'Visible-history continuation',
       ' · ', !view ? zh ? '状态待确认' : 'Unknown' : view.enabled ? zh ? '开启' : 'On'
         : view.nextTurnAuthorized ? zh ? '仅下一轮' : 'Next turn only' : zh ? '关闭' : 'Off'),
@@ -134,7 +135,9 @@ export function ContinuationDefaultCard({ remote, locale = 'en', onSaved }: {
     finally { if (generation === lifetime.current) setBusy(false) }
   }
 
-  return h('details', null, h('summary', null, zh ? '新 Session 降级默认' : 'New Session continuation default'),
+  return h('details', { 'data-copilot-native-ui': true, style: nativeSettingsStyle },
+    h('style', null, nativeSettingsCss),
+    h('summary', null, zh ? '新 Session 降级默认' : 'New Session continuation default'),
     h('label', null, h('input', { type: 'checkbox', checked: view?.enabled ?? false, disabled: busy || !view,
       onChange: (event: { currentTarget: { checked: boolean } }) => void save(event.currentTarget.checked) }),
     zh ? '新 Session 默认开启降级续聊' : 'Enable visible-history continuation for new Sessions'),

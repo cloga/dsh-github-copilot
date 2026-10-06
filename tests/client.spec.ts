@@ -84,7 +84,9 @@ describe('GitHub Copilot Models client', () => {
     vi.mocked(React.useId).mockReturnValue('theme-management')
     vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
     const tree = GitHubCopilotCompactAccount({ remote: remote as never, account: surfaces.getSnapshot()!.account })
-    expect(tree.props.style.colorScheme).toBe('light dark')
+    expect(tree.props.style.colorScheme).toBe('inherit')
+    expect(tree.props.style.fontFamily).toBe('var(--dsw-font-family, system-ui)')
+    expect(tree.props.style.fontWeight).toBe(400)
     const css = descendants(tree).find(element => element.type === 'style')?.props.children
     expect(css).toContain('option')
     expect(css).toContain('background: Canvas')

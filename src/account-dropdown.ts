@@ -1,5 +1,6 @@
 import { createElement as h, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent, ReactElement, RefObject } from 'react'
+import { nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 
 export interface AccountDropdownOption {
   id: string
@@ -66,13 +67,13 @@ export function AccountDropdown(props: {
     document.addEventListener('pointerdown', outside)
     return () => document.removeEventListener('pointerdown', outside)
   }, [props.open, trigger])
-  return h('div', { 'data-copilot-account-dropdown': '', style: { position: 'relative', minWidth: 0, flexShrink: 0 } },
-    h('style', null, `
+  return h('div', { 'data-copilot-account-dropdown': '', 'data-copilot-native-ui': true,
+    style: { ...nativeSettingsStyle, position: 'relative', flexShrink: 0 } },
+    h('style', null, nativeSettingsCss + `
       [data-copilot-account-dropdown] > button::after { content: ' ▾'; padding-left: 6px; font-size: 11px }
       [data-copilot-dropdown-option]::before { content: ''; width: 16px; flex-shrink: 0 }
       [data-copilot-dropdown-option][aria-pressed=true]::before { content: '✓' }
       [data-copilot-dropdown-option]:hover { background: var(--dsw-alias-bg-layer-2, ButtonFace) !important }
-      [data-copilot-account-dropdown] button:focus-visible { outline: 2px solid var(--dsw-alias-label-primary, CanvasText); outline-offset: -2px }
     `),
     h('button', { ref: trigger, type: 'button', style: { ...props.triggerStyle, whiteSpace: 'nowrap' }, disabled: props.disabled,
       'aria-label': props.label,
@@ -80,12 +81,12 @@ export function AccountDropdown(props: {
       onClick: () => props.onOpenChange(!props.open) }, props.label),
     props.open ? h('div', { ref: menu, id, popover: 'manual', role: 'group', 'aria-label': props.label,
       'aria-busy': props.busy, 'data-copilot-account-selector': '',
-      style: { position: 'fixed', inset: 'auto', margin: 0, ...placement, zIndex: 1100,
+      style: { ...nativeSettingsStyle, position: 'fixed', inset: 'auto', margin: 0, ...placement, zIndex: 1100,
         width: 300, maxWidth: 'calc(100vw - 24px)', boxSizing: 'border-box', overflowY: 'auto',
         padding: 5, border: '1px solid var(--dsw-alias-border-main, GrayText)', borderRadius: 10,
         background: 'linear-gradient(var(--dsw-specific-menu, Canvas), var(--dsw-specific-menu, Canvas)), Canvas',
         color: 'var(--dsw-alias-label-primary, CanvasText)',
-        colorScheme: 'inherit', font: 'inherit', boxShadow: '0 10px 28px rgb(0 0 0 / 24%)' },
+        colorScheme: 'inherit', boxShadow: '0 10px 28px rgb(0 0 0 / 24%)' },
       onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
         const buttons = Array.from(menu.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])
         if (event.key === 'Escape') {

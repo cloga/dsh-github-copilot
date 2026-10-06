@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { createElement, useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { nativeButtonStyle, nativeHeadingStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 
 type Settings = Context['remote']['settings']
 interface Snapshot { enabled: boolean; revision: number; writable: boolean; legacy: boolean }
@@ -11,10 +12,7 @@ interface Props {
 }
 
 const ns = 'github-copilot'
-const button: CSSProperties = {
-  font: 'inherit', color: 'inherit', background: 'transparent', padding: '8px 14px',
-  border: '1px solid currentColor', borderRadius: '6px', minHeight: '40px',
-}
+const button: CSSProperties = nativeButtonStyle
 
 export async function readParentFollowSettings(settings: Settings): Promise<Snapshot> {
   const result = await settings.describe()
@@ -99,19 +97,20 @@ export function ParentModelFollowCard({ settings, onSaved }: Props) {
       if (owner.active && owner.generation === generation) { owner.busy = false; setBusy(false) }
     }
   }
-  return createElement('section', { 'data-dsh-parent-model-follow': true, 'aria-busy': busy,
-    style: { padding: '18px', marginTop: '16px', display: 'grid', gap: '14px', minWidth: 0 } },
-  createElement('h3', { style: { margin: 0, fontSize: '16px' } }, 'Subagent models'),
+  return createElement('section', { 'data-dsh-parent-model-follow': true, 'data-copilot-native-ui': true, 'aria-busy': busy,
+    style: { ...nativeSettingsStyle, padding: '12px 14px', marginTop: '16px', display: 'grid', gap: '12px' } },
+  createElement('style', null, nativeSettingsCss),
+  createElement('h3', { style: nativeHeadingStyle }, 'Subagent models'),
   createElement('label', { style: { display: 'flex', gap: '12px', alignItems: 'center', minHeight: '40px' } },
     createElement('input', { type: 'checkbox', role: 'switch', checked: enabled, disabled,
       'aria-describedby': descriptionId,
       onChange: (event: { currentTarget: { checked: boolean } }) => { setEnabled(event.currentTarget.checked); setMessage('Unsaved change.') } }),
     createElement('strong', null, 'Follow parent model')),
-  createElement('div', { id: descriptionId, style: { fontSize: '13px', lineHeight: 1.6, maxWidth: '70ch' } },
+  createElement('div', { id: descriptionId, style: { fontSize: '14px', lineHeight: '22px', maxWidth: '70ch' } },
     createElement('p', { style: { margin: 0 } }, 'Apply to existing and new supported Copilot subagents and Team mates.'),
     createElement('p', { style: { margin: '6px 0 0' } }, 'Fixed parent: follow its model next turn. Auto parent: each child chooses using its own context.'),
     createElement('p', { style: { margin: '6px 0 0' } }, 'Running turns stay unchanged. Replaces creation-time model choices; a child’s own manual selection still wins.')),
-  saved?.legacy ? createElement('p', { role: 'note', style: { margin: 0, fontSize: '13px' } },
+  saved?.legacy ? createElement('p', { role: 'note', style: { margin: 0, fontSize: '12px', lineHeight: '18px' } },
     'Existing per-child bindings remain active even when this switch is off. They have not been changed.') : null,
   createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '12px' } },
     createElement('button', { type: 'button', style: { ...button, opacity: disabled || enabled === saved?.enabled ? 0.5 : 1 },
@@ -120,5 +119,5 @@ export function ParentModelFollowCard({ settings, onSaved }: Props) {
     createElement('button', { type: 'button', style: { ...button, opacity: busy ? 0.5 : 1 }, disabled: busy,
       title: 'Reload saved values and discard unsaved edits', onClick: () => { void load() } }, 'Reload')),
   createElement('p', { role: 'status', 'aria-live': 'polite', 'aria-atomic': true,
-    style: { margin: 0, fontSize: '13px', lineHeight: 1.6 } }, message || (busy ? 'Loading subagent settings…' : '')))
+    style: { margin: 0, fontSize: '12px', lineHeight: '18px' } }, message || (busy ? 'Loading subagent settings…' : '')))
 }
