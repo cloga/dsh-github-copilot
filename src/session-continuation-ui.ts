@@ -62,8 +62,8 @@ export function SessionContinuationCard({ sessionId, remote, locale = 'en', runn
     finally { if (owner.current === generation) setBusy(false) }
   }
   const loss = h('p', { style: body }, zh
-    ? '每个新轮次不回放旧加密推理及内嵌摘要，同账号也适用。可见消息、工具记录和磁盘历史不变；可能失去隐含细节。不会自动发送或重试。'
-    : 'Every new turn omits old encrypted reasoning and embedded summaries, including on the same account. Visible messages, tool records and disk history stay unchanged; implicit details may be lost. No automatic sending or retries.')
+    ? '聊天及本 Session 的原生压缩使用可见历史，省略旧加密推理及内嵌摘要，同账号也适用；可能失去隐含细节。可见消息、工具关系和原历史保留，摘要由原生事务提交。不会额外发送聊天或重试。'
+    : 'Chat and native compaction in this Session use visible history, omitting old encrypted reasoning and embedded summaries even on the same account; implicit details may be lost. Visible messages, tool relations and source history remain intact; native transactions commit summaries. No extra chat sending or retries.')
   const unavailable = error ? h('p', { role: 'alert', style: body }, 'COPILOT_CONTINUATION_STATUS_UNAVAILABLE',
     h('button', { type: 'button', style: button, disabled: busy || recovery && running,
       onClick: () => setReload(value => value + 1) }, zh ? '重试读取' : 'Retry read')) : null
@@ -139,8 +139,8 @@ export function ContinuationDefaultCard({ remote, locale = 'en', onSaved }: {
       onChange: (event: { currentTarget: { checked: boolean } }) => void save(event.currentTarget.checked) }),
     zh ? '新 Session 默认开启降级续聊' : 'Enable visible-history continuation for new Sessions'),
     h('p', { style: paragraph }, zh
-      ? '开启即同意新 Session 每轮省略旧加密推理及内嵌摘要，同账号也适用。已有 Session 和继承历史不自动授权，不修改消息或工具记录。'
-      : 'Enabling consents to omitting prior encrypted reasoning and embedded summaries each turn, even on the same account. Existing Sessions and seeded histories are not automatically enrolled. Messages and tools are unchanged.'),
+      ? '开启即同意新 Session 的聊天及原生压缩省略旧加密推理及内嵌摘要，可能丢失隐藏细节，同账号也适用。已有 Session 和继承历史不自动授权，原历史和工具关系保留。'
+      : 'Enabling consents to omitting prior encrypted reasoning and embedded summaries in new Session chat and native compaction, even on the same account; hidden details may be lost. Existing Sessions and seeded histories are not automatically enrolled. Source history and tool relations are preserved.'),
     error ? h('p', { role: 'alert' }, 'COPILOT_CONTINUATION_STATUS_UNAVAILABLE',
       h('button', { type: 'button', style: control, onClick: () => setReload(value => value + 1) }, zh ? '重试' : 'Retry')) : null)
 }

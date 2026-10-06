@@ -465,7 +465,8 @@ class PreviewAdapter extends PiAiAdapter {
       // SDK lazyStream retains only error text. Keep an owned failure in this exact
       // dispatch closure, never on the shared lease, to restore its structured code.
       let requestFailure: LlmError | undefined
-      const recovery = owner.replayRecovery?.prepare(options)
+      const recovery = options.purpose === 'compaction' && model.api !== 'openai-responses'
+        ? undefined : owner.replayRecovery?.prepare(options)
       let wireAbort: ManagedWireAbortCode | undefined
       let bodyTimeout: string | undefined
       let liveness: Parameters<NonNullable<AccountProviderGuard['onStreamLiveness']>>[0] | undefined

@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.121"
+    "version": "0.4.0-alpha.122"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -577,6 +577,8 @@
         {"file": "src/manual-compaction-recovery.ts", "marker": "COPILOT_MANUAL_RECOVERY_"},
         {"file": "src/background-compaction.ts", "marker": "copilot-compact"},
         {"file": "src/compaction-replay.ts", "marker": "request.purpose !== 'compaction'"},
+        {"file": "src/compaction-continuation.ts", "marker": "COPILOT_CONTINUATION_COMPACTION_BOUNDARY_UNAVAILABLE"},
+        {"file": "src/compaction-continuation-ui.ts", "marker": "Compacting with visible history"},
         {"file": "src/background-compaction.ts", "marker": "visible-history"},
         {"file": "src/background-compaction.ts", "marker": "this.jobs.wait(jobId"},
         {"file": "src/preview-route.ts", "marker": "recoveryLimits(modelId)"},
@@ -588,6 +590,8 @@
         {"file": "tests/manual-compaction-recovery.spec.ts", "name": "rejects unmatched tool calls before dispatch instead of splitting a call and result"},
         {"file": "tests/background-compaction.spec.ts", "name": "acknowledges before completion and outlives a five-minute caller deadline"},
         {"file": "tests/compaction-replay.spec.ts", "name": "authorizes only the exact manual summary operation and preserves visible tool content"},
+        {"file": "tests/session-continuation-host.spec.ts", "name": "applies persisted continuation before a native summary and reports only native replacement success"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "persistent policy restores automatic replay-blocked compaction without a command, recovery engine=%s"},
         {"file": "tests/background-compaction.spec.ts", "name": "reports only allowlisted causes through native error wrappers"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "recovers only an explicitly authorized manual job through one native transaction"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "commits beyond the carrier deadline without a model wakeup and keeps status owner-scoped"},

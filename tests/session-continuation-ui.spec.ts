@@ -37,8 +37,9 @@ it('discloses loss beside one persistent policy control without offering one-tur
   try {
     await act(async () => f.root.render(h(SessionContinuationCard, { sessionId: 's', remote: f.remote })))
     expect(f.node.querySelector('details')!.open).toBe(false)
-    expect(f.node.textContent).toContain('including on the same account')
-    expect(f.node.textContent).toContain('No automatic sending or retries')
+    expect(f.node.textContent).toContain('even on the same account')
+    expect(f.node.textContent).toContain('Chat and native compaction')
+    expect(f.node.textContent).toContain('No extra chat sending or retries')
     expect(f.remote.set).not.toHaveBeenCalled()
     expect(f.node.textContent).not.toContain('Next turn only')
     const select = f.node.querySelector('select')!

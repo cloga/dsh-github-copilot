@@ -105,3 +105,88 @@ async function checkDefaults() {
 }
 it('persists exact Session consent and freezes changes through the active turn', async () => { await checkPersistence() })
 it('captures birth-time defaults and consumes one-turn consent', async () => { await checkDefaults() })
+
+it('applies persisted continuation before a native summary and reports only native replacement success', async () => {
+  const ctx = new Context()
+  const value = { sessionContinuation: [{ sessionId: 'summary-session', version: 1, enabled: true, consentedAt: 1 }],
+    continuationDefaultHistory: [{ enabled: true, changedAt: 1 }] }
+  ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', value, revision: 1 }] })
+  const agent = { ctx, session: { id: 'summary-session' } } as unknown as Agent
+  ctx.provide('agents', { get: (id: string) => id === agent.session.id ? agent : undefined, currentInitiator: () => undefined })
+  const owner = installSessionContinuation(ctx)
+  await owner.ready
+  const signal = new AbortController().signal
+  const request: GenerateOptions = { provider: 'github-copilot-preview', model: 'fixture',
+    sessionId: agent.session.id, purpose: 'compaction', signal, messages: [] }
+  const visible = { type: 'message', role: 'user', content: 'synthetic-visible' }
+  const body = { input: [{ type: 'reasoning', encrypted_content: 'synthetic', summary: [{ type: 'summary_text', text: 'hidden' }] }, visible] }
+  try {
+    ctx.emit('session/event', agent.session, { type: 'compaction/start', data: { compactionId: 'synthetic-operation', turn: null } } as never)
+    const filter = owner.prepare(request)
+    expect(filter).toBeTypeOf('function')
+    expect(await filter!(body)).toEqual({ input: [visible] })
+    expect(body.input).toHaveLength(2)
+    expect(await ctx.githubCopilotSessionContinuation.get(agent)).toMatchObject({ compaction: { state: 'running' } })
+    value.sessionContinuation[0]!.enabled = false
+    expect(await filter!(body)).toEqual({ input: [visible] })
+    ctx.emit('session/event', agent.session, { type: 'user/message', data: { source: {
+      kind: 'compact-checkpoint', compactionId: 'synthetic-operation' } } } as never)
+    ctx.emit('session/event', agent.session, { type: 'compaction/end', data: { compactionId: 'synthetic-operation', turn: null } } as never)
+    expect(await ctx.githubCopilotSessionContinuation.get(agent)).toMatchObject({ compaction: { state: 'completed' } })
+    await expect(filter!(body)).rejects.toThrow('REVOKED')
+    ctx.emit('session/event', agent.session, { type: 'compaction/start', data: { compactionId: 'next', turn: null } } as never)
+    expect(owner.prepare(request)).toBeUndefined()
+  } finally { owner.dispose(); await ctx.fiber.dispose() }
+})
+
+it.each(['cancelled', 'failed', 'blocked'] as const)('retains truthful summary outcome %s and revokes the operation', async state => {
+  const ctx = new Context()
+  const value = { sessionContinuation: [{ sessionId: 'summary', version: 1, enabled: state !== 'blocked', consentedAt: 1 }],
+    continuationDefaultHistory: [{ enabled: false, changedAt: 1 }] }
+  ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', value, revision: 1 }] })
+  const agent = { ctx, session: { id: 'summary' } } as unknown as Agent
+  ctx.provide('agents', { get: () => agent, currentInitiator: () => undefined })
+  const owner = installSessionContinuation(ctx)
+  await owner.ready
+  const abort = new AbortController()
+  const request: GenerateOptions = { provider: 'github-copilot-preview', model: 'fixture',
+    sessionId: agent.session.id, purpose: 'compaction', signal: abort.signal, messages: [] }
+  try {
+    expect(() => owner.prepare(request)).toThrow('BOUNDARY_UNAVAILABLE')
+    ctx.emit('session/event', agent.session, { type: 'compaction/start', data: { compactionId: 'op', turn: null } } as never)
+    const filter = owner.prepare(request)
+    if (state === 'blocked') expect(filter).toBeUndefined()
+    else {
+      expect(filter).toBeTypeOf('function')
+      expect(() => owner.prepare({ ...request, model: 'changed' })).toThrow('MODEL_CHANGED')
+      if (state === 'cancelled') abort.abort()
+    }
+    ctx.emit('session/event', agent.session, { type: 'compaction/end', data: { compactionId: 'op', turn: null,
+      error: state === 'blocked' ? 'LlmError: COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: synthetic' : 'synthetic failure' } } as never)
+    expect(await ctx.githubCopilotSessionContinuation.get(agent)).toMatchObject({ compaction: { id: 'op', state } })
+    if (filter) await expect(filter({ input: [] })).rejects.toThrow('REVOKED')
+    expect(owner.prepare({ ...request, purpose: 'session-title' })).toBeUndefined()
+  } finally { owner.dispose(); await ctx.fiber.dispose() }
+})
+
+it('does not inherit legacy next-turn-only consent or classify network failure as replay recovery', async () => {
+  const ctx = new Context()
+  const value = { continuationDefaultHistory: [{ enabled: false, changedAt: 1 }] }
+  ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', value, revision: 1 }] })
+  const agent = { ctx, session: { id: 'legacy-once' } } as unknown as Agent
+  ctx.provide('agents', { get: () => agent, currentInitiator: () => undefined })
+  const owner = installSessionContinuation(ctx)
+  await owner.ready
+  const signal = new AbortController().signal
+  try {
+    await ctx.githubCopilotSessionContinuation.authorizeNext(agent, 1, true)
+    await ctx.waterfall(scopeTarget(agent, agent), 'agent/request', { agent, turn: 1, step: 1, signal },
+      async () => ({ provider: 'github-copilot-preview', model: 'fixture' }))
+    ctx.emit('session/event', agent.session, { type: 'compaction/start', data: { compactionId: 'op', turn: 1 } } as never)
+    expect(owner.prepare({ provider: 'github-copilot-preview', model: 'fixture',
+      sessionId: agent.session.id, purpose: 'compaction', signal, messages: [] })).toBeUndefined()
+    ctx.emit('session/event', agent.session, { type: 'compaction/end', data: {
+      compactionId: 'op', turn: 1, error: 'synthetic network failure' } } as never)
+    expect((await ctx.githubCopilotSessionContinuation.get(agent)).compaction).toBeUndefined()
+  } finally { owner.dispose(); await ctx.fiber.dispose() }
+})

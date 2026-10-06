@@ -112,12 +112,12 @@ class FixtureAdapter extends LlmAdapter {
   override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const summary = options.purpose === 'compaction'
     if (summary) {
-      if (this.compactionReplay) {
+      if (this.compactionReplay || this.continuation) {
         const payload = { input: [
           { type: 'reasoning', encrypted_content: 'synthetic-old-replay', summary: [] },
           { type: 'message', role: 'user', content: requestText(options) },
         ] }
-        const transform = this.compactionReplay.prepare(options)
+        const transform = this.compactionReplay?.prepare(options) ?? this.continuation?.prepare(options)
         const dispatched = transform ? await transform(payload) : payload
         if (JSON.stringify(dispatched).includes('synthetic-old-replay'))
           throw new LlmError('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: synthetic scope rejection', 'INVALID_REQUEST')
@@ -440,8 +440,45 @@ function installController(ctx: Context): void {
 }
 
 describe('alpha2 stock compaction driven by the Copilot local pressure signal', () => {
+  it.each([false, true])('persistent policy restores automatic replay-blocked compaction without a command, recovery engine=%s', async recoveryEngine => {
+    const f = await fixture('stop', recoveryEngine, false, recoveryEngine, true)
+    const value = { continuationDefaultHistory: [{ enabled: false, changedAt: 0 }],
+      sessionContinuation: [{ sessionId: f.agent.session.id, version: 1, enabled: true, consentedAt: 1 }] }
+    f.ctx.provide('settings', { describe: () => [{ ns: 'github-copilot', value, revision: 1 }] })
+    const owner = installSessionContinuation(f.ctx)
+    f.ctx.effect(() => () => owner.dispose())
+    await owner.ready
+    f.adapter.continuation = owner
+    const lifecycle: unknown[] = []
+    f.ctx.sessionProjections.onChanged((session, key, value) => {
+      if (session === f.agent.session && key === 'githubCopilotCompactionLifecycle') lifecycle.push(value)
+    })
+    f.ctx.sessionProjections.stateOf(f.agent.session, 'githubCopilotCompactionLifecycle')
+    const oldSource = JSON.stringify(f.events)
+    const oldCount = f.events.length
+    expect(f.originalTokens).toBeGreaterThan(200)
+    f.enable(200)
+    f.send(`${currentSentinel}: continue without manual recovery`)
+    await f.agent.whenIdle()
+    expect(f.currentEvents().at(-1), JSON.stringify(f.currentEvents().at(-1)?.data)).toMatchObject({
+      type: 'turn/end', data: { reason: { kind: 'completed' } },
+    })
+    expect(compactionEvents(f.currentEvents()).map(event => event.type)).toEqual([
+      'compaction/start', 'compaction/summary', 'compaction/end',
+    ])
+    expect(JSON.stringify(f.events.slice(0, oldCount))).toBe(oldSource)
+    expect(f.agent.session.surface.replaceGeneration).toBeGreaterThan(f.originalGeneration)
+    expect(await f.ctx.githubCopilotSessionContinuation.get(f.agent)).toMatchObject({ compaction: { state: 'completed' } })
+    expect(f.adapter.summaries).toHaveLength(1)
+    expect(f.adapter.conversation).toHaveLength(2)
+    expect(lifecycle).toEqual(expect.arrayContaining([
+      expect.objectContaining({ running: true }), expect.objectContaining({ running: false }),
+    ]))
+    expect(f.forbiddenFetch).not.toHaveBeenCalled()
+  })
+
   it.each([false, true])('compacts and rebuilds an Auto request with large historical continuation reasoning, continuing=%s', async continuing => {
-    const f = await fixture()
+    const f = await fixture('stop', false, false, false, true)
     installController(f.ctx)
     const value = {
       continuationDefaultHistory: [{ enabled: false, changedAt: 0 }],

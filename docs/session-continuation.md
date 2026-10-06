@@ -63,12 +63,31 @@ Remote uses explicit Agent lookup; temporary recovery descriptors remain intact.
 Public `agent/request`, `session/event` and `agent/disposed` bind an in-memory
 per-turn baseline to the exact initiating Session and request signal. The
 published adapter/SDK's payload hook filters the normalized payload. Only
-`github-copilot-preview` Responses chat calls participate. Classifier, compaction,
+`github-copilot-preview` Responses chat calls participate. Classifier,
 unbound requests and other protocols remain native. Cold mid-turn recovery
 without a first-step boundary fails explicitly.
 
-Explicit manual summary recovery is separate: `/copilot-compact visible-history`
-authorizes only one selected-engine operation, never inherited chat consent.
+The persistent Session policy also covers native managed Responses compaction.
+An observed native `compaction/start` bracket plus exact public Agent lookup
+binds each summary before dispatch. Active turns retain their captured persistent
+policy; idle manual summaries capture current Session policy. Legacy next-turn-only
+consent does not authorize summaries. Each segment omits all historical encrypted
+reasoning and embedded summaries, while visible intermediate checkpoints remain.
+Stock and separately selected recovery engines keep their existing transactions;
+no additional failure-first attempt, retry loop or engine replacement is added.
+End, cancellation, disposal and model/scope mismatch revoke filtering.
+
+An additive composer notice reports actual filtering and native outcome. Success
+requires a checkpoint replacement and an error-free matching native end, not
+summary text alone. Failed/cancelled outcomes stay distinct; missing Host-lifetime
+evidence remains unknown after restart. A public projection folds only native
+bracket IDs/phase to trigger strict status reads; it stores no content or new
+events. Polling occurs only while the viewed native bracket is active and stops
+on settlement/unmount. When off, an exact replay-scope rejection exposes the same
+loss-disclosed persistent enable control; unrelated failures do not.
+
+`/copilot-compact visible-history` remains a one-operation alternative when the
+selected engine supports it; its consent is never made persistent by the command.
 See [summary recovery](./manual-compaction-recovery.md#explicit-visible-history-summary-recovery).
 
 The filter scans at most 65536 top-level input items and 4096 reasoning items
@@ -86,7 +105,7 @@ Credentials, account entitlement and model capabilities remain independently gua
 Native retry normalization retains raw reference-restoration evidence but records
 the final filtered bytes for exact 408 matching. No new retry loop is introduced.
 Input admission still precedes payload filtering: this is not an oversized-context,
-quota, upload-timeout, compaction or native context-meter repair.
+quota, upload-timeout or native context-meter repair.
 Actual token pressure still uses the initiating Agent's enabled native compaction
 engine and bounded recovery: commit the native summary, rebuild the request, then
 apply continuation. A continuation work-bound error is not relabeled as context

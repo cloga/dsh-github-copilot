@@ -1,5 +1,14 @@
 import { z } from 'zod'
 
+export const COMPACTION_CONTINUATION = 'githubCopilotCompactionLifecycle'
+export const CompactionContinuationStatusSchema = z.object({
+  id: z.string().min(1).max(256),
+  state: z.enum(['running', 'completed', 'failed', 'cancelled', 'blocked']),
+}).strict()
+export type CompactionContinuationStatus = z.infer<typeof CompactionContinuationStatusSchema>
+export const CompactionContinuationLifecycleSchema = z.object({ id: z.string().nullable(), running: z.boolean() }).strict()
+export type CompactionContinuationLifecycle = z.infer<typeof CompactionContinuationLifecycleSchema>
+
 export const SessionContinuationPreferenceSchema = z.object({
   sessionId: z.string().min(1).max(256).refine(value => !/[\p{Cc}\p{Cf}]/u.test(value)),
   version: z.literal(1),
@@ -22,5 +31,6 @@ export const SessionContinuationViewSchema = z.object({
   activeTurnEnabled: z.boolean().optional(),
   source: z.enum(['default', 'session']).optional(),
   nextTurnAuthorized: z.boolean().optional(),
+  compaction: CompactionContinuationStatusSchema.optional(),
 }).strict()
 export type SessionContinuationView = z.infer<typeof SessionContinuationViewSchema>

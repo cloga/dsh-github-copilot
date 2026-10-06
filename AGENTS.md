@@ -45,15 +45,23 @@ This repository owns eleven narrow surfaces:
 10. Managed-route estimated input/output admission, optional exact-request pressure signalling through official compaction recovery, and supported low summary effort only when no effort is already resolved. See [compaction budgets](./docs/copilot-compaction.md). Preserve truthful capacities, requested output caps, native errors/replay and transaction ownership; no hidden history trimming, wire chunking, competing compaction service or automatic model switch. The separately selected, single-service [recovery engine](./docs/manual-compaction-recovery.md) defaults to automatic segmented recovery for known oversized summaries or one typed native capacity failure through the public subclass hook. Preserve `automaticRecovery: false`, native `auto: false`, scopes and custom engines; at most 16 physical calls including a failed first attempt, no recursive retry or 408/network/auth/quota fallback. Installation alone never selects or migrates an engine.
 11. Optional account quota reads and a session-scoped composer usage control through public credentials, strict Remotes and additive slots. Keep account billing-cycle credits separate from context tokens and session cost. Missing, pooled, legacy and stale data must retain their real semantics; never infer credits from token estimates or account deltas. A separate plugin-owned historical context projection may diagnose failed-zero readings, never filter shared native usage, replace Core's meter, infer current occupancy/percentages or rewrite history. See [quota boundaries](./docs/copilot-usage.md).
 
-## Explicit compaction replay consent (#349)
+## Session-policy compaction replay consent (#349, #352)
 
 `/copilot-compact visible-history` explicitly authorizes one lossy managed Responses
 summary operation through the separately selected recovery engine. Scope consent
 to the native summarizer signal, Session and account-proven model protocol; revoke
-on settlement/cancellation/teardown. Remove historical reasoning and its embedded
+on settlement/cancellation/teardown. The persistent visible-history Session policy
+also authorizes managed Responses automatic/manual summaries inside an observed
+native compaction bracket. Freeze the active turn's persistent policy, or capture
+the idle Session policy before summary dispatch; legacy next-turn-only consent is
+not summary consent. Bind native Agent/Session, summary model and exact signals.
+Remove historical reasoning and its embedded
 summaries only from outgoing payloads, preserve visible tool relations and native
-source/transaction ownership, and fail explicitly for unsupported routes. Never
-inherit chat continuation consent or silently enable it for automatic compaction.
+source/transaction ownership. Other protocols stay native; explicit one-time
+commands still fail for unsupported routes. Never silently enable a disabled or
+unknown persistent policy. Show actual filtering and native commit/failure/cancel
+status through strict bounded ephemeral evidence and an additive composer notice;
+only a verified replay-scope failure offers the same enable control when off.
 Safe background diagnostics use bounded Error cause chains and fixed allowlisted
 codes, never raw errors. Installation alone neither selects nor invokes recovery.
 See `src/compaction-replay.ts` and `docs/manual-compaction-recovery.md` (#349).

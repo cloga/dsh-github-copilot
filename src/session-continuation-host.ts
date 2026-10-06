@@ -6,6 +6,8 @@ import { readSettingsNamespace } from './settings-reader.ts'
 import { SessionContinuationTurn } from './session-continuation.ts'
 import { SessionContinuationPreferencesSchema, ContinuationDefaultHistorySchema } from './session-continuation-types.ts'
 import type { SessionContinuationPreference, SessionContinuationView } from './session-continuation-types.ts'
+import { installCompactionContinuation } from './compaction-continuation.ts'
+import type { CompactionContinuationStatus } from './session-continuation-types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context { githubCopilotSessionContinuation: SessionContinuationController }
@@ -13,6 +15,7 @@ declare module '@deepseek-ai/cordis' {
 interface Admission {
   readonly turn: number
   readonly enabled: boolean
+  readonly persistentEnabled: boolean
   readonly filter: SessionContinuationTurn
   step: number
   signal: AbortSignal
@@ -26,7 +29,8 @@ function preferences(value: unknown): readonly SessionContinuationPreference[] {
 }
 export class SessionContinuationController extends TypertRemoteService {
   constructor(ctx: Context, private readonly active: Map<object, Admission>,
-    private readonly once = new Set<object>(), private readonly ready: Promise<void> = Promise.resolve()) {
+    private readonly once = new Set<object>(), private readonly ready: Promise<void> = Promise.resolve(),
+    private readonly summaryStatus: (agent: Agent) => CompactionContinuationStatus | undefined = () => undefined) {
     super(ctx, 'githubCopilotSessionContinuation')
   }
   @Remote
@@ -36,9 +40,11 @@ export class SessionContinuationController extends TypertRemoteService {
     if (!entry) throw new Error('COPILOT_CONTINUATION_SETTINGS_UNAVAILABLE')
     const admission = this.active.get(agent.session)
     const explicit = preferences(entry.value).find(row => row.sessionId === agent.session.id)
+    const compaction = this.summaryStatus(agent)
     return { enabled: resolveEnabled(agent, entry.value), source: explicit ? 'session' : 'default',
       nextTurnAuthorized: this.once.has(agent.session), revision: entry.revision,
-      ...admission ? { activeTurnEnabled: admission.enabled } : {} }
+      ...admission ? { activeTurnEnabled: admission.enabled } : {},
+      ...compaction ? { compaction } : {} }
   }
   @Remote
   async set(agent: Agent, revision: number, enabled: boolean | null): Promise<SessionContinuationView> {
@@ -118,20 +124,26 @@ export function installSessionContinuation(ctx: Context): {
   const active = new Map<object, Admission>()
   const once = new Set<object>()
   const requests = new WeakMap<AbortSignal, Agent['session']>()
+  let initialized = false
   const ready = (async () => {
     const settings = ctx.get('settings')
     const entry = settings?.describe({ redactSecrets: true }).find(row => row.ns === 'github-copilot')
     if (!settings || !entry) throw new Error('COPILOT_CONTINUATION_SETTINGS_UNAVAILABLE')
-    if (defaultHistory(entry.value).length) return
+    if (defaultHistory(entry.value).length) { initialized = true; return }
     await settings.mutate('github-copilot', [{ op: 'set', path: ['continuationDefaultHistory'],
       value: [{ enabled: true, changedAt: Date.now() }] }], entry.revision)
     const actual = readSettingsNamespace(ctx, 'github-copilot')
     if (!defaultHistory(actual).length) throw new Error('COPILOT_CONTINUATION_COMMIT_UNCERTAIN')
+    initialized = true
   })()
   // Keep startup failures observable without creating an unhandled rejection;
   // views and turn admission still await the original, rejecting promise.
   void ready.catch(() => ctx.logger.warn('COPILOT_CONTINUATION_INITIALIZATION_FAILED'))
-  new SessionContinuationController(ctx, active, once, ready)
+  const summaries = installCompactionContinuation(ctx, agent => {
+    if (!initialized) throw new Error('COPILOT_CONTINUATION_SETTINGS_UNAVAILABLE')
+    return active.get(agent.session)?.persistentEnabled ?? resolveEnabled(agent, readSettingsNamespace(ctx, 'github-copilot'))
+  })
+  new SessionContinuationController(ctx, active, once, ready, agent => summaries.status(agent))
   const removeRequest = ctx.on('agent/request', async ({ agent, turn, step, signal }, next) => {
     const result = await next()
     if (signal.aborted || result.provider !== 'github-copilot-preview') return result
@@ -141,8 +153,9 @@ export function installSessionContinuation(ctx: Context): {
     let admission = active.get(agent.session)
     if (admission && admission.turn !== turn) throw new Error('COPILOT_CONTINUATION_TURN_UNSETTLED')
     if (!admission) {
-      const enabled = resolveEnabled(agent, readSettingsNamespace(ctx, 'github-copilot')) || once.has(agent.session)
-      admission = { turn, step, enabled, filter: new SessionContinuationTurn(), signal }
+      const persistentEnabled = resolveEnabled(agent, readSettingsNamespace(ctx, 'github-copilot'))
+      const enabled = persistentEnabled || once.has(agent.session)
+      admission = { turn, step, enabled, persistentEnabled, filter: new SessionContinuationTurn(), signal }
       active.set(agent.session, admission)
       once.delete(agent.session)
     }
@@ -159,6 +172,7 @@ export function installSessionContinuation(ctx: Context): {
   return {
     ready,
     prepare(request) {
+      if (request.purpose === 'compaction') return summaries.prepare(request)
       if (request.provider !== 'github-copilot-preview' || request.purpose !== undefined || !request.signal) return undefined
       const session = requests.get(request.signal)
       const admission = session && active.get(session)
@@ -172,6 +186,6 @@ export function installSessionContinuation(ctx: Context): {
       }
       return payload => admission.filter.transform(payload, assertCurrent)
     },
-    dispose() { disposed = true; removeRequest(); removeEvents(); removeAgent(); active.clear(); once.clear() },
+    dispose() { disposed = true; summaries.dispose(); removeRequest(); removeEvents(); removeAgent(); active.clear(); once.clear() },
   }
 }
