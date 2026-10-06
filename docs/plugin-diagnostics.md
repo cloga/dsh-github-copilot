@@ -28,6 +28,8 @@ strict aggregate snapshot; **Review aggregate-only JSON → Prepare current JSON
 prepares a read-only copy for explicit review/sharing, never a download or upload.
 The coding session does not automatically gain access to the running Host.
 Pause preserves retained evidence and closes active observations as interrupted.
+It remains available for a configured-on collector when storage is unavailable;
+enabling still requires ready storage.
 Clear requires a separate confirmation, advances an epoch and removes this
 domain's aggregates without changing the enabled setting, accounts or history.
 An uncertain write is not automatically replayed by the UI.

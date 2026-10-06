@@ -70,7 +70,7 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
       control('Read status', () => { void run(value => value.get()) }, !remote),
       control(view?.enabled ? 'Pause collection' : 'Enable local collection',
         () => { void run(value => value.setEnabled(!view?.enabled)) },
-        !remote || !view || view.state !== 'ready'),
+        !remote || !view || !view.enabled && view.state !== 'ready'),
       control('Clear local aggregates', () => setConfirmClear(true), !remote || !view || view.state !== 'ready')),
     confirmClear ? h('div', { role: 'group', 'aria-label': 'Confirm clearing local diagnostics' },
       h('p', null, 'Delete collected aggregates only? Collection keeps its current enabled/paused setting. This does not clear account settings or conversation history.'),

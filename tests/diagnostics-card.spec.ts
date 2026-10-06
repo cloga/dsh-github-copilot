@@ -57,4 +57,25 @@ describe('local diagnostics control', () => {
       expect(Array.from(element.querySelectorAll('button')).find(node => node.textContent === 'Enable local collection')?.disabled).toBe(true)
     } finally { await act(async () => root.unmount()) }
   })
+  it('allows pausing a configured-on collector even when storage is unavailable', async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+    let view: DiagnosticsView = { enabled: true, state: 'unavailable',
+      diagnostic: 'storage-unavailable', dirty: false, snapshot: emptyDiagnostics() }
+    const remote: DiagnosticsRemote = {
+      get: async () => ({ ok: true, value: view }),
+      setEnabled: vi.fn(async enabled => ({ ok: true as const, value: view = { ...view, enabled } })),
+      clear: vi.fn(), recordClient: vi.fn(),
+    }
+    const element = document.createElement('div')
+    const root = createRoot(element)
+    try {
+      await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
+      const pause = Array.from(element.querySelectorAll('button')).find(node => node.textContent === 'Pause collection')
+      expect(pause?.disabled).toBe(false)
+      await act(async () => { pause?.click() })
+      expect(remote.setEnabled).toHaveBeenCalledWith(false)
+      expect(element.textContent).toContain('Collection paused')
+      expect(Array.from(element.querySelectorAll('button')).find(node => node.textContent === 'Enable local collection')?.disabled).toBe(true)
+    } finally { await act(async () => root.unmount()) }
+  })
 })
