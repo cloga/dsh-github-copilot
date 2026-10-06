@@ -91,6 +91,7 @@ function observeRequest(options: GenerateOptions): RequestObservation {
 
 /** Model double at the public adapter seam; every compaction decision remains Core-owned. */
 class FixtureAdapter extends LlmAdapter {
+  historyReplayPadding = 0
   firstSummaryFailure?: string
   onSummary?: () => void
   nextUsage?: TokenUsage
@@ -173,7 +174,10 @@ class FixtureAdapter extends LlmAdapter {
       yield { type: 'finish', reason: { kind: 'tool-calls' } }
       return
     }
-    yield { type: 'finish', reason: { kind: summary && this.summaryMode === 'max-tokens' ? 'max-tokens' : 'stop' } }
+    yield { type: 'finish', reason: { kind: summary && this.summaryMode === 'max-tokens' ? 'max-tokens' : 'stop' },
+      ...!summary && this.historyReplayPadding > 0 ? {
+        replayState: { response: { syntheticPlannerPadding: 'x'.repeat(this.historyReplayPadding) }, blocks: [{}] },
+      } : {} }
   }
 }
 
@@ -562,8 +566,9 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     })
     expect(f.forbiddenFetch).not.toHaveBeenCalled()
   })
-  it.each([false, true])('uses real managed admission with full native summary input and large prior usage, recovery=%s', async recoveryEngine => {
+  it.each([false, true])('uses real managed admission with metadata-heavy native history and large prior usage, recovery=%s', async recoveryEngine => {
     const f = await fixture('stop', true, true, recoveryEngine)
+    f.adapter.historyReplayPadding = 3500
     for (let turn = 0; turn < 26; turn++) {
       if (turn === 25) f.adapter.nextUsage = { inputTokens: 508198, outputTokens: 10, totalTokens: 508208 }
       f.send(`NATIVE_HISTORY_${turn} ${'historical engineering detail '.repeat(70)}`)
@@ -630,6 +635,8 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
       expect(estimates.mock.results.some(result => result.type === 'return' && result.value.tokens > 12000)).toBe(true)
     }
     expect(JSON.stringify(f.events.slice(0, sourceLength))).toBe(source)
+    expect(source).toContain('syntheticPlannerPadding')
+    expect(JSON.stringify(bodies)).not.toContain('syntheticPlannerPadding')
     expect(estimates).toHaveBeenCalled()
     expect(estimates.mock.calls.some(([context]) => context.messages.some(message => message.role === 'assistant'))).toBe(true)
     for (const [context] of estimates.mock.calls) {
