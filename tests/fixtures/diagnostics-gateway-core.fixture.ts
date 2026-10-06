@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { webcrypto } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -26,8 +27,8 @@ async function loadClientGateway(): Promise<{ apply(ctx: Context): void }> {
   const require = createRequire(import.meta.url)
   let registration: unknown
   vm.runInNewContext(await readFile(require.resolve('@deepseek-ai/dsh-api-gateway/client'), 'utf8'), {
-    window: { __ModuleLoader__: { load(value: unknown) { registration = value } } },
-    AbortController, Error, TextEncoder, TextDecoder, URL, console, performance,
+    window: { crypto: webcrypto, __ModuleLoader__: { load(value: unknown) { registration = value } } },
+    crypto: webcrypto, AbortController, AbortSignal, Error, TextEncoder, TextDecoder, URL, console, performance,
     setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask,
   })
   if (typeof registration !== 'object' || registration === null
