@@ -268,8 +268,9 @@ export function createAccountProvider(
         let dispatchInit = init
         let compression: RequestCompressionEvidence | undefined
         if (responses && guard.responsesRequestCompression === true) {
-          const signals = [lease.signal, ...options.signal === undefined ? [] : [options.signal],
-            ...init?.signal === undefined ? [] : [init.signal]]
+          const signals = [lease.signal]
+          if (options.signal != null) signals.push(options.signal)
+          if (init?.signal != null) signals.push(init.signal)
           const signal = AbortSignal.any(signals)
           const prepared = await prepareResponsesRequest(input, init, model.baseUrl, true,
             options.fetch !== undefined, signal, entry.api)
