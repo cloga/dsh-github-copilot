@@ -7,6 +7,10 @@ export const COPILOT_CONTEXT_EVIDENCE = 'githubCopilotContextEvidence'
 const count = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
 const routeSchema = z.object({ provider: z.string().min(1), model: z.string().min(1) }).strict()
 const sampleSchema = z.object({ tokens: count, seq: count, route: routeSchema }).strict()
+const incidentSchema = z.object({
+  kind: z.enum(['failed-zero', 'invalid-sample']),
+  seq: count,
+}).strict()
 const stepSchema = z.object({ turn: count, step: count }).strict()
 const compactionSchema = z.object({
   id: z.string().min(1).max(256), startSeq: count, endSeq: count.nullable(),
@@ -19,7 +23,8 @@ export const ContextEvidenceSchema = z.object({
   route: routeSchema.nullable(),
   sample: sampleSchema.nullable(),
   invalid: z.boolean(),
-  reason: z.enum(['none', 'failed-zero', 'compaction', 'selection', 'unknown']),
+  reason: z.enum(['none', 'failed-zero', 'invalid-sample', 'compaction', 'selection', 'unknown']),
+  incident: incidentSchema.nullable(),
   compaction: compactionSchema.nullable().optional(),
   activeStep: stepSchema.nullable().optional(),
 }).strict()
@@ -53,7 +58,10 @@ function copilot(route: ContextEvidence['route']): boolean {
   return route?.provider === 'github-copilot' || route?.provider === 'github-copilot-preview'
 }
 export function initialContextEvidence(): ContextEvidence {
-  return { route: null, sample: null, invalid: false, reason: 'none', compaction: null, activeStep: null }
+  return {
+    route: null, sample: null, invalid: false, reason: 'none', incident: null,
+    compaction: null, activeStep: null,
+  }
 }
 
 /** Read only counts and routing leaves; never message content or opaque replay. */
@@ -66,7 +74,7 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
   if (event.type === 'compaction/start') {
     const id = compactionSchema.shape.id.safeParse(event.data.compactionId)
     const seq = count.safeParse(event.seq)
-    return { ...state, sample: null, invalid: true, reason: 'compaction',
+    return { ...state, sample: null, invalid: false, reason: 'compaction', incident: null,
       compaction: id.success && seq.success ? {
         id: id.data, startSeq: seq.data, endSeq: null, state: 'running', checkpoint: false,
         headerSeq: null, requestRoute: null, step: null, request: 'idle',
@@ -76,7 +84,7 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
     && state.compaction.endSeq !== null && count.safeParse(event.seq).success
     && Number(event.seq) > state.compaction.endSeq) {
     const step = compactionSchema.shape.step.safeParse({ turn: event.data.turn, step: event.data.step })
-    return { ...state, invalid: true, reason: 'unknown', compaction: { ...state.compaction, step: step.success ? step.data : null,
+    return { ...state, compaction: { ...state.compaction, step: step.success ? step.data : null,
       headerSeq: step.success ? count.parse(event.seq) : null, requestRoute: state.route,
       request: step.success && copilot(state.route) ? 'pending' : 'unknown' } }
   }
@@ -106,9 +114,13 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
     const revoke = () => state.compaction ? {
       ...state.compaction, headerSeq: null, requestRoute: null, step: null, request: 'unknown' as const,
     } : state.compaction
-    if (!record(raw)) return { ...state, route: null, sample: null, invalid: true, reason: 'unknown', compaction: revoke() }
+    if (!record(raw)) return {
+      ...state, route: null, sample: null, invalid: true, reason: 'unknown', incident: null, compaction: revoke(),
+    }
     const parsed = routeSchema.safeParse({ provider: raw.provider, model: raw.model })
-    if (!parsed.success) return { ...state, route: null, sample: null, invalid: true, reason: 'unknown', compaction: revoke() }
+    if (!parsed.success) return {
+      ...state, route: null, sample: null, invalid: true, reason: 'unknown', incident: null, compaction: revoke(),
+    }
     const route = parsed.data
     const compact = state.compaction
     if (compact?.state === 'completed') {
@@ -119,12 +131,12 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
       } else if (!sameRoute(state.route, route)) state = { ...state, compaction: revoke() }
     }
     if (sameRoute(state.route, route)) return state
-    return { ...state, route, sample: null, reason: 'selection' }
+    return { ...state, route, sample: null, invalid: false, reason: 'selection', incident: null }
   }
   if (event.type.startsWith('compaction/') || event.surfaceOp !== undefined && event.surfaceOp !== 'append') {
     const checkpoint = event.type === 'user/message' && record(event.data.source)
       && event.data.source.kind === 'compact-checkpoint' && event.data.source.compactionId === state.compaction?.id
-    return { ...state, sample: null, invalid: true, reason: 'compaction',
+    return { ...state, sample: null, invalid: false, reason: 'compaction', incident: null,
       compaction: event.type.startsWith('compaction/') || checkpoint || !state.compaction ? state.compaction
         : { ...state.compaction, request: 'unknown', step: null, headerSeq: null, requestRoute: null } }
   }
@@ -134,7 +146,9 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
   if (event.type === 'assistant/message' && source !== undefined) {
     const parsed = routeSchema.safeParse(record(source) ? { provider: source.provider, model: source.model } : source)
     if (!parsed.success || !sameRoute(state.route, parsed.data)) {
-      return { ...state, sample: null, invalid: true, reason: 'unknown', compaction: state.compaction
+      const seq = count.safeParse(event.seq)
+      return { ...state, sample: null, invalid: true, reason: seq.success ? 'invalid-sample' : 'unknown',
+        incident: seq.success ? { kind: 'invalid-sample', seq: seq.data } : null, compaction: state.compaction
         ? { ...state.compaction, request: 'unknown', step: null, headerSeq: null, requestRoute: null } : state.compaction }
     }
   }
@@ -162,29 +176,38 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
       && source !== undefined ? 'succeeded' : record(terminal) && terminal.kind === 'aborted' ? 'cancelled'
         : record(terminal) && terminal.kind === 'error' ? 'failed' : 'unknown' } }
   } else if (compact?.state === 'running') return state
-  if (usage === undefined) return compact?.state === 'completed'
-    ? { ...state, invalid: true, reason: 'unknown' } : state
+  if (usage === undefined) return state
   const parsed = usageSchema.safeParse(usage)
   if (!parsed.success || !count.safeParse(event.seq).success) {
-    return { ...state, sample: null, invalid: true, reason: 'unknown' }
+    const seq = count.safeParse(event.seq)
+    return { ...state, sample: null, invalid: true, reason: seq.success ? 'invalid-sample' : 'unknown',
+      incident: seq.success ? { kind: 'invalid-sample', seq: seq.data } : null }
   }
   const value = parsed.data
   const zero = isZeroContextUsage(value)
   if (zero && !successful) {
-    const reason = state.sample !== null || state.reason === 'none' ? 'failed-zero' : state.reason
-    return { ...state, invalid: true, reason }
+    return {
+      ...state, invalid: true, reason: 'failed-zero',
+      incident: { kind: 'failed-zero', seq: count.parse(event.seq) },
+    }
   }
   const tokens = value.inputTokens + (value.cacheReadTokens ?? 0) + (value.cacheWriteTokens ?? 0)
   if (!Number.isSafeInteger(tokens) || state.route === null) {
-    return { ...state, sample: null, invalid: true, reason: 'unknown' }
+    return {
+      ...state, sample: null, invalid: true, reason: 'invalid-sample',
+      incident: { kind: 'invalid-sample', seq: count.parse(event.seq) },
+    }
   }
-  return { ...state, sample: { tokens, seq: count.parse(event.seq), route: state.route }, invalid: false, reason: 'none' }
+  return {
+    ...state, sample: { tokens, seq: count.parse(event.seq), route: state.route },
+    invalid: false, reason: 'none', incident: null,
+  }
 }
 
 /** Separate bounded replay unit; never register under or modify a Core key. */
 export const contextEvidenceDefinition = {
   key: COPILOT_CONTEXT_EVIDENCE,
-  stateVersion: 2,
+  stateVersion: 3,
   stateSchema: ContextEvidenceSchema,
   init: initialContextEvidence,
   apply: foldContextEvidence,

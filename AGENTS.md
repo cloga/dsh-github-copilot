@@ -43,7 +43,15 @@ This repository owns twelve narrow surfaces:
 8. Optional, provider-scoped Chat presentation for completed empty reasoning disclosures; durable content and encrypted replay metadata remain Core-owned.
 9. Compatibility-only policy restoration and request recovery for existing dedicated planner/executor Sessions. Model roles UI, settings writes and new dedicated roots are retired (#158); never reintroduce them or migrate histories implicitly.
 10. Managed-route estimated input/output admission, optional exact-request pressure signalling through official compaction recovery, supported low summary effort only when no effort is already resolved, and default-off lossless gzip for explicitly opted-in account-proven HTTP Responses requests. See [compaction budgets](./docs/copilot-compaction.md). Preserve truthful capacities, requested output caps, native errors/replay and transaction ownership; no hidden history trimming, wire chunking, competing compaction service or automatic model switch. The separately selected, single-service [recovery engine](./docs/manual-compaction-recovery.md) defaults to automatic segmented recovery for known oversized summaries or one typed native capacity failure through the public subclass hook. Preserve `automaticRecovery: false`, native `auto: false`, scopes and custom engines; at most 16 physical calls including a failed first attempt, no recursive retry or 408/network/auth/quota fallback. Installation alone never selects or migrates an engine.
-11. Optional account quota reads and a session-scoped composer usage control through public credentials, strict Remotes and additive slots. Keep account billing-cycle credits separate from context tokens and session cost. Missing, pooled, legacy and stale data must retain their real semantics; never infer credits from token estimates or account deltas. A separate plugin-owned historical context projection may diagnose failed-zero readings, never filter shared native usage, replace Core's meter, infer current occupancy/percentages or rewrite history. See [quota boundaries](./docs/copilot-usage.md).
+11. Optional account quota reads and a session-scoped composer usage control
+through public credentials, strict Remotes and additive slots. Keep account
+billing-cycle credits separate from context tokens and session cost. Missing,
+pooled, legacy and stale data must retain their real semantics; never infer credits
+from token estimates or account deltas. A separate plugin-owned historical context
+projection may diagnose concrete failed-zero or invalid-sample incidents; ordinary
+request progress and absent fresh sampling stay quiet. Never filter shared native
+usage, replace Core's meter, infer current occupancy/percentages or rewrite history.
+See [quota boundaries](./docs/copilot-usage.md).
 12. Default-off local account/Checking/compaction diagnostics through public storage-domain and strict additive Remotes. Keep fixed-dimension Client/Host and logical/physical populations separate, with bounded handles/rows, 14-day retention, explicit loss/uncertainty and native commit evidence. Isolate the home-wide backend by public profile context, never account/Session identity; one writer per profile is required. No content, raw errors, identities/hashes, credential/history reads, ad-hoc files, Settings logs, upload, daily task or automatic repair. Enable/pause uses only the hidden volatile `diagnosticsEnabled` CAS leaf; clear is a separately confirmed epoch fence. Missing/corrupt storage remains unavailable, never healthy empty data. Publication does not enable collection. See [local diagnostics](./docs/plugin-diagnostics.md).
 
 ## Session-policy compaction replay consent (#349, #352)
@@ -97,7 +105,15 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/reasoning-presentation.ts`: guarded native Chat delegation and historical Copilot provenance; filters temporary view props only, never messages, signatures, replay indexes or usage.
 - `src/remote.ts`: Typert Remote contribution. Never add credential payloads here.
 - `src/copilot-usage-host.ts`, `src/copilot-usage-remote.ts`, `src/copilot-usage-card.ts`, `src/copilot-usage-ui.ts`: bounded Host quota snapshots, an independent strict namespace and reversible composer presentation. No real account fetches in tests, private Client store/DOM injection, quota-specific credential owner or general model wire.
-- `src/context-usage.ts`, `src/context-evidence.ts`, `src/context-evidence-ui.ts`: diagnostic-only failed-zero classification and bounded numeric historical evidence through a plugin-owned public projection and additive composer disclosure. Never filter native usage chunks to protect context readings: shared samples also feed Core's turn and cumulative accounting. Historical counts never become current occupancy; Core pressure, billing and durable events stay under Core ownership.
+- `src/context-usage.ts`, `src/context-evidence.ts`,
+  `src/context-evidence-ui.ts`: diagnostic-only failed-zero/invalid-sample
+  incidents and bounded numeric historical evidence through a plugin-owned public
+  projection and additive composer disclosure. Keep ordinary progress quiet;
+  dismissal is bounded Client presentation keyed by Session/incident, and a valid
+  applicable sample clears the incident. Never filter native usage chunks to
+  protect context readings: shared samples also feed Core's turn and cumulative
+  accounting. Historical counts never become current occupancy; Core pressure,
+  billing and durable events stay under Core ownership.
 - `src/current-provider.ts`: selected DSH route plus installed pi-ai catalog facts.
 - `src/temporary-models.ts`: exact, account-gated corrections with semantic protocol/capability retirement.
 - `src/model-protocol.ts`: explicit Core capability detection and conservative legacy fallback.
@@ -301,6 +317,9 @@ above the composer, with shared native secondary typography. Do not restore long
 notices to the nonwrapping statistics row or mutate its parent DOM. Scope errors
 keep concise recovery guidance; bounded dispatch counts are separate Host diagnostics,
 not proof of the rejected item, account-switch failure or recovery success.
+Ordinary context-request progress stays quiet. Only concrete sequenced sampling
+incidents may notify, with bounded Session/incident dismissal; missing or unknown
+projection evidence remains a named diagnostic and never fabricated health.
 
 Completed-turn Usage diagnostics (#259) are read-only plugin conversation data and an additive assistant-actions explanation. Official rc.2 hides its total if any attempt lacks complete accounting; the plugin's finish-only pre-dispatch pressure block can trigger this rule even after recovery. Never fabricate zero usage or replace it with successful-step partial totals. Identify local interception only from its exact recorded finish-only diagnostic, keep other missing samples and paged evidence uncertain, and suppress the explanation whenever native `tokenUsage` exists. Preserve native accounting, history, pressure and recovery; see `docs/copilot-usage.md`.
 

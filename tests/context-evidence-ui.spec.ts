@@ -19,6 +19,7 @@ afterEach(async () => {
 const route = { provider: 'github-copilot-preview', model: 'synthetic-model' }
 const invalid: ContextEvidence = {
   route, sample: { tokens: 671_709, seq: 2, route }, invalid: true, reason: 'failed-zero',
+  incident: { kind: 'failed-zero', seq: 3 },
 }
 function mount<P extends object>(component: ComponentType<P>, props: P) {
   const container = document.createElement('div')
@@ -82,7 +83,7 @@ describe('additive historical context notice', () => {
       message: { source: route }, stream: [{ type: 'chunk', chunk: { type: 'finish', reason: { kind: 'stop' } } }] } })
     await view.render({ evidence, locale })
     expect(view.container.querySelector('summary')?.textContent).toContain(locale === 'en' ? 'subsequent request succeeded' : '后续请求已成功')
-    expect(view.container.textContent).toContain(locale === 'en' ? 'No applicable valid post-compaction' : '尚未确认仍适用的有效压缩后输入采样')
+    expect(view.container.textContent).not.toContain(locale === 'en' ? 'occupancy awaiting confirmation' : '占用待确认')
     expect(view.container.querySelector('details')?.open).toBe(false)
     expect(view.container.querySelector('[role="progressbar"]')).toBeNull()
   })
@@ -99,16 +100,13 @@ describe('additive historical context notice', () => {
     expect(view.container.textContent).not.toContain('42 tokens')
     expect(view.container.textContent).not.toContain('input sample is recorded')
   })
-  it('does not certify a successful zero input sample or expire its uncertainty explanation', async () => {
+  it('keeps a successful zero input sample quiet after transient compaction feedback expires', async () => {
     const evidence = { ...completed(), sample: { tokens: 0, seq: 6, route }, invalid: false }
     const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, {
       evidence, showCompactionResult: false,
     })
     await view.render()
-    expect(view.container.textContent).toContain('No applicable valid post-compaction input sample')
-    expect(view.container.textContent).not.toContain('Last valid input')
-    expect(view.container.textContent).not.toContain('input sample is recorded')
-    expect(view.container.querySelector('summary')?.textContent).toBe('Context occupancy awaiting confirmation')
+    expect(view.container.textContent).toBe('')
   })
   it('mounts one combined disclosure and reads native commit status without policy writes', async () => {
     vi.useFakeTimers()
@@ -134,9 +132,8 @@ describe('additive historical context notice', () => {
       await view.render({ sessionId: 'a', useProjection, useSession })
       expect(view.container.querySelector('summary')?.textContent).toContain('Compaction completed')
       await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-      expect(view.container.querySelector('summary')?.textContent).not.toContain('Compaction completed')
-      expect(view.container.textContent).toContain('Context occupancy awaiting confirmation')
-      expect(view.container.textContent).toContain('Native 0% does not prove an empty context')
+      expect(view.container.querySelector('summary')).toBeNull()
+      expect(view.container.textContent).toBe('')
       expect(view.container.querySelector('[aria-label="Close compaction notice"]')).toBeNull()
       expect(f.continuation.get).toHaveBeenCalledTimes(2)
     } finally { vi.useRealTimers() }
@@ -161,9 +158,8 @@ describe('additive historical context notice', () => {
     expect(summary.style.color).toBe('var(--dsw-alias-label-tertiary, GrayText)')
     expect(summary.style.cursor).toBe('pointer')
     expect(view.container.querySelector('details')!.open).toBe(false)
-    await view.render({ evidence: undefined, locale })
+    await view.render({ evidence: { ...invalid, incident: { kind: 'invalid-sample', seq: 4 } }, locale })
     expect(view.container.querySelector('summary')!.style.cssText).toBe(summary.style.cssText)
-    expect(view.container.textContent).toContain('COPILOT_CONTEXT_PROJECTION_UNAVAILABLE')
   })
   it.each(['en', 'zh-CN'])('labels counts as historical rather than current occupancy in %s', async locale => {
     const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence: invalid, locale })
@@ -175,19 +171,31 @@ describe('additive historical context notice', () => {
     expect(view.container.querySelector('summary')).not.toBeNull()
     expect(view.container.querySelector('[role="progressbar"]')).toBeNull()
   })
-  it('hides healthy samples and does not invent counts when evidence is unavailable or revoked', async () => {
+  it('hides healthy, unavailable and revoked evidence without inventing counts', async () => {
     const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence: initialContextEvidence() })
     await view.render()
     expect(view.container.textContent).toBe('')
     await view.render({ evidence: undefined })
-    expect(view.container.textContent).toContain('COPILOT_CONTEXT_PROJECTION_UNAVAILABLE')
-    expect(view.container.textContent).not.toContain('model change')
+    expect(view.container.textContent).toBe('')
     await view.render({ evidence: invalid, applicable: false })
-    expect(view.container.textContent).not.toContain('671,709')
-    expect(view.container.textContent).toContain('No applicable historical input sample')
-    await view.render({ evidence: { ...invalid, sample: null, reason: 'unknown' } })
-    expect(view.container.textContent).toContain('evidence is incomplete')
-    expect(view.container.textContent).not.toContain('failed Copilot attempt')
+    expect(view.container.textContent).toBe('')
+    await view.render({ evidence: { ...invalid, sample: null, invalid: true, reason: 'unknown', incident: null } })
+    expect(view.container.textContent).toBe('')
+  })
+  it('keeps unknown projection evidence diagnostic-only', async () => {
+    const f = fixture()
+    f.declare()
+    const unknown = {
+      ...initialContextEvidence(), route, invalid: true, reason: 'unknown' as const,
+    }
+    const useProjection = (key: string) => key === COPILOT_CONTEXT_EVIDENCE ? unknown
+      : key === COMPACTION_CONTINUATION ? undefined : { next: route }
+    const useSession = <T,>(select: (value: unknown) => T): T =>
+      select({ sessionId: 'a', removed: false, openState: 'open' })
+    const view = mount(f.component(), { sessionId: 'a', useProjection, useSession })
+    await view.render()
+    expect(view.container.textContent).toBe('')
+    expect(f.ctx.logger.warn).toHaveBeenCalledWith('[github-copilot] COPILOT_CONTEXT_EVIDENCE_INCOMPLETE')
   })
   it('reacts to only the current open Session and pending selection, preserving the native meter', async () => {
     const f = fixture()
@@ -204,8 +212,28 @@ describe('additive historical context notice', () => {
     const view = mount(f.component(), { sessionId: 'a', useProjection, useSession })
     await view.render()
     expect(view.container.textContent).toContain('671,709')
-    await act(async () => { selection.set({ next: { ...route, model: 'auto' } }) })
+    const close = view.container.querySelector<HTMLButtonElement>('[aria-label="Dismiss context sample warning"]')!
+    await act(async () => { close.click() })
+    expect(view.container.textContent).toBe('')
+    await view.hide()
+    await view.render()
+    expect(view.container.textContent).toBe('')
+    await act(async () => { session.set({ sessionId: 'b', removed: false, openState: 'open' }) })
+    await view.render({ sessionId: 'b', useProjection, useSession })
     expect(view.container.textContent).toContain('671,709')
+    await act(async () => { session.set({ sessionId: 'a', removed: false, openState: 'open' }) })
+    await view.render({ sessionId: 'a', useProjection, useSession })
+    expect(view.container.textContent).toBe('')
+    await act(async () => {
+      evidence.set({ ...invalid, incident: { kind: 'failed-zero', seq: 4 } })
+    })
+    expect(view.container.textContent).toContain('671,709')
+    await act(async () => { evidence.set({
+      ...invalid, sample: { tokens: 42, seq: 5, route }, invalid: false, reason: 'none', incident: null,
+    }) })
+    expect(view.container.textContent).toBe('')
+    await act(async () => { selection.set({ next: { ...route, model: 'auto' } }) })
+    expect(view.container.textContent).toBe('')
     await act(async () => { selection.set({ next: { ...route, model: 'different' } }) })
     expect(view.container.textContent).not.toContain('671,709')
     await act(async () => { selection.set({ next: { provider: 'other', model: 'auto' } }) })
@@ -213,7 +241,7 @@ describe('additive historical context notice', () => {
     await act(async () => { selection.set({ next: route }); session.set({ sessionId: 'b', removed: false, openState: 'open' }) })
     expect(view.container.textContent).toBe('')
     await act(async () => { session.set({ sessionId: 'a', removed: false, openState: 'open' }); evidence.set({ ...invalid, unexpected: true }) })
-    expect(view.container.textContent).toContain('COPILOT_CONTEXT_PROJECTION_UNAVAILABLE')
+    expect(view.container.textContent).toBe('')
     await view.render()
     expect(f.ctx.logger.warn).toHaveBeenCalledTimes(1)
     await act(async () => { evidence.set(initialContextEvidence()) })

@@ -37,7 +37,8 @@ describe('public native context integration', () => {
       const state = ctx.sessionProjections.stateOf(session, COPILOT_CONTEXT_EVIDENCE)
       expect(state?.compaction).toMatchObject({ state: 'completed', request: 'succeeded' })
       expect(state?.sample).toBeNull()
-      expect(state?.invalid).toBe(true)
+      expect(state?.invalid).toBe(false)
+      expect(state?.incident).toBeNull()
     } finally { await ctx.fiber.dispose() }
   })
   it('registers a strict independent wire projection, cold-folds request routing and disposes reversibly', async () => {
@@ -59,7 +60,7 @@ describe('public native context integration', () => {
       })
       expect(ctx.sessionProjections.stateOf(session, COPILOT_CONTEXT_EVIDENCE)?.route)
         .toEqual({ provider: 'other', model: 'other' })
-      expect(ctx.sessionProjections.checkpoint(session)[COPILOT_CONTEXT_EVIDENCE]?.ver).toBe(2)
+      expect(ctx.sessionProjections.checkpoint(session)[COPILOT_CONTEXT_EVIDENCE]?.ver).toBe(3)
       await fiber.dispose()
       expect(ctx.sessionProjections.snapshot(session).values).not.toHaveProperty(COPILOT_CONTEXT_EVIDENCE)
     } finally { await ctx.fiber.dispose() }
