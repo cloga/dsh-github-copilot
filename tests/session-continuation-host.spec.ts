@@ -165,7 +165,7 @@ it.each(['cancelled', 'failed', 'blocked'] as const)('retains truthful summary o
       error: state === 'blocked' ? 'LlmError: COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: synthetic' : 'synthetic failure' } } as never)
     expect(await ctx.githubCopilotSessionContinuation.get(agent)).toMatchObject({ compaction: { id: 'op', state } })
     if (filter) await expect(filter({ input: [] })).rejects.toThrow('REVOKED')
-    expect(owner.prepare({ ...request, purpose: 'assessment' })).toBeUndefined()
+    expect(owner.prepare({ ...request, purpose: 'session-title' })).toBeUndefined()
   } finally { owner.dispose(); await ctx.fiber.dispose() }
 })
 

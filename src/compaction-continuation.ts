@@ -2,12 +2,33 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-compaction'
+import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import { SessionContinuationTurn } from './session-continuation.ts'
 import { COMPACTION_CONTINUATION, CompactionContinuationLifecycleSchema } from './session-continuation-types.ts'
 import type { CompactionContinuationStatus, CompactionContinuationLifecycle } from './session-continuation-types.ts'
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionMap { githubCopilotCompactionLifecycle: CompactionContinuationLifecycle }
   interface SessionProjectionStateMap { githubCopilotCompactionLifecycle: CompactionContinuationLifecycle }
+}
+type Definition = Omit<ProjectionDefinition<typeof COMPACTION_CONTINUATION>, 'stateSchema' | 'wire'> & {
+  stateSchema: typeof CompactionContinuationLifecycleSchema
+  wire: Omit<NonNullable<ProjectionDefinition<typeof COMPACTION_CONTINUATION>['wire']>, 'viewSchema'> & {
+    viewSchema: typeof CompactionContinuationLifecycleSchema
+  }
+}
+export const compactionContinuationDefinition = {
+  key: COMPACTION_CONTINUATION, stateVersion: 1, stateSchema: CompactionContinuationLifecycleSchema,
+  init: (): CompactionContinuationLifecycle => ({ id: null, running: false }),
+  apply(state, event) {
+    if (event.type === 'compaction/start') return { id: event.data.compactionId, running: true }
+    if (event.type === 'compaction/end' && event.data.compactionId === state.id) return { ...state, running: false }
+    return state
+  },
+  wire: { viewSchema: CompactionContinuationLifecycleSchema, view: (state: CompactionContinuationLifecycle) => state },
+} satisfies Definition
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 interface Operation {
   readonly session: Agent['session']
@@ -23,16 +44,11 @@ export function installCompactionContinuation(ctx: Context, enabled: (agent: Age
   const statuses = new Map<string, CompactionContinuationStatus>()
   let disposed = false
   const removeProjection = ctx.inject(['sessionProjections'], scope => {
-    const registry = scope.sessionProjections
-    return registry.register({
-      key: COMPACTION_CONTINUATION, stateVersion: 1, stateSchema: CompactionContinuationLifecycleSchema,
-      init: (): CompactionContinuationLifecycle => ({ id: null, running: false }),
-      apply(state, event) {
-        if (event.type === 'compaction/start') return { id: event.data.compactionId, running: true }
-        if (event.type === 'compaction/end' && event.data.compactionId === state.id) return { ...state, running: false }
-        return state
-      },
-    })
+    const registry: unknown = scope.get('sessionProjections')
+    if (!record(registry) || typeof registry.register !== 'function') throw new Error('COPILOT_CONTINUATION_COMPACTION_PROJECTION_UNAVAILABLE')
+    const remove: unknown = registry.register(compactionContinuationDefinition)
+    if (typeof remove !== 'function') throw new Error('COPILOT_CONTINUATION_COMPACTION_PROJECTION_DISPOSER_UNAVAILABLE')
+    return () => { remove() }
   })
   const removeEvents = ctx.on('session/event', (session, event) => {
     if (event.type === 'compaction/start') {

@@ -449,6 +449,11 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     f.ctx.effect(() => () => owner.dispose())
     await owner.ready
     f.adapter.continuation = owner
+    const lifecycle: unknown[] = []
+    f.ctx.sessionProjections.onChanged((session, key, value) => {
+      if (session === f.agent.session && key === 'githubCopilotCompactionLifecycle') lifecycle.push(value)
+    })
+    f.ctx.sessionProjections.stateOf(f.agent.session, 'githubCopilotCompactionLifecycle')
     const oldSource = JSON.stringify(f.events)
     const oldCount = f.events.length
     expect(f.originalTokens).toBeGreaterThan(200)
@@ -466,6 +471,9 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     expect(await f.ctx.githubCopilotSessionContinuation.get(f.agent)).toMatchObject({ compaction: { state: 'completed' } })
     expect(f.adapter.summaries).toHaveLength(1)
     expect(f.adapter.conversation).toHaveLength(2)
+    expect(lifecycle).toEqual(expect.arrayContaining([
+      expect.objectContaining({ running: true }), expect.objectContaining({ running: false }),
+    ]))
     expect(f.forbiddenFetch).not.toHaveBeenCalled()
   })
 
