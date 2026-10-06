@@ -5,6 +5,7 @@ import '@earendil-works/pi-ai/api/openai-completions'
 import '@earendil-works/pi-ai/api/anthropic-messages'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
@@ -123,6 +124,54 @@ async function call(ctx: Context, options: Partial<GenerateOptions> = {}) {
 }
 
 describe('managed request-body timeout guidance', () => {
+  it('reads compression policy when a prepared Responses call reaches lazy HTTP dispatch', async () => {
+    let enabled = false
+    let sentBody: BodyInit | null | undefined
+    let sentHeaders = new Headers()
+    stubFetch(async (_input, init) => {
+      sentBody = init?.body
+      sentHeaders = new Headers(init?.headers)
+      return response()
+    })
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ responsesRequestCompression: enabled }),
+    })
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    const text = 'late setting changes apply only at this actual dispatch '.repeat(12_000)
+    const stream = prepared.stream({ ...prepared.config, messages: [createUserMessage({
+      content: [{ type: 'text', text }], source: { kind: 'user' },
+    })] })
+    enabled = true
+    const assembler = new BlockAssembler()
+    for await (const chunk of stream) assembler.push(chunk)
+    expect(assembler.finish).toEqual({ kind: 'stop' })
+    expect(sentBody).toBeInstanceOf(Uint8Array)
+    if (!(sentBody instanceof Uint8Array)) throw new Error('prepared Responses request was not compressed')
+    const payload = JSON.parse(gunzipSync(Buffer.from(sentBody)).toString('utf8')) as {
+      input?: Array<{ content?: Array<{ text?: string }> }>
+    }
+    expect(payload.input?.some(item => item.content?.some(part => part.text === text))).toBe(true)
+    expect(sentHeaders.get('content-encoding')).toBe('gzip')
+    expect(sentHeaders.get('content-length')).toBe(String(sentBody.byteLength))
+  })
+
+  it('does not let compressed wire bytes bypass native hard context admission', async () => {
+    const fetch = vi.fn(async () => response())
+    stubFetch(fetch)
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ responsesRequestCompression: true }),
+    })
+    const message = createUserMessage({
+      content: [{ type: 'text', text: 'synthetic oversized context '.repeat(80_000) }],
+      source: { kind: 'user' },
+    })
+    const result = await call(harness.ctx, { messages: [message] })
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED' },
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('excludes actual Core consumer think time despite eager SDK event forwarding', async () => {
     let source!: ReadableStreamDefaultController<Uint8Array>
     let wireSignal: AbortSignal | null | undefined

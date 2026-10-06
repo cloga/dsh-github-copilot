@@ -14,12 +14,13 @@ import { normalizeAccountModelCatalog } from '../src/account-model-catalog.ts'
 import type { AccountModelApi } from '../src/account-model-catalog.ts'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { BlockAssembler, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, createUserMessage, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW } from '../src/copilot-identity.ts'
 import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
 import { requestBodyEvidence } from '../src/request-body-evidence.ts'
 import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
 import { createServer } from 'node:http'
+import { gunzipSync } from 'node:zlib'
 import * as uploadEvidence from '../src/request-upload-evidence.ts'
 
 // Preserve the real factory by default; one observer identity test replaces only
@@ -83,9 +84,11 @@ function nativeEvents(api: AccountModelApi): Response {
   ]
   return new Response(events.map(value => `event: ${value.type}\n${sse(value)}`).join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
-async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>, streamIdleTimeoutMs?: number) {
+async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>, streamIdleTimeoutMs?: number,
+  compression?: { enabled: boolean; text: string }, customFetch?: StreamOptions['fetch']) {
   const item = descriptor(api)
-  const guarded = { ...accountGuard(item.id), ...streamIdleTimeoutMs === undefined ? {} : { streamIdleTimeoutMs } }
+  const guarded = { ...accountGuard(item.id), ...streamIdleTimeoutMs === undefined ? {} : { streamIdleTimeoutMs },
+    ...compression === undefined ? {} : { responsesRequestCompression: compression.enabled } }
   const { provider } = createAccountProvider([item], guarded, baseURL)
   const profile: ResolvedPiAiProviderProfile = { provider: PREVIEW, displayName: 'Account models', piProvider: provider,
     streamIdleTimeoutMs: 300_000, maxRequestImageBytes: 20_971_520,
@@ -104,14 +107,180 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
   })
   const prepared = await adapter.prepareCall(PREVIEW, item.id)
   const assembler = new BlockAssembler()
-  for await (const chunk of prepared.stream({ provider: PREVIEW, model: item.id, messages: [],
+  for await (const chunk of prepared.stream({ provider: PREVIEW, model: item.id,
+    messages: compression === undefined ? [] : [createUserMessage({
+      source: { kind: 'user' }, content: [{ type: 'text', text: compression.text }],
+    })],
     ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
+    ...customFetch === undefined ? {} : { fetch: customFetch },
   })) assembler.push(chunk)
   return { assembler, model: prepared.model, env }
 }
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('account-driven native provider', () => {
+  it('preserves published-adapter JSON and usage across identity and gzip encoding', async () => {
+    const text = 'Synthetic UTF-8 context. '.repeat(15_000)
+    const bodies: string[] = []
+    const encodings: (string | null)[] = []
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const headers = new Headers(init?.headers)
+      encodings.push(headers.get('content-encoding'))
+      if (headers.get('content-encoding') === 'gzip') {
+        if (!(init?.body instanceof Uint8Array)) throw new Error('FIXTURE_EXPECTED_GZIP_BYTES')
+        expect(headers.get('content-length')).toBe(String(init.body.byteLength))
+        bodies.push(gunzipSync(init.body).toString('utf8'))
+      } else bodies.push(String(init?.body))
+      return nativeEvents('openai-responses')
+    })
+    vi.stubGlobal('fetch', fetch)
+    const baseline = await accountCall('openai-responses', undefined, undefined, undefined, { enabled: false, text })
+    const compressed = await accountCall('openai-responses', undefined, undefined, undefined, { enabled: true, text })
+    expect(encodings).toEqual([null, 'gzip'])
+    expect(bodies[1]).toBe(bodies[0])
+    expect(bodies[1]).toContain(text)
+    expect(compressed.assembler.finish).toEqual({ kind: 'stop' })
+    expect(compressed.assembler.usage).toEqual(baseline.assembler.usage)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps caller-owned Fetch unchanged and does not resend a gzip 415 response', async () => {
+    const text = 'Synthetic context. '.repeat(15_000)
+    const customFetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(typeof init?.body).toBe('string')
+      expect(new Headers(init?.headers).has('content-encoding')).toBe(false)
+      return nativeEvents('openai-responses')
+    })
+    const custom = await accountCall('openai-responses', undefined, undefined, undefined,
+      { enabled: true, text }, customFetch)
+    expect(custom.assembler.finish).toEqual({ kind: 'stop' })
+    expect(customFetch).toHaveBeenCalledOnce()
+
+    const unsupported = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('content-encoding')).toBe('gzip')
+      return new Response('Unsupported Content-Encoding', { status: 415 })
+    })
+    vi.stubGlobal('fetch', unsupported)
+    const failed = await accountCall('openai-responses', undefined, undefined, undefined, { enabled: true, text })
+    expect(failed.assembler.finish).toMatchObject({ kind: 'error' })
+    expect(unsupported).toHaveBeenCalledOnce()
+  })
+
+  it('rechecks the request/account fence after compression and never dispatches revoked work', async () => {
+    const item = descriptor('openai-responses')
+    const controller = new AbortController()
+    const release = vi.fn()
+    let checkpoints = 0
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    const guard: AccountProviderGuard = {
+      ...accountGuard(item.id),
+      responsesRequestCompression: true,
+      beforeWire: async () => ({ signal: controller.signal, release }),
+      requestCheckpoint() {
+        if (++checkpoints === 2) controller.abort(new Error('SYNTHETIC_ACCOUNT_REVOKED'))
+      },
+    }
+    const { provider, models } = createAccountProvider([item], guard, baseURL)
+    const stream = provider.streamSimple(models[0]!, normalizeContext({
+      messages: [{ role: 'user', content: 'Synthetic context. '.repeat(15_000) }],
+    }), { apiKey: 'synthetic-account-token', maxRetries: 0 })
+    for await (const _event of stream) { /* Preserve the native terminal cancellation. */ }
+    expect(checkpoints).toBe(2)
+    expect(fetch).not.toHaveBeenCalled()
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it.each(['openai-completions', 'anthropic-messages'] as const)(
+    'keeps native %s transport when the option is enabled', async api => {
+      const text = 'Synthetic context. '.repeat(15_000)
+      const bodies: string[] = []
+      const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+        expect(new Headers(init?.headers).has('content-encoding')).toBe(false)
+        expect(typeof init?.body).toBe('string')
+        bodies.push(String(init?.body))
+        return nativeEvents(api)
+      })
+      vi.stubGlobal('fetch', fetch)
+      const baseline = await accountCall(api, undefined, undefined, undefined, { enabled: false, text })
+      const enabled = await accountCall(api, undefined, undefined, undefined, { enabled: true, text })
+      expect(bodies[1]).toBe(bodies[0])
+      expect(enabled.assembler.finish).toEqual({ kind: 'stop' })
+      expect(enabled.assembler.usage).toEqual(baseline.assembler.usage)
+      expect(fetch).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('sends gzip with correct framing through Node Fetch', async () => {
+    let contentEncoding: string | undefined
+    let contentLength: string | undefined
+    let received = Buffer.alloc(0)
+    const server = createServer(async (request, response) => {
+      const chunks: Buffer[] = []
+      for await (const chunk of request) chunks.push(Buffer.from(chunk))
+      contentEncoding = request.headers['content-encoding']
+      contentLength = request.headers['content-length']
+      received = Buffer.concat(chunks)
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.end(await nativeEvents('openai-responses').text())
+    })
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('FIXTURE_EXPECTED_LOCAL_SERVER_ADDRESS')
+    const nativeFetch = globalThis.fetch.bind(globalThis)
+    const redirectedFetch = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      nativeFetch(`http://127.0.0.1:${address.port}/responses`, init))
+    vi.stubGlobal('fetch', redirectedFetch)
+    try {
+      const item = descriptor('openai-responses')
+      const { provider, models } = createAccountProvider([item], {
+        ...accountGuard(item.id), responsesRequestCompression: true,
+      }, baseURL)
+      const text = 'Synthetic local Fetch upload. '.repeat(15_000)
+      const stream = provider.streamSimple(models[0]!, normalizeContext({
+        messages: [{ role: 'user', content: text }],
+      }), { apiKey: 'synthetic-account-token', maxRetries: 0 })
+      for await (const _event of stream) { /* Drain the native SDK response. */ }
+      expect((await stream.result()).stopReason).toBe('stop')
+      expect(redirectedFetch).toHaveBeenCalledOnce()
+      expect(contentEncoding).toBe('gzip')
+      expect(contentLength).toBe(String(received.byteLength))
+      expect(gunzipSync(received).toString('utf8')).toContain(text)
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
+  })
+
+  it('keeps original JSON for replay-scope checks after gzip without retiring the account', async () => {
+    const text = 'Synthetic context. '.repeat(15_000)
+    let originalBody = ''
+    const unauthorized = vi.fn(), rejected = vi.fn(), replayFailure = vi.fn()
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('content-encoding')).toBe('gzip')
+      if (!(init?.body instanceof Uint8Array)) throw new Error('FIXTURE_EXPECTED_GZIP_BYTES')
+      originalBody = gunzipSync(init.body).toString('utf8')
+      return Response.json({ message: 'input item does not belong to this connection' }, { status: 401 })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const item = descriptor('openai-responses')
+    const guard = { ...accountGuard(item.id), responsesRequestCompression: true,
+      onUnauthorized: unauthorized, onReplayScopeRejected: rejected, onReplayFailure: replayFailure }
+    const { provider, models } = createAccountProvider([item], guard, baseURL)
+    const stream = provider.streamSimple(models[0]!, normalizeContext({
+      messages: [{ role: 'user', content: text }],
+    }), { apiKey: 'synthetic-account-token', maxRetries: 0 })
+    for await (const _event of stream) { /* Drain the native terminal failure. */ }
+    expect((await stream.result()).stopReason).toBe('error')
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(rejected).toHaveBeenCalledExactlyOnceWith(originalBody)
+    expect(JSON.parse(originalBody).input[0].content[0].text).toBe(text)
+    expect(replayFailure).toHaveBeenCalledOnce()
+    expect(unauthorized).not.toHaveBeenCalled()
+  })
+
   it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
     'checks the auxiliary deadline immediately before native %s Fetch and releases the lease', async api => {
       const item = descriptor(api)
@@ -541,8 +710,8 @@ describe('managed upload-timeout observation', () => {
 })
 
 describe('managed Responses replay compatibility', () => {
-  function replayContext(includeEmptyReasoning = false): PiContext {
-    return { messages: [{ role: 'user', content: 'Synthetic task', timestamp: 0 }, {
+  function replayContext(includeEmptyReasoning = false, userText = 'Synthetic task'): PiContext {
+    return { messages: [{ role: 'user', content: userText, timestamp: 0 }, {
       role: 'assistant', api: 'openai-responses', provider: PREVIEW, model: 'future-lab-r17',
       stopReason: 'toolUse', timestamp: 0,
       usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
@@ -593,6 +762,57 @@ describe('managed Responses replay compatibility', () => {
     expect(fetch).toHaveBeenCalledTimes(3)
     expect(bodies[0]).toBe(bodies[1])
     expect(bodies[1]).toBe(bodies[2])
+    expect(JSON.stringify(context)).toBe(original)
+  })
+  it('recompresses identical native JSON after HTTP 408 retries without an identity resend', async () => {
+    const item = descriptor('openai-responses')
+    const retryReplay = new ResponsesRetryReplay()
+    const coreSignal = new AbortController().signal
+    const context = normalizeContext(replayContext(false, 'Synthetic task '.repeat(20_000)))
+    const original = JSON.stringify(context)
+    const bodies: string[] = []
+    const wireLengths: number[] = []
+    let timeoutDiagnostic: string | undefined
+    const timeout = vi.fn((value: string | undefined) => {
+      if (value !== undefined) timeoutDiagnostic = value
+    })
+    let firstPayload: Record<string, unknown> | undefined
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers)
+      expect(headers.get('content-encoding')).toBe('gzip')
+      if (!(init?.body instanceof Uint8Array)) throw new Error('FIXTURE_EXPECTED_GZIP_BYTES')
+      expect(headers.get('content-length')).toBe(String(init.body.byteLength))
+      wireLengths.push(init.body.byteLength)
+      bodies.push(gunzipSync(init.body).toString('utf8'))
+      return bodies.length < 3 ? Response.json({ code: 'user_request_timeout',
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' }, { status: 408 })
+        : nativeEvents('openai-responses')
+    })
+    vi.stubGlobal('fetch', fetch)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const guard: AccountProviderGuard = { ...accountGuard(item.id), retryReplay, retrySignal: coreSignal,
+        responsesRequestCompression: true, onRequestBodyTimeout: timeout }
+      const { provider, models } = createAccountProvider([item], guard, baseURL)
+      const stream = provider.streamSimple(models[0]!, context, {
+        apiKey: 'synthetic-account-token', sessionId: 'synthetic-session', maxRetries: 0,
+        onPayload(payload) {
+          const originalPayload = payload as Record<string, unknown>
+          if (attempt === 0) firstPayload = structuredClone(originalPayload)
+          if (attempt < 2) return undefined
+          return { ...originalPayload, input: (firstPayload!.input as Record<string, unknown>[]).map(entry =>
+            typeof entry.id === 'string' ? { type: 'item_reference', id: entry.id } : entry) }
+        },
+      })
+      for await (const _event of stream) { /* Drain the native SDK attempt. */ }
+      expect((await stream.result()).stopReason).toBe(attempt < 2 ? 'error' : 'stop')
+    }
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(bodies[0]).toBe(bodies[1])
+    expect(bodies[1]).toBe(bodies[2])
+    expect(wireLengths[0]).toBe(wireLengths[1])
+    expect(timeoutDiagnostic).toContain(`Encoded body: ${wireLengths[1]} gzip bytes`)
+    expect(timeoutDiagnostic).toContain('Request body (original JSON):')
+    expect(bodies[0]).not.toBe(original)
     expect(JSON.stringify(context)).toBe(original)
   })
   async function invoke(context: PiContext, options: Partial<StreamOptions> = {}, api: AccountModelApi = 'openai-responses') {

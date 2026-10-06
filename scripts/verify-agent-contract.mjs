@@ -76,6 +76,12 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && task.requestBodyEvidenceBoundary?.includes('supplier receipt')
     && task.requestBodyEvidenceBoundary?.includes('dispose subscriptions')),
   'request upload diagnostics must retain scoped lifecycle ownership and local-only evidence limits')
+  require(contract.tasks.compatibility?.responsesCompressionBoundary?.includes('defaults false')
+    && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('original JSON admission/replay/evidence')
+    && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('no identity resend')
+    && contract.tasks.compatibility?.read?.includes('src/responses-request-compression.ts')
+    && contract.tasks.compatibility?.tests?.includes('tests/responses-request-compression.spec.ts'),
+  'managed Responses gzip must remain default-off, bounded and lossless through its public Fetch seam')
   require(contract.tasks.continuation?.processingBoundary?.includes('never recursively traverse')
     && contract.tasks.continuation?.processingBoundary?.includes('atomic baseline commit')
     && contract.tasks.continuation?.tests?.includes('tests/fixtures/compaction-pressure-core.fixture.ts')
