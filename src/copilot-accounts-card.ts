@@ -423,7 +423,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
   })
   return h('div', { 'data-copilot-accounts': '', 'data-copilot-native-ui': true, 'aria-busy': pending,
     style: { ...nativeSettingsStyle, overflowWrap: 'anywhere' } },
-    h('style', null, nativeSettingsCss),
+    props.expanded ? h('style', null, nativeSettingsCss) : null,
     !props.expanded ? h('p', { style: muted, role: 'status', 'aria-live': 'polite', 'data-copilot-current-account': '' },
       identity ?? (busy || identityChecking ? text.identityChecking : text.identityUnavailable)) : null,
     !props.expanded ? null : h('section', {
