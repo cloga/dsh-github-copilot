@@ -3,12 +3,9 @@ import { createElement, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import { GitHubCopilotAuthorizationViewSchema, GitHubCopilotModelPreferencesViewSchema } from './remote.ts'
+import { nativeCompactButtonStyle, nativeInputStyle, nativeCaptionStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 
-const controlStyle: CSSProperties = {
-  color: 'inherit', background: 'transparent', font: 'inherit', fontSize: '14px',
-  border: '1px solid var(--dsw-alias-border-main, ButtonBorder)', colorScheme: 'inherit',
-  borderRadius: '8px', padding: '7px 12px', minHeight: '36px',
-}
+const controlStyle: CSSProperties = nativeCompactButtonStyle
 
 interface PreferenceEdit {
   readonly modelId: string
@@ -185,7 +182,9 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     }
     await completed
   }
-  return createElement('details', { 'data-dsh-github-copilot-model-preferences': true },
+  return createElement('details', { 'data-dsh-github-copilot-model-preferences': true,
+    'data-copilot-native-ui': true, style: nativeSettingsStyle },
+    createElement('style', null, nativeSettingsCss),
     createElement('summary', null, settingsKnown
       ? `Model preferences · ${visibleCount} enabled · ${excluded.size} excluded` : 'Model preferences · Read-only'),
     createElement('p', { style: { fontSize: '14px', marginBlock: '12px' } },
@@ -204,11 +203,11 @@ export function GitHubCopilotModelPreferencesPanel(props: {
         createElement('button', { type: 'button', style: controlStyle, disabled: busyModel !== undefined,
           onClick: () => update(), 'data-dsh-github-copilot-preferences-retry': true },
         busyModel === '' ? 'Reading settings…' : 'Retry'))),
-    createElement('label', { style: { display: 'grid', gap: '6px', fontSize: '14px' } },
+    createElement('label', { style: { display: 'grid', gap: '6px', fontSize: '12px', lineHeight: '18px' } },
       'Search models',
       createElement('input', {
         type: 'search', value: query,
-        style: { ...controlStyle, fontSize: '16px', width: '100%', boxSizing: 'border-box', minWidth: 0,
+        style: { ...nativeInputStyle, width: '100%', boxSizing: 'border-box', minWidth: 0,
           background: 'var(--dsw-alias-bg-layer-1, Canvas)', color: 'var(--dsw-alias-label-primary, CanvasText)' },
         onChange: (event: { currentTarget: { value: string } }) => setQuery(event.currentTarget.value),
         placeholder: 'Search by name or exact model ID',
@@ -221,8 +220,8 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       disabled: (value === 'enabled' || value === 'excluded') && !settingsKnown
         || (value === 'available' || value === 'unavailable') && !availabilityKnown,
       onClick: () => setFilter(value),
-      style: { ...controlStyle, fontWeight: filter === value ? 600 : 400,
-        background: filter === value ? 'color-mix(in srgb, currentColor 12%, transparent)' : 'transparent' },
+      style: { ...controlStyle, fontWeight: filter === value ? 500 : 400,
+        background: filter === value ? 'var(--dsw-alias-interactive-bg-hover, ButtonFace)' : 'transparent' },
     }, value === 'all' ? `All (${rows.length})` : value === 'enabled'
       ? `Enabled (${settingsKnown ? visibleCount : '?'})` : value === 'excluded'
         ? `Excluded (${settingsKnown ? excluded.size : '?'})` : value === 'available'
@@ -236,13 +235,13 @@ export function GitHubCopilotModelPreferencesPanel(props: {
             || queuedModels.includes(model.id)
           return createElement('li', { key: model.id, style: { display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center',
             paddingBlock: '12px', borderBottom: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
-            createElement('span', { style: { flex: 1, minWidth: 0, overflowWrap: 'anywhere', fontSize: '14px' } },
+            createElement('span', { style: { flex: '1 1 240px', minWidth: 0, overflowWrap: 'anywhere', fontSize: '14px' } },
               createElement('strong', null, model.name),
               createElement('br'),
-              createElement('code', null, model.id),
-              createElement('span', null, ` · ${!availabilityKnown ? 'Current account availability unconfirmed'
+              createElement('code', { style: nativeCaptionStyle }, model.id),
+              createElement('span', { style: nativeCaptionStyle }, ` · ${!availabilityKnown ? 'Current account availability unconfirmed'
                 : model.available ? 'Available on current account' : 'Currently unavailable on current account; saved preferences retained'}`),
-              createElement('span', null, ` · ${!settingsKnown ? 'Exclusion status unknown' : isExcluded ? 'Excluded' : 'Enabled'}`),
+              createElement('span', { style: nativeCaptionStyle }, ` · ${!settingsKnown ? 'Exclusion status unknown' : isExcluded ? 'Excluded' : 'Enabled'}`),
               errorModel === model.id && error !== undefined
                 ? createElement('span', { role: 'status', style: { display: 'block', marginTop: '6px' } }, preferenceMessage(error)) : null),
             createElement('label', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px',

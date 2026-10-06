@@ -3,6 +3,7 @@ import { AccountDropdown } from './account-dropdown.ts'
 import { createClientDiagnosticsScope } from './diagnostics-client.ts'
 import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
 import type { ChangeEvent, CSSProperties, ReactElement } from 'react'
+import { nativeCompactButtonStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 import { CopilotUsageViewSchema } from './copilot-usage-remote.ts'
 import { externalLinkTarget } from './external-link.ts'
 import type { CopilotUsageView } from './copilot-usage-types.ts'
@@ -97,19 +98,12 @@ const copy = {
 
 const secondary = 'var(--dsw-alias-label-secondary, GrayText)'
 const border = '1px solid var(--dsw-alias-border-main, color-mix(in srgb, currentColor 20%, transparent))'
-const button: CSSProperties = {
-  font: 'inherit', color: 'inherit', cursor: 'pointer', border, borderRadius: 8,
-  background: 'var(--dsw-alias-bg-layer-1, Canvas)', padding: '5px 9px', colorScheme: 'inherit',
-}
-const formStyles = `
+const button: CSSProperties = nativeCompactButtonStyle
+const formStyles = nativeSettingsCss + `
 [data-copilot-usage-panel] :is(input, select, textarea, button) { color-scheme: inherit; }
 [data-copilot-usage-panel] option { background: Canvas; color: CanvasText; }
-[data-copilot-usage-panel] :is(input, select, textarea, button, a, summary):focus-visible {
-  outline: 2px solid Highlight; outline-offset: 2px;
-}
-[data-copilot-usage-panel] :is(input, select, textarea, button):disabled { opacity: 0.65; }
 `
-const muted: CSSProperties = { color: secondary, fontSize: 12, lineHeight: 1.5, margin: 0 }
+const muted: CSSProperties = { color: secondary, fontSize: 12, lineHeight: '18px', margin: 0 }
 const row: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }
 const separator: CSSProperties = { borderTop: border, paddingTop: 12 }
 
@@ -482,15 +476,14 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     }, triggerText),
     open ? h('div', {
       id, ref: panel, role: 'dialog', 'aria-labelledby': `${id}-title`, 'aria-describedby': `${id}-scope`,
-      popover: 'manual', 'data-copilot-usage-panel': '',
+      popover: 'manual', 'data-copilot-usage-panel': '', 'data-copilot-native-ui': true,
       style: {
-        colorScheme: 'light dark',
+        ...nativeSettingsStyle,
         position: 'fixed', inset: 'auto', margin: 0, ...position, width: 336, maxWidth: 'calc(100vw - 24px)',
         maxHeight: `calc(100vh - ${position.bottom + 12}px)`, overflowY: 'auto', boxSizing: 'border-box',
         zIndex: 1000, padding: 16, display: 'grid', gap: 14, border, borderRadius: 14,
         color: 'var(--dsw-alias-label-primary, CanvasText)',
         background: 'linear-gradient(var(--dsw-specific-menu, Canvas), var(--dsw-specific-menu, Canvas)), Canvas',
-        fontFamily: 'var(--dsw-font-family, inherit)', fontSize: 13,
         boxShadow: '0 8px 32px rgb(0 0 0 / 24%)', overflowWrap: 'anywhere',
       },
     },

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.126 (prepared)
+
+- Align plugin-owned Models, account management, model preferences, continuation disclosures, Credits details and plugin settings with the unchanged official rc.2 font family, type scale, themed neutral controls and focus states (#361).
+- Match compact provider actions to native Edit; keep Sign out and Refresh content-sized, and wrap model actions below long names/IDs on narrow layouts. Preserve authorization, CAS, preferences, continuation, quota and native UI ownership.
+- Isolated real-component browser comparisons cover desktop/narrow widths and light/dark themes; they do not prove live Desktop activation or authorize installation/restart.
+
 ## 0.4.0-alpha.125 (prepared)
 
 - Add the experimental, default-off `github-copilot.responsesRequestCompression` option: account-proven managed HTTP Responses JSON may use bounded, lossless gzip at the existing public Fetch boundary (#358).

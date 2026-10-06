@@ -9,6 +9,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AUTHORIZATION_POLL_INITIAL_MS, AUTHORIZATION_POLL_MAX_MS, createCompactAccount } from './compact-account.ts'
 import type { CSSProperties, ReactElement } from 'react'
+import { nativeSettingsStyle, nativeCardStyle, nativeHeadingStyle, nativeCaptionStyle, nativeCompactButtonStyle, nativeSettingsCss } from './native-settings-style.ts'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
@@ -643,14 +644,9 @@ interface GitHubCopilotPreviewFooterProps {
   readonly embedded?: boolean
 }
 
-const compactButtonStyle: CSSProperties = {
-  appearance: 'none', border: '1px solid color-mix(in srgb, currentColor 24%, transparent)',
-  borderRadius: '999px', background: 'transparent', color: 'inherit', fontFamily: 'inherit',
-  fontSize: '13px', lineHeight: '18px', padding: '6px 12px', minHeight: '32px',
-  maxWidth: '100%', cursor: 'pointer',
-}
+const compactButtonStyle = nativeCompactButtonStyle
 
-const modelsControlCss = `
+const modelsControlCss = nativeSettingsCss + `
 [data-dsh-github-copilot-compact-account] :is(input, select, button) {
   color-scheme: inherit;
 }
@@ -661,10 +657,6 @@ const modelsControlCss = `
 [data-dsh-github-copilot-compact-account] option {
   background: Canvas;
   color: CanvasText;
-}
-[data-dsh-github-copilot-compact-account] :is(input, select, button, summary, a):focus-visible {
-  outline: 2px solid Highlight;
-  outline-offset: 2px;
 }
 [data-dsh-github-copilot-compact-account] :is(input, select, button):disabled {
   color: var(--dsw-alias-label-secondary, GrayText);
@@ -736,25 +728,23 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     routeStatusMessage(view) === undefined ? null : createElement('p', { role: 'status' }, routeStatusMessage(view)),
     view?.route?.state === 'needs-repair' && signedIn ? actionButton('Repair model configuration', account.reconcile, pendingAction) : null,
     signedIn ? actionButton(state.operation === 'signOut' ? 'Signing out…' : 'Sign out', account.signOut, pendingAction || view?.writable === false) : null,
-    view?.writable === false ? createElement('p', { style: { fontSize: '13px' } }, 'Credentials are read-only in this profile.') : null)
+    view?.writable === false ? createElement('p', { style: nativeCaptionStyle }, 'Credentials are read-only in this profile.') : null)
   const continuationSettings = props.continuationSettings ?? createElement(ContinuationDefaultCard, {
     remote: props.continuationRemote, locale: props.locale, onSaved: refreshAccountRevision,
   })
   return createElement('section', {
-    'data-dsh-github-copilot-compact-account': true,
+    'data-dsh-github-copilot-compact-account': true, 'data-copilot-native-ui': true,
     'data-dsh-github-copilot-embedded': props.embedded === true ? true : undefined,
     'aria-label': props.embedded === true ? 'GitHub Copilot account' : undefined,
-    style: props.embedded === true ? { minWidth: 0, marginTop: '8px', colorScheme: 'light dark' }
-      : { minWidth: 0, padding: '12px 14px', margin: '12px 0', borderRadius: '16px',
-        border: '1px solid color-mix(in srgb, currentColor 24%, transparent)', background: 'transparent',
-        colorScheme: 'light dark' },
+    style: props.embedded === true ? { ...nativeSettingsStyle, marginTop: '8px' }
+      : { ...nativeCardStyle, margin: '12px 0' },
   },
   createElement('style', null, modelsControlCss),
-  createElement('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', minHeight: '42px' } },
+  createElement('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', minHeight: '28px' } },
     createElement('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', minWidth: 0 } },
-      props.embedded === true ? null : createElement('h3', { style: { margin: 0, fontSize: '16px', lineHeight: '24px' } }, 'GitHub Copilot'),
-      createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '13px', opacity: 0.75 } }, status),
-      modelStatus === undefined ? null : createElement('span', { role: 'status', 'aria-live': 'polite', style: { fontSize: '12px', opacity: 0.7 } }, modelStatus),
+      props.embedded === true ? null : createElement('h3', { style: nativeHeadingStyle }, 'GitHub Copilot'),
+      createElement('span', { role: 'status', 'aria-live': 'polite', style: nativeCaptionStyle }, status),
+      modelStatus === undefined ? null : createElement('span', { role: 'status', 'aria-live': 'polite', style: nativeCaptionStyle }, modelStatus),
       signedIn ? createElement(GitHubCopilotAccountModelsUpdatedAt, { discoveredAt: models?.discoveredAt }) : null),
     createElement('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginInlineStart: 'auto', minWidth: 0 } },
       (view === undefined && !state.checking) || state.error === 'COPILOT_AUTHORIZATION_STATUS_FAILED' || uncertain
@@ -763,7 +753,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
         { title: view.writable === false ? 'Credentials are read-only' : undefined }) : null,
       actionButton('Manage', () => setManageOpen(open => !open), false, { 'aria-expanded': manageOpen, 'aria-controls': managementId }))),
   state.error === undefined ? null : createElement('p', { role: 'alert', 'data-dsh-github-copilot-account-error': state.error,
-    style: { margin: '8px 0 0', fontSize: '13px', overflowWrap: 'anywhere' } },
+    style: { ...nativeCaptionStyle, margin: '8px 0 0', overflowWrap: 'anywhere' } },
   compactErrorMessage(state.error, view?.authorizationMilestone)),
   authorizing ? createElement('div', { 'data-dsh-github-copilot-auto-authorization': true, style: { marginTop: '8px', overflowWrap: 'anywhere' } },
     notice === undefined ? createElement('p', { role: 'status', 'aria-live': 'polite' }, state.operation === 'cancel' ? 'Cancelling sign-in…' : 'Waiting for GitHub authorization…')
@@ -781,19 +771,19 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
       accountSettings, continuationSettings,
     }),
     manageOpen && props.accountsRemote === undefined ? createElement('section', { 'aria-label': 'Account management' },
-        createElement('h3', { style: { margin: 0, fontSize: 16 } }, 'Account management'),
+        createElement('h3', { style: nativeHeadingStyle }, 'Account management'),
         accountSettings, continuationSettings) : null,
     manageOpen ? createElement('section', { 'data-dsh-github-copilot-model-management': true, 'aria-label': 'Model preferences',
-      style: { display: 'grid', gap: 10, marginTop: 18, paddingTop: 16,
+      style: { display: 'grid', gap: 12, marginTop: 16, paddingTop: 12,
         borderTop: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
-    createElement('h3', { style: { margin: 0, fontSize: 16 } }, 'Model preferences'),
+    createElement('h3', { style: nativeHeadingStyle }, 'Model preferences'),
     signedIn ? createElement(GitHubCopilotModelPreferencesPanel, {
       remote: props.remote, models, preferences: view?.modelPreferences,
     }) : createElement('p', { role: 'status' }, 'Sign in to manage model preferences.'),
     createElement('details', null,
       createElement('summary', null, 'Discovery details'),
-      createElement('p', { style: { fontSize: '13px' } }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
-      models === undefined ? createElement('p', { style: { fontSize: '13px' } }, 'Account model metadata is not available yet.')
+      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
+      models === undefined ? createElement('p', { style: nativeCaptionStyle }, 'Account model metadata is not available yet.')
         : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models })),
     signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
       { 'data-dsh-github-copilot-refresh-models': true }) : null,

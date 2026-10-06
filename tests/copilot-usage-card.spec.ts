@@ -43,7 +43,11 @@ function button(text: string) {
   return Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent === text)!
 }
 async function click(element: HTMLElement) { await act(async () => { element.click() }) }
-function text() { return document.body.textContent ?? '' }
+function text() {
+  const content = document.body.cloneNode(true) as HTMLElement
+  content.querySelectorAll('style, script').forEach(node => node.remove())
+  return content.textContent ?? ''
+}
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>(done => { resolve = done })
@@ -352,7 +356,7 @@ describe('Copilot account usage chip', () => {
     card.container.style.colorScheme = scheme
     await click(trigger())
     const dialog = document.querySelector<HTMLElement>('[data-copilot-usage-panel]')!
-    expect(dialog.style.colorScheme).toBe('light dark')
+    expect(dialog.style.colorScheme).toBe('inherit')
     const styles = dialog.querySelector('style')?.textContent ?? ''
     expect(styles).toContain('color-scheme: inherit')
     expect(styles).toContain('background: Canvas; color: CanvasText')

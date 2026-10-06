@@ -5,6 +5,7 @@ import type { ChangeEvent, CSSProperties, ReactElement } from 'react'
 import { SearchProviderCatalogSchema } from './search-routing-remote.ts'
 import { normalizeWebSearchRouting } from './search-routing-policy.ts'
 import { nativeOptionStyle, nativeSelectStyle } from './native-select-style.ts'
+import { nativeCardStyle, nativeButtonStyle, nativeHeadingStyle, nativeCaptionStyle, nativeSettingsCss } from './native-settings-style.ts'
 import type { InlineConfig } from './config.ts'
 
 const GITHUB_COPILOT_SETTINGS_NAMESPACE = 'github-copilot'
@@ -25,12 +26,10 @@ interface Draft {
 }
 interface ModelOverride { model: string; revision?: number }
 const cardStyle: CSSProperties = {
-  display: 'grid', gap: '14px', padding: '18px', marginTop: '16px', minWidth: 0,
-  border: '1px solid color-mix(in srgb, currentColor 20%, transparent)',
-  borderRadius: '14px', background: 'color-mix(in srgb, currentColor 4%, transparent)',
+  ...nativeCardStyle, display: 'grid', gap: '12px', marginTop: '16px',
 }
 const restartBannerStyle: CSSProperties = {
-  padding: '12px 14px', borderRadius: '10px', fontSize: '13px', lineHeight: 1.5,
+  padding: '12px 14px', borderRadius: 'var(--dsw-radius-md, 12px)', fontSize: '12px', lineHeight: '18px',
   border: '1px solid color-mix(in srgb, var(--dsw-alias-color-warning, #e3a300) 40%, transparent)',
   background: 'color-mix(in srgb, var(--dsw-alias-color-warning, #e3a300) 12%, transparent)',
   display: 'grid', gap: '4px',
@@ -42,11 +41,7 @@ const lifecycleNoticeStyle: CSSProperties = {
 }
 const fieldStyle: CSSProperties = { display: 'grid', gap: '6px', minWidth: 0 }
 const optionsRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
-const buttonStyle: CSSProperties = {
-  justifySelf: 'start', padding: '9px 16px', borderRadius: '999px', cursor: 'pointer',
-  border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
-  background: 'color-mix(in srgb, currentColor 10%, transparent)', color: 'inherit', font: 'inherit',
-}
+const buttonStyle = nativeButtonStyle
 const hintStyle: CSSProperties = { opacity: 0.8, fontSize: '12px', lineHeight: 1.5, overflowWrap: 'anywhere', margin: 0 }
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -198,8 +193,9 @@ export function HostedSearchSettingsCard({ settings }: Pick<SearchRoutingCardPro
     ['stripServerTools', 'Remove local variants of hosted-search tools'],
     ['probe', 'Verify native search capability before use'],
   ] as const
-  return createElement('details', { 'data-dsh-copilot-search-options': true, style: cardStyle },
-    createElement('summary', { style: { cursor: 'pointer', fontWeight: 600 } }, 'Copilot hosted-search options'),
+  return createElement('details', { 'data-dsh-copilot-search-options': true, 'data-copilot-native-ui': true, style: cardStyle },
+    createElement('summary', null, 'Copilot hosted-search options'),
+    createElement('style', null, nativeSettingsCss),
     createElement('p', { style: hintStyle }, 'These settings affect Copilot only. Disabling capability verification explicitly trusts the provider protocol. The allowlist restricts routes; it does not choose a search model.'),
     ...toggles.map(([key, label]) => createElement('label', { key, style: optionsRowStyle },
       createElement('input', { type: 'checkbox', disabled, checked: draft[key], 'data-dsh-copilot-search-option': key,
@@ -376,24 +372,26 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
 
   const providerOptions = () => providers.map(id => createElement('option', { key: id, value: id, style: nativeOptionStyle() }, providerLabel(id)))
   const unavailableOption = (id: string, known: boolean) => known ? null : createElement('option', { value: id, disabled: true, style: nativeOptionStyle(true) }, `${id || '(empty)'} — unavailable`)
-  return createElement('section', { style: cardStyle, 'data-dsh-web-search-routing': true, 'aria-busy': loading || saving !== undefined },
+  return createElement('section', { style: cardStyle, 'data-dsh-web-search-routing': true,
+    'data-copilot-native-ui': true, 'aria-busy': loading || saving !== undefined },
+    createElement('style', null, nativeSettingsCss),
     createElement('div', { role: 'note', style: lifecycleNoticeStyle, 'data-dsh-web-search-lifecycle-notice': true },
-      createElement('strong', { style: { fontWeight: 600 } }, 'Desktop 0.2.0-rc.2 lifecycle note / Desktop 0.2.0-rc.2 生命周期提示'),
+      createElement('strong', { style: { fontWeight: 500 } }, 'Desktop 0.2.0-rc.2 lifecycle note / Desktop 0.2.0-rc.2 生命周期提示'),
       createElement('span', { style: { opacity: 0.85 } },
         'After disabling, removing, or upgrading this plugin, fully exit and restart Desktop to complete Web service recomposition. If the native manager shows only pending entries waiting for a service and this plugin is Off, restart instead of toggling it repeatedly. / 停用、移除或升级本插件后，请完全退出并重新启动 Desktop，以完成 Web 服务重编排。若原生管理器仅显示等待某项服务的 pending 条目且本插件已为 Off，请直接重启，不要反复切换。'),
     ),
     restartRequired ? createElement('div', { role: 'alert', style: restartBannerStyle, 'data-dsh-web-search-restart-banner': true },
-      createElement('strong', { style: { fontWeight: 600 } }, 'Restart required to complete update / 检测到更新，请重启 Desktop 完成生效'),
+      createElement('strong', { style: { fontWeight: 500 } }, 'Restart required to complete update / 检测到更新，请重启 Desktop 完成生效'),
       createElement('span', { style: { opacity: 0.85 } },
         'Web search service composition requires a full application restart to rebind components. / Web 搜索服务组件更新需退出并重新启动 Desktop 以完成重编排。'),
     ) : null,
     createElement('div', null,
-      createElement('h3', { style: { margin: 0, fontSize: '16px' } }, 'Web search'),
-      createElement('p', { style: { margin: '5px 0 0', opacity: 0.8, fontSize: '13px', lineHeight: 1.5 } },
+      createElement('h3', { style: nativeHeadingStyle }, 'Web search'),
+      createElement('p', { style: { margin: '4px 0 0', color: 'var(--dsw-alias-label-secondary, GrayText)', fontSize: '14px', lineHeight: '22px' } },
         'Choose who runs web searches. This does not change your Chat model.'),
     ),
     createElement('label', { style: fieldStyle },
-      createElement('span', { style: { fontSize: '13px', fontWeight: 600 } }, 'Search provider'),
+      createElement('span', { style: { ...nativeCaptionStyle, fontWeight: 500 } }, 'Search provider'),
       createElement('select', { style: nativeSelectStyle(disabled), disabled, value: draft.primary, 'data-dsh-web-search-mode': true,
         onChange: (event: ChangeEvent<HTMLSelectElement>) => { const primary = event.currentTarget.value; setMessage(''); setDraft(current => ({ ...current, primary })) } },
       createElement('option', { value: 'auto', style: nativeOptionStyle() }, 'Auto — follow Chat'),
@@ -402,7 +400,7 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
       createElement('span', { style: hintStyle }, 'Auto follows the Chat provider when it supports search. A selected provider stays fixed when you switch Chat models.'),
     ),
     createElement('label', { style: fieldStyle },
-      createElement('span', { style: { fontSize: '13px', fontWeight: 600 } }, 'Fallback provider'),
+      createElement('span', { style: { ...nativeCaptionStyle, fontWeight: 500 } }, 'Fallback provider'),
       createElement('select', { style: nativeSelectStyle(disabled), disabled, value: draft.provider, 'data-dsh-web-search-provider': true,
         onChange: (event: ChangeEvent<HTMLSelectElement>) => { const provider = event.currentTarget.value; setMessage(''); setDraft(current => ({ ...current, provider })) } },
       createElement('option', { value: 'none', style: nativeOptionStyle() }, 'None — no fallback'),
@@ -414,7 +412,7 @@ export function WebSearchRoutingCard(props: SearchRoutingCardProps): ReactElemen
     draft.legacy && catalogReady ? createElement('p', { style: hintStyle }, 'Saving adopts the selected fallback for new searches. Cancellation and account-proof invalidation never trigger fallback.') : null,
     usesCopilot ? createElement('p', { style: hintStyle }, 'Copilot handles search model selection. No model setup is needed here. A signed-in account and a model with verified search support are required when searching.') : null,
     usesCopilot && override.model ? createElement('details', { 'data-dsh-copilot-search-override': true },
-      createElement('summary', { style: { cursor: 'pointer', fontSize: '13px' } }, 'Existing Copilot model override'),
+      createElement('summary', null, 'Existing Copilot model override'),
       createElement('div', { style: { ...fieldStyle, marginTop: '8px' } },
         createElement('p', { style: hintStyle }, 'Your saved override ', createElement('code', null, override.model), ' is preserved. Saving providers does not change it.'),
         createElement('button', { type: 'button', style: buttonStyle, disabled: disabled || override.revision === undefined,
