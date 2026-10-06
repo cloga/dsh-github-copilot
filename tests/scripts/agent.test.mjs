@@ -109,8 +109,9 @@ test('manual replay recovery plan retains explicit consent and rejects weakened 
   const plan = await planTask('compaction')
   assert.ok(plan.read.includes('src/compaction-replay.ts'))
   assert.ok(plan.tests.includes('tests/compaction-replay.spec.ts'))
-  assert.match(plan.visibleHistoryBoundary, /Only explicit \/copilot-compact visible-history/)
-  assert.match(plan.visibleHistoryBoundary, /no inherited chat consent/)
+  assert.match(plan.visibleHistoryBoundary, /Persistent Session visible-history policy/)
+  assert.match(plan.visibleHistoryBoundary, /legacy next-turn-only consent is not summary consent/)
+  assert.match(plan.visibleHistoryBoundary, /Disabled\/unknown policy never silently enables loss/)
   const root = await mkdtemp(join(tmpdir(), 'copilot-compaction-consent-'))
   try {
     const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
