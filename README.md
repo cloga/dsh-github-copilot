@@ -13,6 +13,8 @@ independent official authorizations in the existing credentials service.
 **Models → Manage → GitHub accounts** manages authorizations and the global default.
 Inside **Credits**, choose a saved account for this Session's subsequent turns or
 restore **Follow global default**. Running turns retain their original account.
+Selector-only switching permits their account-bound model preparation and
+dispatch to continue; unbound requests and credential mutations remain fenced.
 Identity display accepts GitHub Enterprise Managed User names, including their underscore-separated enterprise suffixes.
 
 Models and Chat share an opaque, theme-aware account dropdown; translucent native menu tokens cannot reveal underlying controls or quota text. Both use restrained dark elevation in light and dark mode.
@@ -23,7 +25,7 @@ Visible Models and Credits resolve missing names for saved accounts without acti
 
 Adding an account now keeps the device-authorization link, selectable URL, one-time code, Copy code action and Cancel together while authorization is pending. After GitHub authorizes, identity and model verification are shown as a separate phase. Adding never changes the global default; use the existing explicit **Switch** action when ready. Technical diagnostics are secondary, and account/turn identity fallbacks never expose opaque account IDs or infer historical identity from today's settings.
 
-**Source candidate: `0.4.0-alpha.119` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
+**Source candidate: `0.4.0-alpha.120` (unreleased). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** Earlier DSH pins are historical evidence, not supported installation targets. Publication, profile installation and the version loaded by a running Host are separate states. The versioned commands below are for this candidate after publication, not evidence that its assets exist.
 
 ## What you can do
 
@@ -80,10 +82,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.119/dsh-github-copilot-0.4.0-alpha.119.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.120/dsh-github-copilot-0.4.0-alpha.120.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.119` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.120` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -245,14 +247,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.119/dsh-github-copilot-0.4.0-alpha.119.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.119/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.120/dsh-github-copilot-0.4.0-alpha.120.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.120/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.119.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.120.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

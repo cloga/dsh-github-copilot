@@ -10,6 +10,20 @@ publication, installation and loaded runtime state are separate evidence.
 
 ## Requirements
 
+### Selector switching and account-bound turns (#344)
+
+A global switch changes only the selector. Explicit record-bound request leases
+may be acquired during its preflight and CAS so already admitted turns can
+prepare and dispatch their next native step with their frozen account. A new
+turn still captures its account once at admission; it does not adopt a later
+selector. Unbound/global leases remain blocked during switching, and all
+requests remain blocked during credential authorization/removal/sign-out.
+Pinned records cannot be reauthorized or removed until their leases end.
+Cancellation, route eligibility, credential validity and account-model checks
+remain independent. This is not automatic retry or permission to redirect an
+existing turn. Deferred native fixtures exercise all three supported protocols
+while the selector operation is still pending, not just after it settles.
+
 ### Global switch responsiveness (#342)
 
 Models first reads metadata-only `get()` and separately hydrates display names

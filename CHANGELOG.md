@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.120 (prepared)
+
+- Let explicitly account-bound model preparation, native dispatch and subsequent turn steps continue during global selector switching, fixing `COPILOT_ACCOUNTS_BUSY` from the overly broad acquisition fence (#344).
+- Keep unbound/global request fences, credential authorization/removal/sign-out protection, pinned-record leases, cancellation, route checks and original turn accounts. No automatic retry, message replay, fallback account, history rewrite, Core change, installation or restart.
+- Exercise native Responses, Chat Completions and Anthropic dispatch while switch preflight is pending, then verify that the next turn adopts the confirmed new default.
+
 ## 0.4.0-alpha.119 (prepared)
 
 - Show Models global account metadata before background identity-name hydration, keeping Switch available when metadata and route/activity evidence allow it (#342). Hydration never authorizes a switch and late results cannot undo a confirmed change.

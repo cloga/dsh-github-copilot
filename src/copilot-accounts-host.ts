@@ -168,7 +168,9 @@ export class CopilotAccountsHost {
     binding.assertCurrent()
   }
   acquire(signal?: AbortSignal, requireManaged = true, accountId?: string): CopilotAccountLease {
-    if (this.operation !== undefined || this.ctx.get('authorization')?.describe(recordKey('canonical'))?.inFlight === true) {
+    const selectorOnly = this.operation === 'switching' && accountId !== undefined
+    if (this.operation !== undefined && !selectorOnly
+      || this.ctx.get('authorization')?.describe(recordKey('canonical'))?.inFlight === true) {
       fail('COPILOT_ACCOUNTS_BUSY')
     }
     if (signal?.aborted) fail('COPILOT_ACCOUNTS_CHANGED')
