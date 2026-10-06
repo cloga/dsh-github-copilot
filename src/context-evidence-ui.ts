@@ -115,13 +115,13 @@ export function ContextEvidenceNotice({ evidence, locale = 'en', applicable = tr
   const text = locale.startsWith('zh') ? copy.zh : copy.en
   const native = evidence?.compaction
   const status = showCompactionResult ? compactionStatus ?? (native ? { id: native.id, state: native.state } : undefined) : undefined
-  if (!status && evidence !== undefined && !evidence.invalid) return null
   const sample = applicable ? evidence?.sample : null
   const completed = status?.state === 'completed'
   const following = applicable && native?.state === 'completed'
     && (status === undefined || native.id === status.id) ? native : undefined
   const sampled = following?.endSeq !== null && following?.endSeq !== undefined
-    && sample !== null && sample !== undefined && sample.seq > following.endSeq && !evidence?.invalid
+    && sample !== null && sample !== undefined && sample.tokens > 0 && sample.seq > following.endSeq && !evidence?.invalid
+  if (!status && evidence !== undefined && !evidence.invalid && (!following || sampled)) return null
   const title = status ? completed ? following?.request === 'succeeded' ? text.completedSucceeded
     : following?.request === 'failed' ? text.completedFailed
       : following?.request === 'cancelled' ? text.completedCancelled : text.completed
@@ -204,7 +204,7 @@ export function registerContextEvidenceUi(ctx: Context): () => void {
   if (!isSlots(slots)) { diagnostic('COPILOT_CONTEXT_SLOT_UNAVAILABLE'); return noop }
   const candidate: unknown = ctx.get('locale')
   const locale = isLocale(candidate) ? candidate : undefined
-  const continuation = ctx.remote.githubCopilotSessionContinuation
+  let faces: { continuation: SessionContinuationRemote } | undefined
   const presentation = new CompactionNoticePresentation()
   const remove = slots.inject(slot, () => {
     const spec = slots.spec(slot)
@@ -212,6 +212,8 @@ export function registerContextEvidenceUi(ctx: Context): () => void {
       diagnostic('COPILOT_CONTEXT_SLOT_UNAVAILABLE')
       return noop
     }
+    faces ??= { continuation: ctx.remote.githubCopilotSessionContinuation }
+    const { continuation } = faces
     return slots.register({ name: slot, id: 'github-copilot-context-evidence', order: 25 }, props => {
       if (!isRuntime(props)) { diagnostic('COPILOT_CONTEXT_SESSION_RUNTIME_UNAVAILABLE'); return null }
       return h(Surface, { runtime: props, locale, diagnostic, continuation, presentation })

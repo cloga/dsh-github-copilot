@@ -25,7 +25,8 @@ function mount<P extends object>(component: ComponentType<P>, props: P) {
   document.body.append(container)
   const root = createRoot(container)
   cleanups.push(() => root.unmount())
-  return { container, render: async (next = props) => { await act(async () => { root.render(h(component, next)) }) } }
+  return { container, render: async (next = props) => { await act(async () => { root.render(h(component, next)) }) },
+    hide: async () => { await act(async () => { root.render(null) }) } }
 }
 function source<T>(initial: T) {
   let value = initial
@@ -98,6 +99,16 @@ describe('additive historical context notice', () => {
     expect(view.container.textContent).not.toContain('42 tokens')
     expect(view.container.textContent).not.toContain('input sample is recorded')
   })
+  it('does not certify a successful zero input sample or expire its uncertainty explanation', async () => {
+    const evidence = { ...completed(), sample: { tokens: 0, seq: 6, route }, invalid: false }
+    const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, {
+      evidence, showCompactionResult: false,
+    })
+    await view.render()
+    expect(view.container.textContent).toContain('No applicable valid post-compaction input sample')
+    expect(view.container.textContent).not.toContain('input sample is recorded')
+    expect(view.container.querySelector('summary')?.textContent).toBe('Context occupancy awaiting confirmation')
+  })
   it('mounts one combined disclosure and reads native commit status without policy writes', async () => {
     vi.useFakeTimers()
     const f = fixture()
@@ -115,12 +126,18 @@ describe('additive historical context notice', () => {
       expect(f.continuation.get).toHaveBeenCalledTimes(1)
       expect(f.continuation.get).toHaveBeenCalledWith('a')
       expect(f.continuation.set).not.toHaveBeenCalled()
-      await act(async () => { await vi.advanceTimersByTimeAsync(8000) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+      await view.hide()
+      expect(vi.getTimerCount()).toBe(0)
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      await view.render({ sessionId: 'a', useProjection, useSession })
+      expect(view.container.querySelector('summary')?.textContent).toContain('Compaction completed')
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
       expect(view.container.querySelector('summary')?.textContent).not.toContain('Compaction completed')
       expect(view.container.textContent).toContain('Context occupancy awaiting confirmation')
       expect(view.container.textContent).toContain('Native 0% does not prove an empty context')
       expect(view.container.querySelector('[aria-label="Close compaction notice"]')).toBeNull()
-      expect(f.continuation.get).toHaveBeenCalledTimes(1)
+      expect(f.continuation.get).toHaveBeenCalledTimes(2)
     } finally { vi.useRealTimers() }
   })
   it.each(['en', 'zh-CN'])('matches composer statistics typography without changing disclosure behavior in %s', async locale => {

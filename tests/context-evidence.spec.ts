@@ -39,6 +39,12 @@ describe('separate bounded historical context evidence', () => {
     expect(state.compaction?.request).toBe('failed')
     expect(state.invalid).toBe(true)
     expect(state.sample?.tokens).toBe(40)
+    state = fold(state, { seq: 15, type: 'step/start', data: { turn: 1, step: 1 } })
+    state = fold(state, { seq: 16, type: 'assistant/message', data: { turn: 1, step: 1, source: route,
+      stream: [{ type: 'chunk', chunk: { type: 'finish', reason: { kind: 'stop' } } }] } })
+    expect(state.compaction?.request).toBe('succeeded')
+    expect(state.invalid).toBe(true)
+    expect(state.sample?.tokens).toBe(40)
   })
   it('requires matching native checkpoint and settlement before claiming compaction completed', () => {
     const start = fold(initial(), { seq: 1, type: 'compaction/start', data: { compactionId: 'c' } })

@@ -76,7 +76,7 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
     && state.compaction.endSeq !== null && count.safeParse(event.seq).success
     && Number(event.seq) > state.compaction.endSeq) {
     const step = compactionSchema.shape.step.safeParse({ turn: event.data.turn, step: event.data.step })
-    return { ...state, compaction: { ...state.compaction, step: step.success ? step.data : null,
+    return { ...state, invalid: true, reason: 'unknown', compaction: { ...state.compaction, step: step.success ? step.data : null,
       headerSeq: step.success ? count.parse(event.seq) : null, requestRoute: state.route,
       request: step.success && copilot(state.route) ? 'pending' : 'unknown' } }
   }
@@ -162,7 +162,8 @@ export function foldContextEvidence(state: ContextEvidence, event: unknown): Con
       && source !== undefined ? 'succeeded' : record(terminal) && terminal.kind === 'aborted' ? 'cancelled'
         : record(terminal) && terminal.kind === 'error' ? 'failed' : 'unknown' } }
   } else if (compact?.state === 'running') return state
-  if (usage === undefined) return state
+  if (usage === undefined) return compact?.state === 'completed'
+    ? { ...state, invalid: true, reason: 'unknown' } : state
   const parsed = usageSchema.safeParse(usage)
   if (!parsed.success || !count.safeParse(event.seq).success) {
     return { ...state, sample: null, invalid: true, reason: 'unknown' }
