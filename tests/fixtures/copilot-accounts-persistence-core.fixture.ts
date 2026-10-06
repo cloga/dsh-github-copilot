@@ -12,7 +12,7 @@ import { createModels } from '@earendil-works/pi-ai'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
 import { Config as PiAiConfig } from '@deepseek-ai/dsh-llm-pi-ai'
 import { expect, it, vi } from 'vitest'
-import { Config } from '../../src/config.ts'
+import { Config, readInlineConfig, type ResolvedInlineConfig } from '../../src/config.ts'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import { createGitHubCopilotCredentialStore } from '../../src/copilot-auth.ts'
 import { GitHubCopilotAuthorizationController } from '../../src/authorization-controller.ts'
@@ -20,6 +20,51 @@ import { migrationStatus } from '../../src/migration-status.ts'
 import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
 import { installSessionContinuation } from '../../src/session-continuation-host.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { scopeTarget } from '@deepseek-ai/dsh-scope'
+import { installAutoModelRouting } from '../../src/auto-model-host.ts'
+import type { AccountModelDescriptor } from '../../src/account-model-catalog.ts'
+import { normalizeHighCostModelIds } from '../../src/auto-allocation.ts'
+import { readSettingsNamespace } from '../../src/settings-reader.ts'
+import { GITHUB_COPILOT_AUTO_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../../src/copilot-identity.ts'
+
+async function verifySavedAutoPreferences(profile: Context, config: ResolvedInlineConfig): Promise<void> {
+  const ctx = new Context()
+  ctx.provide('tokenMeter', { estimateMessage: () => 10, measure: () => ({ totalTokens: 10 }) })
+  const agent = { ctx, session: { id: 'synthetic-auto', append: vi.fn(), requestHeader: () => undefined } } as unknown as Agent
+  const models: AccountModelDescriptor[] = ['synthetic-costly-fast', 'synthetic-peer'].map(id => ({
+    id, name: id, api: 'openai-responses', category: 'powerful',
+    contextWindow: 128000, maxTokens: 8192, input: ['text'],
+    reasoning: { advertisedEfforts: [], unmappedEfforts: [] },
+    evidence: { endpoints: ['/responses'], unsupportedEndpointCount: 0, selectedEndpoint: '/responses',
+      apiSource: 'advertised-native', policySource: 'server-enabled', contextWindowSource: 'max_context_window_tokens' },
+  }))
+  const highCost = vi.fn(() => {
+    const source = readSettingsNamespace(profile, 'github-copilot')
+    if (typeof source !== 'object' || source === null) throw new Error('fixture settings unavailable')
+    const current = { ...readInlineConfig(config), ...source }
+    return normalizeHighCostModelIds(current.highCostModelIds)
+  })
+  const dispose = installAutoModelRouting(ctx, { loadModels: async () => models, highCostModelIds: highCost })
+  const scope = scopeTarget(agent, agent)
+  const signal = new AbortController().signal
+  const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Investigate this bug.' }] })]
+  try {
+    await ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+    await ctx.waterfall(scope, 'agent/pre-step', { agent, turn: 1, step: 1, signal, messages },
+      async () => ({ kind: 'enter' as const, messages }))
+    await ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+      async () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: GITHUB_COPILOT_AUTO_MODEL_ID }))
+    const captured = ctx.githubCopilotTurnSelection.get(agent, 1)
+    expect(captured.mode === 'auto' && captured.explanation?.allocation?.candidates)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ modelId: 'synthetic-costly-fast', highCost: true, weight: 0.2, expectedShare: 1 / 6 }),
+        expect.objectContaining({ modelId: 'synthetic-peer', highCost: false, weight: 1, expectedShare: 5 / 6 }),
+      ]))
+    expect(highCost).toHaveBeenCalledTimes(1)
+    expect(agent.session.append).not.toHaveBeenCalled()
+  } finally { dispose(); await ctx.fiber.dispose() }
+}
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
@@ -34,6 +79,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
   const dir = join(home, 'profiles', 'synthetic')
   const contexts: Context[] = []
   const hosts: CopilotAccountsHost[] = []
+  const configs: ResolvedInlineConfig[] = []
   try {
     initProfile(dir, ['synthetic-bundle'])
     const bundle = join(dir, 'node_modules', 'synthetic-bundle')
@@ -56,7 +102,8 @@ it('persists independent native credentials and SettingsForms CAS across profile
         scope.provide('profileContext', profile)
         scope.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
         Object.assign(scope.loader.builtins, { editor: ConfigEditor, settings: Settings,
-          selector: { Config, apply() {} }, 'provider-config': { Config: PiAiConfig, apply() {} } })
+          selector: { Config, apply(_ctx: Context, config: ResolvedInlineConfig) { configs.push(config) } },
+          'provider-config': { Config: PiAiConfig, apply() {} } })
       })
       contexts.push(ctx)
       await ctx.plugin(LocalCredentialProvider, { path: join(dir, '.credentials.yaml'), dshHome: home, watch: false })
@@ -110,6 +157,8 @@ it('persists independent native credentials and SettingsForms CAS across profile
     const preferences = new GitHubCopilotAuthorizationController(ctx)
     expect(await preferences.setModelHighCost('synthetic-costly-fast', true))
       .toMatchObject({ state: 'ready', highCostModelIds: ['synthetic-costly-fast'] })
+    expect(readInlineConfig(configs.at(-1)!).highCostModelIds).toEqual(['synthetic-costly-fast'])
+    await verifySavedAutoPreferences(ctx, configs.at(-1)!)
     expect([...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber).toBe(selectorFiber)
     const viewedSession = { session: { id: 'synthetic-session-override' } }
     const defaults = await ctx.githubCopilotSessionContinuation.defaults()
@@ -144,6 +193,8 @@ it('persists independent native credentials and SettingsForms CAS across profile
     expect(await host.get()).toMatchObject({ state: 'ready', activeAccountId: A })
     expect((await new GitHubCopilotAuthorizationController(ctx).status()).modelPreferences)
       .toMatchObject({ highCostModelIds: ['synthetic-costly-fast'] })
+    expect(readInlineConfig(configs.at(-1)!).highCostModelIds).toEqual(['synthetic-costly-fast'])
+    await verifySavedAutoPreferences(ctx, configs.at(-1)!)
     expect((await ctx.githubCopilotSessionContinuation.get(viewedSession as Agent)).enabled).toBe(true)
     expect((await ctx.githubCopilotSessionContinuation.defaults()).enabled).toBe(false)
     expect((await ctx.githubCopilotSessionContinuation.get(fresh)).enabled).toBe(true)
