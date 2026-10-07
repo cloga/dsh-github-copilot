@@ -6,7 +6,7 @@ import '@earendil-works/pi-ai/api/openai-responses'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import * as AutoReview from '@deepseek-ai/dsh-experimental-auto-review'
-import LlmRuntime, { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import PermissionPresetService, { AUTO_PRESET } from '@deepseek-ai/dsh-permission-presets'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
@@ -118,18 +118,41 @@ async function run(outcome: Outcome) {
   }))
   const session = ctx.sessions.create(SessionId(`auto-review-${outcome}`), { meta: { cwd: process.cwd() } })
   session.append('request/header', {
-    header: { config: { provider: PREVIEW, model: MODEL } },
+    header: {
+      config: { provider: PREVIEW, model: MODEL },
+      tools: [{
+        name: 'probe',
+        description: 'Synthetic reviewer compatibility probe.',
+        parameters: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
+      }],
+    },
     reason: 'initial',
   })
   session.append('user/message', createUserMessage({
     content: [{ type: 'text', text: 'Inspect the synthetic target.' }],
     source: { kind: 'user', rpcId: `human-${outcome}` } as never,
   }), { surfaceOp: 'append' })
+  const callId = ToolCallId(`call-${outcome}`)
+  const rawArguments = JSON.stringify({ value: outcome })
+  session.append('step/start', { turn: 1, step: 1 })
+  session.append('assistant/message', {
+    turn: 1,
+    step: 1,
+    stream: [],
+    message: createMessage({
+      role: 'assistant',
+      content: [{ type: 'tool-call', id: callId, name: 'probe', arguments: rawArguments }],
+      source: { kind: 'model', provider: PREVIEW, model: MODEL },
+    }),
+  }, { surfaceOp: 'append' })
+  session.append('tool/call', {
+    turn: 1, step: 1, callId, name: 'probe', arguments: rawArguments,
+  })
   ctx.permissionPresets.set(session, AUTO_PRESET)
   setApprovalPolicy(session, 'never')
   const agent = { id: session.id, session, options: { provider: PREVIEW, model: MODEL } } as Agent
   const result = await ctx.tools.execute({
-    signal: controller.signal, callId: ToolCallId(`call-${outcome}`),
+    signal: controller.signal, callId,
     name: 'probe', arguments: { value: outcome }, agent,
   })
   return { result, executions, wireCalls, wireBodies }
