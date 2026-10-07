@@ -36,6 +36,7 @@ async function verifySavedAutoPreferences(profile: Context, config: ResolvedInli
     id, name: id, api: 'openai-responses', category: 'powerful',
     contextWindow: 128000, maxTokens: 8192, input: ['text'],
     reasoning: { advertisedEfforts: [], unmappedEfforts: [] },
+    sampling: { temperature: 'unknown' },
     evidence: { endpoints: ['/responses'], unsupportedEndpointCount: 0, selectedEndpoint: '/responses',
       apiSource: 'advertised-native', policySource: 'server-enabled', contextWindowSource: 'max_context_window_tokens' },
   }))
