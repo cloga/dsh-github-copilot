@@ -4,7 +4,9 @@
  */
 import '@earendil-works/pi-ai/api/openai-responses'
 import { Context } from '@deepseek-ai/cordis'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { PluginPackages } from '@deepseek-ai/dsh-app-boot'
 import * as AutoReview from '@deepseek-ai/dsh-experimental-auto-review'
 import LlmRuntime, { createMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import PermissionPresetService, { AUTO_PRESET } from '@deepseek-ai/dsh-permission-presets'
@@ -15,13 +17,23 @@ import Tools, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import ApprovalService, { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../../src/preview-route.ts'
+import { installAutoReviewSampling } from '../../src/auto-review-sampling.ts'
 import {
   GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
 } from '../../src/copilot-identity.ts'
 
-const MODEL = 'synthetic-thinking-model'
+const MODEL = 'synthetic-model'
 const contexts: Context[] = []
+
+class ReviewerFixtureLoader extends Loader {
+  constructor(ctx: Context) { super(ctx, { baseUrl: import.meta.url }) }
+  async import(name: string) {
+    if (name !== '@deepseek-ai/dsh-experimental-auto-review') throw new Error('unexpected fixture import')
+    return import('@deepseek-ai/dsh-experimental-auto-review')
+  }
+  write() {}
+}
 
 beforeAll(() => {
   expect(['tagged-source-runtime', 'published-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
@@ -53,7 +65,7 @@ function reviewerResponse(outcome: Outcome): Response {
   ].join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
 
-async function run(outcome: Outcome) {
+async function run(outcome: Outcome, automatic = false, thinking?: boolean) {
   const ctx = new Context()
   contexts.push(ctx)
   const controller = new AbortController()
@@ -65,14 +77,17 @@ async function run(outcome: Outcome) {
         id: MODEL, name: MODEL, model_picker_enabled: true, policy: { state: 'enabled' },
         supported_endpoints: ['/responses'],
         capabilities: {
-          supports: { streaming: true, tool_calls: true, vision: false, thinking: true,
+          supports: { streaming: true, tool_calls: true, vision: false,
+            ...thinking === undefined ? {} : { thinking },
             reasoning_effort: ['low', 'medium', 'high'] },
           limits: { max_context_window_tokens: 64_000, max_prompt_tokens: 48_000, max_output_tokens: 8_192 },
         },
       }] })
     }
     wireCalls += 1
-    wireBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    wireBodies.push(body)
+    if (body.temperature === 0.37) return reviewerResponse('allow')
     if (outcome === 'cancel') {
       controller.abort(new DOMException('Synthetic review cancellation', 'AbortError'))
       throw controller.signal.reason
@@ -88,7 +103,7 @@ async function run(outcome: Outcome) {
     deleteRecord: async () => { throw new Error('fixture credential must not be deleted') },
   })
   await ctx.plugin(LlmRuntime)
-  await ctx.plugin(previewPlugin, {})
+  await ctx.plugin(previewPlugin, { chatRequestSettings: () => ({ responsesOmitTemperature: !automatic }) })
   await ctx.get('githubCopilotPreview')!.refresh()
   await ctx.plugin(SessionStore)
   await ctx.plugin(Projections)
@@ -109,7 +124,15 @@ async function run(outcome: Outcome) {
     },
     defaultPreset: 'workspace-write',
   })
-  await ctx.plugin(AutoReview)
+  if (automatic) {
+    await ctx.plugin(PluginPackages)
+    await ctx.plugin(ReviewerFixtureLoader)
+    ctx.effect(() => installAutoReviewSampling(ctx))
+    await ctx.loader.create({ name: '@deepseek-ai/dsh-experimental-auto-review' })
+    await ctx.loader.await()
+  } else {
+    await ctx.plugin(AutoReview)
+  }
   let executions = 0
   ctx.tools.register(defineContentToolFixture({
     name: 'probe', description: 'Synthetic reviewer compatibility probe.',
@@ -151,16 +174,24 @@ async function run(outcome: Outcome) {
   ctx.permissionPresets.set(session, AUTO_PRESET)
   setApprovalPolicy(session, 'never')
   const agent = { id: session.id, session, options: { provider: PREVIEW, model: MODEL } } as Agent
-  const result = await ctx.tools.execute({
+  const pending = ctx.tools.execute({
     signal: controller.signal, callId,
     name: 'probe', arguments: { value: outcome }, agent,
   })
+  if (automatic) {
+    const ordinary = ctx.llm.stream({
+      provider: PREVIEW, model: MODEL, temperature: 0.37, messages: [],
+      sessionId: session.id, signal: new AbortController().signal,
+    })
+    await Promise.all([pending, (async () => { for await (const _chunk of ordinary) { /* consume */ } })()])
+  }
+  const result = await pending
   return { result, executions, wireCalls, wireBodies }
 }
 
 describe('native Auto reviewer Copilot compatibility', () => {
   it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
-    'omits unsupported temperature without weakening the %s verdict boundary', async outcome => {
+    'omits temperature with explicit opt-in without weakening the %s verdict boundary', async outcome => {
       const result = await run(outcome)
       expect(result.wireCalls).toBe(1)
       expect(result.wireBodies).toHaveLength(1)
@@ -173,4 +204,21 @@ describe('native Auto reviewer Copilot compatibility', () => {
         expect(result.executions).toBe(0)
       }
     })
+    describe.runIf(process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime')(
+      'qualified native loader reviewer-only sampling', () => {
+        it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
+          'omits only the actual reviewer temperature and preserves concurrent chat for %s', async outcome => {
+            const result = await run(outcome, true)
+            expect(result.wireCalls).toBe(2)
+            expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
+            expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
+            expect(result.executions).toBe(outcome === 'allow' ? 1 : 0)
+            expect(result.result.isError).toBe(outcome !== 'allow')
+          })
+        it.each([true, false, undefined])('does not use thinking=%s as reviewer identity', async thinking => {
+          const result = await run('allow', true, thinking)
+          expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
+          expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
+        })
+      })
 })

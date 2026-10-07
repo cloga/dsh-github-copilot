@@ -173,7 +173,7 @@ describe('account-driven native provider', () => {
     expect(unsupported).toHaveBeenCalledOnce()
   })
 
-  it('rechecks the request/account fence after compression and never dispatches revoked work', async () => {
+  it('rechecks the request/account fence with both opt-ins and never dispatches revoked work', async () => {
     const item = descriptor('openai-responses')
     const controller = new AbortController()
     const release = vi.fn()
@@ -183,6 +183,7 @@ describe('account-driven native provider', () => {
     const guard: AccountProviderGuard = {
       ...accountGuard(item.id),
       responsesRequestCompression: true,
+      responsesOmitTemperature: true,
       beforeWire: async () => ({ signal: controller.signal, release }),
       requestCheckpoint() {
         if (++checkpoints === 2) controller.abort(new Error('SYNTHETIC_ACCOUNT_REVOKED'))
@@ -823,13 +824,14 @@ describe('managed Responses replay compatibility', () => {
     expect(JSON.stringify(context)).toBe(original)
   })
   async function invoke(context: PiContext, options: Partial<StreamOptions> = {}, api: AccountModelApi = 'openai-responses',
-    thinking?: boolean) {
+    thinking?: boolean, omitTemperature = false) {
     const item = descriptor(api, 'future-lab-r17', ['high', 'max'], true, thinking)
     const release = vi.fn()
     const unauthorized = vi.fn()
     const replayFailure = vi.fn()
     const rejectedReplay = vi.fn()
     const guard: AccountProviderGuard = { ...accountGuard(item.id),
+      responsesOmitTemperature: omitTemperature,
       beforeWire: async () => ({ signal: new AbortController().signal, release }),
       onUnauthorized: unauthorized, onReplayFailure: replayFailure, onReplayScopeRejected: rejectedReplay,
     }
@@ -868,21 +870,30 @@ describe('managed Responses replay compatibility', () => {
     expect(result.unauthorized).not.toHaveBeenCalled()
   })
   it.each([
-    [true, undefined],
-    [false, 0],
-    [undefined, 0],
-  ] as const)('uses explicit Responses temperature compatibility without mutating frozen caller options, thinking=%j',
-    async (thinking, expected) => {
+    [false, true, 0],
+    [false, false, 0],
+    [false, undefined, 0],
+    [true, true, undefined],
+    [true, false, undefined],
+    [true, undefined, undefined],
+  ] as const)('applies explicit Responses omission=%s independently of thinking metadata %j',
+    async (omitTemperature, thinking, expected) => {
       const options = Object.freeze({ temperature: 0 })
-      const result = await invoke({ messages: [] }, options, 'openai-responses', thinking)
+      const result = await invoke({ messages: [] }, options, 'openai-responses', thinking, omitTemperature)
       expect(result.result.stopReason).toBe('stop')
       expect(result.body?.temperature).toBe(expected)
       expect(options).toEqual({ temperature: 0 })
       expect(Object.isFrozen(options)).toBe(true)
     })
+  it.each([true, false, undefined] as const)(
+    'preserves default Responses temperature regardless of thinking metadata %j', async thinking => {
+      const result = await invoke({ messages: [] }, Object.freeze({ temperature: 0 }),
+        'openai-responses', thinking)
+      expect(result.body?.temperature).toBe(0)
+    })
   it.each(['openai-completions', 'anthropic-messages'] as const)(
-    'does not change temperature on native %s when thinking is supported', async api => {
-      const result = await invoke({ messages: [] }, Object.freeze({ temperature: 0 }), api, true)
+    'does not change temperature on native %s when the omission override is enabled', async api => {
+      const result = await invoke({ messages: [] }, Object.freeze({ temperature: 0 }), api, true, true)
       expect(result.result.stopReason).toBe('stop')
       expect(result.body?.temperature).toBe(0)
     })

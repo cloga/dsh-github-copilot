@@ -12,6 +12,12 @@ describe('session search settings', () => {
     expect(readInlineConfig(Config({ ...base, responsesRequestCompression: false })).responsesRequestCompression).toBe(false)
     expect(() => Config({ ...base, responsesRequestCompression: 'true' } as unknown as InlineConfig)).toThrow()
   })
+  it('keeps managed Responses temperature omission default-off and boolean-only', () => {
+    expect(readInlineConfig(Config(base)).responsesOmitTemperature).toBe(false)
+    expect(readInlineConfig(Config({ ...base, responsesOmitTemperature: true })).responsesOmitTemperature).toBe(true)
+    expect(readInlineConfig(Config({ ...base, responsesOmitTemperature: false })).responsesOmitTemperature).toBe(false)
+    expect(() => Config({ ...base, responsesOmitTemperature: 'true' } as unknown as InlineConfig)).toThrow()
+  })
 
   it('defaults to session routing with automatic disclosed DeepSeek fallback', () => {
     expect(Config(base)).toMatchObject({ routeWebSearch: true, searchFallback: 'deepseek' })
@@ -107,12 +113,14 @@ describe('managed request and compaction settings', () => {
   it('separates managed chat liveness and image projection from search deadlines', () => {
     expect(readInlineConfig(Config(base))).toMatchObject({
       chatStreamIdleTimeoutMs: 300_000, chatStreamLiveness: true, chatMaxRequestImageBytes: 20_971_520,
-      responsesRequestCompression: false,
+      responsesRequestCompression: false, responsesOmitTemperature: false,
     })
     expect(readInlineConfig(Config({ ...base, chatStreamIdleTimeoutMs: 400_000,
-      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608, responsesRequestCompression: true }))).toMatchObject({
+      chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608, responsesRequestCompression: true,
+      responsesOmitTemperature: true }))).toMatchObject({
       idleTimeoutMs: 300_000, chatStreamIdleTimeoutMs: 400_000,
       chatStreamLiveness: false, chatMaxRequestImageBytes: 8_388_608, responsesRequestCompression: true,
+      responsesOmitTemperature: true,
     })
   })
   it.each(['chatStreamIdleTimeoutMs', 'chatMaxRequestImageBytes'] as const)('rejects unsafe managed request setting %s', key => {

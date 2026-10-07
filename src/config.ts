@@ -40,6 +40,8 @@ export interface InlineConfig {
   chatMaxRequestImageBytes?: number
   /** Default-off lossless gzip for eligible managed Responses HTTP requests. */
   responsesRequestCompression?: boolean
+  /** Default-off override omitting temperature from all managed Responses requests. */
+  responsesOmitTemperature?: boolean
   /** Verify the endpoint executes native search before serving. */
   probe: boolean
   /** Bound on one probe request, in milliseconds. */
@@ -162,6 +164,7 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   chatStreamLiveness: z.boolean().default(true),
   chatMaxRequestImageBytes: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(20_971_520),
   responsesRequestCompression: z.boolean().default(false),
+  responsesOmitTemperature: z.boolean().default(false),
   probe: z.boolean().default(true),
   probeTimeoutMs: z.number().step(1).min(1).max(MAX_TIMEOUT_MS).default(30_000),
   accountModelTtlMs: z.number().step(1).min(0).max(MAX_TIMEOUT_MS).default(86_400_000),
