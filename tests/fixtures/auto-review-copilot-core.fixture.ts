@@ -116,7 +116,7 @@ async function run(outcome: Outcome) {
     parameters: { value: { type: 'string' } },
     async execute() { executions += 1; return [{ type: 'text', text: 'executed' }] },
   }))
-  const session = ctx.sessions.create(SessionId(`auto-review-${outcome}`), { meta: { cwd: 'C:\\synthetic-workspace' } })
+  const session = ctx.sessions.create(SessionId(`auto-review-${outcome}`), { meta: { cwd: process.cwd() } })
   session.append('request/header', {
     header: { config: { provider: PREVIEW, model: MODEL } },
     reason: 'initial',
@@ -129,21 +129,24 @@ async function run(outcome: Outcome) {
   setApprovalPolicy(session, 'never')
   const agent = { id: session.id, session, options: { provider: PREVIEW, model: MODEL } } as Agent
   let reviewerRequest: GenerateOptions | undefined
+  let reviewerCalls = 0
   ctx.on('llm/stream', (request, next) => {
-    if (request.system?.startsWith('REVIEW_POLICY\n') === true) reviewerRequest = request
+    reviewerCalls += 1
+    reviewerRequest = request
     return next()
   })
   const result = await ctx.tools.execute({
     signal: controller.signal, callId: ToolCallId(`call-${outcome}`),
     name: 'probe', arguments: { value: outcome }, agent,
   })
-  return { result, executions, wireCalls, wireBodies, reviewerRequest }
+  return { result, executions, wireCalls, wireBodies, reviewerCalls, reviewerRequest }
 }
 
 describe('native Auto reviewer Copilot compatibility', () => {
   it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
     'omits unsupported temperature without weakening the %s verdict boundary', async outcome => {
       const result = await run(outcome)
+      expect(result.reviewerCalls).toBe(1)
       expect(result.reviewerRequest).toMatchObject({ provider: PREVIEW, model: MODEL, temperature: 0 })
       expect(result.reviewerRequest).not.toHaveProperty('sessionId')
       expect(Object.isFrozen(result.reviewerRequest)).toBe(true)
