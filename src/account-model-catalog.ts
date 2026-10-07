@@ -36,13 +36,6 @@ export interface AccountModelDescriptor {
   readonly input: readonly ('text' | 'image')[]
   readonly category?: AccountModelCategory
   readonly reasoning: AccountModelReasoning
-  readonly sampling: {
-    /**
-     * GitHub's explicit thinking capability is the supplier-owned compatibility
-     * fact used by its official OpenAI endpoint to omit temperature.
-     */
-    readonly temperature: 'supported' | 'unsupported' | 'unknown'
-  }
   readonly evidence: {
     /** Recognized endpoint literals only, never arbitrary URLs or query strings. */
     readonly endpoints: readonly RecognizedEndpoint[]
@@ -204,8 +197,6 @@ function normalizeModel(raw: object, id: string, options: AccountModelCatalogOpt
     ACCOUNT_MODEL_CATALOG_LIMITS.maxEffortLength, 'INVALID_REASONING', budget)
   const adaptiveThinking = field(supports, 'adaptive_thinking', budget)
   if (adaptiveThinking !== undefined && typeof adaptiveThinking !== 'boolean') fail('INVALID_REASONING')
-  const thinking = field(supports, 'thinking', budget)
-  if (thinking !== undefined && typeof thinking !== 'boolean') fail('INVALID_REASONING')
   const minThinkingBudget = optionalPositive(supports, 'min_thinking_budget', 'INVALID_REASONING', budget)
   const maxThinkingBudget = optionalPositive(supports, 'max_thinking_budget', 'INVALID_REASONING', budget)
   if (minThinkingBudget !== undefined && maxThinkingBudget !== undefined && minThinkingBudget > maxThinkingBudget) fail('INVALID_REASONING')
@@ -243,10 +234,6 @@ function normalizeModel(raw: object, id: string, options: AccountModelCatalogOpt
       ...adaptiveThinking === undefined ? {} : { adaptiveThinking },
       ...minThinkingBudget === undefined ? {} : { minThinkingBudget },
       ...maxThinkingBudget === undefined ? {} : { maxThinkingBudget },
-    }),
-    sampling: Object.freeze({
-      temperature: thinking === true ? 'unsupported' as const
-        : thinking === false ? 'supported' as const : 'unknown' as const,
     }),
     evidence: Object.freeze({
       endpoints: Object.freeze(endpoints), unsupportedEndpointCount,

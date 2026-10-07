@@ -133,6 +133,7 @@ describe('managed request-body timeout guidance', () => {
       sentHeaders = new Headers(init?.headers)
       return response()
     })
+
     const harness = await runtime(grant(), {
       chatRequestSettings: () => ({ responsesRequestCompression: enabled }),
     })
@@ -153,6 +154,24 @@ describe('managed request-body timeout guidance', () => {
     expect(payload.input?.some(item => item.content?.some(part => part.text === text))).toBe(true)
     expect(sentHeaders.get('content-encoding')).toBe('gzip')
     expect(sentHeaders.get('content-length')).toBe(String(sentBody.byteLength))
+  })
+
+  it('reads temperature omission from dynamic config at lazy native stream dispatch', async () => {
+    let enabled = false
+    let sentBody: Record<string, unknown> | undefined
+    stubFetch(async (_input, init) => {
+      sentBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return response()
+    })
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ responsesOmitTemperature: enabled }),
+    })
+    const stream = harness.ctx.llm.stream({ provider: PREVIEW, model: MODEL, temperature: 0, messages: [] })
+    enabled = true
+    const assembler = new BlockAssembler()
+    for await (const chunk of stream) assembler.push(chunk)
+    expect(assembler.finish).toEqual({ kind: 'stop' })
+    expect(sentBody).not.toHaveProperty('temperature')
   })
 
   it('does not let compressed wire bytes bypass native hard context admission', async () => {

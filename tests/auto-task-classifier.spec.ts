@@ -6,7 +6,6 @@ const model: AccountModelDescriptor = {
   id: 'synthetic-arbitrary', name: 'Arbitrary', category: 'lightweight', api: 'openai-responses',
   contextWindow: 64_000, maxTokens: 8000, input: ['text'],
   reasoning: { advertisedEfforts: [], unmappedEfforts: [] },
-  sampling: { temperature: 'unknown' },
   evidence: { endpoints: ['/responses'], unsupportedEndpointCount: 0, selectedEndpoint: '/responses',
     apiSource: 'advertised-native', policySource: 'server-enabled', contextWindowSource: 'max_context_window_tokens' },
 }

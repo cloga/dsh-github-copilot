@@ -175,16 +175,6 @@ describe('account model catalog normalization (synthetic API fixtures)', () => {
     expect(first(catalog(model())).reasoning).toEqual({ advertisedEfforts: [], unmappedEfforts: [] })
   })
 
-  it.each([
-    [true, 'unsupported'],
-    [false, 'supported'],
-    [undefined, 'unknown'],
-  ] as const)('preserves explicit supplier temperature compatibility for thinking=%j', (thinking, temperature) => {
-    const value = model()
-    if (thinking !== undefined) capabilities(value).supports.thinking = thinking
-    expect(first(catalog(value)).sampling).toEqual({ temperature })
-  })
-
   it('does not manufacture high, max, or off when only an unfamiliar effort is advertised', () => {
     const value = model()
     capabilities(value).supports.reasoning_effort = ['future-depth']
@@ -196,7 +186,7 @@ describe('account model catalog normalization (synthetic API fixtures)', () => {
 
   it.each([
     { reasoning_effort: [false] }, { reasoning_effort: 'high' }, { adaptive_thinking: 'yes' },
-    { min_thinking_budget: 100, max_thinking_budget: 10 }, { max_thinking_budget: Infinity }, { thinking: 'yes' },
+    { min_thinking_budget: 100, max_thinking_budget: 10 }, { max_thinking_budget: Infinity },
   ])('rejects malformed reasoning metadata %j', extra => {
     const value = model()
     Object.assign(capabilities(value).supports, extra)

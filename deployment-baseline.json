@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.132"
+    "version": "0.4.0-alpha.133"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -717,7 +717,7 @@
         {"file": "tests/config.spec.ts", "name": "keeps managed Responses request compression default-off and boolean-only"},
         {"file": "tests/preview-provider.spec.ts", "name": "preserves published-adapter JSON and usage across identity and gzip encoding"},
         {"file": "tests/preview-provider.spec.ts", "name": "keeps caller-owned Fetch unchanged and does not resend a gzip 415 response"},
-        {"file": "tests/preview-provider.spec.ts", "name": "rechecks the request/account fence after compression and never dispatches revoked work"},
+        {"file": "tests/preview-provider.spec.ts", "name": "rechecks the request/account fence with both opt-ins and never dispatches revoked work"},
         {"file": "tests/preview-provider.spec.ts", "name": "keeps native %s transport when the option is enabled"},
         {"file": "tests/preview-provider.spec.ts", "name": "sends gzip with correct framing through Node Fetch"},
         {"file": "tests/preview-provider.spec.ts", "name": "keeps original JSON for replay-scope checks after gzip without retiring the account"},
@@ -920,18 +920,19 @@
       ]
     },
     {
-      "id": "managed-auto-review-sampling-compatibility",
+      "id": "managed-auto-review-temperature-override",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/account-model-catalog.ts", "marker": "temperature: thinking === true ? 'unsupported'"},
-        {"file": "src/preview-provider.ts", "marker": "entry.temperatureCompatibility === 'unsupported'"},
+        {"file": "src/config.ts", "marker": "responsesOmitTemperature: z.boolean().default(false)"},
+        {"file": "src/preview-provider.ts", "marker": "guard.responsesOmitTemperature === true"},
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/auto-review-copilot-core.fixture.ts"}
       ],
       "tests": [
-        {"file": "tests/account-model-catalog.spec.ts", "name": "preserves explicit supplier temperature compatibility for thinking=%j"},
-        {"file": "tests/preview-provider.spec.ts", "name": "uses explicit Responses temperature compatibility without mutating frozen caller options, thinking=%j"},
-        {"file": "tests/preview-provider.spec.ts", "name": "does not change temperature on native %s when thinking is supported"},
-        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "omits unsupported temperature without weakening the %s verdict boundary"}
+        {"file": "tests/config.spec.ts", "name": "keeps managed Responses temperature omission default-off and boolean-only"},
+        {"file": "tests/preview-provider.spec.ts", "name": "applies explicit Responses omission=%s independently of thinking metadata %j"},
+        {"file": "tests/preview-provider.spec.ts", "name": "preserves default Responses temperature regardless of thinking metadata %j"},
+        {"file": "tests/preview-route.spec.ts", "name": "reads temperature omission from dynamic config at lazy native stream dispatch"},
+        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "omits temperature with explicit opt-in without weakening the %s verdict boundary"}
       ]
     },
     {

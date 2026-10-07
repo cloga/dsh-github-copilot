@@ -20,7 +20,7 @@ import {
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
 } from '../../src/copilot-identity.ts'
 
-const MODEL = 'synthetic-thinking-model'
+const MODEL = 'synthetic-model'
 const contexts: Context[] = []
 
 beforeAll(() => {
@@ -65,7 +65,7 @@ async function run(outcome: Outcome) {
         id: MODEL, name: MODEL, model_picker_enabled: true, policy: { state: 'enabled' },
         supported_endpoints: ['/responses'],
         capabilities: {
-          supports: { streaming: true, tool_calls: true, vision: false, thinking: true,
+          supports: { streaming: true, tool_calls: true, vision: false,
             reasoning_effort: ['low', 'medium', 'high'] },
           limits: { max_context_window_tokens: 64_000, max_prompt_tokens: 48_000, max_output_tokens: 8_192 },
         },
@@ -88,7 +88,7 @@ async function run(outcome: Outcome) {
     deleteRecord: async () => { throw new Error('fixture credential must not be deleted') },
   })
   await ctx.plugin(LlmRuntime)
-  await ctx.plugin(previewPlugin, {})
+  await ctx.plugin(previewPlugin, { chatRequestSettings: () => ({ responsesOmitTemperature: true }) })
   await ctx.get('githubCopilotPreview')!.refresh()
   await ctx.plugin(SessionStore)
   await ctx.plugin(Projections)
@@ -160,7 +160,7 @@ async function run(outcome: Outcome) {
 
 describe('native Auto reviewer Copilot compatibility', () => {
   it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
-    'omits unsupported temperature without weakening the %s verdict boundary', async outcome => {
+    'omits temperature with explicit opt-in without weakening the %s verdict boundary', async outcome => {
       const result = await run(outcome)
       expect(result.wireCalls).toBe(1)
       expect(result.wireBodies).toHaveLength(1)

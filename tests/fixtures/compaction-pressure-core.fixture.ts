@@ -70,7 +70,6 @@ function autoCandidate(id: string): AccountModelDescriptor {
     maxTokens: 8192,
     input: ['text'],
     reasoning: { advertisedEfforts: ['low', 'medium', 'high'], unmappedEfforts: [] },
-    sampling: { temperature: 'unknown' },
     evidence: {
       endpoints: ['/responses'],
       unsupportedEndpointCount: 0,
