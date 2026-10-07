@@ -32,10 +32,12 @@ vi.mock('@earendil-works/pi-ai/providers/github-copilot', async importOriginal =
 
 const baseURL = 'https://api.individual.githubcopilot.com'
 const endpoint: Record<AccountModelApi, string> = { 'openai-responses': '/responses', 'openai-completions': '/chat/completions', 'anthropic-messages': '/v1/messages' }
-function descriptor(api: AccountModelApi, id = 'future-lab-r17', efforts = ['high', 'max'], adaptive = true) {
+function descriptor(api: AccountModelApi, id = 'future-lab-r17', efforts = ['high', 'max'], adaptive = true,
+  thinking?: boolean) {
   const parsed = normalizeAccountModelCatalog({ data: [{ id, name: 'Unseen model', model_picker_enabled: true,
     policy: { state: 'enabled' }, supported_endpoints: [endpoint[api]],
-    capabilities: { supports: { streaming: true, tool_calls: true, vision: true, reasoning_effort: efforts, adaptive_thinking: adaptive },
+    capabilities: { supports: { streaming: true, tool_calls: true, vision: true, reasoning_effort: efforts,
+      adaptive_thinking: adaptive, ...thinking === undefined ? {} : { thinking } },
       limits: { max_context_window_tokens: 65536, max_prompt_tokens: 32768, max_output_tokens: 8192 } },
   }] })
   expect(parsed.rejected).toEqual([])
@@ -820,8 +822,9 @@ describe('managed Responses replay compatibility', () => {
     expect(bodies[0]).not.toBe(original)
     expect(JSON.stringify(context)).toBe(original)
   })
-  async function invoke(context: PiContext, options: Partial<StreamOptions> = {}, api: AccountModelApi = 'openai-responses') {
-    const item = descriptor(api)
+  async function invoke(context: PiContext, options: Partial<StreamOptions> = {}, api: AccountModelApi = 'openai-responses',
+    thinking?: boolean) {
+    const item = descriptor(api, 'future-lab-r17', ['high', 'max'], true, thinking)
     const release = vi.fn()
     const unauthorized = vi.fn()
     const replayFailure = vi.fn()
@@ -864,6 +867,25 @@ describe('managed Responses replay compatibility', () => {
     expect(result.replayFailure).not.toHaveBeenCalled()
     expect(result.unauthorized).not.toHaveBeenCalled()
   })
+  it.each([
+    [true, undefined],
+    [false, 0],
+    [undefined, 0],
+  ] as const)('uses explicit Responses temperature compatibility without mutating frozen caller options, thinking=%j',
+    async (thinking, expected) => {
+      const options = Object.freeze({ temperature: 0 })
+      const result = await invoke({ messages: [] }, options, 'openai-responses', thinking)
+      expect(result.result.stopReason).toBe('stop')
+      expect(result.body?.temperature).toBe(expected)
+      expect(options).toEqual({ temperature: 0 })
+      expect(Object.isFrozen(options)).toBe(true)
+    })
+  it.each(['openai-completions', 'anthropic-messages'] as const)(
+    'does not change temperature on native %s when thinking is supported', async api => {
+      const result = await invoke({ messages: [] }, Object.freeze({ temperature: 0 }), api, true)
+      expect(result.result.stopReason).toBe('stop')
+      expect(result.body?.temperature).toBe(0)
+    })
   it('omits an empty SDK reasoning signature while preserving opaque reasoning and tool pairing', async () => {
     const context = replayContext(true)
     const original = JSON.stringify(context)

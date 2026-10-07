@@ -187,6 +187,7 @@ describe('tagged Core public Session context (actual controller projection)', ()
       id: 'fixture-selected', name: 'Synthetic candidate', api: 'openai-responses',
       contextWindow: 128_000, maxTokens: 32_000, input: ['text'],
       reasoning: { advertisedEfforts: ['high'], unmappedEfforts: [] },
+      sampling: { temperature: 'unknown' },
       evidence: {
         endpoints: ['/responses'], unsupportedEndpointCount: 0, selectedEndpoint: '/responses',
         apiSource: 'advertised-native', policySource: 'server-enabled', contextWindowSource: 'max_context_window_tokens',

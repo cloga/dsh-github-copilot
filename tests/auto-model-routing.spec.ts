@@ -31,6 +31,7 @@ function model(id: string, options: {
       advertisedEfforts: options.efforts ?? [],
       unmappedEfforts: [],
     },
+    sampling: { temperature: 'unknown' },
     evidence: {
       endpoints: ['/responses'],
       unsupportedEndpointCount: 0,

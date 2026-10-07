@@ -37,6 +37,7 @@ function model(id: string, contextWindow: number, effort: string, category?: Acc
     maxTokens: Math.floor(contextWindow / 4),
     input: ['text'],
     reasoning: { advertisedEfforts: [effort], unmappedEfforts: [] },
+    sampling: { temperature: 'unknown' },
     evidence: {
       endpoints: ['/responses'],
       unsupportedEndpointCount: 0,

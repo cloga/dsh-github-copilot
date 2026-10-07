@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.130"
+    "version": "0.4.0-alpha.131"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -917,6 +917,21 @@
         {"file": "tests/account-model-auth.spec.ts", "name": "rejects account replacement during refresh without overwriting the replacement"},
         {"file": "tests/account-model-auth.spec.ts", "name": "validates credential-specific Enterprise endpoints and rejects token-controlled foreign origins"},
         {"file": "tests/account-model-auth.spec.ts", "name": "sanitizes credential backend failures and keeps account identity independent of token rotation"}
+      ]
+    },
+    {
+      "id": "managed-auto-review-sampling-compatibility",
+      "required": true,
+      "sourceMarkers": [
+        {"file": "src/account-model-catalog.ts", "marker": "temperature: thinking === true ? 'unsupported'"},
+        {"file": "src/preview-provider.ts", "marker": "entry.temperatureCompatibility === 'unsupported'"},
+        {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/auto-review-copilot-core.fixture.ts"}
+      ],
+      "tests": [
+        {"file": "tests/account-model-catalog.spec.ts", "name": "preserves explicit supplier temperature compatibility for thinking=%j"},
+        {"file": "tests/preview-provider.spec.ts", "name": "uses explicit Responses temperature compatibility without mutating frozen caller options, thinking=%j"},
+        {"file": "tests/preview-provider.spec.ts", "name": "does not change temperature on native %s when thinking is supported"},
+        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "omits unsupported temperature without weakening the %s verdict boundary"}
       ]
     },
     {

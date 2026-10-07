@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-alpha.131 (prepared)
+
+- Make native rc.2 Auto authorization review compatible with managed Copilot Responses models that explicitly advertise `capabilities.supports.thinking`: omit the unsupported `temperature` field only at the plugin-owned native transport boundary (#374).
+- Preserve the frozen reviewer request, supported or unknown temperature behavior, other protocols/providers, account and cancellation fences, and native allow/deny/malformed/error handling. No prompt matching, model-name rule, retry, permission bypass or canonical-route interception is added.
+- Add exact tagged-source and published-artifact reviewer fixtures with synthetic metadata, credentials and responses. These tests do not attest a live selected model, provider endpoint, Desktop activation, installation or restart.
+
 ## 0.4.0-alpha.130 (prepared)
 
 - Add explicit offline analysis for a caller-selected persisted diagnostics unit or reviewed aggregate view (#368). Bound reads, reject unsafe/changed inputs, and write strict reports only to a new explicitly selected local file.

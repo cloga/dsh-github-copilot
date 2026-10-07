@@ -6,6 +6,7 @@ const model: AccountModelDescriptor = {
   id: 'fixture-vision', name: 'Fixture vision', api: 'openai-responses',
   contextWindow: 128_000, maxTokens: 16_000, input: ['text', 'image'],
   reasoning: { advertisedEfforts: [], unmappedEfforts: [] },
+  sampling: { temperature: 'unknown' },
   evidence: {
     endpoints: ['/responses'], unsupportedEndpointCount: 0, selectedEndpoint: '/responses',
     apiSource: 'advertised-priority', policySource: 'server-enabled',

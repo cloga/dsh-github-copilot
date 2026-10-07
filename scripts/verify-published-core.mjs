@@ -55,6 +55,12 @@ function fixtureManifest(original, release) {
     manifest[section] = Object.fromEntries(Object.entries(original[section]).map(([name, version]) =>
       [name, name.startsWith('@deepseek-ai/dsh-') ? release : version]))
   }
+  manifest.devDependencies = {
+    ...manifest.devDependencies,
+    '@deepseek-ai/dsh-experimental-auto-review': release,
+    '@deepseek-ai/dsh-permission-presets': release,
+    '@deepseek-ai/dsh-user-approval': release,
+  }
   // The fixture owns only top-level requirements, never Core's transitive SDK resolution.
   for (const key of ['overrides', 'resolutions', 'pnpm', 'bundledDependencies', 'bundleDependencies', 'workspaces']) delete manifest[key]
   return manifest
