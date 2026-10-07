@@ -45,6 +45,9 @@ class ReviewerFixtureLoader extends Loader {
     if (this.fixture.scope === 'descendant') {
       return { inject: AutoReview.inject, apply: async (owner: Context) => { await owner.plugin(AutoReview) } }
     }
+    if (process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime') {
+      return super.import('@deepseek-ai/dsh-experimental-auto-review', () => [])
+    }
     return import('@deepseek-ai/dsh-experimental-auto-review')
   }
   write() {}
@@ -62,6 +65,7 @@ afterEach(async () => {
 type Outcome = 'allow' | 'deny' | 'malformed' | 'http-error' | 'cancel'
 type ScopeCase = 'native' | 'impostor' | 'descendant' | 'alias' | 'missing-resolution' | 'disposed'
   | 'other-protocol' | 'canonical' | 'other-provider' | 'bound-account'
+  | 'retained-facade' | 'late-identity' | 'other-listener' | 'dispose-before-dispatch'
 
 function sourceResolution(): RuntimeResolution | undefined {
   if (process.env.DSH_CORE_EVIDENCE !== 'tagged-source-runtime') return undefined
@@ -118,6 +122,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   const wireBodies: Record<string, unknown>[] = []
   const wireTokens: (string | null)[] = []
   const readScopes: { reviewer: boolean, entry: boolean, root: boolean, service: string }[] = []
+  let stopSampling: (() => void) | undefined
   let wireCalls = 0
   vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
     if (String(input).endsWith('/user')) return Response.json({ login: 'fixture-user', id: 1 })
@@ -165,7 +170,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     ctx.provide('settings', {
       describe: () => [{ ns: 'github-copilot', revision: 1, value: {
         activeAccountId: 'canonical', sessionAccounts: [{ sessionId: `auto-review-${outcome}`, accountId: second }],
-      } }],
+      } }, { ns: 'llm-pi-ai', revision: 1, value: { providers: {} } }],
       mutate: async () => { throw new Error('reviewer qualification must not write settings') },
     })
     const host = new CopilotAccountsHost(ctx)
@@ -195,8 +200,23 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       root: caller.fiber.entry?.fiber === caller.fiber,
       service: typeof native,
     })
+    if (name === 'llm' && caller.fiber.runtime?.callback === AutoReview.apply
+      && caller.fiber.entry?.fiber === caller.fiber && stopSampling !== undefined) {
+      if (scope === 'retained-facade') stopSampling()
+      if (scope === 'late-identity') queueMicrotask(stopSampling)
+    }
     return native
   })
+  if (scope === 'dispose-before-dispatch') {
+    ctx.on('llm/stream', (options, next) => {
+      if (options.temperature !== undefined) return next()
+      return (async function* () {
+        await Promise.resolve()
+        stopSampling?.()
+        yield* next()
+      })()
+    })
+  }
   await ctx.plugin(previewPlugin, { chatRequestSettings: () => ({ responsesOmitTemperature: !automatic }) })
   await ctx.get('githubCopilotPreview')!.refresh()
   await ctx.plugin(SessionStore)
@@ -221,7 +241,9 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   if (automatic) {
     if (scope !== 'missing-resolution') await ctx.plugin(PluginPackages, { resolution: sourceResolution() })
     await ctx.plugin(ReviewerFixtureLoader, { scope })
-    const stop = ctx.effect(() => installAutoReviewSampling(ctx))
+    const stop = installAutoReviewSampling(ctx)
+    stopSampling = stop
+    ctx.effect(() => stop)
     await ctx.loader.create({ name: scope === 'alias' ? 'fixture-reviewer-alias' : '@deepseek-ai/dsh-experimental-auto-review' })
     await ctx.loader.await()
     if (scope === 'disposed') await stop()
@@ -270,16 +292,29 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   setApprovalPolicy(session, 'never')
   const agent = { id: session.id, session, ctx, options: { provider, model: MODEL } } as Agent
   if (scope === 'bound-account') ctx.githubCopilotSessionAccounts.admit(agent, 1, controller.signal)
+  if (scope === 'other-listener') {
+    ctx.on('tools/pre-execute', async (exec, next) => {
+      const ordinary = (async () => {
+        for await (const _chunk of ctx.llm.stream(Object.freeze({
+          provider, model: MODEL, temperature: 0.61, messages: [],
+          sessionId: session.id, signal: exec.signal,
+        }))) { /* consume */ }
+      })()
+      const decision = next()
+      await ordinary
+      return decision
+    }, { prepend: true })
+  }
   const pending = ctx.agents.withInitiator(agent, () => ctx.tools.execute({
     signal: controller.signal, callId,
     name: 'probe', arguments: { value: outcome }, agent,
   }))
   if (automatic) {
     const ordinary = ctx.agents.withInitiator(agent, async () => {
-      for await (const _chunk of ctx.llm.stream({
+      for await (const _chunk of ctx.llm.stream(Object.freeze({
         provider, model: MODEL, temperature: 0.37, messages: [],
         sessionId: session.id, signal: new AbortController().signal,
-      })) { /* consume */ }
+      }))) { /* consume */ }
     })
     await Promise.all([pending, ordinary])
   }
@@ -325,8 +360,23 @@ describe('native Auto reviewer Copilot compatibility', () => {
       expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
       expect(result.wireTokens).toEqual(['Bearer synthetic-second-access', 'Bearer synthetic-second-access'])
     })
+    it('does not group another tool listener request into the native reviewer scope', async () => {
+      const result = await run('allow', true, undefined, 'other-listener')
+      expect(result.executions).toBe(1)
+      expect(result.wireBodies).toHaveLength(3)
+      expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
+      expect(result.wireBodies.filter(body => body.temperature === 0.61)).toHaveLength(1)
+      expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
+    })
+    it('revokes a delayed native reviewer dispatch without cancelling concurrent Chat', async () => {
+      const result = await run('allow', true, undefined, 'dispose-before-dispatch')
+      expect(result.executions).toBe(0)
+      expect(result.result.isError).toBe(true)
+      expect(result.wireBodies).toHaveLength(1)
+      expect(result.wireBodies[0]?.temperature).toBe(0.37)
+    })
     it.each(['impostor', 'descendant', 'alias', 'missing-resolution', 'disposed',
-      'other-protocol', 'canonical', 'other-provider'] as const)(
+      'other-protocol', 'canonical', 'other-provider', 'retained-facade', 'late-identity'] as const)(
       'preserves native sampling for an unqualified %s scope', async scope => {
         const result = await run('allow', true, undefined, scope)
         expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
