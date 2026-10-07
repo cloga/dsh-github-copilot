@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Current release: [`0.4.0-alpha.133`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.133). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** This is still an alpha release, not a stable-channel promotion. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
+**Current release: [`0.4.0-alpha.134`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.134). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** This is still an alpha release, not a stable-channel promotion. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
 
 ## What you can do
 
@@ -85,10 +85,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.133/dsh-github-copilot-0.4.0-alpha.133.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/dsh-github-copilot-0.4.0-alpha.134.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.133` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.134` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -179,7 +179,7 @@ The same failure can include request-scoped native local body-write/header miles
 
 HTTP/SSE liveness separates five-minute byte idle from bounded ten-minute assistant-output silence by default. Consumer work is excluded; WebSocket/explicit `auto` stays native-only. This does not cure supplier HTTP 408s. Images are admitted against actual native-projected MIME evidence; the plugin does not own conversion or infer format support from filenames. [Image compatibility](./docs/image-input-compatibility.md).
 
-Native rc.2 Auto authorization review asks its selected route with `temperature: 0`. No verified supplier contract establishes that `capabilities.supports.thinking` determines temperature support; that metadata is not used for this decision. The explicit compatibility override `github-copilot.responsesOmitTemperature` defaults to `false`. Set it to `true` only when you choose to omit temperature from **all** account-discovered managed OpenAI Responses requests, regardless of native transport; it may address the reported reviewer 400 but also changes temperature semantics for ordinary chat and other requests on that managed protocol. It has no effect on Chat Completions, Anthropic Messages or the canonical Core-owned Copilot route. The plugin does not enable or migrate this setting automatically. The frozen reviewer request, strict verdict parser, cancellation and fail-closed tool denial remain unchanged; errors are not retried. See [model compatibility acceptance](./docs/model-compatibility-acceptance.md).
+Native rc.2 Auto authorization review requests `temperature: 0`. The plugin now automatically omits it **only for the authenticated official Auto reviewer root on account-discovered managed OpenAI Responses**; no switch is needed. Concurrent ordinary Chat, even on the same Session/model, retains its temperature. Public Loader callback identity and same-profile package ownership authenticate the caller; unknown identity, aliases, descendants, other protocols/providers and canonical Core-owned Copilot remain native, with bounded diagnostics for unqualified reviewer scope. No capability is inferred from `supports.thinking`. Frozen inputs, native account/cancellation guards, strict verdicts and fail-closed tool denial remain intact; no retries, permission changes or settings migration occur. The independent legacy `github-copilot.responsesOmitTemperature` override remains default `false`; explicit `true` still omits temperature from **all** managed Responses requests, not just review. See [public scope and qualification limits](./docs/auto-review-sampling.md).
 
 ## Settings and troubleshooting
 
@@ -262,14 +262,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.133/dsh-github-copilot-0.4.0-alpha.133.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.133/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/dsh-github-copilot-0.4.0-alpha.134.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.133.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.134.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
