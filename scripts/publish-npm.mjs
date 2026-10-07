@@ -21,6 +21,14 @@ export function distributionTag(version) {
   return tag
 }
 
+function isSameVersionPrereleasePromotion(current, target) {
+  const previous = parseVersion(current)
+  const next = parseVersion(target)
+  return previous.prerelease.length > 0 && next.prerelease.length === 0
+    && previous.major === next.major && previous.minor === next.minor && previous.patch === next.patch
+    && compareVersions(current, target) < 0
+}
+
 export function validatePublicPackage(pkg) {
   check(pkg?.name === NAME && pkg.private === undefined && pkg.type === 'module' && pkg.license === 'MIT',
     'Public package identity, private flag, module type or license differs')
@@ -44,7 +52,9 @@ export async function publishNpm({ manifest, bytes, archive, readPackage, readVe
   const current = pkg['dist-tags']?.[tag]
   if (current !== undefined) {
     parseVersion(current)
-    check(distributionTag(current) === tag, 'Registry dist-tag points to another channel')
+    const currentTag = distributionTag(current)
+    check(currentTag === tag || (tag === 'latest' && isSameVersionPrereleasePromotion(current, version)),
+      'Registry dist-tag points to another channel')
   }
   const existing = await readVersion()
   const verify = remote => check(remote?.name === NAME && remote.version === version && remote.dist?.integrity === expected,

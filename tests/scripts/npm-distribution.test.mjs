@@ -87,6 +87,51 @@ test('new direct publication uses original tgz and verifies registry SRI after o
     '--registry', 'https://registry.npmjs.org/', '--ignore-scripts']])
 })
 
+test('stable publication promotes its same-version prerelease latest pointer without lowering it', async () => {
+  const stableVersion = '0.4.0'
+  const stableManifest = {
+    ...manifest(),
+    version: stableVersion,
+    publishConfig: { ...manifest().publishConfig, tag: 'latest' },
+  }
+  const calls = []
+  let current = null
+  let latest = '0.4.0-alpha.134'
+  const api = {
+    readPackage: async () => ({ name, 'dist-tags': { latest } }),
+    readVersion: async () => current,
+    publish: async args => {
+      calls.push(args)
+      current = { ...published(), version: stableVersion }
+      latest = stableVersion
+    },
+  }
+
+  const result = await publishNpm(options({ ...api, manifest: stableManifest }))
+  assert.equal(result.state, 'published')
+  assert.equal(result.tag, 'latest')
+  assert.equal(result.integrity, sri)
+  assert.deepEqual(calls, [['publish', 'artifacts/test.tgz', '--tag', 'latest', '--access', 'public',
+    '--registry', 'https://registry.npmjs.org/', '--ignore-scripts']])
+})
+
+test('stable publication rejects a latest pointer to a different version prerelease channel', async () => {
+  const stableManifest = {
+    ...manifest(),
+    version: '0.4.0',
+    publishConfig: { ...manifest().publishConfig, tag: 'latest' },
+  }
+  for (const latest of ['0.5.0-alpha.1', '0.4.1']) {
+    const api = {
+      readPackage: async () => ({ name, 'dist-tags': { latest } }),
+      readVersion: async () => null,
+      publish: async () => assert.fail('must reject the mismatched or newer tag before writing'),
+    }
+    const expectedError = latest === '0.4.1' ? /Refusing to lower/ : /another channel/
+    await assert.rejects(publishNpm(options({ ...api, manifest: stableManifest })), expectedError)
+  }
+})
+
 test('same version is read-only only when its integrity matches and tag is not stranded', async () => {
   const api = registry({ existing: published(), tag: version })
   assert.equal((await publishNpm(options(api))).state, 'published')
