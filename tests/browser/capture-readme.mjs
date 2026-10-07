@@ -56,7 +56,6 @@ try {
     'Place Credits at the composer-like bottom anchor so its quota panel is not clipped')
   await capture('copilot-accounts-credits.png', page.locator('[data-copilot-usage-panel]'))
   await open('credits')
-  await page.locator('summary').filter({ hasText: 'Visible-history continuation' }).click()
   await page.locator('[data-copilot-continuation-settings] select').waitFor()
   assert.equal(await page.locator('[data-copilot-continuation-settings] select').inputValue(), 'on')
   await page.getByText('The active turn keeps its policy; changes apply next turn.').waitFor()
@@ -73,7 +72,6 @@ try {
         await page.getByRole('button', { name: 'Switch', exact: true }).click()
       }
       if (surface === 'credits') {
-        await page.locator('summary').filter({ hasText: 'Visible-history continuation' }).click()
         await page.getByRole('button', { name: 'Switch account', exact: true }).click()
       }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false,
