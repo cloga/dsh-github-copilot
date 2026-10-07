@@ -52,7 +52,9 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   & Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
   & {
     readonly streamLiveness?: boolean
-    readonly chatRequestSettings?: () => Pick<InlineConfig, 'chatStreamIdleTimeoutMs' | 'chatStreamLiveness' | 'chatMaxRequestImageBytes' | 'responsesRequestCompression'>
+    readonly chatRequestSettings?: () => Pick<InlineConfig,
+      'chatStreamIdleTimeoutMs' | 'chatStreamLiveness' | 'chatMaxRequestImageBytes'
+      | 'responsesRequestCompression' | 'responsesOmitTemperature'>
     readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment' | 'autoAllocationEvidence'>
     readonly requestBudget?: Partial<RequestBudgetPolicy>
     readonly requestBudgetSettings?: () => Partial<RequestBudgetPolicy>
@@ -775,6 +777,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...hooks,
       responsesRequestCompression: settings?.responsesRequestCompression === true
         && (template.transport === undefined || template.transport === 'sse'),
+      responsesOmitTemperature: settings?.responsesOmitTemperature === true,
       onReplayFailure(error) {
         if (error.dispatchEvidence !== undefined) ctx.logger.warn(`[github-copilot] ${error.dispatchEvidence}`)
         hooks.onReplayFailure?.(error)

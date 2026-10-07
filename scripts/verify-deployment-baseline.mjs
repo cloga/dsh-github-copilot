@@ -347,7 +347,7 @@ for (const [file, name] of [
   ['tests/config.spec.ts', 'keeps managed Responses request compression default-off and boolean-only'],
   ['tests/preview-provider.spec.ts', 'preserves published-adapter JSON and usage across identity and gzip encoding'],
   ['tests/preview-provider.spec.ts', 'keeps caller-owned Fetch unchanged and does not resend a gzip 415 response'],
-  ['tests/preview-provider.spec.ts', 'rechecks the request/account fence after compression and never dispatches revoked work'],
+  ['tests/preview-provider.spec.ts', 'rechecks the request/account fence with both opt-ins and never dispatches revoked work'],
   ['tests/preview-provider.spec.ts', 'keeps native %s transport when the option is enabled'],
   ['tests/preview-provider.spec.ts', 'sends gzip with correct framing through Node Fetch'],
   ['tests/preview-provider.spec.ts', 'keeps original JSON for replay-scope checks after gzip without retiring the account'],
