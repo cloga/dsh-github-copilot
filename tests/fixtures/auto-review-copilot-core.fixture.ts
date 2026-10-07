@@ -3,15 +3,17 @@
  * Synthetic metadata, credential, verdicts and wire only; no live inference.
  */
 import '@earendil-works/pi-ai/api/openai-responses'
+import '@earendil-works/pi-ai/api/openai-completions'
 import { readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import { PluginPackages, type RuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import * as AutoReview from '@deepseek-ai/dsh-experimental-auto-review'
-import LlmRuntime, { createMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createMessage, createUserMessage, LlmAdapter, ToolCallId,
+  type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import PermissionPresetService, { AUTO_PRESET } from '@deepseek-ai/dsh-permission-presets'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
@@ -21,6 +23,8 @@ import ApprovalService, { setApprovalPolicy } from '@deepseek-ai/dsh-user-approv
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../../src/preview-route.ts'
 import { installAutoReviewSampling } from '../../src/auto-review-sampling.ts'
+import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
+import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
 import {
   GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
@@ -39,7 +43,7 @@ class ReviewerFixtureLoader extends Loader {
       return { inject: AutoReview.inject, apply: (owner: Context) => AutoReview.apply(owner) }
     }
     if (this.fixture.scope === 'descendant') {
-      return { apply: (owner: Context) => owner.plugin(AutoReview) }
+      return { inject: AutoReview.inject, apply: async (owner: Context) => { await owner.plugin(AutoReview) } }
     }
     return import('@deepseek-ai/dsh-experimental-auto-review')
   }
@@ -57,6 +61,7 @@ afterEach(async () => {
 
 type Outcome = 'allow' | 'deny' | 'malformed' | 'http-error' | 'cancel'
 type ScopeCase = 'native' | 'impostor' | 'descendant' | 'alias' | 'missing-resolution' | 'disposed'
+  | 'other-protocol' | 'canonical' | 'other-provider' | 'bound-account'
 
 function sourceResolution(): RuntimeResolution | undefined {
   if (process.env.DSH_CORE_EVIDENCE !== 'tagged-source-runtime') return undefined
@@ -76,13 +81,21 @@ function sourceResolution(): RuntimeResolution | undefined {
   return { profilesDir: dirname(profileDir), profileDir, localPackageNames: [], entries, linkedRoots: [] }
 }
 
-function reviewerResponse(outcome: Outcome): Response {
+function reviewerResponse(outcome: Outcome, completions = false): Response {
   if (outcome === 'http-error') {
     return Response.json({ error: { type: 'invalid_request_body', message: 'synthetic provider rejection' } }, { status: 400 })
   }
   const text = outcome === 'allow' ? '{"risk":"low","decision":"allow"}'
     : outcome === 'deny' ? '{"risk":"medium","decision":"deny","reason":"not authorized"}'
       : '{"risk":"low","decision":"invalid"}'
+  if (completions) {
+    const chunk = (delta: object, finish_reason: string | null) => `data: ${JSON.stringify({
+      id: 'fixture-completion', object: 'chat.completion.chunk',
+      choices: [{ index: 0, delta, finish_reason }],
+    })}\n\n`
+    return new Response(chunk({ role: 'assistant', content: text }, null) + chunk({}, 'stop') + 'data: [DONE]\n\n',
+      { headers: { 'content-type': 'text/event-stream' } })
+  }
   const event = (type: string, data: object) => `data: ${JSON.stringify({ type, ...data })}\n\n`
   const item = { id: 'message_fixture', type: 'message', role: 'assistant',
     content: [{ type: 'output_text', text }] }
@@ -98,15 +111,20 @@ function reviewerResponse(outcome: Outcome): Response {
 async function run(outcome: Outcome, automatic = false, thinking?: boolean, scope: ScopeCase = 'native') {
   const ctx = new Context()
   contexts.push(ctx)
+  const provider = scope === 'canonical' ? 'github-copilot' : scope === 'other-provider' ? 'fixture-other' : PREVIEW
+  const completions = scope === 'other-protocol'
+  const second = '11111111-1111-4111-8111-111111111111'
   const controller = new AbortController()
   const wireBodies: Record<string, unknown>[] = []
+  const wireTokens: (string | null)[] = []
   const readScopes: { reviewer: boolean, entry: boolean, root: boolean, service: string }[] = []
   let wireCalls = 0
   vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
+    if (String(input).endsWith('/user')) return Response.json({ login: 'fixture-user', id: 1 })
     if (String(input).endsWith('/models')) {
       return Response.json({ data: [{
         id: MODEL, name: MODEL, model_picker_enabled: true, policy: { state: 'enabled' },
-        supported_endpoints: ['/responses'],
+        supported_endpoints: [completions ? '/chat/completions' : '/responses'],
         capabilities: {
           supports: { streaming: true, tool_calls: true, vision: false,
             ...thinking === undefined ? {} : { thinking },
@@ -116,24 +134,59 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       }] })
     }
     wireCalls += 1
+    wireTokens.push(new Headers(init?.headers).get('authorization'))
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>
     wireBodies.push(body)
-    if (body.temperature === 0.37) return reviewerResponse('allow')
+    if (body.temperature === 0.37) return reviewerResponse('allow', completions)
     if (outcome === 'cancel') {
       controller.abort(new DOMException('Synthetic review cancellation', 'AbortError'))
       throw controller.signal.reason
     }
-    return reviewerResponse(outcome)
+    return reviewerResponse(outcome, completions)
   }))
   const grant = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-refresh', access: 'synthetic-access',
     expires: Date.now() + 3_600_000, availableModelIds: [MODEL] } }
+  const records = new Map([
+    [KEY, grant],
+    [`github-copilot/account-${second}`, { kind: 'grant', payload: {
+      type: 'oauth', refresh: 'synthetic-second-refresh', access: 'synthetic-second-access',
+      expires: Date.now() + 3_600_000, availableModelIds: [MODEL],
+    } }],
+  ])
   ctx.provide('credentials', {
-    readRecord: async (key: string) => { expect(key).toBe(KEY); return grant },
-    listRecords: async () => [{ key: KEY, kind: 'grant' }],
+    readRecord: async (key: string) => { expect(records.has(key)).toBe(true); return records.get(key) },
+    listRecords: async () => [...records.keys()].map(key => ({ key, kind: 'grant' })),
     modifyRecord: async () => { throw new Error('fixture token must not refresh') },
     deleteRecord: async () => { throw new Error('fixture credential must not be deleted') },
   })
   await ctx.plugin(LlmRuntime)
+  await ctx.plugin(AgentRegistry)
+  if (scope === 'bound-account') {
+    ctx.provide('settings', {
+      describe: () => [{ ns: 'github-copilot', revision: 1, value: {
+        activeAccountId: 'canonical', sessionAccounts: [{ sessionId: `auto-review-${outcome}`, accountId: second }],
+      } }],
+      mutate: async () => { throw new Error('reviewer qualification must not write settings') },
+    })
+    const host = new CopilotAccountsHost(ctx)
+    ctx.provide('githubCopilotAccounts', { host })
+    const owner = new SessionAccountsHost(ctx)
+    ctx.provide('githubCopilotSessionAccounts', owner)
+    ctx.effect(() => () => { owner.dispose(); host.dispose() })
+  }
+  if (provider !== PREVIEW) {
+    ctx.llm.registerAdapter([provider], new class extends LlmAdapter {
+      async *stream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
+        wireCalls += 1
+        wireBodies.push({ temperature: options.temperature })
+        const text = '{"risk":"low","decision":"allow"}'
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        yield { type: 'text-delta', index: 0, text }
+        yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
+    })
+  }
   ctx.on('internal/get', (caller, name, _error, next) => {
     const native: unknown = next()
     if (name === 'llm') readScopes.push({
@@ -184,7 +237,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   const session = ctx.sessions.create(SessionId(`auto-review-${outcome}`), { meta: { cwd: process.cwd() } })
   session.append('request/header', {
     header: {
-      config: { provider: PREVIEW, model: MODEL },
+      config: { provider, model: MODEL },
       tools: [{
         name: 'probe',
         description: 'Synthetic reviewer compatibility probe.',
@@ -207,7 +260,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     message: createMessage({
       role: 'assistant',
       content: [{ type: 'tool-call', id: callId, name: 'probe', arguments: rawArguments }],
-      source: { kind: 'model', provider: PREVIEW, model: MODEL },
+      source: { kind: 'model', provider, model: MODEL },
     }),
   }, { surfaceOp: 'append' })
   session.append('tool/call', {
@@ -215,20 +268,23 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   })
   ctx.permissionPresets.set(session, AUTO_PRESET)
   setApprovalPolicy(session, 'never')
-  const agent = { id: session.id, session, options: { provider: PREVIEW, model: MODEL } } as Agent
-  const pending = ctx.tools.execute({
+  const agent = { id: session.id, session, ctx, options: { provider, model: MODEL } } as Agent
+  if (scope === 'bound-account') ctx.githubCopilotSessionAccounts.admit(agent, 1, controller.signal)
+  const pending = ctx.agents.withInitiator(agent, () => ctx.tools.execute({
     signal: controller.signal, callId,
     name: 'probe', arguments: { value: outcome }, agent,
-  })
+  }))
   if (automatic) {
-    const ordinary = ctx.llm.stream({
-      provider: PREVIEW, model: MODEL, temperature: 0.37, messages: [],
-      sessionId: session.id, signal: new AbortController().signal,
+    const ordinary = ctx.agents.withInitiator(agent, async () => {
+      for await (const _chunk of ctx.llm.stream({
+        provider, model: MODEL, temperature: 0.37, messages: [],
+        sessionId: session.id, signal: new AbortController().signal,
+      })) { /* consume */ }
     })
-    await Promise.all([pending, (async () => { for await (const _chunk of ordinary) { /* consume */ } })()])
+    await Promise.all([pending, ordinary])
   }
   const result = await pending
-  return { result, executions, wireCalls, wireBodies, readScopes }
+  return { result, executions, wireCalls, wireBodies, wireTokens, readScopes }
 }
 
 describe('native Auto reviewer Copilot compatibility', () => {
@@ -262,7 +318,15 @@ describe('native Auto reviewer Copilot compatibility', () => {
       expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
       expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
     })
-    it.each(['impostor', 'descendant', 'alias', 'missing-resolution', 'disposed'] as const)(
+    it('uses the native initiator and frozen Session account without a reviewer sessionId', async () => {
+      const result = await run('allow', true, undefined, 'bound-account')
+      expect(result.executions).toBe(1)
+      expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
+      expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
+      expect(result.wireTokens).toEqual(['Bearer synthetic-second-access', 'Bearer synthetic-second-access'])
+    })
+    it.each(['impostor', 'descendant', 'alias', 'missing-resolution', 'disposed',
+      'other-protocol', 'canonical', 'other-provider'] as const)(
       'preserves native sampling for an unqualified %s scope', async scope => {
         const result = await run('allow', true, undefined, scope)
         expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
