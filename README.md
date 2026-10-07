@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Current release: [`0.4.0-alpha.130`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.130). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** This is still an alpha release, not a stable-channel promotion. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
+**Current release: [`0.4.0-alpha.131`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.131). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** This is still an alpha release, not a stable-channel promotion. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
 
 ## What you can do
 
@@ -85,10 +85,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.130/dsh-github-copilot-0.4.0-alpha.130.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.131/dsh-github-copilot-0.4.0-alpha.131.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.130` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.131` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -179,6 +179,8 @@ The same failure can include request-scoped native local body-write/header miles
 
 HTTP/SSE liveness separates five-minute byte idle from bounded ten-minute assistant-output silence by default. Consumer work is excluded; WebSocket/explicit `auto` stays native-only. This does not cure supplier HTTP 408s. Images are admitted against actual native-projected MIME evidence; the plugin does not own conversion or infer format support from filenames. [Image compatibility](./docs/image-input-compatibility.md).
 
+Native rc.2 Auto authorization review always asks its selected route with `temperature: 0`. On the managed account-discovered Responses route, the plugin now follows the supplier's explicit `capabilities.supports.thinking` fact and omits that unsupported field at the plugin-owned native transport boundary. An explicit `false` or absent capability preserves the caller's setting; other protocols/providers remain unchanged. The frozen reviewer request, strict verdict parser, cancellation and fail-closed tool denial are untouched, and no failed request is retried. Existing canonical Core-owned Copilot profiles are outside this mitigation because the plugin cannot intercept them without taking over another owner's adapter.
+
 ## Settings and troubleshooting
 
 Configuration is under `github-copilot`. Credentials, endpoint definitions and a static model catalog are not plugin settings.
@@ -259,14 +261,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.130/dsh-github-copilot-0.4.0-alpha.130.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.130/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.131/dsh-github-copilot-0.4.0-alpha.131.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.131/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.130.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.131.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

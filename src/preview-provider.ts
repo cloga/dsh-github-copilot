@@ -71,6 +71,7 @@ export type AccountPiModel = Model<AccountModelApi> & {
   readonly unmappedReasoningEfforts: readonly string[]
   readonly minThinkingBudget?: number
   readonly maxThinkingBudget?: number
+  readonly temperatureCompatibility: AccountModelDescriptor['sampling']['temperature']
 }
 
 const enabledLevels = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
@@ -115,6 +116,7 @@ export function accountModelFromDescriptor(descriptor: AccountModelDescriptor, b
     input: [...descriptor.input], reasoning: supported.length > 0,
     thinkingLevelMap: Object.freeze(map),
     unmappedReasoningEfforts: Object.freeze(unmapped),
+    temperatureCompatibility: descriptor.sampling.temperature,
     ...descriptor.reasoning.minThinkingBudget === undefined ? {} : { minThinkingBudget: descriptor.reasoning.minThinkingBudget },
     ...descriptor.reasoning.maxThinkingBudget === undefined ? {} : { maxThinkingBudget: descriptor.reasoning.maxThinkingBudget },
     headers: copilotPublicHeaders(),
@@ -310,7 +312,9 @@ export function createAccountProvider(
       }
       const wireOptions = model.api === 'anthropic-messages'
         ? { ...options, signal: liveness?.signal ?? lease.signal, apiKey: undefined, headers, fetch: observeResponse }
-        : { ...options, signal: liveness?.signal ?? lease.signal, headers, fetch: observeResponse, onPayload }
+        : { ...options,
+          ...responses && entry.temperatureCompatibility === 'unsupported' ? { temperature: undefined } : {},
+          signal: liveness?.signal ?? lease.signal, headers, fetch: observeResponse, onPayload }
       if (!hasApi(model, 'openai-responses') && !hasApi(model, 'openai-completions') && !hasApi(model, 'anthropic-messages')) {
         retry?.finish()
         liveness?.dispose()
