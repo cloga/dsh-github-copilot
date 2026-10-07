@@ -646,6 +646,8 @@ for (const marker of [
   'uses: ./.github/workflows/release.yml',
 ]) assert(workflow.includes(marker), `CI release gate is missing ${marker}`)
 const orderedReleaseSteps = [
+  'fetch-depth: 0',
+  'path: release-tools',
   '- run: pnpm install --frozen-lockfile',
   '- name: Install 0.2.0 Core pi-ai closure',
   '- run: pnpm verify:upstream -- dsh-upstream',
@@ -661,7 +663,9 @@ const orderedReleaseSteps = [
   '- name: Publish exact annotated tag and immutable GitHub Release',
   'scripts/publish-release.mjs',
   '- name: Publish the same verified archive to npm and verify integrity',
-  'node scripts/publish-npm.mjs',
+  'publisher_version=',
+  'cmp -- artifacts/SHA256SUMS release-tools/artifacts/SHA256SUMS',
+  'node "release-tools/scripts/publish-npm.mjs"',
 ]
 let priorReleaseStep = -1
 for (const step of orderedReleaseSteps) {
