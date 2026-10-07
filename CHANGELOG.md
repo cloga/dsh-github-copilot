@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.4.0-alpha.131 (prepared)
+## 0.4.0-alpha.132 (prepared)
+
+- Publish the reviewed #374 native Auto-review compatibility update and its complete exact-Core descriptor fixtures under a fresh immutable version.
+- Preserve the unused `v0.4.0-alpha.131` tag after its noncanonical manual annotation was rejected by the protected publication workflow; that version was not published to GitHub Releases or npm and is never moved, reused or repacked.
+
+## 0.4.0-alpha.131 (not published)
 
 - Make native rc.2 Auto authorization review compatible with managed Copilot Responses models that explicitly advertise `capabilities.supports.thinking`: omit the unsupported `temperature` field only at the plugin-owned native transport boundary (#374).
 - Preserve the frozen reviewer request, supported or unknown temperature behavior, other protocols/providers, account and cancellation fences, and native allow/deny/malformed/error handling. No prompt matching, model-name rule, retry, permission bypass or canonical-route interception is added.
