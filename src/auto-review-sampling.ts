@@ -1,6 +1,3 @@
-import { createRequire } from 'node:module'
-import { isAbsolute, relative } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type { GenerateOptions, LlmRuntime, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -30,10 +27,9 @@ export async function isNativeReviewerContext(caller: Context): Promise<boolean>
   if (base === undefined || packages === undefined) return false
   const owner = packages.packageOf(REVIEWER, base)
   if (owner?.name !== REVIEWER || owner.version !== CORE_VERSION) return false
-  const path = createRequire(base).resolve(REVIEWER)
-  const suffix = relative(owner.dir, path)
-  if (suffix === '..' || suffix.startsWith('..\\') || suffix.startsWith('../') || isAbsolute(suffix)) return false
-  const module: unknown = await import(pathToFileURL(path).href)
+  const importedOwner = packages.packageOf(REVIEWER, import.meta.url)
+  if (importedOwner?.manifestPath !== owner.manifestPath) return false
+  const module: unknown = await import(REVIEWER)
   return record(module) && typeof module.apply === 'function' && module.apply === fiber.runtime.callback
     && fiber.uid !== null && entry.fiber === fiber && entry.options.name === REVIEWER
 }

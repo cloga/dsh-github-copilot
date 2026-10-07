@@ -3,10 +3,13 @@
  * Synthetic metadata, credential, verdicts and wire only; no live inference.
  */
 import '@earendil-works/pi-ai/api/openai-responses'
+import { readFileSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { PluginPackages } from '@deepseek-ai/dsh-app-boot'
+import { PluginPackages, type RuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import * as AutoReview from '@deepseek-ai/dsh-experimental-auto-review'
 import LlmRuntime, { createMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import PermissionPresetService, { AUTO_PRESET } from '@deepseek-ai/dsh-permission-presets'
@@ -27,9 +30,17 @@ const MODEL = 'synthetic-model'
 const contexts: Context[] = []
 
 class ReviewerFixtureLoader extends Loader {
-  constructor(ctx: Context) { super(ctx, { baseUrl: import.meta.url }) }
+  constructor(ctx: Context, private fixture: { scope: ScopeCase }) { super(ctx, { baseUrl: import.meta.url }) }
   async import(name: string) {
-    if (name !== '@deepseek-ai/dsh-experimental-auto-review') throw new Error('unexpected fixture import')
+    if (name !== '@deepseek-ai/dsh-experimental-auto-review' && name !== 'fixture-reviewer-alias') {
+      throw new Error('unexpected fixture import')
+    }
+    if (this.fixture.scope === 'impostor') {
+      return { inject: AutoReview.inject, apply: (owner: Context) => AutoReview.apply(owner) }
+    }
+    if (this.fixture.scope === 'descendant') {
+      return { apply: (owner: Context) => owner.plugin(AutoReview) }
+    }
     return import('@deepseek-ai/dsh-experimental-auto-review')
   }
   write() {}
@@ -45,6 +56,25 @@ afterEach(async () => {
 })
 
 type Outcome = 'allow' | 'deny' | 'malformed' | 'http-error' | 'cancel'
+type ScopeCase = 'native' | 'impostor' | 'descendant' | 'alias' | 'missing-resolution' | 'disposed'
+
+function sourceResolution(): RuntimeResolution | undefined {
+  if (process.env.DSH_CORE_EVIDENCE !== 'tagged-source-runtime') return undefined
+  const path = process.env.DSH_TAGGED_CORE_MANIFEST
+  if (path === undefined) throw new Error('missing tagged package manifest')
+  const manifest: unknown = JSON.parse(readFileSync(path, 'utf8'))
+  if (manifest === null || typeof manifest !== 'object' || !('packages' in manifest)
+    || !Array.isArray(manifest.packages)) throw new Error('invalid tagged package manifest')
+  const entries = manifest.packages.map((value: unknown) => {
+    if (value === null || typeof value !== 'object' || !('name' in value) || typeof value.name !== 'string'
+      || !('manifestPath' in value) || typeof value.manifestPath !== 'string'
+      || !('version' in value) || typeof value.version !== 'string') throw new Error('invalid tagged package')
+    return { name: value.name, packageDir: dirname(value.manifestPath), version: value.version,
+      declarer: path, scope: 'installation' as const }
+  })
+  const profileDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
+  return { profilesDir: dirname(profileDir), profileDir, localPackageNames: [], entries, linkedRoots: [] }
+}
 
 function reviewerResponse(outcome: Outcome): Response {
   if (outcome === 'http-error') {
@@ -65,11 +95,12 @@ function reviewerResponse(outcome: Outcome): Response {
   ].join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
 
-async function run(outcome: Outcome, automatic = false, thinking?: boolean) {
+async function run(outcome: Outcome, automatic = false, thinking?: boolean, scope: ScopeCase = 'native') {
   const ctx = new Context()
   contexts.push(ctx)
   const controller = new AbortController()
   const wireBodies: Record<string, unknown>[] = []
+  const readScopes: { reviewer: boolean, entry: boolean, root: boolean, service: string }[] = []
   let wireCalls = 0
   vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
     if (String(input).endsWith('/models')) {
@@ -103,6 +134,16 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean) {
     deleteRecord: async () => { throw new Error('fixture credential must not be deleted') },
   })
   await ctx.plugin(LlmRuntime)
+  ctx.on('internal/get', (caller, name, _error, next) => {
+    const native: unknown = next()
+    if (name === 'llm') readScopes.push({
+      reviewer: caller.fiber.runtime?.callback === AutoReview.apply,
+      entry: caller.fiber.entry !== undefined,
+      root: caller.fiber.entry?.fiber === caller.fiber,
+      service: typeof native,
+    })
+    return native
+  })
   await ctx.plugin(previewPlugin, { chatRequestSettings: () => ({ responsesOmitTemperature: !automatic }) })
   await ctx.get('githubCopilotPreview')!.refresh()
   await ctx.plugin(SessionStore)
@@ -125,11 +166,12 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean) {
     defaultPreset: 'workspace-write',
   })
   if (automatic) {
-    await ctx.plugin(PluginPackages)
-    await ctx.plugin(ReviewerFixtureLoader)
-    ctx.effect(() => installAutoReviewSampling(ctx))
-    await ctx.loader.create({ name: '@deepseek-ai/dsh-experimental-auto-review' })
+    if (scope !== 'missing-resolution') await ctx.plugin(PluginPackages, { resolution: sourceResolution() })
+    await ctx.plugin(ReviewerFixtureLoader, { scope })
+    const stop = ctx.effect(() => installAutoReviewSampling(ctx))
+    await ctx.loader.create({ name: scope === 'alias' ? 'fixture-reviewer-alias' : '@deepseek-ai/dsh-experimental-auto-review' })
     await ctx.loader.await()
+    if (scope === 'disposed') await stop()
   } else {
     await ctx.plugin(AutoReview)
   }
@@ -186,7 +228,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean) {
     await Promise.all([pending, (async () => { for await (const _chunk of ordinary) { /* consume */ } })()])
   }
   const result = await pending
-  return { result, executions, wireCalls, wireBodies }
+  return { result, executions, wireCalls, wireBodies, readScopes }
 }
 
 describe('native Auto reviewer Copilot compatibility', () => {
@@ -204,21 +246,28 @@ describe('native Auto reviewer Copilot compatibility', () => {
         expect(result.executions).toBe(0)
       }
     })
-    describe.runIf(process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime')(
-      'qualified native loader reviewer-only sampling', () => {
-        it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
-          'omits only the actual reviewer temperature and preserves concurrent chat for %s', async outcome => {
-            const result = await run(outcome, true)
-            expect(result.wireCalls).toBe(2)
-            expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
-            expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
-            expect(result.executions).toBe(outcome === 'allow' ? 1 : 0)
-            expect(result.result.isError).toBe(outcome !== 'allow')
-          })
-        it.each([true, false, undefined])('does not use thinking=%s as reviewer identity', async thinking => {
-          const result = await run('allow', true, thinking)
-          expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
-          expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
-        })
+  describe('qualified native loader reviewer-only sampling', () => {
+    it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
+      'omits only the actual reviewer temperature and preserves concurrent chat for %s', async outcome => {
+        const result = await run(outcome, true)
+        expect(result.readScopes).toContainEqual({ reviewer: true, entry: true, root: true, service: 'object' })
+        expect(result.wireCalls).toBe(2)
+        expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
+        expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
+        expect(result.executions).toBe(outcome === 'allow' ? 1 : 0)
+        expect(result.result.isError).toBe(outcome !== 'allow')
       })
+    it.each([true, false, undefined])('does not use thinking=%s as reviewer identity', async thinking => {
+      const result = await run('allow', true, thinking)
+      expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
+      expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
+    })
+    it.each(['impostor', 'descendant', 'alias', 'missing-resolution', 'disposed'] as const)(
+      'preserves native sampling for an unqualified %s scope', async scope => {
+        const result = await run('allow', true, undefined, scope)
+        expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
+        expect(result.wireBodies.filter(body => body.temperature === 0)).toHaveLength(1)
+        expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(0)
+      })
+  })
 })
