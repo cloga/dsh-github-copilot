@@ -1,14 +1,14 @@
 # dsh-github-copilot
 
 [![CI](https://github.com/cloga/dsh-github-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/cloga/dsh-github-copilot/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/cloga/dsh-github-copilot?include_prereleases)](https://github.com/cloga/dsh-github-copilot/releases)
+[![Release](https://img.shields.io/github/v/release/cloga/dsh-github-copilot)](https://github.com/cloga/dsh-github-copilot/releases)
 [![License](https://img.shields.io/github/license/cloga/dsh-github-copilot)](./LICENSE)
 
 [English](./README.md) | **简体中文**
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-**当前发布：[`0.4.0-alpha.134`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.134)。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 仍为 alpha 版本，未升级为稳定发布通道。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
+**首个稳定版：[`0.4.0`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0)。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 稳定版也发布到 npm 的 `latest` dist-tag；预发布版本仍使用各自渠道 tag。稳定渠道不扩大已验证的宿主基线，也不证明实时账号、模型、搜索或 Desktop 健康状态。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
 
 ## 你可以做什么
 
@@ -45,21 +45,26 @@ node scripts/analyze-diagnostics.mjs --input "ABSOLUTE_UNIT_FILE.json" --mode pe
 | 登录并管理账号模型 | **设置 → 模型 → GitHub Copilot → Sign in** |
 | 添加／切换 GitHub 账号 | **Manage → 账号管理 → 切换**；仅限托管路由 profile |
 | 指定本 Session 后续 turn 的账号 | **Credits → Switch account**；仅选择已保存授权 |
+| 让本 Session 恢复跟随全局默认账号 | **Credits → Follow global default**；仅改变账号选择，不是模型 |
 | 排除／恢复单个模型 | **Manage → Model preferences** |
 | 自动选择模型 | 选择 **Auto · Balance / Efficiency / Intelligence** |
 | 让受支持子代理跟随父模型 | **插件 → dsh-github-copilot → 详情 → Follow parent model** |
 | 设置搜索主 provider 与最终 fallback | **插件详情 → Web search** |
+| 设置新 Session 的可见历史默认 | **设置 → 模型 → GitHub Copilot → Manage → New Session continuation default** |
+| 为已有 Session 开启可见历史续聊 | 选择托管 Copilot 模型，在输入框点 **Credits/usage** → **Visible-history continuation** → **Session policy → On** |
 | 查看账号 Credits 与上下文证据 | Copilot 会话输入框；原生 Turn Usage 独立保留 |
 
-![当前构建 Client 的账号控件与模型偏好](./docs/images/copilot-model-preferences.png)
+![Client 账号控件与模型偏好](./docs/images/copilot-model-preferences.png)
 
-当前 alpha.130 构建的真实 Client 组件，运行于隔离浏览器，账号与模型均为模拟。Manage 包含账号控件、续聊默认值和模型偏好（包括 High cost）。图片仅说明界面，不证明真实登录、模型可用性或 Desktop 已加载。
+此截图来自 0.4.0 候选版构建的 Client，账号与模型均为模拟数据。它展示 Models 账号控件、展开后的 **New Session continuation default** 以及精确 ID 模型偏好（包括 High cost）。默认值仅由策略 epoch 之后创建的合格 Session 继承，不会追溯授权已有或 seeded 历史。图片不证明真实登录、模型可用性或 Desktop 已加载。
 
 ![在 Models 中切换已保存的 GitHub 账号](./docs/images/copilot-accounts.png)
 
 ![Credits 中的会话账号选择与账号周期额度](./docs/images/copilot-accounts-credits.png)
 
-这两张截图使用相同的当前构建组件及模拟身份／额度。Models 更改全局默认，Credits 仅更改本 Session 后续 turn 的账号；不包含真实账号或账单数据。[截图来源](./docs/images/copilot-current-provenance.json)随图片一同分发。
+![composer 的 Credits 弹层中已有 Session 的可见历史策略](./docs/images/copilot-session-continuation.png)
+
+这些 Credits 截图使用 0.4.0 候选版 Client 构建，以及模拟身份、额度和 Session 状态。账号截图展示本 Session 账号选择的 **Follow global default**；续聊截图展示持久的 **Session policy → On**、同账号也适用的损失说明及下一轮边界。不含真实账号或账单数据，不会发送或重试消息。[截图来源](./docs/images/copilot-current-provenance.json)随图片一同分发。
 
 ## 安装与登录
 
@@ -76,10 +81,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/dsh-github-copilot-0.4.0-alpha.134.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0/dsh-github-copilot-0.4.0.tgz
 ```
 
-**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.134`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器接受精确稳定版 npm spec `dsh-github-copilot@0.4.0`；稳定版发布到 npm `latest` dist-tag。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -130,13 +135,13 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 ## 子代理与搜索
 
-![当前父模型跟随及 Web search 控件](./docs/images/copilot-search-routing.png)
+![父模型跟随及 Web search 控件](./docs/images/copilot-search-routing.png)
 
-当前 alpha.130 构建的插件详情页，设置／provider 为模拟，诊断为暂停且无数据。截图没有发起搜索、采集或调用真实服务。
+此截图来自 0.4.0 候选版构建的 Client，展示父模型跟随、Web search 路由和默认关闭的本地诊断。设置／provider 为模拟，诊断为暂停且无数据。截图没有发起搜索、采集或调用真实服务；参见[来源记录](./docs/images/copilot-current-provenance.json)。
 
 **Follow parent model**默认关闭，在当前 profile 内作用于托管 Copilot 父会话的受支持原生子代理／Team mate。固定父模型从子会话下一 turn 生效；Auto 父会话传递准确偏好，子会话按自己的上下文选模。子会话的显式选择优先。运行中 turn、root、fork、其它 provider、旧专用策略不被改写；关闭宽泛开关也不移除旧绑定。[父模型跟随合同](./docs/parent-model-follow.md)。
 
-**Web search**仅有两个常规选项：主 provider 与最终 fallback。Auto 在存在对应搜索注册时跟随发起 Chat provider；固定 provider 不随 Chat 模型改变。最多尝试一个不同的最终 fallback，明确提示可能费用；取消或账号 proof 失效不授权 fallback。
+**Web search**位于插件详情页，仅有两个常规路由选项：主 provider 与最终 fallback。无需 Copilot 登录或发现账号模型即可保存路由，但选项必须是已注册的搜索 provider。保存只记录路由，不证明 Copilot 搜索能力；实际搜索时才检查能力。Auto 在存在对应搜索注册时跟随发起 Chat provider；固定 provider 不随 Chat 模型改变。最多尝试一个不同的最终 fallback，明确提示可能费用；取消或账号 proof 失效不授权 fallback。
 
 Copilot 搜索要求当前账号／协议证据及能力 proof。固定／fallback Copilot 保留非空旧 `searchModel`；否则最多考虑三个账号 Responses 候选。最终用户查询只发送一次，不跨候选重放。设置保存或 Chat 成功不证明 hosted search 可用。[搜索路由与组合](./docs/session-search-routing.md)。
 
@@ -209,9 +214,11 @@ HTTP/SSE liveness 默认区分 5 分钟字节 idle 和有界的 10 分钟助手�
 
 账号保存确认后立即恢复控件，不等待额度读取。同账号仅改变跟随方式时保留已确认归属的额度，不重复读取；真正换账号时清除旧额度，独立加载新快照，不阻塞后续账号编辑。额度读取失败不会撤销已经确认的账号选择。
 
-Credits 账号面板显示当前账号和 **切换**，下拉菜单只列已有账号，为当前实际账号打勾，长列表内部滚动。**跟随全局默认**是独立复选框：开启时清除本会话指定，关闭时固定当前账号；手动选择账号也会固定，即使所选恰好是当前全局默认。两种操作均保持续聊确认和 revision 校验保存。添加账号只留在 Models，其 **管理** 展开账号管理与共享模型偏好，菜单底部添加账号但不自动选中，并保留重新授权与受保护的本地账号移除。两处都没有账号搜索框。按精确模型 ID 共享排除偏好，可用性仍按账号验证。参见[已确认体验与交互 mock](./docs/account-management-experience.md)。
+Credits 账号面板显示当前账号和 **切换**，下拉菜单只列已有账号，为当前实际账号打勾，长列表内部滚动。**跟随全局默认**是独立复选框，跟随的是全局默认**账号**，不是全局默认模型：开启时清除本 Session 的账号指定，关闭时固定当前账号；手动选择账号也会固定，即使所选恰好是当前全局默认。该选择只影响本 Session 后续 turn，不影响运行中的 turn 或其它 Session。两种操作均保持续聊确认和 revision 校验保存。添加账号只留在 Models，其 **管理** 展开账号管理与共享模型偏好，菜单底部添加账号但不自动选中，并保留重新授权与受保护的本地账号移除。两处都没有账号搜索框。按精确模型 ID 共享排除偏好，可用性仍按账号验证。参见[已确认体验与交互 mock](./docs/account-management-experience.md)。
 
-[可见历史续聊模式](./docs/session-continuation.md)放在账号切换旁，不再常驻输入框上方。功能首次成功激活后创建的非继承 Session 默认开启；已有 Session、继承历史仍需明确授权。全局默认只影响新 Session，Session 开关跨账号及重启保留，直到关闭。关闭时切换到不同账号，提供持续开启、保持关闭或取消，不再提供仅下一轮模式。启用后的每个新 turn 省略旧加密推理及其内嵌摘要，同账号也适用；当前轮新推理、可见消息、工具记录和磁盘历史不变。授权不自动发送或重试，不解决额度或上下文超限。精确回放失败使用同一个持久策略，用户另行点击原生重试。当前 Core 没有公开 Models 直达 API，Chat 不展示不可用的管理入口；完整管理仍在设置 → 模型 → GitHub Copilot → 管理。
+[可见历史续聊模式](./docs/session-continuation.md)有两个控件：**Manage → New Session continuation default** 设置符合条件的新 Session 如何继承默认；**Credits → Visible-history continuation → Session policy** 控制当前 Session。首次成功激活时记录初始默认开启 epoch，只有在该 epoch 后创建的非 seeded 新 Session 才继承；已有、seeded／forked 或状态未知的历史不会追溯启用。更改全局默认只影响未来 Session。
+
+“New Session”说的是默认继承对象，并非只处理第一条消息：启用的 Session policy 会在每个后续托管 Copilot turn 准入时冻结，并同样控制该 Session 的托管原生压缩摘要。为已有且符合条件的 Session 开启时，选择托管 Copilot 模型，点击输入框的 **Credits/usage** 控件，展开 **Visible-history continuation**，再于 **Session policy** 选择 **On**。此控件只出现在仍打开且使用托管账号发现路由的 Session；canonical/native 路由不显示。选择前可见有损说明。开启即明确同意省略旧加密推理及内嵌摘要，同账号也适用；隐藏细节可能丢失，可见消息、工具关系和原历史保留。该策略跨账号切换与重启持久保留，直到更改；从下一 turn 生效，已准入 turn 保持原先冻结的策略。关闭时切换到不同账号会提供持续开启、保持关闭或取消，没有仅下一轮模式。`/copilot-compact visible-history` 是通过已选恢复引擎执行的另一种一次性操作，不等同于持久 Session 设置。两者都不会自动发送／重试，也不解决额度或上下文超限；精确回放失败仍使用同一个持久策略，用户另行点击原生重试。当前 Core 没有公开 Models 直达 API，Chat 不展示不可用的管理入口。
 
 上下文证据与回放恢复以紧凑、居中提示显示在输入框上方，宽度遵循原生输入框。模型、项数和状态刷新收进默认折叠的技术详情；有损恢复仍需明确确认。上下文采样只在明确事件时告警，可按 Session／事件关闭，且不会断言原生仪表当前值；原生统计不变。切换账号不会让旧加密推理自动变得可跨账号使用。简短 scope 错误指向显式恢复或新会话；有界、脱敏的请求结构计数留在 Host 诊断中，不挤占主错误。**已授权**只表示授权已准备好，不表示消息已发送或恢复已成功。
 
@@ -253,14 +260,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/dsh-github-copilot-0.4.0-alpha.134.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0/dsh-github-copilot-0.4.0.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.134.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

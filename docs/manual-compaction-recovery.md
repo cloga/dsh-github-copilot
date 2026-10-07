@@ -43,6 +43,18 @@ Status and cancellation apply only to the invoking Agent's latest job. Duplicate
 
 For a verified `COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH`, repeating the same summary cannot repair supplier-scoped encrypted replay. The existing **Visible-history continuation** Session policy now authorizes managed Responses summaries as well as chat: ordinary `/compact`, `/copilot-compact` and automatic compaction apply it before dispatch, without a failure-first retry or extra command. The active turn retains its captured persistent policy; idle summaries capture the Session policy. Disabled/unknown policy never silently enables loss, and legacy next-turn-only consent does not authorize summaries. Stock and selected recovery engines remain independently owned. An additive composer notice reports filtering and distinguishes native commit, failure and cancellation; exact scope rejection when off offers the same persistent enable control. This is not a capacity/timeout/quota cure or permission to enable an absent engine.
 
+For an existing open Session on the managed account-discovered Copilot route,
+the persistent control is in the composer **Credits/usage** popover: expand
+**Visible-history continuation**, review the loss disclosure, then choose
+**On** under **Session policy**. The control is not shown for the
+canonical/native route. Enabling applies to subsequent turns and summaries in
+that Session even when the account does not change; an already admitted turn
+keeps its captured policy. The **New Session continuation default** in Models
+is separate and only determines inheritance for eligible new Sessions. See
+[the synthetic composer capture](./images/copilot-session-continuation.png) and
+[Session continuation](./session-continuation.md) for the complete admission,
+scope and persistence contract.
+
 `/copilot-compact visible-history` remains explicit consent for **one lossy manual compaction operation** through the selected engine, without changing the persistent checkbox. Managed Responses summary requests omit historical encrypted reasoning items **and their embedded summaries**, while retaining visible messages, tool calls/results, the system head and native final directive. Hidden reasoning may contain details absent from visible messages. Review this loss before enabling the policy or issuing the one-time command.
 
 Consent is local to the native summarizer's exact cancellation signal, Session and summary model, including its bounded segments. It is revoked on completion, failure, cancellation or teardown. No unrelated request, subsequent command or automatic retry inherits it. Unknown or incomplete reasoning fails closed. No replay is decrypted, fabricated or written back; original source events remain unchanged and only Core can commit the final smaller checkpoint. The command adds no retry or model/account switch, and does not repair supplier scope. Missing managed integration or an unsupported summary route fails explicitly.

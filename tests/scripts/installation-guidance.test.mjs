@@ -48,11 +48,14 @@ test('current user guides retain task-oriented entry points and honest screensho
     const text = await doc(path)
     assert.ok(text.includes(pkg.version), path)
     for (const image of ['copilot-model-preferences.png', 'copilot-search-routing.png',
-      'copilot-accounts.png', 'copilot-accounts-credits.png']) {
+      'copilot-accounts.png', 'copilot-accounts-credits.png', 'copilot-session-continuation.png']) {
       assert.ok(text.includes(`./docs/images/${image}`), `${path}: ${image}`)
       const bytes = await readFile(new URL(`../../docs/images/${image}`, import.meta.url))
       assert.deepEqual(bytes.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
     }
+    for (const marker of ['Follow parent model', 'Web search', 'Local diagnostics',
+      'Model preferences', 'Follow global default', 'New Session continuation default',
+      'copilot-session-continuation.png']) assert.ok(text.includes(marker), `${path}: ${marker}`)
     assert.ok(text.includes('./CHANGELOG.md'), path)
     assert.ok(text.includes('./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics'), path)
   }
@@ -70,28 +73,40 @@ test('current user guides retain task-oriented entry points and honest screensho
 test('current screenshot provenance covers every packaged README capture', async () => {
   const pkg = JSON.parse(await doc('package.json'))
   const provenance = JSON.parse(await doc('docs/images/copilot-current-provenance.json'))
-  assert.match(provenance.clientVersion, /^\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/)
+  assert.match(provenance.clientVersion, /^\d+\.\d+\.\d+$/)
   assert.match(provenance.sourceCommit, /^[a-f0-9]{40}$/)
   assert.match(provenance.builtClientSha256, /^[a-f0-9]{64}$/)
+  assert.match(provenance.continuationComponentBundleSha256, /^[a-f0-9]{64}$/)
   assert.match(provenance.source, /Local pnpm build/)
+  assert.match(provenance.source, /release-candidate commit/)
   assert.doesNotMatch(provenance.source, /Actual published archive/)
   assert.ok(pkg.files.includes('docs/images/'))
   assert.deepEqual(provenance.capture.viewports, [920, 375])
   assert.deepEqual(provenance.capture.themes, ['dark', 'light'])
   assert.equal(provenance.capture.horizontalOverflow, false)
-  assert.equal(Object.keys(provenance.components).length, 4)
+  assert.equal(Object.keys(provenance.components).length, 5)
   for (const image of Object.keys(provenance.components)) {
     const bytes = await readFile(new URL(`../../docs/images/${image}`, import.meta.url))
     assert.equal(createHash('sha256').update(bytes).digest('hex'), provenance.imageSha256[image], image)
     assert.ok(bytes.readUInt32BE(20) > 400, `${image}: meaningful capture, not a clipped popup`)
   }
   const fixture = await doc(provenance.fixture)
-  assert.ok(fixture.includes(`version:'${provenance.clientVersion}'`))
+  assert.ok(fixture.includes("version:'__CLIENT_VERSION__'"))
   assert.match(fixture, /connect-src 'none'/)
   assert.match(fixture, /src="\/client\.js"/)
   assert.match(fixture, /UI\.GitHubCopilotCompactAccount/)
   assert.match(fixture, /UI\.CopilotUsageCard/)
   assert.match(fixture, /UI\.CopilotPluginSettingsPage/)
+  assert.match(fixture, /CopilotContinuation\.SessionContinuationCard/)
+  const continuation = await doc('src/session-continuation-ui.ts')
+  assert.match(continuation, /Session policy/)
+  const server = await doc('tests/browser/serve-search-routing.mjs')
+  assert.match(server, /replaceAll\('__CLIENT_VERSION__', version\)/)
+  assert.match(server, /readme-capture\/continuation\.js/)
+  const bundleConfig = await doc('tests/browser/capture-continuation.config.ts')
+  assert.match(bundleConfig, /continuation-capture-entry\.ts/)
+  const captureEntry = await doc('tests/browser/continuation-capture-entry.ts')
+  assert.match(captureEntry, /src\/session-continuation-ui\.ts/)
 })
 
 test('README contracts stay bilingual, current and separate native summary routes', async () => {
