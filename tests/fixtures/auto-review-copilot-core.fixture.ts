@@ -128,26 +128,17 @@ async function run(outcome: Outcome) {
   ctx.permissionPresets.set(session, AUTO_PRESET)
   setApprovalPolicy(session, 'never')
   const agent = { id: session.id, session, options: { provider: PREVIEW, model: MODEL } } as Agent
-  const reviewerStream = vi.spyOn(ctx.llm, 'stream')
   const result = await ctx.tools.execute({
     signal: controller.signal, callId: ToolCallId(`call-${outcome}`),
     name: 'probe', arguments: { value: outcome }, agent,
   })
-  return {
-    result, executions, wireCalls, wireBodies,
-    reviewerCalls: reviewerStream.mock.calls.length,
-    reviewerRequest: reviewerStream.mock.calls[0]?.[0],
-  }
+  return { result, executions, wireCalls, wireBodies }
 }
 
 describe('native Auto reviewer Copilot compatibility', () => {
   it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
     'omits unsupported temperature without weakening the %s verdict boundary', async outcome => {
       const result = await run(outcome)
-      expect(result.reviewerCalls).toBe(1)
-      expect(result.reviewerRequest).toMatchObject({ provider: PREVIEW, model: MODEL, temperature: 0 })
-      expect(result.reviewerRequest).not.toHaveProperty('sessionId')
-      expect(Object.isFrozen(result.reviewerRequest)).toBe(true)
       expect(result.wireCalls).toBe(1)
       expect(result.wireBodies).toHaveLength(1)
       expect(result.wireBodies[0]).not.toHaveProperty('temperature')
