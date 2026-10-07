@@ -3,10 +3,10 @@
 ## Delivery status
 
 This document records the approved requirements and implementation design for
-issues #297 and #305. Candidate behavior is not released or installed until the
-acceptance gates below complete. The existing single-account behavior remains
-the compatibility baseline. The current source candidate is `0.4.0-alpha.107`;
-publication, installation and loaded runtime state are separate evidence.
+issues #297 and #305. It is not a release receipt or a claim of current
+installation/runtime state. The existing single-account behavior remains the
+compatibility baseline; publication, installation and loaded runtime state are
+separate evidence.
 
 ## Requirements
 
@@ -262,10 +262,17 @@ the preference while a turn runs leaves that turn's old account pinned; the
 popover identifies it separately. Other Sessions are unchanged. Unknown identity
 is unavailable, not a stale username presented as current.
 
-One Models **Manage** groups account management and shared exact-ID model
-preferences. The Credits account panel contains continuation policy; when off,
-an account change pauses for explicit persistent-enable/keep-off/cancel consent.
-See [the approved experience and mock](./account-management-experience.md).
+One Models **Manage** groups account management, the new-Session continuation
+default and shared exact-ID model preferences. The existing Session policy is
+under the composer Credits/usage popover → **Visible-history continuation** →
+**Session policy**; it appears only for an open Session whose effective model
+is the managed account-discovered Copilot route. Choose **On** after reviewing
+the loss disclosure. This is distinct from the Models new-Session default and
+applies to subsequent turns and managed native compaction summaries, including
+on the same account. Active turns keep their captured policy; enabling does not
+send or retry a message. See the [synthetic composer capture](./images/copilot-session-continuation.png)
+and [continuation contract](./session-continuation.md). When off, an account change pauses for explicit
+persistent-enable/keep-off/cancel consent. See the [approved experience and mock](./account-management-experience.md).
 
 Completed managed turns have a compact **Account** disclosure alongside native
 Usage/selection actions through the public assistant-actions slot. This is

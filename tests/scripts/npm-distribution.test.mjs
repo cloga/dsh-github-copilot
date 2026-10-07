@@ -47,6 +47,10 @@ test('distribution channels are explicit and never inferred from lexical version
   for (const [v, tag] of [['1.0.0-alpha.10', 'alpha'], ['1.0.0-beta.2', 'beta'], ['1.0.0-rc.1', 'rc'], ['1.0.0', 'latest']]) {
     assert.equal(distributionTag(v), tag)
   }
+  const stableManifest = { ...manifest(), version: '0.4.0',
+    publishConfig: { ...manifest().publishConfig, tag: 'latest' } }
+  validatePublicPackage(stableManifest)
+  assert.equal(distributionTag(stableManifest.version), stableManifest.publishConfig.tag)
   for (const v of ['1.0.0-preview.1', 'v1.0.0', '1.0.0+build']) assert.throws(() => distributionTag(v))
 })
 

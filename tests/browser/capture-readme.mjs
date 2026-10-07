@@ -24,6 +24,7 @@ try {
   const open = async (surface, theme = 'dark') => {
     await page.goto(new URL(`/readme?surface=${surface}&theme=${theme}`, base).href)
     await page.waitForFunction(() => window.fixture?.synthetic === true)
+    await page.waitForFunction(() => window.CopilotContinuation?.SessionContinuationCard !== undefined)
     if (surface === 'models') {
       await page.getByRole('button', { name: 'Manage', exact: true }).click()
       await page.getByText('Current default', { exact: true }).first().waitFor()
@@ -41,6 +42,8 @@ try {
   await open('models')
   await page.locator('summary').filter({ hasText: 'Model preferences ·' }).click()
   await page.getByRole('checkbox', { name: /High cost/ }).first().waitFor()
+  await page.locator('summary').filter({ hasText: 'New Session continuation default' }).click()
+  await page.getByRole('checkbox', { name: /Enable visible-history continuation for new Sessions/ }).waitFor()
   await capture('copilot-model-preferences.png', page.locator('main'))
   await open('models')
   await page.getByRole('button', { name: 'Switch', exact: true }).click()
@@ -52,6 +55,11 @@ try {
   assert.ok((await page.locator('[data-copilot-usage-panel]').boundingBox()).height > 400,
     'Place Credits at the composer-like bottom anchor so its quota panel is not clipped')
   await capture('copilot-accounts-credits.png', page.locator('[data-copilot-usage-panel]'))
+  await open('credits')
+  await page.locator('summary').filter({ hasText: 'Visible-history continuation' }).click()
+  await page.getByRole('combobox', { name: 'Session policy' }).waitFor()
+  await page.getByText('The active turn keeps its policy; changes apply next turn.').waitFor()
+  await capture('copilot-session-continuation.png', page.locator('[data-copilot-usage-panel]'))
   await open('settings')
   await capture('copilot-search-routing.png', page.locator('main'))
   for (const width of [920, 375]) for (const theme of ['dark', 'light']) {
@@ -60,9 +68,13 @@ try {
       await open(surface, theme)
       if (surface === 'models') {
         await page.locator('summary').filter({ hasText: 'Model preferences ·' }).click()
+        await page.locator('summary').filter({ hasText: 'New Session continuation default' }).click()
         await page.getByRole('button', { name: 'Switch', exact: true }).click()
       }
-      if (surface === 'credits') await page.getByRole('button', { name: 'Switch account', exact: true }).click()
+      if (surface === 'credits') {
+        await page.locator('summary').filter({ hasText: 'Visible-history continuation' }).click()
+        await page.getByRole('button', { name: 'Switch account', exact: true }).click()
+      }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false,
         `${surface}/${theme}/${width}: horizontal overflow`)
       const menu = page.locator('[popover][data-copilot-account-selector]')
@@ -77,25 +89,28 @@ try {
   assert.deepEqual(errors, [], 'No page errors')
   assert.deepEqual(external, [], 'No external requests')
   const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
+  const continuationBundle = await readFile(resolve(root, 'artifacts/readme-capture/continuation.js'))
   const provenance = {
     clientVersion: pkg.version,
     sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-    source: 'Local pnpm build from the unchanged current release source; not extracted published archive bytes. Provenance accompanies packaged image assets.',
+    source: `Local pnpm build from this ${pkg.version} release-candidate commit; not extracted from published archive bytes. Provenance accompanies packaged image assets.`,
     builtClientSha256: hash(await readFile(resolve(root, 'lib/client.js'))),
+    continuationComponentBundleSha256: hash(continuationBundle),
     synthetic: true,
     fixture: 'tests/browser/readme.html',
-    reproduce: 'pnpm build; node tests/browser/serve-search-routing.mjs; set PLAYWRIGHT_MODULE to an existing Playwright index.mjs; node tests/browser/capture-readme.mjs <printed-loopback-URL>',
+    reproduce: 'pnpm build; pnpm exec tsdown --config tests/browser/capture-continuation.config.ts; node tests/browser/serve-search-routing.mjs; set PLAYWRIGHT_MODULE to an existing Playwright index.mjs; node tests/browser/capture-readme.mjs <printed-loopback-URL>',
     components: {
       'copilot-model-preferences.png': 'GitHubCopilotCompactAccount',
       'copilot-accounts.png': 'GitHubCopilotCompactAccount',
       'copilot-accounts-credits.png': 'CopilotUsageCard',
+      'copilot-session-continuation.png': 'CopilotUsageCard + SessionContinuationCard',
       'copilot-search-routing.png': 'CopilotPluginSettingsPage',
     },
     imageSha256: captures,
     capture: { browser: `Microsoft Edge ${browser.version()}`, viewports: [920, 375], themes: ['dark', 'light'],
       horizontalOverflow: false, pageErrors: errors, externalRequests: false },
-    limits: 'Actual current built Client components with synthetic settings, identities, models and quota. No live OAuth, model availability, search, billing, collection, persistence or loaded Desktop proof. Credits captures only the usage/account component, not its parent-owned continuation disclosure. Desktop images are committed; narrow/light states were checked for overflow and menu dismissal, not native Desktop integration.',
+    limits: 'Actual current built Client components with synthetic settings, identities, models and quota. SessionContinuationCard is an isolated test-only bundle of the same source component, composed through the real CopilotUsageCard prop; it is not a new package export. No live OAuth, model availability, search, billing, collection, persistence or loaded Desktop proof. Desktop images are committed; narrow/light states were checked for overflow and menu dismissal, not native Desktop integration.',
   }
   await writeFile(resolve(root, 'docs/images/copilot-current-provenance.json'), JSON.stringify(provenance, null, 2) + '\n')
-  console.log('Captured four current-component images; desktop/narrow, dark/light checks passed.')
+  console.log('Captured five current-component images; desktop/narrow, dark/light checks passed.')
 } finally { await browser.close() }

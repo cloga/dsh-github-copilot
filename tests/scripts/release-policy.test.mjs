@@ -92,6 +92,15 @@ test('plan releases a missing tag or exact annotated tag at HEAD with prerelease
   assert.deepEqual(plan({ tagInfo: tagInfo({ sha: head }) }), expected)
 })
 
+test('0.4.0 promotion keeps stable metadata, exact README URLs and stable release state', () => {
+  const stable = '0.4.0'
+  const stableMetadata = metadata(stable)
+  assert.doesNotThrow(() => assertReleaseMetadata({ version: stable, ...stableMetadata }))
+  assert.deepEqual(assessPlan({ manifest: { name, version: stable }, head }), {
+    release: true, tag: `v${stable}`, sha: head, prerelease: false,
+  })
+})
+
 test('plan reconciles the exact tagged commit after docs-only commits', () => {
   const expected = { release: true, tag: `v${version}`, sha: previous, prerelease: true }
   assert.deepEqual(plan({ tagInfo: tagInfo(), files: ['README.md', 'tests/a.spec.ts'] }), expected)

@@ -1,14 +1,14 @@
 # dsh-github-copilot
 
 [![CI](https://github.com/cloga/dsh-github-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/cloga/dsh-github-copilot/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/cloga/dsh-github-copilot?include_prereleases)](https://github.com/cloga/dsh-github-copilot/releases)
+[![Release](https://img.shields.io/github/v/release/cloga/dsh-github-copilot)](https://github.com/cloga/dsh-github-copilot/releases)
 [![License](https://img.shields.io/github/license/cloga/dsh-github-copilot)](./LICENSE)
 
 **English** | [简体中文](./README.zh.md)
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Current release: [`0.4.0-alpha.134`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.134). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** This is still an alpha release, not a stable-channel promotion. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
+**First stable release: [`0.4.0`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0). Supported host: official DSH / Windows Desktop `0.2.0-rc.2`.** The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
 
 ## What you can do
 
@@ -54,21 +54,26 @@ Replace the placeholders with the reviewed file/profile and a new absolute outpu
 | Sign in and manage account models | **Settings → Models → GitHub Copilot → Sign in** |
 | Add or switch GitHub accounts | **Manage → Account management → Switch**; managed-only profiles |
 | Select this Session's next-turn account | **Credits → Switch account**; saved authorizations only |
+| Return this Session to the global default account | **Credits → Follow global default**; account selection only, not the model |
 | Exclude or restore individual models | **Manage → Model preferences** |
 | Choose models automatically | Pick **Auto · Balance**, **Auto · Efficiency** or **Auto · Intelligence** |
 | Follow a parent model in supported subagents | **Plugins → dsh-github-copilot → Details → Follow parent model** |
 | Choose primary/fallback search providers | **Plugin details → Web search** |
+| Set the visible-history default for new Sessions | **Settings → Models → GitHub Copilot → Manage → New Session continuation default** |
+| Enable visible-history for an existing Session | Select a managed Copilot model, open the composer **Credits/usage** pill → **Visible-history continuation** → **Session policy → On** |
 | Read account Credits and context evidence | Copilot Session composer; native Turn Usage stays separate |
 
-![Current built Client account controls and model preferences](./docs/images/copilot-model-preferences.png)
+![Client account controls and model preferences](./docs/images/copilot-model-preferences.png)
 
-Current alpha.130 built Client components in an isolated browser, with synthetic accounts and models. Manage contains account controls, continuation defaults and model preferences, including High cost. This is presentation evidence, not live sign-in, model availability or loaded Desktop proof.
+This 0.4.0 release-candidate capture uses the built Client with synthetic accounts and models. It shows the Models account controls, the expanded **New Session continuation default**, and exact-ID model preferences including High cost. The default applies only to eligible Sessions created after its policy epoch; it does not enroll existing or seeded histories. This is not live sign-in, model availability or loaded Desktop proof.
 
 ![Switching between saved GitHub accounts in Models](./docs/images/copilot-accounts.png)
 
 ![Session account selection and account-wide quota in Credits](./docs/images/copilot-accounts-credits.png)
 
-These captures use the same current built components and synthetic identities/quota. Models changes the global default; Credits changes only this Session's subsequent turns. They do not show real accounts or billing data. [Capture provenance](./docs/images/copilot-current-provenance.json) accompanies the images.
+![Existing Session visible-history policy in the composer Credits popover](./docs/images/copilot-session-continuation.png)
+
+These Credits captures use the 0.4.0 release-candidate Client and synthetic identities, quota and Session state. The account panel shows **Follow global default** for this Session's account choice; the continuation capture shows the persistent **Session policy → On** disclosure, same-account loss notice and next-turn boundary. No real account or billing data is shown; no message is sent or retried. [Capture provenance](./docs/images/copilot-current-provenance.json) accompanies the images.
 
 ## Install and sign in
 
@@ -85,10 +90,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/dsh-github-copilot-0.4.0-alpha.134.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0/dsh-github-copilot-0.4.0.tgz
 ```
 
-For **Desktop**, its native package manager accepts `dsh-github-copilot@0.4.0-alpha.134` after publication. Official rc.2's **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts the exact stable npm spec `dsh-github-copilot@0.4.0`; stable versions publish on npm's `latest` dist-tag. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -139,13 +144,13 @@ Explicit Auto intent survives native pending-selection consumption and cold rest
 
 ## Subagents and search
 
-![Current parent-following and Web search controls](./docs/images/copilot-search-routing.png)
+![Parent-following and Web search controls](./docs/images/copilot-search-routing.png)
 
-Current alpha.130 built plugin-detail page with synthetic settings/providers and paused, empty diagnostics. No search, collection or live service was invoked for this capture.
+This 0.4.0 release-candidate capture shows the built Client's parent-following switch, Web search routing and default-off local diagnostics together. Settings/providers and paused, empty diagnostics are synthetic. No search, collection or live service was invoked for the capture; see [provenance](./docs/images/copilot-current-provenance.json).
 
 **Follow parent model** defaults Off and applies profile-wide to supported native children/Team mates of managed Copilot parents. Fixed parents apply on each child's next turn; Auto parents pass the exact preference while each child evaluates its own context. Child-owned explicit selections win. Running turns, roots, forks, other providers and dedicated legacy policies are not rewritten. Existing legacy bindings remain independent when the broad switch is Off. [Parent-following contract](./docs/parent-model-follow.md).
 
-**Web search** has two ordinary controls: primary provider and final fallback. Auto follows the initiating Chat provider when a corresponding search registration exists; fixed choices stay fixed when Chat changes. At most one distinct final fallback is tried, with possible charges disclosed. Cancellation/account-proof loss never authorizes a fallback.
+**Web search** has two ordinary controls in the plugin-detail page: primary provider and final fallback. Routing can be saved without Copilot sign-in or account-model discovery; the choices must be registered search providers. Saving only records routing and does not prove Copilot search capability, which is checked when a search runs. Auto follows the initiating Chat provider when a corresponding search registration exists; fixed choices stay fixed when Chat changes. At most one distinct final fallback is tried, with possible charges disclosed. Cancellation/account-proof loss never authorizes a fallback.
 
 Copilot search requires current account/protocol evidence and capability proof. Fixed/fallback Copilot preserves a nonempty legacy `searchModel`; otherwise it considers at most three account-owned Responses candidates. The final user query is sent once, never replayed across those candidates. A saved choice or successful Chat request does not prove hosted search. [Search routing and composition](./docs/session-search-routing.md).
 The legacy `github-copilot.searchFallback` setting applies only to its separate
@@ -218,9 +223,11 @@ Configuration is under `github-copilot`. Credentials, endpoint definitions and a
 
 Confirmed account saves restore controls immediately, independently of quota loading. Changing only follow mode for the same account retains its attributed quota without another read. Switching accounts clears the old quota and loads the new snapshot without blocking further account edits; quota errors do not undo a confirmed selection.
 
-The Credits account panel shows the current account and **Switch account**. Its dropdown lists only configured accounts, marks the effective account and scrolls long lists internally. **Follow global default** is a separate checkbox: enabling it clears the Session override; disabling it fixes the current account. Choosing any account also fixes it, even if it is today's default. Both actions retain continuation confirmation and revision-checked saving. Account addition belongs only in Models, where one **Manage** disclosure contains account management and shared model preferences. Models retains Add in its dropdown footer without selecting the new account, plus guarded local removal and reauthorization. Neither surface has account search. Exact-ID exclusions are shared across accounts; availability is account-specific. See the [approved experience and interactive mock](./docs/account-management-experience.md).
+The Credits account panel shows the current account and **Switch account**. Its dropdown lists only configured accounts, marks the effective account and scrolls long lists internally. **Follow global default** is a separate checkbox for the account only—not the global model choice: enabling it clears this Session's account override; disabling it fixes the current account. Choosing any account also fixes it, even if it is today's default. The choice affects subsequent turns in this Session, not a running turn or another Session. Both actions retain continuation confirmation and revision-checked saving. Account addition belongs only in Models, where one **Manage** disclosure contains account management and shared model preferences. Models retains Add in its dropdown footer without selecting the new account, plus guarded local removal and reauthorization. Neither surface has account search. Exact-ID exclusions are shared across accounts; availability is account-specific. See the [approved experience and interactive mock](./docs/account-management-experience.md).
 
-[Visible-history continuation](./docs/session-continuation.md) is configured beside account switching, not permanently above the composer. New unseeded Sessions default on after the feature's first successful activation; existing Sessions and inherited histories remain off unless explicitly authorized. Global defaults affect new Sessions only; Session on/off overrides persist across accounts/restarts until disabled. With continuation off, a different-account switch offers persistent enable, keep off or cancel, without a one-turn mode. Each new enabled turn omits prior encrypted reasoning and embedded summaries, even on the same account; current-turn reasoning, visible messages, tools and disk history remain unchanged. Authorization never auto-sends/retries and is not a quota/context cure. Exact replay failures expose the same policy and require a separate native retry. The pinned Core lacks a public Models deep link; Chat omits the nonfunctional management entry. Full management remains in Settings → Models → GitHub Copilot → Manage.
+[Visible-history continuation](./docs/session-continuation.md) has two controls: **Manage → New Session continuation default** sets what eligible new Sessions inherit; **Credits → Visible-history continuation → Session policy** controls the current Session. The initial default-on epoch is recorded at first successful activation. Only new, unseeded Sessions created after that epoch inherit it; existing, seeded/forked, or unknown histories are not enrolled retroactively. Changing the global default affects future Sessions only.
+
+The name “New Session” describes default inheritance, not a one-message feature: an enabled Session policy is frozen at admission for each subsequent managed Copilot turn and also governs that Session's managed native compaction summaries. For an existing eligible Session, select the managed Copilot model, open the composer **Credits/usage** pill, expand **Visible-history continuation**, then choose **On** in **Session policy**. This control appears only for an open Session using the managed account-discovered route; it is not shown for the canonical/native route. The loss disclosure is shown before the choice. Enabling is explicit consent to omit prior encrypted reasoning and embedded summaries, even on the same account; hidden details may be lost, while visible messages, tool relations and source history remain. The policy persists across account switches and restarts until changed. It takes effect on the next turn; an already admitted turn keeps its captured policy. With continuation off, switching to a different account offers persistent enable, keep off or cancel—there is no next-turn-only choice. `/copilot-compact visible-history` is a separate one-time operation through the selected recovery engine, not the persistent Session setting. Neither path auto-sends/retries or cures quota/context limits; exact replay failures use the same persistent Session policy and require a separate native retry. The pinned Core lacks a public Models deep link, so Chat omits the nonfunctional management entry.
 
 Context evidence and Replay recovery use compact, centered notices bounded by the native composer width. Model/item counts and status refresh live in collapsed technical details; loss consent remains explicit. Context sampling warns only for a concrete incident, can be dismissed for that Session/incident, and never asserts the native meter's current value; native statistics stay unchanged. Switching accounts does not make old encrypted reasoning portable. The concise scope error points to explicit recovery or a new conversation; bounded, sanitized dispatch counts stay in Host diagnostics, not the main error. **Authorized** means permission is ready, not that a message was sent or recovery succeeded.
 
@@ -262,14 +269,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/dsh-github-copilot-0.4.0-alpha.134.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0/dsh-github-copilot-0.4.0.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.134.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

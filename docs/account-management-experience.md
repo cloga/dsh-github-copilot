@@ -34,9 +34,23 @@ keeps its admitted account and policy. Save failures retain their real uncertain
 and never imply that a change succeeded. Session explicit choices do not change
 other Sessions or the global default.
 
-The same panel includes a collapsible continuation policy. Full management belongs
-in Models; show a "Manage accounts and models" entry only with a working public
-navigation callback. Do not show a disabled link or unavailable-navigation paragraph.
+The composer Credits/usage pill opens a popover that includes a collapsible
+**Visible-history continuation** disclosure only while the viewed Session is
+open and its effective selection is the managed account-discovered Copilot
+route. Expand it and choose **On** under **Session policy** to explicitly enable
+an existing Session; the loss disclosure appears before the choice. The
+canonical/native route does not show this control. Saving sets a persistent
+Session policy, not the new-Session default: it applies to subsequent turns and
+managed native compaction in that Session, including when the account does not
+change. The active turn retains its admitted policy. No message is sent or
+retried by enabling it.
+See the [synthetic composer capture](./images/copilot-session-continuation.png);
+it shows the control's appearance, not a live Session or policy read.
+
+The separate **New Session continuation default** is managed in Models under
+GitHub Copilot → Manage. Full account management belongs in Models; show a
+"Manage accounts and models" entry only with a working public navigation
+callback. Do not show a disabled link or unavailable-navigation paragraph.
 Opening and closing Settings must not discard the composer draft or change the
 selected Session. Direct navigation and automatic expansion depend on published
 navigation APIs; absent support leaves navigation to ordinary Settings, never
@@ -85,6 +99,12 @@ embedded summaries, including on the same account. Visible messages, tool
 calls/results and stored history remain unchanged. Current-turn reasoning stays
 available for tool steps and native retries. This does not solve quota, HTTP 408
 or oversized context and does not guarantee supplier acceptance.
+
+This is a persistent Session policy, not only a one-time summary consent. Its
+enabled state is captured at new-turn admission and also governs summaries
+inside an observed managed native compaction bracket. Explicit visible-history
+consent does not send or retry chat; the user must separately invoke native
+Retry when appropriate.
 
 When continuation is off and the user switches accounts, stop before saving the
 selection and disclose the potential replay risk. Offer persistent enable and

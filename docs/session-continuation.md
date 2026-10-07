@@ -7,14 +7,27 @@ their same-provider/API/model check does not establish Copilot account identity.
 
 ## Experience
 
-The Credits account panel contains **Visible-history continuation**. New,
-unseeded Sessions created after this feature's first successful activation default
-on. Activation persists a bounded creation-time policy epoch using Settings CAS;
-existing Sessions, seeded histories, forks and unknown birth evidence remain off.
-Manage the global default in **Models → GitHub Copilot → Manage → Account management**.
-Changing it affects only subsequently created Sessions. Session overrides
-(on, off or creation-time default) persist across account changes and restarts.
-No failed request is required first and no hourly confirmation is needed.
+The composer **Credits/usage** pill opens a popover containing
+**Visible-history continuation** only for an open Session whose effective
+selection is the managed account-discovered Copilot route. Expand it and set
+**Session policy → On** to explicitly enable an existing Session after
+reviewing the loss disclosure. The canonical/native route does not show this
+control.
+
+![Built Client continuation policy in the composer Credits popover](./images/copilot-session-continuation.png)
+
+This 0.4.0 release-candidate capture uses synthetic Session state and quota;
+[capture provenance](./images/copilot-current-provenance.json) records the
+source commit, build and image hashes. It is not evidence of live availability.
+
+New, unseeded Sessions created after this feature's first successful
+activation default on. Activation persists a bounded creation-time policy
+epoch using Settings CAS; existing Sessions, seeded histories, forks and
+unknown birth evidence remain off. Manage the separate new-Session default in
+**Models → GitHub Copilot → Manage → New Session continuation default**.
+Changing it affects only subsequently created Sessions. Session overrides (on, off or
+creation-time default) persist across account changes and restarts. No failed
+request is required first and no hourly confirmation is needed.
 
 The enabled disclosure stays compact. Details contain the disable action.
 Enable/disable changes affect future turns; the active turn retains its captured
