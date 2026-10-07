@@ -8,7 +8,7 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-**当前发布：[`0.4.0-alpha.133`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.133)。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 仍为 alpha 版本，未升级为稳定发布通道。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
+**当前发布：[`0.4.0-alpha.134`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.0-alpha.134)。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。** 仍为 alpha 版本，未升级为稳定发布通道。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
 
 ## 你可以做什么
 
@@ -76,10 +76,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.133/dsh-github-copilot-0.4.0-alpha.133.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/dsh-github-copilot-0.4.0-alpha.134.tgz
 ```
 
-**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.133`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器在发布后接受 `dsh-github-copilot@0.4.0-alpha.134`。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -170,7 +170,7 @@ Copilot 搜索要求当前账号／协议证据及能力 proof。固定／fallba
 
 HTTP/SSE liveness 默认区分 5 分钟字节 idle 和有界的 10 分钟助手输出静默，排除消费者工作；WebSocket／显式 `auto`仍仅使用原生路径。这不修复供应方 HTTP 408。图片按原生实际投影 MIME 证据准入；插件不负责转换，也不按文件名猜格式支持。[图片兼容](./docs/image-input-compatibility.md)。
 
-原生 rc.2 Auto 授权审查以 `temperature: 0` 请求所选路由。没有经验证的供应方契约能证明 `capabilities.supports.thinking` 决定 temperature 是否受支持；此元数据不会用于该判断。显式兼容覆盖项 `github-copilot.responsesOmitTemperature` 默认 `false`。只有在用户接受影响范围时才设为 `true`：无论原生传输方式如何，它都会从**所有**账号发现的托管 OpenAI Responses 请求中省略 temperature，可能解决已报告的 reviewer 400，但也会改变该托管协议上普通聊天及其它请求的 temperature 语义。它不影响 Chat Completions、Anthropic Messages 或 Core 所有的 canonical Copilot 路由。插件不会自动启用或迁移该设置。冻结的 reviewer 请求、严格 verdict 解析、取消和失败关闭的工具拒绝保持不变；错误不会重试。参见[模型兼容性验收](./docs/model-compatibility-acceptance.md)。
+原生 rc.2 Auto 授权审查以 `temperature: 0` 请求模型。插件现在**仅对身份已验证的官方 Auto reviewer 根上下文、账号发现的托管 OpenAI Responses 请求自动省略此参数**，无需开启开关。同一 Session／模型的并发普通 Chat 仍保留 temperature。身份由公开 Loader 回调与同 profile 包归属共同验证；未知身份、别名、子上下文、其它协议／供应方以及 Core 所有的 canonical Copilot 保持原生行为，未验证的 reviewer 范围只报告有界诊断。不会从 `supports.thinking` 推断兼容性。冻结输入、账号／取消约束、严格 verdict 和失败关闭的工具拒绝保持不变；没有重试、权限变更或设置迁移。独立的旧兼容覆盖项 `github-copilot.responsesOmitTemperature` 仍默认 `false`；显式 `true` 才影响**所有**托管 Responses 请求，不限于 review。参见[公开范围与验证限制](./docs/auto-review-sampling.md)。
 
 ## 设置与排障
 
@@ -253,14 +253,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.133/dsh-github-copilot-0.4.0-alpha.133.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.133/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/dsh-github-copilot-0.4.0-alpha.134.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.0-alpha.134/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.133.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.0-alpha.134.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

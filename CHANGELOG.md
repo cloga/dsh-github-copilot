@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0-alpha.134 (prepared)
+
+- Automatically omit temperature only for the authenticated official rc.2 Auto reviewer root calling an account-proven managed Responses route. Ordinary concurrent Chat and other tool listeners retain their sampling; no opt-in or settings migration is required.
+- Qualify the public service-read facade with profile package ownership and independent exported callback equality, before cloning and delegating through the native LLM pipeline. Missing/unknown reviewer identity, aliases, descendants, other protocols and canonical routes remain native. Dispose the plugin-owned listener and revoke delayed reviewer dispatch.
+- Execute native reviewer fixtures explicitly on unchanged source and published artifacts with exact-count/no-skip receipts. Preserve strict verdicts and fail-closed tool denial. Earlier excluded published-fixture selector claims remain retracted; synthetic qualification is not live endpoint evidence.
+- Keep the separate all-managed-Responses override default false and preserve immutable alpha.132/alpha.133 releases. No live settings, installation or restart is included.
+
 ## 0.4.0-alpha.133 (prepared)
 
 - Correct the #374 temperature-compatibility claim: `supports.thinking` does not establish temperature support. Replace inferred omission with the explicit, default-off `github-copilot.responsesOmitTemperature` override.

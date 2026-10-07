@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "DSH companion for GitHub Copilot sign-in, account-aware model profiles, tool compatibility, and provider-hosted search.",
-  "version": "0.4.0-alpha.133",
+  "version": "0.4.0-alpha.134",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/",
@@ -55,6 +55,7 @@
     "AGENTS.md",
     "docs/agent-readiness.md",
     "docs/model-compatibility-acceptance.md",
+    "docs/auto-review-sampling.md",
     "docs/single-route-migration.md",
     "docs/session-search-routing.md",
     "docs/npm-distribution.md",

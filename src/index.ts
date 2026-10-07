@@ -62,6 +62,7 @@ import { contentHasFileCompat } from './content-file.ts'
 import { hasResponsesReplayContext } from './serialize.ts'
 import { resolveCopilotResponsesReasoning } from './responses-reasoning.ts'
 import previewPlugin from './preview-route.ts'
+import { installAutoReviewSampling } from './auto-review-sampling.ts'
 import { GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -159,6 +160,7 @@ function observeSettingsNamespace(
  * @param config - the composition entry config, used as the settings base layer.
  */
 export function apply(ctx: Context, config: LiveInlineConfig): void {
+  ctx.effect(() => installAutoReviewSampling(ctx))
   ctx.plugin({ apply(scope) { new DiagnosticsController(scope) } })
   // Register before dependency-gated activation so every Agent-scoped model
   // selection listener remains downstream. The filter must observe the

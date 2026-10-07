@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.0-alpha.133"
+    "version": "0.4.0-alpha.134"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -925,6 +925,9 @@
       "sourceMarkers": [
         {"file": "src/config.ts", "marker": "responsesOmitTemperature: z.boolean().default(false)"},
         {"file": "src/preview-provider.ts", "marker": "guard.responsesOmitTemperature === true"},
+        {"file": "src/index.ts", "marker": "ctx.effect(() => installAutoReviewSampling(ctx))"},
+        {"file": "src/auto-review-sampling.ts", "marker": "module.apply === fiber.runtime.callback"},
+        {"file": "vitest.auto-review-published.config.ts", "marker": "passWithNoTests: false"},
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/auto-review-copilot-core.fixture.ts"}
       ],
       "tests": [
@@ -932,7 +935,10 @@
         {"file": "tests/preview-provider.spec.ts", "name": "applies explicit Responses omission=%s independently of thinking metadata %j"},
         {"file": "tests/preview-provider.spec.ts", "name": "preserves default Responses temperature regardless of thinking metadata %j"},
         {"file": "tests/preview-route.spec.ts", "name": "reads temperature omission from dynamic config at lazy native stream dispatch"},
-        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "omits temperature with explicit opt-in without weakening the %s verdict boundary"}
+        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "omits temperature with explicit opt-in without weakening the %s verdict boundary"},
+        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "activates reviewer-only sampling through the actual plugin Host entry"},
+        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "uses the native initiator and frozen Session account without a reviewer sessionId"},
+        {"file": "tests/loader-composition.spec.ts", "name": "starts and disposes without an optional native reviewer package or package resolver"}
       ]
     },
     {

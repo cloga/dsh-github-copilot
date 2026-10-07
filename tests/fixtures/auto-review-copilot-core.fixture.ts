@@ -25,6 +25,7 @@ import previewPlugin from '../../src/preview-route.ts'
 import { installAutoReviewSampling } from '../../src/auto-review-sampling.ts'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
+import * as GitHubCopilotPlugin from '../../src/index.ts'
 import {
   GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
@@ -66,6 +67,7 @@ type Outcome = 'allow' | 'deny' | 'malformed' | 'http-error' | 'cancel'
 type ScopeCase = 'native' | 'impostor' | 'descendant' | 'alias' | 'missing-resolution' | 'disposed'
   | 'other-protocol' | 'canonical' | 'other-provider' | 'bound-account'
   | 'retained-facade' | 'late-identity' | 'other-listener' | 'dispose-before-dispatch'
+  | 'production' | 'production-disposed'
 
 function sourceResolution(): RuntimeResolution | undefined {
   if (process.env.DSH_CORE_EVIDENCE !== 'tagged-source-runtime') return undefined
@@ -241,12 +243,16 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   if (automatic) {
     if (scope !== 'missing-resolution') await ctx.plugin(PluginPackages, { resolution: sourceResolution() })
     await ctx.plugin(ReviewerFixtureLoader, { scope })
-    const stop = installAutoReviewSampling(ctx)
+    const production = scope === 'production' || scope === 'production-disposed'
+      ? await ctx.plugin(GitHubCopilotPlugin, { enabled: true, providers: [], probe: false })
+      : undefined
+    const stop = production === undefined ? installAutoReviewSampling(ctx) : () => { void production.dispose() }
     stopSampling = stop
-    ctx.effect(() => stop)
+    if (production === undefined) ctx.effect(() => stop)
     await ctx.loader.create({ name: scope === 'alias' ? 'fixture-reviewer-alias' : '@deepseek-ai/dsh-experimental-auto-review' })
     await ctx.loader.await()
     if (scope === 'disposed') await stop()
+    if (scope === 'production-disposed') await production!.dispose()
   } else {
     await ctx.plugin(AutoReview)
   }
@@ -375,8 +381,14 @@ describe('native Auto reviewer Copilot compatibility', () => {
       expect(result.wireBodies).toHaveLength(1)
       expect(result.wireBodies[0]?.temperature).toBe(0.37)
     })
+    it('activates reviewer-only sampling through the actual plugin Host entry', async () => {
+      const result = await run('allow', true, undefined, 'production')
+      expect(result.executions).toBe(1)
+      expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
+      expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
+    })
     it.each(['impostor', 'descendant', 'alias', 'missing-resolution', 'disposed',
-      'other-protocol', 'canonical', 'other-provider', 'retained-facade', 'late-identity'] as const)(
+      'other-protocol', 'canonical', 'other-provider', 'retained-facade', 'late-identity', 'production-disposed'] as const)(
       'preserves native sampling for an unqualified %s scope', async scope => {
         const result = await run('allow', true, undefined, scope)
         expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
