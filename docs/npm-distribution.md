@@ -60,7 +60,10 @@ A missing/older tag needs review, not a hidden dist-tag write.
 SemVer ordering prevents downgrades. Missing older releases are not published
 when their channel already points newer; reconciling existing older bytes never
 lowers the pointer. Report GitHub tag/commit/assets/SHA-256 and npm version/SRI
-separately. One channel succeeding is partial delivery.
+separately. A stable release may advance `latest` from a prerelease only when
+that pointer names a prerelease of the exact same SemVer core version; other
+cross-channel pointers and newer versions still fail closed. One channel
+succeeding is partial delivery.
 [Read-only reconciliation](./npm-publication-readback.md).
 
 ## Installation preflight still applies
