@@ -6,7 +6,7 @@ import '@earendil-works/pi-ai/api/openai-responses'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import * as AutoReview from '@deepseek-ai/dsh-experimental-auto-review'
-import LlmRuntime, { createUserMessage, ToolCallId, type GenerateOptions } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import PermissionPresetService, { AUTO_PRESET } from '@deepseek-ai/dsh-permission-presets'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
@@ -128,18 +128,16 @@ async function run(outcome: Outcome) {
   ctx.permissionPresets.set(session, AUTO_PRESET)
   setApprovalPolicy(session, 'never')
   const agent = { id: session.id, session, options: { provider: PREVIEW, model: MODEL } } as Agent
-  let reviewerRequest: GenerateOptions | undefined
-  let reviewerCalls = 0
-  ctx.on('llm/stream', (request, next) => {
-    reviewerCalls += 1
-    reviewerRequest = request
-    return next()
-  })
+  const reviewerStream = vi.spyOn(ctx.llm, 'stream')
   const result = await ctx.tools.execute({
     signal: controller.signal, callId: ToolCallId(`call-${outcome}`),
     name: 'probe', arguments: { value: outcome }, agent,
   })
-  return { result, executions, wireCalls, wireBodies, reviewerCalls, reviewerRequest }
+  return {
+    result, executions, wireCalls, wireBodies,
+    reviewerCalls: reviewerStream.mock.calls.length,
+    reviewerRequest: reviewerStream.mock.calls[0]?.[0],
+  }
 }
 
 describe('native Auto reviewer Copilot compatibility', () => {
