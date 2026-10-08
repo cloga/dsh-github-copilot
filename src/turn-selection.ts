@@ -46,6 +46,7 @@ export type TurnSelection = { readonly mode: 'unknown' } | { readonly mode: 'man
 export class TurnSelectionStore {
   private readonly agents = new Map<object, Map<number, TurnSelection>>()
   private timestamps = new WeakMap<object, Map<number, number>>()
+  constructor(private readonly onAutoDecision?: (explanation: AutoSelectionExplanation) => void) {}
   record(agent: object, turn: number, selection: TurnSelection): void {
     if (!Number.isSafeInteger(turn) || turn < 0) throw new Error('COPILOT_TURN_SELECTION_INVALID_TURN')
     let turns = this.agents.get(agent)
@@ -75,6 +76,7 @@ export class TurnSelectionStore {
           },
         }) }),
       } }))
+      if (explanation !== undefined) this.onAutoDecision?.(explanation)
     }
     if (turns.size > 128) {
       const oldest = turns.keys().next().value!

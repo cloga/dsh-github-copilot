@@ -15,6 +15,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     githubCopilotDiagnostics: {
       get(): Promise<RemoteResult<DiagnosticsView>>
       setEnabled(enabled: boolean): Promise<RemoteResult<DiagnosticsView>>
+      setAutoAllocationEnabled(enabled: boolean): Promise<RemoteResult<DiagnosticsView>>
       clear(): Promise<RemoteResult<DiagnosticsView>>
       recordClient(batch: ClientDiagnosticsBatch): Promise<RemoteResult<DiagnosticsView>>
     }
@@ -28,6 +29,8 @@ const contribution: TypertRemoteContribution = {
     { method: 'clear', parameters: [] },
     { method: 'setEnabled', parameters: [{ name: 'enabled', wire: 'enabled', source: 'json' as const,
       codec: strictRemoteCodec('dsh-github-copilot#DiagnosticsEnabled', z.boolean()) }] },
+    { method: 'setAutoAllocationEnabled', parameters: [{ name: 'enabled', wire: 'enabled', source: 'json' as const,
+      codec: strictRemoteCodec('dsh-github-copilot#AutoAllocationDiagnosticsEnabled', z.boolean()) }] },
     { method: 'recordClient', parameters: [{ name: 'batch', wire: 'batch', source: 'json' as const,
       codec: strictRemoteCodec('dsh-github-copilot#ClientDiagnosticsBatch', ClientDiagnosticsBatchSchema) }] },
   ].map(descriptor => ({ ...descriptor, id: `dsh-github-copilot:githubCopilotDiagnostics.${descriptor.method}`,

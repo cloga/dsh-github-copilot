@@ -68,7 +68,7 @@ async function fixture(footer: boolean, routingAvailable = true, bundle = true, 
   const addDiagnostics = () => root.plugin({ apply(ctx) {
     class DiagnosticsRemote extends NamedService {
       constructor() { super(ctx, 'remote.githubCopilotDiagnostics') }
-      async get() { return { ok: true, value: { enabled: false, state: 'ready', diagnostic: 'none',
+      async get() { return { ok: true, value: { enabled: false, autoAllocationEnabled: false, state: 'ready', diagnostic: 'none',
         dirty: false, snapshot: emptyDiagnostics() } } }
     }
     new DiagnosticsRemote()

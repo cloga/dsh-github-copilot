@@ -90,14 +90,26 @@ and eligibility windows. No-fit decisions have no fitting-pool distribution.
 Report category, assessment source, switching/continuity and marking state at
 decision time, never reconstructed from today's settings.
 
-Initial monitoring may be bounded Host-lifetime evidence. State its window,
-retained sample count, eviction and restart limits. Missing history is unknown,
-not zero usage or success. A session-local snapshot is not account-wide traffic.
-Persistent monitoring requires a separately reviewed public storage seam,
-retention/clearing and explicit scope; do not write custom Core history events.
-`autoAllocationEvidence: false` stops future candidate captures without changing
-selection; older retained observations expire through the normal bounded
-store lifecycle. The read-only export performs no automatic file writes/upload.
+The turn-selection dialog continues to expose bounded Host-lifetime evidence.
+Separately, default-off Local diagnostics persists daily profile-local
+allocation aggregates in the reviewed public storage domain when collection is
+enabled. It records plugin/policy version, target/selected category,
+demand/assessment source, model, high-cost/continuity flags, weight,
+opportunities, conditional expected selections, actual selections and no-fit
+counts. Retain at most 1,024 strata for 14 days under the shared 2 MiB snapshot
+limit; expose restart, expiration, drops and truncation. There are no
+Session/turn IDs, prompt/content, execution or task-outcome records, custom
+Core history events, automatic uploads or tuning. The shared Local diagnostics
+switch controls account/Checking and compaction aggregates; Auto allocation
+collection has its own hidden volatile, default-off setting and can be enabled
+without collecting those other populations. Missing history is unknown, not
+zero usage or success, and selection remains distinct from execution, quality
+and billing.
+
+`autoAllocationEvidence: false` stops future Host-lifetime candidate captures
+without changing selection; it does not disable the separately controlled
+persistent Local diagnostics aggregates. The read-only exports perform no
+automatic file writes/upload.
 
 No prompt, answer, tool content, replay, credential, account name or raw Session
 ID belongs in an aggregate review. Keep evidence local; no automatic upload.

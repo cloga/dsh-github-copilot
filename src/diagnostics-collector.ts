@@ -4,6 +4,8 @@ import {
 } from './diagnostics-types.ts'
 import type { DiagnosticsOperation, DiagnosticsStage, DiagnosticsOutcome, DiagnosticsReason,
   DiagnosticsRow, DiagnosticsSnapshot } from './diagnostics-types.ts'
+import { AutoAllocationDiagnosticsCollector, emptyAutoAllocationDiagnostics } from './auto-allocation-diagnostics.ts'
+import type { AutoSelectionExplanation } from './auto-model-routing.ts'
 
 export interface DiagnosticsHandle {
   stage(stage: DiagnosticsStage): void
@@ -12,6 +14,7 @@ export interface DiagnosticsHandle {
 const noop: DiagnosticsHandle = { stage() {}, finish() {} }
 export function emptyDiagnostics(): DiagnosticsSnapshot {
   return { schemaVersion: 1, coverageVersion: 1, epoch: 0, updatedAt: 0, rows: [], pending: [],
+    autoAllocation: emptyAutoAllocationDiagnostics(),
     dropped: 0, clientDropped: 0, clientUnconfirmed: 0, saturated: 0, evicted: 0, interrupted: 0 }
 }
 interface Live { operation: DiagnosticsOperation; stage: DiagnosticsStage; start: number; epoch: number }
@@ -20,14 +23,20 @@ export class DiagnosticsCollector {
   private data = emptyDiagnostics()
   private readonly live = new Set<Live>()
   private enabled = false
+  private autoAllocationEnabled = false
   private lastWall = 0
+  private readonly autoAllocation: AutoAllocationDiagnosticsCollector
   constructor(readonly version: string, readonly layer: 'client' | 'host',
     private readonly changed: () => void = () => {},
     private readonly wall: () => number = Date.now,
-    private readonly mono: () => number = () => performance.now()) {}
+    private readonly mono: () => number = () => performance.now()) {
+    this.autoAllocation = new AutoAllocationDiagnosticsCollector(version, changed, wall)
+  }
 
   restore(snapshot: DiagnosticsSnapshot): void {
     this.data = DiagnosticsSnapshotSchema.parse(snapshot)
+    this.autoAllocation.restore(this.data.autoAllocation ?? emptyAutoAllocationDiagnostics())
+    this.data.autoAllocation = this.autoAllocation.snapshot()
     this.lastWall = this.data.updatedAt
     for (const pending of this.data.pending) {
       this.add(pending.operation, pending.stage, 'interrupted', 'unknown', pending.bucket, pending.count, pending.version)
@@ -61,6 +70,7 @@ export class DiagnosticsCollector {
     const epoch = this.data.epoch + 1
     if (!Number.isSafeInteger(epoch)) throw new Error('COPILOT_DIAGNOSTICS_EPOCH_LIMIT')
     this.live.clear()
+    this.autoAllocation.clear()
     this.data = { ...emptyDiagnostics(), epoch }
     this.changed()
   }
@@ -143,15 +153,38 @@ export class DiagnosticsCollector {
       if (existing) existing.count++
       else pending.push({ version: this.version, operation: live.operation, stage: live.stage, bucket, count: 1 })
     }
-    return DiagnosticsSnapshotSchema.parse({ ...this.data, updatedAt: this.wall(), pending })
+    return DiagnosticsSnapshotSchema.parse({ ...this.data, autoAllocation: this.autoAllocation.snapshot(),
+      updatedAt: this.wall(), pending })
   }
-  close(): void { this.setEnabled(false) }
+  close(): void { this.setEnabled(false); this.setAutoAllocationEnabled(false) }
   noteDropped(): void { if (this.enabled) { this.increment('dropped'); this.changed() } }
   noteClientGaps(dropped: number, unconfirmed: number): void {
     if (!this.enabled) return
     this.increment('clientDropped', dropped)
     this.increment('clientUnconfirmed', unconfirmed)
     if (dropped || unconfirmed) this.changed()
+  }
+  recordAutoAllocation(explanation: AutoSelectionExplanation): void {
+    if (!this.autoAllocationEnabled) return
+    if (explanation.method !== 'no-fit' && explanation.method !== 'weighted-distribution'
+      && explanation.method !== 'only-candidate') return
+    if (explanation.method !== 'no-fit' && explanation.allocation === undefined) return
+    const before = this.autoAllocation.snapshot()
+    this.autoAllocation.record(explanation)
+    const next = this.autoAllocation.snapshot()
+    const candidate = { ...this.data, autoAllocation: next }
+    if (!DiagnosticsSnapshotSchema.safeParse(candidate).success) {
+      this.autoAllocation.restore(before, false)
+      this.autoAllocation.setEnabled(this.enabled)
+      this.data.saturated = Math.min(Number.MAX_SAFE_INTEGER, this.data.saturated + 1)
+      this.changed()
+      return
+    }
+    this.data.autoAllocation = next
+  }
+  setAutoAllocationEnabled(enabled: boolean): void {
+    this.autoAllocationEnabled = enabled
+    this.autoAllocation.setEnabled(enabled)
   }
   mergeClient(rows: readonly DiagnosticsRow[]): void {
     if (!this.enabled) return

@@ -68,7 +68,7 @@ test('reviewed-view mode is an explicit strict file input and preserves its read
     const input = join(directory, 'reviewed-view.json')
     const output = join(directory, 'reviewed-report.json')
     await writeFile(input, JSON.stringify({
-      enabled: true, state: 'ready', diagnostic: 'none', dirty: false,
+      enabled: true, autoAllocationEnabled: false, state: 'ready', diagnostic: 'none', dirty: false,
       persistedAt: 1_800_000_000_000, snapshot: emptySnapshot(),
     }), { flag: 'wx' })
     const result = spawnSync(process.execPath, [script, '--input', input, '--mode', 'reviewed-view',
