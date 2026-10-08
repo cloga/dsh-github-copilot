@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.1
+
+- Upgrade from 0.4.0: fix normal plugin-owned same-account native OAuth refresh aborting concurrent already-dispatched managed HTTP streams with `COPILOT_PREVIEW_CREDENTIAL_CHANGED`.
+- Qualify unchanged account, entitlements and official OAuth-derived endpoint through an exact single serialized credential notification and commit result. Immediately invalidate reusable metadata/prepared proof; subsequent requests resolve fresh native auth and metadata without redirecting a frozen account or replaying the user query.
+- Keep unknown/external/Core-only notifications, duplicate/delayed/failed writes, revocation, cancellation and disposal fail-closed. Provider rejection remains an ordinary native error; this is not blanket invisible recovery or a new retry owner.
+- Synthetic native-adapter and credential-store regressions establish this scope, not attribution of any particular live incident. Retain 0.4.0's original immutable tag/archive; use the new stable patch. No installation, restart or live settings mutation is included.
+
+## 0.4.0
+
+- First stable release, retaining official DSH / Windows Desktop 0.2.0-rc.2 support and plugin-only boundaries.
+- Synchronize bilingual configuration documentation and synthetic built-Client screenshots. The same-account refresh interruption described above is corrected in 0.4.1.
+
 ## 0.4.0-alpha.134 (prepared)
 
 - Automatically omit temperature only for the authenticated official rc.2 Auto reviewer root calling an account-proven managed Responses route. Ordinary concurrent Chat and other tool listeners retain their sampling; no opt-in or settings migration is required.

@@ -12,7 +12,7 @@ import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import type { CredentialStore } from '@earendil-works/pi-ai'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { estimateContextTokens, estimateMessageTokens } from '@earendil-works/pi-ai/utils/estimate'
-import { createGitHubCopilotCredentialStore, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
+import { createGitHubCopilotCredentialStore, observeCopilotNativeRefresh, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { normalizeHighCostModelIds } from './auto-allocation.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
@@ -133,7 +133,7 @@ interface Lease {
 
 class PreviewLifetime {
   readonly controller = new AbortController()
-  private readonly wires = new Set<AbortController>()
+  private readonly wires = new Map<AbortController, { dispatched: boolean }>()
   private readonly retryEntries = new Map<AbortSignal, { replay: ResponsesRetryReplay; snapshot: AccountModelSnapshot;
     proof: Proof; model: string; revision: number; at: number; onAbort: () => void }>()
   revision = 0
@@ -176,12 +176,14 @@ class PreviewLifetime {
     this.retryEntries.set(signal, { replay, snapshot, proof, model, revision: this.revision, at: Date.now(), onAbort })
     return replay
   }
-  change(): void {
+  change(preserveDispatched = false): void {
     this.assertActive()
     this.revision++
     this.clearRetries()
     this.source.invalidate()
-    for (const wire of this.wires) wire.abort(new ManagedWireAbortError('COPILOT_PREVIEW_CREDENTIAL_CHANGED'))
+    for (const [wire, state] of this.wires) {
+      if (!preserveDispatched || !state.dispatched) wire.abort(new ManagedWireAbortError('COPILOT_PREVIEW_CREDENTIAL_CHANGED'))
+    }
   }
   dispose(): void {
     if (!this.active) return
@@ -189,7 +191,7 @@ class PreviewLifetime {
     this.clearRetries()
     this.source.dispose()
     this.controller.abort(new ManagedWireAbortError('COPILOT_PREVIEW_DISPOSED'))
-    for (const wire of this.wires) wire.abort()
+    for (const wire of this.wires.keys()) wire.abort()
     this.wires.clear()
   }
   async read(signal = this.controller.signal, ticket?: CredentialReadTicket): Promise<GitHubCopilotOAuthCredential | undefined> {
@@ -288,8 +290,14 @@ class PreviewLifetime {
         if (options?.apiKey !== grant.access) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
         if (trustedGitHubCopilotBaseUrl(model.baseUrl, grant) !== lease.proof.baseURL) throw failure('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
         const controller = new AbortController()
-        this.wires.add(controller)
-        return { signal: AbortSignal.any([signal, controller.signal]), release: () => { this.wires.delete(controller); controller.abort() } }
+        const state = { dispatched: false }
+        this.wires.set(controller, state)
+        return { signal: AbortSignal.any([signal, controller.signal]),
+          dispatch: () => {
+            if (!this.isCurrent(lease.revision)) throw failure('COPILOT_PREVIEW_PREPARED_CALL_INVALIDATED', 'ABORTED')
+            state.dispatched = true
+          },
+          release: () => { this.wires.delete(controller); controller.abort() } }
       },
     }
   }
@@ -929,8 +937,8 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
       if (snapshotProof === undefined || snapshotProof.expires <= Date.now()) return undefined
       return `${binding?.accountId ?? 'canonical'}:${lifetime.revision}:${snapshotProof.accountKey}:${snapshotProof.tokenFingerprint}`
     },
-    invalidate() {
-      lifetime.change(); provenSnapshot = undefined; snapshotProof = undefined; lastValidatedProof = undefined
+    invalidate(preserveDispatched = false) {
+      lifetime.change(preserveDispatched); provenSnapshot = undefined; snapshotProof = undefined; lastValidatedProof = undefined
       void refresh().catch(() => undefined)
     },
   }
@@ -1065,9 +1073,15 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (event.type === 'turn/end') exclusionTurns.end(session)
   })
   const removeListener = ctx.on('credentials/record-updated', key => {
+    const refresh = observeCopilotNativeRefresh(ctx, key)
     for (const [accountId, runtime] of runtimes) {
       const record = accountId === 'canonical' ? GITHUB_COPILOT_CREDENTIAL_KEY : `github-copilot/account-${accountId}`
-      if (record === key) runtime.invalidate()
+      if (record === key) {
+        runtime.invalidate(refresh !== undefined)
+        if (refresh !== undefined) void refresh.then(committed => {
+          if (!committed && !disposed) runtime.invalidate()
+        })
+      }
     }
   })
   const removeAccountListener = ctx.get('githubCopilotAccounts')?.host.onChanged(() => {

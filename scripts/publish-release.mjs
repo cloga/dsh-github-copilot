@@ -46,10 +46,13 @@ function validateInputs({ repository, token, sha, version, files }) {
  * Writes are never retried (except a ref POST 422 is reconciled with one exact GET).
  * An uncertain write fails closed; a later invocation reconciles remote state with GETs.
  */
-export async function publishRelease({ repository, token, sha, version, files, fetch: fetchImpl = globalThis.fetch }) {
+export async function publishRelease({ repository, token, sha, version, files, notes, fetch: fetchImpl = globalThis.fetch }) {
   const assets = validateInputs({ repository, token, sha, version, files })
+  check(notes === undefined || typeof notes === 'string' && notes.trim().length > 0
+    && Buffer.byteLength(notes, 'utf8') <= 16 * 1024 && !notes.includes('\0'), 'Invalid source-bound release notes')
   check(typeof fetchImpl === 'function', 'A fetch implementation is required')
   const tag = `v${version}`
+  const body = notes === undefined ? `Release ${tag}.` : `Release ${tag}.\n\n${notes.trim()}`
   const prerelease = isPrerelease(version)
   const base = `https://api.github.com/repos/${repository}`
   const refPath = `/git/ref/tags/${tag}`
@@ -138,7 +141,7 @@ export async function publishRelease({ repository, token, sha, version, files, f
   function validateRelease(release, id) {
     check(release && Number.isSafeInteger(release.id) && release.id > 0 && (id === undefined || release.id === id)
       && release.tag_name === tag && release.target_commitish === sha
-      && release.name === `${PACKAGE_NAME} ${version}` && release.body === `Release ${tag}.`
+      && release.name === `${PACKAGE_NAME} ${version}` && release.body === body
       && typeof release.draft === 'boolean' && release.prerelease === prerelease,
     'Release metadata does not exactly match the expected version, commit, title, body, and prerelease state')
     check(!release.draft || release.immutable !== true, 'Draft release must remain mutable')
@@ -154,7 +157,7 @@ export async function publishRelease({ repository, token, sha, version, files, f
   if (!release) {
     ;({ data: release } = await request('POST', '/releases', {
       statuses: [201],
-      body: { tag_name: tag, target_commitish: sha, name: `${PACKAGE_NAME} ${version}`, body: `Release ${tag}.`, draft: true, prerelease },
+      body: { tag_name: tag, target_commitish: sha, name: `${PACKAGE_NAME} ${version}`, body, draft: true, prerelease },
     }))
     check(release?.draft === true, 'GitHub did not create a draft; refusing asset writes')
   }
@@ -222,6 +225,22 @@ export async function loadReleaseInputs({
   try { manifest = JSON.parse(await read(join(directory, 'package.json'), 'utf8')) } catch { throw new Error('Cannot read package.json') }
   check(manifest?.name === 'dsh-github-copilot' && isVersion(manifest.version) && manifest.version === expectedVersion,
     'package.json must identify dsh-github-copilot at the exact expected stable version')
+  let notes
+  if (manifest.releaseNotes !== undefined) {
+    check(manifest.releaseNotes === 'CHANGELOG.md', 'Release notes must use the tracked CHANGELOG.md')
+    let changelog
+    try { changelog = await read(join(directory, 'CHANGELOG.md'), 'utf8') }
+    catch { throw new Error('Cannot read source-bound release notes') }
+    const heading = `## ${manifest.version}\n`
+    const text = changelog.replaceAll('\r\n', '\n')
+    const start = text.indexOf(heading)
+    check(start >= 0 && (start === 0 || text[start - 1] === '\n')
+      && text.indexOf(heading, start + heading.length) === -1, 'Changelog must contain exactly one release version heading')
+    const end = text.indexOf('\n## ', start + heading.length)
+    notes = text.slice(start + heading.length, end < 0 ? undefined : end).trim()
+    check(notes.length > 0 && Buffer.byteLength(notes, 'utf8') <= 16 * 1024 && !notes.includes('\0'),
+      'Invalid source-bound release notes')
+  }
   let head
   try { head = await readHead() } catch { throw new Error('Cannot read git HEAD') }
   const expectedSha = env.RELEASE_SHA ?? env.GITHUB_SHA
@@ -232,7 +251,8 @@ export async function loadReleaseInputs({
     try { data = await read(join(directory, 'artifacts', name)) } catch { throw new Error('Cannot read required release artifact') }
     files.push({ name, data })
   }
-  const inputs = { repository: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN, sha: head, version: manifest.version, files }
+  const inputs = { repository: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN, sha: head, version: manifest.version, files,
+    ...notes === undefined ? {} : { notes } }
   validateInputs(inputs)
   return inputs
 }

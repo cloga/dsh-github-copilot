@@ -49,6 +49,11 @@ Verification already built/prepacked. Recovery downloads the original uploaded
 archive, verifies tag/source, size/digests, SHA-256/SHA-512 and build equality,
 and never repacks/overwrites immutable bytes. Release assets include
 `SHA256SUMS`; npm receives that same archive with lifecycle scripts disabled.
+When the tagged package declares `releaseNotes: "CHANGELOG.md"`, publication
+uses only the exact matching version section from that tracked checkout.
+Reconciliation requires the identical body; older tags without that declaration
+retain their original `Release v<version>.` body. A warning must never be added
+to an old Release in a way that breaks its immutable provenance checks.
 
 Only registry E404 establishes absence. Auth, TLS, malformed metadata and network
 failures stop delivery. Existing exact versions require matching SRI and a

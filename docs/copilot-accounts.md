@@ -10,6 +10,39 @@ separate evidence.
 
 ## Requirements
 
+### Native OAuth refresh and dispatched requests (#385)
+
+In 0.4.0, every matching credential notification aborts managed wires, including
+normal native refresh by another same-account request. Upgrade to 0.4.1 for the
+narrow plugin-owned refresh exception. This is synthetic regression evidence,
+not attribution of a particular live error to refresh.
+
+Only a genuine native refresh through the plugin's public credential-store bridge
+may qualify: normalized account grant, model entitlements and official
+OAuth-derived endpoint must remain unchanged. Its exact returned object is
+consumed once inside the serialized `modifyRecord` callback. Exactly one
+synchronous record notification and matching returned committed grant confirm
+the write. No refresh-wide timing flag or unchanged-token heuristic is used.
+Failed, duplicated, delayed, unknown or externally produced notifications remain
+revocation; Core's separately owned canonical adapter has no provenance seam
+through this bridge and remains fail-closed.
+
+The exception retains only HTTP streams already dispatched through the native
+adapter's public Fetch seam, including concurrent streams for the same frozen
+account. Metadata, prepared leases, search/recovery proof and retry snapshots are
+still invalidated immediately. A new step/request must resolve fresh native auth
+and validate current account metadata. An old prepared request cannot dispatch
+after renewal; an already-dispatched request cannot use its old lease to make a
+second physical HTTP attempt after renewal. Core retains retry/transaction
+ownership; this plugin adds no resend or automatic retry. Account default changes
+do not redirect frozen requests; each account's record remains isolated.
+
+Account/endpoint/permission replacement, record removal, read/commit failure,
+caller cancellation and disposal still revoke. Supplier expired-token rejection
+and network failures can still terminate the original request; preserving a local
+stream does not prove supplier acceptance. Identity/quota presentation caches
+continue to invalidate on every notification, not reuse old credentials.
+
 ### Selector switching and account-bound turns (#344)
 
 A global switch changes only the selector. Explicit record-bound request leases
