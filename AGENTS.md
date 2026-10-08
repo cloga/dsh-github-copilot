@@ -148,6 +148,14 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - The canonical compatibility credential record key is `llm-pi-ai/github-copilot`; additional account records are limited to the approved #297 contract above.
 - OAuth credential payloads stay Host-only. Client Remote methods may expose status, notices, and errors only.
 - Refresh must run through pi-ai `Models.getAuth()` and DSH `credentials.modifyRecord()`.
+- A plugin-owned native refresh may retain only already-dispatched HTTP streams
+  when account, entitlements and public OAuth-derived endpoint agree, its exact
+  returned object passes through the serialized store, and one synchronous
+  notification plus exact commit readback qualify that write. Invalidate all
+  reusable metadata/prepared proof immediately. Unknown, duplicate, delayed,
+  failed or external/Core-only changes revoke work; never use a refresh timing
+  window, unchanged bytes alone, old proof for a new request or a hidden retry.
+  See `docs/copilot-accounts.md` (#385).
 - Copilot OAuth grant writes must rebuild only pi-ai's documented provider fields as a fresh plain JSON object; unrelated extension values never reach DSH credential storage.
 - Settings changes are path-level. Never replace the whole `llm-pi-ai` section or unrelated provider profiles.
 - Sign-out deletes only the active Copilot credential record and keeps other records, the selector and route settings. A missing selected noncanonical slot fails explicitly; only an explicit eligible Add or Switch recovers it, never automatic canonical fallback.

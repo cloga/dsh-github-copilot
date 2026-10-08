@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "entrypoints": ["AGENTS.md", "CONTRIBUTING.md", "README.md", "README.zh.md", "SECURITY.md", "deployment-baseline.json"],
   "boundaries": {
-    "credentialOwner": "DSH credentials and pi-ai OAuth; canonical compatibility record is preserved. Approved #297 plugin account records are directly authorized, never copied; immutable request binding and managed-only CAS switching. Never request, log or export grants.",
+    "credentialOwner": "DSH credentials and pi-ai OAuth; canonical compatibility record is preserved. Approved #297 plugin account records are directly authorized, never copied; immutable request binding and managed-only CAS switching. Only an exact single committed plugin-owned native refresh with unchanged account, entitlement and endpoint may retain already-dispatched HTTP streams; all reusable proof is invalidated. Unknown/external/Core-only notifications still revoke. Never request, log or export grants.",
     "transportOwner": "DSH llm-pi-ai; no second general Copilot adapter",
     "implementationScope": {
       "mode": "plugin-only",
