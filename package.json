@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "DSH companion for GitHub Copilot sign-in, account-aware model profiles, tool compatibility, and provider-hosted search.",
-  "version": "0.4.2-alpha.1",
+  "version": "0.4.2-alpha.2",
   "releaseNotes": "CHANGELOG.md",
   "publishConfig": {
     "access": "public",

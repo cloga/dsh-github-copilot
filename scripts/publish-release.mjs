@@ -231,13 +231,15 @@ export async function loadReleaseInputs({
     let changelog
     try { changelog = await read(join(directory, 'CHANGELOG.md'), 'utf8') }
     catch { throw new Error('Cannot read source-bound release notes') }
-    const heading = `## ${manifest.version}\n`
     const text = changelog.replaceAll('\r\n', '\n')
-    const start = text.indexOf(heading)
-    check(start >= 0 && (start === 0 || text[start - 1] === '\n')
-      && text.indexOf(heading, start + heading.length) === -1, 'Changelog must contain exactly one release version heading')
-    const end = text.indexOf('\n## ', start + heading.length)
-    notes = text.slice(start + heading.length, end < 0 ? undefined : end).trim()
+    const escapedVersion = manifest.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const heading = new RegExp(`^## ${escapedVersion}(?: \\(prepared\\))?\\n`, 'gm')
+    const matches = [...text.matchAll(heading)]
+    check(matches.length === 1, 'Changelog must contain exactly one release version heading')
+    const start = matches[0].index
+    const contentStart = start + matches[0][0].length
+    const end = text.indexOf('\n## ', contentStart)
+    notes = text.slice(contentStart, end < 0 ? undefined : end).trim()
     check(notes.length > 0 && Buffer.byteLength(notes, 'utf8') <= 16 * 1024 && !notes.includes('\0'),
       'Invalid source-bound release notes')
   }

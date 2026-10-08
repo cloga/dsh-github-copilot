@@ -510,10 +510,12 @@ test('CLI preflight checks manifest, exact HEAD, expected version, and fixed art
 test('CLI release notes read only the declared fixed file and exact version section', async () => {
   for (const [changelog, valid] of [
     [`# Changelog\n\n## ${version}\n\n- Upgrade recommended.\n\n## 0.3.0\n\nOld notes.\n`, true],
+    [`# Changelog\n\n## ${version} (prepared)\n\n- Upgrade recommended.\n\n## 0.3.0\n\nOld notes.\n`, true],
     [`## ${version}\r\n\r\n- Upgrade recommended.\r\n`, true],
     ['## 0.3.0\nOld notes.', false],
     [`## ${version}\n\n## 0.3.0\nOld notes.`, false],
     [`## ${version}\nFirst.\n## ${version}\nDuplicate.`, false],
+    [`## ${version} (prepared)\nFirst.\n## ${version}\nDuplicate.`, false],
   ]) {
     const { options } = localOptions()
     const read = options.read
