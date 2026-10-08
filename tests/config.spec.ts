@@ -18,6 +18,11 @@ describe('session search settings', () => {
     expect(readInlineConfig(Config({ ...base, responsesOmitTemperature: false })).responsesOmitTemperature).toBe(false)
     expect(() => Config({ ...base, responsesOmitTemperature: 'true' } as unknown as InlineConfig)).toThrow()
   })
+  it('keeps persistent Auto allocation observation independent and default-off', () => {
+    expect(readInlineConfig(Config(base)).autoAllocationDiagnosticsEnabled).toBe(false)
+    expect(readInlineConfig(Config({ ...base, autoAllocationDiagnosticsEnabled: true })).autoAllocationDiagnosticsEnabled).toBe(true)
+    expect(readInlineConfig(Config({ ...base, autoAllocationDiagnosticsEnabled: false })).autoAllocationDiagnosticsEnabled).toBe(false)
+  })
 
   it('defaults to session routing with automatic disclosed DeepSeek fallback', () => {
     expect(Config(base)).toMatchObject({ routeWebSearch: true, searchFallback: 'deepseek' })
@@ -36,7 +41,7 @@ describe('session search settings', () => {
 
   it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['diagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['diagnosticsEnabled', 'autoAllocationDiagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
@@ -47,6 +52,8 @@ describe('session search settings', () => {
   it('keeps diagnostics default-off and reads the hidden live collection setting', () => {
     expect(Config.dict?.diagnosticsEnabled?.meta.hidden).toBe(true)
     expect(Config.dict?.diagnosticsEnabled?.meta.volatile).toBe(true)
+    expect(Config.dict?.autoAllocationDiagnosticsEnabled?.meta.hidden).toBe(true)
+    expect(Config.dict?.autoAllocationDiagnosticsEnabled?.meta.volatile).toBe(true)
     expect(readInlineConfig(Config(base)).diagnosticsEnabled).toBe(false)
     let enabled = false
     const live = { ...base, diagnosticsEnabled: { get: () => enabled } }

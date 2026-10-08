@@ -411,8 +411,9 @@ describe('tsdown client artifact', () => {
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation').map(descriptor => descriptor.method).sort())
       .toEqual(['authorizeNext', 'defaults', 'get', 'set', 'setDefault'])
     const diagnosticsDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
-    expect(diagnosticsDescriptors.map(descriptor => descriptor.method).sort()).toEqual(['clear', 'get', 'recordClient', 'setEnabled'])
-    const diagnosticsView = { enabled: false, state: 'ready', diagnostic: 'none', dirty: false,
+    expect(diagnosticsDescriptors.map(descriptor => descriptor.method).sort())
+      .toEqual(['clear', 'get', 'recordClient', 'setAutoAllocationEnabled', 'setEnabled'])
+    const diagnosticsView = { enabled: false, autoAllocationEnabled: false, state: 'ready', diagnostic: 'none', dirty: false,
       snapshot: { schemaVersion: 1, coverageVersion: 1, epoch: 0, updatedAt: 0, rows: [], pending: [],
         dropped: 0, clientDropped: 0, clientUnconfirmed: 0, saturated: 0, evicted: 0, interrupted: 0 } }
     for (const descriptor of diagnosticsDescriptors) {

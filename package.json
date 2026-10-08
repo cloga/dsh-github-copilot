@@ -1,12 +1,12 @@
 {
   "name": "dsh-github-copilot",
   "description": "DSH companion for GitHub Copilot sign-in, account-aware model profiles, tool compatibility, and provider-hosted search.",
-  "version": "0.4.1",
+  "version": "0.4.2-alpha.1",
   "releaseNotes": "CHANGELOG.md",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/",
-    "tag": "latest"
+    "tag": "alpha"
   },
   "packageManager": "pnpm@11.7.0",
   "repository": {

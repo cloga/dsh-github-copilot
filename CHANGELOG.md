@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2-alpha.1 (prepared)
+
+- Persist bounded daily Auto allocation aggregates in the existing profile-isolated local diagnostics storage domain. The Auto collection switch is independent and default-off; enabling it does not enable account/Checking or compaction collection.
+- Retain only fixed policy/model/category/demand/assessment/high-cost/continuity dimensions and bounded opportunity, expected-share, selected and no-fit counts. Cap Auto strata at 1,024 and retain for 14 days under the existing snapshot-size limit; expose restart, eviction, drop, truncation and saturation evidence.
+- Preserve turn routing and Host-lifetime explanations when observation is disabled or fails. No Session/turn IDs, conversation data, upload, automatic tuning or execution/quality/billing inference is added.
+- Add collector, UI, Remote codec and storage-gateway regression coverage; synthetic tests do not establish live Desktop activation or Auto performance.
+
 ## 0.4.1
 
 - Upgrade from 0.4.0: fix normal plugin-owned same-account native OAuth refresh aborting concurrent already-dispatched managed HTTP streams with `COPILOT_PREVIEW_CREDENTIAL_CHANGED`.

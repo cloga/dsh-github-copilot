@@ -179,7 +179,7 @@ describe('diagnostics analysis', () => {
 
   it('validates reviewed views and preserves only their current bounded state', () => {
     const view = parseReviewedView(JSON.stringify({
-      enabled: false, state: 'ready', diagnostic: 'none', dirty: true,
+      enabled: false, autoAllocationEnabled: false, state: 'ready', diagnostic: 'none', dirty: true,
       snapshot: emptySnapshot(),
     }))
     const report = analyzeReviewedView(view, observedAt)

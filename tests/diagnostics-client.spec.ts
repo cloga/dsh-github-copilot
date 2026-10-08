@@ -9,7 +9,8 @@ import type { DiagnosticsView } from '../src/diagnostics-types.ts'
 class TestRemote extends Service {
   constructor(ctx: Context, readonly githubCopilotDiagnostics: DiagnosticsRemote) { super(ctx, 'remote') }
 }
-const view = (epoch: number): DiagnosticsView => ({ enabled: true, state: 'ready', diagnostic: 'none',
+const view = (epoch: number): DiagnosticsView => ({ enabled: true, autoAllocationEnabled: false,
+  state: 'ready', diagnostic: 'none',
   dirty: false, snapshot: { ...emptyDiagnostics(), epoch } })
 
 it('rejects stale status responses and settles an unmounted Checking operation once', async () => {
@@ -17,7 +18,8 @@ it('rejects stale status responses and settles an unmounted Checking operation o
   let release!: (value: Awaited<ReturnType<DiagnosticsRemote['get']>>) => void
   const status = new Promise<Awaited<ReturnType<DiagnosticsRemote['get']>>>(resolve => { release = resolve })
   const report = vi.fn<DiagnosticsRemote['recordClient']>(async () => ({ ok: true, value: view(5) }))
-  new TestRemote(ctx, { get: () => status, recordClient: report, clear: vi.fn(), setEnabled: vi.fn() })
+  new TestRemote(ctx, { get: () => status, recordClient: report, clear: vi.fn(), setEnabled: vi.fn(),
+    setAutoAllocationEnabled: vi.fn() })
   const dispose = installDiagnosticsClient(ctx)
   try {
     updateDiagnosticsClient(view(5))
@@ -43,7 +45,7 @@ it('does not resend uncertain rows and exposes acknowledgement gaps on the next 
     .mockRejectedValueOnce(new Error('synthetic-private-error'))
     .mockResolvedValue({ ok: true, value: view(2) })
   new TestRemote(ctx, { get: async () => ({ ok: true, value: view(2) }), recordClient: report,
-    clear: vi.fn(), setEnabled: vi.fn() })
+    clear: vi.fn(), setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn() })
   const dispose = installDiagnosticsClient(ctx)
   try {
     updateDiagnosticsClient(view(2))

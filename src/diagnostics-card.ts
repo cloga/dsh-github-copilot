@@ -45,6 +45,14 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
     return () => { current.active = false; current.generation++; current.busy = false }
   }, [remote])
   const rows = view?.snapshot.rows ?? []
+  const auto = view?.snapshot.autoAllocation
+  const autoOpportunities = auto?.rows.reduce((sum, row) => sum + row.opportunities, 0) ?? 0
+  const autoExpected = auto?.rows.reduce((sum, row) => sum + row.expectedSelections, 0) ?? 0
+  const autoSelections = auto?.rows.reduce((sum, row) => sum + row.selections, 0) ?? 0
+  const autoNoFit = auto?.noFitRows.reduce((sum, row) => sum + row.decisions, 0) ?? 0
+  const autoWindow = auto === undefined || auto.observationStart === null || auto.observationEnd === null
+    ? 'No retained observation window'
+    : `${new Date(auto.observationStart).toISOString().slice(0, 10)} – ${new Date(auto.observationEnd).toISOString().slice(0, 10)} UTC`
   const populations = [...new Set(rows.filter(row => row.operation !== 'collection').map(row => `${row.layer}/${row.operation}`))]
   const count = (metrics: readonly string[], population: string) => rows
     .filter(row => metrics.includes(row.metric) && `${row.layer}/${row.operation}` === population)
@@ -62,6 +70,11 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
           : `${view.enabled ? view.state === 'ready' ? 'Collection enabled' : 'Collection configured on; not collecting' : 'Collection paused'} · Storage ${view.state}`
             + (view.diagnostic === 'none' ? '' : ` · ${view.diagnostic}`)
             + (view.dirty ? ' · Not all observations are persisted yet' : '')),
+    view ? h('p', { role: 'status', style: { margin: 0 } },
+      `Auto allocation observation ${view.autoAllocationEnabled
+        ? view.state === 'ready' ? 'enabled' : 'configured on; not collecting' : 'paused'}.`) : null,
+    h('p', { style: { margin: 0, lineHeight: 1.5, maxWidth: '70ch' } },
+      'Auto allocation observation has its own opt-in switch below. It stores daily aggregate candidate opportunities, conditional expected selections, actual selected counts and no-fit decisions. It does not retain individual turns or infer execution, quality, billing or task success.'),
     failed ? h('p', { role: 'alert', style: { margin: 0 } },
       'Could not confirm the operation. Read status before retrying; no write is automatically replayed.') : null,
     clientDiagnosticsReportingFailed() ? h('p', { role: 'alert', style: { margin: 0 } },
@@ -71,9 +84,12 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
       control(view?.enabled ? 'Pause collection' : 'Enable local collection',
         () => { void run(value => value.setEnabled(!view?.enabled)) },
         !remote || !view || !view.enabled && view.state !== 'ready'),
+      control(view?.autoAllocationEnabled ? 'Pause Auto allocation observation' : 'Enable Auto allocation observation',
+        () => { void run(value => value.setAutoAllocationEnabled(!view?.autoAllocationEnabled)) },
+        !remote || !view || !view.autoAllocationEnabled && view.state !== 'ready'),
       control('Clear local aggregates', () => setConfirmClear(true), !remote || !view || view.state !== 'ready')),
     confirmClear ? h('div', { role: 'group', 'aria-label': 'Confirm clearing local diagnostics' },
-      h('p', null, 'Delete collected aggregates only? Collection keeps its current enabled/paused setting. This does not clear account settings or conversation history.'),
+      h('p', null, 'Delete collected aggregates only? Both collection controls keep their current enabled/paused settings. This does not clear account settings or conversation history.'),
       control('Confirm clear', () => { setConfirmClear(false); void run(value => value.clear()) }),
       control('Cancel', () => setConfirmClear(false))) : null,
     view && populations.length ? h('div', { style: { overflowX: 'auto', minWidth: 0 } },
@@ -87,6 +103,13 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
           h('td', { style: { padding: 6 } },
             count(['no-op', 'policy-rejected', 'revoked', 'environment-fault', 'unknown'], population))))))) : null,
     view && !populations.length ? h('p', null, 'No retained operation observations. This is not evidence of zero failures.') : null,
+    auto ? h('details', null,
+      h('summary', null, 'Auto allocation aggregates'),
+      h('p', { style: { margin: 0 } }, `${view?.autoAllocationEnabled ? 'Collection enabled' : 'Collection paused'} · ${auto.status === 'observed' ? 'Observed' : 'Not collected'} · ${autoWindow} · ${auto.rows.length} retained strata · ${autoNoFit} no-fit decisions · ${auto.dropped} dropped candidate rows · ${auto.expired} expired strata · ${auto.restarts} observed restarts · ${auto.saturated} counter saturations · ${auto.rowsTruncated ? 'row limit reached' : 'row limit not reached'}. Complete history: no.`),
+      auto.rows.length ? h('p', { style: { margin: 0 } },
+        `Across these retained strata: ${autoOpportunities} candidate opportunities, ${autoExpected.toFixed(3)} expected selections and ${autoSelections} actual selections. Cohorts differ; use the JSON rows to compare matching policy/model/category/continuity strata.`) : null,
+      h('p', { style: { margin: 0 } }, 'Retention: 14 days. Rows contain model IDs and aggregate counts only; no Session/turn IDs, conversation content, upload or automatic tuning. Expired counts are strata, not removed decisions.'),
+    ) : null,
     view ? h('p', { style: { margin: 0, fontSize: 12, lineHeight: '18px' } },
       `Host pending: ${view.snapshot.pending.reduce((sum, row) => sum + row.count, 0)}. `
       + `Host dropped: ${view.snapshot.dropped}; Client dropped: ${view.snapshot.clientDropped}; Client unconfirmed: ${view.snapshot.clientUnconfirmed}; `

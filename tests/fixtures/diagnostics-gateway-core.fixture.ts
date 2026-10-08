@@ -60,13 +60,17 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     const registry = new TypertRegistry(host)
     registry.register({ package: contribution.package, face: 'host', schemas: [],
       model: { services: [], events: [], objects: [] }, invocations: contribution.descriptors })
-    let revision = 0, enabled = false
+    let revision = 0, enabled = false, autoEnabled = false
     host.provide('settings', {
-      describe: () => [{ ns: 'github-copilot', revision, value: { diagnosticsEnabled: enabled } }],
+      describe: () => [{ ns: 'github-copilot', revision, value: {
+        diagnosticsEnabled: enabled, autoAllocationDiagnosticsEnabled: autoEnabled,
+      } }],
       mutate: vi.fn(async (ns: string, operations: readonly { path: readonly string[]; value: boolean }[], expected: number) => {
         expect(ns).toBe('github-copilot'); expect(expected).toBe(revision)
-        expect(operations[0]?.path).toEqual(['diagnosticsEnabled'])
-        enabled = operations[0]!.value; revision++
+        if (operations[0]?.path[0] === 'diagnosticsEnabled') enabled = operations[0]!.value
+        else if (operations[0]?.path[0] === 'autoAllocationDiagnosticsEnabled') autoEnabled = operations[0]!.value
+        else throw new Error('UNEXPECTED_DIAGNOSTICS_SETTING')
+        revision++
       }),
     })
     let browserRecord: CredentialRecord | undefined
@@ -100,8 +104,13 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     await host.plugin({ apply(ctx) { diagnostics = new DiagnosticsController(ctx) } })
     await vi.waitFor(() => expect(diagnostics.get().state).toBe('ready'))
     const remote = client.remote.githubCopilotDiagnostics
-    await expect(remote.get()).resolves.toMatchObject({ ok: true, value: { enabled: false, state: 'ready' } })
+    await expect(remote.get()).resolves.toMatchObject({ ok: true, value: {
+      enabled: false, autoAllocationEnabled: false, state: 'ready',
+    } })
     await expect(remote.setEnabled(true)).resolves.toMatchObject({ ok: true, value: { enabled: true, dirty: false } })
+    await expect(remote.setAutoAllocationEnabled(true)).resolves.toMatchObject({
+      ok: true, value: { enabled: true, autoAllocationEnabled: true, dirty: false },
+    })
     const operation = diagnostics.collector.begin('account-global-switch')
     operation.stage('cas')
     await diagnostics.flush()

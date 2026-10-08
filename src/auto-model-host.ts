@@ -163,7 +163,10 @@ function actualNotice(agent: Agent, model: string) {
 /** Resolve virtual Auto once per Core turn before request/header persistence. */
 export function installAutoModelRouting(ctx: Context, dependencies: AutoModelHostDependencies): () => void {
   type Dispose = () => void
-  const selections = new TurnSelectionStore()
+  const selections = new TurnSelectionStore(explanation => {
+    try { ctx.get('githubCopilotDiagnostics')?.collector.recordAutoAllocation(explanation) }
+    catch { ctx.logger.warn('[github-copilot] COPILOT_AUTO_ALLOCATION_DIAGNOSTICS_UNAVAILABLE') }
+  })
   new TurnSelectionController(ctx, selections)
   const captured = new WeakMap<Agent, CapturedTurn>()
   const routed = new WeakMap<Agent, RoutedTurn>()

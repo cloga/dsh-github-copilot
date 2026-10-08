@@ -1,4 +1,4 @@
-# Local diagnostics: account and compaction pilot
+# Local diagnostics: account, compaction and Auto allocation
 
 Roadmap: [#347](https://github.com/cloga/dsh-github-copilot/issues/347).
 Phase 0: [#354](https://github.com/cloga/dsh-github-copilot/issues/354).
@@ -23,8 +23,23 @@ collection **and bounded local aggregate persistence**, not exports or uploads.
 The normal installation does not change this default-off setting.
 
 Use the plugin normally: account selection, Identity/Checking and compaction
-will contribute independent Client/Host populations. **Read status** returns a
-strict aggregate snapshot; **Review aggregate-only JSON → Prepare current JSON**
+will contribute independent Client/Host populations. Auto model allocation has a
+separate **Enable Auto allocation observation** control and its own hidden,
+volatile `github-copilot.autoAllocationDiagnosticsEnabled` path-level CAS.
+It can be enabled without collecting the other diagnostics. Auto decisions
+contribute daily, profile-local allocation aggregates to the same storage
+domain while this switch is enabled. These contain plugin/policy version, model
+ID, target and selected category, task-demand/assessment-source strata,
+high-cost/continuity flags, effective weight, candidate opportunities,
+conditional expected selections, actual selections and no-fit counts. They do
+not contain Session/turn identifiers, prompts, outcomes, execution or billing
+attribution. Aggregate rows are capped at 1,024, retained for 14 days and
+included in the existing 2 MiB snapshot limit; expired, dropped, truncated,
+saturated and restart evidence remains explicit. There is no per-turn export,
+automatic tuning or upload. The two controls can be paused independently;
+**Clear local aggregates** clears both diagnostics populations.
+
+**Read status** returns a strict aggregate snapshot; **Review aggregate-only JSON → Prepare current JSON**
 prepares a read-only copy for explicit review/sharing, never a download or upload.
 The coding session does not automatically gain access to the running Host.
 Pause preserves retained evidence and closes active observations as interrupted.
