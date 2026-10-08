@@ -2072,6 +2072,91 @@ describe('plugin-owned account Copilot route', () => {
     }
   })
 
+  it('keeps concurrent dispatched streams alive across a proven native same-account refresh', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    const old = 'tid=old;proxy-ep=proxy.individual.githubcopilot.com;'
+    const fresh = 'tid=fresh;proxy-ep=proxy.individual.githubcopilot.com;'
+    const pending: { signal: AbortSignal; finish: (response: Response) => void }[] = []
+    const tokens: string[] = []
+    stubFetch(async (input, init) => {
+      const url = String(input)
+      if (url.endsWith('/copilot_internal/v2/token')) return new Response(JSON.stringify({
+        token: fresh, expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }))
+      if (url.endsWith('/models')) return catalogResponse()
+      tokens.push(new Headers(init?.headers).get('authorization') ?? '')
+      if (pending.length < 2) return new Promise<Response>((finish, reject) => {
+        const signal = init?.signal
+        if (!signal) throw new Error('Missing fixture request signal')
+        pending.push({ signal, finish })
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+      return response()
+    }, true)
+    try {
+      const harness = await runtime(grant({ access: old, expires: start + 400_000, availableModelIds: [MODEL] }))
+      const a = call(harness.ctx)
+      await vi.waitFor(() => expect(pending).toHaveLength(1))
+      const b = call(harness.ctx)
+      await vi.waitFor(() => expect(pending).toHaveLength(2))
+      clock.mockReturnValue(start + 100_001)
+      expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+      expect(harness.modify).toHaveBeenCalledTimes(1)
+      expect(pending.every(wire => !wire.signal.aborted)).toBe(true)
+      for (const wire of pending) wire.finish(response())
+      expect((await a).assembler.finish).toEqual({ kind: 'stop' })
+      expect((await b).assembler.finish).toEqual({ kind: 'stop' })
+      expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+      expect(tokens).toEqual([`Bearer ${old}`, `Bearer ${old}`, `Bearer ${fresh}`, `Bearer ${fresh}`])
+    } finally {
+      for (const wire of pending) wire.finish(response())
+      clock.mockRestore()
+    }
+  })
+
+  it.each(['endpoint', 'entitlements', 'external', 'unchanged-notification'] as const)(
+    'revokes dispatched work for an unqualified %s refresh transition', async mode => {
+      const start = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+      let wireSignal: AbortSignal | undefined
+      let release!: (response: Response) => void
+      let harness: Awaited<ReturnType<typeof runtime>>
+      stubFetch(async (input, init) => {
+        const url = String(input)
+        if (url.endsWith('/copilot_internal/v2/token')) {
+          if (mode === 'external') harness.replace(grant({ refresh: 'external-account', availableModelIds: [MODEL] }))
+          return new Response(JSON.stringify({
+            token: `tid=renewed;proxy-ep=proxy.${mode === 'endpoint' ? 'business' : 'individual'}.githubcopilot.com;`,
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+          }))
+        }
+        if (url.endsWith('/models')) return catalogResponse(mode === 'entitlements'
+          ? [catalogItem(MODEL), catalogItem('extra-model')] : undefined)
+        wireSignal = init?.signal ?? undefined
+        return new Promise<Response>((resolve, reject) => {
+          release = resolve
+          wireSignal?.addEventListener('abort', () => reject(wireSignal?.reason), { once: true })
+        })
+      }, true)
+      try {
+        harness = await runtime(grant({ access: 'tid=old;proxy-ep=proxy.individual.githubcopilot.com;',
+          expires: start + 400_000, availableModelIds: [MODEL] }))
+        const ongoing = call(harness.ctx)
+        await vi.waitFor(() => expect(wireSignal).toBeDefined())
+        if (mode === 'unchanged-notification') harness.replace(harness.current())
+        else {
+          clock.mockReturnValue(start + 100_001)
+          await harness.ctx.get('githubCopilotPreview')!.discover({ force: true })
+        }
+        await vi.waitFor(() => expect(wireSignal?.aborted).toBe(true))
+        expect((await ongoing).assembler.finish).toMatchObject({
+          kind: 'aborted', failure: { message: 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' },
+        })
+      } finally { release?.(response()); clock.mockRestore() }
+    },
+  )
+
   it.each(['request', 'catalog'] as const)('refreshes the shared grant from a cold %s without aborting its own discovery', async entry => {
     const fresh = 'tid=synthetic;proxy-ep=proxy.individual.githubcopilot.com;'
     const urls: string[] = []

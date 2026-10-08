@@ -8,7 +8,7 @@ import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from '@earendil-wor
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
-import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
+import { certifyCopilotNativeRefresh, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { CopilotResponsesReplayError, isCopilotInputItemScopeError, normalizeCopilotResponsesPayload } from './responses-replay-compat.ts'
 import type { ResponsesRetryReplay } from './responses-replay-compat.ts'
 import { requestBodyTimeoutDiagnostic } from './request-body-timeout.ts'
@@ -32,7 +32,7 @@ export interface PreviewProviderGuard {
   readonly signal: AbortSignal
   assertActive(): void
   assertAccount(credential: GitHubCopilotOAuthCredential): void
-  beforeWire(model: Model<Api>, options?: StreamOptions): Promise<{ signal: AbortSignal; release(): void }>
+  beforeWire(model: Model<Api>, options?: StreamOptions): Promise<{ signal: AbortSignal; release(): void; dispatch?(): void }>
   /** Actual model HTTP 401, excluding proven Responses replay-scope failures; no request replay. */
   onUnauthorized?(): void
   /** Dispatch-local, verified replay failure; never inferred from SDK error text. */
@@ -163,6 +163,8 @@ export function createAccountProvider(
       const result = normalizeGitHubCopilotOAuthCredential(fresh)
       guard.assertAccount(result)
       // Revocation must be persisted by Models before toAuth rejects this call.
+      await certifyCopilotNativeRefresh(current, result, oauth.toAuth, operationSignal)
+      guard.assertActive()
       return result
     },
     toAuth: async credential => {
@@ -283,6 +285,7 @@ export function createAccountProvider(
           dispatchInit = prepared.init
           compression = prepared.evidence
         }
+        lease.dispatch?.()
         liveness?.beginRequest(originalBody)
         let response: Response
         const upload = guard.onRequestBodyTimeout === undefined ? undefined : createRequestUploadObserver()

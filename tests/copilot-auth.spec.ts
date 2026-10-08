@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createGitHubCopilotCredentialStore,
   createGitHubCopilotTokenResolver,
+  certifyCopilotNativeRefresh,
+  observeCopilotNativeRefresh,
 } from '../src/copilot-auth.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY } from '../src/authorization-controller.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../src/copilot-identity.ts'
@@ -80,6 +82,59 @@ afterEach(() => {
 })
 
 describe('GitHub Copilot credential adapter', () => {
+  it.each(['commit', 'missing', 'duplicate', 'changed', 'failed', 'delayed'] as const)(
+    'qualifies only a single exact serialized native refresh notification (%s)', async mode => {
+      const ctx = new Context()
+      const key = GITHUB_COPILOT_CREDENTIAL_KEY
+      const next: Credential = { type: 'oauth', refresh: 'synthetic', access: 'rotated', expires: Date.now() + 60_000 }
+      let result: Promise<boolean> | undefined
+      let duplicate: Promise<boolean> | undefined
+      const service = {
+        readRecord: async () => undefined,
+        listRecords: async () => [],
+        deleteRecord: async () => undefined,
+        modifyRecord: async (_key: string, mutate: (value: GrantRecord | undefined) => Promise<GrantRecord | undefined>) => {
+          const record = await mutate(undefined)
+          if (mode !== 'missing' && mode !== 'delayed') result = observeCopilotNativeRefresh(ctx, key)
+          if (mode === 'duplicate') duplicate = observeCopilotNativeRefresh(ctx, key)
+          if (mode === 'failed') throw new Error('Synthetic write failure')
+          return mode === 'changed' ? { kind: 'grant', payload: { ...next, access: 'external' } } : record
+        },
+      }
+      ctx.get = ((name: string) => name === 'credentials' ? service : undefined) as typeof ctx.get
+      expect(observeCopilotNativeRefresh(ctx, key)).toBeUndefined()
+      await certifyCopilotNativeRefresh(next, next, async grant => ({
+        apiKey: grant.access, baseUrl: 'https://api.individual.githubcopilot.com',
+      }))
+      const operation = createGitHubCopilotCredentialStore(ctx).modify('github-copilot', async () => next)
+      if (mode === 'failed') await expect(operation).rejects.toThrow('Synthetic write failure')
+      else await operation
+      if (result) expect(await result).toBe(mode === 'commit')
+      expect(duplicate).toBeUndefined()
+      expect(observeCopilotNativeRefresh(ctx, key)).toBeUndefined()
+      expect(observeCopilotNativeRefresh(ctx, 'unrelated')).toBeUndefined()
+    },
+  )
+
+  it('does not qualify an ordinary store write or notifications during its async mutation', async () => {
+    const ctx = new Context()
+    const key = GITHUB_COPILOT_CREDENTIAL_KEY
+    const service = {
+      readRecord: async () => undefined, listRecords: async () => [], deleteRecord: async () => undefined,
+      modifyRecord: async (_key: string, mutate: (value: undefined) => Promise<unknown>) => {
+        const operation = mutate(undefined)
+        expect(observeCopilotNativeRefresh(ctx, key)).toBeUndefined()
+        const result = await operation
+        expect(observeCopilotNativeRefresh(ctx, key)).toBeUndefined()
+        return result
+      },
+    }
+    ctx.get = ((name: string) => name === 'credentials' ? service : undefined) as typeof ctx.get
+    await createGitHubCopilotCredentialStore(ctx).modify('github-copilot', async () => ({
+      type: 'oauth', refresh: 'synthetic', access: 'unchanged', expires: Date.now() + 60_000,
+    }))
+  })
+
   it('does not overwrite request-owned headers with local model metadata', async () => {
     const headers = { 'User-Agent': 'Request-Agent', 'Editor-Version': 'Request-Editor' }
     const harness = runtime({ kind: 'grant', payload: {

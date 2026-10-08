@@ -4,7 +4,7 @@ import type { CredentialStore, OAuthAuth } from '@earendil-works/pi-ai'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
-import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
+import { certifyCopilotNativeRefresh, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import type { AccountModelAuth, AccountModelSourceDependencies } from './account-model-source.ts'
 
@@ -111,12 +111,15 @@ export function createAccountModelAuth(
           login: async () => { throw new Error('COPILOT_ACCOUNT_USE_CANONICAL_SIGN_IN') },
           async refresh(credential, requestSignal) {
             active(signal)
-            matches(normalizeGitHubCopilotOAuthCredential(credential), key)
+            const previous = normalizeGitHubCopilotOAuthCredential(credential)
+            matches(previous, key)
             const result = normalizeGitHubCopilotOAuthCredential(await oauth.refresh(
               credential, requestSignal === undefined ? signal : AbortSignal.any([signal, requestSignal]),
             ))
             active(signal)
             matches(result, key)
+            await certifyCopilotNativeRefresh(previous, result, oauth.toAuth, signal)
+            active(signal)
             return result
           },
           async toAuth(credential) {
