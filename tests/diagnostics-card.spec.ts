@@ -142,7 +142,8 @@ describe('local diagnostics control', () => {
       status: 'observed', rows: [{
         day: observedDay, version: '0.4.0-alpha.126', policyVersion: 'high-cost-v1',
         modelId: 'fixture-model', targetCategory: 'powerful', category: 'powerful',
-        demand: 'complex', assessmentSource: 'semantic', method: 'weighted-distribution', fallback: false,
+        demand: 'complex', assessmentSource: 'semantic', assessmentOutcome: 'semantic-known',
+        method: 'weighted-distribution', fallback: false,
         highCost: true, previous: false, weight: 0.2, opportunities: 4,
         expectedSelections: 0.8, selections: 1,
       }], noFitRows: [{
@@ -166,6 +167,9 @@ describe('local diagnostics control', () => {
       expect(element.textContent).toContain('no Session or turn IDs')
       const table = element.querySelector('table')
       expect(table?.textContent).toContain('fixture-model')
+      expect(table?.textContent).toContain('assessment: semantic-known')
+      expect(table?.textContent).toContain('assessment: not recorded')
+      expect(element.textContent).toContain('sum Selected or No-fit')
       expect(table?.textContent).toContain('4')
       expect(table?.textContent).toContain('0.800')
       expect(table?.textContent).toContain('1')

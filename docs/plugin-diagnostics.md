@@ -46,6 +46,16 @@ attribution. Aggregate rows are capped at 1,024, retained for 14 days and
 included in the existing 2 MiB snapshot limit; expired, dropped, truncated,
 saturated and restart evidence remains explicit. There is no per-turn export,
 automatic tuning or upload. The aggregate controls can be paused independently.
+New rows also distinguish fixed assessment outcomes: local-known/local-unknown,
+semantic-known/semantic-unknown, disabled, unavailable, timeout, failed,
+invalid-result and context-omitted. Missing legacy outcomes remain **not recorded**,
+never reconstructed from demand/source. Count decisions using Selected plus
+No-fit, not candidate opportunities (one decision may have many candidates).
+These outcomes explain classifier settlement, not network root cause or model
+execution; no error bodies, signals, prompts or Session/turn IDs are added.
+Classification, its eight-second budget and conservative omitted-context guard
+are unchanged. Older strict plugin versions may reject new snapshot fields on
+rollback; do not delete or silently rewrite retained evidence to make them parse.
 The separate **Enable request observations** control uses the hidden volatile
 `github-copilot.requestDiagnosticsEnabled` leaf with path-level CAS and exact
 readback. Existing aggregate consent never enables request observations.
