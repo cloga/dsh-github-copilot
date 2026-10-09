@@ -23,7 +23,8 @@ const partial = [
 ].map(sse).join('')
 
 async function call(managed: boolean, fetch: NonNullable<StreamOptions['fetch']>, controller = new AbortController(),
-  wire = new AbortController(), requestDiagnostics?: PreviewProviderGuard['requestDiagnostics'], maxRetries = 0) {
+  wire = new AbortController(), requestDiagnostics?: PreviewProviderGuard['requestDiagnostics'], maxRetries = 0,
+  requestContext = context) {
   const released = vi.fn()
   const onWireAbort = vi.fn()
   const { provider, models } = createAccountProvider([descriptor], {
@@ -35,7 +36,7 @@ async function call(managed: boolean, fetch: NonNullable<StreamOptions['fetch']>
     }),
   }, baseURL)
   const model = models[0]!
-  const stream = (managed ? provider : githubCopilotProvider()).streamSimple(model, context, {
+  const stream = (managed ? provider : githubCopilotProvider()).streamSimple(model, requestContext, {
     apiKey: 'synthetic-test-key', signal: controller.signal, maxRetries, fetch,
   })
   const events = []
@@ -53,6 +54,28 @@ describe('managed Responses failure boundaries with native SDK and no network', 
       enabled: () => collector.isRequestEnabled(), begin: collector.beginRequest.bind(collector), failed: vi.fn(),
     } }
   }
+  it('does not wait for large-request composition before native success and updates the exact settled row', async () => {
+    const { collector, requestDiagnostics } = observed()
+    const large = normalizeContext({ messages: [{ role: 'user',
+      content: 'SYNTHETIC_PRIVATE'.repeat(1400000), timestamp: 1 }] })
+    const bodies: string[] = []
+    const fetch = vi.fn(async (_input, init) => {
+      bodies.push(String(init?.body))
+      return new Response(sse({ type: 'response.completed', response: { status: 'completed',
+        usage: { input_tokens: 1, output_tokens: 0 } } }))
+    })
+    const native = await call(false, fetch, new AbortController(), new AbortController(), undefined, 0, large)
+    const managed = await call(true, fetch, new AbortController(), new AbortController(), requestDiagnostics, 0, large)
+    expect({ ...managed.result, timestamp: 0 }).toEqual({ ...native.result, timestamp: 0 })
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(bodies[1]).toBe(bodies[0])
+    expect(collector.snapshot().requests!.rows[0]!.composition.state).toBe('size-limit')
+    await vi.waitFor(() => expect(collector.snapshot().requests!.rows[0]!.composition).toMatchObject({
+      state: 'complete', totalBytes: Buffer.byteLength(bodies[1]!), imageBlockBytes: 0, opaqueReplayBytes: 0,
+    }), { timeout: 3000 })
+    expect(collector.snapshot().requests!.rows[0]!.outcome).toBe('stream-done')
+    expect(JSON.stringify(collector.snapshot())).not.toContain('SYNTHETIC_PRIVATE')
+  })
   it('records verified 408 once without changing the native error, serialized input or dispatch count', async () => {
     const { collector, requestDiagnostics } = observed()
     const bodies: string[] = []

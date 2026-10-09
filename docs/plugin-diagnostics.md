@@ -166,10 +166,26 @@ original JSON and dispatched wire byte counts, encoding, bounded composition
 partitions, local header/elapsed timing, HTTP status and fixed terminal/reason
 categories. Existing public native upload observations add ALPN, local body-write
 timing and writable-buffer bytes only when available. Unsupported/ambiguous
-transport evidence stays explicitly unavailable. Composition is bounded to
-16 MiB and fixed parser work limits; larger bodies retain byte counts with
-`size-limit`, never an invented composition or unlimited body parse. These are
-diagnostic work limits, not provider request limits.
+transport evidence stays explicitly unavailable. Bodies up to 16 MiB retain the
+existing synchronous span validator. Larger JSON bodies, including the reported
+approximately 20.4 MiB class, use a cooperative span scanner up to 32 MiB without
+building a payload object graph or decoding image/replay values. It yields every
+65,536 scanned characters, checks a two-second monotonic work deadline and caps
+concurrent scans at four. Both paths retain 64-level depth, 65,536-value,
+131,072-token and 128-serialized-key-character limits. Size, work, time and
+cancellation limits remain named unavailable states without partial totals.
+These are diagnostic work limits, not provider request limits.
+
+For opted-in observations, large-body counting starts after Fetch invocation
+and does not delay ordinary native response/stream delivery. A retained row can
+receive its numeric composition after terminal settlement; until then its
+initial `size-limit` remains explicit. Refresh/read/export obtains the currently
+available evidence, not a promise of completion. Pause/re-enable, clear,
+teardown, retention and eviction fence late updates, and the counting work
+retains its source string only for that bounded scan. Actual caller cancellation
+can stop it. Verified-408 guidance may await that same bounded work; without
+request consent only an exact verified failure starts the larger scan.
+Replay validation/recovery keeps its original 16 MiB boundary unchanged.
 
 Random stream UUIDs group only dispatches within one native SDK stream.
 `dispatchIndex` is physical Fetch order, **not** Core's retry number or an
@@ -177,6 +193,10 @@ end-to-end Session/turn correlation. No account/Session/turn IDs or hashes,
 URLs, headers, raw errors, prompts, tool parameters/results, attachment or replay
 content, credentials or token accounting are retained. Review timestamps/model
 metadata before explicit sharing; nothing is uploaded automatically.
+Comparing JSON/wire sizes and partitions within a stream can reveal repeated
+large payload sizes or growth, not duplicate contents, a Core retry count,
+delivery to a proxy/supplier or the reason for a rejection. No request hashes
+are collected and no automatic size-based mitigation is introduced.
 
 An exact verified HTTP408 `user_request_timeout` is classified as
 `request-body-timeout`; other provider/transport errors remain fixed unknown

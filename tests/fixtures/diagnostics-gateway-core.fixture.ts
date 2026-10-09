@@ -119,8 +119,14 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     })!
     request.headers(408, 61375)
     request.finish('http-error', 'request-body-timeout')
+    request.composition!({ state: 'complete', totalBytes: 21355789, conversationBytes: 21355770,
+      toolSchemaBytes: 0, systemBytes: 0, otherBytes: 19, imageBlockBytes: 0, opaqueReplayBytes: 0,
+      remainingConversationBytes: 21355770 })
     await diagnostics.flush()
     expect(diagnostics.get().snapshot.requests?.rows).toMatchObject([{ httpStatus: 408, reason: 'request-body-timeout' }])
+    await expect(remote.get()).resolves.toMatchObject({ ok: true, value: { snapshot: { requests: {
+      rows: [{ composition: { state: 'complete', totalBytes: 21355789, conversationBytes: 21355770 } }],
+    } } } })
     await expect(remote.setRequestEnabled(false)).resolves.toMatchObject({ ok: true, value: { requestEnabled: false } })
     await expect(remote.setEnabled(true)).resolves.toMatchObject({ ok: true, value: { enabled: true, dirty: false } })
     await expect(remote.setAutoAllocationEnabled(true)).resolves.toMatchObject({

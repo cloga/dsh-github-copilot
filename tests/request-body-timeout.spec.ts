@@ -6,6 +6,16 @@ const error = { code: 'user_request_timeout',
   message: 'Timed out reading request body. Try again, or use a smaller request size.' }
 
 describe('verified request-body timeout diagnostics', () => {
+  it('measures a verified 20.4 MiB failure while preserving the original native response and timing', async () => {
+    const body = JSON.stringify({ input: [{ role: 'user', content: 'PRIVATE'.repeat(3559000) }] })
+    const response = new Response(JSON.stringify(error), { status: 408 })
+    const text = await requestBodyTimeoutDiagnostic(response, body, undefined,
+      { protocol: 'openai-responses', responseHeadersMs: 61375 })
+    expect(text).toContain('Composition (wire UTF-8 bytes): conversation')
+    expect(text).toContain('61375 ms (round trip, not upload duration)')
+    expect(text).not.toContain('PRIVATE')
+    expect(await response.json()).toEqual(error)
+  })
   it('includes local phase evidence only after strict failure verification and keeps the original response', async () => {
     const upload = { state: 'observed' as const, bodyWrite: 'observed' as const,
       bodyWriteCompleteMs: 32, nativeResponseHeadersMs: 900, alpn: 'h2' as const, nodeWritableBufferBytes: 0 }
