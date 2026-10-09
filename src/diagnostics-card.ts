@@ -59,16 +59,16 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
   const autoRows = auto ? [
     ...auto.rows.map(row => ({
       key: JSON.stringify([row.day, row.version, row.policyVersion, row.modelId, row.targetCategory, row.category, row.demand,
-        row.assessmentSource, row.method, row.fallback, row.highCost, row.previous]),
+        row.assessmentSource, row.assessmentOutcome, row.method, row.fallback, row.highCost, row.previous]),
       day: row.day, policy: row.policyVersion, model: row.modelId,
-      cohort: `${row.targetCategory} → ${row.category} · ${row.demand} · ${row.assessmentSource} · ${row.method}`
+      cohort: `${row.targetCategory} → ${row.category} · ${row.demand} · ${row.assessmentSource} · assessment: ${row.assessmentOutcome ?? 'not recorded'} · ${row.method}`
         + (row.fallback ? ' · fallback' : '') + (row.highCost ? ' · high-cost' : '') + (row.previous ? ' · continuity' : ''),
       opportunities: row.opportunities, expected: row.expectedSelections, selected: row.selections, noFit: null as number | null,
     })),
     ...auto.noFitRows.map(row => ({
-      key: JSON.stringify([row.day, row.version, row.policyVersion, row.targetCategory, row.category, row.demand, row.assessmentSource]),
+      key: JSON.stringify([row.day, row.version, row.policyVersion, row.targetCategory, row.category, row.demand, row.assessmentSource, row.assessmentOutcome]),
       day: row.day, policy: row.policyVersion, model: '—',
-      cohort: `${row.targetCategory} → ${row.category} · ${row.demand} · ${row.assessmentSource} · no fit`,
+      cohort: `${row.targetCategory} → ${row.category} · ${row.demand} · ${row.assessmentSource} · assessment: ${row.assessmentOutcome ?? 'not recorded'} · no fit`,
       opportunities: null as number | null, expected: null as number | null, selected: null as number | null,
       noFit: row.decisions,
     })),
@@ -122,7 +122,7 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
             ? h('p', { style: { margin: 0 } }, 'Storage is not ready; retained Auto observation status is unknown.')
             : view && auto.status !== 'observed' ? h('p', { style: { margin: 0 } }, 'No retained observations yet.') : null,
       autoRows.length ? h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        `${autoOpportunities} candidate opportunities · ${autoExpected.toFixed(3)} expected selections · ${autoSelections} actual selections · ${autoNoFit} no-fit decisions. Compare expected and selected counts only within matching cohorts; these are not execution, quality or billing evidence.`) : null),
+        `${autoOpportunities} candidate opportunities · ${autoExpected.toFixed(3)} expected selections · ${autoSelections} actual selections · ${autoNoFit} no-fit decisions. Compare expected and selected counts only within matching cohorts; these are not execution, quality or billing evidence. Assessment outcomes explain classification only, not the supplier root cause. Legacy reasons are not recorded; sum Selected or No-fit, not candidate opportunities, when counting decisions by outcome.`) : null),
     view ? h('details', null,
       h('summary', null, 'Physical request observations'),
       h('p', { style: { margin: 0 } },

@@ -133,6 +133,14 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
       ok: true, value: { enabled: true, autoAllocationEnabled: true, dirty: false },
     })
     const operation = diagnostics.collector.begin('account-global-switch')
+    diagnostics.collector.recordAutoAllocation({
+      assessment: { demand: 'unknown', source: 'local', signals: ['insufficient-evidence'], diagnostic: 'timeout' },
+      targetCategory: 'powerful', selectedCategory: 'powerful', categoryCandidateCount: 0,
+      method: 'no-fit', fallback: true,
+    })
+    await expect(remote.get()).resolves.toMatchObject({ ok: true, value: { snapshot: {
+      autoAllocation: { noFitRows: [{ assessmentOutcome: 'timeout', decisions: 1 }] },
+    } } })
     operation.stage('cas')
     await diagnostics.flush()
     expect(diagnostics.get().snapshot.pending[0]?.stage).toBe('cas')

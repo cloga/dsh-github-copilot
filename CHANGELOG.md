@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.2-alpha.6 (prepared)
+
+- Retain fixed assessment outcomes in existing opted-in daily Auto allocation
+  aggregates and their diagnostic table: timeout, disabled, unavailable, invalid
+  result, failed, omitted context, and known/unknown local or semantic assessment.
+- Preserve legacy missing reasons as unrecorded, keep outcome cohorts separate
+  through strict gateways and storage reopen, and distinguish task counts from
+  repeated candidate opportunities. No prompts, error bodies or Session IDs added.
+- Leave classification, routing, eight-second assessment budget, conservative
+  context handling and collection consent unchanged. Historical unknown causes
+  remain unproven; review new outcome data before changing policy.
+
 ## 0.4.2-alpha.5 (prepared)
 
 - Measure large request JSON composition up to 32 MiB with a cooperative,

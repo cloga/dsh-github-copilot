@@ -54,6 +54,11 @@ usage, replace Core's meter, infer current occupancy/percentages or rewrite hist
 See [quota boundaries](./docs/copilot-usage.md).
 12. Default-off local account/Checking/compaction diagnostics through public storage-domain and strict additive Remotes. Keep fixed-dimension Client/Host and logical/physical populations separate, with bounded handles/rows, 14-day retention, explicit loss/uncertainty and native commit evidence. Isolate the home-wide backend by public profile context, never account/Session identity; one writer per profile is required. No content, raw errors, identities/hashes, credential/history reads, ad-hoc files, Settings logs, upload, daily task or automatic repair. Aggregate and Auto controls remain independent. Separately consented `requestDiagnosticsEnabled` collects at most 128 content-free managed-adapter physical requests for 24 hours within the shared 2 MiB cap. Random stream groups/dispatch indices are not Session/turn identity or Core retry counts. Local body-write completion does not prove supplier receipt; abort attribution needs actual signal evidence, not EOF text. Never change transport/retries/Usage to obtain diagnostics. All controls use hidden volatile CAS leaves with exact readback; clear is a separately confirmed epoch fence. Missing/corrupt storage remains unavailable, never healthy empty data. Publication does not enable collection. See [local diagnostics](./docs/plugin-diagnostics.md).
 
+Auto aggregate assessment outcomes are fixed codes only; keep legacy missing reasons
+unrecorded and separate from new cohorts. Count decisions by selected/no-fit counts,
+not repeated candidate opportunities. Never change assessment policy, deadline or
+context safety merely to populate diagnostics; retain the shared storage/row bounds.
+
 ## Session-policy compaction replay consent (#349, #352)
 
 `/copilot-compact visible-history` explicitly authorizes one lossy managed Responses

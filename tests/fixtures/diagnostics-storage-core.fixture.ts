@@ -36,6 +36,12 @@ it('persists strictly bounded aggregate snapshots across actual public JSON/doma
     collector.setEnabled(true)
     collector.begin('identity-read').finish('success')
     collector.begin('compaction').stage('summary-attempt')
+    collector.setAutoAllocationEnabled(true)
+    collector.recordAutoAllocation({
+      assessment: { demand: 'unknown', source: 'semantic', signals: ['context-omitted'], diagnostic: 'context-omitted' },
+      targetCategory: 'powerful', selectedCategory: 'unknown', categoryCandidateCount: 0,
+      method: 'no-fit', fallback: true,
+    })
     collector.setRequestEnabled(true)
     const requestStart = { streamId: '12345678-1234-4234-8234-123456789abc', dispatchIndex: 1,
       model: 'fixture-model', protocol: 'openai-responses' as const,
@@ -55,6 +61,9 @@ it('persists strictly bounded aggregate snapshots across actual public JSON/doma
     expect(restarted.snapshot().rows.some(row => row.metric === 'success')).toBe(true)
     expect(restarted.snapshot().interrupted).toBe(1)
     expect(restarted.snapshot().pending).toEqual([])
+    expect(restarted.snapshot().autoAllocation?.noFitRows).toMatchObject([
+      { assessmentOutcome: 'context-omitted', decisions: 1 },
+    ])
     expect(restarted.snapshot().requests).toMatchObject({
       pending: 0, interruptedOnReopen: 1, rows: [{ reason: 'request-body-timeout', httpStatus: 408,
         composition: { state: 'complete', totalBytes: 21355789, conversationBytes: 21355770 } }],

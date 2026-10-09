@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { allocateAutoModel } from '../src/auto-allocation.ts'
-import { AutoAllocationDiagnosticsCollector } from '../src/auto-allocation-diagnostics.ts'
+import { AutoAllocationDiagnosticsCollector, AutoAllocationDiagnosticsSchema } from '../src/auto-allocation-diagnostics.ts'
 import type { AutoSelectionExplanation } from '../src/auto-model-routing.ts'
 import { DiagnosticsCollector, emptyDiagnostics } from '../src/diagnostics-collector.ts'
 import { DiagnosticsSnapshotSchema } from '../src/diagnostics-types.ts'
@@ -16,6 +16,46 @@ function explanation(): AutoSelectionExplanation {
 }
 
 describe('persistent Auto allocation diagnostics', () => {
+  it('separates assessment outcomes without changing model opportunities or exposing errors', () => {
+    const collector = new AutoAllocationDiagnosticsCollector('0.4.2-alpha.6', undefined, () => day)
+    collector.setEnabled(true)
+    for (const diagnostic of ['disabled', 'unavailable', 'timeout', 'failed', 'invalid-result', 'context-omitted'] as const) {
+      const value = explanation()
+      collector.record({ ...value, assessment: { ...value.assessment, diagnostic } })
+    }
+    collector.record(explanation())
+    const semantic = explanation()
+    collector.record({ ...semantic, assessment: { demand: 'unknown', source: 'semantic', signals: ['insufficient-evidence'] } })
+    const rows = collector.snapshot().rows
+    expect(rows).toHaveLength(16)
+    expect(new Set(rows.map(row => row.assessmentOutcome))).toEqual(new Set([
+      'disabled', 'unavailable', 'timeout', 'failed', 'invalid-result', 'context-omitted',
+      'local-unknown', 'semantic-unknown',
+    ]))
+    expect(rows.reduce((sum, row) => sum + row.selections, 0)).toBe(8)
+    expect(rows.reduce((sum, row) => sum + row.opportunities, 0)).toBe(16)
+    expect(AutoAllocationDiagnosticsSchema.safeParse({
+      ...collector.snapshot(), rows: [{ ...rows[0], assessmentOutcome: 'raw error body' }],
+    }).success).toBe(false)
+  })
+
+  it('keeps legacy reasons unrecorded and captures no-fit and successful assessment outcomes', () => {
+    const collector = new AutoAllocationDiagnosticsCollector('0.4.2-alpha.6', undefined, () => day)
+    collector.setEnabled(true)
+    collector.record(explanation())
+    const snapshot = collector.snapshot()
+    const legacyRows = snapshot.rows.map(({ assessmentOutcome: _outcome, ...row }) => row)
+    collector.restore({ ...snapshot, rows: legacyRows }, false)
+    collector.record(explanation())
+    expect(collector.snapshot().rows).toHaveLength(4)
+    expect(collector.snapshot().rows.filter(row => row.assessmentOutcome === undefined)).toHaveLength(2)
+    for (const source of ['local', 'semantic'] as const) {
+      collector.record({ ...explanation(), method: 'no-fit',
+        assessment: { demand: 'routine', source, signals: ['bounded-transformation'] } })
+    }
+    expect(collector.snapshot().noFitRows.map(row => row.assessmentOutcome)).toEqual(['local-known', 'semantic-known'])
+  })
+
   it('keeps allocation opportunities and conditional expected/actual counts in separate strata', () => {
     let now = 10 * day + 1234
     const collector = new AutoAllocationDiagnosticsCollector('0.4.0-alpha.126', undefined, () => now)
