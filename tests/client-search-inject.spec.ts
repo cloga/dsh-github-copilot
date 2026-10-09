@@ -68,7 +68,8 @@ async function fixture(footer: boolean, routingAvailable = true, bundle = true, 
   const addDiagnostics = () => root.plugin({ apply(ctx) {
     class DiagnosticsRemote extends NamedService {
       constructor() { super(ctx, 'remote.githubCopilotDiagnostics') }
-      async get() { return { ok: true, value: { enabled: false, autoAllocationEnabled: false, state: 'ready', diagnostic: 'none',
+      async get() { return { ok: true, value: { enabled: false, autoAllocationEnabled: false,
+        state: 'ready', diagnostic: 'none',
         dirty: false, snapshot: emptyDiagnostics() } } }
     }
     new DiagnosticsRemote()
@@ -92,7 +93,7 @@ describe('search UI traced Remote dependency', () => {
       expect(element.textContent).toContain('Diagnostics controls are unavailable')
       let diagnostics!: ReturnType<typeof f.addDiagnostics>
       await act(async () => { diagnostics = f.addDiagnostics(); await diagnostics })
-      expect(element.textContent).toContain('Collection paused')
+      expect(element.textContent).toContain('Local collection paused')
       await act(async () => { await diagnostics.dispose() })
       expect(element.textContent).toContain('Diagnostics controls are unavailable')
     } finally {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2-alpha.3 (prepared, #390)
+
+- Put daily Auto allocation aggregate rows in the primary Local diagnostics view, with UTC date, policy, model, decision cohort, opportunities, expected selections, selected counts and no-fit decisions. Keep cohorts distinct and state that these counts do not prove execution, quality or billing.
+- Move account/Checking and compaction tables, collection controls, and data-scope/limits/JSON guidance into collapsed disclosures. Preserve status retry access, independent default-off switches and separately confirmed clear behavior.
+- Match disclosure summaries and aggregate tables to native settings typography. Update bilingual usage guidance and add focused component regressions; no collection, CAS, storage, privacy or routing policy changes.
+
 ## 0.4.2-alpha.1 (publication blocked: immutable tag metadata)
 
 - Persist bounded daily Auto allocation aggregates in the existing profile-isolated local diagnostics storage domain. The Auto collection switch is independent and default-off; enabling it does not enable account/Checking or compaction collection.
@@ -7,7 +13,7 @@
 - Preserve turn routing and Host-lifetime explanations when observation is disabled or fails. No Session/turn IDs, conversation data, upload, automatic tuning or execution/quality/billing inference is added.
 - Add collector, UI, Remote codec and storage-gateway regression coverage; synthetic tests do not establish live Desktop activation or Auto performance.
 
-## 0.4.2-alpha.2 (prepared)
+## 0.4.2-alpha.2 (published)
 
 - Carry forward the default-off local Auto allocation observations from the unpublished `0.4.2-alpha.1` candidate.
 - Accept the repository's `(prepared)` changelog heading in the release preflight and verify exactly one version section before publishing.
