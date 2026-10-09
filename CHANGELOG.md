@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.2-alpha.3 (prepared, #390)
+## 0.4.2-alpha.3 (prepared)
 
 - Put daily Auto allocation aggregate rows in the primary Local diagnostics view, with UTC date, policy, model, decision cohort, opportunities, expected selections, selected counts and no-fit decisions. Keep cohorts distinct and state that these counts do not prove execution, quality or billing.
 - Move account/Checking and compaction tables, collection controls, and data-scope/limits/JSON guidance into collapsed disclosures. Preserve status retry access, independent default-off switches and separately confirmed clear behavior.
