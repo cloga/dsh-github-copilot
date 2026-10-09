@@ -14,8 +14,14 @@ import { normalizeAccountModelCatalog } from '../src/account-model-catalog.ts'
 import type { AccountModelApi } from '../src/account-model-catalog.ts'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { BlockAssembler, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, createUserMessage, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW } from '../src/copilot-identity.ts'
+import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
+import { requestBodyEvidence } from '../src/request-body-evidence.ts'
+import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
+import { createServer } from 'node:http'
+import { gunzipSync } from 'node:zlib'
+import * as uploadEvidence from '../src/request-upload-evidence.ts'
 
 // Preserve the real factory by default; one observer identity test replaces only
 // its returned stream entrypoint, without modifying the installed ESM module.
@@ -26,10 +32,12 @@ vi.mock('@earendil-works/pi-ai/providers/github-copilot', async importOriginal =
 
 const baseURL = 'https://api.individual.githubcopilot.com'
 const endpoint: Record<AccountModelApi, string> = { 'openai-responses': '/responses', 'openai-completions': '/chat/completions', 'anthropic-messages': '/v1/messages' }
-function descriptor(api: AccountModelApi, id = 'future-lab-r17', efforts = ['high', 'max'], adaptive = true) {
+function descriptor(api: AccountModelApi, id = 'future-lab-r17', efforts = ['high', 'max'], adaptive = true,
+  thinking?: boolean) {
   const parsed = normalizeAccountModelCatalog({ data: [{ id, name: 'Unseen model', model_picker_enabled: true,
     policy: { state: 'enabled' }, supported_endpoints: [endpoint[api]],
-    capabilities: { supports: { streaming: true, tool_calls: true, vision: true, reasoning_effort: efforts, adaptive_thinking: adaptive },
+    capabilities: { supports: { streaming: true, tool_calls: true, vision: true, reasoning_effort: efforts,
+      adaptive_thinking: adaptive, ...thinking === undefined ? {} : { thinking } },
       limits: { max_context_window_tokens: 65536, max_prompt_tokens: 32768, max_output_tokens: 8192 } },
   }] })
   expect(parsed.rejected).toEqual([])
@@ -78,9 +86,11 @@ function nativeEvents(api: AccountModelApi): Response {
   ]
   return new Response(events.map(value => `event: ${value.type}\n${sse(value)}`).join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
-async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>) {
+async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>, streamIdleTimeoutMs?: number,
+  compression?: { enabled: boolean; text: string }) {
   const item = descriptor(api)
-  const guarded = accountGuard(item.id)
+  const guarded = { ...accountGuard(item.id), ...streamIdleTimeoutMs === undefined ? {} : { streamIdleTimeoutMs },
+    ...compression === undefined ? {} : { responsesRequestCompression: compression.enabled } }
   const { provider } = createAccountProvider([item], guarded, baseURL)
   const profile: ResolvedPiAiProviderProfile = { provider: PREVIEW, displayName: 'Account models', piProvider: provider,
     streamIdleTimeoutMs: 300_000, maxRequestImageBytes: 20_971_520,
@@ -99,7 +109,10 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
   })
   const prepared = await adapter.prepareCall(PREVIEW, item.id)
   const assembler = new BlockAssembler()
-  for await (const chunk of prepared.stream({ provider: PREVIEW, model: item.id, messages: [],
+  for await (const chunk of prepared.stream({ provider: PREVIEW, model: item.id,
+    messages: compression === undefined ? [] : [createUserMessage({
+      source: { kind: 'user' }, content: [{ type: 'text', text: compression.text }],
+    })],
     ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
   })) assembler.push(chunk)
   return { assembler, model: prepared.model, env }
@@ -107,6 +120,227 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('account-driven native provider', () => {
+  it('preserves published-adapter JSON and usage across identity and gzip encoding', async () => {
+    const text = 'Synthetic UTF-8 context. '.repeat(15_000)
+    const bodies: string[] = []
+    const encodings: (string | null)[] = []
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const headers = new Headers(init?.headers)
+      encodings.push(headers.get('content-encoding'))
+      if (headers.get('content-encoding') === 'gzip') {
+        if (!(init?.body instanceof Uint8Array)) throw new Error('FIXTURE_EXPECTED_GZIP_BYTES')
+        expect(headers.get('content-length')).toBe(String(init.body.byteLength))
+        bodies.push(gunzipSync(init.body).toString('utf8'))
+      } else bodies.push(String(init?.body))
+      return nativeEvents('openai-responses')
+    })
+    vi.stubGlobal('fetch', fetch)
+    const baseline = await accountCall('openai-responses', undefined, undefined, undefined, { enabled: false, text })
+    const compressed = await accountCall('openai-responses', undefined, undefined, undefined, { enabled: true, text })
+    expect(encodings).toEqual([null, 'gzip'])
+    expect(bodies[1]).toBe(bodies[0])
+    expect(bodies[1]).toContain(text)
+    expect(compressed.assembler.finish).toEqual({ kind: 'stop' })
+    expect(compressed.assembler.usage).toEqual(baseline.assembler.usage)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps caller-owned Fetch unchanged and does not resend a gzip 415 response', async () => {
+    const text = 'Synthetic context. '.repeat(15_000)
+    const item = descriptor('openai-responses')
+    const customFetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(typeof init?.body).toBe('string')
+      expect(new Headers(init?.headers).has('content-encoding')).toBe(false)
+      return nativeEvents('openai-responses')
+    })
+    const direct = createAccountProvider([item], {
+      ...accountGuard(item.id), responsesRequestCompression: true,
+    }, baseURL)
+    const customStream = direct.provider.streamSimple(direct.models[0]!, normalizeContext({
+      messages: [{ role: 'user', content: text, timestamp: 0 }],
+    }), { apiKey: 'synthetic-account-token', maxRetries: 0, fetch: customFetch })
+    for await (const _event of customStream) { /* Drain the native SDK response. */ }
+    expect((await customStream.result()).stopReason).toBe('stop')
+    expect(customFetch).toHaveBeenCalledOnce()
+
+    const unsupported = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('content-encoding')).toBe('gzip')
+      return new Response('Unsupported Content-Encoding', { status: 415 })
+    })
+    vi.stubGlobal('fetch', unsupported)
+    const failed = await accountCall('openai-responses', undefined, undefined, undefined, { enabled: true, text })
+    expect(failed.assembler.finish).toMatchObject({ kind: 'error' })
+    expect(unsupported).toHaveBeenCalledOnce()
+  })
+
+  it('rechecks the request/account fence with both opt-ins and never dispatches revoked work', async () => {
+    const item = descriptor('openai-responses')
+    const controller = new AbortController()
+    const release = vi.fn()
+    let checkpoints = 0
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    const guard: AccountProviderGuard = {
+      ...accountGuard(item.id),
+      responsesRequestCompression: true,
+      responsesOmitTemperature: true,
+      beforeWire: async () => ({ signal: controller.signal, release }),
+      requestCheckpoint() {
+        if (++checkpoints === 2) controller.abort(new Error('SYNTHETIC_ACCOUNT_REVOKED'))
+      },
+    }
+    const { provider, models } = createAccountProvider([item], guard, baseURL)
+    const stream = provider.streamSimple(models[0]!, normalizeContext({
+      messages: [{ role: 'user', content: 'Synthetic context. '.repeat(15_000), timestamp: 0 }],
+    }), { apiKey: 'synthetic-account-token', maxRetries: 0 })
+    for await (const _event of stream) { /* Preserve the native terminal cancellation. */ }
+    expect(checkpoints).toBe(2)
+    expect(fetch).not.toHaveBeenCalled()
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it.each(['openai-completions', 'anthropic-messages'] as const)(
+    'keeps native %s transport when the option is enabled', async api => {
+      const text = 'Synthetic context. '.repeat(15_000)
+      const bodies: string[] = []
+      const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+        expect(new Headers(init?.headers).has('content-encoding')).toBe(false)
+        expect(typeof init?.body).toBe('string')
+        bodies.push(String(init?.body))
+        return nativeEvents(api)
+      })
+      vi.stubGlobal('fetch', fetch)
+      const baseline = await accountCall(api, undefined, undefined, undefined, { enabled: false, text })
+      const enabled = await accountCall(api, undefined, undefined, undefined, { enabled: true, text })
+      expect(bodies[1]).toBe(bodies[0])
+      expect(enabled.assembler.finish).toEqual({ kind: 'stop' })
+      expect(enabled.assembler.usage).toEqual(baseline.assembler.usage)
+      expect(fetch).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('sends gzip with correct framing through Node Fetch', async () => {
+    let contentEncoding: string | undefined
+    let contentLength: string | undefined
+    let received = Buffer.alloc(0)
+    const server = createServer(async (request, response) => {
+      const chunks: Buffer[] = []
+      for await (const chunk of request) chunks.push(Buffer.from(chunk))
+      contentEncoding = request.headers['content-encoding']
+      contentLength = request.headers['content-length']
+      received = Buffer.concat(chunks)
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.end(await nativeEvents('openai-responses').text())
+    })
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('FIXTURE_EXPECTED_LOCAL_SERVER_ADDRESS')
+    const nativeFetch = globalThis.fetch.bind(globalThis)
+    const redirectedFetch = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      nativeFetch(`http://127.0.0.1:${address.port}/responses`, init))
+    vi.stubGlobal('fetch', redirectedFetch)
+    try {
+      const item = descriptor('openai-responses')
+      const { provider, models } = createAccountProvider([item], {
+        ...accountGuard(item.id), responsesRequestCompression: true,
+      }, baseURL)
+      const text = 'Synthetic local Fetch upload. '.repeat(15_000)
+      const stream = provider.streamSimple(models[0]!, normalizeContext({
+        messages: [{ role: 'user', content: text, timestamp: 0 }],
+      }), { apiKey: 'synthetic-account-token', maxRetries: 0 })
+      for await (const _event of stream) { /* Drain the native SDK response. */ }
+      expect((await stream.result()).stopReason).toBe('stop')
+      expect(redirectedFetch).toHaveBeenCalledOnce()
+      expect(contentEncoding).toBe('gzip')
+      expect(contentLength).toBe(String(received.byteLength))
+      expect(gunzipSync(received).toString('utf8')).toContain(text)
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
+  })
+
+  it('keeps original JSON for replay-scope checks after gzip without retiring the account', async () => {
+    const text = 'Synthetic context. '.repeat(15_000)
+    let originalBody = ''
+    const unauthorized = vi.fn(), rejected = vi.fn(), replayFailure = vi.fn()
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('content-encoding')).toBe('gzip')
+      if (!(init?.body instanceof Uint8Array)) throw new Error('FIXTURE_EXPECTED_GZIP_BYTES')
+      originalBody = gunzipSync(init.body).toString('utf8')
+      return Response.json({ message: 'input item does not belong to this connection' }, { status: 401 })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const item = descriptor('openai-responses')
+    const guard = { ...accountGuard(item.id), responsesRequestCompression: true,
+      onUnauthorized: unauthorized, onReplayScopeRejected: rejected, onReplayFailure: replayFailure }
+    const { provider, models } = createAccountProvider([item], guard, baseURL)
+    const stream = provider.streamSimple(models[0]!, normalizeContext({
+      messages: [{ role: 'user', content: text, timestamp: 0 }],
+    }), { apiKey: 'synthetic-account-token', maxRetries: 0 })
+    for await (const _event of stream) { /* Drain the native terminal failure. */ }
+    expect((await stream.result()).stopReason).toBe('error')
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(rejected).toHaveBeenCalledExactlyOnceWith(originalBody)
+    expect(JSON.parse(originalBody).input[0].content[0].text).toBe(text)
+    expect(replayFailure).toHaveBeenCalledOnce()
+    expect(unauthorized).not.toHaveBeenCalled()
+  })
+
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'checks the auxiliary deadline immediately before native %s Fetch and releases the lease', async api => {
+      const item = descriptor(api)
+      const guard = accountGuard(item.id)
+      let expired = false
+      const release = vi.fn(), fetch = vi.fn()
+      const checkpoint = vi.fn(() => {
+        if (expired) throw new DOMException('Synthetic assessment deadline exceeded', 'TimeoutError')
+      })
+      const { provider, models } = createAccountProvider([item], {
+        ...guard,
+        beforeWire: async () => {
+          expired = true
+          return { signal: guard.signal, release }
+        },
+        requestCheckpoint: checkpoint,
+      }, baseURL)
+      const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+        apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+      })
+      for await (const _event of stream) { /* Preserve the native terminal failure. */ }
+      expect((await stream.result()).errorMessage).toBe('Request timed out.')
+      expect(checkpoint).toHaveBeenCalledOnce()
+      expect(fetch).not.toHaveBeenCalled()
+      expect(release).toHaveBeenCalledTimes(1)
+    })
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)('preserves native output and reasoning with byte-aware %s observation', async api => {
+    const fetch = vi.fn(async () => nativeEvents(api))
+    vi.stubGlobal('fetch', fetch)
+    const result = await accountCall(api, 'high', undefined, 1000)
+    expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    expect(result.assembler.blocks()).toContainEqual({ type: 'reasoning', text: 'Public summary.' })
+    expect(result.assembler.blocks()).toContainEqual({ type: 'text', text: 'Hello.' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it('releases the admitted wire lease if the idle interval is invalid', async () => {
+    const item = descriptor('openai-responses')
+    const guard = accountGuard(item.id)
+    const release = vi.fn()
+    const fetch = vi.fn()
+    const { provider, models } = createAccountProvider([item], {
+      ...guard, streamIdleTimeoutMs: NaN,
+      beforeWire: async () => ({ signal: guard.signal, release }),
+    }, baseURL)
+    const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+      apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+    })
+    for await (const _event of stream) { /* Preserve the native terminal failure. */ }
+    expect((await stream.result()).errorMessage).toContain('COPILOT_STREAM_IDLE_INTERVAL_INVALID')
+    expect(release).toHaveBeenCalledTimes(1)
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)('routes an unseen ID through published Core and native %s with Bearer auth', async api => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'must-not-use')
     let body: Record<string, unknown> | undefined
@@ -332,14 +566,168 @@ describe('account provider model HTTP authorization observation', () => {
   })
 })
 
+describe('managed upload-timeout observation', () => {
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'captures final %s callback bytes and dispatch-local header time before clone observation', async api => {
+      const item = descriptor(api)
+      const diagnostic = vi.fn()
+      const { provider, models } = createAccountProvider([item], {
+        ...accountGuard(item.id), onRequestBodyTimeout: diagnostic,
+      }, baseURL)
+      let clock = 100
+      const timer = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+      const observer = vi.spyOn(timeoutDiagnostics, 'requestBodyTimeoutDiagnostic')
+      const image = api === 'anthropic-messages'
+        ? { type: 'image', source: { type: 'base64', data: 'AAAA', media_type: 'image/png' } }
+        : api === 'openai-responses' ? { type: 'input_image', image_url: 'data:image/png;base64,AAAA' }
+          : { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }
+      const conversation = [{ role: 'user', content: [{ type: 'text', text: 'PRIVATE_CALLBACK 中文' }, image] },
+        ...api === 'openai-responses' ? [{ type: 'reasoning', encrypted_content: 'PRIVATE_OPAQUE', summary: [] }]
+          : api === 'anthropic-messages' ? [{ role: 'assistant', content: [{ type: 'redacted_thinking', data: 'PRIVATE_OPAQUE' }] }] : []]
+      let finalBody = ''
+      const response = new Response(JSON.stringify({ code: 'user_request_timeout',
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' }), { status: 408 })
+      try {
+        const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+          finalBody = String(init?.body)
+          clock = 175
+          return response
+        })
+        const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+          apiKey: 'synthetic-account-token', maxRetries: 0, fetch,
+          onPayload(payload) {
+            if (typeof payload !== 'object' || payload === null) throw new Error('EXPECTED_NATIVE_PAYLOAD')
+            return { ...payload, [api === 'openai-responses' ? 'input' : 'messages']: conversation,
+              tools: [{ type: 'function', name: 'private_tool', parameters: { type: 'object' } }] }
+          },
+        })
+        for await (const _event of stream) { /* Native error remains SDK-owned. */ }
+        expect((await stream.result()).stopReason).toBe('error')
+        expect(observer.mock.lastCall?.[3]).toEqual({ protocol: api, responseHeadersMs: 75, upload: { state: 'unavailable' } })
+        expect(diagnostic.mock.lastCall?.[0]).toContain('75 ms (round trip, not upload duration)')
+        expect(diagnostic.mock.lastCall?.[0]).toContain(`image blocks ${Buffer.byteLength(JSON.stringify(image))}`)
+        expect(diagnostic.mock.lastCall?.[0]).toContain(`opaque replay ${api === 'openai-completions' ? 0 : Buffer.byteLength(JSON.stringify('PRIVATE_OPAQUE'))}`)
+        expect(diagnostic.mock.lastCall?.[0]).not.toContain('PRIVATE')
+        expect(observer.mock.lastCall?.[1]).toBe(finalBody)
+        expect(response.bodyUsed).toBe(true)
+        expect(fetch).toHaveBeenCalledTimes(1)
+      } finally { timer.mockRestore(); observer.mockRestore() }
+    })
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'observes verified %s timeout without changing bytes, Response, native retries or credential ownership', async api => {
+      const item = descriptor(api)
+      const onRequestBodyTimeout = vi.fn()
+      const onUnauthorized = vi.fn()
+      const guard: AccountProviderGuard = { ...accountGuard(item.id), onRequestBodyTimeout, onUnauthorized }
+      const { provider, models } = createAccountProvider([item], guard, baseURL)
+      const body = JSON.stringify({ code: 'user_request_timeout',
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' })
+      const response = new Response(body, { status: 408 })
+      let requestBody: string | undefined
+      const fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        requestBody = typeof init?.body === 'string' ? init.body : undefined
+        return response
+      })
+      const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [
+        { role: 'user', content: 'Synthetic 中文 input', timestamp: 0 },
+      ] }), { apiKey: 'synthetic-account-token', maxRetries: 0, fetch })
+      for await (const _event of stream) { /* Native terminal delivery remains unchanged. */ }
+      expect((await stream.result()).stopReason).toBe('error')
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(requestBody).toBeDefined()
+      expect(onRequestBodyTimeout.mock.calls[0]).toEqual([undefined])
+      expect(onRequestBodyTimeout.mock.lastCall?.[0]).toContain(
+        `Request body: ${Buffer.byteLength(requestBody!, 'utf8')} UTF-8 bytes`,
+      )
+      expect(onUnauthorized).not.toHaveBeenCalled()
+      const evidence = requestBodyEvidence(requestBody, api)
+      if (evidence.state !== 'complete') throw new Error('fixture requires complete wire composition')
+      expect(onRequestBodyTimeout.mock.lastCall?.[0]).toContain(`conversation ${evidence.conversationBytes}`)
+      expect(onRequestBodyTimeout.mock.lastCall?.[0]).toMatch(/Fetch-to-response-headers: \d+ ms \(round trip, not upload duration\)/u)
+      // Native SDK consumed the original, not a synthetic replacement response.
+      expect(response.bodyUsed).toBe(true)
+    },
+  )
+  it('records real local Fetch stages on a verified native timeout and disposes the observer on settlement', async () => {
+    const item = descriptor('openai-responses'), diagnostic = vi.fn()
+    const { provider, models } = createAccountProvider([item], {
+      ...accountGuard(item.id), onRequestBodyTimeout: diagnostic,
+    }, baseURL)
+    const received: Buffer[] = []
+    const failure = { code: 'user_request_timeout',
+      message: 'Timed out reading request body. Try again, or use a smaller request size.' }
+    const server = createServer(async (request, response) => {
+      for await (const chunk of request) received.push(Buffer.from(chunk))
+      response.writeHead(408, { 'content-type': 'application/json' })
+      response.end(JSON.stringify(failure))
+    })
+    const observer = uploadEvidence.createRequestUploadObserver()
+    const close = vi.spyOn(observer, 'close')
+    const factory = vi.spyOn(uploadEvidence, 'createRequestUploadObserver').mockReturnValue(observer)
+    let original: Response | undefined, sent = ''
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const address = server.address()
+      if (address === null || typeof address === 'string') throw new Error('LOCAL_SERVER_ADDRESS')
+      const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        sent = String(init?.body)
+        original = await fetch(`http://127.0.0.1:${address.port}`, init)
+        return original
+      })
+      const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [{
+        role: 'user', content: 'Synthetic local-only request.', timestamp: 0,
+      }] }), { apiKey: 'synthetic-account-token', maxRetries: 0, fetch: fetcher })
+      for await (const _event of stream) { /* Preserve native error delivery. */ }
+      expect((await stream.result()).stopReason).toBe('error')
+      expect(fetcher).toHaveBeenCalledTimes(1)
+      expect(Buffer.concat(received).toString()).toBe(sent)
+      expect(original?.status).toBe(408)
+      expect(original?.bodyUsed).toBe(true)
+      expect(close).toHaveBeenCalledTimes(1)
+      expect(observer.snapshot()).toMatchObject({ state: 'observed', bodyWrite: 'observed' })
+      expect(diagnostic.mock.lastCall?.[0]).toMatch(/local body-write complete at \d+ ms/u)
+      expect(diagnostic.mock.lastCall?.[0]).toContain('not upload duration, kernel ACK, supplier receipt or execution')
+    } finally {
+      observer.close()
+      factory.mockRestore()
+      server.closeAllConnections()
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
+  })
+  it('disposes native upload subscriptions when Fetch rejects without replacing native failure', async () => {
+    const item = descriptor('openai-responses'), diagnostic = vi.fn()
+    const { provider, models } = createAccountProvider([item], {
+      ...accountGuard(item.id), onRequestBodyTimeout: diagnostic,
+    }, baseURL)
+    const observer = uploadEvidence.createRequestUploadObserver()
+    const close = vi.spyOn(observer, 'close')
+    const factory = vi.spyOn(uploadEvidence, 'createRequestUploadObserver').mockReturnValue(observer)
+    const fetcher = vi.fn(async () => { throw new Error('SYNTHETIC_FETCH_FAILURE') })
+    try {
+      const stream = provider.streamSimple(models[0]!, normalizeContext({ messages: [] }), {
+        apiKey: 'synthetic-account-token', maxRetries: 0, fetch: fetcher,
+      })
+      for await (const _event of stream) { /* Native SDK owns network failure conversion. */ }
+      expect((await stream.result()).stopReason).toBe('error')
+      expect(fetcher).toHaveBeenCalledTimes(1)
+      expect(close).toHaveBeenCalledTimes(1)
+      expect(diagnostic.mock.calls).toEqual([[undefined]])
+      expect(observer.snapshot()).toEqual({ state: 'unavailable' })
+    } finally { observer.close(); factory.mockRestore() }
+  })
+})
+
 describe('managed Responses replay compatibility', () => {
-  function replayContext(): PiContext {
-    return { messages: [{ role: 'user', content: 'Synthetic task', timestamp: 0 }, {
+  function replayContext(includeEmptyReasoning = false, userText = 'Synthetic task'): PiContext {
+    return { messages: [{ role: 'user', content: userText, timestamp: 0 }, {
       role: 'assistant', api: 'openai-responses', provider: PREVIEW, model: 'future-lab-r17',
       stopReason: 'toolUse', timestamp: 0,
       usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       content: [
+        ...includeEmptyReasoning ? [{ type: 'thinking' as const, thinking: '', thinkingSignature: JSON.stringify({
+          type: 'reasoning', id: 'rs_empty_scope', summary: [],
+        }) }] : [],
         { type: 'thinking', thinking: 'Public summary.', thinkingSignature: JSON.stringify({
           type: 'reasoning', id: 'rs_old_scope', summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'opaque-old-reasoning',
         }) },
@@ -349,14 +737,103 @@ describe('managed Responses replay compatibility', () => {
     }, { role: 'toolResult', toolCallId: 'call_check|fc_old_scope', toolName: 'check',
       content: [{ type: 'text', text: 'Done.' }], isError: false, timestamp: 0 }] }
   }
-  async function invoke(context: PiContext, options: Partial<StreamOptions> = {}, api: AccountModelApi = 'openai-responses') {
-    const item = descriptor(api)
+  it.each([false, true])('sends identical normalized bytes after two HTTP 408s (empty reasoning: %s)', async includeEmptyReasoning => {
+    const item = descriptor('openai-responses')
+    const retryReplay = new ResponsesRetryReplay()
+    const coreSignal = new AbortController().signal
+    const guard: AccountProviderGuard = { ...accountGuard(item.id), retryReplay, retrySignal: coreSignal }
+    const context = normalizeContext(replayContext(includeEmptyReasoning))
+    const original = JSON.stringify(context)
+    const bodies: string[] = []
+    let firstPayload: Record<string, unknown> | undefined
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      bodies.push(String(init?.body))
+      return bodies.length < 3 ? new Response('synthetic timeout', { status: 408 }) : nativeEvents('openai-responses')
+    })
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // Core rc.2 calls prepareCall again for every retry, creating a fresh
+      // adapter/provider; only the bounded request state is shared.
+      const { provider, models } = createAccountProvider([item], guard, baseURL)
+      const stream = provider.streamSimple(models[0]!, context, {
+        apiKey: 'synthetic-account-token', sessionId: 'synthetic-session', maxRetries: 0, fetch,
+        onPayload(payload) {
+          const originalPayload = payload as Record<string, unknown>
+          if (attempt === 0) firstPayload = structuredClone(originalPayload)
+          if (attempt < 2) return undefined
+          return { ...originalPayload, input: (firstPayload!.input as Record<string, unknown>[]).map(entry =>
+            typeof entry.id === 'string' ? { type: 'item_reference', id: entry.id } : entry) }
+        },
+      })
+      for await (const _event of stream) { /* Drain the native SDK attempt. */ }
+      expect((await stream.result()).stopReason).toBe(attempt < 2 ? 'error' : 'stop')
+    }
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(bodies[0]).toBe(bodies[1])
+    expect(bodies[1]).toBe(bodies[2])
+    expect(JSON.stringify(context)).toBe(original)
+  })
+  it('recompresses identical native JSON after HTTP 408 retries without an identity resend', async () => {
+    const item = descriptor('openai-responses')
+    const retryReplay = new ResponsesRetryReplay()
+    const coreSignal = new AbortController().signal
+    const context = normalizeContext(replayContext(false, 'Synthetic task '.repeat(20_000)))
+    const original = JSON.stringify(context)
+    const bodies: string[] = []
+    const wireLengths: number[] = []
+    let timeoutDiagnostic: string | undefined
+    const timeout = vi.fn((value: string | undefined) => {
+      if (value !== undefined) timeoutDiagnostic = value
+    })
+    let firstPayload: Record<string, unknown> | undefined
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers)
+      expect(headers.get('content-encoding')).toBe('gzip')
+      if (!(init?.body instanceof Uint8Array)) throw new Error('FIXTURE_EXPECTED_GZIP_BYTES')
+      expect(headers.get('content-length')).toBe(String(init.body.byteLength))
+      wireLengths.push(init.body.byteLength)
+      bodies.push(gunzipSync(init.body).toString('utf8'))
+      return bodies.length < 3 ? Response.json({ code: 'user_request_timeout',
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' }, { status: 408 })
+        : nativeEvents('openai-responses')
+    })
+    vi.stubGlobal('fetch', fetch)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const guard: AccountProviderGuard = { ...accountGuard(item.id), retryReplay, retrySignal: coreSignal,
+        responsesRequestCompression: true, onRequestBodyTimeout: timeout }
+      const { provider, models } = createAccountProvider([item], guard, baseURL)
+      const stream = provider.streamSimple(models[0]!, context, {
+        apiKey: 'synthetic-account-token', sessionId: 'synthetic-session', maxRetries: 0,
+        onPayload(payload) {
+          const originalPayload = payload as Record<string, unknown>
+          if (attempt === 0) firstPayload = structuredClone(originalPayload)
+          if (attempt < 2) return undefined
+          return { ...originalPayload, input: (firstPayload!.input as Record<string, unknown>[]).map(entry =>
+            typeof entry.id === 'string' ? { type: 'item_reference', id: entry.id } : entry) }
+        },
+      })
+      for await (const _event of stream) { /* Drain the native SDK attempt. */ }
+      expect((await stream.result()).stopReason).toBe(attempt < 2 ? 'error' : 'stop')
+    }
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(bodies[0]).toBe(bodies[1])
+    expect(bodies[1]).toBe(bodies[2])
+    expect(wireLengths[0]).toBe(wireLengths[1])
+    expect(timeoutDiagnostic).toContain(`Encoded body: ${wireLengths[1]} gzip bytes`)
+    expect(timeoutDiagnostic).toContain('Request body (original JSON):')
+    expect(bodies[0]).not.toBe(original)
+    expect(JSON.stringify(context)).toBe(original)
+  })
+  async function invoke(context: PiContext, options: Partial<StreamOptions> = {}, api: AccountModelApi = 'openai-responses',
+    thinking?: boolean, omitTemperature = false) {
+    const item = descriptor(api, 'future-lab-r17', ['high', 'max'], true, thinking)
     const release = vi.fn()
     const unauthorized = vi.fn()
     const replayFailure = vi.fn()
+    const rejectedReplay = vi.fn()
     const guard: AccountProviderGuard = { ...accountGuard(item.id),
+      responsesOmitTemperature: omitTemperature,
       beforeWire: async () => ({ signal: new AbortController().signal, release }),
-      onUnauthorized: unauthorized, onReplayFailure: replayFailure,
+      onUnauthorized: unauthorized, onReplayFailure: replayFailure, onReplayScopeRejected: rejectedReplay,
     }
     const { provider, models } = createAccountProvider([item], guard, baseURL)
     let body: Record<string, unknown> | undefined
@@ -370,7 +847,7 @@ describe('managed Responses replay compatibility', () => {
     for await (const _event of stream) { /* Consume the real native SDK stream. */ }
     const result = await stream.result()
     await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(1))
-    return { body, fetch, result, release, unauthorized, replayFailure }
+    return { body, fetch, result, release, unauthorized, replayFailure, rejectedReplay }
   }
   it('normalizes only wire item IDs after native serialization while preserving durable replay and tool pairing', async () => {
     const context = replayContext()
@@ -389,6 +866,58 @@ describe('managed Responses replay compatibility', () => {
     expect(call.call_id).toBe(output.call_id)
     expect(JSON.parse(String(call.arguments))).toEqual({ id: 'keep-business-id' })
     expect(result.body!.store).toBe(false)
+    expect(result.replayFailure).not.toHaveBeenCalled()
+    expect(result.unauthorized).not.toHaveBeenCalled()
+  })
+  it.each([
+    [false, true, 0],
+    [false, false, 0],
+    [false, undefined, 0],
+    [true, true, undefined],
+    [true, false, undefined],
+    [true, undefined, undefined],
+  ] as const)('applies explicit Responses omission=%s independently of thinking metadata %j',
+    async (omitTemperature, thinking, expected) => {
+      const options = Object.freeze({ temperature: 0 })
+      const result = await invoke({ messages: [] }, options, 'openai-responses', thinking, omitTemperature)
+      expect(result.result.stopReason).toBe('stop')
+      expect(result.body?.temperature).toBe(expected)
+      expect(options).toEqual({ temperature: 0 })
+      expect(Object.isFrozen(options)).toBe(true)
+    })
+  it.each([true, false, undefined] as const)(
+    'preserves default Responses temperature regardless of thinking metadata %j', async thinking => {
+      const result = await invoke({ messages: [] }, Object.freeze({ temperature: 0 }),
+        'openai-responses', thinking)
+      expect(result.body?.temperature).toBe(0)
+    })
+  it.each(['openai-completions', 'anthropic-messages'] as const)(
+    'does not change temperature on native %s when the omission override is enabled', async api => {
+      const result = await invoke({ messages: [] }, Object.freeze({ temperature: 0 }), api, true, true)
+      expect(result.result.stopReason).toBe('stop')
+      expect(result.body?.temperature).toBe(0)
+    })
+  it('omits an empty SDK reasoning signature while preserving opaque reasoning and tool pairing', async () => {
+    const context = replayContext(true)
+    const original = JSON.stringify(context)
+    const onPayload = vi.fn((payload: unknown) => {
+      const input = (payload as { input: Record<string, unknown>[] }).input
+      expect(input.find(item => item.id === 'rs_empty_scope')).toEqual({
+        type: 'reasoning', id: 'rs_empty_scope', summary: [],
+      })
+    })
+    const result = await invoke(context, { onPayload })
+    expect(onPayload).toHaveBeenCalledTimes(1)
+    expect(result.result.stopReason).toBe('stop')
+    expect(result.fetch).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(context)).toBe(original)
+    const input = result.body!.input as Record<string, unknown>[]
+    expect(input.filter(item => item.type === 'reasoning')).toEqual([{
+      type: 'reasoning', summary: [{ type: 'summary_text', text: 'Public summary.' }],
+      encrypted_content: 'opaque-old-reasoning',
+    }])
+    expect(input.find(item => item.type === 'function_call')!.call_id)
+      .toBe(input.find(item => item.type === 'function_call_output')!.call_id)
     expect(result.replayFailure).not.toHaveBeenCalled()
     expect(result.unauthorized).not.toHaveBeenCalled()
   })
@@ -435,6 +964,7 @@ describe('managed Responses replay compatibility', () => {
     expect(result.result.errorMessage).toContain('COPILOT_RESPONSES_REPLAY_')
     expect(result.fetch).not.toHaveBeenCalled()
     expect(result.replayFailure).toHaveBeenCalledTimes(1)
+    expect(result.rejectedReplay).not.toHaveBeenCalled()
     expect(result.unauthorized).not.toHaveBeenCalled()
   })
   it.each([
@@ -465,7 +995,7 @@ describe('managed Responses replay compatibility', () => {
       }),
     }))
     try {
-      const result = await invoke(context, { fetch })
+      const result = await invoke(context, { fetch, sessionId: 'synthetic-secret-session' })
       expect(result.result.stopReason).toBe('error')
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(receivedResponse).toBe(response)
@@ -474,11 +1004,39 @@ describe('managed Responses replay compatibility', () => {
       expect(result.unauthorized).not.toHaveBeenCalled()
       expect(result.replayFailure).toHaveBeenCalledTimes(1)
       expect(result.replayFailure.mock.calls[0]![0].message).toContain('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH')
+      expect(result.replayFailure.mock.calls[0]![0].dispatchEvidence).toContain('items=5, directIds=0, references=0, encryptedReasoning=1, otherItems=0')
+      expect(result.rejectedReplay).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(result.rejectedReplay.mock.calls[0]![0]).input).toHaveLength(5)
+      expect(result.replayFailure.mock.calls[0]![0].dispatchEvidence).toContain('sessionHeader=present, clientRequestHeader=present')
+      expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/synthetic-secret-session|opaque-old-reasoning|rs_old_scope/)
       expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/input item|synthetic-private-response-body/)
       expect(JSON.stringify(context)).toBe(original)
       expect(response.status).toBe(401)
       expect(response.headers.get('x-synthetic')).toBe('unchanged')
     } finally { factory.mockReset().mockImplementation(originalFactory) }
+  })
+  it('reports the final caller replacement rather than discarded native replay', async () => {
+    const result = await invoke(replayContext(), {
+      sessionId: 'synthetic-secret-session',
+      onPayload: () => ({ input: [{ role: 'user', content: 'synthetic-private', id: 'user-native-owned' }] }),
+      fetch: async () => new Response(JSON.stringify({ message: 'input item does not belong to this connection' }),
+        { status: 401, headers: { 'content-type': 'application/json' } }),
+    })
+    expect(result.replayFailure).toHaveBeenCalledTimes(1)
+    expect(result.replayFailure.mock.calls[0]![0].dispatchEvidence).toContain('items=1, directIds=1, references=0, encryptedReasoning=0')
+    expect(result.replayFailure.mock.calls[0]![0].message).not.toMatch(/synthetic-private|user-native-owned|opaque-old-reasoning/)
+    expect(result.unauthorized).not.toHaveBeenCalled()
+  })
+  it.each([
+    { status: 401, body: '{"message":"invalid token"}' },
+    { status: 401, body: '{"message":"input item does not belong to this connection","code":"auth"}' },
+    { status: 401, body: 'not JSON' },
+    { status: 408, body: '{"message":"input item does not belong to this connection"}' },
+  ])('does not offer replay recovery for an unverified failure: $status $body', async failure => {
+    const result = await invoke(replayContext(), {
+      fetch: async () => new Response(failure.body, { status: failure.status, headers: { 'content-type': 'application/json' } }),
+    })
+    expect(result.rejectedReplay).not.toHaveBeenCalled()
   })
 })
 

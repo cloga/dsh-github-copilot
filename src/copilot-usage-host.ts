@@ -8,10 +8,12 @@ import { copilotAccountKey } from './account-model-auth.ts'
 import { createGitHubCopilotCredentialStore } from './copilot-auth.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
-import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
+import { GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeCopilotUsage, unavailableCopilotUsage } from './copilot-usage-normalize.ts'
 import type { CopilotUsageView, CopilotUsageDiagnostic } from './copilot-usage-types.ts'
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
+import { activeCopilotBinding, isActiveCopilotRecord } from './copilot-accounts-host.ts'
+import type { CopilotAccountBinding } from './copilot-accounts-types.ts'
 
 export const COPILOT_USAGE_ENDPOINT = 'https://api.github.com/copilot_internal/user'
 const TTL_MS = 60_000
@@ -26,6 +28,7 @@ const CERTIFICATE_FAILURES = new Set([
 ])
 
 interface Dependencies {
+  readonly accountId?: string
   readCredential(): Promise<unknown>
   fetch?: typeof globalThis.fetch
   now?: () => number
@@ -234,6 +237,9 @@ export class CopilotUsageSource {
       })
       const raw = await Promise.race([this.fetchQuota(auth, abort), cancellation])
       value = normalizeCopilotUsage(raw, this.now())
+      if (value.state === 'ready' && this.dependencies.accountId !== undefined) {
+        value = { ...value, accountId: this.dependencies.accountId }
+      }
     } catch (caught) { error = caught }
     finally {
       if (timer !== undefined) clearTimeout(timer)
@@ -279,21 +285,66 @@ declare module '@deepseek-ai/cordis' {
 }
 
 export default class GitHubCopilotUsageController extends TypertRemoteService {
-  private readonly source: CopilotUsageSource
+  private readonly accountSources = new Map<string, CopilotUsageSource>()
+  private source: CopilotUsageSource
+  private accountSignature: string | undefined
+  private sourceInitialized = false
   constructor(ctx: Context) {
     super(ctx, 'githubCopilotUsage')
-    const credentials = createGitHubCopilotCredentialStore(ctx)
-    this.source = new CopilotUsageSource({ readCredential: () => credentials.read(GITHUB_COPILOT_PROVIDER_ID) })
+    this.source = new CopilotUsageSource({ readCredential: async () => { throw new Error('COPILOT_USAGE_CREDENTIALS_UNAVAILABLE') } })
     ctx.on('credentials/record-updated', key => {
-      if (key === GITHUB_COPILOT_CREDENTIAL_KEY) this.source.invalidate()
+      if (isActiveCopilotRecord(ctx, key)) this.source.invalidate()
+      this.accountSources.get(key)?.invalidate()
     })
     onSettingsNamespaceUpdated(ctx, namespace => {
       if (namespace === 'github-copilot' || namespace === 'llm-pi-ai') this.source.invalidate()
     })
-    ctx.effect(() => () => this.source.dispose())
+    ctx.effect(() => async () => {
+      await this.source.dispose()
+      await Promise.all([...this.accountSources.values()].map(source => source.dispose()))
+      this.accountSources.clear()
+    })
+  }
+  forAccount(binding: CopilotAccountBinding, force = false): Promise<CopilotUsageView> {
+    binding.assertCurrent()
+    let source = this.accountSources.get(binding.key)
+    if (!source) {
+      if (this.accountSources.size >= 32) throw new Error('COPILOT_SESSION_ACCOUNTS_LIMIT')
+      const credentials = createGitHubCopilotCredentialStore(this.ctx, GITHUB_COPILOT_PROVIDER_ID, binding)
+      source = new CopilotUsageSource({ accountId: binding.accountId,
+        readCredential: () => credentials.read(GITHUB_COPILOT_PROVIDER_ID) })
+      this.accountSources.set(binding.key, source)
+    }
+    return force ? source.refresh() : source.get()
+  }
+  private createSource(): CopilotUsageSource {
+    // The store for every read in this cache generation is immutable. A late
+    // response can never change its credential address after a selector change.
+    const binding = activeCopilotBinding(this.ctx)
+    this.accountSignature = binding === undefined ? undefined : `${binding.generation}:${binding.accountId}`
+    const credentials = createGitHubCopilotCredentialStore(this.ctx, GITHUB_COPILOT_PROVIDER_ID, binding)
+    return new CopilotUsageSource({ accountId: binding?.accountId ?? 'canonical',
+      readCredential: () => credentials.read(GITHUB_COPILOT_PROVIDER_ID) })
+  }
+  private async current(): Promise<CopilotUsageSource> {
+    const binding = activeCopilotBinding(this.ctx)
+    const signature = binding === undefined ? undefined : `${binding.generation}:${binding.accountId}`
+    if (signature !== this.accountSignature || !this.sourceInitialized) {
+      const previous = this.source
+      this.source = this.createSource()
+      this.sourceInitialized = true
+      await previous.dispose()
+    }
+    return this.source
   }
   @Remote
-  async get(): Promise<CopilotUsageView> { return this.source.get() }
+  async get(): Promise<CopilotUsageView> {
+    try { return await (await this.current()).get() }
+    catch { return unavailableCopilotUsage('COPILOT_USAGE_CREDENTIALS_UNAVAILABLE') }
+  }
   @Remote
-  async refresh(): Promise<CopilotUsageView> { return this.source.refresh() }
+  async refresh(): Promise<CopilotUsageView> {
+    try { return await (await this.current()).refresh() }
+    catch { return unavailableCopilotUsage('COPILOT_USAGE_CREDENTIALS_UNAVAILABLE') }
+  }
 }

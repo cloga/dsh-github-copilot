@@ -3,12 +3,18 @@ import { z } from 'zod'
 import { strictRemoteCodec } from './remote-codec.ts'
 import type { TurnSelection } from './turn-selection.ts'
 import { TurnSelectionSchema } from './turn-selection.ts'
+import { RequestedModelsSchema } from './turn-request-models.ts'
+import type { RequestedModels } from './turn-request-models.ts'
+import { AutoAllocationSummarySchema } from './auto-allocation-evidence.ts'
+import type { AutoAllocationSummary } from './auto-allocation-evidence.ts'
 export { TurnSelectionSchema } from './turn-selection.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
     githubCopilotTurnSelection: {
       get(agentId: string, turn: number): Promise<RemoteResult<TurnSelection>>
+      requestedModels(agentId: string, turn: number): Promise<RemoteResult<RequestedModels>>
+      allocationSummary(agentId: string): Promise<RemoteResult<AutoAllocationSummary>>
     }
   }
 }
@@ -17,7 +23,8 @@ const contribution: TypertRemoteContribution = {
   descriptors: [{
     id: 'dsh-github-copilot:githubCopilotTurnSelection.get',
     namespace: 'githubCopilotTurnSelection', service: 'githubCopilotTurnSelection', method: 'get',
-    invocation: { kind: 'direct' }, scope: { context: 'agent', wire: 'agentId' },
+    // The footer always supplies the viewed Session ID, even inside a bound Chat.
+    invocation: { kind: 'direct' },
     parameters: [
       { name: 'agent', wire: 'agentId', source: 'lookup', lookup: 'agent',
         codec: strictRemoteCodec('@deepseek-ai/dsh-session/types#SessionId', z.string().min(1).max(256)) },
@@ -25,6 +32,26 @@ const contribution: TypertRemoteContribution = {
         codec: strictRemoteCodec('dsh-github-copilot#TurnSelectionTurn', z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)) },
     ],
     result: strictRemoteCodec('dsh-github-copilot#TurnSelection', TurnSelectionSchema),
+  }, {
+    id: 'dsh-github-copilot:githubCopilotTurnSelection.requestedModels',
+    namespace: 'githubCopilotTurnSelection', service: 'githubCopilotTurnSelection', method: 'requestedModels',
+    invocation: { kind: 'direct' },
+    parameters: [
+      { name: 'agent', wire: 'agentId', source: 'lookup', lookup: 'agent',
+        codec: strictRemoteCodec('@deepseek-ai/dsh-session/types#SessionId', z.string().min(1).max(256)) },
+      { name: 'turn', wire: 'turn', source: 'json',
+        codec: strictRemoteCodec('dsh-github-copilot#TurnSelectionTurn', z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)) },
+    ],
+    result: strictRemoteCodec('dsh-github-copilot#RequestedModels', RequestedModelsSchema),
+  }, {
+    id: 'dsh-github-copilot:githubCopilotTurnSelection.allocationSummary',
+    namespace: 'githubCopilotTurnSelection', service: 'githubCopilotTurnSelection', method: 'allocationSummary',
+    invocation: { kind: 'direct' },
+    parameters: [{
+      name: 'agent', wire: 'agentId', source: 'lookup', lookup: 'agent',
+      codec: strictRemoteCodec('@deepseek-ai/dsh-session/types#SessionId', z.string().min(1).max(256)),
+    }],
+    result: strictRemoteCodec('dsh-github-copilot#AutoAllocationSummary', AutoAllocationSummarySchema),
   }],
 }
 export default contribution

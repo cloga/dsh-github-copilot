@@ -1,22 +1,37 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
-import { installAutoModelRouting } from '../src/auto-model-host.ts'
+import { foldFollowState, initialFollowState, PARENT_MODEL_FOLLOW_PROJECTION } from '../src/parent-model-follow.ts'
+import { installAutoModelRouting as installRouting } from '../src/auto-model-host.ts'
+import { TurnSelectionController } from '../src/turn-selection-host.ts'
+import * as routing from '../src/auto-model-routing.ts'
+import { AUTO_MODEL_INTENT_PROJECTION, foldAutoModelIntent, initialAutoModelIntent } from '../src/auto-model-intent.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
   GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID as INTELLIGENCE, GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
 } from '../src/copilot-identity.ts'
 
-function model(id: string, contextWindow: number, effort: string): AccountModelDescriptor {
+function installAutoModelRouting(...[ctx, dependencies]: Parameters<typeof installRouting>) {
+  ctx.provide('tokenMeter', {
+    estimateMessage: (message: unknown) => Math.ceil(JSON.stringify(message).length / 4),
+    measure: () => ({ totalTokens: 0 }),
+  })
+  const dispose = installRouting(ctx, dependencies)
+  expect(ctx.githubCopilotTurnSelection).toBeInstanceOf(TurnSelectionController)
+  return dispose
+}
+
+function model(id: string, contextWindow: number, effort: string, category?: AccountModelDescriptor['category']): AccountModelDescriptor {
   return {
     id,
     name: id,
+    category,
     api: 'openai-responses',
     contextWindow,
     maxTokens: Math.floor(contextWindow / 4),
@@ -38,6 +53,195 @@ function message(text: string) {
 }
 
 describe('Auto model Host integration', () => {
+  it.each([
+    { register: undefined, state: initialAutoModelIntent(), error: 'COPILOT_AUTO_INTENT_PROJECTIONS_UNAVAILABLE' },
+    { register: () => undefined, state: initialAutoModelIntent(), error: 'COPILOT_AUTO_INTENT_DISPOSER_UNAVAILABLE' },
+    { register: () => () => {}, state: undefined, error: 'COPILOT_AUTO_INTENT_UNAVAILABLE' },
+    { register: () => () => {}, state: { ...initialAutoModelIntent(), blocked: true }, error: 'COPILOT_AUTO_INTENT_UNAVAILABLE' },
+  ])('diagnoses unavailable continuity evidence ($error) without blocking a new explicit fixed choice', async fixture => {
+    const ctx = new Context()
+    let pending: { provider: string; model: string } | null = null
+    ctx.provide('sessionProjections', {
+      register: fixture.register,
+      stateOf: (_session: unknown, key: string) => key === AUTO_MODEL_INTENT_PROJECTION ? fixture.state : { pending },
+    } as never)
+    const agent = { ctx, session: {
+      requestHeader: () => ({ config: { provider: PREVIEW, model: 'fixture-real' } }),
+    } } as unknown as Agent
+    const loadModels = vi.fn(async () => [model('fixture-real', 128_000, 'medium')])
+    const dispose = installAutoModelRouting(ctx, { loadModels })
+    const scope = scopeTarget(agent, agent)
+    const signal = new AbortController().signal
+    try {
+      await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: 'fixture-real' }))).rejects.toThrow(fixture.error)
+      pending = { provider: PREVIEW, model: 'fixture-real' }
+      await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 2, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: 'fixture-real' }))).resolves.toMatchObject(pending)
+      expect(loadModels).not.toHaveBeenCalled()
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it.each([true, false, undefined])('uses owning preset recovery availability (%s) for Auto diagnostics', async auto => {
+    const ctx = new Context()
+    const agent = { ctx, session: { requestHeader: () => undefined } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const serviceFor = vi.fn(() => auto === undefined ? undefined : { config: { auto, maxOverflowRetries: 1 } })
+    ctx.provide('agentPresets', { composedPreset: () => 'isolated', serviceFor })
+    ctx.provide('compaction', { config: { auto: !auto, maxOverflowRetries: 1 } } as never)
+    const selected = vi.spyOn(routing, 'selectAutoModel')
+    const dispose = installAutoModelRouting(ctx, {
+      loadModels: async () => [model('fixture-real', 128_000, 'medium')],
+    })
+    const signal = new AbortController().signal
+    const messages = [message('Continue.')]
+    try {
+      await ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      await ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: AUTO }))
+      expect(serviceFor).toHaveBeenCalledExactlyOnceWith(agent, 'compaction')
+      expect(selected.mock.calls.at(-1)?.[3]?.compactionAvailable).toBe(auto === true)
+    } finally {
+      selected.mockRestore()
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it.each(['bindings', 'switch'])('follows fixed and Auto parents using %s without writing child selections', async mode => {
+    const ctx = new Context()
+    const parentCtx = new Context()
+    let turn = 1
+    let binding = true
+    let parentModel = 'fixture-fast'
+    let explicit: { provider: string; model: string } | null = null
+    const append = vi.fn()
+    const agent = { ctx, session: {
+      id: 'child', header: { id: 'child', parentSession: 'parent', origin: 'subagent' },
+      append, requestHeader: () => ({ config: { provider: PREVIEW, model: 'old-model', maxTokens: 100 } }),
+    } } as unknown as Agent
+    const parent = { ctx: parentCtx, session: {
+      id: 'parent', header: { id: 'parent' }, requestHeader: () => ({ config: { provider: PREVIEW, model: 'stale-model' } }),
+    } } as unknown as Agent
+    const removeProjection = vi.fn()
+    const removeIntentProjection = vi.fn()
+    const register = vi.fn((definition: { key: string }) =>
+      definition.key === AUTO_MODEL_INTENT_PROJECTION ? removeIntentProjection : removeProjection)
+    ctx.provide('sessionProjections', { register, stateOf: (session: { id: string }, key: string) => {
+      if (key === 'modelSelection') return { pending: session.id === 'parent' ? { provider: PREVIEW, model: parentModel } : explicit }
+      if (key === AUTO_MODEL_INTENT_PROJECTION) return initialAutoModelIntent()
+      if (key !== PARENT_MODEL_FOLLOW_PROJECTION) return undefined
+      if (session.id === 'parent') return initialFollowState()
+      const state = foldFollowState(initialFollowState(), {
+        seq: 0, type: 'subagent/descriptor', data: { version: 3, provider: 'spawn', mode: 'continuable' },
+      })
+      return { ...state, turn, explicit }
+    } } as never)
+    ctx.provide('agents', { get: (id: string) => id === 'parent' ? parent : undefined } as never)
+    const scope = scopeTarget(agent, agent)
+    const promptScope = scopeTarget(new SystemPrompt(ctx, {}), agent)
+    const dispose = installAutoModelRouting(ctx, {
+      parentModelBindings: () => binding && mode === 'bindings' ? [{ childSessionId: 'child', parentSessionId: 'parent' }] : [],
+      followParentModel: () => binding && mode === 'switch',
+      loadModels: async () => [model('fixture-fast', 64_000, 'low'), model('fixture-strong', 256_000, 'high')],
+    })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+    const signal = new AbortController().signal
+    const assemble = async () => {
+      const assembly = { sections: [], contexts: [], tools: [], variables: { provider: PREVIEW, model: 'old-model' } }
+      return ctx.waterfall(promptScope, 'system-prompt/assemble', assembly, {}, async () => assembly)
+    }
+    const request = async () => {
+      const messages = [message('A child-specific question.')]
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      return ctx.waterfall(scope, 'agent/request', { agent, turn, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: explicit?.model ?? 'old-model', reasoningEffort: ReasoningEffortId('high'), maxTokens: 100 }))
+    }
+    try {
+      expect((await assemble()).variables.model).toBe('fixture-fast')
+      parentModel = 'fixture-strong'
+      expect(await request()).toMatchObject({ model: 'fixture-fast', maxTokens: 100 })
+      turn++
+      expect((await assemble()).variables.model).toBe('fixture-strong')
+      expect((await request()).reasoningEffort).toBeUndefined()
+      parentModel = INTELLIGENCE
+      turn++
+      expect((await assemble()).variables.model).toBe(INTELLIGENCE)
+      const auto = await request()
+      expect(['fixture-fast', 'fixture-strong']).toContain(auto.model)
+      expect(ctx.githubCopilotTurnSelection.get(agent, turn)).toMatchObject({ mode: 'auto', preference: 'intelligence' })
+      binding = false
+      parentModel = 'fixture-fast'
+      expect((await request()).model).toBe(auto.model)
+      turn++
+      expect((await request()).model).toBe('old-model')
+      binding = true
+      explicit = { provider: PREVIEW, model: 'fixture-fast' }
+      turn++
+      expect((await request()).model).toBe('fixture-fast')
+      expect(append).not.toHaveBeenCalled()
+    } finally {
+      dispose()
+      expect(removeProjection).toHaveBeenCalledOnce()
+      expect(removeIntentProjection).toHaveBeenCalledOnce()
+      await ctx.fiber.dispose()
+      await parentCtx.fiber.dispose()
+    }
+  })
+  it('requires the public token meter for Auto without blocking a manually selected model', async () => {
+    const ctx = new Context()
+    const agent = { ctx, session: { requestHeader: () => undefined } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const loadModels = vi.fn(async () => [model('fixture-real', 128_000, 'medium')])
+    const dispose = installRouting(ctx, { loadModels })
+    ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+    const signal = new AbortController().signal
+    const messages = [message('Continue.')]
+    try {
+      await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: AUTO }))).rejects.toThrow('COPILOT_AUTO_TOKEN_METER_UNAVAILABLE')
+      expect(loadModels).not.toHaveBeenCalled()
+      await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 2, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: 'fixture-real' }))).resolves.toMatchObject({ model: 'fixture-real' })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it.each([undefined, { totalTokens: NaN }, { totalTokens: -1 }])(
+    'rejects invalid native measurement %j before account discovery',
+    async measured => {
+      const ctx = new Context()
+      ctx.provide('tokenMeter', { measure: () => measured, estimateMessage: () => 10 })
+      const agent = { ctx, session: { requestHeader: () => undefined } } as unknown as Agent
+      const scope = scopeTarget(agent, agent)
+      const loadModels = vi.fn(async () => [model('fixture-real', 128_000, 'medium')])
+      const dispose = installRouting(ctx, { loadModels })
+      ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
+      const signal = new AbortController().signal
+      const messages = [message('Continue.')]
+      try {
+        await ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+          async () => ({ kind: 'enter' as const, messages }))
+        await expect(ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+          async () => ({ provider: PREVIEW, model: AUTO }))).rejects.toThrow('COPILOT_AUTO_TOKEN_ESTIMATE_INVALID')
+        expect(loadModels).not.toHaveBeenCalled()
+      } finally {
+        dispose()
+        await ctx.fiber.dispose()
+      }
+    },
+  )
+
   it('cold-reads Auto selection through the official format reader without plugin vocabulary', async () => {
     const ctx = new Context()
     const id = SessionId('fixture-auto-cold-read')
@@ -85,7 +289,7 @@ describe('Auto model Host integration', () => {
     const scope = scopeTarget(agent, agent)
     const promptScope = scopeTarget(new SystemPrompt(ctx, {}), agent)
     const loadModels = vi.fn(async () => [
-      model('fixture-fast', 64_000, 'low'), model('fixture-middle', 128_000, 'medium'), model('fixture-strong', 256_000, 'high'),
+      model('fixture-fast', 64_000, 'low', 'lightweight'), model('fixture-middle', 128_000, 'medium', 'versatile'), model('fixture-strong', 256_000, 'high', 'powerful'),
     ])
     ctx.provide('sessionProjections', { stateOf: () => selection } as never)
     const dispose = installAutoModelRouting(ctx, { loadModels })
@@ -101,7 +305,7 @@ describe('Auto model Host integration', () => {
     try {
       await enter(1, 'Short.')
       const first = await request(1, INTELLIGENCE)
-      expect(first.model).toBe('fixture-middle')
+      expect(first.model).toBe('fixture-strong')
       expect(selection.pending?.model).toBe(INTELLIGENCE)
       expect(ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
         mode: 'auto', preference: 'intelligence', reason: 'short-text-turn', candidateCount: 3,
@@ -133,17 +337,23 @@ describe('Auto model Host integration', () => {
     const ctx = new Context()
     const selection: { pending: { provider: string; model: string } | null } = { pending: null }
     let header: { config: { provider: string; model: string } } | undefined
+    let intent = initialAutoModelIntent()
+    let seq = 0
     const append = vi.fn((type: string, data: { provider: string; model: string }) => {
       if (type === 'model/selection') selection.pending = data
+      intent = foldAutoModelIntent(intent, { type, data, seq: seq++ })
     })
     const agent = { ctx, session: { append, requestHeader: () => header } } as unknown as Agent
     const scope = scopeTarget(agent, agent)
     const promptScope = scopeTarget(new SystemPrompt(ctx, {}), agent)
-    ctx.provide('sessionProjections', { stateOf: () => selection } as never)
+    ctx.provide('sessionProjections', {
+      register: () => () => {},
+      stateOf: (_session: unknown, key: string) => key === AUTO_MODEL_INTENT_PROJECTION ? intent : selection,
+    } as never)
     ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: PREVIEW, model: AUTO }) } as never)
     const loadModels = vi.fn(async () => [
-      model('fixture-fast', 64_000, 'low'),
-      model('fixture-strong', 256_000, 'high'),
+      model('fixture-fast', 64_000, 'low', 'lightweight'),
+      model('fixture-strong', 256_000, 'high', 'powerful'),
     ])
     const dispose = installAutoModelRouting(ctx, { loadModels })
     ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
@@ -156,7 +366,7 @@ describe('Auto model Host integration', () => {
     const request = (turn: number, modelId: string) => ctx.waterfall(scope, 'agent/request',
       { agent, turn, step: 1, signal }, async () => ({ provider: PREVIEW, model: modelId }))
     try {
-      await enter(1, 'Short question.')
+      await enter(1, 'Hello!')
       const first = await request(1, AUTO)
       expect(first.model).toBe('fixture-fast')
       expect(selection.pending).toEqual({ provider: PREVIEW, model: AUTO })
@@ -173,7 +383,7 @@ describe('Auto model Host integration', () => {
       expect(selection.pending).toEqual({ provider: PREVIEW, model: AUTO })
       expect(append.mock.calls.filter(([type]) => type === 'model/selection')).toHaveLength(1)
 
-      selection.pending = { provider: PREVIEW, model: 'fixture-fast' }
+      append('model/selection', { provider: PREVIEW, model: 'fixture-fast' })
       const manualAssembly = { ...assembly, variables: { provider: PREVIEW, model: 'fixture-fast' } }
       const manual = await ctx.waterfall(promptScope, 'system-prompt/assemble', manualAssembly, {},
         async () => manualAssembly)
@@ -202,10 +412,11 @@ describe('Auto model Host integration', () => {
     const agent = { ctx, session: { append, requestHeader: () => undefined } } as unknown as Agent
     const scope = scopeTarget(agent, agent)
     const loadModels = vi.fn(async () => [
-      model('fixture-fast', 64_000, 'low'),
-      model('fixture-strong', 256_000, 'high'),
+      model('fixture-fast', 64_000, 'low', 'lightweight'),
+      model('fixture-strong', 256_000, 'high', 'powerful'),
     ])
-    const dispose = installAutoModelRouting(ctx, { loadModels })
+    let marked = ['fixture-fast']
+    const dispose = installAutoModelRouting(ctx, { loadModels, highCostModelIds: () => marked })
     ctx.emit(scope, 'agent/created', { agent, source: 'startup' })
     ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider: PREVIEW, model: AUTO }))
     const signal = new AbortController().signal
@@ -217,14 +428,20 @@ describe('Auto model Host integration', () => {
     const request = (turn: number, step = 1) => ctx.waterfall(scope, 'agent/request',
       { agent, turn, step, signal }, async () => ({ provider: 'fixture-seed', model: 'fixture-seed' }))
     try {
-      await enter(1, 'Explain this symbol.')
+      await enter(1, 'Hello!')
       await expect(request(1)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
+      const first = ctx.githubCopilotTurnSelection.get(agent, 1)
+      expect(first.mode === 'auto' && first.explanation?.allocation?.candidates[0]?.highCost).toBe(true)
+      marked = ['fixture-strong']
       await enter(1, 'detail '.repeat(1_000))
       await expect(request(1, 2)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
       expect(loadModels).toHaveBeenCalledTimes(1)
+      expect(ctx.githubCopilotTurnSelection.get(agent, 1)).toBe(first)
 
-      await enter(2, 'detail '.repeat(1_000))
+      await enter(2, 'Prove this theorem.')
       await expect(request(2)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-strong' })
+      const second = ctx.githubCopilotTurnSelection.get(agent, 2)
+      expect(second.mode === 'auto' && second.explanation?.allocation?.candidates[0]?.highCost).toBe(true)
       expect(loadModels).toHaveBeenCalledTimes(2)
       // Optional attribution must not add unknown required events to the durable log.
       expect(append).not.toHaveBeenCalled()

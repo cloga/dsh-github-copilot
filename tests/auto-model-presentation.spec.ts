@@ -3,6 +3,7 @@ import {
   AUTO_MODEL_ATTRIBUTION_KEY, autoModelAttributionDefinition, installAutoModelPresentation,
 } from '../src/auto-model-presentation.ts'
 import { turnModelProvenanceDefinition } from '../src/turn-model-provenance.ts'
+import { turnUsageEvidenceDefinition } from '../src/turn-usage-evidence.ts'
 
 function decision(overrides: Record<string, unknown> = {}) {
   return {
@@ -90,6 +91,7 @@ describe('Auto model presentation', () => {
       remote: { githubCopilotTurnSelection: { get: vi.fn() } } })
     expect(events.register).toHaveBeenCalledWith(autoModelAttributionDefinition)
     expect(events.register).toHaveBeenCalledWith(turnModelProvenanceDefinition)
+    expect(events.register).toHaveBeenCalledWith(turnUsageEvidenceDefinition)
     expect(register).toHaveBeenCalledWith(
       { name: 'conversation.chat.assistant-actions', id: 'github-copilot-auto-model', order: 20 },
       expect.any(Function),
@@ -97,7 +99,44 @@ describe('Auto model presentation', () => {
     expect(diagnostic).not.toHaveBeenCalled()
     dispose()
     expect(removeEntry).toHaveBeenCalledOnce()
-    expect(removeDefinition).toHaveBeenCalledTimes(2)
+    expect(removeDefinition).toHaveBeenCalledTimes(3)
     expect(removeInjection).toHaveBeenCalledOnce()
+  })
+  it('retains independent selection projections if optional usage registration fails', () => {
+    const remove = vi.fn(), diagnostic = vi.fn()
+    const register = vi.fn()
+    const dispose = installAutoModelPresentation({
+      diagnostic, remote: { githubCopilotTurnSelection: { get: vi.fn() } },
+      uiConversation: { events: { register: vi.fn().mockReturnValueOnce(remove).mockReturnValueOnce(remove)
+        .mockImplementationOnce(() => { throw new Error('fixture optional usage registration failure') }) } },
+      slots: { spec: () => ({ kind: 'list', scope: 'session' }),
+        inject: (_: string, setup: () => () => void) => setup(), register: () => { register(); return () => {} } },
+    })
+    expect(register).toHaveBeenCalledOnce()
+    expect(remove).not.toHaveBeenCalled()
+    expect(diagnostic).toHaveBeenCalledWith('COPILOT_TURN_USAGE_PROJECTION_FAILED')
+    dispose()
+    expect(remove).toHaveBeenCalledTimes(2)
+  })
+
+  it('cleans partial projection registration without suppressing the independent actions entry', () => {
+    const removeDefinition = vi.fn(), removeEntry = vi.fn(), diagnostic = vi.fn()
+    const register = vi.fn(() => removeEntry)
+    const dispose = installAutoModelPresentation({
+      diagnostic, remote: { githubCopilotTurnSelection: { get: vi.fn() } },
+      uiConversation: { events: { register: vi.fn().mockReturnValueOnce(removeDefinition)
+        .mockImplementationOnce(() => { throw new Error('fixture registration failure') }) } },
+      slots: {
+        spec: () => ({ kind: 'list', scope: 'session' }),
+        inject: (_: string, setup: () => () => void) => setup(), register,
+      },
+    })
+    expect(removeDefinition).toHaveBeenCalledOnce()
+    expect(register).toHaveBeenCalledOnce()
+    expect(diagnostic).toHaveBeenCalledWith('COPILOT_AUTO_PROJECTIONS_FAILED')
+    expect(removeEntry).not.toHaveBeenCalled()
+    dispose()
+    expect(removeEntry).toHaveBeenCalledOnce()
+    expect(removeDefinition).toHaveBeenCalledOnce()
   })
 })

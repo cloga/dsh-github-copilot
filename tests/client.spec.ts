@@ -4,6 +4,8 @@ import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID } from '../src/copilot-identity.ts'
 import type { GitHubCopilotAuthorizationView } from '../src/authorization-controller.ts'
+import { CopilotAccountsPanel } from '../src/copilot-accounts-card.ts'
+import { ContinuationDefaultCard } from '../src/session-continuation-ui.ts'
 
 // Element/lifecycle evidence, not a browser or live Remote integration. Keep the
 // actual React element implementation and control only hooks exercised below.
@@ -34,11 +36,274 @@ import {
   previewAssignmentMessage,
   GitHubCopilotAccountModelsPanel,
   GitHubCopilotAccountModelsSummary,
+  GitHubCopilotModelPreferencesPanel,
   formatAccountModelsUpdatedAt,
   GitHubCopilotAccountModelsUpdatedAt,
 } from '../src/client.ts'
 
 describe('GitHub Copilot Models client', () => {
+  it('keeps account and model management below the single Manage control with one persistent identity owner', async () => {
+    const { remote, surfaces, provider } = surfaceFixture(accountResult({
+      state: 'ready', models: [], rejected: [],
+    }).value)
+    surfaces.mount(provider, Symbol('provider'), remote as never)
+    await Promise.resolve()
+    const account = surfaces.getSnapshot()!.account
+    const accountsRemote = {} as never
+    const continuationRemote = { get: vi.fn(), set: vi.fn(), defaults: vi.fn(), setDefault: vi.fn() }
+    vi.mocked(React.useMemo).mockImplementation(factory => factory())
+    vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe, snapshot) => snapshot())
+    vi.mocked(React.useEffect).mockImplementation(() => undefined)
+    vi.mocked(React.useId).mockReturnValue('layout-management')
+    vi.mocked(React.useState).mockReturnValue([false, vi.fn()])
+    const closed = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
+    expect(closed.filter(element => element.type === 'button').map(element => element.props.children)).toEqual(['Manage'])
+    expect(closed.filter(element => element.type === CopilotAccountsPanel)).toHaveLength(1)
+    vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
+    const open = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
+    const manageIndex = open.findIndex(element => element.type === 'button' && element.props.children === 'Manage')
+    const accountIndex = open.findIndex(element => element.type === CopilotAccountsPanel)
+    expect(accountIndex).toBeGreaterThan(manageIndex)
+    const region = open.find(element => element.props.id === 'github-copilot-management-layout-management')!
+    expect(descendants(region).some(element => element.type === CopilotAccountsPanel)).toBe(true)
+    expect(descendants(region).some(element => element.props['data-dsh-github-copilot-model-management'])).toBe(true)
+    const settings = open[accountIndex]!.props.continuationSettings
+    expect(settings.type).toBe(ContinuationDefaultCard)
+    expect(settings.props).toMatchObject({ remote: continuationRemote, locale: 'zh-CN' })
+    expect(continuationRemote.defaults).not.toHaveBeenCalled()
+    expect(continuationRemote.setDefault).not.toHaveBeenCalled()
+  })
+
+  it('pairs native dropdown colors and preserves focus, disabled and error visibility in both schemes', async () => {
+    const { remote, surfaces, provider } = surfaceFixture(accountResult().value)
+    surfaces.mount(provider, Symbol('provider'), remote as never)
+    await Promise.resolve()
+    vi.mocked(React.useMemo).mockImplementation(factory => factory())
+    vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe, snapshot) => snapshot())
+    vi.mocked(React.useEffect).mockImplementation(() => undefined)
+    vi.mocked(React.useId).mockReturnValue('theme-management')
+    vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
+    const tree = GitHubCopilotCompactAccount({ remote: remote as never, account: surfaces.getSnapshot()!.account })
+    expect(tree.props.style.colorScheme).toBe('inherit')
+    expect(tree.props.style.fontFamily).toBe('var(--dsw-font-family, system-ui)')
+    expect(tree.props.style.fontWeight).toBe(400)
+    const css = descendants(tree).find(element => element.type === 'style')?.props.children
+    expect(css).toContain('option')
+    expect(css).toContain('background: Canvas')
+    expect(css).toContain('color: CanvasText')
+    expect(css).toContain('color-scheme: inherit')
+    expect(css).toContain(':focus-visible')
+    expect(css).toContain(':disabled')
+    expect(css).toContain('[role="alert"]')
+    expect(css).not.toContain('outline: none')
+  })
+
+  it('keeps preferences through shared account status and the mounted Manage surface', async () => {
+    const preferences = { state: 'ready' as const, writable: true, revision: 2,
+      excludedModelIds: ['excluded'], lockedModelIds: [], unavailableExcludedModelIds: ['excluded'] }
+    const { remote, surfaces, provider } = surfaceFixture({ ...accountResult().value, modelPreferences: preferences })
+    surfaces.mount(provider, Symbol('provider'), remote as never)
+    await Promise.resolve()
+    const account = surfaces.getSnapshot()!.account
+    vi.mocked(React.useMemo).mockImplementation(factory => factory())
+    vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe, snapshot) => snapshot())
+    vi.mocked(React.useEffect).mockImplementation(() => undefined)
+    vi.mocked(React.useId).mockReturnValue('fixture-management')
+    vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
+    const continuation = React.createElement('div', { 'data-continuation-settings': true }, 'Continuation settings')
+    const elements = descendants(GitHubCopilotCompactAccount({ remote: remote as never, account, continuationSettings: continuation }))
+    expect(elements.find(element => element.type === GitHubCopilotModelPreferencesPanel)?.props.preferences).toEqual(preferences)
+    expect(elements.some(element => element.type === 'summary' && element.props.children === 'Discovery details')).toBe(true)
+    expect(elements.find(element => element.props['data-continuation-settings'])?.props.children).toBe('Continuation settings')
+    expect(elements.some(element => element.props['aria-label'] === 'Account management')).toBe(true)
+    expect(elements.some(element => element.type === 'button' && element.props.children === 'Sign out')).toBe(true)
+  })
+
+  function preferencesFixture() {
+    const models: AccountModels = { state: 'ready', rejected: [], models: [
+      { id: 'enabled', name: 'Enabled model', api: 'openai-responses' },
+      { id: 'excluded', name: 'Excluded model', api: 'openai-responses' },
+    ] }
+    const preferences = { state: 'ready' as const, writable: true, revision: 1,
+      excludedModelIds: ['excluded', 'absent'], lockedModelIds: [], unavailableExcludedModelIds: ['absent'] }
+    return { models, preferences }
+  }
+
+  it('saves a high-cost row through its narrow Remote without discovery and retains exclusion state', async () => {
+    const { models, preferences } = preferencesFixture()
+    const known = { ...preferences, highCostModelIds: [] }
+    const remote = modelRemote()
+    remote.setModelHighCost.mockResolvedValue({ ok: true, value: { ...known, highCostModelIds: ['enabled'], revision: 2 } })
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never,
+      models, preferences: known }))
+    await descendants(panel.render()).find(element => element.props['data-high-cost-model-id'] === 'enabled')!
+      .props.onChange({ currentTarget: { checked: true } })
+    expect(remote.setModelHighCost).toHaveBeenCalledExactlyOnceWith('enabled', true)
+    expect(descendants(panel.render()).find(element => element.props['data-high-cost-model-id'] === 'enabled')?.props.checked).toBe(true)
+    expect(descendants(panel.render()).find(element => element.props['data-model-id'] === 'excluded')?.props.children).toBe('Restore')
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.ensureModels).not.toHaveBeenCalled()
+  })
+
+  it('labels exclusions as shared preferences and filters only evidenced unavailable exclusions', () => {
+    const { models, preferences } = preferencesFixture()
+    const expandedModels = { ...models, models: [
+      ...models.models, { id: 'new-metadata-model', name: 'New metadata model', api: 'openai-responses' as const },
+    ] }
+    const panel = panelHarness(modelRemote(), face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models: expandedModels, preferences,
+    }))
+    const initial = descendants(panel.render())
+    const copy = initial.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
+    expect(copy).toContain('shared across GitHub Copilot accounts')
+    expect(copy).toContain('availability below reflects the current account')
+    expect(initial.some(element => element.type === 'button' && String(element.props.children).startsWith('Unavailable'))).toBe(true)
+    const enabled = initial.find(element => element.props['data-model-id'] === 'enabled')
+    expect(enabled?.props.children).toBe('Exclude')
+    expect(initial.some(element => element.props['data-model-id'] === 'enabled'
+      && String(element.props['aria-label']).includes('Enabled model'))).toBe(true)
+    expect(initial.find(element => element.props['data-model-id'] === 'new-metadata-model')?.props.children).toBe('Exclude')
+    const unavailable = initial.find(element => element.props['data-model-id'] === 'absent')
+    expect(unavailable).toBeDefined()
+    expect(initial.some(element => String(element.props.children).includes('Currently unavailable on current account'))).toBe(true)
+    const unavailableFilter = initial.find(element => element.type === 'button'
+      && String(element.props.children).startsWith('Unavailable'))!
+    unavailableFilter.props.onClick()
+    const filtered = descendants(panel.render())
+    expect(filtered.filter(element => element.props['data-model-id']).map(element => element.props['data-model-id'])).toEqual(['absent'])
+  })
+  it.each(['stale', 'loading', 'error', 'unavailable'] as const)('keeps saved exclusions without claiming current availability from %s metadata', state => {
+    const { models, preferences } = preferencesFixture()
+    const snapshot = { ...models, state }
+    const panel = panelHarness(modelRemote(), face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models: snapshot, preferences,
+    }))
+    const elements = descendants(panel.render())
+    const copy = elements.flatMap(element => typeof element.props.children === 'string' ? [element.props.children] : []).join(' ')
+    expect(copy).not.toContain('Available on current account')
+    expect(copy).not.toContain('Currently unavailable on current account')
+    expect(copy).toContain('Current account availability unconfirmed')
+    expect(elements.find(element => element.type === 'button' && element.props.children === 'Unavailable (?)')?.props.disabled).toBe(true)
+    expect(elements.find(element => element.props['data-model-id'] === 'absent')?.props.children).toBe('Restore')
+  })
+
+  it('shows read-only account rows with unknown exclusion status and recovers via status without discovery', async () => {
+    const { models, preferences } = preferencesFixture()
+    const remote = modelRemote()
+    remote.status.mockResolvedValue({ ok: true, value: { ...accountResult(models).value, modelPreferences: preferences } })
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models, preferences: undefined,
+    }))
+    const initial = descendants(panel.render())
+    expect(initial.filter(element => element.props['data-model-id']).every(element => element.props.disabled)).toBe(true)
+    expect(initial.some(element => String(element.props.children).includes('Exclusion status unknown'))).toBe(true)
+    await initial.find(element => element.props['data-dsh-github-copilot-preferences-retry'])!.props.onClick()
+    const recovered = descendants(panel.render())
+    expect(recovered.find(element => element.props['data-model-id'] === 'enabled')?.props.disabled).toBe(false)
+    expect(remote.status).toHaveBeenCalledOnce()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.ensureModels).not.toHaveBeenCalled()
+  })
+
+  it('combines filters and search, preserves failed actions, and prevents duplicate writes before render', async () => {
+    const { models, preferences } = preferencesFixture()
+    const remote = modelRemote()
+    const write = deferred<ReturnType<typeof accountResult>>()
+    remote.setModelExcluded.mockReturnValue(write.promise)
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never, models, preferences }))
+    let elements = descendants(panel.render())
+    const action = elements.find(element => element.props['data-model-id'] === 'enabled')!
+    const pending = action.props.onClick()
+    await action.props.onClick()
+    expect(remote.setModelExcluded).toHaveBeenCalledExactlyOnceWith('enabled', true)
+    write.reject(new Error('PRIVATE_HOST_FAILURE'))
+    await pending
+    elements = descendants(panel.render())
+    expect(elements.find(element => element.props['data-model-id'] === 'enabled')?.props.children).toBe('Exclude')
+    expect(elements.some(element => String(element.props.children).includes('PRIVATE_HOST_FAILURE'))).toBe(false)
+    elements.find(element => element.type === 'button' && element.props.children === 'Excluded (2)')!.props.onClick()
+    elements = descendants(panel.render())
+    expect(elements.filter(element => element.props['data-model-id']).map(element => element.props['data-model-id'])).toEqual(['excluded', 'absent'])
+    elements.find(element => element.props['data-dsh-github-copilot-model-search'])!.props.onChange({ currentTarget: { value: 'absent' } })
+    expect(descendants(panel.render()).filter(element => element.props['data-model-id'])).toHaveLength(1)
+  })
+
+  it('ignores a retry response after the account props have been replaced', async () => {
+    const fixture = preferencesFixture()
+    const remote = modelRemote()
+    const read = deferred<ReturnType<typeof accountResult>>()
+    remote.status.mockReturnValue(read.promise)
+    let models: AccountModels | undefined = fixture.models
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models, preferences: undefined,
+    }))
+    const pending = descendants(panel.render()).find(element => element.props['data-dsh-github-copilot-preferences-retry'])!.props.onClick()
+    models = undefined
+    panel.render()
+    read.resolve({ ok: true, value: { ...accountResult(fixture.models).value } })
+    await pending
+    expect(descendants(panel.render()).filter(element => element.props['data-model-id'])).toHaveLength(0)
+  })
+
+  it('updates one row from the narrow preferences result without account status or discovery', async () => {
+    const { models, preferences } = preferencesFixture()
+    const remote = modelRemote()
+    remote.setModelExcluded.mockResolvedValue({ ok: true, value: { ...preferences,
+      revision: 2, excludedModelIds: ['absent', 'enabled', 'excluded'] } })
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never, models, preferences }))
+    await descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')!.props.onClick()
+    expect(descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')?.props.children).toBe('Restore')
+    expect(remote.setModelExcluded).toHaveBeenCalledExactlyOnceWith('enabled', true)
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+    expect(remote.ensureModels).not.toHaveBeenCalled()
+  })
+
+  it('serializes independent row intents without disabling unrelated rows or replaying failed writes', async () => {
+    const { models, preferences } = preferencesFixture()
+    const remote = modelRemote()
+    const first = deferred<{ ok: true; value: typeof preferences }>()
+    remote.setModelExcluded.mockReturnValueOnce(first.promise)
+    remote.setModelHighCost.mockResolvedValue({ ok: true, value: { ...preferences, revision: 3,
+      excludedModelIds: [...preferences.excludedModelIds, 'enabled'], highCostModelIds: ['excluded'] } })
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({ remote: face as never, models, preferences }))
+    const action = (id: string) => descendants(panel.render()).find(element => element.props['data-model-id'] === id)!
+    const firstSave = action('enabled').props.onClick()
+    expect(action('excluded').props.disabled).toBe(false)
+    const secondSave = descendants(panel.render()).find(element => element.props['data-high-cost-model-id'] === 'excluded')!
+      .props.onChange({ currentTarget: { checked: true } })
+    expect(action('excluded').props.children).toBe('Waiting…')
+    expect(remote.setModelHighCost).not.toHaveBeenCalled()
+    first.resolve({ ok: true, value: { ...preferences, revision: 2,
+      excludedModelIds: [...preferences.excludedModelIds, 'enabled'] } })
+    await Promise.all([firstSave, secondSave])
+    expect(remote.setModelHighCost).toHaveBeenCalledExactlyOnceWith('excluded', true)
+    expect(action('enabled').props.children).toBe('Restore')
+    expect(remote.status).not.toHaveBeenCalled()
+  })
+
+  it('retains confirmed preferences across equivalent parent snapshots and stops queued writes on uncertainty', async () => {
+    const fixture = preferencesFixture()
+    let preferences = fixture.preferences
+    const remote = modelRemote()
+    const first = deferred<{ ok: true; value: typeof preferences }>()
+    remote.setModelExcluded.mockReturnValueOnce(first.promise)
+    const panel = panelHarness(remote, face => GitHubCopilotModelPreferencesPanel({
+      remote: face as never, models: fixture.models, preferences,
+    }))
+    const firstSave = descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')!.props.onClick()
+    preferences = { ...preferences, excludedModelIds: [...preferences.excludedModelIds] }
+    expect(descendants(panel.render()).find(element => element.props['data-model-id'] === 'enabled')?.props.children).toBe('Saving…')
+    const queued = descendants(panel.render()).find(element => element.props['data-model-id'] === 'excluded')!.props.onClick()
+    first.reject(new Error('PRIVATE_TRANSPORT_FAILURE'))
+    await Promise.all([firstSave, queued])
+    expect(remote.setModelExcluded).toHaveBeenCalledExactlyOnceWith('enabled', true)
+    expect(descendants(panel.render()).filter(element => element.props['data-model-id']).every(element => element.props.disabled)).toBe(true)
+    expect(descendants(panel.render()).find(element => element.props['data-dsh-github-copilot-preferences-retry'])?.props.disabled).toBe(false)
+    expect(remote.status).not.toHaveBeenCalled()
+  })
+
   function descendants(root: unknown): ReactElement[] {
     if (Array.isArray(root)) return root.flatMap(descendants)
     if (!isValidElement(root)) return []
@@ -60,11 +325,12 @@ describe('GitHub Copilot Models client', () => {
   }
   function modelRemote(discoverModels: ReturnType<typeof vi.fn> = vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] }))) {
     return { discoverModels, ensureModels: vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] })),
-      status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn() }
+      status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(),
+      excludeModel: vi.fn(), restoreModel: vi.fn(), setModelExcluded: vi.fn(), setModelHighCost: vi.fn() }
   }
   // Tiny deterministic hook host: component state/ref identity and effect cleanup,
   // without mounting a browser or invoking any real Remote implementation.
-  function panelHarness(initialRemote: object) {
+  function panelHarness(initialRemote: object, component = (remote: object) => GitHubCopilotAccountModelsPanel({ remote: remote as never })) {
     let remote = initialRemote
     const states: unknown[] = []
     const setters: ReturnType<typeof vi.fn>[] = []
@@ -95,7 +361,7 @@ describe('GitHub Copilot Models client', () => {
           })
         }
       })
-      return GitHubCopilotAccountModelsPanel({ remote: remote as never })
+      return component(remote)
     }
     const render = (nextRemote = remote) => {
       if (!mounted) throw new Error('test panel is unmounted')
@@ -820,6 +1086,59 @@ describe('GitHub Copilot Models client', () => {
     expect(text).toContain('not offered')
   })
 
+  it('renders nested searchable model preferences with selected locks and absent exclusions', async () => {
+    vi.mocked(React.useState).mockImplementation((initial?: unknown) =>
+      [typeof initial === 'function' ? initial() : initial, vi.fn()] as never)
+    vi.mocked(React.useEffect).mockImplementation(() => undefined)
+    vi.mocked(React.useRef).mockImplementation(initial => ({ current: initial }))
+    const remote = modelRemote()
+    remote.setModelExcluded.mockResolvedValue({ ok: true, value: preferencesFixture().preferences })
+    const tree = GitHubCopilotModelPreferencesPanel({
+      remote: remote as never,
+      models: { state: 'ready', rejected: [], models: [
+        { id: 'selected', name: 'Selected model', api: 'openai-responses' },
+        { id: 'excluded', name: 'Excluded model', api: 'openai-responses' },
+      ] },
+      preferences: {
+        state: 'ready',
+        writable: true,
+        revision: 4,
+        excludedModelIds: ['excluded', 'temporarily-absent'],
+        lockedModelIds: ['selected'],
+        unavailableExcludedModelIds: ['temporarily-absent'],
+      },
+    })
+
+    const elements = descendants(tree)
+    expect(elements.find(element => element.type === 'summary')?.props.children)
+      .toBe('Model preferences · 1 enabled · 2 excluded')
+    expect(elements.find(element => element.props['data-dsh-github-copilot-model-search'] === true)).toBeDefined()
+    const selected = elements.find(element => element.props['data-model-id'] === 'selected')
+    expect(selected?.props).toMatchObject({ disabled: false, children: 'Exclude' })
+    const restore = elements.find(element => element.props['data-model-id'] === 'temporarily-absent')
+    expect(restore?.props.children).toBe('Restore')
+    await restore?.props.onClick()
+    expect(remote.setModelExcluded).toHaveBeenCalledWith('temporarily-absent', false)
+    expect(remote.status).not.toHaveBeenCalled()
+    expect(remote.discoverModels).not.toHaveBeenCalled()
+  })
+
+  it('preserves owned model preferences through the actual account decoder without reading extra fields', () => {
+    const preferences = {
+      state: 'ready', writable: true, revision: 3,
+      excludedModelIds: ['excluded'], lockedModelIds: ['selected'],
+      unavailableExcludedModelIds: [],
+    }
+    Object.defineProperty(preferences, 'privateData', { get() { throw new Error('must not read extras') } })
+    const decoded = authorizationViewFrom({ ...accountResult().value, modelPreferences: preferences })
+    expect(decoded?.modelPreferences).toEqual(preferences)
+    expect(decoded?.modelPreferences).not.toBe(preferences)
+    expect(decoded?.modelPreferences?.excludedModelIds).not.toBe(preferences.excludedModelIds)
+    expect(authorizationViewFrom({
+      ...accountResult().value, modelPreferences: { ...preferences, excludedModelIds: [123] },
+    })).toBeUndefined()
+  })
+
   it('preserves safe warnings from discovery while accepting older responses without them', async () => {
     const warning = Object.defineProperty({ id: 'new-model', code: 'REASONING_EFFORTS_UNSUPPORTED' }, 'accountKey', {
       enumerable: true, get() { throw new Error('must not read warning extras') },
@@ -1122,6 +1441,7 @@ describe('GitHub Copilot Models client', () => {
         spec: ReturnType<typeof vi.fn>
       }
       logger: { warn: ReturnType<typeof vi.fn> }
+      get: ReturnType<typeof vi.fn>
       on: ReturnType<typeof vi.fn>
       inject: ReturnType<typeof vi.fn>
     }
@@ -1129,11 +1449,14 @@ describe('GitHub Copilot Models client', () => {
       if (services.includes('uiConversation')) {
         return Object.assign(new Promise<void>(() => {}), { dispose: disposePresentation })
       }
-      if (services.includes('remote.githubCopilotUsage')) {
+      if (services.includes('remote.githubCopilotUsage') || services.includes('remote.githubCopilotDiagnostics')) {
         return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
       }
       const cleanup = callback(ctx)
-      if (services.includes('remote.settings')) {
+      if (services.includes('remote.settings') || services.includes('remote.githubCopilotTurnSelection')
+        || services.includes('remote.githubCopilotReplayRecovery')
+        || services.length === 2 && services[0] === 'remote.githubCopilotSessionContinuation' && services[1] === 'slots'
+        || services.length === 1 && services[0] === 'slots') {
         return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })
       }
       if (typeof cleanup === 'function') cleanupUi = cleanup as () => void
@@ -1164,10 +1487,11 @@ describe('GitHub Copilot Models client', () => {
         register,
         spec: vi.fn((name: string) => ({
           kind: name === 'settings.models.provider-card' || name === 'plugins.bundle.config' ? 'keyed' : 'list',
-          scope: 'root',
+          scope: name === 'conversation.chat.assistant-actions' ? 'session' : 'root',
         })),
       },
       logger: { warn: vi.fn() },
+      get: vi.fn((name: string) => name === 'slots' ? ctx.slots : undefined),
       on: vi.fn(() => vi.fn()),
       inject,
     }
@@ -1206,6 +1530,58 @@ describe('GitHub Copilot Models client', () => {
     expect(first.props).not.toHaveProperty('copilot')
     await dispose()
   })
+  it('declares account namespace access for both Models and Credits injection scopes', async () => {
+    const { ctx } = clientContext(['settings.models.footer'])
+    const dispose = await apply(ctx as never)
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    await dispose()
+  })
+
+  it.each(['settings.models.provider-card', 'settings.models.footer', 'settings.section'])(
+    'retains account metadata without redundant reads on exclusion-driven %s renders', async slot => {
+      const { ctx, register } = clientContext([slot])
+      const fixture = preferencesFixture()
+      const view = { ...accountResult(fixture.models).value, modelPreferences: fixture.preferences }
+      const status = vi.fn().mockResolvedValue({ ok: true, value: view })
+      const ensureModels = vi.fn(), discoverModels = vi.fn()
+      const namespace = vi.fn(() => ({ status, ensureModels, discoverModels }))
+      Object.defineProperty(ctx.remote, 'githubCopilot', { get: namespace })
+      const continuation = vi.fn(() => ({ get: vi.fn(), set: vi.fn(), defaults: vi.fn(), setDefault: vi.fn() }))
+      Object.defineProperty(ctx.remote, 'githubCopilotSessionContinuation', { get: continuation })
+      const dispose = await apply(ctx as never)
+      const render = register.mock.calls.find(([options]) => options.name === slot)?.[1] as (props: object) => ReactElement
+      const props = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, settingsNs: 'llm-pi-ai' }, configured: true }
+      const first = render(props)
+      const token = Symbol('mounted-account')
+      const surfaces: ReturnType<typeof createAccountSurfaces> = first.props.surfaces
+      const unmount = surfaces.mount(first.props.seat, token, first.props.remote)
+      await Promise.resolve()
+      await Promise.resolve()
+      const account = surfaces.getSnapshot()!.account
+      expect(account.getSnapshot().checking).toBe(false)
+      expect(account.getSnapshot().view?.accountModels).toEqual(view.accountModels)
+      // Any second status read would block for as long as the Host takes.
+      status.mockImplementation(() => new Promise(() => {}))
+      for (let i = 0; i < 5; i++) {
+        const next = render(props)
+        expect(next.props.remote).toBe(first.props.remote)
+        expect(next.props.continuationRemote).toBe(first.props.continuationRemote)
+        expect(next.props.seat).toBe(first.props.seat)
+        surfaces.mount(next.props.seat, token, next.props.remote)
+        expect(surfaces.getSnapshot()!.account).toBe(account)
+        expect(account.getSnapshot().checking).toBe(false)
+        expect(account.getSnapshot().view?.modelPreferences).toEqual(view.modelPreferences)
+      }
+      expect(namespace).toHaveBeenCalledTimes(1)
+      expect(continuation).toHaveBeenCalledTimes(1)
+      expect(status).toHaveBeenCalledTimes(1)
+      expect(ensureModels).not.toHaveBeenCalled()
+      expect(discoverModels).not.toHaveBeenCalled()
+      unmount()
+      await dispose()
+    })
 
   it('moves search routing between the bundle page and Models fallback as the bundle slot appears and disappears', async () => {
     const { ctx, register, registrations, injections } = clientContext(['settings.models.footer'])
@@ -1334,12 +1710,23 @@ describe('GitHub Copilot Models client', () => {
     const { ctx, disposeRemote, disposeUi, disposePresentation } = clientContext(['settings.section'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], expect.any(Function))
     expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotDualModel', 'slots'], expect.any(Function))
     expect(disposePresentation).not.toHaveBeenCalled()
     await dispose()
     expect(disposePresentation).toHaveBeenCalledOnce()
     expect(disposeUi).toHaveBeenCalledOnce()
     expect(disposeRemote).toHaveBeenCalledOnce()
+  })
+
+  it('registers and disposes Auto actions while the optional conversation fiber remains pending', async () => {
+    const { ctx, registrations } = clientContext(['conversation.chat.assistant-actions'])
+    const dispose = await apply(ctx as never)
+    const remove = registrations.get('conversation.chat.assistant-actions')
+    expect(remove).toBeTypeOf('function')
+    expect(remove).not.toHaveBeenCalled()
+    await dispose()
+    expect(remove).toHaveBeenCalledOnce()
   })
 
   it('mounts its Remote contribution and registers the rc.1 provider-card seat', async () => {

@@ -13,6 +13,9 @@ import {
 } from './route-ownership.ts'
 import { temporaryGitHubCopilotModelFromProfile } from './temporary-models.ts'
 import { migrationStatus, type GitHubCopilotMigrationStatus } from './migration-status.ts'
+import { normalizeExcludedModelIds } from './model-exclusions.ts'
+import { normalizeHighCostModelIds } from './auto-allocation.ts'
+import type {} from './copilot-accounts-host.ts'
 
 export { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
@@ -66,6 +69,20 @@ export interface GitHubCopilotAccountModelsView {
   readonly warnings?: readonly { readonly id: string; readonly code: string }[]
   readonly discoveredAt?: number
   readonly error?: string
+}
+
+export interface GitHubCopilotModelPreferencesView {
+  readonly state: 'ready' | 'error'
+  readonly writable: boolean
+  readonly revision?: number
+  readonly excludedModelIds: readonly string[]
+  readonly lockedModelIds: readonly string[]
+  readonly unavailableExcludedModelIds: readonly string[]
+  readonly highCostModelIds?: readonly string[]
+  readonly error?: 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE' | 'COPILOT_MODEL_EXCLUSION_SELECTED'
+    | 'COPILOT_MODEL_EXCLUSION_CONFLICT' | 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
+    | 'COPILOT_MODEL_SETTINGS_UNAVAILABLE' | 'COPILOT_MODEL_SETTINGS_INVALID'
+    | 'COPILOT_MODEL_SELECTION_UNAVAILABLE'
 }
 
 /** Only these owned presentation leaves can cross the Remote boundary. */
@@ -124,9 +141,63 @@ export interface GitHubCopilotAuthorizationView {
   readonly catalog?: GitHubCopilotModelCatalogView
   readonly route?: GitHubCopilotRouteView
   readonly accountModels?: GitHubCopilotAccountModelsView
+  readonly modelPreferences?: GitHubCopilotModelPreferencesView
   readonly error?: string
   /** Latest fixed interaction milestone observed during a failed or active attempt; never a failure cause. */
   readonly authorizationMilestone?: GitHubCopilotAuthorizationMilestone
+}
+
+interface ModelPreferenceSettingsView {
+  describe(options: { redactSecrets: true }): readonly {
+    readonly ns: string
+    readonly revision: number
+    readonly user?: unknown
+    readonly value?: unknown
+  }[]
+  mutate(namespace: string, operations: readonly {
+    readonly op: 'set' | 'unset'
+    readonly path: readonly string[]
+    readonly value?: unknown
+  }[], expectedRevision?: number): Promise<void>
+}
+
+function modelPreferencesView(
+  ctx: Context,
+  accountModels: GitHubCopilotAccountModelsView | undefined,
+  error?: GitHubCopilotModelPreferencesView['error'],
+): GitHubCopilotModelPreferencesView {
+  const unavailable = (diagnostic: GitHubCopilotModelPreferencesView['error']): GitHubCopilotModelPreferencesView => ({
+    state: 'error', writable: false, excludedModelIds: [], lockedModelIds: [],
+    unavailableExcludedModelIds: [], error: diagnostic,
+  })
+  let settings: ModelPreferenceSettingsView
+  let descriptor: ReturnType<ModelPreferenceSettingsView['describe']>[number] | undefined
+  try {
+    settings = service<ModelPreferenceSettingsView>(ctx, 'settings', ['describe', 'mutate'])
+    descriptor = settings.describe({ redactSecrets: true }).find(item => item.ns === GITHUB_COPILOT_SETTINGS_NAMESPACE)
+  } catch { return unavailable('COPILOT_MODEL_SETTINGS_UNAVAILABLE') }
+  if (descriptor === undefined) return unavailable('COPILOT_MODEL_SETTINGS_UNAVAILABLE')
+  if (!Number.isSafeInteger(descriptor.revision) || descriptor.revision < 0) return unavailable('COPILOT_MODEL_SETTINGS_INVALID')
+  let excludedModelIds: readonly string[]
+  let highCostModelIds: readonly string[]
+  try {
+    const raw = object(descriptor.value)
+    if (raw === undefined) return unavailable('COPILOT_MODEL_SETTINGS_INVALID')
+    excludedModelIds = normalizeExcludedModelIds(raw.excludedModelIds)
+    highCostModelIds = normalizeHighCostModelIds(raw.highCostModelIds)
+  } catch { return unavailable('COPILOT_MODEL_SETTINGS_INVALID') }
+  const diagnostic = error
+  const available = new Set(accountModels?.models.map(model => model.id) ?? [])
+  return {
+    state: diagnostic === undefined ? 'ready' : 'error',
+    writable: true,
+    revision: descriptor.revision,
+    excludedModelIds,
+    highCostModelIds,
+    lockedModelIds: [],
+    unavailableExcludedModelIds: excludedModelIds.filter(id => !available.has(id)),
+    ...diagnostic === undefined ? {} : { error: diagnostic },
+  }
 }
 
 export type GitHubCopilotAuthorizationMilestone =
@@ -373,6 +444,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   private reconciliationFailed = false
   private attempt: Promise<void> | undefined
   private authorizationMilestone: GitHubCopilotAuthorizationMilestone | undefined
+  private modelPreferenceFailure: GitHubCopilotModelPreferencesView['error']
 
   constructor(ctx: Context) {
     super(ctx, 'githubCopilotAuthorization', { namespace: 'githubCopilot' })
@@ -386,6 +458,27 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
   @Remote
   async status(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts) {
+      let accountId: string
+      try { accountId = accounts.host.capture().accountId }
+      catch {
+        return { phase: 'error', configured: false, writable: false, inFlight: false, notices: [],
+          error: 'COPILOT_ACCOUNTS_SELECTOR_INVALID' }
+      }
+      if (accountId !== 'canonical') {
+        const view = await accounts.get()
+        const row = view.accounts.find(row => row.id === accountId)
+        const discovered = accountModelsView(this.ctx)
+        return { phase: view.operation === 'authorizing' ? 'authorizing' : view.state === 'error' ? 'error'
+          : row?.configured ? 'signed-in' : 'signed-out',
+        configured: row?.configured === true, writable: view.writable, inFlight: view.operation !== undefined,
+        notices: view.notices, route: { state: 'not-configured' },
+        ...discovered === undefined ? {} : { accountModels: discovered },
+        modelPreferences: modelPreferencesView(this.ctx, discovered, this.modelPreferenceFailure),
+        ...view.diagnostic === undefined ? {} : { error: view.diagnostic } }
+      }
+    }
     const authorization = service<AuthorizationServiceView>(
       this.ctx,
       'authorization',
@@ -419,6 +512,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     const inFlight = authorization.describe(GITHUB_COPILOT_CREDENTIAL_KEY)?.inFlight === true
       || this.attempt !== undefined
     const discovered = accountModelsView(this.ctx)
+    const modelPreferences = modelPreferencesView(this.ctx, discovered, this.modelPreferenceFailure)
     return {
       phase: inFlight
         ? 'authorizing'
@@ -432,9 +526,32 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       route,
       ...catalog === undefined ? {} : { catalog },
       ...discovered === undefined ? {} : { accountModels: discovered },
+      ...modelPreferences === undefined ? {} : { modelPreferences },
       ...this.failure === undefined ? {} : { error: this.failure },
       ...this.authorizationMilestone === undefined ? {} : { authorizationMilestone: this.authorizationMilestone },
     }
+  }
+
+  @Remote
+  async excludeModel(modelId: string): Promise<GitHubCopilotAuthorizationView> {
+    await this.updateModelExclusion(modelId, true)
+    return this.status()
+  }
+
+  @Remote
+  async restoreModel(modelId: string): Promise<GitHubCopilotAuthorizationView> {
+    await this.updateModelExclusion(modelId, false)
+    return this.status()
+  }
+
+  @Remote
+  async setModelExcluded(modelId: string, excluded: boolean): Promise<GitHubCopilotModelPreferencesView> {
+    return this.updateModelExclusion(modelId, excluded)
+  }
+
+  @Remote
+  async setModelHighCost(modelId: string, highCost: boolean): Promise<GitHubCopilotModelPreferencesView> {
+    return this.updateModelExclusion(modelId, highCost, 'highCostModelIds')
   }
 
   /** Explicit model discovery: may refresh OAuth and GET the account catalog, never changes selection. */
@@ -467,6 +584,8 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   /** Explicit route repair over the stored account snapshot; never forces OAuth or a network probe. */
   @Remote
   async reconcile(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts && accounts.host.capture().accountId !== 'canonical') return this.status()
     const current = await this.status()
     if (!current.configured || current.inFlight || this.attempt !== undefined) return current
     await this.ensureProviderProfile()
@@ -475,6 +594,16 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
   @Remote
   async start(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts) {
+      const binding = accounts.host.capture()
+      if (binding.accountId !== 'canonical') {
+        const view = await accounts.get()
+        if (view.revision === undefined) return this.status()
+        await accounts.host.reauthorize(binding.accountId, view.revision)
+        return this.status()
+      }
+    }
     const current = await this.status()
     if (current.inFlight || this.attempt !== undefined) return current
     if (current.configured) return this.reconcile()
@@ -497,6 +626,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       )
     }
 
+    const admission = accounts?.host.acquireCanonicalAuthorization()
     this.notices = []
     this.failure = undefined
     this.reconciliationFailed = false
@@ -544,6 +674,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       this.ctx.logger.error('github-copilot: authorization.begin failed (COPILOT_AUTHORIZATION_BEGIN_FAILED)')
     }).finally(() => {
       this.attempt = undefined
+      admission?.release()
     })
     this.attempt = running
     return this.status()
@@ -551,6 +682,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
   @Remote
   async cancel(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts && accounts.host.capture().accountId !== 'canonical') {
+      await accounts.cancel()
+      return this.status()
+    }
     const authorization = service<AuthorizationServiceView>(
       this.ctx,
       'authorization',
@@ -564,6 +700,11 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
 
   @Remote
   async signOut(): Promise<GitHubCopilotAuthorizationView> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts && accounts.host.capture().accountId !== 'canonical') {
+      await accounts.host.signOutActive()
+      return this.status()
+    }
     const authorization = service<AuthorizationServiceView>(
       this.ctx,
       'authorization',
@@ -583,6 +724,53 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     this.reconciliationFailed = false
     this.authorizationMilestone = undefined
     return this.status()
+  }
+
+  private async updateModelExclusion(
+    modelId: string, exclude: boolean, field: 'excludedModelIds' | 'highCostModelIds' = 'excludedModelIds',
+  ): Promise<GitHubCopilotModelPreferencesView> {
+    const view = () => modelPreferencesView(this.ctx, accountModelsView(this.ctx), this.modelPreferenceFailure)
+    let normalized: string
+    try { [normalized] = normalizeExcludedModelIds([modelId]) as [string] }
+    catch {
+      this.modelPreferenceFailure = 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
+      return view()
+    }
+    const current = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
+    if (!current.writable || current.revision === undefined) {
+      this.modelPreferenceFailure = 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE'
+      return view()
+    }
+    const original = field === 'excludedModelIds' ? current.excludedModelIds : current.highCostModelIds ?? []
+    const ids = new Set(original)
+    if (exclude) ids.add(normalized)
+    else ids.delete(normalized)
+    const next = normalizeExcludedModelIds([...ids])
+    if (next.length === original.length
+      && next.every((id, index) => id === original[index])) {
+      this.modelPreferenceFailure = undefined
+      return current
+    }
+    try {
+      const settings = service<ModelPreferenceSettingsView>(this.ctx, 'settings', ['describe', 'mutate'])
+      await settings.mutate(GITHUB_COPILOT_SETTINGS_NAMESPACE,
+        [{ op: 'set', path: [field], value: next }], current.revision)
+      this.modelPreferenceFailure = undefined
+      const saved = view()
+      const readback = field === 'excludedModelIds' ? saved.excludedModelIds : saved.highCostModelIds
+      if (!saved.writable || readback === undefined || readback.length !== next.length
+        || readback.some((id, index) => id !== next[index])) {
+        this.modelPreferenceFailure = 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
+        return { ...saved, state: 'error', error: this.modelPreferenceFailure }
+      }
+      return saved
+    } catch (cause) {
+      const record = object(cause)
+      this.modelPreferenceFailure = record?.code === 'SETTINGS_CONFLICT'
+        || cause instanceof Error && /conflict/i.test(cause.message)
+        ? 'COPILOT_MODEL_EXCLUSION_CONFLICT' : 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
+    }
+    return view()
   }
 
   private async ensureProviderProfile(): Promise<void> {

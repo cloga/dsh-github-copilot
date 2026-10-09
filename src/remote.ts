@@ -8,12 +8,17 @@ import type {
 } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 import { strictRemoteCodec } from './remote-codec.ts'
-import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
+import type { GitHubCopilotAuthorizationView, GitHubCopilotModelPreferencesView } from './authorization-controller.ts'
 import type { GitHubCopilotMigrationStatus } from './migration-status.ts'
 import dualModelRemote from './dual-model-remote.ts'
 import searchRoutingRemote from './search-routing-remote.ts'
 import copilotUsageRemote from './copilot-usage-remote.ts'
 import turnSelectionRemote from './turn-selection-remote.ts'
+import replayRecoveryRemote from './replay-recovery-remote.ts'
+import copilotAccountsRemote from './copilot-accounts-remote.ts'
+import sessionAccountsRemote from './session-accounts-remote.ts'
+import sessionContinuationRemote from './session-continuation-remote.ts'
+import diagnosticsRemote from './diagnostics-remote.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
@@ -23,6 +28,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       reconcile(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       discoverModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       ensureModels(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      excludeModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      restoreModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
+      setModelExcluded(modelId: string, excluded: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
+      setModelHighCost(modelId: string, highCost: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       cancel(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       signOut(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -60,6 +69,24 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
     discoveredAt: z.number().int().nonnegative().optional(),
     error: z.string().optional(),
   }).strict().optional(),
+  modelPreferences: z.object({
+    state: z.enum(['ready', 'error']),
+    writable: z.boolean(),
+    revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    excludedModelIds: z.array(z.string().min(1).max(512)).max(512),
+    lockedModelIds: z.array(z.string().min(1).max(512)).max(512),
+    unavailableExcludedModelIds: z.array(z.string().min(1).max(512)).max(512),
+    highCostModelIds: z.array(z.string().min(1).max(512)).max(512).optional(),
+    error: z.enum([
+      'COPILOT_MODEL_PREFERENCES_UNAVAILABLE',
+      'COPILOT_MODEL_SETTINGS_UNAVAILABLE',
+      'COPILOT_MODEL_SETTINGS_INVALID',
+      'COPILOT_MODEL_SELECTION_UNAVAILABLE',
+      'COPILOT_MODEL_EXCLUSION_SELECTED',
+      'COPILOT_MODEL_EXCLUSION_CONFLICT',
+      'COPILOT_MODEL_EXCLUSION_SAVE_FAILED',
+    ]).optional(),
+  }).strict().optional(),
   route: z.object({
     state: z.enum(['ready', 'needs-repair', 'not-configured', 'conflict', 'error']),
     diagnosticCode: z.enum(['ROUTE_READ_FAILED', 'RECONCILIATION_FAILED', 'ROUTE_CONFLICT']).optional(),
@@ -73,6 +100,7 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
 }).strict()
 
 const result = strictRemoteCodec(GITHUB_COPILOT_AUTHORIZATION_VIEW_TYPE_SYMBOL, GitHubCopilotAuthorizationViewSchema)
+export const GitHubCopilotModelPreferencesViewSchema = GitHubCopilotAuthorizationViewSchema.shape.modelPreferences.unwrap()
 
 export const GITHUB_COPILOT_MIGRATION_STATUS_TYPE_SYMBOL
   = 'dsh-github-copilot#GitHubCopilotMigrationStatus'
@@ -117,6 +145,44 @@ const contribution: TypertRemoteContribution = {
       parameters: [],
       result,
     })),
+    ...['excludeModel', 'restoreModel'].map(method => ({
+      id: `dsh-github-copilot:githubCopilot.${method}`,
+      service: 'githubCopilotAuthorization',
+      namespace: 'githubCopilot',
+      method,
+      invocation: direct,
+      parameters: [{
+        name: 'modelId',
+        wire: 'modelId',
+        source: 'json' as const,
+        codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelId', z.string().min(1).max(512)),
+      }],
+      result,
+    })),
+    {
+      id: 'dsh-github-copilot:githubCopilot.setModelExcluded',
+      service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'setModelExcluded',
+      invocation: direct,
+      parameters: [
+        { name: 'modelId', wire: 'modelId', source: 'json',
+          codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelId', z.string().min(1).max(512)) },
+        { name: 'excluded', wire: 'excluded', source: 'json',
+          codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelExcluded', z.boolean()) },
+      ],
+      result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelPreferencesView', GitHubCopilotModelPreferencesViewSchema),
+    },
+    {
+      id: 'dsh-github-copilot:githubCopilot.setModelHighCost',
+      service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'setModelHighCost',
+      invocation: direct,
+      parameters: [
+        { name: 'modelId', wire: 'modelId', source: 'json',
+          codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelId', z.string().min(1).max(512)) },
+        { name: 'highCost', wire: 'highCost', source: 'json',
+          codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelHighCost', z.boolean()) },
+      ],
+      result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelPreferencesView', GitHubCopilotModelPreferencesViewSchema),
+    },
     {
       id: 'dsh-github-copilot:githubCopilot.migrationStatus',
       service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'migrationStatus',
@@ -127,6 +193,11 @@ const contribution: TypertRemoteContribution = {
     ...searchRoutingRemote.descriptors,
     ...copilotUsageRemote.descriptors,
     ...turnSelectionRemote.descriptors,
+    ...replayRecoveryRemote.descriptors,
+    ...copilotAccountsRemote.descriptors,
+    ...sessionAccountsRemote.descriptors,
+    ...sessionContinuationRemote.descriptors,
+    ...diagnosticsRemote.descriptors,
   ],
 }
 

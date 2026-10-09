@@ -10,6 +10,7 @@ import {
 import { encodeBackup, leavesOf, ROUTE_OWNERSHIP_EPOCH } from '../src/route-ownership.ts'
 import { createCompactAccount } from '../src/compact-account.ts'
 import type { GitHubCopilotAuthorizationView } from '../src/authorization-controller.ts'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../src/copilot-identity.ts'
 
 const catalogDrift = vi.hoisted(() => ({ wrongGpt6Api: false }))
 vi.mock('@earendil-works/pi-ai/providers/all', async (importOriginal) => {
@@ -46,11 +47,19 @@ function runtime(options: {
   authorizationOutcome?: 'authorized' | 'cancelled'
   beforeMutate?: (namespace: string, operations: readonly { op: 'set' | 'unset' }[]) => void
   readFailure?: boolean
+  defaultSelection?: { provider: string; model: string } | null
+  accountModels?: readonly { id: string; name: string; api: string }[]
+  githubCopilotUserSettings?: Record<string, unknown>
+  githubCopilotEffectiveSettings?: Record<string, unknown>
+  liveSelections?: readonly {
+    pending: { provider: string; model: string } | null
+    requestHeader?: { config: { provider: string; model: string } }
+  }[]
 } = {}): Runtime {
   let configured = options.configured ?? false
   let resolveAuthorization: (() => void) | undefined
   const settingsDocument: Record<string, unknown> = {
-    'github-copilot': {},
+    'github-copilot': options.githubCopilotEffectiveSettings ?? {},
     'llm-pi-ai': {
       providers: {
         openai: { apiKeyEnv: 'OPENAI_API_KEY' },
@@ -62,7 +71,9 @@ function runtime(options: {
   }
   const revisions = new Map<string, number>()
   const describeSettings = vi.fn(() => Object.entries(settingsDocument).map(([ns, value]) => ({
-    ns, revision: revisions.get(ns) ?? 0, user: value, value,
+    ns, revision: revisions.get(ns) ?? 0,
+    user: ns === 'github-copilot' ? options.githubCopilotUserSettings ?? value : value,
+    value,
   })))
   const mutate = vi.fn(async (ns: string, operations: Array<
     | { op: 'set'; path: string[]; value: unknown }
@@ -154,6 +165,26 @@ function runtime(options: {
       describe: describeSettings,
       mutate,
     }],
+    ['agentDefaultModel', { currentSelection: () => options.defaultSelection ?? null }],
+    ['agents', { list: () => (options.liveSelections ?? []).map((selection, index) => ({
+      id: `session-${index}`,
+      session: {
+        id: `session-${index}`,
+        requestHeader: () => selection.requestHeader,
+        selection,
+      },
+    })) }],
+    ['sessionProjections', { stateOf: (session: { selection: { pending: unknown } }) => ({
+      pending: session.selection.pending,
+    }) }],
+    ['githubCopilotPreview', {
+      getView: () => ({
+        state: 'ready',
+        models: options.accountModels ?? [],
+        rejected: [],
+        warnings: [],
+      }),
+    }],
   ])
   const ctx = new Context()
   ctx.get = ((name: string) => services.get(name)) as typeof ctx.get
@@ -225,6 +256,138 @@ function activeTemporaryRouteBackup(): string {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); catalogDrift.wrongGpt6Api = false })
 
 describe('GitHubCopilotAuthorizationController', () => {
+  it('stores exact exclusions with CAS including selected fixed models without reading sessions', async () => {
+    const harness = runtime({
+      configured: true,
+      defaultSelection: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'selected-model' },
+      accountModels: [
+        { id: 'selected-model', name: 'Selected', api: 'openai-responses' },
+        { id: 'other-model', name: 'Other', api: 'openai-responses' },
+      ],
+    })
+    harness.settingsDocument['github-copilot'] = { excludedModelIds: ['temporarily-absent'] }
+    await expect(harness.controller.status()).resolves.toMatchObject({
+      modelPreferences: {
+        state: 'ready',
+        excludedModelIds: ['temporarily-absent'],
+        lockedModelIds: [],
+        unavailableExcludedModelIds: ['temporarily-absent'],
+      },
+    })
+    await expect(harness.controller.excludeModel('selected-model')).resolves.toMatchObject({
+      modelPreferences: { state: 'ready', excludedModelIds: ['selected-model', 'temporarily-absent'] },
+    })
+    expect(harness.mutate).toHaveBeenCalledOnce()
+
+    await expect(harness.controller.excludeModel('other-model')).resolves.toMatchObject({
+      modelPreferences: { state: 'ready', excludedModelIds: ['other-model', 'selected-model', 'temporarily-absent'] },
+    })
+    expect(harness.mutate).toHaveBeenLastCalledWith('github-copilot', [{
+      op: 'set', path: ['excludedModelIds'], value: ['other-model', 'selected-model', 'temporarily-absent'],
+    }], 1)
+
+    await expect(harness.controller.restoreModel('temporarily-absent')).resolves.toMatchObject({
+      modelPreferences: { state: 'ready', excludedModelIds: ['other-model', 'selected-model'] },
+    })
+  })
+
+  it('answers a narrow single-model save without reading credentials or enumerating sessions', async () => {
+    const harness = runtime({ configured: true })
+    harness.services.delete('agents')
+    harness.services.delete('sessionProjections')
+    harness.readRecord.mockImplementation(() => { throw new Error('UNRELATED_CREDENTIAL_READ') })
+    await expect(harness.controller.setModelExcluded('model-a', true)).resolves.toMatchObject({
+      state: 'ready', revision: 1, excludedModelIds: ['model-a'], lockedModelIds: [],
+    })
+    expect(harness.readRecord).not.toHaveBeenCalled()
+    expect(harness.mutate).toHaveBeenCalledOnce()
+    expect(harness.describeSettings).toHaveBeenCalledTimes(2)
+    await expect(harness.controller.setModelExcluded('model-a', false)).resolves.toMatchObject({
+      state: 'ready', revision: 2, excludedModelIds: [],
+    })
+  })
+
+  it('reports a revision conflict without overwriting model exclusion settings', async () => {
+    const harness = runtime({
+      configured: true,
+      accountModels: [{ id: 'other-model', name: 'Other', api: 'openai-responses' }],
+      beforeMutate(namespace) {
+        if (namespace === 'github-copilot') throw new Error('settings revision conflict')
+      },
+    })
+    await expect(harness.controller.excludeModel('other-model')).resolves.toMatchObject({
+      modelPreferences: { state: 'error', error: 'COPILOT_MODEL_EXCLUSION_CONFLICT', excludedModelIds: [] },
+    })
+    expect(harness.settingsDocument['github-copilot']).toEqual({})
+  })
+  it('saves orthogonal high-cost preferences narrowly without credential or Session reads', async () => {
+    const harness = runtime({ configured: true, githubCopilotEffectiveSettings: {
+      excludedModelIds: ['excluded'], other: 'preserved',
+    } })
+    harness.services.delete('agents'); harness.services.delete('sessionProjections')
+    harness.readRecord.mockImplementation(() => { throw new Error('UNRELATED_CREDENTIAL_READ') })
+    expect(await harness.controller.setModelHighCost('fast-future-id', true))
+      .toMatchObject({ state: 'ready', highCostModelIds: ['fast-future-id'], excludedModelIds: ['excluded'] })
+    expect(harness.mutate).toHaveBeenCalledWith('github-copilot', [{
+      op: 'set', path: ['highCostModelIds'], value: ['fast-future-id'],
+    }], 0)
+    expect(harness.settingsDocument['github-copilot']).toMatchObject({ other: 'preserved' })
+    expect(harness.readRecord).not.toHaveBeenCalled()
+    expect(harness.describeSettings).toHaveBeenCalledTimes(2)
+    expect(await harness.controller.setModelHighCost('fast-future-id', false)).toMatchObject({ highCostModelIds: [] })
+  })
+  it('reads exclusions from the effective settings value rather than a partial user layer', async () => {
+    const harness = runtime({
+      configured: true,
+      githubCopilotUserSettings: {},
+      githubCopilotEffectiveSettings: { excludedModelIds: ['inherited-model'] },
+      accountModels: [{ id: 'inherited-model', name: 'Inherited', api: 'openai-responses' }],
+    })
+    await expect(harness.controller.status()).resolves.toMatchObject({
+      modelPreferences: { state: 'ready', excludedModelIds: ['inherited-model'] },
+    })
+  })
+  it('does not require session selection evidence to save exclusions', async () => {
+      const harness = runtime({ configured: true, githubCopilotEffectiveSettings: { excludedModelIds: ['absent'] } })
+      harness.services.delete('sessionProjections')
+      await expect(harness.controller.status()).resolves.toMatchObject({
+        modelPreferences: { state: 'ready', writable: true, revision: 0, excludedModelIds: ['absent'] },
+      })
+      await harness.controller.excludeModel('new')
+      await harness.controller.restoreModel('absent')
+      expect(harness.mutate).toHaveBeenCalledTimes(2)
+    })
+    it.each([undefined, { excludedModelIds: [123] }])('reports invalid settings without treating them as no exclusions: %j', async value => {
+      const harness = runtime({ configured: true })
+      harness.settingsDocument['github-copilot'] = value
+      await expect(harness.controller.status()).resolves.toMatchObject({
+        modelPreferences: { state: 'error', writable: false, error: 'COPILOT_MODEL_SETTINGS_INVALID' },
+      })
+      await harness.controller.excludeModel('new')
+      expect(harness.mutate).not.toHaveBeenCalled()
+    })
+    it('classifies missing settings without leaking an exception or hiding account models', async () => {
+      const harness = runtime({ configured: true, accountModels: [{ id: 'available', name: 'Available', api: 'openai-responses' }] })
+      harness.describeSettings.mockImplementation(() => { throw new Error('PRIVATE_SETTINGS_FAILURE') })
+      const view = await harness.controller.status()
+      expect(view.modelPreferences).toMatchObject({ writable: false, error: 'COPILOT_MODEL_SETTINGS_UNAVAILABLE' })
+      expect(view.accountModels?.models).toHaveLength(1)
+      expect(JSON.stringify(view)).not.toContain('PRIVATE_SETTINGS_FAILURE')
+    })
+  it('does not lock fixed models selected by live Sessions', async () => {
+    const harness = runtime({
+      configured: true,
+      liveSelections: [
+        { pending: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'pending-model' } },
+        { pending: null, requestHeader: {
+          config: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'request-model' },
+        } },
+      ],
+    })
+    await expect(harness.controller.status()).resolves.toMatchObject({
+      modelPreferences: { writable: true, lockedModelIds: [] },
+    })
+  })
   it('exposes only owned model presentation leaves and never discovers during status', async () => {
     const harness = runtime({ configured: true })
     const discover = vi.fn(async () => { throw new Error('status cannot discover') })

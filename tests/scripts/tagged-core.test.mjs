@@ -23,6 +23,13 @@ test('admits the exact 0.2.0-rc.2 source pin while retaining prior tagged baseli
 })
 
 const release = '0.1.3-alpha.1'
+test('installs the same unchanged diagnostic storage closure for CI and release qualification', async () => {
+  for (const workflow of ['ci.yml', 'release.yml']) {
+    const content = await readFile(join(process.cwd(), '.github', 'workflows', workflow), 'utf8')
+    assert.ok(content.includes("run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'"), workflow)
+  }
+})
+
 async function fixture(release = '0.1.3-alpha.1') {
   const base = await realpath(await mkdtemp(join(await realpath(tmpdir()), 'copilot-tagged-test-')))
   const root = join(base, 'plugin')
@@ -52,6 +59,8 @@ async function fixture(release = '0.1.3-alpha.1') {
     ['packages/attachment/attachment', '@deepseek-ai/dsh-attachment', release],
     ['packages/client/ui-renderer', '@deepseek-ai/dsh-client-ui-renderer', release],
     ['vendor/cordis', '@deepseek-ai/cordis', '4.0.2'],
+    ['vendor/loader', '@deepseek-ai/cordis-plugin-loader', '1.0.0'],
+    ['vendor/group', '@deepseek-ai/cordis-plugin-group', '1.0.0'],
     ['vendor/cosmokit', '@deepseek-ai/cosmokit', '1.8.3'],
   ]) {
     await source(`${dir}/package.json`, JSON.stringify({ name, version, type: 'module', exports: {
@@ -140,6 +149,10 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   assert.equal(projection.replacement, join(value.core, 'packages/compaction/compaction-image-offload/src/projection.ts'))
   assert.equal(config.resolve.alias.some(alias => alias.find.test('@earendil-works/pi-ai')), false)
   assert.equal(config.resolve.alias.some(alias => alias.find.test('@deepseek-ai/cosmokit')), false)
+  for (const name of ['loader', 'group']) {
+    const alias = config.resolve.alias.find(item => item.find.test(`@deepseek-ai/cordis-plugin-${name}`))
+    assert.equal(alias.replacement, join(value.core, `vendor/${name}/src/index.ts`))
+  }
   const guard = config.plugins.find(plugin => plugin.name === 'tagged-core-public-import-guard')
   const vendor = '@deepseek-ai/cosmokit'
   assert.equal(guard.resolveId(vendor, join(value.core, 'vendor/cordis/src/index.ts')), join(value.core, 'vendor/cosmokit/src/index.ts'))
@@ -184,6 +197,20 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
           await writeFile(join(value.root, 'tests', name), 'export {}')
         }
       }
+      if (release === '0.2.0-rc.2') {
+        await writeFile(join(value.root, 'tests/fixtures/scoped-compaction-core.fixture.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/fixtures/model-exclusions-core.fixture.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/fixtures/turn-usage-core.fixture.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/fixtures/copilot-accounts-persistence-core.fixture.ts'), 'export {}')
+        for (const name of ['copilot-accounts-host-core.fixture.ts', 'copilot-accounts-gateway-core.fixture.ts', 'copilot-accounts-request-core.fixture.ts',
+          'diagnostics-storage-core.fixture.ts', 'diagnostics-gateway-core.fixture.ts']) {
+          await writeFile(join(value.root, 'tests/fixtures', name), 'export {}')
+        }
+        for (const name of ['copilot-stream-liveness.spec.ts', 'copilot-stream-adapter.spec.ts']) {
+          await writeFile(join(value.root, 'tests', name), 'export {}')
+        }
+        await writeFile(join(value.root, 'tests/fixtures/auto-review-copilot-core.fixture.ts'), 'export {}')
+      }
       const report = await prepareTaggedCoreFixture(value, value)
       const config = (await import(pathToFileURL(report.configPath).href)).default
       assert.equal(report.commit, TAGGED_CORE_RELEASES[release])
@@ -207,6 +234,9 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         ...release.startsWith('0.2.0-') ? ['tests/tool-schema-compat.spec.ts'] : [],
         ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
         ...release.startsWith('0.2.0-') ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
+        ...release === '0.2.0-rc.2' ? ['tests/fixtures/scoped-compaction-core.fixture.ts', 'tests/fixtures/model-exclusions-core.fixture.ts', 'tests/fixtures/turn-usage-core.fixture.ts', 'tests/fixtures/copilot-accounts-persistence-core.fixture.ts', 'tests/fixtures/copilot-accounts-host-core.fixture.ts', 'tests/fixtures/copilot-accounts-gateway-core.fixture.ts', 'tests/fixtures/copilot-accounts-request-core.fixture.ts', 'tests/copilot-stream-liveness.spec.ts', 'tests/copilot-stream-adapter.spec.ts'] : [],
+        ...release === '0.2.0-rc.2' ? ['tests/fixtures/auto-review-copilot-core.fixture.ts'] : [],
+        ...release === '0.2.0-rc.2' ? ['tests/fixtures/diagnostics-storage-core.fixture.ts', 'tests/fixtures/diagnostics-gateway-core.fixture.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts'])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })

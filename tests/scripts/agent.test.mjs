@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { attribution, describeRepository, doctor, planTask, repositoryRoot } from '../../scripts/agent.mjs'
@@ -31,6 +31,56 @@ test('plans only known task IDs with unexecuted argument arrays', async () => {
   assert.ok((await planTask('tooling')).commands.some(command => command.argv[1] === 'test:scripts'))
 })
 
+test('context diagnostics preserve shared usage and include native whole-turn evidence', async () => {
+  const plan = await planTask('context')
+  assert.ok(plan.commands.some(command => command.argv.includes('tests/fixtures/turn-usage-core.fixture.ts')))
+  const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+  assert.ok(contract.tasks.context.risk.includes('Never filter or delay shared native usage'))
+  await verifyAgentContract()
+})
+
+test('multi-account plan retains explicit direct-grant ownership and UI boundaries', async () => {
+  const plan = await planTask('accounts')
+  assert.ok(plan.commands.some(command => command.argv.includes('tests/copilot-accounts-card.spec.ts')))
+  const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+  assert.match(contract.tasks.accounts.risk, /never grant copies/)
+  assert.match(contract.tasks.accounts.risk, /Models alone/)
+  assert.match(contract.tasks.accounts.risk, /missing records never fall back/)
+  assert.match(contract.tasks.accounts.risk, /Credits selects this Session's subsequent turns or restores inheritance/)
+  assert.match(contract.tasks.accounts.risk, /hold account pins through native turn\/end\/disposal/)
+  assert.match(contract.tasks.accounts.risk, /No durable account events, history\/default\/model\/Usage writes/)
+  const doc = await readFile(join(repositoryRoot, 'docs/copilot-accounts.md'), 'utf8')
+  assert.match(doc, /immutable account identifier/)
+  assert.match(doc, /not a cross-namespace/)
+  assert.match(doc, /No automatic fallback/)
+  await verifyAgentContract()
+})
+
+test('upload evidence retains request scope, cleanup and local-only observation boundaries', async () => {
+  const plan = await planTask('authorization')
+  assert.ok(plan.commands.some(command => command.argv.includes('tests/request-upload-evidence.spec.ts')))
+  const contract = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+  assert.ok(contract.tasks.authorization.read.includes('src/request-upload-evidence.ts'))
+  assert.match(contract.tasks.authorization.requestBodyEvidenceBoundary, /dispose subscriptions/)
+  assert.match(contract.tasks.authorization.requestBodyEvidenceBoundary, /not kernel ACK, supplier receipt or execution/)
+  await verifyAgentContract()
+})
+
+test('automatic recovery plan preserves explicit composition and bounded capacity-only escalation', async () => {
+  const plan = await planTask('compaction')
+  for (const file of ['tests/preview-route.spec.ts', 'tests/fixtures/scoped-compaction-core.fixture.ts']) {
+    assert.ok(plan.commands.some(command => command.argv.includes(file)))
+  }
+  assert.match(plan.automaticRecoveryBoundary, /Default-on only in the explicitly selected replacement/)
+  assert.match(plan.automaticRecoveryBoundary, /at most 16 calls including the failed first attempt/)
+  assert.match(plan.automaticRecoveryBoundary, /No 408\/network\/auth\/quota fallback/)
+  assert.match(plan.automaticRecoveryBoundary, /no automatic live composition migration/)
+  const guide = await readFile(join(repositoryRoot, 'docs/manual-compaction-recovery.md'), 'utf8')
+  assert.match(guide, /matching guard, not a replacement/)
+  assert.match(guide, /Existing Agents may retain the older preset generation/)
+  await verifyAgentContract()
+})
+
 test('important updates carry release follow-through without a second approval prompt', async () => {
   const plan = await planTask('release')
   const policy = plan.boundaries.releaseDelivery
@@ -53,6 +103,35 @@ test('important updates carry release follow-through without a second approval p
   }
   assert.match(plan.delivery, /reviewed merge without a separate approval prompt; important updates continue to verified Release/)
   assert.ok(plan.commands.every(command => command.executed === false))
+})
+
+test('manual replay recovery plan retains explicit consent and rejects weakened boundaries', async () => {
+  const plan = await planTask('compaction')
+  assert.ok(plan.read.includes('src/compaction-replay.ts'))
+  assert.ok(plan.tests.includes('tests/compaction-replay.spec.ts'))
+  assert.match(plan.visibleHistoryBoundary, /Persistent Session visible-history policy/)
+  assert.match(plan.visibleHistoryBoundary, /legacy next-turn-only consent is not summary consent/)
+  assert.match(plan.visibleHistoryBoundary, /Disabled\/unknown policy never silently enables loss/)
+  const root = await mkdtemp(join(tmpdir(), 'copilot-compaction-consent-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    for (const file of original.entrypoints) {
+      await mkdir(dirname(join(root, file)), { recursive: true })
+      await writeFile(join(root, file), '')
+    }
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    await writeFile(join(root, 'AGENTS.md'), await readFile(join(repositoryRoot, 'AGENTS.md')))
+    for (const mutate of [
+      contract => { delete contract.tasks.compaction.visibleHistoryBoundary },
+      contract => { contract.tasks.compaction.visibleHistoryBoundary = 'Automatic fallback is permitted' },
+      contract => { contract.tasks.compaction.tests = contract.tasks.compaction.tests.filter(file => file !== 'tests/compaction-replay.spec.ts') },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /visible-history summary consent/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test('contract validation rejects a redundant release prompt or weakened release prerequisites', async () => {
@@ -163,11 +242,33 @@ test('CLI unknown input returns one JSON error with exit 2', () => {
 test('agent contract references actual files and verification gates', async () => {
   const result = await verifyAgentContract()
   assert.equal(result.ok, true)
-  assert.equal(result.taskCount, 9)
+  assert.equal(result.taskCount, 17)
+  const dropdown = await planTask('dropdown')
+  assert.ok(dropdown.read.includes('src/account-dropdown.ts'))
+  assert.ok(dropdown.tests.includes('tests/account-dropdown.spec.ts'))
+  const continuation = await planTask('continuation')
+  assert.ok(continuation.read.includes('docs/account-management-experience.md'))
+  assert.ok(continuation.tests.includes('tests/session-continuation-ui.spec.ts'))
+  const autointent = await planTask('autointent')
+  assert.ok(autointent.read.includes('src/auto-model-intent.ts'))
+  assert.ok(autointent.tests.includes('tests/fixtures/session-context-core.fixture.ts'))
+  assert.ok(autointent.risk.includes('No Core projection replacement'))
+  const autorouting = await planTask('autorouting')
+  assert.ok(autorouting.read.includes('docs/auto-task-routing.md'))
+  assert.ok(autorouting.tests.includes('tests/auto-task-classifier.spec.ts'))
+  const context = await planTask('context')
+  assert.ok(context.read.includes('src/context-evidence.ts'))
+  assert.ok(context.tests.includes('tests/context-evidence-runtime.spec.ts'))
   const history = await planTask('history')
   assert.ok(history.read.includes('scripts/repair-auto-model-history.mjs'))
   assert.ok(history.tests.includes('tests/scripts/repair-auto-model-history.test.mjs'))
+  assert.ok(history.read.includes('src/turn-usage-evidence.ts'))
+  assert.ok(history.tests.includes('tests/fixtures/turn-usage-core.fixture.ts'))
+  assert.ok(history.risk.includes('No fabricated zero usage, partial token totals'))
   const usage = await planTask('usage')
   assert.ok(usage.read.includes('src/copilot-usage-host.ts'))
   assert.ok(usage.tests.includes('tests/scripts/copilot-usage-gateway.test.mjs'))
+  const compaction = await planTask('compaction')
+  assert.ok(compaction.read.includes('docs/manual-compaction-recovery.md'))
+  assert.ok(compaction.tests.includes('tests/manual-compaction-recovery.spec.ts'))
 })

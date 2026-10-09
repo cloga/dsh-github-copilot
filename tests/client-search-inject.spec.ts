@@ -4,7 +4,8 @@ import { act, createElement } from 'react'
 import type { ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it, vi } from 'vitest'
-import { apply, HostedSearchSettingsCard, inject, WebSearchRoutingCard } from '../src/client.ts'
+import { apply, CopilotPluginSettingsPage, HostedSearchSettingsCard, inject, WebSearchRoutingCard } from '../src/client.ts'
+import { emptyDiagnostics } from '../src/diagnostics-collector.ts'
 
 // Actual Cordis dependency tracing and the actual Client apply/render callback.
 // The mounted test uses real React DOM and Cordis tracing; Remote transport and
@@ -59,18 +60,47 @@ async function fixture(footer: boolean, routingAvailable = true, bundle = true, 
     new Remote(ctx)
     new Slots(ctx)
     new NamedService(ctx, 'remote.githubCopilot')
+    new NamedService(ctx, 'remote.githubCopilotAccounts')
+    new NamedService(ctx, 'remote.githubCopilotSessionContinuation')
     new SettingsRemote(ctx)
   } })
   const addRouting = () => root.plugin({ apply(ctx) { new RoutingRemote(ctx) } })
+  const addDiagnostics = () => root.plugin({ apply(ctx) {
+    class DiagnosticsRemote extends NamedService {
+      constructor() { super(ctx, 'remote.githubCopilotDiagnostics') }
+      async get() { return { ok: true, value: { enabled: false, autoAllocationEnabled: false,
+        state: 'ready', diagnostic: 'none',
+        dirty: false, snapshot: emptyDiagnostics() } } }
+    }
+    new DiagnosticsRemote()
+  } })
   if (routingAvailable) await addRouting()
   const client = root.plugin({ inject, apply })
   await client
-  return { root, client, registrations, addRouting, describeSettings, mutateSettings, settings: settingsRemote, remoteDisposals: () => remoteDisposals }
+  return { root, client, registrations, addRouting, addDiagnostics, describeSettings, mutateSettings, settings: settingsRemote, remoteDisposals: () => remoteDisposals }
 }
 
 const searchId = 'github-copilot-search-routing'
 
 describe('search UI traced Remote dependency', () => {
+  it('mounts late diagnostics without replacing routing drafts or blocking unavailable controls', async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+    const f = await fixture(true, true, true)
+    const element = document.createElement('div')
+    const mounted = createRoot(element)
+    try {
+      await act(async () => { mounted.render(f.registrations.get(searchId)!.render({ view: 'page' })) })
+      expect(element.textContent).toContain('Diagnostics controls are unavailable')
+      let diagnostics!: ReturnType<typeof f.addDiagnostics>
+      await act(async () => { diagnostics = f.addDiagnostics(); await diagnostics })
+      expect(element.textContent).toContain('Local collection paused')
+      await act(async () => { await diagnostics.dispose() })
+      expect(element.textContent).toContain('Diagnostics controls are unavailable')
+    } finally {
+      await act(async () => { mounted.unmount(); await f.root.fiber.dispose() })
+      Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
+    }
+  })
   it.each([
     { footer: true, bundle: true, seat: 'plugins.bundle.config' },
     { footer: true, bundle: false, seat: 'settings.models.footer' },
@@ -85,13 +115,14 @@ describe('search UI traced Remote dependency', () => {
       if (bundle) expect(f.registrations.has('github-copilot-preview')).toBe(true)
       // The captured faces retain their exact Cordis namespace grants.
       const element = registration.render({ view: 'page' })!
-      const card = element
-      expect(card.type).toBe(WebSearchRoutingCard)
+      const card = bundle ? element : element.props.children[0]
+      if (!bundle) expect(element.props.children).toHaveLength(2)
+      expect(card.type).toBe(bundle ? CopilotPluginSettingsPage : WebSearchRoutingCard)
       expect(card.props.settings.name).toBe('remote.settings')
       expect(card.props).not.toHaveProperty('copilot')
       expect(card.props.routing.name).toBe('remote.githubCopilotSearchRouting')
       const next = registration.render({ view: 'page' })!
-      const nextCard = next
+      const nextCard = bundle ? next : next.props.children[0]
       expect(nextCard.props.settings).toBe(card.props.settings)
       expect(nextCard.props.routing).toBe(card.props.routing)
       if (bundle) expect(registration.render({ view: 'summary' })).toBeNull()
@@ -118,7 +149,7 @@ describe('search UI traced Remote dependency', () => {
       })
       await act(async () => { mounted.render(render()) })
       expect(select.value).toBe('github-copilot-hosted')
-      expect(f.describeSettings).toHaveBeenCalledTimes(1)
+      expect(f.describeSettings).toHaveBeenCalledTimes(bundle ? 2 : 1)
       let finish!: () => void
       f.mutateSettings.mockImplementationOnce(() => new Promise(resolve => {
         finish = () => resolve({ ok: true as const, value: { ns: 'github-copilot', revision: 8, autoGenerate: false,
@@ -132,12 +163,12 @@ describe('search UI traced Remote dependency', () => {
       await act(async () => { finish() })
       expect(container.textContent).toContain('Saved.')
       expect(select.value).toBe('github-copilot-hosted')
-      expect(f.describeSettings).toHaveBeenCalledTimes(1)
+      expect(f.describeSettings).toHaveBeenCalledTimes(bundle ? 2 : 1)
       expect(f.mutateSettings).toHaveBeenCalledExactlyOnceWith('github-copilot', [
         { op: 'set', path: ['searchRouting', 'searchProvider'], value: 'github-copilot-hosted' },
         { op: 'set', path: ['searchRouting', 'defaultSearchProvider'], value: 'none' },
       ], 7)
-      expect(container.querySelector('input')).toBeNull()
+      expect(container.querySelectorAll('input')).toHaveLength(bundle ? 1 : 0)
     } finally {
       await act(async () => { mounted.unmount(); await f.root.fiber.dispose() })
       container.remove()

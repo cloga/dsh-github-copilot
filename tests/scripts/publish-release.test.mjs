@@ -28,7 +28,7 @@ const draft = () => ({
   body: `Release ${tag}.`, draft: true, prerelease: true, immutable: false,
 })
 
-function github({ tagged = false, release = null, assets = [], intercept, immutable = true } = {}) {
+function github({ tagged = false, release = null, assets = [], intercept, immutable = true, notes } = {}) {
   const state = {
     ref: tagged ? annotatedRef() : null,
     object: tagged ? annotation() : null,
@@ -73,10 +73,10 @@ function github({ tagged = false, release = null, assets = [], intercept, immuta
       assert.equal(body.tag_name, tag)
       assert.equal(body.target_commitish, sha)
       assert.equal(body.name, `${name} ${version}`)
-      assert.equal(body.body, `Release ${tag}.`)
+      assert.equal(body.body, notes === undefined ? `Release ${tag}.` : `Release ${tag}.\n\n${notes}`)
       assert.equal(body.draft, true)
       assert.equal(body.prerelease, true)
-      state.release = draft()
+      state.release = { ...draft(), body: body.body }
       return reply(201, state.release)
     }
     if (call.method === 'GET' && path === '/releases/7') return reply(200, state.release)
@@ -112,6 +112,19 @@ test('fresh publication creates an annotated exact-SHA tag, drafts, uploads, the
     'POST /releases/7/assets', 'POST /releases/7/assets', 'PATCH /releases/7',
   ])
   assert.equal(api.state.release.immutable, true)
+})
+
+test('source-bound release notes are exact on creation and read-only reconciliation', async () => {
+  const notes = 'Upgrade from the preceding stable release; synthetic refresh regression is fixed.'
+  const api = github({ notes })
+  await publishRelease({ ...inputs(api.fetch), notes })
+  api.state.calls.length = 0
+  await publishRelease({ ...inputs(api.fetch), notes })
+  assert.deepEqual(api.writes(), [])
+  await assert.rejects(publishRelease({ ...inputs(api.fetch), notes: `${notes} changed` }), /metadata/)
+  for (const invalid of ['', ' ', '\0', 'x'.repeat(16 * 1024 + 1)]) {
+    await assert.rejects(publishRelease({ ...inputs(api.fetch), notes: invalid }), /notes/)
+  }
 })
 
 test('rerun is read-only and verifies tag plus both asset digests and sizes', async () => {
@@ -492,6 +505,28 @@ test('CLI preflight checks manifest, exact HEAD, expected version, and fixed art
   const result = await loadReleaseInputs(options)
   assert.deepEqual(result, { repository, token, sha, version, files: files() })
   assert.deepEqual(readPaths, [join('/fixture', 'package.json'), join('/fixture', 'artifacts', tarName), join('/fixture', 'artifacts', 'SHA256SUMS')])
+})
+
+test('CLI release notes read only the declared fixed file and exact version section', async () => {
+  for (const [changelog, valid] of [
+    [`# Changelog\n\n## ${version}\n\n- Upgrade recommended.\n\n## 0.3.0\n\nOld notes.\n`, true],
+    [`# Changelog\n\n## ${version} (prepared)\n\n- Upgrade recommended.\n\n## 0.3.0\n\nOld notes.\n`, true],
+    [`## ${version}\r\n\r\n- Upgrade recommended.\r\n`, true],
+    ['## 0.3.0\nOld notes.', false],
+    [`## ${version}\n\n## 0.3.0\nOld notes.`, false],
+    [`## ${version}\nFirst.\n## ${version}\nDuplicate.`, false],
+    [`## ${version} (prepared)\nFirst.\n## ${version}\nDuplicate.`, false],
+  ]) {
+    const { options } = localOptions()
+    const read = options.read
+    options.read = async path => basename(path) === 'package.json'
+      ? JSON.stringify({ name, version, releaseNotes: 'CHANGELOG.md' })
+      : basename(path) === 'CHANGELOG.md' ? changelog : read(path)
+    if (valid) assert.equal((await loadReleaseInputs(options)).notes, '- Upgrade recommended.')
+    else await assert.rejects(loadReleaseInputs(options), /notes|Changelog/)
+  }
+  const { options } = localOptions({ read: async () => JSON.stringify({ name, version, releaseNotes: '../private' }) })
+  await assert.rejects(loadReleaseInputs(options), /tracked CHANGELOG/)
 })
 
 test('CLI preflight accepts the exact planned tagged SHA over the caller main SHA', async () => {

@@ -47,6 +47,10 @@ test('distribution channels are explicit and never inferred from lexical version
   for (const [v, tag] of [['1.0.0-alpha.10', 'alpha'], ['1.0.0-beta.2', 'beta'], ['1.0.0-rc.1', 'rc'], ['1.0.0', 'latest']]) {
     assert.equal(distributionTag(v), tag)
   }
+  const stableManifest = { ...manifest(), version: '0.4.0',
+    publishConfig: { ...manifest().publishConfig, tag: 'latest' } }
+  validatePublicPackage(stableManifest)
+  assert.equal(distributionTag(stableManifest.version), stableManifest.publishConfig.tag)
   for (const v of ['1.0.0-preview.1', 'v1.0.0', '1.0.0+build']) assert.throws(() => distributionTag(v))
 })
 
@@ -81,6 +85,51 @@ test('new direct publication uses original tgz and verifies registry SRI after o
   assert.equal(result.integrity, sri)
   assert.deepEqual(api.calls, [['publish', 'artifacts/test.tgz', '--tag', 'alpha', '--access', 'public',
     '--registry', 'https://registry.npmjs.org/', '--ignore-scripts']])
+})
+
+test('stable publication promotes its same-version prerelease latest pointer without lowering it', async () => {
+  const stableVersion = '0.4.0'
+  const stableManifest = {
+    ...manifest(),
+    version: stableVersion,
+    publishConfig: { ...manifest().publishConfig, tag: 'latest' },
+  }
+  const calls = []
+  let current = null
+  let latest = '0.4.0-alpha.134'
+  const api = {
+    readPackage: async () => ({ name, 'dist-tags': { latest } }),
+    readVersion: async () => current,
+    publish: async args => {
+      calls.push(args)
+      current = { ...published(), version: stableVersion }
+      latest = stableVersion
+    },
+  }
+
+  const result = await publishNpm(options({ ...api, manifest: stableManifest }))
+  assert.equal(result.state, 'published')
+  assert.equal(result.tag, 'latest')
+  assert.equal(result.integrity, sri)
+  assert.deepEqual(calls, [['publish', 'artifacts/test.tgz', '--tag', 'latest', '--access', 'public',
+    '--registry', 'https://registry.npmjs.org/', '--ignore-scripts']])
+})
+
+test('stable publication rejects a latest pointer to a different version prerelease channel', async () => {
+  const stableManifest = {
+    ...manifest(),
+    version: '0.4.0',
+    publishConfig: { ...manifest().publishConfig, tag: 'latest' },
+  }
+  for (const latest of ['0.5.0-alpha.1', '0.4.1']) {
+    const api = {
+      readPackage: async () => ({ name, 'dist-tags': { latest } }),
+      readVersion: async () => null,
+      publish: async () => assert.fail('must reject the mismatched or newer tag before writing'),
+    }
+    const expectedError = latest === '0.4.1' ? /Refusing to lower/ : /another channel/
+    await assert.rejects(publishNpm(options({ ...api, manifest: stableManifest })), expectedError)
+  }
 })
 
 test('same version is read-only only when its integrity matches and tag is not stranded', async () => {
@@ -149,4 +198,9 @@ test('normal release requires npm and OIDC without a silent opt-out', async () =
   assert.match(release, /id-token: write/)
   assert.match(release, /scripts\/prepare-release-artifact\.mjs/)
   assert.match(prepare, /'--config.ignore-scripts=true', 'pack'/)
+  assert.match(release, /ref: \$\{\{ needs\.plan\.outputs\.sha \}\}/)
+  assert.match(release, /ref: \$\{\{ github\.sha \}\}\s+path: release-tools/)
+  assert.match(release, /publisher_version=.*release-tools\/package\.json/)
+  assert.match(release, /cmp -- "artifacts\/dsh-github-copilot-\$version\.tgz" "release-tools\/artifacts\/dsh-github-copilot-\$version\.tgz"/)
+  assert.match(release, /node "release-tools\/scripts\/publish-npm\.mjs" "\$version"/)
 })

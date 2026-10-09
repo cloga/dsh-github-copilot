@@ -22,13 +22,22 @@ afterEach(async () => {
   vi.restoreAllMocks()
   document.body.replaceChildren()
 })
-function fixture(spec = { kind: 'list', scope: 'session' }) {
+function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unknown) {
   let component: ComponentType<Record<string, unknown>> | undefined
   let injection: (() => () => void) | undefined
   let release: (() => void) | undefined
-  const remote = { get: vi.fn(async () => ({ ok: true, value: { state: 'ready', billing: 'credits', budget: 'individual', used: 7, remaining: 13, limit: 20, observedAt: 1 } })), refresh: vi.fn() }
+  const remote = { get: vi.fn(async () => ({ ok: true, value: { state: 'ready', accountId: 'canonical', billing: 'credits', budget: 'individual', used: 7, remaining: 13, limit: 20, observedAt: 1 } })), refresh: vi.fn() }
+  const accountView = { source: 'global', accountId: 'canonical', globalAccountId: 'canonical',
+    accounts: { state: 'ready', activeAccountId: 'canonical', revision: 1, writable: true, switchable: true,
+      accounts: [{ id: 'canonical', configured: true, identityState: 'unknown' }], notices: [] } }
+  const sessionRemote = { get: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
+    set: vi.fn(), refreshIdentity: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
+    ensureIdentity: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
+    usage: vi.fn(async (_id: string) => remote.get()), refreshUsage: vi.fn() }
   const capture = vi.fn(() => remote)
   const namespace = Object.defineProperty({}, 'githubCopilotUsage', { get: capture })
+  Object.defineProperty(namespace, 'githubCopilotSessionAccount', { value: sessionRemote })
+  Object.defineProperty(namespace, 'githubCopilotSessionContinuation', { value: continuation })
   const ctx = {
     remote: namespace, get: vi.fn(() => undefined), logger: { warn: vi.fn() },
     slots: {
@@ -42,7 +51,7 @@ function fixture(spec = { kind: 'list', scope: 'session' }) {
   }
   const dispose = registerCopilotUsageUi(ctx as unknown as Context)
   cleanups.push(dispose)
-  return { ctx, remote, capture, declare: () => { release = injection?.() }, component: () => component! }
+  return { ctx, remote, sessionRemote, capture, declare: () => { release = injection?.() }, component: () => component! }
 }
 function source<T>(initial: T) {
   let value = initial
@@ -82,6 +91,16 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
     expect(f.ctx.logger.warn).toHaveBeenCalledWith('[github-copilot] COPILOT_USAGE_SLOT_UNAVAILABLE')
   })
 
+  it.each(['authorizeNext', 'defaults', 'setDefault'])('rejects a malformed optional continuation method: %s', method => {
+    const f = fixture(undefined, { get: vi.fn(), set: vi.fn(), [method]: true })
+    expect(f.ctx.logger.warn).toHaveBeenCalledWith('[github-copilot] COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
+  })
+
+  it('accepts the narrow continuation Remote without optional methods', () => {
+    const f = fixture(undefined, { get: vi.fn(), set: vi.fn() })
+    expect(f.ctx.logger.warn).not.toHaveBeenCalledWith('[github-copilot] COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
+  })
+
   it('follows durable next selection instead of last-used, defaults or another session', async () => {
     const f = fixture()
     f.declare()
@@ -100,6 +119,7 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
     expect(container.textContent).toBe('')
     await act(async () => { projection.set({ lastUsed: selected('other-provider'), next: selected('github-copilot-preview') }) })
     expect(f.remote.get).toHaveBeenCalledTimes(1)
+    expect(f.sessionRemote.usage).toHaveBeenCalledExactlyOnceWith('a')
     expect(container.textContent).toContain('7 used')
     expect(useProjection).toHaveBeenCalledWith('modelSelection')
     await act(async () => { projection.set({ lastUsed: selected('github-copilot'), next: selected('other-provider') }) })
@@ -129,6 +149,7 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
       }))
     })
     expect(useSession).toHaveBeenCalledWith(expect.any(Function))
+    if (provider === 'github-copilot-preview') expect(f.sessionRemote.usage).toHaveBeenCalledExactlyOnceWith('current')
     expect(container.querySelector('[data-copilot-usage-trigger]')).not.toBeNull()
     expect(container.textContent).toContain('7 used')
     expect(f.remote.get).toHaveBeenCalledTimes(1)

@@ -28,6 +28,24 @@ describe('strict Remote factory compatibility', () => {
         checked++
       }
     }
-    expect(checked).toBe(19)
+    expect(checked).toBe(97)
+  })
+  it('keeps explicit replay recovery arguments and output strict', () => {
+    const descriptors = remote.descriptors.filter(value => value.namespace === 'githubCopilotReplayRecovery')
+    expect(descriptors.map(value => value.method).sort()).toEqual(['authorize', 'get', 'setEnabled'])
+    const write = descriptors.find(value => value.method === 'setEnabled')!
+    expect(write.scope).toBeUndefined()
+    expect(write.parameters[0]).toMatchObject({ source: 'lookup', lookup: 'agent', wire: 'agentId' })
+    const revision = write.parameters[1]!.codec as ReturnType<typeof strictRemoteCodec>
+    const enabled = write.parameters[2]!.codec as ReturnType<typeof strictRemoteCodec>
+    expect(() => revision.create().parse('stale-not-a-uuid')).toThrow()
+    expect(() => enabled.create().parse('true')).toThrow()
+    const result = write.result as ReturnType<typeof strictRemoteCodec>
+    expect(() => result.create().parse({ state: 'unavailable', encrypted_content: 'private' })).toThrow()
+    expect(() => result.create().parse({ state: 'available', itemCount: 0,
+      revision: '12345678-1234-4234-8234-123456789012', model: 'synthetic' })).toThrow()
+    const duration = descriptors.find(value => value.method === 'authorize')!.parameters[2]!.codec as ReturnType<typeof strictRemoteCodec>
+    expect(duration.create().parse('next-turn')).toBe('next-turn')
+    expect(() => duration.create().parse('always')).toThrow()
   })
 })

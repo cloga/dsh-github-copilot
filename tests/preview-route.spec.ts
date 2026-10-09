@@ -5,16 +5,24 @@ import '@earendil-works/pi-ai/api/openai-completions'
 import '@earendil-works/pi-ai/api/anthropic-messages'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import type { GenerateOptions, Message, PreparedAdapterCall, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../src/preview-route.ts'
+import { ResponsesRetryReplay } from '../src/responses-replay-compat.ts'
+import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
+import { createGitHubCopilotTokenResolver } from '../src/copilot-auth.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
+import type { CopilotAccountBinding } from '../src/copilot-accounts-types.ts'
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
@@ -35,7 +43,8 @@ function grant(overrides: Record<string, unknown> = {}): RecordValue {
   return { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-account-a', access: 'synthetic-current-access',
     expires: Date.now() + 3_600_000, availableModelIds: [MODEL, 'gemini-3.5-flash', 'claude-sonnet-4.5'], ...overrides } }
 }
-async function runtime(initial: RecordValue | undefined = grant(), config: PreviewRouteConfig = { accountModelTtlMs: 300_000, accountModelFailureCooldownMs: 0 }) {
+async function runtime(initial: RecordValue | undefined = grant(), config: PreviewRouteConfig = { accountModelTtlMs: 300_000, accountModelFailureCooldownMs: 0 },
+  continuation?: { value: Record<string, unknown>; revision: number }) {
   const ctx = new Context()
   contexts.push(ctx)
   let current: RecordValue | undefined = initial
@@ -55,6 +64,14 @@ async function runtime(initial: RecordValue | undefined = grant(), config: Previ
     return work
   })
   await ctx.plugin({ apply(owner: Context) {
+    if (continuation) owner.provide('settings', {
+      describe: () => [{ ns: 'github-copilot', ...continuation }],
+      mutate: async (_namespace: string, operations: readonly { path: string[]; value: unknown }[], expected: number) => {
+        if (expected !== continuation.revision) throw new Error('Fixture conflict')
+        for (const operation of operations) continuation.value[operation.path[0]!] = operation.value
+        continuation.revision++
+      },
+    })
     owner.provide('credentials', {
       readRecord: reads,
       modifyRecord: modify,
@@ -77,10 +94,10 @@ async function runtime(initial: RecordValue | undefined = grant(), config: Previ
   }
 }
 function event(type: string, data: Record<string, unknown>) { return `data: ${JSON.stringify({ type, ...data })}\n\n` }
-function response(tool = false, phase?: 'commentary' | 'final_answer') {
+function response(tool = false, phase?: 'commentary' | 'final_answer', text = 'hello') {
   const reasoning = { type: 'reasoning', id: 'rs_synthetic', summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'synthetic-opaque-replay' }
   const output = tool ? { type: 'function_call', id: 'fc_synthetic', call_id: 'call_synthetic', name: 'echo', arguments: '{"value":"hi"}' }
-    : { type: 'message', id: 'msg_synthetic', role: 'assistant', content: [{ type: 'output_text', text: 'hello' }],
+    : { type: 'message', id: 'msg_synthetic', role: 'assistant', content: [{ type: 'output_text', text }],
       ...phase === undefined ? {} : { phase } }
   return new Response([
     event('response.created', { response: { id: 'resp_synthetic' } }),
@@ -89,7 +106,7 @@ function response(tool = false, phase?: 'commentary' | 'final_answer') {
     event('response.output_item.done', { output_index: 0, item: reasoning }),
     event('response.output_item.added', { output_index: 1, item: output }),
     ...(tool ? [event('response.function_call_arguments.delta', { output_index: 1, delta: '{"value":"hi"}' })]
-      : [event('response.output_text.delta', { output_index: 1, delta: 'hello' })]),
+      : [event('response.output_text.delta', { output_index: 1, delta: text })]),
     event('response.output_item.done', { output_index: 1, item: output }),
     event('response.completed', { response: { status: 'completed', output: [reasoning, output], usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 } } }),
   ].join(''), { headers: { 'content-type': 'text/event-stream' } })
@@ -97,6 +114,7 @@ function response(tool = false, phase?: 'commentary' | 'final_answer') {
 async function call(ctx: Context, options: Partial<GenerateOptions> = {}) {
   const model = options.model ?? MODEL
   const prepared = await ctx.llm.prepareCall({ provider: PREVIEW, model,
+    ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
     ...options.reasoningEffort === undefined ? {} : { reasoningEffort: options.reasoningEffort } })
   const assembler = new BlockAssembler()
   const input: GenerateOptions = { ...prepared.config,
@@ -105,6 +123,256 @@ async function call(ctx: Context, options: Partial<GenerateOptions> = {}) {
   return { assembler, message: assembler.message({ provider: PREVIEW, model,
     ...assembler.replayState === undefined ? {} : { replayState: assembler.replayState } }) }
 }
+
+describe('managed request-body timeout guidance', () => {
+  it('reads compression policy when a prepared Responses call reaches lazy HTTP dispatch', async () => {
+    let enabled = false
+    let sentBody: BodyInit | null | undefined
+    let sentHeaders = new Headers()
+    stubFetch(async (_input, init) => {
+      sentBody = init?.body
+      sentHeaders = new Headers(init?.headers)
+      return response()
+    })
+
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ responsesRequestCompression: enabled }),
+    })
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    const text = 'late setting changes apply only at this actual dispatch '.repeat(12_000)
+    const stream = prepared.stream({ ...prepared.config, messages: [createUserMessage({
+      content: [{ type: 'text', text }], source: { kind: 'user' },
+    })] })
+    enabled = true
+    const assembler = new BlockAssembler()
+    for await (const chunk of stream) assembler.push(chunk)
+    expect(assembler.finish).toEqual({ kind: 'stop' })
+    expect(sentBody).toBeInstanceOf(Uint8Array)
+    if (!(sentBody instanceof Uint8Array)) throw new Error('prepared Responses request was not compressed')
+    const payload = JSON.parse(gunzipSync(Buffer.from(sentBody)).toString('utf8')) as {
+      input?: Array<{ content?: Array<{ text?: string }> }>
+    }
+    expect(payload.input?.some(item => item.content?.some(part => part.text === text))).toBe(true)
+    expect(sentHeaders.get('content-encoding')).toBe('gzip')
+    expect(sentHeaders.get('content-length')).toBe(String(sentBody.byteLength))
+  })
+
+  it('reads temperature omission from dynamic config at lazy native stream dispatch', async () => {
+    let enabled = false
+    let sentBody: Record<string, unknown> | undefined
+    stubFetch(async (_input, init) => {
+      sentBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return response()
+    })
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ responsesOmitTemperature: enabled }),
+    })
+    const stream = harness.ctx.llm.stream({ provider: PREVIEW, model: MODEL, temperature: 0, messages: [] })
+    enabled = true
+    const assembler = new BlockAssembler()
+    for await (const chunk of stream) assembler.push(chunk)
+    expect(assembler.finish).toEqual({ kind: 'stop' })
+    expect(sentBody).not.toHaveProperty('temperature')
+  })
+
+  it('does not let compressed wire bytes bypass native hard context admission', async () => {
+    const fetch = vi.fn(async (_input: unknown, _init?: RequestInit) => response())
+    const limited = catalogItem(MODEL, '/responses', { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: true, reasoning_effort: ['low', 'medium', 'high', 'xhigh', 'max'] },
+      limits: { max_context_window_tokens: 64_000, max_prompt_tokens: 32_000, max_output_tokens: 8_192 },
+    } })
+    stubFetch(async (input, init) => String(input).endsWith('/models')
+      ? catalogResponse([limited]) : fetch(input, init), true)
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ responsesRequestCompression: true }),
+    })
+    const message = createUserMessage({
+      content: [{ type: 'text', text: 'x'.repeat(300_000) }],
+      source: { kind: 'user' },
+    })
+    const result = await call(harness.ctx, { messages: [message], maxTokens: 8_192 })
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED' },
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('excludes actual Core consumer think time despite eager SDK event forwarding', async () => {
+    let source!: ReadableStreamDefaultController<Uint8Array>
+    let wireSignal: AbortSignal | null | undefined
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      wireSignal = init?.signal
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          source = controller
+          controller.enqueue(new TextEncoder().encode(
+            event('response.output_item.added', { output_index: 0, item: {
+              id: 'synthetic-think-time', type: 'message', role: 'assistant', content: [],
+            } }) + event('response.output_text.delta', { output_index: 0, delta: 'hello' }),
+          ))
+          init?.signal?.addEventListener('abort', () => {
+            controller.error(new Error('Synthetic transport aborted'))
+          }, { once: true })
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } })
+    })
+    stubFetch(fetch)
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500 }),
+    })
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    const iterator = prepared.stream({ ...prepared.config, messages: [] })[Symbol.asyncIterator]()
+    try {
+      let next = await iterator.next()
+      while (!next.done && next.value.type !== 'text-delta') next = await iterator.next()
+      expect(next.done).toBe(false)
+      await new Promise(resolve => setTimeout(resolve, 1200))
+      expect(wireSignal?.aborted).toBe(false)
+      source.enqueue(new TextEncoder().encode(event('response.completed', {
+        response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+      })))
+      source.close()
+      const assembler = new BlockAssembler()
+      while (!(next = await iterator.next()).done) assembler.push(next.value)
+      expect(assembler.finish).toEqual({ kind: 'stop' })
+      expect(fetch).toHaveBeenCalledTimes(1)
+    } finally { await iterator.return?.() }
+  })
+  it('restores byte-idle failures as TIMEOUT without adding a native wire attempt', async () => {
+    const fetch = vi.fn((_input: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      expect(init?.signal).toBeDefined()
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+    }))
+    stubFetch(fetch)
+    const harness = await runtime(grant(), { chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500 }) })
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'TIMEOUT', message: expect.stringContaining('COPILOT_STREAM_IDLE_TIMEOUT') },
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    if (result.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal timeout')
+    expect(result.assembler.finish.failure.message).toContain('waiting for HTTP response')
+    expect(result.assembler.finish.failure.message).toContain('UTF-8 bytes')
+    expect(result.assembler.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
+  })
+
+  it('preserves native nonzero Anthropic usage before restoring an owned byte-idle failure', async () => {
+    const id = 'synthetic-idle-usage-model'
+    const items = [catalogItem(id, '/v1/messages', { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: false },
+      limits: { max_context_window_tokens: 64000, max_prompt_tokens: 48000, max_output_tokens: 8000 },
+    } })]
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(
+          `event: message_start\ndata: ${JSON.stringify({ type: 'message_start', message: {
+            id: 'msg_synthetic_idle', type: 'message', role: 'assistant', model: id,
+            content: [], stop_reason: null, usage: { input_tokens: 100, output_tokens: 0 },
+          } })}\n\n`,
+        ))
+        init?.signal?.addEventListener('abort', () => {
+          controller.error(new Error('Synthetic byte-idle transport aborted'))
+        }, { once: true })
+      },
+    }), { headers: { 'content-type': 'text/event-stream' } }))
+    stubFetch(async (input, init) => String(input).endsWith('/models') ? catalogResponse(items) : fetch(input, init), true)
+    const harness = await runtime(grant({ availableModelIds: [] }), {
+      chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500 }),
+    })
+    const result = await call(harness.ctx, { model: id })
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'TIMEOUT', message: expect.stringContaining('COPILOT_STREAM_IDLE_TIMEOUT') },
+    })
+    expect(result.assembler.usage).toEqual({ inputTokens: 100, outputTokens: 0, totalTokens: 100 })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('supports explicitly restoring the native-only semantic timeout', async () => {
+    let canceled = false
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        init?.signal?.addEventListener('abort', () => {
+          canceled = true
+          controller.error(new Error('Synthetic canceled transport'))
+        }, { once: true })
+      },
+    }), { headers: { 'content-type': 'text/event-stream' } }))
+    stubFetch(fetch)
+    const harness = await runtime(grant(), {
+      chatRequestSettings: () => ({ chatStreamIdleTimeoutMs: 500, chatStreamLiveness: false }),
+    })
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'TIMEOUT', message: 'pi-ai stream idle timeout after 500ms' },
+    })
+    expect(canceled).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('enriches only a verified 408 while preserving native failure classification and retry ownership', async () => {
+    const payload = { message: 'Timed out reading request body. Try again, or use a smaller request size.',
+      code: 'user_request_timeout', private: 'SECRET_PROVIDER_BODY' }
+    let body = ''
+    const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      body = typeof init?.body === 'string' ? init.body : ''
+      return new Response(JSON.stringify(payload), { status: 408 })
+    })
+    stubFetch(fetch)
+    const harness = await runtime()
+    const observer = vi.spyOn(timeoutDiagnostics, 'requestBodyTimeoutDiagnostic').mockResolvedValueOnce(undefined)
+    let baseline: Awaited<ReturnType<typeof call>>
+    try { baseline = await call(harness.ctx) }
+    finally { observer.mockRestore() }
+    if (baseline.assembler.finish.kind !== 'error') throw new Error('fixture requires native terminal failure')
+    const native = baseline.assembler.finish.failure
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish.kind).toBe('error')
+    if (result.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal failure')
+    const first = result.assembler.finish.failure
+    expect(first.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+    expect(first.message).toContain(`Request body: ${Buffer.byteLength(body, 'utf8')} UTF-8 bytes`)
+    expect(first.message).toContain('Composition (wire UTF-8 bytes)')
+    expect(first.message).toMatch(/Fetch-to-response-headers: \d+ ms/u)
+    expect(first.message).not.toContain('SECRET_PROVIDER_BODY')
+    expect({ ...first, message: undefined }).toEqual({ ...native, message: undefined })
+    expect(fetch).toHaveBeenCalledTimes(2)
+    fetch.mockImplementation(async () => new Response('synthetic generic timeout', { status: 408 }))
+    const generic = await call(harness.ctx)
+    if (generic.assembler.finish.kind !== 'error') throw new Error('fixture requires terminal failure')
+    expect(generic.assembler.finish.failure.message).not.toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not leak a timeout diagnostic between concurrent prepared and direct dispatches', async () => {
+    let calls = 0
+    let failedBodyBytes = 0
+    const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      calls++
+      if (calls === 1) failedBodyBytes = Buffer.byteLength(String(init?.body))
+      return calls === 1
+        ? new Response(JSON.stringify({ code: 'user_request_timeout',
+          message: 'Timed out reading request body. Try again, or use a smaller request size.' }), { status: 408 })
+        : response()
+    })
+    stubFetch(fetch)
+    const harness = await runtime()
+    const prepared = call(harness.ctx)
+    const chunks: StreamChunk[] = []
+    const direct = (async () => {
+      for await (const chunk of harness.adapter.stream({ provider: PREVIEW, model: MODEL, messages: [] })) chunks.push(chunk)
+    })()
+    const [result] = await Promise.all([prepared, direct])
+    const endings = [result.assembler.finish, ...chunks.filter(chunk => chunk.type === 'finish').map(chunk => chunk.reason)]
+    expect(endings.filter(reason => reason.kind === 'error')).toHaveLength(1)
+    expect(endings.filter(reason => reason.kind === 'stop')).toHaveLength(1)
+    for (const reason of endings) if (reason.kind === 'error') {
+      expect(reason.failure.message).toContain('COPILOT_REQUEST_BODY_TIMEOUT')
+      expect(reason.failure.message).toContain(`Request body: ${failedBodyBytes} UTF-8 bytes`)
+      expect(reason.failure.message).toContain('Composition (wire UTF-8 bytes)')
+    }
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+})
 function compatibilityOffloadedImageBlock(block: Message['content'][number]): Message['content'][number] {
   return block.type === 'image' ? { ...block, offloaded: true } as Message['content'][number] : block
 }
@@ -135,7 +403,463 @@ function stubFetch(handler: (input: unknown, init?: RequestInit) => Promise<Resp
 }
 beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Error('Unexpected synthetic model request') }) })
 
+describe('account-local managed runtimes', () => {
+  const second = '11111111-1111-4111-8111-111111111111'
+  async function scopedRuntime() {
+    const ctx = new Context()
+    contexts.push(ctx)
+    let active = 'canonical'
+    let initiator: string | undefined
+    let summaryAccount = 'canonical'
+    const bound = new WeakMap<AbortSignal, string>()
+    const changed = new Set<() => void>()
+    const captured = vi.fn()
+    const key = (id: string) => id === 'canonical' ? KEY : `github-copilot/account-${id}`
+    const records = new Map([
+      [key('canonical'), grant({ refresh: 'synthetic-a', access: 'synthetic-a-token', availableModelIds: ['account-a-model'] })],
+      [key(second), grant({ refresh: 'synthetic-b', access: 'synthetic-b-token', availableModelIds: ['account-b-model'] })],
+    ])
+    const captureAccount = (accountId: string): CopilotAccountBinding => Object.freeze({
+      accountId, key: key(accountId), generation: 0, assertCurrent() {},
+    })
+    await ctx.plugin({ apply(owner: Context) {
+      owner.provide('credentials', {
+        readRecord: async (id: string) => records.get(id),
+        modifyRecord: async (id: string, mutate: (record: RecordValue | undefined) => Promise<RecordValue | undefined>) => {
+          const next = await mutate(records.get(id))
+          if (next !== undefined) {
+            records.set(id, next)
+            ctx.emit('credentials/record-updated', id as never)
+          }
+          return records.get(id)
+        },
+        listRecords: async () => [...records.keys()].map(key => ({ key, kind: 'grant' })),
+        deleteRecord: async (id: string) => { records.delete(id) },
+      } as never)
+      owner.provide('githubCopilotAccounts', { host: {
+        capture: () => captureAccount(active), captureAccount,
+        acquire: (_signal: AbortSignal | undefined, _managed: boolean, accountId: string) => ({
+          binding: captureAccount(accountId), release() {},
+        }),
+        onChanged: (listener: () => void) => { changed.add(listener); return () => { changed.delete(listener) } },
+      } } as never)
+      owner.provide('githubCopilotSessionAccounts', {
+        turns: { current: () => undefined },
+        selected: () => ({ accountId: summaryAccount }),
+        bindingForAccount: captureAccount,
+        requestBinding: (signal?: AbortSignal) => captureAccount((signal && bound.get(signal)) ?? initiator ?? active),
+        admit: (_agent: Agent, _turn: number, signal: AbortSignal) => captureAccount(bound.get(signal) ?? initiator ?? active),
+        recordRequest: captured,
+      } as never)
+    } })
+    await ctx.plugin(LlmRuntime)
+    const registrations = vi.spyOn(ctx.llm, 'registerAdapter')
+    await ctx.plugin(previewPlugin, { accountModelFailureCooldownMs: 0 })
+    expect(registrations).toHaveBeenCalledTimes(1)
+    const adapter = registrations.mock.calls[0]![1]
+    registrations.mockRestore()
+    return { ctx, adapter, captured,
+      record(id: string) { return records.get(key(id)) },
+      selectSummaryAccount(id: string) { summaryAccount = id },
+      bind(id: string) { const signal = new AbortController().signal; bound.set(signal, id); return signal },
+      switchDefault(id: string) { active = id; for (const listener of changed) listener() },
+      within(id: string | undefined) { initiator = id },
+      rotate(id: string) {
+        const record = records.get(key(id))!
+        records.set(key(id), { ...record, payload: { ...record.payload, access: `${record.payload.access}-rotated` } })
+        ctx.emit('credentials/record-updated', key(id) as never)
+      },
+    }
+  }
+  function scopedFetch() {
+    const requests: { model: string; token: string | null }[] = []
+    stubFetch(async (input, init) => {
+      const token = new Headers(init?.headers).get('authorization')
+      if (String(input).endsWith('/models')) {
+        return catalogResponse([catalogItem(token?.includes('synthetic-a-token') ? 'account-a-model' : 'account-b-model')])
+      }
+      requests.push({ model: (JSON.parse(String(init?.body)) as { model: string }).model, token })
+      return response()
+    }, true)
+    return requests
+  }
+  async function drain(prepared: PreparedAdapterCall, signal: AbortSignal) {
+    const chunks = []
+    for await (const chunk of prepared.stream({ provider: PREVIEW, model: prepared.model.id, messages: [], signal })) chunks.push(chunk)
+    expect(chunks.some(chunk => chunk.type === 'finish' && chunk.reason.kind === 'stop')).toBe(true)
+  }
+  it('isolates a proven refresh and later revocation from another admitted account', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    const pending: { account: string; signal: AbortSignal; finish: (response: Response) => void }[] = []
+    stubFetch(async (input, init) => {
+      const token = new Headers(init?.headers).get('authorization') ?? ''
+      if (String(input).endsWith('/copilot_internal/v2/token')) return new Response(JSON.stringify({
+        token: 'tid=renewed-a;proxy-ep=proxy.individual.githubcopilot.com;', expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }))
+      const account = token.includes('synthetic-b') ? second : 'canonical'
+      if (String(input).endsWith('/models')) return catalogResponse([catalogItem(account === second ? 'account-b-model' : 'account-a-model')])
+      return new Promise<Response>((finish, reject) => {
+        const signal = init?.signal
+        if (!signal) throw new Error('Missing fixture signal')
+        pending.push({ account, signal, finish })
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    }, true)
+    try {
+      const harness = await scopedRuntime()
+      for (const id of ['canonical', second]) {
+        const record = harness.record(id)!
+        record.payload.access = `tid=synthetic-${id === second ? 'b' : 'a'};proxy-ep=proxy.individual.githubcopilot.com;`
+        record.payload.expires = start + 400_000
+      }
+      const aSignal = harness.bind('canonical'), bSignal = harness.bind(second)
+      const preparedA = await harness.adapter.prepareCall(PREVIEW, 'account-a-model', aSignal)
+      const preparedB = await harness.adapter.prepareCall(PREVIEW, 'account-b-model', bSignal)
+      const a = (async () => {
+        const chunks: StreamChunk[] = []
+        for await (const chunk of preparedA.stream({ provider: PREVIEW, model: 'account-a-model', messages: [], signal: aSignal })) chunks.push(chunk)
+        return chunks
+      })()
+      const abortedA = expect(a).rejects.toThrow('COPILOT_PREVIEW_CREDENTIAL_CHANGED')
+      const b = drain(preparedB, bSignal)
+      await vi.waitFor(() => expect(pending).toHaveLength(2))
+      clock.mockReturnValue(start + 100_001)
+      await harness.ctx.githubCopilotPreview.discover({ force: true, signal: aSignal })
+      expect(pending.every(wire => !wire.signal.aborted)).toBe(true)
+      harness.rotate('canonical')
+      expect(pending.find(wire => wire.account === 'canonical')!.signal.aborted).toBe(true)
+      expect(pending.find(wire => wire.account === second)!.signal.aborted).toBe(false)
+      await abortedA
+      pending.find(wire => wire.account === second)!.finish(response())
+      await b
+    } finally {
+      for (const wire of pending) wire.finish(response())
+      clock.mockRestore()
+    }
+  })
+  it('binds explicit summary capacity proof to its Agent rather than the current default', async () => {
+    scopedFetch()
+    const harness = await scopedRuntime()
+    await harness.adapter.prepareCall(PREVIEW, 'account-a-model', harness.bind('canonical'))
+    await harness.adapter.prepareCall(PREVIEW, 'account-b-model', harness.bind(second))
+    harness.switchDefault(second)
+    const agent = { session: { id: SessionId('summary-owner') } } as Agent
+    const lease = harness.ctx.githubCopilotPreview.recoveryLimits('account-a-model', agent)
+    expect(lease).toBeDefined()
+    expect(harness.ctx.githubCopilotPreview.recoveryLimits('account-b-model', agent)).toBeUndefined()
+    expect(() => lease!.assertCurrent()).not.toThrow()
+    harness.selectSummaryAccount(second)
+    expect(() => lease!.assertCurrent()).toThrow('COPILOT_MANUAL_RECOVERY_ACCOUNT_PROOF_CHANGED')
+  })
+  it('keeps concurrent prepared turns on their own record when the global directory switches', async () => {
+    const requests = scopedFetch()
+    const harness = await scopedRuntime()
+    const a = harness.bind('canonical'), b = harness.bind(second)
+    const [preparedA, preparedB] = await Promise.all([
+      harness.adapter.prepareCall(PREVIEW, 'account-a-model', a),
+      harness.adapter.prepareCall(PREVIEW, 'account-b-model', b),
+    ])
+    expect(harness.captured).not.toHaveBeenCalled()
+    harness.within('canonical')
+    const proofA = harness.ctx.githubCopilotPreview.captureSearchProof()
+    expect(harness.ctx.githubCopilotPreview.routeFacts('account-a-model')).toBeDefined()
+    expect(harness.ctx.githubCopilotPreview.recoveryLimits('account-a-model')).toBeDefined()
+    const composite = AbortSignal.any([a, new AbortController().signal])
+    await harness.ctx.githubCopilotPreview.discover({ signal: composite })
+    expect(harness.ctx.githubCopilotPreview.getView().models.map(model => model.id)).toEqual(['account-a-model'])
+    expect((await harness.ctx.githubCopilotPreview.resolveRequestAuth('account-a-model', composite)).apiKey)
+      .toBe('synthetic-a-token')
+    const [authA, authB] = await Promise.all([
+      harness.ctx.githubCopilotPreview.resolveRequestAuth('account-a-model', a),
+      harness.ctx.githubCopilotPreview.resolveRequestAuth('account-b-model', b),
+    ])
+    expect([authA.apiKey, authB.apiKey]).toEqual(['synthetic-a-token', 'synthetic-b-token'])
+    harness.within(undefined)
+    harness.switchDefault(second)
+    expect((await harness.adapter.listModels(PREVIEW)).map(model => model.id)).toContain('account-b-model')
+    expect(harness.ctx.githubCopilotPreview.getView().models.map(model => model.id)).toEqual(['account-b-model'])
+    expect(proofA()).toBe(true)
+    harness.within('canonical')
+    expect(harness.ctx.githubCopilotPreview.routeFacts('account-a-model')).toBeDefined()
+    expect((await harness.ctx.githubCopilotPreview.resolveRequestAuth('account-a-model', composite)).apiKey)
+      .toBe('synthetic-a-token')
+    harness.within(undefined)
+    await Promise.all([drain(preparedA, a), drain(preparedB, b)])
+    expect(requests).toEqual(expect.arrayContaining([
+      { model: 'account-a-model', token: 'Bearer synthetic-a-token' },
+      { model: 'account-b-model', token: 'Bearer synthetic-b-token' },
+    ]))
+    expect(requests).toHaveLength(2)
+    expect(harness.captured.mock.calls.map(([signal]) => signal)).toEqual(expect.arrayContaining([a, b]))
+  })
+  it('revokes only the matching account proof and prepared turn on credential updates', async () => {
+    const requests = scopedFetch()
+    const harness = await scopedRuntime()
+    const a = harness.bind('canonical'), b = harness.bind(second)
+    const [preparedA, preparedB] = await Promise.all([
+      harness.adapter.prepareCall(PREVIEW, 'account-a-model', a),
+      harness.adapter.prepareCall(PREVIEW, 'account-b-model', b),
+    ])
+    harness.within('canonical')
+    const proofA = harness.ctx.githubCopilotPreview.captureSearchProof()
+    harness.within(second)
+    const proofB = harness.ctx.githubCopilotPreview.captureSearchProof()
+    harness.within(undefined)
+    harness.rotate('canonical')
+    expect(proofA()).toBe(false)
+    expect(proofB()).toBe(true)
+    await expect(drain(preparedA, a)).rejects.toThrow()
+    await drain(preparedB, b)
+    expect(requests).toEqual([{ model: 'account-b-model', token: 'Bearer synthetic-b-token' }])
+  })
+  it('bounds runtime ownership without evicting an already prepared account', async () => {
+    const requests = scopedFetch()
+    const harness = await scopedRuntime()
+    const a = harness.bind('canonical')
+    const prepared = await harness.adapter.prepareCall(PREVIEW, 'account-a-model', a)
+    for (let index = 0; index < 31; index++) {
+      harness.within(`${String(index).padStart(8, '0')}-2222-4222-8222-222222222222`)
+      expect(harness.ctx.githubCopilotPreview.getView().state).toBe('unconfigured')
+    }
+    harness.within(second)
+    expect(() => harness.ctx.githubCopilotPreview.getView()).toThrow(/RUNTIME_LIMIT/)
+    harness.within(undefined)
+    await drain(prepared, a)
+    expect(requests).toEqual([{ model: 'account-a-model', token: 'Bearer synthetic-a-token' }])
+  })
+  it('classifies and selects Auto from the initiating account instead of the global directory', async () => {
+    const classifierRequests: { model: string; token: string | null }[] = []
+    stubFetch(async (input, init) => {
+      const token = new Headers(init?.headers).get('authorization')
+      if (String(input).endsWith('/models')) {
+        const model = catalogItem(token?.includes('synthetic-a-token') ? 'account-a-model' : 'account-b-model',
+          '/responses', { model_picker_category: 'lightweight' })
+        model.capabilities.supports.reasoning_effort = ['off', 'high']
+        return catalogResponse([model])
+      }
+      const body = JSON.parse(String(init?.body)) as { model: string }
+      classifierRequests.push({ model: body.model, token })
+      return response(false, undefined, '{"demand":"routine","signals":["bounded-transformation"]}')
+    }, true)
+    const harness = await scopedRuntime()
+    const signal = harness.bind(second)
+    harness.within(second)
+    const agent = { ctx: harness.ctx, session: {
+      id: 'account-b-auto', header: { id: 'account-b-auto' }, requestHeader: () => undefined,
+    } } as unknown as Agent
+    harness.ctx.provide('tokenMeter', { estimateMessage: () => 100, measure: () => ({ totalTokens: 100 }) } as never)
+    harness.ctx.provide('sessionProjections', { stateOf: () => ({ pending: { provider: PREVIEW, model: AUTO } }) } as never)
+    const scope = scopeTarget(agent, agent)
+    await harness.ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+    const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Convert these records.' }] })]
+    await harness.ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+      async () => ({ kind: 'enter' as const, messages }))
+    expect(await harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+      async () => ({ provider: PREVIEW, model: AUTO }))).toMatchObject({ model: 'account-b-model' })
+    expect(classifierRequests).toEqual([{ model: 'account-b-model', token: 'Bearer synthetic-b-token' }])
+    expect(harness.captured).not.toHaveBeenCalled()
+    harness.within(undefined)
+    expect((await harness.adapter.listModels(PREVIEW)).map(model => model.id)).toContain('account-a-model')
+  })
+})
+
 describe('plugin-owned account Copilot route', () => {
+  it('does not dispatch an auxiliary request when native preparation outlasts a delayed deadline timer', async () => {
+    const modelCalls = vi.fn(async (_input: unknown, _init?: RequestInit) => response())
+    stubFetch(async (input, init) => String(input).endsWith('/models')
+      ? catalogResponse([
+        catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' }),
+        catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
+      ]) : modelCalls(input, init), true)
+    const harness = await runtime(grant({ availableModelIds: [] }))
+    const agent = { ctx: harness.ctx, session: {
+      id: 'deadline-session', header: { id: 'deadline-session' }, requestHeader: () => undefined,
+    } } as unknown as Agent
+    harness.ctx.provide('tokenMeter', { estimateMessage: () => 100, measure: () => ({ totalTokens: 100 }) } as never)
+    harness.ctx.provide('sessionProjections', { stateOf: () => ({ pending: { provider: PREVIEW, model: AUTO } }) } as never)
+    const scope = scopeTarget(agent, agent), signal = new AbortController().signal
+    await harness.ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const original = CorePiAi.PiAiAdapter.prototype.prepareCall
+    const prepare = vi.spyOn(CorePiAi.PiAiAdapter.prototype, 'prepareCall').mockImplementation(async function (this: CorePiAi.PiAiAdapter, ...args) {
+      const result = await original.apply(this, args)
+      now = 9000
+      return result
+    })
+    try {
+      const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Convert these records.' }] })]
+      await harness.ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      expect(await harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: AUTO }))).toMatchObject({ model: 'answer-fixture' })
+      expect(modelCalls).not.toHaveBeenCalled()
+      expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+        mode: 'auto', explanation: { assessment: { demand: 'unknown', diagnostic: 'timeout',
+          semantic: { stage: 'model-selected', elapsedMs: 9000, validation: 'not-validated' } } },
+      })
+    } finally { prepare.mockRestore(); clock.mockRestore() }
+  })
+  it.each([undefined, true, false, 'no-settings'] as const)('assesses Auto with setting %s and freezes the captured reason across retries', async enabled => {
+    const modelCalls = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      expect(body.model).toBe('classifier-fixture')
+      expect(body.max_output_tokens).toBe(128)
+      expect(body.reasoning).toBeUndefined()
+      expect(body.tools === undefined || Array.isArray(body.tools) && body.tools.length === 0).toBe(true)
+      return response(false, undefined, '{"demand":"routine","signals":["bounded-transformation"]}')
+    })
+    const classifier = catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' })
+    classifier.capabilities.supports.reasoning_effort = ['off', 'high']
+    stubFetch(async (input, init) => String(input).endsWith('/models')
+      ? catalogResponse([
+        classifier,
+        catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
+      ]) : modelCalls(input, init), true)
+    const harness = await runtime(grant({ availableModelIds: [] }), {
+      ...(enabled === 'no-settings' ? {} : {
+        accountModelSettings: () => ({ autoSemanticAssessment: enabled, excludedModelIds: [] }),
+      }),
+    })
+    const agent = { ctx: harness.ctx, session: {
+      id: 'assessment-session', header: { id: 'assessment-session' }, requestHeader: () => undefined,
+    } } as unknown as Agent
+    harness.ctx.provide('tokenMeter', { estimateMessage: () => 100, measure: () => ({ totalTokens: 100 }) } as never)
+    harness.ctx.provide('sessionProjections', { stateOf: () => ({ pending: { provider: PREVIEW, model: AUTO } }) } as never)
+    const scope = scopeTarget(agent, agent), signal = new AbortController().signal
+    await harness.ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+    const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Convert these records to CSV.' }] })]
+    const enter = () => harness.ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+      async () => ({ kind: 'enter' as const, messages }))
+    await Promise.all([enter(), enter()])
+    const request = () => harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+      async () => ({ provider: PREVIEW, model: AUTO }))
+    expect(await request()).toMatchObject({ model: 'answer-fixture' })
+    await enter()
+    expect(await request()).toMatchObject({ model: 'answer-fixture' })
+    expect(modelCalls).toHaveBeenCalledTimes(enabled === false ? 0 : 1)
+    expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+      mode: 'auto', explanation: { assessment: enabled === false
+        ? { demand: 'unknown', source: 'local', diagnostic: 'disabled' }
+        : { demand: 'routine', source: 'semantic' },
+        targetCategory: 'versatile', selectedCategory: 'versatile', method: 'only-candidate' },
+    })
+    if (enabled !== false) {
+      expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+        explanation: { assessment: { semantic: { modelId: 'classifier-fixture', budgetMs: 8000,
+          stage: 'finished', nativeFinish: 'stop', validation: 'valid' } } },
+      })
+    }
+  })
+  it('forwards native SDK failed zero usage without changing the shared accounting stream', async () => {
+    stubFetch(async () => new Response('synthetic unavailable', { status: 503 }))
+    const harness = await runtime()
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    const assembler = new BlockAssembler()
+    const chunks: StreamChunk[] = []
+    for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) {
+      chunks.push(chunk)
+      assembler.push(chunk)
+    }
+    expect(chunks.filter(chunk => chunk.type === 'usage')).toEqual([
+      { type: 'usage', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+    ])
+    expect(assembler.finish.kind).toBe('error')
+    expect(assembler.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
+  })
+  it.each([
+    ['/responses', 0], ['/v1/messages', 100],
+  ] as const)('preserves native cancellation usage on %s (%s input tokens)', async (endpoint, tokens) => {
+    const id = 'synthetic-cancel-model'
+    const stop = new AbortController()
+    const items = [catalogItem(id, endpoint, { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: false },
+      limits: { max_context_window_tokens: 64000, max_prompt_tokens: 48000, max_output_tokens: 8000 },
+    } })]
+    stubFetch(async (input, init) => {
+      if (String(input).endsWith('/models')) return catalogResponse(items)
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          const packet = (type: string, data: Record<string, unknown>) =>
+            `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`
+          controller.enqueue(new TextEncoder().encode(endpoint === '/responses'
+            ? event('response.created', { response: { id: 'resp_synthetic' } })
+            : packet('message_start', { message: { id: 'msg_synthetic', type: 'message',
+              role: 'assistant', model: id, content: [], stop_reason: null,
+              usage: { input_tokens: tokens, output_tokens: 0 } } })))
+          init?.signal?.addEventListener('abort', () => controller.error(new Error('synthetic cancellation')), { once: true })
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } })
+    }, true)
+    const harness = await runtime(grant({ availableModelIds: [] }))
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: id })
+    const timer = setTimeout(() => stop.abort(), 100)
+    const chunks: StreamChunk[] = []
+    try {
+      for await (const chunk of prepared.stream({ ...prepared.config, signal: stop.signal,
+        messages: [createUserMessage({ content: [{ type: 'text', text: 'synthetic' }], source: { kind: 'user' } })],
+      })) chunks.push(chunk)
+    } finally { clearTimeout(timer) }
+    expect(chunks.filter(chunk => chunk.type === 'usage')).toEqual([
+      { type: 'usage', usage: { inputTokens: tokens, outputTokens: 0, totalTokens: tokens } },
+    ])
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'aborted' } })
+  })
+  it('preserves native successful zero usage rather than treating it as failure', async () => {
+    stubFetch(async () => {
+      const successful = response()
+      return new Response((await successful.text()).replace(
+        '"input_tokens":1,"output_tokens":2,"total_tokens":3',
+        '"input_tokens":0,"output_tokens":0,"total_tokens":0',
+      ), { headers: successful.headers })
+    })
+    const harness = await runtime()
+    const result = await call(harness.ctx)
+    expect(result.assembler.finish.kind).toBe('stop')
+    expect(result.assembler.usage).toMatchObject({ inputTokens: 0, outputTokens: 0 })
+  })
+  it.each(['step/start', 'turn/end'] as const)('clears only the matching Session retry cache on %s across fresh Core preparations', async eventType => {
+    const fetch = vi.fn(async () => new Response('synthetic timeout', { status: 408 }))
+    stubFetch(fetch)
+    const harness = await runtime()
+    const firstSignal = new AbortController()
+    const secondSignal = new AbortController()
+    const begin = vi.spyOn(ResponsesRetryReplay.prototype, 'begin')
+    const dispose = vi.spyOn(ResponsesRetryReplay.prototype, 'dispose')
+    const consume = async (signal: AbortSignal, sessionId: string) => {
+      const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL }, signal)
+      const assembled = new BlockAssembler()
+      for await (const chunk of prepared.stream({ ...prepared.config, messages: [],
+        signal, sessionId: sessionId as GenerateOptions['sessionId'] })) assembled.push(chunk)
+      expect(assembled.finish.kind).toBe('error')
+    }
+    try {
+      await consume(firstSignal.signal, 'synthetic-session-a')
+      await consume(secondSignal.signal, 'synthetic-session-b')
+      expect(begin.mock.instances).toHaveLength(2)
+      const firstCache = begin.mock.instances[0]
+      const secondCache = begin.mock.instances[1]
+      expect(firstCache).not.toBe(secondCache)
+      await consume(firstSignal.signal, 'synthetic-session-a')
+      expect(begin.mock.instances[2]).toBe(firstCache)
+      harness.ctx.emit('session/event', { id: 'synthetic-session-a' } as never, { type: eventType, data: { turn: 1, step: 1 } } as never)
+      expect(dispose).toHaveBeenCalledTimes(1)
+      await consume(secondSignal.signal, 'synthetic-session-b')
+      expect(begin.mock.instances[3]).toBe(secondCache)
+      await consume(firstSignal.signal, 'synthetic-session-a')
+      expect(begin.mock.instances[4]).not.toBe(firstCache)
+      secondSignal.abort()
+      expect(dispose).toHaveBeenCalledTimes(2)
+      await harness.fiber.dispose()
+      expect(dispose).toHaveBeenCalledTimes(3)
+    } finally {
+      begin.mockRestore()
+      dispose.mockRestore()
+      firstSignal.abort()
+      secondSignal.abort()
+    }
+  })
   it('does not republish unchanged directories or fetch models during repeated snapshot reads', async () => {
     const harness = await runtime()
     const service = harness.ctx.get('githubCopilotPreview')!
@@ -212,6 +936,34 @@ describe('plugin-owned account Copilot route', () => {
     await service.refresh()
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(service.getView())).not.toMatch(/synthetic-current-access|synthetic-account-a|accountKey/)
+  })
+
+  it('hard-filters excluded models from the picker, Auto, route facts, and direct admission', async () => {
+    const settings: PreviewRouteConfig & { excludedModelIds?: string[] } = {
+      accountModelTtlMs: 300_000,
+      accountModelFailureCooldownMs: 0,
+      excludedModelIds: [MODEL],
+    }
+    const fetch = vi.fn(async () => catalogResponse([catalogItem(MODEL), catalogItem('future-visible')]))
+    stubFetch(fetch, true)
+    const harness = await runtime(grant({ availableModelIds: [MODEL, 'future-visible'] }),
+      { accountModelSettings: () => settings })
+    const service = harness.ctx.get('githubCopilotPreview')!
+    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id))
+      .toEqual([...AUTO_IDS, 'future-visible'])
+    expect(service.getView().models.map(model => model.id)).toEqual([MODEL, 'future-visible'])
+    expect(service.routeFacts(MODEL)).toBeUndefined()
+    await expect(harness.adapter.prepareCall(PREVIEW, MODEL))
+      .rejects.toThrow('COPILOT_PREVIEW_MODEL_EXCLUDED')
+
+    settings.excludedModelIds = [MODEL, 'future-visible']
+    expect(await harness.ctx.llm.listModels(PREVIEW)).toEqual([])
+    await expect(harness.adapter.resolveModel(PREVIEW, AUTO))
+      .rejects.toThrow('COPILOT_AUTO_NO_ELIGIBLE_MODEL')
+
+    settings.excludedModelIds = []
+    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id))
+      .toEqual([...AUTO_IDS, MODEL, 'future-visible'])
   })
 
   it('resolves and prepares a validated account model with the actual Core profile diagnostics contract', async () => {
@@ -399,6 +1151,7 @@ describe('plugin-owned account Copilot route', () => {
     const view = await harness.ctx.get('githubCopilotPreview')!.discover()
     expect(view).toMatchObject({ available: true, rejected: [], warnings: [
       { id: item.id, code: 'INPUT_LIMIT_ESTIMATED_GUARD' },
+      { id: item.id, code: 'AUTO_CATEGORY_MISSING' },
       { id: item.id, code: 'REASONING_EFFORTS_UNSUPPORTED' },
     ] })
     expect((await call(harness.ctx, { model: item.id })).assembler.finish).toEqual({ kind: 'stop' })
@@ -950,10 +1703,19 @@ describe('plugin-owned account Copilot route', () => {
     }, true)
     const original = grant()
     const harness = await runtime(original)
+    const diagnostics = vi.spyOn(harness.ctx.logger, 'warn')
     const first = await call(harness.ctx)
     expect(first.assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST',
       message: expect.stringContaining('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH') } })
+    expect(first.assembler.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })
     expect(JSON.stringify(first.assembler.finish)).not.toMatch(/synthetic-private-response-body|synthetic-current-access|input item/)
+    expect(first.assembler.finish).toMatchObject({ failure: {
+      message: expect.stringContaining('Review Replay recovery options'),
+    } })
+    expect(JSON.stringify(first.assembler.finish)).not.toContain('items=')
+    expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining(
+      'Dispatched Responses structure: items=1, directIds=0, references=0, encryptedReasoning=0'))
+    expect(JSON.stringify(diagnostics.mock.calls)).not.toMatch(/synthetic-private-response-body|synthetic-current-access/)
     expect(requests.map(request => request.path)).toEqual(['/models', '/responses'])
     expect(harness.ctx.get('githubCopilotPreview')!.getView().available).toBe(true)
     expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
@@ -991,6 +1753,133 @@ describe('plugin-owned account Copilot route', () => {
     expect(paths.filter(path => path === '/copilot_internal/v2/token')).toHaveLength(1)
     expect(paths.filter(path => path === '/responses')).toHaveLength(2)
     expect(harness.modify).toHaveBeenCalledTimes(1)
+  })
+
+  it('recovers a summary replay rejection only with operation-scoped explicit authorization', async () => {
+    const bodies: Array<{ input: Record<string, unknown>[]; max_output_tokens?: number }> = []
+    stubFetch(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as typeof bodies[number]
+      bodies.push(body)
+      if (body.input.some(item => typeof item.encrypted_content === 'string')) {
+        return new Response(JSON.stringify({ error: { message: replayScopeMessages[0] } }), { status: 401 })
+      }
+      return response(bodies.length === 1)
+    })
+    const harness = await runtime()
+    const first = await call(harness.ctx)
+    const tool = first.message.content.find(block => block.type === 'tool-call')!
+    if (tool.type !== 'tool-call') throw new Error('expected native tool call')
+    const messages: Message[] = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Summarize.' }] }), first.message, {
+      id: 'summary-tool' as Message['id'], role: 'tool', source: { kind: 'tool', callId: tool.id },
+      toolCallId: tool.id, content: [{ type: 'text', text: 'visible result' }], isError: false,
+    }]
+    const source = JSON.stringify(messages)
+    const sessionId = 'summary-replay' as NonNullable<GenerateOptions['sessionId']>
+    const signal = new AbortController().signal
+    const options: Partial<GenerateOptions> = { purpose: 'compaction', signal, sessionId, messages, maxTokens: 4096 }
+    const rejected = await call(harness.ctx, options)
+    expect(rejected.assembler.finish).toMatchObject({ kind: 'error',
+      failure: { message: expect.stringContaining('COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH') } })
+    await harness.ctx.githubCopilotCompactionReplay.run(sessionId, MODEL, signal, async () => {
+      const recovered = await call(harness.ctx, options)
+      expect(recovered.assembler.finish).toEqual({ kind: 'stop' })
+      expect(bodies.at(-1)!.input.some(item => item.type === 'reasoning')).toBe(false)
+      expect(bodies.at(-1)!.input.some(item => item.type === 'function_call')).toBe(true)
+      expect(bodies.at(-1)!.input.some(item => item.type === 'function_call_output')).toBe(true)
+      expect(bodies.at(-1)!.max_output_tokens).toBe(4096)
+    })
+    const unchanged = await call(harness.ctx, options)
+    expect(unchanged.assembler.finish).toMatchObject({ kind: 'error' })
+    expect(JSON.stringify(messages)).toBe(source)
+    expect(harness.modify).not.toHaveBeenCalled()
+    expect(bodies).toHaveLength(4)
+  })
+
+  it('filters persistent Session consent through the published adapter on successive turns without history writes', async () => {
+    const bodies: Array<{ input: Record<string, unknown>[] }> = []
+    stubFetch(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { input: Record<string, unknown>[] }
+      bodies.push(body)
+      if (body.input.some(item => typeof item.encrypted_content === 'string')) {
+        return new Response(JSON.stringify({ error: { message: replayScopeMessages[0] } }), { status: 401 })
+      }
+      const emitted = await response().text()
+      const replay = bodies.length === 3 ? 'x'.repeat(17 * 1024 * 1024) : `synthetic-turn-${bodies.length}`
+      return new Response(emitted.replaceAll('synthetic-opaque-replay', replay),
+        { headers: { 'content-type': 'text/event-stream' } })
+    })
+    const settings = { value: {}, revision: 0 }
+    const harness = await runtime(grant(), undefined, settings)
+    const first = await call(harness.ctx)
+    const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue.' }] }), first.message]
+    const before = JSON.stringify(messages)
+    const agent = { ctx: harness.ctx, session: { id: 'continuation-session' } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const failedSignal = new AbortController().signal
+    await harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal: failedSignal },
+      async () => ({ provider: PREVIEW, model: MODEL }))
+    const failed = await call(harness.ctx, { signal: failedSignal, sessionId: agent.session.id, messages })
+    expect(failed.assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    harness.ctx.emit('session/event', agent.session, { type: 'turn/end', data: { turn: 1 } } as never)
+    const current = await harness.ctx.githubCopilotSessionContinuation.get(agent)
+    await harness.ctx.githubCopilotSessionContinuation.set(agent, current.revision, true)
+    expect(harness.ctx.githubCopilotReplayRecovery.get(agent).state).not.toBe('enabled')
+    for (const turn of [2, 3, 4]) {
+      const signal = new AbortController().signal
+      await harness.ctx.waterfall(scope, 'agent/request', { agent, turn, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: MODEL }))
+      const result = await call(harness.ctx, { signal, sessionId: agent.session.id, messages })
+      expect(result.assembler.finish).toEqual({ kind: 'stop' })
+      expect(bodies.at(-1)!.input.some(item => typeof item.encrypted_content === 'string')).toBe(false)
+      harness.ctx.emit('session/event', agent.session, { type: 'turn/end', data: { turn } } as never)
+      messages.push(result.message)
+    }
+    expect(JSON.stringify(messages.slice(0, 2))).toBe(before)
+    expect(harness.modify).not.toHaveBeenCalled()
+    expect(bodies).toHaveLength(5)
+  })
+
+  it('offers exact failed replay only to its initiating session and recovers after explicit confirmation', async () => {
+    let rejectOpaque = false
+    const bodies: Array<{ input: Record<string, unknown>[] }> = []
+    stubFetch(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { input: Record<string, unknown>[] }
+      bodies.push(body)
+      return rejectOpaque && body.input.some(item => typeof item.encrypted_content === 'string')
+        ? new Response(JSON.stringify({ error: { message: replayScopeMessages[0] } }), { status: 401 })
+        : response()
+    })
+    const harness = await runtime()
+    const first = await call(harness.ctx)
+    const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue.' }] }), first.message]
+    const before = JSON.stringify(messages)
+    rejectOpaque = true
+    const agent = { ctx: harness.ctx, session: {
+      id: 'recovery-session', header: { id: 'recovery-session' }, requestHeader: () => undefined,
+    } } as unknown as Agent
+    const scope = scopeTarget(agent, agent)
+    const run = async (turn: number) => {
+      const signal = new AbortController().signal
+      await harness.ctx.waterfall(scope, 'agent/request', { agent, turn, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: MODEL }))
+      const result = await call(harness.ctx, { signal, sessionId: agent.session.id, messages })
+      harness.ctx.emit('session/event', agent.session, { type: 'turn/end', data: { turn: 1 } } as never)
+      return result
+    }
+    expect((await run(1)).assembler.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    const service = harness.ctx.githubCopilotReplayRecovery
+    const available = service.get(agent)
+    expect(available).toMatchObject({ state: 'available', itemCount: 1 })
+    if (available.state === 'unavailable') throw new Error('missing recovery evidence')
+    service.setEnabled(agent, available.revision, true)
+    expect((await run(2)).assembler.finish).toEqual({ kind: 'stop' })
+    expect(bodies).toHaveLength(3)
+    expect(bodies[2]!.input.some(item => typeof item.encrypted_content === 'string')).toBe(false)
+    expect(JSON.stringify(messages)).toBe(before)
+    // Unbound callers cannot borrow this session's consent, even with its ID.
+    expect((await call(harness.ctx, { sessionId: agent.session.id, messages })).assembler.finish)
+      .toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    expect(harness.modify).not.toHaveBeenCalled()
   })
 
   it.each(replayScopeMessages)('does not abort a parallel native request when another dispatch receives a replay-scope 401: %s', async message => {
@@ -1203,7 +2092,8 @@ describe('plugin-owned account Copilot route', () => {
     await vi.waitFor(() => expect(finish).toBeDefined())
     // This seam belongs to the plugin, not Core. Run the real source load and
     // pause only its caller continuation after the new cache is already public.
-    const lifetime = Reflect.get(harness.adapter, 'lifetime') as { source: AccountModelSource }
+    const runtimeForRequest = Reflect.get(harness.adapter, 'requestRuntime') as () => { lifetime: { source: AccountModelSource } }
+    const lifetime = runtimeForRequest().lifetime
     const source = lifetime.source
     const originalLoad = source.load.bind(source)
     const previous = source.readDisplaySnapshot()
@@ -1235,6 +2125,143 @@ describe('plugin-owned account Copilot route', () => {
       await discovery
       load.mockRestore()
     }
+  })
+
+  it.each(['managed', 'canonical-search'] as const)('keeps concurrent dispatched streams alive across a proven native same-account refresh (%s)', async entry => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    const old = 'tid=old;proxy-ep=proxy.individual.githubcopilot.com;'
+    const fresh = 'tid=fresh;proxy-ep=proxy.individual.githubcopilot.com;'
+    const pending: { signal: AbortSignal; finish: (response: Response) => void }[] = []
+    const tokens: string[] = []
+    stubFetch(async (input, init) => {
+      const url = String(input)
+      if (url.endsWith('/copilot_internal/v2/token')) return new Response(JSON.stringify({
+        token: fresh, expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }))
+      if (url.endsWith('/models')) return catalogResponse()
+      tokens.push(new Headers(init?.headers).get('authorization') ?? '')
+      if (pending.length < 2) return new Promise<Response>((finish, reject) => {
+        const signal = init?.signal
+        if (!signal) throw new Error('Missing fixture request signal')
+        pending.push({ signal, finish })
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+      return response()
+    }, true)
+    try {
+      const harness = await runtime(grant({ access: old, expires: start + 400_000, availableModelIds: [MODEL] }))
+      const a = call(harness.ctx)
+      await vi.waitFor(() => expect(pending).toHaveLength(1))
+      const b = call(harness.ctx)
+      await vi.waitFor(() => expect(pending).toHaveLength(2))
+      clock.mockReturnValue(start + 100_001)
+      if (entry === 'canonical-search') {
+        expect(await createGitHubCopilotTokenResolver(harness.ctx)(MODEL)).toMatchObject({ apiKey: fresh })
+      } else expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+      expect(harness.modify).toHaveBeenCalledTimes(1)
+      expect(pending.every(wire => !wire.signal.aborted)).toBe(true)
+      for (const wire of pending) wire.finish(response())
+      expect((await a).assembler.finish).toEqual({ kind: 'stop' })
+      expect((await b).assembler.finish).toEqual({ kind: 'stop' })
+      expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+      expect(tokens).toEqual([`Bearer ${old}`, `Bearer ${old}`, ...entry === 'managed' ? [`Bearer ${fresh}`] : [], `Bearer ${fresh}`])
+    } finally {
+      for (const wire of pending) wire.finish(response())
+      clock.mockRestore()
+    }
+  })
+
+  it.each(['endpoint', 'entitlements', 'external', 'unchanged-notification'] as const)(
+    'revokes dispatched work for an unqualified %s refresh transition', async mode => {
+      const start = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+      let wireSignal: AbortSignal | undefined
+      let release!: (response: Response) => void
+      let harness: Awaited<ReturnType<typeof runtime>>
+      stubFetch(async (input, init) => {
+        const url = String(input)
+        if (url.endsWith('/copilot_internal/v2/token')) {
+          if (mode === 'external') harness.replace(grant({ refresh: 'external-account', availableModelIds: [MODEL] }))
+          return new Response(JSON.stringify({
+            token: `tid=renewed;proxy-ep=proxy.${mode === 'endpoint' ? 'business' : 'individual'}.githubcopilot.com;`,
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+          }))
+        }
+        if (url.endsWith('/models')) return catalogResponse(mode === 'entitlements'
+          ? [catalogItem(MODEL), catalogItem('extra-model')] : undefined)
+        wireSignal = init?.signal ?? undefined
+        return new Promise<Response>((resolve, reject) => {
+          release = resolve
+          wireSignal?.addEventListener('abort', () => reject(wireSignal?.reason), { once: true })
+        })
+      }, true)
+      try {
+        harness = await runtime(grant({ access: 'tid=old;proxy-ep=proxy.individual.githubcopilot.com;',
+          expires: start + 400_000, availableModelIds: [MODEL] }))
+        const ongoing = call(harness.ctx)
+        await vi.waitFor(() => expect(wireSignal).toBeDefined())
+        if (mode === 'unchanged-notification') harness.replace(harness.current())
+        else {
+          clock.mockReturnValue(start + 100_001)
+          await harness.ctx.get('githubCopilotPreview')!.discover({ force: true })
+        }
+        await vi.waitFor(() => expect(wireSignal?.aborted).toBe(true))
+        expect((await ongoing).assembler.finish).toMatchObject({
+          kind: 'aborted', failure: { message: 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' },
+        })
+      } finally { release?.(response()); clock.mockRestore() }
+    },
+  )
+
+  it('preserves delivered text and native completion when OAuth rotates during an open SSE body', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    let body!: ReadableStreamDefaultController<Uint8Array>
+    let bodyOpen = true
+    let signal: AbortSignal | undefined
+    let modelRequests = 0
+    const encode = (value: string) => new TextEncoder().encode(value)
+    stubFetch(async (input, init) => {
+      if (String(input).endsWith('/copilot_internal/v2/token')) return new Response(JSON.stringify({
+        token: 'tid=body-renewed;proxy-ep=proxy.individual.githubcopilot.com;', expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }))
+      if (String(input).endsWith('/models')) return catalogResponse()
+      if (++modelRequests > 1) return response()
+      signal = init?.signal ?? undefined
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          body = controller
+          controller.enqueue(encode(event('response.output_item.added', {
+            output_index: 0, item: { type: 'message', id: 'open-message', role: 'assistant', content: [] },
+          }) + event('response.output_text.delta', { output_index: 0, delta: 'Before refresh. ' })))
+          signal?.addEventListener('abort', () => {
+            if (bodyOpen) { bodyOpen = false; controller.close() }
+          }, { once: true })
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } })
+    }, true)
+    try {
+      const harness = await runtime(grant({ access: 'tid=body-old;proxy-ep=proxy.individual.githubcopilot.com;',
+        expires: start + 400_000, availableModelIds: [MODEL] }))
+      const pending = call(harness.ctx)
+      await vi.waitFor(() => expect(body).toBeDefined())
+      clock.mockReturnValue(start + 100_001)
+      await harness.ctx.get('githubCopilotPreview')!.discover({ force: true })
+      expect(signal?.aborted).toBe(false)
+      const item = { type: 'message', id: 'open-message', role: 'assistant',
+        content: [{ type: 'output_text', text: 'Before refresh. After refresh.' }] }
+      body.enqueue(encode(event('response.output_text.delta', { output_index: 0, delta: 'After refresh.' })
+        + event('response.output_item.done', { output_index: 0, item })
+        + event('response.completed', { response: { status: 'completed', output: [item],
+          usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 } } })))
+      bodyOpen = false
+      body.close()
+      const result = await pending
+      expect(result.assembler.finish).toEqual({ kind: 'stop' })
+      expect(result.assembler.blocks()).toContainEqual({ type: 'text', text: 'Before refresh. After refresh.' })
+      expect(modelRequests).toBe(1)
+    } finally { clock.mockRestore() }
   })
 
   it.each(['request', 'catalog'] as const)('refreshes the shared grant from a cold %s without aborting its own discovery', async entry => {
@@ -1648,6 +2675,44 @@ describe('plugin-owned account Copilot route', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it.each([true, false])('admits projected MIME rather than durable MIME before wire: %s', async supported => {
+    const item = catalogItem('fixture-image-model', '/responses', { capabilities: {
+      supports: { streaming: true, tool_calls: true, vision: true },
+      limits: { max_context_window_tokens: 128000, max_output_tokens: 8000,
+        vision: { supported_media_types: [supported ? 'image/png' : 'image/jpeg'] } },
+    } })
+    let wires = 0
+    stubFetch(async input => {
+      if (String(input).endsWith('/models')) return catalogResponse([item])
+      wires++
+      return response()
+    }, true)
+    const harness = await runtime(grant({ availableModelIds: [] }))
+    const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
+    type ImageRef = Extract<Message['content'][number], { type: 'image' }>['attachment']
+    const attachment: ImageRef = { attachmentId: 'synthetic-projected-image' as ImageRef['attachmentId'],
+      mediaType: 'image/webp', bytes: 100, width: 1, height: 1 }
+    await harness.ctx.plugin({ apply(owner: Context) {
+      owner.provide('attachments', {
+        imageLimits: { maxImageBytes: 1_000_000, maxImagesPerMessage: 4, maxMessageImageBytes: 4_000_000,
+          maxImagePixels: 1_000_000, maxImageDimension: 4096, mediaTypes: ['image/png', 'image/webp'] },
+        readImageRequest: async () => ({ variantId: 'synthetic-projected-version', attachment,
+          data, mediaType: 'image/png', bytes: data.length, width: 1, height: 1, depth: 'uchar', space: 'srgb', hasAlpha: true }),
+        imageHostPath: () => undefined,
+      } as unknown as Context['attachments'])
+    } })
+    const result = await call(harness.ctx, { model: item.id, messages: [createUserMessage({
+      content: [{ type: 'image', attachment }], source: { kind: 'user' },
+    })] })
+    if (supported) expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    else expect(result.assembler.finish).toEqual({
+      kind: 'error',
+      failure: { message: 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED', code: 'INVALID_REQUEST' },
+    })
+    expect(wires).toBe(supported ? 1 : 0)
+    expect(attachment.mediaType).toBe('image/webp')
+  })
+
   it.each([true, false])('uses native attachment projection and execution-world mapping when available: %s', async mapped => {
     const harness = await runtime()
     const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
@@ -1688,8 +2753,10 @@ describe('plugin-owned account Copilot route', () => {
     expect(attachment.attachmentId).toBe('synthetic-image')
   })
 
-  it('keeps the mapped read-only path when Core offloads an image to fit its request budget', async () => {
-    const harness = await runtime(grant(), { maxRequestImageBytes: 1 })
+  it.each([false, true])('keeps the mapped read-only path when Core offloads an image to fit its request budget', async settings => {
+    const harness = await runtime(grant(), settings
+      ? { chatRequestSettings: () => ({ chatMaxRequestImageBytes: 1 }) }
+      : { maxRequestImageBytes: 1 })
     const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
     type ImageRef = Extract<Message['content'][number], { type: 'image' }>['attachment']
     const attachment: ImageRef = { attachmentId: 'synthetic-offload' as ImageRef['attachmentId'], mediaType: 'image/png', bytes: data.length, width: 1, height: 1 }
@@ -1891,7 +2958,7 @@ describe('plugin-owned account Copilot route', () => {
     const service = harness.ctx.get('githubCopilotPreview')
     await expect(harness.ctx.plugin({ name: 'duplicate-preview-test', inject: ['llm', 'credentials'],
       apply(owner: Context) { previewPlugin.apply(owner) },
-    })).rejects.toThrow(/already registered|DUPLICATE_ADAPTER/)
+    })).rejects.toThrow(/already registered|has been registered|DUPLICATE_ADAPTER/)
     expect(harness.ctx.get('githubCopilotPreview')).toBe(service)
     expect(harness.ctx.llm.listProviders().filter(provider => provider.id === PREVIEW)).toHaveLength(1)
     await expect(harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })).resolves.toBeDefined()

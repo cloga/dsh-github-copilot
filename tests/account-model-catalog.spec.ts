@@ -28,6 +28,15 @@ function first(value: unknown, options?: Parameters<typeof normalizeAccountModel
 }
 
 describe('account model catalog normalization (synthetic API fixtures)', () => {
+  it.each(['powerful', 'versatile', 'lightweight'] as const)('preserves supplier category %s without model-name rules', category => {
+    expect(first(catalog({ ...model('future-classified-id'), model_picker_category: category }))).toMatchObject({ category })
+  })
+  it.each([[undefined, 'missing'], ['future-category', 'unknown'], [42, 'invalid']] as const)(
+    'keeps unknown category %j explicit rather than guessing from capacity', (category, diagnostic) => {
+      const result = first(catalog({ ...model('powerful-fast-name'), model_picker_category: category }))
+      expect(result.category).toBeUndefined()
+      expect(result.evidence.categoryDiagnostic).toBe(diagnostic)
+    })
   it.each([
     ['/responses', 'openai-responses'],
     ['/chat/completions', 'openai-completions'],

@@ -1,0 +1,39 @@
+{
+  "clientVersion": "0.4.0",
+  "sourceCommit": "2184b01947967d26a506152ddb48e22b14f6091f",
+  "source": "Local pnpm build from this 0.4.0 release-candidate commit; not extracted from published archive bytes. Provenance accompanies packaged image assets.",
+  "builtClientSha256": "07d531ba05df433fd287b251f396c72ed38588f32e91a4d3aab1697a077c06fc",
+  "continuationComponentBundleSha256": "36c9588371965324fb4e66e044a011cd12a5ba78ee706b8662dad902ded39e48",
+  "synthetic": true,
+  "fixture": "tests/browser/readme.html",
+  "reproduce": "pnpm build; pnpm exec tsdown --config tests/browser/capture-continuation.config.ts; node tests/browser/serve-search-routing.mjs; set PLAYWRIGHT_MODULE to an existing Playwright index.mjs; node tests/browser/capture-readme.mjs <printed-loopback-URL>",
+  "components": {
+    "copilot-model-preferences.png": "GitHubCopilotCompactAccount",
+    "copilot-accounts.png": "GitHubCopilotCompactAccount",
+    "copilot-accounts-credits.png": "CopilotUsageCard",
+    "copilot-session-continuation.png": "CopilotUsageCard + SessionContinuationCard",
+    "copilot-search-routing.png": "CopilotPluginSettingsPage"
+  },
+  "imageSha256": {
+    "copilot-model-preferences.png": "493638f95a9780bf3be4bf706e8f6f8d90b1fa4620e0e9ad5890f88da956e0a1",
+    "copilot-accounts.png": "8c19b3b5388c368908b99234aeeb8c077400ddd8dc444c742b25ad83e9b3f028",
+    "copilot-accounts-credits.png": "d6255533948cb5cdf664453d7bca4779aa648d7e7634493c2bffc2c01202f336",
+    "copilot-session-continuation.png": "0c09c879d750c5b10c11fb59d95017b8baf28819a96d78db7f2c996ad829d21e",
+    "copilot-search-routing.png": "993640f3794423a74f9e1a2b78dbc838ac6afeee065c348aff386afb101075f7"
+  },
+  "capture": {
+    "browser": "Microsoft Edge 154.0.4258.62",
+    "viewports": [
+      920,
+      375
+    ],
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "horizontalOverflow": false,
+    "pageErrors": [],
+    "externalRequests": false
+  },
+  "limits": "Actual current built Client components with synthetic settings, identities, models and quota. SessionContinuationCard is an isolated test-only bundle of the same source component, composed through the real CopilotUsageCard prop; it is not a new package export. No live OAuth, model availability, search, billing, collection, persistence or loaded Desktop proof. Desktop images are committed; narrow/light states were checked for overflow and menu dismissal, not native Desktop integration."
+}

@@ -1,0 +1,268 @@
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
+import type {} from './diagnostics-host.ts'
+import type { Context } from '@deepseek-ai/cordis'
+import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
+import type { BasicCompactionConfig } from '@deepseek-ai/dsh-compaction-basic'
+import z from '@deepseek-ai/schemastery'
+import type { ContentBlock, Message, TokenUsage, ToolSchema } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, LlmError } from '@deepseek-ai/dsh-llm'
+import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
+import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
+import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
+import { calculateRequestBudget, resolveRequestBudgetPolicy } from './request-budget.ts'
+import type {} from './preview-route.ts'
+import { installBackgroundCompaction } from './background-compaction.ts'
+import type {} from './compaction-replay.ts'
+import { compactionSafeBoundaries, estimateCompactionInputBytes, reduceCompactionInputLimit } from './compaction-input-estimate.ts'
+
+interface RecoveryMessage {
+  readonly role: string
+  readonly content: readonly { readonly type: string; readonly id?: string }[]
+  readonly toolCallId?: string
+}
+
+interface RecoveryInput<M> {
+  readonly messages: readonly M[]
+  readonly tools?: readonly ToolSchema[]
+}
+
+interface RecoveryResult {
+  readonly summary: ContentBlock[]
+  readonly provider: string
+  readonly model: string
+  readonly maxTokens?: number
+  readonly usage?: TokenUsage
+}
+
+interface RecoveryOptions<M extends RecoveryMessage, R extends RecoveryResult> {
+  readonly input: RecoveryInput<M>
+  readonly inputLimit: number
+  readonly maxCalls?: number
+  readonly signal: AbortSignal
+  readonly estimate: (input: RecoveryInput<M>) => number
+  readonly summarize: (input: RecoveryInput<M>) => Promise<R>
+  readonly makeCheckpoint: (summary: readonly ContentBlock[]) => M
+  readonly assertCurrent?: () => void
+}
+
+function recoverError(code: string): Error {
+  return new Error(`COPILOT_MANUAL_RECOVERY_${code}`)
+}
+
+function sumUsage(usages: readonly TokenUsage[]): TokenUsage {
+  const required = (key: 'inputTokens' | 'outputTokens') => usages.reduce((sum, usage) => sum + usage[key], 0)
+  const optional = (key: 'totalTokens' | 'cacheReadTokens' | 'cacheWriteTokens' | 'reasoningTokens') =>
+    usages.every(usage => usage[key] !== undefined)
+      ? { [key]: usages.reduce((sum, usage) => sum + usage[key]!, 0) }
+      : {}
+  return {
+    inputTokens: required('inputTokens'), outputTokens: required('outputTokens'),
+    ...optional('totalTokens'), ...optional('cacheReadTokens'), ...optional('cacheWriteTokens'),
+    ...optional('reasoningTokens'),
+  }
+}
+
+/**
+ * Bounded map/fold. The native engine still owns the only
+ * durable transaction, source-stability check, shrink check and cancellation.
+ */
+export async function summarizeOversizedManualInput<M extends RecoveryMessage, R extends RecoveryResult>(
+  options: RecoveryOptions<M, R>,
+): Promise<RecoveryResult> {
+  const { input, signal, estimate, summarize, makeCheckpoint, assertCurrent } = options
+  const maxCalls = options.maxCalls ?? 16
+  if (!Number.isSafeInteger(maxCalls) || maxCalls < 2 || maxCalls > 32
+    || !Number.isSafeInteger(options.inputLimit) || options.inputLimit <= 0) throw recoverError('INVALID_POLICY')
+  const prefix = input.messages[0]?.role === 'system' ? input.messages.slice(0, 1) : []
+  const messages = input.messages.slice(prefix.length)
+  if (messages.length === 0) throw recoverError('NO_HISTORY')
+  const safeBoundaries = new Set(compactionSafeBoundaries(messages))
+
+  let previous: RecoveryResult | undefined
+  let offset = 0
+  let calls = 0
+  const usages: TokenUsage[] = []
+  while (offset < messages.length) {
+    signal.throwIfAborted()
+    assertCurrent?.()
+    const carry = previous === undefined ? [] : [makeCheckpoint(previous.summary)]
+    const head = [...prefix, ...carry]
+    if (estimate({ tools: input.tools, messages: head }) >= options.inputLimit) throw recoverError('FIXED_PREFIX')
+    let end = offset
+    for (let index = offset + 1; index <= messages.length; index++) {
+      if (estimate({ tools: input.tools, messages: [...head, ...messages.slice(offset, index)] }) > options.inputLimit) break
+      if (safeBoundaries.has(index)) end = index
+    }
+    if (end === offset) throw recoverError('INDIVISIBLE')
+    if (++calls > maxCalls) throw recoverError('CALL_LIMIT')
+    const result = await summarize({ tools: input.tools, messages: [...head, ...messages.slice(offset, end)] })
+    signal.throwIfAborted()
+    assertCurrent?.()
+    if (previous !== undefined && (result.provider !== previous.provider || result.model !== previous.model
+      || result.maxTokens !== previous.maxTokens)) throw recoverError('ROUTE_CHANGED')
+    if (result.summary.length === 0 || result.summary.some(block => block.type !== 'text')
+      || !result.summary.some(block => block.type === 'text' && block.text.trim())) {
+      throw recoverError('EMPTY_SUMMARY')
+    }
+    if (result.usage !== undefined) usages.push(result.usage)
+    previous = result
+    offset = end
+  }
+  if (previous === undefined) throw recoverError('NO_HISTORY')
+  // An unmarked result is deliberately NOT one llm.stream call. Core records
+  // the aggregate usage only when every underlying call supplied real usage.
+  return {
+    summary: [...previous.summary], provider: previous.provider, model: previous.model,
+    ...previous.maxTokens === undefined ? {} : { maxTokens: previous.maxTokens },
+    ...usages.length === calls ? { usage: sumUsage(usages) } : {},
+  }
+}
+
+/**
+ * Deployment-selected alternative to stock BasicCompactionEngine. Do not
+ * mount both: Cordis compaction is a singleton, not an overridable service.
+ */
+export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine {
+  static override Config: z<BasicCompactionConfig & { automaticRecovery?: boolean }> = z.intersect([
+    BasicCompactionEngine.Config,
+    z.object({ automaticRecovery: z.boolean().default(true) }),
+  ])
+
+  private readonly manual = new WeakMap<Agent, number>()
+  private readonly visibleHistory = new WeakSet<Agent>()
+  private readonly automaticRecovery: boolean
+
+  constructor(ctx: Context, config: BasicCompactionConfig & { automaticRecovery?: boolean } = {}) {
+    const { automaticRecovery = true, ...nativeConfig } = config
+    if (typeof automaticRecovery !== 'boolean') throw recoverError('INVALID_POLICY')
+    super(ctx, nativeConfig)
+    this.automaticRecovery = automaticRecovery
+    ctx.inject(['commands', 'jobs'], scope => {
+      installBackgroundCompaction(scope, (agent, signal, visibleHistory) => {
+        if (!visibleHistory) return this.compactNow(agent, signal)
+        if (this.manual.has(agent)) throw recoverError('BUSY')
+        this.visibleHistory.add(agent)
+        return this.compactNow(agent, signal).finally(() => this.visibleHistory.delete(agent))
+      })
+    })
+  }
+
+  override async compactNow(agent: Agent, signal: AbortSignal, sourceCommandId?: CommandId): Promise<CompactionResult | null> {
+    this.manual.set(agent, (this.manual.get(agent) ?? 0) + 1)
+    try {
+      return await super.compactNow(agent, signal, sourceCommandId)
+    } finally {
+      const remaining = this.manual.get(agent)! - 1
+      if (remaining === 0) this.manual.delete(agent)
+      else this.manual.set(agent, remaining)
+    }
+  }
+
+  protected override async summarize(
+    input: RecoveryInput<Message>,
+    agent: Agent,
+    signal?: AbortSignal,
+  ) {
+    const routed = agent.session.requestHeader()?.config
+    const target = routed?.provider && routed.model ? routed : agent.options
+    const policy = this.config.modelPolicies.find(item => item.provider === target.provider && item.model === target.model)
+    const configuredProvider = policy?.summarizationProvider ?? this.config.summarizationProvider
+    const configuredModel = policy?.summarizationModel ?? this.config.summarizationModel
+    const selected = configuredProvider.length > 0 ? { provider: configuredProvider, model: configuredModel }
+      : routed?.provider && routed.model ? routed
+        : { provider: agent.options.provider, model: agent.options.model }
+    const summaryProvider = selected.provider
+    const summaryModel = selected.model
+    if ((!this.manual.has(agent) && !this.automaticRecovery)
+      || summaryProvider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID || !summaryModel) {
+      if (this.visibleHistory.has(agent)) throw new Error('COPILOT_COMPACTION_REPLAY_UNAVAILABLE')
+      return super.summarize(input, agent, signal)
+    }
+    const maxTokens = policy?.maxTokens ?? this.config.maxTokens
+    const operationSignal = signal ?? new AbortController().signal
+    const summarize = () => this.summarizeManaged(input, agent, summaryModel, maxTokens, operationSignal)
+    if (!this.visibleHistory.has(agent)) return summarize()
+    const recovery = this.ctx.get('githubCopilotCompactionReplay')
+    if (!recovery) throw new Error('COPILOT_COMPACTION_REPLAY_UNAVAILABLE')
+    return recovery.run(agent.session.id, summaryModel, operationSignal, summarize)
+  }
+
+  private async summarizeManaged(
+    input: RecoveryInput<Message>, agent: Agent, summaryModel: string, maxTokens: number, operationSignal: AbortSignal,
+  ) {
+    const preview = this.ctx.get('githubCopilotPreview')
+    const lease = preview?.recoveryLimits(summaryModel, agent)
+    if (lease === undefined) throw recoverError('ACCOUNT_PROOF_UNAVAILABLE')
+    if (this.visibleHistory.has(agent) && lease.api !== 'openai-responses')
+      throw new Error('COPILOT_COMPACTION_REPLAY_UNAVAILABLE')
+    const agents = this.ctx.get('agents')
+    if (this.ctx.get('githubCopilotSessionAccounts') !== undefined && agents === undefined) {
+      throw recoverError('INITIATOR_UNAVAILABLE')
+    }
+    const summarize = async (candidate: RecoveryInput<Message>) => {
+      const observed = this.ctx.get('githubCopilotDiagnostics')?.collector.begin('compaction-summary')
+      observed?.stage('summary-attempt')
+      try {
+        const result = await (agents === undefined
+          ? super.summarize(candidate, agent, operationSignal)
+          : agents.withInitiator(agent, () => super.summarize(candidate, agent, operationSignal)))
+        observed?.finish('success')
+        return result
+      } catch (error) {
+        const reason = diagnosticsReason(error)
+        if (operationSignal.aborted) this.ctx.get('githubCopilotDiagnostics')?.markCompactionCancelled(agent.session)
+        observed?.finish(operationSignal.aborted ? 'cancelled' : diagnosticsOutcome(reason), reason)
+        throw error
+      }
+    }
+    const budget = calculateRequestBudget(lease.limits, maxTokens, resolveRequestBudgetPolicy(lease.policy))
+    if (!budget.ok) throw recoverError(budget.code)
+    // Reserve space for the Core-added summary directive and estimator
+    // variance. The provider's final native guard remains authoritative.
+    const toolHistoryBytes = Buffer.byteLength(JSON.stringify(agent.session.toolHistory()), 'utf8')
+    let inputLimit = budget.budget.hardInputLimit - 4096 - toolHistoryBytes
+    if (inputLimit <= 0) throw recoverError('FIXED_PREFIX')
+    const estimate = estimateCompactionInputBytes
+    operationSignal.throwIfAborted()
+    lease.assertCurrent()
+    const originalSize = estimate(input)
+    let failedAttempt = false
+    if (originalSize <= inputLimit) {
+      try {
+        return await summarize(input)
+      } catch (error) {
+        operationSignal.throwIfAborted()
+        if (!(error instanceof LlmError) || error.code !== 'CONTEXT_WINDOW_EXCEEDED') throw error
+        lease.assertCurrent()
+        // A capacity failure is not a measurement. Reduce partitionable
+        // history once while retaining fixed prefixes and balanced units.
+        inputLimit = reduceCompactionInputLimit(input, inputLimit)
+        failedAttempt = true
+      }
+    }
+    this.ctx.logger.info('[github-copilot] Segmented compaction recovery started; up to %d additional model calls.', failedAttempt ? 15 : 16)
+    const result = await summarizeOversizedManualInput({
+      input, inputLimit, signal: operationSignal, estimate,
+      maxCalls: failedAttempt ? 15 : 16,
+      assertCurrent: lease.assertCurrent,
+      makeCheckpoint: summary => createUserMessage({
+        source: { kind: 'user' },
+        content: [
+          { type: 'text', text: 'Prior intermediate checkpoint (merge with newer context):\n<compacted-summary>' },
+          ...summary,
+          { type: 'text', text: '</compacted-summary>' },
+        ],
+      }),
+      summarize,
+    })
+    // The rejected first request has no complete accounting in this hook.
+    if (failedAttempt) {
+      const { usage: _usage, ...unaccounted } = result
+      return unaccounted
+    }
+    return result
+  }
+}
+
+export default CopilotManualRecoveryCompactionEngine

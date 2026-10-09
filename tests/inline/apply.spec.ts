@@ -22,8 +22,7 @@ import * as WebDelegate from '../../src/web-delegate.ts'
 import type { WebFetchProvider, WebSearchProvider } from '@deepseek-ai/dsh-web'
 import type { CaptureSearchProvider } from '../../src/routed-web.ts'
 import { GITHUB_COPILOT_PREVIEW_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../../src/copilot-identity.ts'
-
-vi.mock('@deepseek-ai/dsh-settings', () => ({ installSettingsSection: undefined }))
+import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 
 interface FakeRuntime {
   ctx: Context
@@ -265,6 +264,8 @@ function buildRuntime(
   }
   // Attach store entries as context properties so injected service contexts
   // expose the same property API as the Harness runtime.
+  store.set('githubCopilotAccounts', { host: new CopilotAccountsHost(ctx as unknown as Context,
+    { routeDiagnostic: () => undefined }) })
   for (const [name, service] of store) (ctx as Record<string, unknown>)[name] = service
   // `listener` must be a live binding: it is assigned by ctx.on when apply
   // runs, after this object is constructed, so a snapshot would stay undefined.
@@ -674,6 +675,82 @@ describe.skipIf(typeof AgentRegistry.prototype.withInitiator !== 'function')('re
 })
 
 describe('managed search metadata entry', () => {
+  it('keeps legacy canonical search proof independent of a dormant managed Session override', async () => {
+    const root = new Context(), fiber = await root.plugin(AgentRegistry), agents = root.agents
+    const B = '11111111-1111-4111-8111-111111111111'
+    const a = testAgent({ provider: 'github-copilot', model: 'gpt-5.4' })
+    Object.assign(a.session, { id: 'canonical-search-owner' })
+    const runtime = buildRuntime({}, undefined, { 'github-copilot': {
+      sessionAccounts: [{ sessionId: a.session.id, accountId: B }],
+    } }, undefined, agents)
+    const fetchMock = searchFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    await flushStartup()
+    const run = () => agents.withInitiator(a, () => search(runtime, 'web'))
+    try {
+      await run()
+      runtime.emitCredentialUpdate(`github-copilot/account-${B}`)
+      await run()
+      expect(proofCount(fetchMock)).toBe(1)
+      runtime.emitCredentialUpdate('llm-pi-ai/github-copilot')
+      await run()
+      expect(proofCount(fetchMock)).toBe(2)
+    } finally { runtime.dispose(); await fiber.dispose() }
+  })
+  it('keeps running search on its frozen account and rebuilds proof only for the next account', async () => {
+    const root = new Context(), fiber = await root.plugin(AgentRegistry), agents = root.agents
+    const B = '11111111-1111-4111-8111-111111111111'
+    const a = testAgent({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-search-model' })
+    Object.assign(a.session, { id: 'account-search-owner' })
+    const baseURL = 'https://api.business.githubcopilot.com'
+    const authAccounts: string[] = []
+    const runtime = buildRuntime({}, undefined, {}, {
+      getView: () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, configured: true }),
+      routeFacts: () => ({ api: 'openai-responses', baseURL }),
+      discover: async () => {},
+      resolveRequestAuth: async (_model: string, signal?: AbortSignal) => {
+        const accountId = runtime.ctx.get('githubCopilotSessionAccounts')!.requestBinding(signal).accountId
+        authAccounts.push(accountId)
+        return { apiKey: `synthetic-${accountId}`, baseURL }
+      },
+    }, agents)
+    let release!: () => void, heldSignal: AbortSignal | undefined
+    const normal = searchFetch()
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (!String(init?.body).includes('Probe web search capability.') && heldSignal === undefined) {
+        heldSignal = init?.signal ?? undefined
+        await new Promise<void>(resolve => { release = resolve })
+      }
+      return normal(url, init)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, probe: true })
+    const turnSignal = new AbortController().signal
+    const owner = runtime.ctx.get('githubCopilotSessionAccounts')!
+    owner.admit(a, 1, turnSignal)
+    const run = () => agents.withInitiator(a, () => search(runtime, 'web', turnSignal))
+    try {
+      const pending = run()
+      await vi.waitFor(() => expect(heldSignal).toBeDefined())
+      runtime.settingsDocument['github-copilot'] = { activeAccountId: B,
+        sessionAccounts: [{ sessionId: a.session.id, accountId: B }] }
+      runtime.triggerSettingsChange('github-copilot')
+      runtime.emitCredentialUpdate(`github-copilot/account-${B}`)
+      expect(heldSignal?.aborted).toBe(false)
+      expect(owner.requestBinding(turnSignal).accountId).toBe('canonical')
+      release()
+      await pending
+      expect(authAccounts.every(id => id === 'canonical')).toBe(true)
+      owner.end(a.session, 1)
+      await agents.withInitiator(a, () => search(runtime, 'web'))
+      expect(proofCount(fetchMock)).toBe(2)
+      expect(authAccounts.at(-1)).toBe(B)
+      runtime.emitCredentialUpdate('llm-pi-ai/github-copilot')
+      await agents.withInitiator(a, () => search(runtime, 'web'))
+      expect(proofCount(fetchMock)).toBe(2)
+    } finally { release?.(); runtime.dispose(); await fiber.dispose() }
+  })
   it('ensures cold metadata only on actual search and captures selection before discovery awaits', async () => {
     const selection: SelectionRef = { current: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'cold-A' } }
     const baseURL = 'https://api.business.githubcopilot.com'
@@ -2167,6 +2244,26 @@ describe('github-copilot apply', () => {
     apply(runtime.ctx, config)
     expect(runtime.listener).toBeTypeOf('function')
     expect(runtime.sectionNames).toContain('tool:github-copilot')
+  })
+
+  it('consumes native live routing snapshots after activation without remounting or probing', () => {
+    const runtime = buildRuntime()
+    let routing = { searchProvider: 'none', defaultSearchProvider: 'none' }
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    apply(runtime.ctx, { ...config, searchRouting: { get: () => routing } })
+    const delegated = Symbol('delegated')
+    const next = vi.fn(() => delegated)
+    expect(runtime.listener?.(request(), next)).toBe(delegated)
+    routing = { searchProvider: 'auto', defaultSearchProvider: 'none' }
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
+    expect(runtime.listener?.(request(), next)).not.toBe(delegated)
+    routing = { searchProvider: 'none', defaultSearchProvider: 'none' }
+    runtime.triggerSettingsChange(GITHUB_COPILOT_SETTINGS_NAMESPACE)
+    expect(runtime.listener?.(request(), next)).toBe(delegated)
+    expect(next).toHaveBeenCalledTimes(2)
+    expect(fetchMock).not.toHaveBeenCalled()
+    runtime.dispose()
   })
 
   it('registers the github-copilot-hosted traditional search provider without a fetch provider', () => {

@@ -4,7 +4,7 @@ import type { CredentialStore, OAuthAuth } from '@earendil-works/pi-ai'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
-import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
+import { certifyCopilotNativeRefresh, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import type { AccountModelAuth, AccountModelSourceDependencies } from './account-model-source.ts'
 
@@ -37,9 +37,30 @@ function active(signal: AbortSignal): void {
  * login, environment fallback or separate credential record is introduced here.
  */
 export function createAccountModelAuth(
-  credentials: CredentialStore,
+  credentials: CredentialStore | (() => CredentialStore),
   renewRejectedCredential?: (grant: GitHubCopilotOAuthCredential) => boolean,
 ): Pick<AccountModelSourceDependencies, 'resolveAuth' | 'assertAuthCurrent'> {
+  if (typeof credentials === 'function') {
+    const owners = new WeakMap<AbortSignal, { auth: AccountModelAuth; owner: ReturnType<typeof createAccountModelAuth> }>()
+    return {
+      async resolveAuth(signal) {
+        const owner = createAccountModelAuth(credentials(), renewRejectedCredential)
+        const auth = await owner.resolveAuth(signal)
+        owners.set(signal, { auth, owner })
+        return auth
+      },
+      async assertAuthCurrent(auth, signal) {
+        // AccountModelSource intentionally normalizes a fresh auth DTO. Its
+        // signal, rather than DTO identity, retains the captured store owner.
+        const entry = owners.get(signal)
+        if (!entry || entry.auth.accountKey !== auth.accountKey || entry.auth.apiKey !== auth.apiKey
+          || entry.auth.baseURL !== auth.baseURL || authEntitlementKey(entry.auth) !== authEntitlementKey(auth)) {
+          throw new Error('COPILOT_ACCOUNT_AUTH_CHANGED')
+        }
+        await entry.owner.assertAuthCurrent(auth, signal)
+      },
+    }
+  }
   const native = githubCopilotProvider()
   const oauth = native.auth.oauth
   if (oauth === undefined) throw new Error('COPILOT_ACCOUNT_OAUTH_UNAVAILABLE')
@@ -90,12 +111,15 @@ export function createAccountModelAuth(
           login: async () => { throw new Error('COPILOT_ACCOUNT_USE_CANONICAL_SIGN_IN') },
           async refresh(credential, requestSignal) {
             active(signal)
-            matches(normalizeGitHubCopilotOAuthCredential(credential), key)
+            const previous = normalizeGitHubCopilotOAuthCredential(credential)
+            matches(previous, key)
             const result = normalizeGitHubCopilotOAuthCredential(await oauth.refresh(
               credential, requestSignal === undefined ? signal : AbortSignal.any([signal, requestSignal]),
             ))
             active(signal)
             matches(result, key)
+            await certifyCopilotNativeRefresh(previous, result, oauth.toAuth, signal)
+            active(signal)
             return result
           },
           async toAuth(credential) {

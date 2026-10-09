@@ -1,67 +1,133 @@
-# Provider-aware web search routing
+# Provider-aware Web search
 
-## Requested behavior
+Target: official DSH / Windows Desktop `0.2.0-rc.2`. The routed facade and
+configuration page are shipped plugin functionality, not a pending proposal.
 
-Issue #135 separates the primary search provider from the final fallback. `searchRouting.searchProvider` is `auto` or an exact registered search-provider ID; `defaultSearchProvider` is an independent ID or `none`. Auto follows the initiating Chat provider, never the global default. Copilot's owned aliases retain their existing account/model checks; other Chat IDs must exactly match an observed search registration, without name/suffix/model-family inference. This is a provider-level convention, not a promise of the same execution model or account across independent registries. GPT, Gemini and Grok models do not each become a separate Copilot search provider. Issue #148 makes ordinary settings provider-only: explicit/fallback Copilot resolves account-owned Responses candidates internally unless a nonempty legacy `github-copilot.searchModel` override is present. Issue #195 roots search routing under the existing `github-copilot` settings namespace at nested paths `searchRouting.searchProvider` and `searchRouting.defaultSearchProvider`, avoiding the unexported `installSection` limitation and preserving independent provider saves.
+## Choose who searches
 
-All implementation belongs to this plugin. No Core source, deployed Core artifact, prototype, private registry, credential copy or global chat-model choice is modified. The original official WebRuntime configuration, including its selected search/fetch providers, is preserved. The routed facade mirrors public search-provider registrations so exact-id selection works for official and community providers without reading Core's private registry.
+Open **Plugins → dsh-github-copilot → Details → Web search**.
 
-## Composition
+| Control | Behavior |
+|---|---|
+| Search provider: Auto | Follow the initiating Chat provider when its exact supported search registration exists |
+| Search provider: an ID | Always use that registered provider, independent of later Chat model changes |
+| Fallback provider | At most one different final provider after an eligible failure; None disables it |
 
-Modern Core may mount `tool-web` in agent presets while disabling its historical Host row. Modifying that disabled row is insufficient. The bundle therefore changes the service composition, not the consumer or preset:
+Saving both routing leaves uses one native settings CAS, with no Copilot
+credential, model discovery or capability-probe prerequisite. Saving does not
+prove a provider is available. The directory lists fresh public registrations,
+not static examples; unavailable stored IDs stay visible and fail explicitly.
+Reload sees newly registered IDs.
 
-1. An id-and-name-guarded patch moves the existing `web` / `@deepseek-ai/dsh-web` row into the named `github-copilot-original-web` service realm without replacing its config.
-2. The plugin's `web-delegate` entry exposes that same official service through a public, Fiber-owned bridge. It does not read any provider registry internals.
-3. The plugin-owned `routed-web` service occupies the ordinary Host `web` scope. It forwards provider registration and fetch to the original service while retaining Fiber-scoped handles for exact-id search dispatch.
-4. Auto-mode Copilot searches use the captured initiating-session route. Fixed/fallback Copilot searches preserve a nonempty explicit provider-owned `searchModel`, otherwise use bounded automatic selection from current account-owned Responses route facts. Other provider ids dispatch through the mirrored public registration. A separate private official WebRuntime supplies native request validation and source capping on every routed branch.
-5. Native `tool-web` consumers, including those in agent presets, retain their original schemas, configured query/source limits, batching, execution policies, timeout metadata, formatting and presentation.
+![Actual parent-following and search controls with synthetic settings](images/copilot-search-routing.png)
 
-This is a plugin-owned subclass and explicit public service composition, not a replacement of Core prototypes or a mutation of a live registered service. It affects all `ctx.web.search` consumers with eligible Copilot context, not only one tool name. The bundle requires the standard enabled top-level official Host `web` row, static provider config and no prior isolation. The patch name guard does not make its separate inserted rows conditional: installing into a custom/missing/disabled/isolated web composition can prevent startup. Run the required read-only `scripts/check-search-composition.mjs` preflight over the existing profile before installing; it uses public readers and composition without calling write-capable `loadProfile` normalization. It compares a routing-free baseline with the actual post-install candidate at the existing bundle position (or the append position for first install), including profile, home and supplied launcher patches. Nonempty disposable `cordis.yml` roots are refused because normal CLI launch resets them; late isolation resets or an original web row inserted only after the routing guard are also refused. `dsh plugin add` does not automatically enforce this step. Unsupported shapes must be refused before mutation, not described as safe no-ops.
+The picture uses current built Client components in an isolated synthetic browser fixture.
+It does not demonstrate a live search or loaded Desktop runtime.
 
 ## Routing and fallback
 
-`src/search-tool-routing.ts` executes an operation-local primary and at most one distinct final fallback. A primary success, including zero sources, ends routing. Failure never retries the same provider as its own fallback, recurses or adds an original-Web hidden third tier. Caller/owner/policy cancellation, facade disposal, captured registration replacement and account-proof invalidation stop the operation rather than authorizing another paid attempt. Generic providers own their internals and must honor the supplied cancellation signal.
+Auto uses the captured initiating Session/request route, never the global Chat
+default or another Session. Copilot aliases keep their account/model checks;
+other IDs match an observed search registration exactly. Model names/families
+do not become search providers. This provider-level convention does not promise
+the same account or execution model across independent registries.
 
-The facade captures registered implementations, not merely IDs that could point to a replacement after an await. The main router resolves Auto from captured initiating-session provider leaves; a fixed selection is not overridden by Copilot inline search or prompt guidance. Copilot's special native/configured paths require its own registered implementation and existing ownership checks, never a third party that happens to register the same ID.
+A successful primary result, including zero sources, ends routing. Failure may
+try one distinct final fallback, never the same backend twice, a hidden third
+tier or recursive routing. Cancellation, disposal, registration replacement
+and account-proof invalidation terminate the operation. Captured implementations,
+not only replaceable IDs, remain bound to the request.
 
-Fallback notices remain inside canonical `WebSearchResult.content`, so Core result projection and query merging retain them. They identify the actual registered backend and possible charges, without copying arbitrary exception messages. Generic backends have no public endpoint/model provenance contract; those fields must not be guessed from the Chat model. Provider-owned safe content can include more precise provenance.
+Fallback notices survive native result projection in `WebSearchResult.content`,
+identify the backend and possible charges, and expose no raw exception.
+Generic providers own their authentication and cancellation; their endpoint/model
+provenance is not guessed from Chat. The stronger Copilot/legacy pre-dispatch
+proof guard is not claimed for every third-party implementation.
 
-Legacy direct callers without the facade capture seam keep the historical `src/search-routing.ts` Copilot/DeepSeek path only for legacy policy. Its `src/deepseek-search-fallback.ts` constructs the unchanged public official adapter and retains its safe URL validation, exact option snapshot, credential ownership and post-auth/pre-fetch guard. The new catalog-based path instead calls the actual registered backend; an identical ID does not authorize replacing it with that factory. Generic `search()` exposes no internal authentication/pre-network hook, so do not claim the stronger legacy guard for arbitrary third-party implementations.
+## Copilot model selection and proof
 
-`src/search-routing-policy.ts` normalizes settings without writes: a new explicit `searchProvider` wins; old auto remains Auto; old fixed preserves its default as primary; old fixed plus `none` stays disabled. Unknown saved IDs remain visible and fail closed at dispatch. Until an explicit UI save adopts the new fallback choice, legacy `searchFallback: none` preserves its failure-spending restriction. The ordinary save commits both primary and fallback leaves together in one CAS mutation in the existing `github-copilot` namespace at nested paths `['searchRouting', 'searchProvider']` and `['searchRouting', 'defaultSearchProvider']`. It neither requires account credentials nor performs account-status/model-discovery RPC or capability probe. A nonempty legacy `searchModel` remains authoritative and visible read-only; only the separate explicit reset sets `searchModel: ''` with the shared namespace revision, coordinating local revisions after either mutation to prevent false CAS conflicts while preserving unsaved drafts. A failed reset must not prevent an unrelated routing save. Missing namespaces, read-only deployments, stale revisions and uncertain responses must remain visible without exposing raw provider errors. `routeWebSearch: false`, the master enable switch, Copilot allowlists and capability proof keep their existing responsibilities.
+Auto-following Copilot search uses the initiating real model. Explicit/fallback
+Copilot search instead preserves a nonempty `github-copilot.searchModel`
+override; otherwise it non-forcing ensures current account metadata and
+considers at most three eligible Responses models in deterministic ID order.
+No model-name table, Session borrowing or global default supplies candidates.
 
-## Search directory and settings UI
+Metadata establishes eligibility, not search capability. Default `probe: true`
+requires bounded successful proof before **one final user-query request**.
+Candidate proof is not query replay; a final failure never tries the query on
+another model. `probe: false` is an explicit trust override, not a recommended
+repair. Cancellation or captured credential/account-proof changes fail closed.
+Successful reusable proofs retain account/owner lifetime, not the creating
+request's signal/deadline. Concurrent callers own their unfinished probes.
 
-Both selectors use `githubCopilotSearchRouting.providers()`, a separate strict Remote exposed through the public `TypertRemoteService` binding. Its catalog contains only fresh IDs from registrations observed by this facade, not Core private registry objects or hidden/direct-original registrations. The read invokes no `available()`, auth, discovery or search: availability is contextual and checked on actual use. A missing facade yields `supported: false`, not a static example list. Newly registered IDs appear on reload; removed saved entries remain visibly unavailable. Primary adds Auto; **Fallback provider** adds None while retaining the stored `defaultSearchProvider` key. The ordinary card has no model selector. Settings and routing Remote faces are captured once at UI registration: real pinned Cordis/Client Gateway namespace reads return fresh traced proxies, so looking them up in each render would change effect dependencies and reload drafts. Models remain provider internals, not additional search-provider entries.
+## Settings and legacy compatibility
 
-Focused postbuild checks must run after `pnpm build`. `tests/search-provider-catalog.spec.ts` checks registration lifecycle, duplicate handling and read purity; `tests/scripts/search-provider-gateway.test.mjs` drives the real Connection Fetch/Gateway against the packaged search-catalog facade/controller. `tests/web-search-routing-card.spec.ts` covers both selectors, unavailable catalogs, one routing CAS without a model prerequisite, explicit separate override reset, safe conflict messages, legacy choices and stale generations. `tests/client-search-inject.spec.ts` mounts the actual Client callback with real React DOM and Cordis in jsdom, checking draft and pending-save continuity through parent rerenders for both footer and legacy section slots; its Remote transport remains synthetic. `tests/scripts/search-settings-contract.test.mjs` uses the real pinned Settings service with in-memory persistence and the unchanged generated Client codecs: two-leaf routing writes, stale CAS, writable hidden/empty legacy overrides and the flat returned namespace revision. It also mounts the real pinned Client Gateway/Remote descriptors to verify traced proxy identity, without RPC or streams. It does **not** execute the actual Host SettingsController write through Gateway. An isolated Edge reproduction with the old alpha.28 built card and actual registration callback, backed by synthetic fresh Remote getters, reproduced both a filled-model draft resetting on a parent render and a completed model write whose subsequent routing write was abandoned on a parent render. This establishes a reproducible plugin lifecycle defect, not a definitive diagnosis of the user's production runtime. The corrected built card passed the same isolated Edge rerender/save/reload flow without a model field or account-status RPC, plus explicit legacy override reset, safe CAS conflict recovery, read-only state, dark/light desktop and 375px mobile captures, and a 200% zoom overflow check. These fixtures are not live account, installed Desktop or paid model evidence. The final local `pnpm verify` passed with one test worker: 62 Vitest files, 1553 passing tests and 2 expected skips, 273 tooling tests, source/test typechecks, baseline checks, build and package smoke. An earlier unrestricted parallel run hit three import-time test timeouts; the unchanged tests passed with bounded concurrency, without extending timeouts or skipping assertions. Remote CI, release publication and loaded-runtime acceptance remain separate pending checks.
+Routing lives in `github-copilot.searchRouting`. One CAS writes nested paths
+`['searchRouting', 'searchProvider']` and
+`['searchRouting', 'defaultSearchProvider']`. Legacy separate namespaces are
+read-only fallback sources. Old fixed/none spending restrictions are preserved
+until an explicit save adopts new policy; unknown IDs never silently normalize
+to an available provider.
 
-## Provider-owned automatic Copilot selection (#148)
+A nonempty legacy `searchModel` is displayed read-only and remains authoritative.
+Only its separate reset writes `searchModel: ''`. Both actions coordinate the
+shared namespace revision without discarding unsaved drafts. A failed reset
+does not block an unrelated routing save.
 
-For explicit/fallback Copilot without a nonempty `searchModel`, an actual search non-forcing ensures current account metadata under the existing ownership, TTL, cooldown and credential guards. Eligible account-owned Responses routes are considered in deterministic model-ID order, with at most three candidates. No static model-name table, another Session's model, global Chat default or UI model list supplies the selection. A nonempty override remains the sole candidate and is not silently replaced if unavailable.
+Official SettingsForms projects volatile Config leaves; the plugin uses native
+live fields and narrow writes, not a manually invented namespace registration.
+Traced Settings/routing Remote faces are captured once at UI registration so
+parent renders retain drafts and pending saves. `routeWebSearch`, enable,
+allowlists and capability proof keep independent responsibilities. Safety and
+transport settings are not routine fields on this card.
 
-Metadata determines eligibility, not native-search support. With the default `probe: true`, bounded candidate proof must succeed before one final user-query request is sent. Candidate proof is not a loop replaying the user's query; a final request failure is not retried on another model. The explicit `probe: false` trust override retains its existing meaning and is not a recovery recommendation. Empty/incomplete account evidence, unsupported protocols and proof exhaustion fail closed; cancellation or captured account-proof invalidation terminates the operation. Auto following a Copilot Chat route continues to use the captured initiating model rather than this independent selection. Existing outer primary/final-fallback policy, no-repeat backend rule and charge disclosures remain unchanged. Reusable successful proofs retain only account/owner lifetime, not the creating request's deadline or cancellation. Concurrent configured callers own separate unfinished probes; canceling one must not abort another, and a canceled probe is never reused as negative capability evidence.
+## Composition and installation safety
 
-## Review hardening
+The plugin moves the original enabled top-level official Web service into
+`github-copilot-original-web`, exposes it through a public Fiber-owned delegate,
+and mounts its routed facade in ordinary Host Web scope. Original configuration,
+fetch and native tool consumers remain under their owners. A separate private
+official WebRuntime retains request validation/source capping for routed search.
+No preset edits, private registry access or Core prototype replacement occurs.
 
-The initiating router also captures the actual managed proof lifetime and its live grant deadline; ordinary metadata TTL refresh does not extend a captured deadline or count as credential revocation. Read-observed credential changes and native authorization failures invalidate continuity before generic probe/plan errors can become fallback eligibility. The same operation-local guard is checked in the native fallback's pre-dispatch recording callback, after asynchronous credential resolution and before either recording or fetching. Rejecting only after the fallback response arrives would be too late to prevent charges.
+Before install/update, run the verified package's read-only
+`scripts/check-search-composition.mjs` with profile, home, install anchor and
+all launcher patches. Require `supported: true`. It parses public composition
+without booting plugins, credentials, network or settings writes and compares
+the baseline with the actual candidate bundle position.
 
-The added regressions cover silent expiry/replacement, native final assertions, cold discovery, supported TTL refresh, delayed fallback credentials, literal-key authorization boundaries, cancellation, and legitimate transport-fallback controls. Supplemental public-API and in-memory reproductions are not a substitute for full CI on the final repaired commit or separately authorized live acceptance.
+Custom/dynamic/nested/disabled/already-isolated layouts, collisions and a nonempty
+disposable `cordis.yml` root are refused. Normal `composeProfile()` rewrites that
+root to `[]`, so preserve it and review complete reconstructibility before any
+separately approved normalization. `dsh plugin add` does not enforce preflight.
+Do not describe unsupported composition as a safe no-op.
 
-## Original verification inventory (before additional review regressions)
+Desktop supports its qualified bundled CLI, not any generic shim.
+[Installation guidance](./npm-distribution.md#desktop-bundled-cli-on-official-rc2).
+Web service disable/remove/upgrade may require a cold restart; do not use
+remove/re-add as a hot-upgrade workaround.
+[Lifecycle characterization](./web-lifecycle-rc2.md).
 
-- `tests/search-routing.spec.ts`: 20 synthetic policy regressions covering route preservation, captured selections, fallback disclosures, cancellation, proof invalidation, unknown fallback provider refusal and simultaneous operations.
-- `tests/routed-web.spec.ts`: 16 tests using actual official AgentRegistry, ToolRuntime, SystemPrompt, scoped official search consumers and WebRuntime instances. They cover native validation/caps, exact-id registered-provider dispatch, duplicate-query collapse, surrounding execution middleware, pre-execute denial, simultaneous Copilot/DeepSeek calls, unchanged fetch, provider Fiber disposal and fallback notices surviving canonical rendering/web-card metadata. Retained handles are rejected after facade disposal; in-flight Copilot work is aborted and drained; the official WebRuntime prototype remains unchanged.
-- `tests/deepseek-search-fallback.spec.ts`: 37 keyless tests composing the real public DeepSeek provider, covering option snapshots, settings/env/credential precedence, request recording, cancellation, redirects, result parsing, safe backend/error metadata and rejection of unsafe API bases. Concurrent searches retain distinct endpoint/model disclosures from their own actual option snapshots.
-- `tests/scripts/search-composition.test.mjs`: 22 pre-install checks, including real public parser use without initialization/normalization or secret output; custom/dynamic/nested/disabled/isolated web layouts are rejected before installation.
-- `tests/routed-web-loader.spec.ts`: public patch composition checks plus an actual Loader boot of the built facade/delegate and official consumers. Since Vitest lacks Node's exposed internal module loader, this test resolves this plugin's public export names to file URLs before Loader import; the realm/config patches and built implementations are unchanged. Main authorization/chat activation is disabled in this isolated test and replaced only by a synthetic routing service. This is not live account acceptance.
-- Existing inline-search tests use their pre-existing synthetic context; its fixture now models public `ctx.provide` registration and disposal required by the new router service. Nine additional main-router cases exercise non-Copilot delegation, owned managed primary search, real official fallback transport with synthetic responses, disabling fallback/routing, allowlist exclusion, user-facing disclosure guidance and credential invalidation before any fallback request.
-- `verify-tagged-core.mjs` now selects the policy, real-consumer and fallback suites in addition to prior adapter tests. CI/release install the unchanged official search dependency closure; tooling regressions reject missing/reordered closure steps. This is test wiring, not proof that the remote matrix has run.
+## Verification and limits
 
-## Remaining before shipping
+Real Loader/ConfigEditor/SettingsForms fixtures cover volatile discovery,
+two-leaf CAS, same Fiber, stale conflicts, hidden legacy reset and restart
+persistence. Client gateway/actual registration tests cover traced identities,
+draft continuity and catalog reads; a settings-map mock alone cannot establish
+native reachability. Native WebRuntime/Agent/tool fixtures cover validation,
+registration disposal, result notices and original fetch ownership.
 
-1. Complete the full verification gate and update deployment/agent evidence inventories, public export smoke and both READMEs.
-2. Add end-to-end coverage of the main router's managed metadata, fallback credentials/options, cancellations during discovery/fallback, mixed multi-query provenance, and complete unload/reload behavior.
-3. Run retained exact Core-baseline fixtures, not only the development artifact. Do not infer eight-pin runtime compatibility from type checks.
-4. Align the new package version, release metadata and package/archive tests.
-5. Run bounded live Copilot hosted-search and permitted-fallback acceptance separately. A successful chat request does not prove hosted search. No live profile installation, global search selection change or restart has occurred for this work.
+Policy and transport tests cover bounded candidates, lazy account discovery,
+proof expiry, fallback auth, credential discontinuity, cancellation and
+independent requests. Published Client desktop/narrow captures use synthetic
+services. Required exact rc.2 Windows/Linux CI remains the release gate; counts
+and old local registry failures belong in the relevant PR evidence, not permanent
+setup instructions.
+
+Live hosted-search capability, paid fallback behavior and Desktop activation
+require separate authorized acceptance. Ordinary Chat success, saved routing,
+synthetic tests or a source marker prove none of those layers.
+Design history: [#135](https://github.com/cloga/dsh-github-copilot/issues/135),
+[#148](https://github.com/cloga/dsh-github-copilot/issues/148),
+[#195](https://github.com/cloga/dsh-github-copilot/issues/195) and
+[#216](https://github.com/cloga/dsh-github-copilot/issues/216).

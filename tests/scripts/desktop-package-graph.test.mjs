@@ -16,6 +16,10 @@ test('retains historical graphs and audits signed rc.2 Desktop peer ownership', 
 })
 
 test('shared graph gate rejects bundled, optional, incompatible, or unaudited host ownership', () => {
+  assert.doesNotThrow(() => verifyDesktopPackageGraph(manifest, [currentContract()]))
+  assert.throws(() => verifyDesktopPackageGraph(manifest, [
+    currentContract({ '@deepseek-ai/cordis': '4.0.2' }),
+  ]), /does not admit host 4\.0\.2/)
   assert.throws(() => verifyDesktopPackageGraph({
     ...manifest,
     dependencies: { ...manifest.dependencies, '@deepseek-ai/dsh-authorization': '0.1.2-rc.1' },
@@ -46,13 +50,11 @@ test('shared graph gate rejects bundled, optional, incompatible, or unaudited ho
 })
 
 function currentContract(overrides = {}) {
-  const contract = structuredClone(contracts[0])
+  const current = contracts.find(contract => contract.runtimeVersion === manifest.engines.dsh)
+  assert.ok(current, 'the current runtime must have an audited package contract')
+  const contract = structuredClone(current)
   contract.id = 'synthetic-current-desktop-contract'
-  contract.runtimeVersion = '0.2.0-rc.2'
-  contract.auditedPackages = Object.fromEntries(Object.entries(contract.auditedPackages).map(([name, value]) => [
-    name,
-    overrides[name] ?? (name.startsWith('@deepseek-ai/dsh-') ? '0.2.0-rc.2' : value),
-  ]))
+  contract.auditedPackages = { ...contract.auditedPackages, ...overrides }
   return contract
 }
 

@@ -321,11 +321,59 @@ assert(!searchCard.includes('GitHubCopilotAuthorizationViewSchema') && !searchCa
 assert(searchCard.includes('data-dsh-copilot-search-reset') && !searchCard.includes('data-dsh-copilot-search-model'),
   'ordinary provider settings must preserve explicit legacy reset without a required model selector')
 const metadata = manifest.capabilities?.find(capability => capability.id === 'account-driven-provider-metadata')
+const autoIntent = manifest.capabilities?.find(capability => capability.id === 'managed-copilot-auto-intent-continuity')
+assert(autoIntent?.required === true
+  && autoIntent.sourceMarkers.some(item => item.file === 'src/auto-model-intent.ts')
+  && autoIntent.tests.some(item => item.file === 'tests/fixtures/session-context-core.fixture.ts'),
+  'Auto intent continuity requires plugin-owned projection and native consumption regression evidence')
 assert(metadata?.activation === 'validated-account-endpoints-and-capabilities', 'managed models must follow account endpoint and capability evidence')
 const publicAdapter = manifest.capabilities?.find(capability => capability.id === 'public-adapter-account-model-route')
 assert(publicAdapter?.activation === 'published-adapter-and-native-sdk', 'managed route must reuse the public adapter and native SDK')
+assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/request-body-timeout-marker.ts' && item.marker === 'COPILOT_REQUEST_BODY_TIMEOUT')
+  && (await read('src/request-body-timeout.ts')).includes('REQUEST_BODY_TIMEOUT_MARKER'),
+  'managed request-body timeout guidance must retain explicit source evidence')
+assert(publicAdapter.tests.some(item => item.file === 'tests/request-body-timeout.spec.ts'),
+  'managed request-body timeout observation must retain bounded/cancellation regression evidence')
+assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/responses-request-compression.ts' && item.marker === 'MAXIMUM_WORK_BYTES')
+  && publicAdapter.sourceMarkers.some(item => item.file === 'src/responses-request-compression.ts'
+    && item.marker === 'satisfiesCompressionSavings')
+  && (await read('src/responses-request-compression.ts')).includes('Z_BEST_SPEED')
+  && publicAdapter.tests.some(item => item.file === 'tests/responses-request-compression.spec.ts'
+    && item.name === 'losslessly gzips eligible JSON and sets exact HTTP encoding and length without mutating headers'),
+  'managed Responses compression must retain bounded lossless encoding and native admission evidence')
+for (const [file, name] of [
+  ['tests/responses-request-compression.spec.ts', 'skips bodies above the compression work limit'],
+  ['tests/responses-request-compression.spec.ts', 'requires both the absolute and proportional savings thresholds'],
+  ['tests/config.spec.ts', 'keeps managed Responses request compression default-off and boolean-only'],
+  ['tests/preview-provider.spec.ts', 'preserves published-adapter JSON and usage across identity and gzip encoding'],
+  ['tests/preview-provider.spec.ts', 'keeps caller-owned Fetch unchanged and does not resend a gzip 415 response'],
+  ['tests/preview-provider.spec.ts', 'rechecks the request/account fence with both opt-ins and never dispatches revoked work'],
+  ['tests/preview-provider.spec.ts', 'keeps native %s transport when the option is enabled'],
+  ['tests/preview-provider.spec.ts', 'sends gzip with correct framing through Node Fetch'],
+  ['tests/preview-provider.spec.ts', 'keeps original JSON for replay-scope checks after gzip without retiring the account'],
+  ['tests/preview-provider.spec.ts', 'recompresses identical native JSON after HTTP 408 retries without an identity resend'],
+  ['tests/preview-route.spec.ts', 'reads compression policy when a prepared Responses call reaches lazy HTTP dispatch'],
+  ['tests/preview-route.spec.ts', 'does not let compressed wire bytes bypass native hard context admission'],
+  ['tests/request-body-timeout.spec.ts', 'distinguishes original JSON composition from compressed HTTP body bytes'],
+  ['tests/request-body-timeout.spec.ts', 'reports a skipped opt-in compression reason without changing identity diagnostics'],
+]) {
+  assert(publicAdapter.tests.some(item => item.file === file && item.name === name),
+    `managed Responses compression must retain acceptance case: ${file}: ${name}`)
+}
+assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/request-upload-evidence.ts' && item.marker === 'createRequestUploadObserver')
+  && publicAdapter.tests.some(item => item.file === 'tests/request-upload-evidence.spec.ts'),
+  'managed upload evidence must retain request-scoped public-event regression evidence')
+assert(publicAdapter.sourceMarkers.some(item => item.file === 'src/copilot-stream-liveness.ts' && item.marker === 'COPILOT_STREAM_IDLE_TIMEOUT'),
+  'managed byte-idle handling must retain explicit source evidence')
+for (const name of [
+  'allows real late output after the original semantic-idle boundary',
+  'retains a native hard semantic deadline for an endless heartbeat stream',
+]) {
+  assert(publicAdapter.tests.some(item => item.file === 'tests/copilot-stream-adapter.spec.ts' && item.name === name),
+    `managed liveness must retain unchanged-adapter regression: ${name}`)
+}
 assert(!manifest.capabilities.some(capability => capability.id === 'capability-gated-mixed-copilot-protocols'), 'unshipped Core capability requirement must be retired')
-const genericSources = ['src/account-model-catalog.ts', 'src/account-model-source.ts', 'src/account-model-auth.ts', 'src/preview-provider.ts', 'src/preview-route.ts', 'src/pi-provider-bridge.ts', 'src/request-budget.ts', 'src/compaction-pressure.ts']
+const genericSources = ['src/account-model-catalog.ts', 'src/account-model-source.ts', 'src/account-model-auth.ts', 'src/preview-provider.ts', 'src/preview-route.ts', 'src/pi-provider-bridge.ts', 'src/request-budget.ts', 'src/compaction-pressure.ts', 'src/pre-step-pressure.ts']
 for (const path of genericSources) await verifyGenericSource(path)
 assert(!(await read('src/model-protocol.ts')).includes('llmPiAiModelProtocol'), 'local catalog facts must not depend on an unshipped Core service')
 const legacyRestore = manifest.capabilities.find(capability => capability.id === 'legacy-global-override-restoration')
@@ -348,7 +396,7 @@ assert(
 assert(Array.isArray(manifest.capabilities) && manifest.capabilities.length > 0, 'capability inventory is missing')
 const capabilityIds = new Set(manifest.capabilities.map(capability => capability.id))
 assert(capabilityIds.size === manifest.capabilities.length, 'capability IDs must be unique')
-for (const required of ['account-quota-composer-usage', 'account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
+for (const required of ['independent-copilot-accounts', 'account-quota-composer-usage', 'account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
   'public-adapter-account-model-route', 'managed-request-budget-and-compaction-policy', 'managed-model-generation-and-lifetime', 'managed-http-auth-rejection-recovery', 'managed-responses-replay-scope-isolation', 'account-discovery-native-oauth',
   'canonical-owner-preservation', 'single-managed-route-native-oauth', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
   'read-only-status-and-explicit-discovery', 'shared-copilot-credential-refresh', 'compact-account-row-and-auth-disclosure']) {
@@ -450,7 +498,10 @@ assert(rc0202Core?.tag === currentDsh.tag && rc0202Core.commit === currentDsh.co
   && rc0202Core.evidenceScope === 'unchanged-tagged-source-target'
   && rc0202Core.standaloneNpmArtifacts === 'tested'
   && rc0202Core.desktopPackageSet === 'installed-descriptor-audited'
-  && JSON.stringify(rc0202Core.runtimeTests) === JSON.stringify(rc020Core.runtimeTests),
+  && JSON.stringify(rc0202Core.runtimeTests) === JSON.stringify([
+    ...rc020Core.runtimeTests.slice(0, -2), 'tests/fixtures/scoped-compaction-core.fixture.ts', 'tests/fixtures/model-exclusions-core.fixture.ts',
+    ...rc020Core.runtimeTests.slice(-2),
+  ]),
   '0.2.0-rc.2 must retain bounded source, npm and signed Desktop peer evidence')
 for (const path of rc0202Core.runtimeTests) await access(resolve(root, path))
 
@@ -470,7 +521,7 @@ const index = await read('src/index.ts')
 for (const symbol of manifest.requiredExports?.['.'] ?? []) {
   assert(index.includes(symbol), `root export ${symbol} is missing`)
 }
-const expectedExportSubpaths = ['.', './client', './remote', './routed-web', './web-delegate', './deployment-baseline.json', './package.json']
+const expectedExportSubpaths = ['.', './client', './remote', './routed-web', './web-delegate', './manual-compaction-recovery', './deployment-baseline.json', './package.json']
 const declaredExportSubpaths = Object.keys(manifest.requiredExports ?? {}).sort()
 const packageExportSubpaths = Object.keys(packageJson.exports ?? {}).sort()
 assert(JSON.stringify(declaredExportSubpaths) === JSON.stringify([...expectedExportSubpaths].sort()), 'required export inventory differs')
@@ -542,6 +593,10 @@ assert(workflow.includes('commit: 639ed015397290b3745d163aafe02ffee4aa3f84')
   && workflow.includes('ref: ${{ matrix.commit }}')
   && !workflow.includes('matrix.dsh.'), 'CI must gate the exact current DSH source, not historical pins')
 const publishedAdapterJob = workflow.split('\n  published-adapter:\n')[1]?.split('\n  release-ready:\n')[0] ?? ''
+for (const file of ['tests/copilot-stream-liveness.spec.ts', 'tests/copilot-stream-adapter.spec.ts']) {
+  assert(publishedAdapterJob.includes(file) && (await read('scripts/verify-tagged-core.mjs')).includes(file),
+    `managed liveness regression must run against published and tagged adapters: ${file}`)
+}
 assert(publishedAdapterJob.includes('--release 0.2.0-rc.2')
   && publishedAdapterJob.includes('DSH_PUBLISHED_CORE_RELEASE: 0.2.0-rc.2')
   && !publishedAdapterJob.includes('matrix.release'), 'published-artifact CI must target only exact DSH 0.2.0-rc.2')
@@ -591,6 +646,8 @@ for (const marker of [
   'uses: ./.github/workflows/release.yml',
 ]) assert(workflow.includes(marker), `CI release gate is missing ${marker}`)
 const orderedReleaseSteps = [
+  'fetch-depth: 0',
+  'path: release-tools',
   '- run: pnpm install --frozen-lockfile',
   '- name: Install 0.2.0 Core pi-ai closure',
   '- run: pnpm verify:upstream -- dsh-upstream',
@@ -606,7 +663,9 @@ const orderedReleaseSteps = [
   '- name: Publish exact annotated tag and immutable GitHub Release',
   'scripts/publish-release.mjs',
   '- name: Publish the same verified archive to npm and verify integrity',
-  'node scripts/publish-npm.mjs',
+  'publisher_version=',
+  'cmp -- artifacts/SHA256SUMS release-tools/artifacts/SHA256SUMS',
+  'node "release-tools/scripts/publish-npm.mjs"',
 ]
 let priorReleaseStep = -1
 for (const step of orderedReleaseSteps) {

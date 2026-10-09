@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat · Account-only Dropdown Mock</title>
+<style>
+:root{color-scheme:dark;--bg:#202020;--panel:#2b2b2b;--popup:#333;--line:#505050;--text:#f2f2f2;--muted:#c0c0c0;--hover:#414141}
+*{box-sizing:border-box}body{margin:0;padding:24px;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,"Segoe UI",sans-serif}button,input,textarea{font:inherit;color:inherit}button{background:transparent;border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}button:hover{background:var(--hover)}button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid #aacfff;outline-offset:3px}[hidden]{display:none!important}h1{font-size:18px;margin:0}h2{font-size:16px;margin:0}p{margin:8px 0;color:var(--muted)}small{color:var(--muted)}.preview{max-width:860px;margin:auto}.header,.row{display:flex;align-items:center;justify-content:space-between;gap:16px}.header{margin-bottom:30px}.messages{min-height:150px}.message{padding:14px 0}.user{text-align:right}.composer{border:1px solid var(--line);border-radius:12px;padding:14px}.composer textarea{background:none;border:0;width:100%;min-height:55px;resize:vertical}.toolbar{display:flex;justify-content:space-between;color:var(--muted)}.panel{margin:12px 0 0 auto;width:min(460px,100%);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 8px 32px #0006}.identity{font-size:17px}.muted{color:var(--muted)}.section{border-top:1px solid var(--line);margin-top:20px;padding-top:18px}.selection{position:relative}.switch{white-space:nowrap}.menu{position:absolute;right:0;top:calc(100% + 8px);width:min(300px,100%);background:var(--popup);border:1px solid #666;border-radius:10px;padding:5px;z-index:5;box-shadow:0 10px 28px #0006}.option{width:100%;border:0;display:flex;gap:12px;text-align:left;padding:12px;border-radius:5px}.check{width:18px;flex-shrink:0}.follow{display:flex;align-items:center;gap:10px;margin-top:16px;cursor:pointer}.follow input{accent-color:#c7ddff;width:17px;height:17px}.scope{font-size:12px;margin-top:12px}.numbers{display:flex;gap:40px;margin:18px 0}.numbers strong{display:block;font-size:26px}.notice{min-height:44px;font-size:12px;margin-top:14px}details{margin-top:18px}summary{cursor:pointer}dialog{width:min(440px,calc(100% - 32px));background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:24px}dialog::backdrop{background:#0008}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}.light{color-scheme:light;--bg:#f5f5f5;--panel:#fff;--popup:#fff;--line:#ccc;--text:#222;--muted:#595959;--hover:#eee}@media(max-width:520px){body{padding:16px}.panel{padding:18px}.numbers{gap:24px}.numbers strong{font-size:23px}}
+</style>
+<main class="preview">
+<header class="header"><div><h1>Chat · 账号选择简化</h1><small>交互 Mock · 虚构数据，不操作真实账号</small></div><button id="theme">浅色预览</button></header>
+<div class="messages"><div class="message user">继续完善账号切换的交互。</div><div class="message">下拉菜单只列已有账号，跟随全局默认单独控制。添加账号留在 Models。</div></div>
+<div class="composer"><textarea aria-label="模拟消息" placeholder="输入消息…（仅模拟，不会发送）"></textarea><div class="toolbar"><span>＋　Full access ▾</span><span>Auto ▾　↑</span></div></div>
+<section class="panel" aria-label="Copilot credits">
+<h2>Copilot credits</h2><div class="identity" id="identity">@demo-personal</div><small id="source">跟随全局默认</small><p>账号级配额快照</p>
+<div class="section"><div class="row selection"><div><strong>本会话账号</strong><div class="muted" id="selected-name">@demo-personal</div></div><button class="switch" id="switch" aria-expanded="false" aria-controls="menu">切换账号　▾</button>
+<div class="menu" id="menu" role="group" aria-label="已有账号" hidden><button class="option" data-account="@demo-personal" aria-pressed="true"><span class="check" aria-hidden="true">✓</span>@demo-personal</button><button class="option" data-account="@demo-work" aria-pressed="false"><span class="check" aria-hidden="true"></span>@demo-work</button></div></div>
+<label class="follow"><input type="checkbox" id="follow" checked>跟随全局默认</label><p class="scope">全局默认：@demo-personal。选择账号后固定本会话；重新开启可恢复跟随。</p><p class="scope">只影响本会话后续轮次，正在运行的轮次与其他会话不变。</p>
+<details><summary id="continuation-title">可见历史续聊 · 开启</summary><label class="follow"><input id="continuation" type="checkbox" checked>持续开启降级续聊</label><p class="scope">省略旧加密推理及内嵌摘要，可能损失隐含细节；可见消息、工具记录和磁盘历史不变。不自动发送或重试。</p></details></div>
+<div class="section"><div class="numbers"><div><small>已用</small><strong id="used">159,947</strong><small>Credits</small></div><div><small>剩余</small><strong id="remaining">1,840,053</strong><small>Credits</small></div></div><p class="scope">周期额度：2,000,000 Credits（模拟）</p><p class="scope">额度不是上下文占用或本会话花费。</p></div>
+</section><p class="notice" id="notice" role="status" aria-live="polite">点击切换查看两个模拟账号；实际菜单列出全部已有账号，不限制数量。</p>
+</main>
+<dialog id="confirm"><h2>切换账号前确认</h2><p>本会话尚未开启降级续聊。开启可能损失旧推理的隐含细节；可见历史不变。切换或授权不会自动发送或重试。</p><div class="actions"><button id="enable">开启并切换</button><button id="keep">保持关闭并切换</button><button id="cancel">取消</button></div></dialog>
+<script>
+const $=id=>document.getElementById(id),options=[...document.querySelectorAll('[data-account]')];let account='@demo-personal',pending;
+function menu(open){$('menu').hidden=!open;$('switch').setAttribute('aria-expanded',String(open))}
+function render(){for(const id of ['identity','selected-name'])$(id).textContent=account;$('source').textContent=$('follow').checked?'跟随全局默认':'本会话固定账号';for(const option of options){const selected=option.dataset.account===account;option.setAttribute('aria-pressed',String(selected));option.querySelector('.check').textContent=selected?'✓':''}$('used').textContent=account==='@demo-personal'?'159,947':'24,680';$('remaining').textContent=account==='@demo-personal'?'1,840,053':'1,975,320';$('continuation-title').textContent='可见历史续聊 · '+($('continuation').checked?'开启':'关闭')}
+function apply(next,following){account=next;$('follow').checked=following;menu(false);render();$('notice').textContent='模拟：'+(following?'跟随全局默认':'本会话固定使用')+' '+account+'。未发送消息或重试。';(following?$('follow'):$('switch')).focus()}
+function request(next,following){menu(false);if(next!==account&&!$('continuation').checked){pending={next,following};$('confirm').showModal()}else apply(next,following)}
+for(const option of options)option.onclick=()=>request(option.dataset.account,false);
+$('switch').onclick=()=>{const open=$('menu').hidden;menu(open);if(open)options.find(option=>option.dataset.account===account).focus()};
+$('follow').onchange=()=>{const following=$('follow').checked;$('follow').checked=$('source').textContent==='跟随全局默认';request(following?'@demo-personal':account,following)};
+function finish(enable){if(enable)$('continuation').checked=true;$('confirm').close();apply(pending.next,pending.following)}
+$('enable').onclick=()=>finish(true);$('keep').onclick=()=>finish(false);$('cancel').onclick=()=>{$('confirm').close();$('switch').focus()};$('continuation').onchange=render;
+document.addEventListener('click',event=>{if(!event.target.closest('.selection'))menu(false)});
+document.addEventListener('keydown',event=>{if($('confirm').open)return;if(event.key==='Escape'&&!$('menu').hidden){menu(false);$('switch').focus()}if(event.target.closest('#menu')&&['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();let index=options.indexOf(document.activeElement);index=event.key==='Home'?0:event.key==='End'?options.length-1:(index+1)%options.length;options[index].focus()}});
+$('theme').onclick=()=>{const light=document.body.classList.toggle('light');$('theme').textContent=light?'深色预览':'浅色预览'};render();
+</script>
+</html>

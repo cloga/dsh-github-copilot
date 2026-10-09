@@ -140,10 +140,21 @@ describe('tsdown client artifact', () => {
     let memoIndex = 0, effectIndex = 0
     const hooks = {
       ...React,
+      useState(initial?: unknown) {
+        const instance = current, index = memoIndex++
+        instance.memos[index] ??= { deps: [], value: typeof initial === 'function' ? initial() : initial }
+        return [instance.memos[index]!.value, (next: unknown) => {
+          const previous = instance.memos[index]!.value
+          instance.memos[index]!.value = typeof next === 'function' ? next(previous) : next
+        }]
+      },
       useMemo<T>(factory: () => T, deps: React.DependencyList): T {
         const index = memoIndex++, previous = current.memos[index]
         if (!previous || deps.some((value, at) => !Object.is(value, previous.deps[at]))) current.memos[index] = { deps, value: factory() }
         return current.memos[index]!.value as T
+      },
+      useCallback<T extends (...args: never[]) => unknown>(callback: T, deps: React.DependencyList): T {
+        return hooks.useMemo(() => callback, deps)
       },
       useSyncExternalStore<T>(_subscribe: unknown, snapshot: () => T): T { return snapshot() },
       useLayoutEffect(setup: React.EffectCallback, deps?: React.DependencyList) {
@@ -183,6 +194,7 @@ describe('tsdown client artifact', () => {
       remote: { $mount: vi.fn(async () => async () => {}), $on: on, githubCopilot: remote, settings: settingsRemote },
       on,
       logger: { warn: vi.fn() },
+      get: vi.fn(),
       slots: {
         spec: (name: string) => ({ kind: name === 'plugins.bundle.config' ? 'keyed' : 'list', scope: 'root' }),
         register(options: { name: string; id?: string; key?: string }, render: Render) {
@@ -253,7 +265,10 @@ describe('tsdown client artifact', () => {
       expect(fixture.registrations.has('settings.models.footer')).toBe(true)
       expect(fixture.registrations.has('settings.models.footer:github-copilot-search-routing')).toBe(false)
       const element = fixture.registrations.get('plugins.bundle.config')!({ view: 'page' })
-      expect(element.type).toBe(fixture.client.exports.WebSearchRoutingCard)
+      expect(element.type).toBe(fixture.client.exports.CopilotPluginSettingsPage)
+      const page = fixture.instance().render(element)
+      expect(page?.props.children[0].type).toBe(fixture.client.exports.ParentModelFollowCard)
+      expect(page?.props.children[1].type).toBe(fixture.client.exports.WebSearchRoutingCard)
       expect(fixture.registrations.get('plugins.bundle.config')!({ view: 'summary' })).toBeNull()
       expect(element.props.settings).toBe(fixture.ctx.remote.settings)
     } finally { await fixture.dispose() }
@@ -381,13 +396,50 @@ describe('tsdown client artifact', () => {
     ) => Promise<() => Promise<void>>)(ctx)
 
     expect(contributions).toHaveLength(1)
-    expect(contributions[0]?.descriptors.map(descriptor => descriptor.method)).toEqual([
-      'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get',
+    expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace !== 'githubCopilotAccounts'
+      && descriptor.namespace !== 'githubCopilotSessionAccount'
+      && descriptor.namespace !== 'githubCopilotSessionContinuation'
+      && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
+      'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
+    expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())
+      .toEqual(['add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])
+    expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionAccount').map(descriptor => descriptor.method).sort())
+      .toEqual(['ensureIdentity', 'get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])
+    expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation').map(descriptor => descriptor.method).sort())
+      .toEqual(['authorizeNext', 'defaults', 'get', 'set', 'setDefault'])
+    const diagnosticsDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
+    expect(diagnosticsDescriptors.map(descriptor => descriptor.method).sort())
+      .toEqual(['clear', 'get', 'recordClient', 'setAutoAllocationEnabled', 'setEnabled'])
+    const diagnosticsView = { enabled: false, autoAllocationEnabled: false, state: 'ready', diagnostic: 'none', dirty: false,
+      snapshot: { schemaVersion: 1, coverageVersion: 1, epoch: 0, updatedAt: 0, rows: [], pending: [],
+        dropped: 0, clientDropped: 0, clientUnconfirmed: 0, saturated: 0, evicted: 0, interrupted: 0 } }
+    for (const descriptor of diagnosticsDescriptors) {
+      expect(descriptor).toMatchObject({
+        id: `${PLUGIN_ID}:githubCopilotDiagnostics.${descriptor.method}`,
+        service: 'githubCopilotDiagnostics', invocation: { kind: 'direct' },
+        result: { mode: 'strict', typeSymbol: `${PLUGIN_ID}#DiagnosticsView` },
+      })
+      expect(descriptor.scope).toBeUndefined()
+      if (descriptor.result.mode !== 'strict') throw new Error('expected independent strict diagnostics codec')
+      const schema = descriptor.result.create()
+      expect(schema.parse(diagnosticsView)).toEqual(diagnosticsView)
+      expect(() => schema.parse({ ...diagnosticsView, credentials: 'private' })).toThrow()
+      expect(() => schema.parse({ ...diagnosticsView, snapshot: { ...diagnosticsView.snapshot, sessionId: 'private' } })).toThrow()
+    }
     for (const descriptor of contributions[0]!.descriptors.filter(item => item.namespace === 'githubCopilot')) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
-      expect(descriptor.parameters).toEqual([])
+      if (descriptor.method === 'excludeModel' || descriptor.method === 'restoreModel') {
+        expect(descriptor.parameters).toHaveLength(1)
+        expect(descriptor.parameters[0]?.codec.mode).toBe('strict')
+      }
+      else if (descriptor.method === 'setModelExcluded' || descriptor.method === 'setModelHighCost') {
+        expect(descriptor.parameters).toHaveLength(2)
+        expect(descriptor.parameters.every(parameter => parameter.codec.mode === 'strict')).toBe(true)
+      }
+      else expect(descriptor.parameters).toEqual([])
       expect(descriptor).toMatchObject({
         id: `dsh-github-copilot:githubCopilot.${descriptor.method}`,
         service: 'githubCopilotAuthorization', namespace: 'githubCopilot',
@@ -396,6 +448,7 @@ describe('tsdown client artifact', () => {
         mode: 'strict',
         typeSymbol: descriptor.method === 'migrationStatus'
           ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
+          : descriptor.method === 'setModelExcluded' || descriptor.method === 'setModelHighCost' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
           : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })
     }
@@ -452,12 +505,36 @@ describe('tsdown client artifact', () => {
     expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotUsage/get', { args: {} }, expect.any(AbortSignal))
 
     const selectionDescriptor = contributions[0]!.descriptors.find(descriptor => descriptor.namespace === 'githubCopilotTurnSelection')!
+    expect(selectionDescriptor).not.toHaveProperty('scope')
     expect(selectionDescriptor).toMatchObject({
-      scope: { context: 'agent', wire: 'agentId' },
+      invocation: { kind: 'direct' },
       parameters: [{ source: 'lookup', lookup: 'agent' }, { source: 'json' }],
     })
     if (selectionDescriptor.result.mode !== 'strict') throw new Error('expected independent strict selection codec')
     expect(selectionDescriptor.result.create().parse({ mode: 'manual' })).toEqual({ mode: 'manual' })
+    rpcCall.mockResolvedValueOnce({ ok: true, value: { mode: 'manual' } })
+    await expect(ctx.remote.githubCopilotTurnSelection.get('explicit-master', 7))
+      .resolves.toEqual({ ok: true, value: { mode: 'manual' } })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotTurnSelection/get',
+      { args: { agentId: 'explicit-master', turn: 7 } }, expect.any(AbortSignal))
+
+    const recovery = { state: 'available', revision: '12345678-1234-4234-8234-123456789012',
+      itemCount: 1, model: 'synthetic-model' }
+    rpcCall.mockResolvedValueOnce({ ok: true, value: recovery })
+    await expect(ctx.remote.githubCopilotReplayRecovery.get('explicit-master'))
+      .resolves.toEqual({ ok: true, value: recovery })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotReplayRecovery/get',
+      { args: { agentId: 'explicit-master' } }, expect.any(AbortSignal))
+    rpcCall.mockResolvedValueOnce({ ok: true, value: { ...recovery, state: 'enabled' } })
+    await expect(ctx.remote.githubCopilotReplayRecovery.setEnabled('explicit-master', recovery.revision, true))
+      .resolves.toEqual({ ok: true, value: { ...recovery, state: 'enabled' } })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotReplayRecovery/setEnabled',
+      { args: { agentId: 'explicit-master', revision: recovery.revision, enabled: true } }, expect.any(AbortSignal))
+    rpcCall.mockResolvedValueOnce({ ok: true, value: { ...recovery, state: 'enabled', duration: 'next-turn' } })
+    await expect(ctx.remote.githubCopilotReplayRecovery.authorize('explicit-master', recovery.revision, 'next-turn'))
+      .resolves.toEqual({ ok: true, value: { ...recovery, state: 'enabled', duration: 'next-turn' } })
+    expect(rpcCall).toHaveBeenLastCalledWith('/api', 'githubCopilotReplayRecovery/authorize',
+      { args: { agentId: 'explicit-master', revision: recovery.revision, duration: 'next-turn' } }, expect.any(AbortSignal))
 
     const statusDescriptor = contributions[0]!.descriptors.find(
       descriptor => descriptor.method === 'status',

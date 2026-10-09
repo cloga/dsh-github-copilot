@@ -44,3 +44,12 @@ Prepare version alignment in the implementation PR. Important runtime or deliver
 After the release-ready PR merges, the successful main CI run calls the reusable Release workflow on that exact SHA. It creates or reconciles the annotated version tag and a draft-first Release, rebuilds and verifies the package, writes and verifies `SHA256SUMS`, checks remote asset digests, and only then publishes an immutable Release. Identical reruns reconcile safely; conflicting tags, releases or bytes fail closed. A tag created by `GITHUB_TOKEN` does not trigger a second workflow, so publication occurs in the gated main workflow rather than depending on recursive tag events. Do not hand-upload a replacement or bypass failed CI.
 
 Release-bearing work is complete only after reporting the published Release URL and verified version/commit/assets/checksum, or clearly identifying a concrete publication blocker and pending step. A merged PR or a local tarball alone is not release delivery. After publication, independently verify the Release is not a draft, its prerelease flag, exact tag/commit, asset names and downloaded SHA-256. An install command must include the target `--profile`; never overwrite a shipped preset. Compare the installed package to the downloaded asset, then separately validate activation after restart. HTTP 200 alone does not prove the new plugin loaded.
+
+## Auto policy evidence
+
+Before Auto routing, assessment, high-cost, continuity or assistance changes,
+read and validate `docs/auto-iteration-review.json`. Follow
+[`docs/evidence-driven-iteration.md`](./docs/evidence-driven-iteration.md) and
+record the prior decision, evidence status/denominator, actual validation and
+post-delivery owner/trigger in the PR. Missing observations are not a pass.
+Never upload raw local exports or infer billing/quality from allocation counts.

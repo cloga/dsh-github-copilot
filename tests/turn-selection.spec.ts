@@ -22,10 +22,50 @@ describe('ephemeral turn selection evidence', () => {
     expect(TurnSelectionSchema.safeParse({ mode: 'manual', model: 'invented' }).success).toBe(false)
     expect(TurnSelectionSchema.safeParse({ mode: 'auto', preference: 'balance', reason: 'invented', candidateCount: 2 }).success).toBe(false)
   })
+  it('strictly decodes detailed explanations and copies frozen evidence without retaining caller arrays', () => {
+    const selection = { mode: 'auto', preference: 'intelligence', reason: 'short-text-turn', candidateCount: 3,
+      fittingCandidateCount: 2, explanation: {
+        assessment: { demand: 'simple', source: 'local', signals: ['isolated-greeting'] },
+        targetCategory: 'lightweight', selectedCategory: 'lightweight', categoryCandidateCount: 1,
+        method: 'only-candidate', fallback: false,
+      } } as const
+    expect(TurnSelectionSchema.safeParse(selection).success).toBe(true)
+    expect(TurnSelectionSchema.safeParse({ ...selection, explanation: { ...selection.explanation, model: 'invented' } }).success).toBe(false)
+    expect(TurnSelectionSchema.safeParse({ ...selection, explanation: { ...selection.explanation,
+      assessment: { ...selection.explanation.assessment, demand: 'invented' } } }).success).toBe(false)
+    const recorded: unknown[] = []
+    const store = new TurnSelectionStore(explanation => recorded.push(explanation)), agent = {}
+    store.record(agent, 1, selection)
+    store.record(agent, 1, { mode: 'manual' })
+    const value = store.get(agent, 1)
+    expect(value).toEqual(selection)
+    if (value.mode !== 'auto') throw new Error('EXPECTED_AUTO')
+    expect(value.explanation).not.toBe(selection.explanation)
+    expect(Object.isFrozen(value.explanation?.assessment.signals)).toBe(true)
+    expect(recorded).toEqual([selection.explanation])
+  })
   it('evicts old agents without mixing their records', () => {
     const store = new TurnSelectionStore(), first = {}
     store.record(first, 1, { mode: 'manual' })
     for (let i = 0; i < 64; i++) store.record({}, 1, { mode: 'manual' })
     expect(store.get(first, 1)).toEqual({ mode: 'unknown' })
+  })
+  it('strictly decodes, copies and freezes semantic evidence while retaining legacy explanations', () => {
+    const semantic = { modelId: 'aux-fixture', budgetMs: 8000, elapsedMs: 8001, stage: 'adapter-started' as const,
+      adapterStartedMs: 100, outputCharacters: 0, validation: 'not-validated' as const }
+    const selection = { mode: 'auto', preference: 'intelligence', reason: 'standard-turn', candidateCount: 2,
+      explanation: { assessment: { demand: 'unknown', source: 'local', signals: [], diagnostic: 'timeout', semantic },
+        targetCategory: 'powerful', selectedCategory: 'powerful', categoryCandidateCount: 2,
+        method: 'equal-distribution', fallback: false } } as const
+    expect(TurnSelectionSchema.safeParse(selection).success).toBe(true)
+    expect(TurnSelectionSchema.safeParse({ ...selection, explanation: { ...selection.explanation,
+      assessment: { ...selection.explanation.assessment, semantic: { ...semantic, raw: 'SECRET' } } } }).success).toBe(false)
+    const store = new TurnSelectionStore(), agent = {}
+    store.record(agent, 1, selection)
+    semantic.elapsedMs = 9000
+    const stored = store.get(agent, 1)
+    if (stored.mode !== 'auto') throw new Error('EXPECTED_AUTO')
+    expect(stored.explanation?.assessment.semantic?.elapsedMs).toBe(8001)
+    expect(Object.isFrozen(stored.explanation?.assessment.semantic)).toBe(true)
   })
 })

@@ -1,208 +1,233 @@
-# GitHub Copilot Auto model routing MVP
+# GitHub Copilot Auto routing contracts
 
-**Tracking:** [#174](https://github.com/cloga/dsh-github-copilot/issues/174), [#192](https://github.com/cloga/dsh-github-copilot/issues/192), [#199](https://github.com/cloga/dsh-github-copilot/issues/199)
-
-**Target:** official DSH and Windows Desktop `0.2.0-rc.2`
-
-**Boundary:** plugin-only; no Core source, artifact, registry, prototype, or history patch
-
-**Interactive mockup:** [`output/auto-model-mockup/index.html`](../output/auto-model-mockup/index.html)
+Target: official DSH / Windows Desktop `0.2.0-rc.2`. Implementation is plugin-only.
+For ordinary use, start with [task assessment and explanations](./auto-task-routing.md)
+and [parent following](./parent-model-follow.md).
 
 ## User contract
 
-The managed `github-copilot-preview` provider contributes **Auto · Balance** (the existing `auto` ID), **Auto · Efficiency**, and **Auto · Intelligence** to the ordinary flat model picker. They never appear under another provider and never route across providers or accounts. Explicitly selecting another virtual preference preserves Auto intent; only a real model selection exits Auto.
+The managed `github-copilot-preview` group provides **Auto · Balance** (`auto`),
+**Auto · Efficiency** and **Auto · Intelligence** in Core's flat picker.
+Only a real model selection exits Auto. Native selection also saves the future
+global default; the plugin does not change that Core behavior.
 
-Selecting Auto uses normal Core selection behavior, including saving it as the future default selection. For every Core turn, the plugin resolves Auto to one real model from the authenticated account catalog:
+Each admitted Core turn resolves to one real account model. Tool continuations,
+native request retries and compaction retries retain it; a new user or Goal
+turn can choose differently. Transport, replay, native Usage and billing retain
+the actual model identity. Auto never crosses providers/accounts or changes an
+explicit real-model selection.
 
-- one decision is made for the turn;
-- every model request, tool continuation, request-error retry, and compaction retry in that turn uses the same real model;
-- a later user turn or Goal continuation is a new turn and may select a different model;
-- an explicit real model selection always wins;
-- the actual model remains the provider transport, usage, replay, and billing identity.
+The virtual preference normally remains the Session's pending selection while actual
+request headers record real models. A strict plugin-owned public Session projection
+also retains the latest owner-explicit native `model/selection`: if a virtual
+request header consumes native pending, later concrete headers cannot erase that
+Auto intent. Cold refolding restores intent, not old decisions or reasons.
+Copied fork/child prefixes alone do not establish an owner-explicit choice;
+native pending and the existing parent-following rules remain independent.
+Missing or malformed continuity evidence produces a named diagnostic instead of
+guessing Auto from a real model. A new explicit fixed or other-provider selection
+replaces intent for future turns, even after its native pending is consumed.
+Already admitted Auto turns retain their real route through late picker changes.
+This projection neither writes history/settings nor changes native projection ownership.
+For an otherwise unselected Session that
+inherits default Auto, the first request persists the exact virtual
+`model/selection` intent. A later explicit selection wins. Existing fixed
+Sessions are not converted because the global default changes.
 
-A Goal does not become one indefinitely frozen Auto decision. Each automatic continuation that Core opens as a new turn is classified independently. Tool steps inside that turn do not trigger another decision.
+## Eligibility and input fit
 
-## Routing policy and input fit
+Current authenticated account metadata establishes entitlement, endpoint,
+context/input/output limits, tool/image support and reasoning capabilities.
+Missing/invalid metadata produces diagnostics, not guessed capabilities.
+Exact exclusions and independent account/proof/cancellation guards apply first.
 
-The account `/models` catalog is authoritative for entitlement and hard capabilities: protocol, context and output limits, image input, tool support, reasoning efforts, and server policy. Unknown or incomplete capability metadata fails closed.
+The public native TokenMeter estimates every entered message, including
+reasoning and tool history. Its current-surface measurement is an envelope
+floor, not a substitute for candidate-specific final serialization.
+Missing/invalid measurement fails with
+`COPILOT_AUTO_TOKEN_METER_UNAVAILABLE` /
+`COPILOT_AUTO_TOKEN_ESTIMATE_INVALID`.
 
-The catalog does not provide trustworthy quality, latency, price, or global-health rankings. The routing policy therefore does **not** infer model quality from a marketing name, model-ID prefix, provider order, or token price. It does not claim to reproduce GitHub's private Auto algorithm.
+Candidates fit when estimated input does not exceed the hard budget after
+output reservation and safety allowance. If none fits, choose the largest
+input budget for native recovery and explain whether content is fixed,
+compaction unavailable, already attempted, or eligible. This is not permission
+to dispatch an oversized request. The native managed `inspectRequest` guard
+remains authoritative after final framing/attachment projection.
 
-### Hard input fit check before preference
+Task preference uses supplier `model_picker_category`, not capacity, model
+names or reasoning effort as quality rankings. [Task policy](./auto-task-routing.md)
+owns the demand matrix, default semantic assessment, category fallback,
+finite continuity and stable positive-weight same-category allocation.
+User-marked high cost is orthogonal to demand and category; see
+[high-cost requirements](./auto-high-cost.md). Future policy changes must read
+the [latest review](./auto-iteration-review.json) before implementation.
 
-Before applying soft preferences, routing checks whether each candidate can accommodate the estimated input tokens of the current turn:
+## Images, compaction and search
 
-1. **Input estimate:** `estimateTurnInputTokens` measures current conversation messages using `@earendil-works/pi-ai/utils/estimate` (`estimateMessageTokens` and `estimateContextTokens`).
-2. **Hard candidate budget:** For each candidate model, `calculateRequestBudget` calculates `hardInputLimit` given the model context window, output reservation, and safety allowance.
-3. **Headroom filtering:** Candidates with insufficient headroom (`estimatedInputTokens > hardInputLimit`) are filtered out. If one or more fitting candidates exist, soft preference selects among the `fitting` subset.
-4. **No-fit and compaction recovery:** If no candidate can fit the current messages:
-   - Auto selects the candidate with the **largest input capacity** to give Core compaction maximum headroom.
-   - Its in-memory routing decision includes a structured diagnostic (not a new durable event):
-     - `fixed-content-cannot-fit`: the latest user turn alone exceeds maximum capacity and cannot be compacted away.
-     - `compaction-unavailable`: compaction is disabled or has zero retries configured.
-     - `attempted-but-still-oversized`: a compaction summary already exists in history and the turn remains oversized.
-     - `compaction-eligible`: prior history is compressible and downstream dispatch will trigger compaction pressure.
-5. **Final framing limitation:** At routing time, only messages are estimated; downstream `system-prompt/assemble` injects system prompt instructions and tool schemas. If final framing pushes a near-limit request over the budget, the native provider guard (`inspectRequest`) truthfully rejects the request with `COPILOT_CONTEXT_BUDGET_EXCEEDED` without bypassing safety boundaries.
+Image eligibility includes historical user/tool image blocks in all entered
+messages, not only current user text. Text-only candidates are removed; Auto
+advertises image input only with an eligible image model. Actual fixed/Auto
+dispatch independently checks explicit account MIME restrictions against
+Core's projected image. Missing MIME lists stay unverified.
+[Image admission limits](./image-input-compatibility.md).
 
-### Soft capacity preferences across candidate bands
+Auto does not trim history or own compaction transactions. Estimated pressure
+uses the initiating Agent's public bound recovery service and preserves the
+same real model. If the summary input already exceeds every eligible budget,
+stock one-shot compaction cannot rescue it. [Budget admission](./copilot-compaction.md)
+and [manual recovery](./manual-compaction-recovery.md) describe separate paths.
 
-All three virtual preferences use the *same* eligible account models. Account entitlement, verified input capability (including image input), and input headroom are hard filters; preference changes where the routing policy lands in the deterministic, advertised-capacity order across candidate bands:
-
-- **Intelligence:** Biased toward higher advertised capacity across the upper candidate band.
-- **Efficiency:** Biased toward lower advertised capacity across the lower candidate band, though demanding tasks allow higher capacity.
-- **Balance:** Central candidate band.
-
-To avoid monopolizing a single top candidate (such as Grok 4.7) across all turns and Sessions, band selection uses an in-memory deterministic seed derived from `${sessionId}:${turn}` (or turn content when Session context is absent). This guarantees:
-
-- Selection is **100% frozen** across all steps and retries within the same turn.
-- Unrelated Sessions or turns sample across the candidate band rather than concentrating on one model.
-- No sensitive prompt text or seed hashes are persisted or sent over the network.
-- When only a single candidate is eligible or fitting, it is returned unchanged.
-
-| Latest-turn class | Efficiency | Balance (`auto`) | Intelligence |
-| --- | --- | --- | --- |
-| Fast | low band (index 0) | low band (index 0) | middle band |
-| Balanced | lower band | center band | upper band |
-| Strong | center band | upper band | upper band |
-
-These are **capacity preferences**, not measured quality, speed, price, or inference-cost preferences. They cannot promise that Intelligence is smarter or Efficiency faster or cheaper. The actual request-budget and compaction checks still apply after selection; no cost or speed metadata is fabricated.
-
-The exact virtual preference stays in the Session's pending selection across turns, while each real request header and transport record the chosen account model. Switching to a real model ends automatic routing for subsequent turns. New turns no longer write a separate decision event; compatible historical events without a preference field remain Balance for display.
-
-## Images
-
-Image input is part of the MVP.
-
-The virtual Auto picker entry advertises image input only when the current authenticated catalog contains at least one eligible image-capable model. At routing time, an image turn filters out every text-only candidate. If catalog changes leave no eligible image model, the turn fails with a named Auto routing error instead of sending the image to an unverified model.
-
-This preserves two separate checks:
-
-1. Core's normal picker/admission path sees truthful aggregate Auto modalities.
-2. The resolved real model is independently verified against the current account snapshot before transport.
-
-## Context pressure and automatic compaction
-
-Auto may choose a model with a smaller context window than the previous turn. The plugin must not trim history, create a competing compaction service, or silently switch models during recovery.
-
-The resolved real model enters the existing managed-route request-budget path. If the estimated committed request exceeds that model's input budget, [`src/compaction-pressure.ts`](../src/compaction-pressure.ts) emits the normal `CONTEXT_WINDOW_EXCEEDED` signal before transport. Core's stock transactional compaction then:
-
-1. summarizes and replaces eligible history;
-2. rebuilds the request;
-3. retries the same turn with the same resolved real model;
-4. keeps the ordinary bounded overflow retry policy.
-
-The guarantee is limited to compressible history. A fixed prompt, current attachment, or indivisible content block that cannot fit after compaction remains an explicit error. See [Copilot compaction](./copilot-compaction.md).
-
-## Search ownership
-
-Chat Auto does not own or alter the independent `github-copilot-hosted` search provider.
-
-- A nonempty explicit `searchModel` remains authoritative.
-- Automatic hosted-search candidate selection continues to use its own bounded account-owned Responses policy and capability proof.
-- Routed search that follows the initiating Chat request sees the durable real request header, not the virtual Auto ID.
-- The final query is still sent once; Chat Auto introduces no search replay or fallback.
+Chat Auto does not own independent hosted search. A nonempty `searchModel`
+override remains authoritative; otherwise that provider uses bounded
+account-owned Responses selection and capability proof. Auto-following search
+sees the initiating real request route. No virtual model reaches transport,
+and the final query is not replayed across candidates.
+[Search routing](./session-search-routing.md).
 
 ## Attribution and explanation
 
-**Compatibility fix (alpha.54):** new turns omit plugin-specific Auto decision events. Official `0.2.0-rc.2` cannot set an `ignorable` envelope through public `Session.append()`, and its reader rejects unknown required plugin events. The plugin therefore stops writing `github-copilot/auto-model-decision` rather than patching Core, mutating event objects, or borrowing an unrelated event type. Core's actual model/usage provenance and Auto routing remain unchanged. Restore new decision recording only when a supported public informational-event or equivalent storage seam has proven cold-read compatibility.
+Completed replies show **Auto (preference)** with captured reasons, **Manual**
+only with explicit fixed-selection evidence, or **Selection unknown** when a
+successful read has no record. Failed reads show **Selection unavailable → Retry**.
+Retry rereads the same Session/turn; it never runs inference.
 
-Completed Copilot replies show **Auto (preference)** with an information button, **Manual** with captured explicit fixed-selection evidence, or **Selection unknown** when that evidence is absent. The public `conversation.chat.assistant-actions` slot places the plugin's own flex item after native Usage/time using `order: 1`. There is no separate Model details entry or repeated model name. The native parent is a fixed-height, non-wrapping row: the plugin can shrink/wrap its own item but cannot promise whole-row wrapping, and does not modify native ancestors. A turn without a closing message has no assistant-actions anchor.
+The public assistant-actions slot adds the plugin item after native Usage/time.
+It cannot change the native fixed-height parent row and adds no Model details
+or footer button. The existing info dialog is **Turn model and selection evidence**.
+When native Usage lacks complete model routes, model evidence comes first and the
+original selection explanation remains in a collapsed disclosure below:
 
-New Auto decisions and matching explicit fixed selections are captured at dispatch in a bounded in-memory store (64 Agents, 128 turns per Agent, first decision per turn). `githubCopilotTurnSelection.get` uses Core's native agent scope and lookup, with its existing Session resolution and ownership checks, rather than a plugin-owned arbitrary-session metadata endpoint. The lookup can use normal Core resume semantics; it is not a new access-control system. The Client reads once for the exact displayed Session/turn, cancels stale responses and never polls. Agent disposal, plugin disposal, eviction or Host restart removes evidence; no new Session event is emitted. Compatible historical Auto events can supply a recorded preference and reason; omitted historical preference is not guessed.
+- **Recorded models** lists independent successful same-turn `assistant/message`
+  sources, preserving multiple models/providers. Failed attempts, retries and
+  paged/missing history retain an explicit incomplete-attribution warning; known
+  sources do not prove which models every failed attempt used.
+- **Requested model** is the fallback when no successful source exists. An
+  independent public Session projection folds native `turn/start`, `step/start`,
+  `request/header`, `step/end` and `turn/end`; only headers inside a recorded open
+  step bind to that turn. Native headers have no turn field and are not emitted
+  for every unchanged request. Therefore absent headers stay unknown, never
+  inherited from an earlier turn or today's `Session.requestHeader()`. Configuration
+  proves neither dispatch nor execution, usage or billing.
+- Missing/invalid evidence stays **Unknown**. Requested-model read failures are
+  distinct from missing evidence and have same-Session/turn read-only Retry.
+  Selection mode and model evidence remain independent.
 
-The expandable explanation reports only the actual routing classification, capacity preference and eligible/fitting counts. It is selection evidence, **not proof of execution**. Absence of Auto evidence never implies Manual, and today's picker/request header never fills a historical gap. Native Usage remains the only model/usage display; its existing all-or-nothing missing-route behavior is not fixed here. A metadata-only projection flags incomplete attempts/history without duplicating or allocating tokens. The disclosure never reads message content, replay data or credentials.
+Complete native Usage routes avoid redundant model presentation. A turn without
+a closing message has no assistant-actions anchor; pure failed turns without one
+are not promised an injected entry. Optional conversation projections do not
+control selection mounting. The request projection has its own `stateVersion: 1`,
+retains at most 128 turns and 32 distinct routes per turn (overflow invalidates
+that turn), and stores no message/tool/replay/credential content. Cold folding
+uses existing recorded events only, not custom events or history conversion.
+
+The bounded Host store retains 64 Agents and 128 turns per Agent. Disposal,
+eviction and restart lose new records. Compatible historical Auto events remain
+readable; missing historical preference/reasons are not reconstructed.
+New optional `github-copilot/auto-model-decision` events are **not** emitted:
+official rc.2 `Session.append()` has no public ignorable-envelope option.
+
+`TurnSelectionController` extends public `TypertRemoteService` with `@Remote get`.
+Client calls carry explicit viewed Session ID and turn, with no automatic
+Client scope projection that would remove the ID. Native Host Agent lookup,
+access checks and strict codecs remain. Additive `requestedModels` preserves the
+existing `get` descriptor and strict selection codec unchanged. Actual Client/Host gateway regressions
+cover reachability, bound contexts and missing/denied identities; mock RPC
+success is not sufficient evidence.
+
+Captured evidence includes task/category, eligible/fitting counts,
+fallback/continuity and optional auxiliary milestones. It proves a decision,
+not execution, current occupancy, usage or supplier billing. Native accounting
+remains independent. [Usage limits](./copilot-usage.md).
 
 ### Recovering affected histories
 
-Upgrading prevents new incompatible events but does **not** rewrite existing logs. Repeated restarts cannot repair a stored missing marker.
-
-From a source checkout of this version, with Node 24 LTS and the pinned dependencies installed using `pnpm install --frozen-lockfile`, run:
+Only histories containing the old incompatible decision event need this
+compatibility utility. Upgrading prevents new writes but does not repair old logs.
+From a source checkout, use Node 24 LTS and the pinned frozen dependencies:
 
 ```powershell
-# Read-only validation; prints counts, affected sequence numbers and hashes, never conversation content.
+# Read-only validation; no conversation content is printed.
 node scripts\repair-auto-model-history.mjs 'C:\absolute\path\session.v4.jsonl.zstd'
 
-# Optional: create a NEW private recovery directory outside the live Session directory.
+# Optional detached copy in a NEW private directory, never the live source.
 node scripts\repair-auto-model-history.mjs 'C:\absolute\path\session.v4.jsonl.zstd' --write-copy 'C:\private\new-recovery-directory'
 ```
 
-This is an explicit offline maintenance utility, not an installed plugin hook. It reads all concatenated zstd frames, uses the exact published official `0.2.0-rc.2` format catalog for strict whole-history validation, and adds only `ignorable: true` to recognized Auto decision envelopes. It preserves type, sequence, time, data and all other rows. Unknown required events, invalid decisions, torn tails, invalid relationships, non-v4 input and compressed/decoded inputs over 128 MiB fail closed. It never repairs or drops other errors.
+The utility validates the entire v4 log with the official rc.2 catalog, marks
+only recognized decision envelopes `ignorable: true`, and preserves all other
+logical fields. Unknown events, malformed relationships, torn tails and inputs
+over 128 MiB fail closed. Copy mode refuses existing destinations and creates a
+byte-exact original, validated copy and SHA-256 receipt; keep both logs private.
 
-Copy mode creates `original.session.v4.jsonl.zstd` (byte-exact backup), `session.v4.jsonl.zstd` (validated repaired copy), and `repair.json` (SHA-256 receipt). It refuses existing destinations and never writes the source. Keep the directory private: both logs contain conversation history. A check/copy can become stale if an active writer appends later.
+The corrected writer preserves a separate first zstd header frame for Desktop
+discovery. The original utility combined header/events and could make a copy
+disappear despite logical validation. `reframedHeader: true` reports physical
+repair; zero changed event sequences alone is not readability proof.
 
-The compressed output keeps the header in its own first zstd frame, as required by Desktop's persistence discovery and reader. The original alpha.54 utility incorrectly combined the header and events into one frame: those copies passed logical event validation but disappeared from Desktop discovery. Use the corrected utility on such a copy; `reframedHeader: true` reports this physical-layout repair even when `changedSeqs` is empty. No logical rows change during reframing, and the current source is backed up separately. A zero `changedSeqs` count alone from the original utility was not proof of Desktop readability.
+**Applying a copy requires separate approval and stopped writers.** Recheck the
+live source against `originalSha256`; regenerate if changed. Replace only that
+log, compare `repairedSha256` and reopen with the official reader. Do not replay
+business requests as a test. The utility never installs, restarts, writes the
+source, clears credentials or performs automatic migration.
 
-**Applying a copy requires separate operator approval:** first stop all writers for that Session, verify the fixed plugin will load before resuming, and recheck the live log against `originalSha256`. If it changed, regenerate and validate a fresh copy. Preserve the backup, replace only the exact affected log, verify its hash against `repairedSha256`, then use the normal official history reader to reopen it. Do not replay business requests as a test. If recovery fails, stop writers before restoring the exact original backup. Neither this utility nor the plugin installs itself, replaces a live file, restarts Desktop, clears credentials, or automatically migrates histories.
+## Requested parent-to-child selection inheritance
 
-## Subagents and Agent Teams
+The implemented opt-in [profile-wide switch](./parent-model-follow.md) follows
+supported children on each new turn. Fixed parent selection is passed directly;
+Auto passes the exact preference and evaluates the child's own context.
+Child-owned explicit selections and admitted-turn freezing remain authoritative.
+Legacy `parentModelFollow` bindings stay independent.
 
-General native subagent Auto inheritance is **not** in the base MVP.
+With both policies off, ordinary native children retain Core's creation-time
+route snapshot. Native resolved options/descriptor v3 do not retain whether an
+equal creation route was an explicit override. Enabling the plugin policy
+authorizes replacing that snapshot; it does not reconstruct original intent,
+fabricate descriptor provenance or rewrite Team labels.
 
-In official DSH 0.2.0-rc.2, `TeamRoster.spawn` calls `ctx.subagents.startContinuable` without `request.agentOptions`. Core's `resolveChildAgentOptions` snapshots the parent's resolved concrete route into the teammate's options and durable descriptor. Public Core evidence cannot distinguish an inherited concrete snapshot from an explicit concrete override. The plugin must not relabel that concrete child route as Auto or write a fabricated child selection.
+The original [investigation #229](https://github.com/cloga/dsh-github-copilot/issues/229)
+and [one-switch follow-up #234](https://github.com/cloga/dsh-github-copilot/issues/234)
+record the design history. Upstream native rules/settings UI is separate work,
+not a dependency or claimed shipped feature of this plugin.
 
-The implementation preserves native behavior:
+## Model exclusions and richer picker boundary
 
-- a child with an explicit model override uses that model;
-- a child or Team teammate without an override inherits Core's resolved concrete route;
-- the child UI shows the real model truthfully;
-- no plugin code claims independent child Auto classification.
+**Settings → Models → GitHub Copilot → Manage → Model preferences** offers
+search, All/Enabled/Excluded filters and immediate Exclude/Restore actions.
+Temporarily absent excluded IDs remain restorable. Selected models can also be
+excluded; legacy `lockedModelIds` remains empty.
 
-A later plugin-owned delegation entry may carry explicit Auto intent in its own public descriptor and let each child classify independently, but only after cold-resume and override precedence are proven without Core changes.
+`setModelExcluded(modelId, excluded)` returns a narrow strict preferences result
+after path-level native CAS persistence. It reads no credentials, discovers no
+models and enumerates no Sessions. Unknown settings make rows read-only with
+named diagnostics; status-only Retry cannot imply an empty exclusion set.
+The hidden volatile Config leaf persists through native projection/restart.
 
-## Public API implementation
+Directory, Auto pools/modalities, search facts and new-turn admission remove
+exact excluded IDs. An admitted Session/turn/model with the exact native request
+signal may continue steps/retries; `turn/end` clears admission. New turns,
+unbound calls and stale picker rows fail `COPILOT_PREVIEW_MODEL_EXCLUDED`.
+Account/proof/cancellation guards remain revocable. A fixed selection is never
+changed automatically; restore it or select another model before the next turn.
+Zero eligible candidates fails `COPILOT_AUTO_NO_ELIGIBLE_MODEL`.
 
-The plugin uses only published public seams:
+Core owns flat grouping and picker search. The old
+[nested-picker prototype](../output/auto-model-mockup/tiers.html) is historical
+design exploration: its capacity quality scores, nested menu and simulated
+responses are not implementation or model evaluations.
 
-- `PreviewAdapter.listModels()` publishes three virtual Auto picker entries alongside real account models.
-- `PreviewAdapter.resolveModel()` returns aggregate Auto modalities for picker admission.
-- `agent/pre-step` captures the admitted current-turn messages.
-- a prepended `agent/request` listener awaits Core's model-selection middleware, recognizes only `github-copilot-preview/auto`, resolves one real account descriptor, and returns the real model before `request/header` persistence.
-- the adapter refuses unresolved Auto in `prepareCall()` and `stream()` so a missing middleware path fails loudly.
-- a per-Agent, per-turn decision cache keeps all later steps and request-error retries on the same model.
-- existing descriptor leases, credential proof, account continuity, request budgets, native pi-ai transport, replay, and cancellation remain unchanged.
+## Public seams and evidence limits
 
-The virtual Auto selection can remain pending while the real request header records the actual model. This is intentional: an unrelated real header must not consume the durable Auto preference. A later explicit picker selection replaces the pending Auto choice through Core's normal projection.
+`PreviewAdapter.listModels/resolveModel`, `agent/pre-step`, public model-selection
+middleware and `agent/request` compose the real route before request-header
+persistence. Unresolved virtual Auto fails in adapter preparation/streaming.
+Per-Agent/turn caching, native adapter leases, OAuth, replay and cancellation
+keep their existing owners.
 
-For an otherwise unselected Session that inherits Auto from the global default, the first virtual request persists a `model/selection` Auto intent before its real request header. Core's request-header fallback would otherwise make the next turn fixed. The plugin restores the pending Auto route during subsequent prompt assembly and request resolution without changing the real header, and yields immediately to a later explicit selection. It does not turn an existing Session with a real recorded route into Auto just because the global default changed.
-
-## Acceptance criteria
-
-The implementation is accepted only when unchanged official Core contract tests prove:
-
-1. Auto appears only in the managed Copilot provider and explicit real/provider selections remain untouched.
-2. Core's downstream model-selection result is visible to the prepended plugin listener, and the committed request header contains the resolved real model.
-3. Auto intent remains durable while actual request provenance remains real.
-4. one turn with multiple steps or request-error retries loads one routing decision.
-5. a new user or Goal turn may make a new decision.
-6. image admission and real candidate filtering agree, including the no-image-candidate failure.
-7. choosing a smaller-context model can trigger the existing local pressure signal, Core compaction, and same-model retry without sending the oversized request.
-8. hosted search remains independent and never receives the virtual Auto ID as a transport model.
-9. no new unknown required attribution event is written; compatible historical attribution is retained, while missing decision events produce no guessed footer.
-10. input fit check filters out candidates with insufficient hard input headroom before soft preference.
-11. soft preferences distribute across upper/lower/center candidate bands without monopolizing one top model.
-12. no Core file, dependency artifact, private registry, shared model catalog, or live history is modified.
-
-Synthetic tests prove composition and contracts only. They do not prove a live account's model availability, provider quality, pricing, OAuth readiness, Desktop activation, or real transport success.
-
-## Deferred work
-
-- benchmark-backed quality/latency/cost ranking;
-- GitHub health signals or GitHub's private Auto service;
-- user-managed exclusions of individual account models and custom picker grouping;
-- cross-provider routing;
-- native subagent and Team Auto inheritance;
-- model fallback after a provider failure;
-- side-effect replay;
-- automatic changes to existing Session selections, settings, or histories.
-
-## Exploration: excluded models and richer picker (not implemented)
-
-**Tracking:** [#192](https://github.com/cloga/dsh-github-copilot/issues/192). **Interactive proposal:** [`output/auto-model-mockup/tiers.html`](../output/auto-model-mockup/tiers.html). This is a local, synthetic UI exercise, not a claim of current Core picker behavior. The three virtual preferences and capacity matrix above are implemented; model exclusions and nested picker controls in the mockup are **not**.
-
-The attached Copilot example uses one Auto switch with a nested Efficiency / Balance / Intelligence menu. The supported DSH model picker is owned by Core and receives a flat provider directory from `PreviewAdapter.listModels()`; the plugin's Models provider-card and bundle-config slots cannot restructure that picker. The plugin advertises three rows under **GitHub Copilot**, with the existing `auto` ID as Balance for previously selected Sessions and defaults. A nested switch like the screenshot requires a separately reviewed public Core UI seam and is not a dependency of the plugin-only preferences.
-
-The proposed exclusions are a separate **hard filter**, not a fourth preference. Today all three preferences share account entitlement and turn-required verified capabilities; no exclusion setting has been wired. The mockup uses illustrative capacity scores and simulated responses, not live evaluation of model quality, cost, or latency.
-
-The model-management surface should be a small **GitHub Copilot · model preferences** section in the plugin's own settings UI, not a replacement of Core's picker. Offer search, a visible/hidden count, **Exclude** and **Restore** per currently validated account model, and a reason when an action is unavailable. Store excluded **exact account model IDs** in a plugin-owned path with revision-checked writes; validate entries against the current directory and preserve exclusion intent for temporarily absent IDs without pretending they are entitled. Do not mutate pi-ai's catalog, account grant, Core settings, or another provider's models. The plugin's advertised directory and every Auto candidate set exclude these IDs. A stale picker row or direct request for an excluded model must also fail with a named, actionable diagnostic rather than silently routing through it. Existing Session history is never rewritten: an old fixed selection can be restored or changed explicitly, but is not automatically moved. Prevent excluding the currently selected fixed model until another selection is made; allow restoring an excluded model. If exclusion or catalog changes leave no eligible candidate, Auto must fail closed. Account change and unavailable metadata must not be interpreted as permission to re-enable or guess models.
-
-The native picker already owns provider groups and text search; listing the three virtual rows first and keeping excluded Copilot models out of its directory is achievable through the existing plugin-owned adapter. Custom section headers inside a provider, nested Auto menus, hiding other providers' models, and replacing Core search/layout are **not** available through the current additive slots. Before implementing, verify cold picker and `/model` refresh behavior, Session-local pending selection versus real request headers, selected-model exclusion, stale directories, concurrent settings edits, account switching, image admission, and zero-candidate failures against unchanged pinned Core. The prototype's invented model capacity order and response are illustrative only.
+Required unchanged rc.2 source/published-artifact fixtures on Windows/Linux
+cover eligibility, real headers, durable intent, multi-step/retry freezing,
+images, native compaction, exclusions and gateway access. They do not establish
+live model availability, quality, latency, price, account access or Desktop
+activation. No Core/dependency/private-registry/shared-catalog/history patch is
+permitted. Measured ranking, cross-provider Auto, failure-driven model switching,
+side-effect replay and native picker redesign remain out of scope.

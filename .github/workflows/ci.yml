@@ -57,6 +57,15 @@ jobs:
       - name: Install compaction recovery verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop...' --filter '@deepseek-ai/dsh-compaction-basic...'
+      - name: Install native Auto reviewer verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-experimental-auto-review...'
+      - name: Install background compaction jobs verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-jobs-local...' --filter '@deepseek-ai/dsh-commands...'
+      - name: Install isolated preset compaction verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-preset-registry...' --filter '@deepseek-ai/cordis-plugin-group...'
       - name: Install subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
@@ -66,6 +75,12 @@ jobs:
       - name: Install tagged search verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
+      - name: Install native account persistence verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-credentials-local...' --filter '@deepseek-ai/dsh-app-boot...' --filter '@deepseek-ai/dsh-config-editor...' --filter '@deepseek-ai/dsh-settings...' --filter '@deepseek-ai/dsh-authorization...'
+      - name: Install native diagnostic storage verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'
       - name: Prepare exact DSH 0.2.0-rc.2 tagged-source runtime verification
         shell: bash
         run: |
@@ -75,7 +90,8 @@ jobs:
       - name: Exercise actual DSH 0.2 runtime without building or patching Core
         shell: bash
         run: |
-          node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts"
+          node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts" --reporter=default --reporter=json --outputFile "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
+          node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==28||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 28 native reviewer tests, none skipped'); console.log('Verified 28 executed tagged-source reviewer tests')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
       - run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts
@@ -118,12 +134,16 @@ jobs:
       - name: Typecheck and exercise the published native adapter
         shell: bash
         env:
+          DSH_CORE_EVIDENCE: published-artifact-runtime
           DSH_PUBLISHED_CORE_RELEASE: 0.2.0-rc.2
         run: |
           cd "$RUNNER_TEMP/copilot-published-core"
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
           node node_modules/typescript/bin/tsc -p tsconfig.tests.json
-          node node_modules/vitest/vitest.mjs run tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts tests/search-routing.spec.ts tests/routed-web.spec.ts tests/deepseek-search-fallback.spec.ts
+          node node_modules/vitest/vitest.mjs run tests/copilot-stream-liveness.spec.ts tests/copilot-stream-adapter.spec.ts tests/config.spec.ts tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts tests/search-routing.spec.ts tests/routed-web.spec.ts tests/deepseek-search-fallback.spec.ts tests/context-usage.spec.ts tests/context-evidence.spec.ts tests/context-evidence-runtime.spec.ts tests/context-evidence-ui.spec.ts tests/background-compaction.spec.ts tests/manual-compaction-recovery.spec.ts tests/fixtures/auto-review-copilot-core.fixture.ts
+          node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts
+          node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts --reporter=default --reporter=json --outputFile reviewer-results.json
+          node -e "const r=require('./reviewer-results.json'); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==28||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 28 native reviewer tests, none skipped'); console.log('Verified 28 executed published-artifact reviewer tests')"
 
   release-ready:
     name: release-ready

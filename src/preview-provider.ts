@@ -8,8 +8,14 @@ import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from '@earendil-wor
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
-import { trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
+import { certifyCopilotNativeRefresh, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { CopilotResponsesReplayError, isCopilotInputItemScopeError, normalizeCopilotResponsesPayload } from './responses-replay-compat.ts'
+import type { ResponsesRetryReplay } from './responses-replay-compat.ts'
+import { requestBodyTimeoutDiagnostic } from './request-body-timeout.ts'
+import { prepareResponsesRequest } from './responses-request-compression.ts'
+import type { RequestCompressionEvidence } from './responses-request-compression.ts'
+import { createRequestUploadObserver } from './request-upload-evidence.ts'
+import { CopilotStreamIdleError, CopilotStreamLiveness } from './copilot-stream-liveness.ts'
 
 export type ManagedWireAbortCode = 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' | 'COPILOT_PREVIEW_DISPOSED'
 
@@ -26,20 +32,38 @@ export interface PreviewProviderGuard {
   readonly signal: AbortSignal
   assertActive(): void
   assertAccount(credential: GitHubCopilotOAuthCredential): void
-  beforeWire(model: Model<Api>, options?: StreamOptions): Promise<{ signal: AbortSignal; release(): void }>
+  beforeWire(model: Model<Api>, options?: StreamOptions): Promise<{ signal: AbortSignal; release(): void; dispatch?(): void }>
   /** Actual model HTTP 401, excluding proven Responses replay-scope failures; no request replay. */
   onUnauthorized?(): void
   /** Dispatch-local, verified replay failure; never inferred from SDK error text. */
   onReplayFailure?(error: CopilotResponsesReplayError): void
   /** Preserve an owned abort cause before SDK terminal delivery and lease cleanup. */
   onWireAbort?(code: ManagedWireAbortCode): void
+  /** Request-local safe guidance from a verified HTTP response; undefined clears prior evidence. */
+  onRequestBodyTimeout?(diagnostic: string | undefined): void
+  /** Optional HTTP byte-idle bound paired with a separate native semantic deadline. */
+  readonly streamIdleTimeoutMs?: number
+  onStreamLiveness?(control: Pick<CopilotStreamLiveness, 'pause' | 'resume'>): void
+  onStreamIdleTimeout?(error: CopilotStreamIdleError): void
 }
 
 /** Guard for one selected model in an account-bound descriptor snapshot. */
 export interface AccountProviderGuard extends PreviewProviderGuard {
+  /** Explicit lossless HTTP encoding; default-off and independent of context admission. */
+  readonly responsesRequestCompression?: boolean
+  /** Explicit compatibility override for all managed Responses requests. */
+  readonly responsesOmitTemperature?: boolean
+  /** Explicit, request-admitted recovery; absent by default. */
+  recoverReplay?(payload: unknown): unknown
+  /** Only exact verified scope HTTP failures may offer recovery evidence. */
+  onReplayScopeRejected?(body: string | undefined): void
   readonly selectedModelId?: string
+  readonly retryReplay?: ResponsesRetryReplay
+  readonly retrySignal?: AbortSignal
   /** Per-dispatch admission after native context conversion, before starting a model wire. */
   inspectRequest?(model: Model<Api>, context: TranscriptContext, options?: StreamOptions): void
+  /** Optional auxiliary-call deadline fence immediately before native Fetch dispatch. */
+  requestCheckpoint?(): void
   assertEntitled(credential: GitHubCopilotOAuthCredential, modelId: string): void
 }
 
@@ -139,6 +163,8 @@ export function createAccountProvider(
       const result = normalizeGitHubCopilotOAuthCredential(fresh)
       guard.assertAccount(result)
       // Revocation must be persisted by Models before toAuth rejects this call.
+      await certifyCopilotNativeRefresh(current, result, oauth.toAuth, operationSignal)
+      guard.assertActive()
       return result
     },
     toAuth: async credential => {
@@ -177,6 +203,25 @@ export function createAccountProvider(
         lease.release()
         throw new Error('COPILOT_MANAGED_OAUTH_REQUIRED')
       }
+      let liveness: CopilotStreamLiveness | undefined
+      try {
+        if (guard.streamIdleTimeoutMs !== undefined) {
+          liveness = new CopilotStreamLiveness(guard.streamIdleTimeoutMs, lease.signal)
+          guard.onStreamLiveness?.(liveness)
+        }
+      } catch (error) {
+        liveness?.dispose()
+        lease.release()
+        throw error
+      }
+      let idleReported = false
+      const reportIdleFailure = (): void => {
+        if (!idleReported && liveness?.signal.reason instanceof CopilotStreamIdleError
+          && !lease.signal.aborted && !options.signal?.aborted) {
+          idleReported = true
+          guard.onStreamIdleTimeout?.(liveness.signal.reason)
+        }
+      }
       const headers: Record<string, string | null> = {}
       for (const [name, value] of Object.entries(options.headers ?? {})) {
         if (name.toLowerCase() !== 'authorization' && name.toLowerCase() !== 'x-api-key') headers[name] = value
@@ -189,6 +234,10 @@ export function createAccountProvider(
       // uses API-key auth unless we provide verified Bearer header-owned auth.
       let unauthorized = false
       const responses = model.api === 'openai-responses'
+      let retry: ReturnType<ResponsesRetryReplay['begin']> | undefined
+      try { retry = responses ? guard.retryReplay?.begin(context, guard.retrySignal,
+        options?.sessionId, model.id) : undefined }
+      catch (error) { liveness?.dispose(); lease.release(); throw error }
       const reportReplayFailure = (error: CopilotResponsesReplayError): void => {
         if (lease.signal.aborted || options.signal?.aborted) return
         try { guard.onReplayFailure?.(error) } catch { /* Keep native cleanup and terminal delivery intact. */ }
@@ -197,7 +246,12 @@ export function createAccountProvider(
         // Preserve caller callback ordering and undefined-as-no-replacement semantics.
         const replacement = await options.onPayload?.(payload, selectedModel)
         if (lease.signal.aborted || options.signal?.aborted) throw new Error('COPILOT_MANAGED_ABORTED')
-        try { return normalizeCopilotResponsesPayload(replacement === undefined ? payload : replacement) }
+        try {
+          const effective = replacement === undefined ? payload : replacement
+          if (retry !== undefined) return await retry.normalize(effective, guard.recoverReplay)
+          const normalized = normalizeCopilotResponsesPayload(effective)
+          return guard.recoverReplay === undefined ? normalized : await guard.recoverReplay(normalized)
+        }
         catch (error) {
           if (error instanceof CopilotResponsesReplayError) reportReplayFailure(error)
           throw error
@@ -205,26 +259,75 @@ export function createAccountProvider(
       } : options.onPayload
       const fetch = options.fetch ?? globalThis.fetch
       const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
-        const response = await fetch(input, init)
+        guard.requestCheckpoint?.()
+        guard.onRequestBodyTimeout?.(undefined)
+        const originalBody = typeof init?.body === 'string' ? init.body : undefined
+        const replayHeaders = responses && init?.headers !== undefined ? new Headers(init.headers) : undefined
+        const replayDispatch = responses ? {
+          body: originalBody,
+          sessionHeader: replayHeaders?.has('session_id'),
+          clientRequestHeader: replayHeaders?.has('x-client-request-id'),
+        } : undefined
+        let dispatchInput = input
+        let dispatchInit = init
+        let compression: RequestCompressionEvidence | undefined
+        if (responses && guard.responsesRequestCompression === true) {
+          const signals = [lease.signal]
+          if (options.signal != null) signals.push(options.signal)
+          if (init?.signal != null) signals.push(init.signal)
+          const signal = AbortSignal.any(signals)
+          const prepared = await prepareResponsesRequest(input, init, model.baseUrl, true,
+            options.fetch !== undefined, signal, entry.api)
+          guard.assertActive()
+          guard.requestCheckpoint?.()
+          signal.throwIfAborted()
+          dispatchInput = prepared.input
+          dispatchInit = prepared.init
+          compression = prepared.evidence
+        }
+        lease.dispatch?.()
+        liveness?.beginRequest(originalBody)
+        let response: Response
+        const upload = guard.onRequestBodyTimeout === undefined ? undefined : createRequestUploadObserver()
+        const startedAt = performance.now()
+        try { response = await (upload === undefined
+          ? fetch(dispatchInput, dispatchInit)
+          : upload.run(() => fetch(dispatchInput, dispatchInit))) }
+        catch (error) { retry?.observe(undefined, 0); throw error }
+        finally { upload?.close() }
+        const responseHeadersMs = performance.now() - startedAt
+        retry?.observe(originalBody, response.status)
+        if (response.status === 408 && guard.onRequestBodyTimeout !== undefined) {
+          const diagnostic = await requestBodyTimeoutDiagnostic(response, originalBody, lease.signal,
+            { protocol: entry.api, responseHeadersMs, ...upload === undefined ? {} : { upload: upload.snapshot() },
+              ...compression === undefined ? {} : { compression } })
+          if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout(diagnostic)
+        }
         // A bounded clone identifies only the observed request-scope rejection.
         // Preserve the original Response/status/body for the native SDK.
         if (response.status === 401) {
           if (responses && await isCopilotInputItemScopeError(response, lease.signal)) {
-            reportReplayFailure(new CopilotResponsesReplayError('scope-mismatch'))
+            guard.onReplayScopeRejected?.(replayDispatch?.body)
+            reportReplayFailure(new CopilotResponsesReplayError('scope-mismatch', replayDispatch))
           } else unauthorized = true
         }
-        return response
+        return liveness?.observe(response) ?? response
       }
       const wireOptions = model.api === 'anthropic-messages'
-        ? { ...options, signal: lease.signal, apiKey: undefined, headers, fetch: observeResponse }
-        : { ...options, signal: lease.signal, headers, fetch: observeResponse, onPayload }
+        ? { ...options, signal: liveness?.signal ?? lease.signal, apiKey: undefined, headers, fetch: observeResponse }
+        : { ...options,
+          ...responses && guard.responsesOmitTemperature === true ? { temperature: undefined } : {},
+          signal: liveness?.signal ?? lease.signal, headers, fetch: observeResponse, onPayload }
       if (!hasApi(model, 'openai-responses') && !hasApi(model, 'openai-completions') && !hasApi(model, 'anthropic-messages')) {
+        retry?.finish()
+        liveness?.dispose()
         lease.release()
         throw new Error('COPILOT_MANAGED_PROTOCOL_UNSUPPORTED')
       }
       return (async function* () {
         try {
           for await (const event of native.streamSimple(model, context, wireOptions)) {
+            reportIdleFailure()
             if (event.type === 'error' && event.reason === 'aborted'
               && lease.signal.reason instanceof ManagedWireAbortError) {
               guard.onWireAbort?.(lease.signal.reason.code)
@@ -232,6 +335,10 @@ export function createAccountProvider(
             yield event
           }
         } finally {
+          reportIdleFailure()
+          liveness?.dispose()
+          if (lease.signal.aborted || options.signal?.aborted) retry?.observe(undefined, 0)
+          retry?.finish()
           lease.release()
           if (unauthorized && !guard.signal.aborted && !options.signal?.aborted) {
             try { guard.onUnauthorized?.() } catch { /* Preserve the native terminal result. */ }

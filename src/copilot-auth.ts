@@ -9,13 +9,66 @@ import {
   type Credential,
   type CredentialInfo,
   type CredentialStore,
+  type OAuthAuth,
 } from '@earendil-works/pi-ai'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
+import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { readCopilotCatalog } from './model-protocol.ts'
+import type { CopilotAccountBinding } from './copilot-accounts-types.ts'
+import type {} from './copilot-accounts-host.ts'
+import { readSettingsNamespace } from './settings-reader.ts'
 
 export { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
+
+const nativeRefreshResults = new WeakSet<object>()
+interface RefreshWrite {
+  notifications: number
+  settle(valid: boolean): void
+  readonly committed: Promise<boolean>
+}
+const refreshWrites = new WeakMap<object, Map<string, RefreshWrite>>()
+
+/** Only a validated native OAuth refresh may certify its exact returned object. */
+export async function certifyCopilotNativeRefresh(
+  previous: GitHubCopilotOAuthCredential,
+  result: GitHubCopilotOAuthCredential,
+  derive: OAuthAuth['toAuth'],
+  signal?: AbortSignal,
+): Promise<void> {
+  const ids = (grant: GitHubCopilotOAuthCredential) => grant.availableModelIds === undefined
+    ? undefined : JSON.stringify([...grant.availableModelIds].sort())
+  if (previous.refresh !== result.refresh || previous.enterpriseUrl !== result.enterpriseUrl
+    || ids(previous) !== ids(result) || result.expires <= Date.now()) return
+  const before = await derive(previous)
+  const after = await derive(result)
+  signal?.throwIfAborted()
+  if (before.apiKey === previous.access && after.apiKey === result.access
+    && trustedGitHubCopilotBaseUrl(before.baseUrl, previous) === trustedGitHubCopilotBaseUrl(after.baseUrl, result)) {
+    nativeRefreshResults.add(result)
+  }
+}
+
+/** Consume exactly one notification from the serialized, certified write. */
+export function observeCopilotNativeRefresh(ctx: Context, key: string): Promise<boolean> | undefined {
+  const service = ctx.get('credentials')
+  const write = service === undefined ? undefined : refreshWrites.get(service)?.get(key)
+  if (!write) return undefined
+  if (++write.notifications !== 1) { write.settle(false); return undefined }
+  return write.committed
+}
+
+export function captureActiveGitHubCopilotBinding(ctx: Context): CopilotAccountBinding | undefined {
+  const accounts = ctx.get('githubCopilotAccounts')
+  if (accounts) return accounts.host.capture()
+  const settings = readSettingsNamespace(ctx, 'github-copilot')
+  if (typeof settings === 'object' && settings !== null
+    && 'activeAccountId' in settings && settings.activeAccountId !== undefined && settings.activeAccountId !== 'canonical') {
+    throw new Error('COPILOT_ACCOUNTS_SETTINGS_UNAVAILABLE')
+  }
+  return undefined
+}
 
 interface ApiKeyRecord {
   readonly kind: 'api-key'
@@ -83,35 +136,72 @@ function toRecord(credential: Credential): CredentialRecord {
 export function createGitHubCopilotCredentialStore(
   ctx: Context,
   logicalProviderId: typeof GITHUB_COPILOT_PROVIDER_ID | typeof GITHUB_COPILOT_PREVIEW_PROVIDER_ID = GITHUB_COPILOT_PROVIDER_ID,
+  binding?: CopilotAccountBinding,
 ): CredentialStore {
+  const key = binding?.key ?? GITHUB_COPILOT_CREDENTIAL_KEY
   const assertProvider = (providerId: string): void => {
     if (providerId !== logicalProviderId) throw new Error('COPILOT_CREDENTIAL_PROVIDER_MISMATCH')
   }
   return {
     read: async (providerId) => {
       assertProvider(providerId)
-      return toCredential(await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY))
+      binding?.assertCurrent()
+      const value = toCredential(await credentialService(ctx).readRecord(key))
+      binding?.assertCurrent()
+      return value
     },
     list: async (): Promise<readonly CredentialInfo[]> => {
-      const record = await credentialService(ctx).readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+      binding?.assertCurrent()
+      const record = (await credentialService(ctx).listRecords()).find(record => record.key === key)
+      binding?.assertCurrent()
       return record === undefined
         ? []
         : [{ providerId: logicalProviderId, type: record.kind === 'api-key' ? 'api_key' : 'oauth' }]
     },
     modify: async (providerId, mutate) => {
       assertProvider(providerId)
-      const stored = await credentialService(ctx).modifyRecord(
-        GITHUB_COPILOT_CREDENTIAL_KEY,
-        async current => {
-          const next = await mutate(toCredential(current))
-          return next === undefined ? undefined : toRecord(next)
-        },
-      )
-      return toCredential(stored)
+      binding?.assertCurrent()
+      const service = credentialService(ctx)
+      let pending: RefreshWrite | undefined
+      let expected: CredentialRecord | undefined
+      let writes = refreshWrites.get(service)
+      if (!writes) { writes = new Map(); refreshWrites.set(service, writes) }
+      try {
+        const stored = await service.modifyRecord(
+          key,
+          async current => {
+            binding?.assertCurrent()
+            const next = await mutate(toCredential(current))
+            binding?.assertCurrent()
+            const record = next === undefined ? undefined : toRecord(next)
+            if (next !== undefined && nativeRefreshResults.delete(next)) {
+              expected = record
+              let settle!: (valid: boolean) => void
+              const committed = new Promise<boolean>(resolve => { settle = resolve })
+              pending = { notifications: 0, settle, committed }
+              if (writes.has(key)) {
+                writes.get(key)?.settle(false)
+                pending.settle(false)
+              } else writes.set(key, pending)
+            }
+            return record
+          },
+        )
+        binding?.assertCurrent()
+        pending?.settle(pending.notifications === 1 && stored?.kind === 'grant'
+          && expected?.kind === 'grant'
+          && JSON.stringify(normalizeGitHubCopilotOAuthCredential(stored.payload))
+            === JSON.stringify(normalizeGitHubCopilotOAuthCredential(expected.payload)))
+        return toCredential(stored)
+      } finally {
+        pending?.settle(false)
+        if (writes.get(key) === pending) writes.delete(key)
+      }
     },
     delete: async (providerId) => {
       assertProvider(providerId)
-      await credentialService(ctx).deleteRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+      binding?.assertCurrent()
+      await credentialService(ctx).deleteRecord(key)
     },
   }
 }
@@ -127,8 +217,20 @@ export function createGitHubCopilotTokenResolver(
   const models = createModels({ credentials: createGitHubCopilotCredentialStore(ctx) })
   const provider = githubCopilotProvider()
   if (provider.auth.oauth === undefined) throw new Error('github-copilot: native OAuth method is unavailable')
-  models.setProvider({ ...provider, auth: { oauth: provider.auth.oauth } })
+  const oauth = provider.auth.oauth
+  models.setProvider({ ...provider, auth: { oauth: { ...oauth,
+    async refresh(credential, signal) {
+      const previous = normalizeGitHubCopilotOAuthCredential(credential)
+      const result = normalizeGitHubCopilotOAuthCredential(await oauth.refresh(credential, signal))
+      await certifyCopilotNativeRefresh(previous, result, oauth.toAuth, signal)
+      return result
+    },
+  } } })
   return async (modelId) => {
+    const binding = captureActiveGitHubCopilotBinding(ctx)
+    if (binding !== undefined && binding.accountId !== 'canonical') {
+      throw new Error('COPILOT_ACCOUNTS_ROUTE_BLOCKED')
+    }
     const snapshot = readCopilotCatalog(ctx)
     const installedModels = new Map(snapshot.models.map(model => [model.id, model]))
     const native = installedModels.get(modelId)
@@ -137,6 +239,7 @@ export function createGitHubCopilotTokenResolver(
     }
     // Resolve OAuth only. A local model would inject headers from another pi copy.
     const resolved = await models.getAuth('github-copilot')
+    binding?.assertCurrent()
     if (resolved === undefined) return undefined
     if (onCredentialChanged !== undefined) {
       try {
@@ -153,6 +256,7 @@ export function createGitHubCopilotTokenResolver(
       throw new Error(`github-copilot: model "${modelId}" is not available for the signed-in Copilot account`)
     }
     const apiKey = resolved.auth.apiKey
+    binding?.assertCurrent()
     if (apiKey === undefined) return undefined
     return {
       apiKey,

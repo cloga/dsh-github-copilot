@@ -54,6 +54,12 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.sha }}
+          path: release-tools
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
           repository: deepseek-ai/deepseek-harness
           ref: 639ed015397290b3745d163aafe02ffee4aa3f84
           path: dsh-upstream
@@ -75,6 +81,15 @@ jobs:
       - name: Install 0.2.0 compaction recovery verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop...' --filter '@deepseek-ai/dsh-compaction-basic...'
+      - name: Install native Auto reviewer verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-experimental-auto-review...'
+      - name: Install background compaction jobs verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-jobs-local...' --filter '@deepseek-ai/dsh-commands...'
+      - name: Install isolated preset compaction verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-preset-registry...' --filter '@deepseek-ai/cordis-plugin-group...'
       - name: Install 0.2.0 subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
@@ -84,6 +99,12 @@ jobs:
       - name: Install tagged search verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
+      - name: Install native account persistence verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-credentials-local...' --filter '@deepseek-ai/dsh-app-boot...' --filter '@deepseek-ai/dsh-config-editor...' --filter '@deepseek-ai/dsh-settings...' --filter '@deepseek-ai/dsh-authorization...'
+      - name: Install native diagnostic storage verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'
       - name: Install pinned Core renderer verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-client-ui-renderer...'
@@ -125,4 +146,11 @@ jobs:
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
-          node scripts/publish-npm.mjs "$version"
+          publisher_version="$(node -p "require('./release-tools/package.json').version")"
+          test "$publisher_version" = "$version"
+          mkdir -p release-tools/artifacts
+          cp -- "artifacts/dsh-github-copilot-$version.tgz" release-tools/artifacts/
+          cp -- artifacts/SHA256SUMS release-tools/artifacts/
+          cmp -- "artifacts/dsh-github-copilot-$version.tgz" "release-tools/artifacts/dsh-github-copilot-$version.tgz"
+          cmp -- artifacts/SHA256SUMS release-tools/artifacts/SHA256SUMS
+          node "release-tools/scripts/publish-npm.mjs" "$version"

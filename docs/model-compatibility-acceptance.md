@@ -14,12 +14,16 @@ Follow the [plugin-only boundary](../AGENTS.md#plugin-only-implementation-bounda
 4. **One credential lifecycle.** All plugin-owned routes share the canonical Host-only Copilot OAuth record. Model discovery, refresh and in-flight requests remain bound to the same account generation. Account switches, entitlement removal, disposal and stale callbacks must fail closed without copying credentials or changing other providers.
 5. **Thinking is included.** Preserve public summary deltas and final-only summaries without duplicate text. Validate selected effort and keep native default semantics. Empty or encrypted-only responses must not become fabricated explanations. Native replay, images and file projection retain their owning adapter's behavior; opaque replay is not displayed or rewritten into raw reasoning text.
 6. **Current pi 0.87.1 compatibility.** The original acceptance target was 0.85.1; official DSH rc.2 now depends on `^0.87.1`. Pin and test the exact published SDK version, not just a GitHub release label. Its Copilot GPT-6 catalog protocol must not override contrary provider endpoint evidence. An updated catalog entry is not sufficient grounds to retire a correction if the protocol/capabilities are still wrong.
+7. **Do not infer temperature support from reasoning metadata.** No verified supplier contract establishes that `capabilities.supports.thinking` means temperature is unsupported or supported. Automatic reviewer-only omission requires authenticated exact official rc.2 root callback identity through the public service-read/Loader/profile package seams and account-proven managed Responses metadata. Clone before native delegation, preserve concurrent ordinary Chat and reject unqualified identity without broad fallback. Test actual Host startup/disposal and the unchanged native reviewer/LLM/adapter pipeline, with explicit nonzero/no-skip fixture collection. The independent `github-copilot.responsesOmitTemperature` override remains default false; explicit true affects all managed Responses. Preserve frozen options, cancellation, other protocols/providers and canonical ownership. Never use prompt/model/error matching, retry a rejection, rewrite a verdict or change permissions. See [the exact public proof and limitations](./auto-review-sampling.md); previously excluded fixture execution claims stay retracted.
 
 ## Regression evidence
 
 - Include GPT-6 Astra, Gemini 3.8 Flash and GPT-5.6 Sol Fast metadata fixtures, plus arbitrary unseen IDs on all three supported protocols. The unseen-ID cases must pass without adding those IDs to implementation tables.
 - Cover missing/conflicting endpoints, missing/invalid limits, duplicate conflicting IDs, explicit denial, stale account snapshots, unsupported reasoning labels, unknown fields and hostile extra getters.
 - Exercise real published adapter/SDK code against local synthetic HTTP for all supported protocols, including tools, public summaries, two-turn opaque replay, images and interruption/retry paths. Synthetic results are not claims of live account availability.
+- The exact pinned rc.2 source trace must retain the reviewer's frozen `temperature: 0` request with no `purpose`/`sessionId`. Run that unchanged native reviewer through the managed route and real pi-ai serializer: default-off preserves temperature for thinking `true`, `false`, or absent; explicit opt-in omits it for each value without mutating caller input. Cover allow, deny, malformed verdict, HTTP error and cancellation with one wire attempt; only allow may execute the synthetic tool. Qualify the fixture against tagged source and exact published artifacts. Synthetic metadata proves no supplier temperature semantics.
+- Verify managed request-body timeout guidance only for the observed HTTP `408`, exact `user_request_timeout` code and request-body message. Bound clone reads to 8 KiB/250 ms, retain the original native response, and expose only fixed guidance plus final string-body UTF-8 bytes. Preserve failure code, retry metadata, cancellation, unchanged retry payloads and independent dispatches. Do not reclassify 408 as overflow, invent a safe byte threshold, change client timeouts, refresh OAuth, compact automatically or promise elimination of upstream failures.
+- Verify byte-aware managed HTTP/SSE liveness through unchanged published and tagged adapters: heartbeat bytes may cross the original semantic deadline before actual output, but endless heartbeat-only output must hit the bounded native deadline. Real header/body stalls retain the original interval and a dispatch-local TIMEOUT; consumer think time, caller/credential cancellation, exact bytes, parser ownership and one native wire attempt remain unchanged. Explicit WebSocket/auto and opt-out retain native-only behavior. Preserve the 20 MiB native image budget by default; explicit smaller budgets must use native offload and retain mapped read-only paths/history, never hidden trimming or a claimed supplier threshold. These synthetic cases do not attest production heartbeat activity or cure HTTP 408.
 - Run source/test typechecks, complete repository tests, built Host/Client/Remote smoke, archive verification, and relevant unchanged-Core compatibility fixtures. Do not suppress type or test failures to bridge incompatible SDK versions.
 
 ## Explicit public-interface limits
@@ -46,3 +50,133 @@ Follow the [plugin-only boundary](../AGENTS.md#plugin-only-implementation-bounda
 - [pi v0.87.1 release](https://github.com/earendil-works/pi/releases/tag/v0.87.1)
 
 These references guide parsing and tests; they are not a guarantee that the upstream discovery schema will never change. Schema drift must be surfaced rather than silently guessed.
+
+## Authentication, replay and request diagnostics
+
+These failures have different owners; do not repair every rejection by signing out.
+
+| Diagnostic | Boundary and safe action |
+|---|---|
+| `COPILOT_AUTHORIZATION_BEGIN_FAILED` | Sign-in did not complete; interaction milestones are not a credential commit or root-cause proof |
+| `COPILOT_ROUTE_REPAIR_FAILED` | Authentication is retained; review legacy configuration and use explicit repair |
+| Native AUTH / HTTP 401 | Exact managed proof may be retired; a later explicit request/discovery can renew natively, not replay the failed message |
+| `COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH` | Exact uncoded item-scope rejection is request-local INVALID_REQUEST, without invalidating shared proof/other requests |
+| `COPILOT_RESPONSES_REPLAY_UNSUPPORTED` | Incomplete/reference-only historical payload lacks safe reconstruction evidence |
+| `COPILOT_REQUEST_BODY_TIMEOUT` | Strict verified request-body 408; composition/timing is not proof of overflow or network cause |
+
+HTTP auth recovery is bounded by account cooldown, including forced discovery.
+An old late response cannot invalidate a newer sign-in. HTTP 403, network errors
+and strings mentioning 401 are not auth evidence; malformed/ambiguous/oversized
+bodies retain native handling. HTTP tests do not prove WebSocket recovery.
+
+### Responses replay compatibility
+
+The public SDK payload hook normalizes only direct IDs on complete assistant
+messages, function calls and encrypted reasoning items. A narrowly recognized
+empty completed reasoning shell can be omitted from outgoing requests only with
+empty summary/content, no encrypted content and no unknown fields. Durable
+history, public summaries, opaque bytes, nested IDs, phase and `call_id` pairing
+stay unchanged.
+
+The source-checkout follow-up for #279 adds bounded structure evidence to an
+exact verified scope rejection: total items, direct ID fields, reference items,
+encrypted reasoning items, unrecognized items, `previous_response_id`/`store`
+state and presence of the two native session/request headers. It observes the
+final HTTP dispatch, not the earlier SDK payload before caller replacement.
+Only fixed labels and counts enter the separate `dispatchEvidence` diagnostic
+and Host warning; the main error stays concise and points to explicit recovery
+or a new conversation. No IDs, header values, message text, arguments, results
+or opaque bytes are retained. The shared
+16 MiB/depth/work diagnostic limits apply; unavailable evidence never becomes
+zero counts. Historical errors are not rewritten; absence of captured evidence
+is not zero counts.
+Structure counts alone do not repair cross-turn scope rejection: zero direct
+IDs does not prove encrypted replay is portable.
+
+Switching from account A to B does not make old account/connection-bound
+encrypted reasoning portable. An exact scope rejection is not proof that
+sign-in failed or that a particular encrypted item was rejected. Recovery
+is an explicitly authorized, lossy continuation, not a portability repair.
+Starting a new conversation avoids replaying the old history.
+
+### Explicit session replay recovery
+
+After an exact verified managed Responses scope rejection, **Replay recovery**
+above that session's composer automatically offers the failed request's old
+encrypted items on opening the eligible session, when its native `running`
+snapshot settles, or when its `lastAgentError` changes while idle. These public
+Session snapshot changes trigger read-only Host evidence reads, not model calls,
+history reads, new durable events or polling. Normal sessions show no notice.
+Dismissal is local to the mounted model/session and evidence revision; a new
+failure can reappear. Read errors remain distinct from missing evidence.
+
+Context evidence and recovery use the public full-width
+`conversation.input.dock` with shared native secondary typography for body
+text and controls. They stack above the composer rather than squeezing into
+its non-wrapping statistics row. Native meters, statistics and parent DOM stay
+unchanged; authorization itself still sends no message.
+
+The normal Client offers one persistent Session policy. When off, the notice
+explains the loss and offers **Enable visible-history continuation** or Cancel.
+Enabling writes the same revision-checked Session policy used by account controls;
+it persists across accounts/restarts until disabled, without an hourly consent.
+When already on, show status and diagnostic guidance, not another authorization.
+Use native Retry separately. Missing or failed policy reads have an explicit
+diagnostic and Retry read, never a guessed off state or legacy authorization
+fallback. No authorization duration radios or next-turn-only actions are shown.
+Controls are disabled during a native turn.
+
+The following temporary recovery mechanism and strict Remotes remain for
+compatibility, not new normal UI authorization. Their one-hour evidence/proof
+lifetime is not the lifetime of the persistent Session policy:
+
+This is lossy recovery, not a supplier-scope repair. Only complete normalized
+encrypted reasoning items whose entire serialized fingerprints match that
+failed request are omitted from later outgoing requests in the same session
+and model. Their hidden state **and their item summaries** are no longer sent;
+displayed messages, tool calls/results and stored history are not modified.
+New or changed reasoning items remain native-owned. Another scope failure
+requires fresh confirmation rather than broadening enabled omission silently.
+
+Evidence is bounded to 64 sessions, 512 distinct items per session, and one
+hour in the current Host. Only hashes, a model label and confirmation metadata
+are retained, never opaque payloads. The Client receives count/model/state,
+an opaque revision, optional duration and evidence expiry only. The original
+`get`/`setEnabled` descriptors retain their identities; `setEnabled(true)` still
+means bounded session consent, and additive `authorize` selects a duration.
+A one-shot expiry read updates the mounted notice, not a polling timer.
+Token/account/metadata proof discontinuity, expiry,
+session disposal or Host restart revokes evidence; an old error on disk cannot
+create a candidate. Re-read status after these changes. Disabling affects
+future requests and does not undo answers already generated.
+
+Admission requires the initiating native Agent request signal and exact
+session; unbound requests, compaction, titles, classifier requests, other
+models and other sessions cannot borrow consent. Active-turn writes are
+rejected. Public native Client/Host gateways enforce explicit Agent lookup;
+no ambient Client session projection is added. No Core changes, credentials
+reset, history rewrite, general wire adapter or automatic business retry is
+introduced. This is not a remedy for HTTP 408, quota or context limits.
+
+Two explicitly authorized real-history diagnostic calls reproduced HTTP 401
+with 12 old encrypted items and returned HTTP 200 after omitting exactly those
+items in a disposable request copy, preserving all 80 tool pairs. This
+implicates the old item set, not any specific item, token rotation or backend
+expiry rule. Sequential calls cannot freeze hidden supplier state. Synthetic
+request-chain and native gateway tests qualify the opt-in mechanism; they do
+not establish that every rejected history is recoverable or that an installed
+runtime has enabled it.
+
+After actual HTTP 408, a newly prepared attempt in the same native step can
+reuse exact normalized payload only when transcript/every other field agree,
+with matching references and no conflicts. Evidence is bound to Session/model/
+account proof and original signal, expires in 60 seconds, is limited to 2 MiB
+and clears on next step/turn, concurrency, cancellation or account discontinuity.
+This creates no retry or cold-history reconstruction. Canonical/other routes,
+protocols and native retry policy stay unchanged. Synthetic adapter tests are
+not acceptance proof for an old conversation. Never discard opaque reasoning,
+rewrite history, replay business work or reset credentials automatically.
+
+For TLS/quota, see [trust boundaries](./copilot-usage.md#account-data-boundary).
+For HTTP 408 and oversized summaries, see
+[budget and recovery limits](./copilot-compaction.md#existing-oversized-history-and-recovery-limits).

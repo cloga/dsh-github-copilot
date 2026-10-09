@@ -118,6 +118,16 @@ async function mountIntegration(ctx: Context): Promise<void> {
 }
 
 describe('loader composition', () => {
+  it('starts and disposes without an optional native reviewer package or package resolver', async () => {
+    const ctx = new Context()
+    await mountProfile(ctx)
+    expect(ctx.get('pluginPackages')).toBeUndefined()
+    const fiber = await ctx.plugin(GitHubCopilotPlugin, config)
+    await vi.waitFor(() => expect(ctx.get('githubCopilotAuthorization')).toBeDefined())
+    await fiber.dispose()
+    expect(fiber.uid).toBeNull()
+    expect(ctx.get('pluginPackages')).toBeUndefined()
+  })
   it('bootstraps authorization in the rc.2 web profile before activating the integration', async () => {
     const ctx = new Context()
     await mountProfile(ctx)

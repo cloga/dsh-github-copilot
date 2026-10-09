@@ -2,12 +2,19 @@ import { access, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { repositoryRoot } from './agent.mjs'
+import { validateIterationReview } from './iteration-review.mjs'
 
 export async function verifyAgentContract(root = repositoryRoot) {
   const contract = JSON.parse(await readFile(resolve(root, 'agent-contract.json'), 'utf8'))
   const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
   const require = (condition, message) => { if (!condition) throw new Error(`Agent contract: ${message}`) }
   require(contract.schemaVersion === 1, 'unsupported schemaVersion')
+  const review = contract.tasks?.autorouting?.iterationReview
+  require(review?.report === 'docs/auto-iteration-review.json'
+    && review.policy === 'docs/evidence-driven-iteration.md'
+    && review.requiredBeforeImplementation === true && review.missingEvidenceMustBeExplicit === true
+    && review.automaticUpload === false && review.followUpRequired === true,
+  'Auto iteration review must require prior evidence, explicit missing data, local-only sharing and follow-up')
   const implementation = contract.boundaries?.implementationScope
   require(implementation?.mode === 'plugin-only', 'plugin-only implementation policy is missing')
   const implementationKeys = ['mode', 'coreInspection', 'allowedIntegration', 'coreSourceChanges', 'coreArtifactPatching', 'coreRuntimeMonkeyPatching', 'corePatchDependency', 'coreCommitPrRelease', 'unsupportedCapability', 'scopeException']
@@ -41,6 +48,59 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(Array.isArray(contract.entrypoints) && contract.entrypoints.includes('AGENTS.md'), 'authoritative entrypoint is missing')
   for (const path of contract.entrypoints) await file(path)
   require(contract.tasks && Object.keys(contract.tasks).length > 0, 'task directory is missing')
+  require(contract.tasks.accounts?.read?.includes('docs/copilot-accounts.md')
+    && contract.tasks.accounts?.tests?.includes('tests/copilot-accounts-card.spec.ts')
+    && contract.tasks.accounts?.risk?.includes('never grant copies')
+    && contract.tasks.accounts?.risk?.includes('second storage service')
+    && contract.tasks.accounts?.risk?.includes('Models alone')
+    && contract.tasks.accounts?.read?.includes('src/session-accounts-host.ts')
+    && contract.tasks.accounts?.tests?.includes('tests/session-accounts-host.spec.ts')
+    && contract.tasks.accounts?.risk?.includes('Freeze before Auto assessment')
+    && contract.tasks.accounts?.risk?.includes('No durable account events')
+    && agentGuide.includes('Approved multi-account ownership extension (#297)'),
+  'account ownership must preserve native authorization, shared storage, Session turn freezing and bounded historical evidence')
+  require(contract.tasks.autointent?.read?.includes('src/auto-model-intent.ts')
+    && contract.tasks.autointent?.tests?.includes('tests/fixtures/session-context-core.fixture.ts')
+    && contract.tasks.autointent?.risk?.includes('No Core projection replacement'),
+  'Auto intent continuity must preserve public projection ownership and exact-source regression evidence')
+  require(contract.tasks.history?.read?.includes('src/turn-usage-evidence.ts')
+    && contract.tasks.history?.tests?.includes('tests/fixtures/turn-usage-core.fixture.ts')
+    && contract.tasks.history?.risk?.includes('No fabricated zero usage, partial token totals'),
+  'missing Turn Usage explanation must preserve native accounting and exact-source evidence')
+  require(contract.tasks.context?.read?.includes('src/context-usage.ts')
+    && contract.tasks.context?.tests?.includes('tests/fixtures/turn-usage-core.fixture.ts')
+    && contract.tasks.context?.risk?.includes('Never filter or delay shared native usage'),
+  'context diagnostics must preserve shared native usage and exact-source accounting evidence')
+  require(Object.values(contract.tasks).some(task => task.read?.includes('src/request-upload-evidence.ts')
+    && task.tests?.includes('tests/request-upload-evidence.spec.ts')
+    && task.requestBodyEvidenceBoundary?.includes('supplier receipt')
+    && task.requestBodyEvidenceBoundary?.includes('dispose subscriptions')),
+  'request upload diagnostics must retain scoped lifecycle ownership and local-only evidence limits')
+  require(contract.tasks.compatibility?.responsesCompressionBoundary?.includes('defaults false')
+    && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('original JSON admission/replay/evidence')
+    && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('no identity resend')
+    && contract.tasks.compatibility?.read?.includes('src/responses-request-compression.ts')
+    && contract.tasks.compatibility?.tests?.includes('tests/responses-request-compression.spec.ts'),
+  'managed Responses gzip must remain default-off, bounded and lossless through its public Fetch seam')
+  require(contract.tasks.continuation?.processingBoundary?.includes('never recursively traverse')
+    && contract.tasks.continuation?.processingBoundary?.includes('atomic baseline commit')
+    && contract.tasks.continuation?.tests?.includes('tests/fixtures/compaction-pressure-core.fixture.ts')
+    && agentGuide.includes('Continuation processing is reasoning-only'),
+  'continuation must retain bounded cancellable reasoning-only work and native compaction evidence')
+  require(contract.tasks.compaction?.automaticRecoveryBoundary?.includes('Default-on only in the explicitly selected replacement')
+    && contract.tasks.compaction?.automaticRecoveryBoundary?.includes('at most 16 calls')
+    && contract.tasks.compaction?.automaticRecoveryBoundary?.includes('No 408/network/auth/quota fallback')
+    && agentGuide.includes('automaticRecovery: false'),
+  'automatic segmented recovery must retain explicit composition, capacity-only escalation and bounded native ownership')
+  require(contract.tasks.compaction?.visibleHistoryBoundary?.includes('Persistent Session visible-history policy')
+    && contract.tasks.compaction?.visibleHistoryBoundary?.includes('revoked after settlement or teardown')
+    && contract.tasks.compaction?.visibleHistoryBoundary?.includes('legacy next-turn-only consent is not summary consent')
+    && contract.tasks.compaction?.visibleHistoryBoundary?.includes('Disabled/unknown policy never silently enables loss')
+    && contract.tasks.compaction?.read?.includes('src/compaction-replay.ts')
+    && contract.tasks.compaction?.tests?.includes('tests/compaction-replay.spec.ts')
+    && contract.tasks.compaction?.read?.includes('src/compaction-continuation.ts')
+    && /Never silently enable a disabled or\s+unknown persistent policy/.test(agentGuide),
+  'visible-history summary consent requires persistent or one-operation authorization, native boundaries and truthful status')
   for (const [name, task] of Object.entries(contract.tasks)) {
     require(/^[a-z]+$/.test(name), 'invalid task id')
     require(typeof task.purpose === 'string' && typeof task.risk === 'string', `${name} needs purpose and risk`)
@@ -50,6 +110,10 @@ export async function verifyAgentContract(root = repositoryRoot) {
   for (const script of ['agent:describe', 'agent:doctor', 'agent:plan', 'verify:agent', 'test:scripts', 'typecheck:tests', 'verify:tarball']) {
     require(typeof pkg.scripts[script] === 'string', `missing package script ${script}`)
   }
+  validateIterationReview(JSON.parse(await readFile(resolve(root, review.report), 'utf8')))
+  await file(review.policy)
+  const template = await readFile(resolve(root, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
+  require(template.includes('### Iteration evidence'), 'PR iteration evidence is missing')
   for (const script of ['verify:agent', 'typecheck:tests', 'test:scripts']) {
     require(pkg.scripts.verify.includes(`pnpm ${script}`), `${script} is absent from the full gate`)
   }
