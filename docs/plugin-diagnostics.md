@@ -22,6 +22,15 @@ through native path-level Settings CAS and confirm readback. This enables
 collection **and bounded local aggregate persistence**, not exports or uploads.
 The normal installation does not change this default-off setting.
 
+The page opens with the daily Auto allocation table: UTC date, policy, model,
+decision cohort, opportunities, expected selections, selected counts and no-fit
+decisions. Compare expected and selected counts only within matching cohorts;
+these aggregates do not establish execution, quality or billing. Account and
+compaction summaries, collection controls, and detailed data-scope/limits/JSON
+guidance are in collapsed disclosures. If a status read fails, expand Collection
+controls to find **Read status**; no failed operation is automatically replayed.
+Clearing aggregates still requires its separate confirmation.
+
 Use the plugin normally: account selection, Identity/Checking and compaction
 will contribute independent Client/Host populations. Auto model allocation has a
 separate **Enable Auto allocation observation** control and its own hidden,

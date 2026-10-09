@@ -50,7 +50,7 @@ export const nativeSettingsCss = `
 [data-copilot-native-ui] summary {
   width: fit-content; max-width: 100%; padding: 2px 4px; margin-left: -4px;
   border-radius: var(--dsw-radius-sm, 8px); cursor: pointer;
-  font-size: 12px; line-height: 18px; font-weight: 500;
+  font: inherit; font-weight: 500;
   color: var(--dsw-alias-label-secondary, GrayText); list-style: none;
 }
 [data-copilot-native-ui] summary::-webkit-details-marker { display: none; }
