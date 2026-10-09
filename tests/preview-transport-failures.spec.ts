@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { createAccountProvider, ManagedWireAbortError } from '../src/preview-provider.ts'
 import { normalizeAccountModelCatalog } from '../src/account-model-catalog.ts'
 import type { StreamOptions } from '@earendil-works/pi-ai'
+import { DiagnosticsCollector } from '../src/diagnostics-collector.ts'
+import type { PreviewProviderGuard } from '../src/preview-provider.ts'
 
 const baseURL = 'https://api.individual.githubcopilot.com'
 const descriptor = normalizeAccountModelCatalog({ data: [{
@@ -21,12 +23,12 @@ const partial = [
 ].map(sse).join('')
 
 async function call(managed: boolean, fetch: NonNullable<StreamOptions['fetch']>, controller = new AbortController(),
-  wire = new AbortController()) {
+  wire = new AbortController(), requestDiagnostics?: PreviewProviderGuard['requestDiagnostics'], maxRetries = 0) {
   const released = vi.fn()
   const onWireAbort = vi.fn()
   const { provider, models } = createAccountProvider([descriptor], {
     selectedModelId: descriptor.id, signal: controller.signal,
-    assertActive() {}, assertAccount() {}, assertEntitled() {}, onWireAbort,
+    assertActive() {}, assertAccount() {}, assertEntitled() {}, onWireAbort, requestDiagnostics,
     beforeWire: async (_model, options) => ({
       signal: AbortSignal.any([controller.signal, wire.signal, ...options?.signal ? [options.signal] : []]),
       release() { released(); wire.abort() },
@@ -34,7 +36,7 @@ async function call(managed: boolean, fetch: NonNullable<StreamOptions['fetch']>
   }, baseURL)
   const model = models[0]!
   const stream = (managed ? provider : githubCopilotProvider()).streamSimple(model, context, {
-    apiKey: 'synthetic-test-key', signal: controller.signal, maxRetries: 0, fetch,
+    apiKey: 'synthetic-test-key', signal: controller.signal, maxRetries, fetch,
   })
   const events = []
   for await (const event of stream) events.push(event)
@@ -44,6 +46,83 @@ async function call(managed: boolean, fetch: NonNullable<StreamOptions['fetch']>
 }
 
 describe('managed Responses failure boundaries with native SDK and no network', () => {
+  const observed = () => {
+    const collector = new DiagnosticsCollector('0.4.2-alpha.3', 'host')
+    collector.setRequestEnabled(true)
+    return { collector, requestDiagnostics: {
+      enabled: () => collector.isRequestEnabled(), begin: collector.beginRequest.bind(collector), failed: vi.fn(),
+    } }
+  }
+  it('records verified 408 once without changing the native error, serialized input or dispatch count', async () => {
+    const { collector, requestDiagnostics } = observed()
+    const bodies: string[] = []
+    const fetch = vi.fn(async (_input, init) => {
+      bodies.push(String(init?.body))
+      return new Response(JSON.stringify({ error: { code: 'user_request_timeout',
+        message: 'Timed out reading request body. Try again, or use a smaller request size.' } }),
+        { status: 408, headers: { 'content-type': 'application/json' } })
+    })
+    const native = await call(false, fetch)
+    const instrumented = await call(true, fetch, new AbortController(), new AbortController(), requestDiagnostics)
+    expect(instrumented.result.errorMessage).toBe(native.result.errorMessage)
+    expect(bodies[0]).toBe(bodies[1])
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(collector.snapshot().requests!.rows).toMatchObject([{ outcome: 'http-error',
+      reason: 'request-body-timeout', httpStatus: 408, model: descriptor.id, dispatchIndex: 1,
+      wireBytes: Buffer.byteLength(bodies[1]!), composition: { state: 'complete', totalBytes: Buffer.byteLength(bodies[1]!) },
+      upload: { state: 'unavailable' } }])
+    expect(requestDiagnostics.failed).not.toHaveBeenCalled()
+    expect(JSON.stringify(collector.snapshot())).not.toContain('Synthetic prompt')
+    expect(JSON.stringify(collector.snapshot())).not.toContain('synthetic-test-key')
+  })
+  it('isolates simultaneous streams and distinguishes missing terminal from real signal abort', async () => {
+    const { collector, requestDiagnostics } = observed()
+    const controller = new AbortController()
+    await Promise.all([
+      call(true, async () => new Response(partial), new AbortController(), new AbortController(), requestDiagnostics),
+      call(true, async () => new Response(sse({ type: 'response.completed', response: { status: 'completed',
+        usage: { input_tokens: 0, output_tokens: 0 } } })), new AbortController(), new AbortController(), requestDiagnostics),
+      call(true, async () => { controller.abort(); throw new Error('synthetic-private-transport') },
+        controller, new AbortController(), requestDiagnostics),
+    ])
+    const rows = collector.snapshot().requests!.rows
+    expect(rows).toHaveLength(3)
+    expect(new Set(rows.map(row => row.streamId)).size).toBe(3)
+    expect(rows.map(row => [row.outcome, row.reason])).toEqual(expect.arrayContaining([
+      ['stream-error', 'unknown'], ['stream-done', 'none'], ['cancelled', 'caller-abort'],
+    ]))
+    expect(rows.every(row => row.dispatchIndex === 1)).toBe(true)
+    expect(JSON.stringify(rows)).not.toContain('synthetic-private-transport')
+  })
+  it('records SDK physical redispatch order without adding retries or claiming the Core retry counter', async () => {
+    const { collector, requestDiagnostics } = observed()
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ error: { code: 'user_request_timeout',
+      message: 'Timed out reading request body. Try again, or use a smaller request size.' } }),
+      { status: 408, headers: { 'content-type': 'application/json' } }))
+    const native = await call(false, fetch, new AbortController(), new AbortController(), undefined, 1)
+    const nativeCount = fetch.mock.calls.length
+    expect(nativeCount).toBe(2)
+    fetch.mockClear()
+    const measured = await call(true, fetch, new AbortController(), new AbortController(), requestDiagnostics, 1)
+    expect(fetch).toHaveBeenCalledTimes(nativeCount)
+    expect(measured.result.errorMessage).toBe(native.result.errorMessage)
+    const rows = collector.snapshot().requests!.rows
+    expect(rows).toHaveLength(nativeCount)
+    expect(rows.map(row => row.dispatchIndex)).toEqual(Array.from({ length: nativeCount }, (_, index) => index + 1))
+    expect(new Set(rows.map(row => row.streamId)).size).toBe(1)
+  })
+  it('does not alter native delivery when observation fails and reports only a fixed diagnostic', async () => {
+    const failed = vi.fn()
+    const fetch = vi.fn(async () => new Response(partial))
+    const result = await call(true, fetch, new AbortController(), new AbortController(), {
+      enabled: () => true, begin() { throw new Error('private-diagnostic-error') }, failed,
+    })
+    expect(result.result.stopReason).toBe('error')
+    expect(result.result.errorMessage).toContain('stream ended before a terminal response event')
+    expect(result.result.errorMessage).not.toContain('private-diagnostic-error')
+    expect(failed).toHaveBeenCalledExactlyOnceWith()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
   it.each([false, true])('preserves an observed HTTP408 with managed=%s without retrying in the provider', async managed => {
     const fetch = vi.fn(async () => new Response(JSON.stringify({
       error: { message: 'Timed out reading request body. Try again, or use a smaller request size.', code: 'user_request_timeout' },

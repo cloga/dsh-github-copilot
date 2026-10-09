@@ -6,6 +6,18 @@ const base: InlineConfig = { enabled: true, providers: [], includeSources: true,
   idleTimeoutMs: 300_000, probe: true, probeTimeoutMs: 30_000 }
 
 describe('session search settings', () => {
+  it('keeps request diagnostics independently default-off, hidden, volatile and boolean-only', () => {
+    expect(readInlineConfig(Config({ ...base, diagnosticsEnabled: true,
+      autoAllocationDiagnosticsEnabled: true })).requestDiagnosticsEnabled).toBe(false)
+    expect(Config.dict?.requestDiagnosticsEnabled?.meta.hidden).toBe(true)
+    expect(Config.dict?.requestDiagnosticsEnabled?.meta.volatile).toBe(true)
+    let enabled = false
+    const live = { ...base, requestDiagnosticsEnabled: { get: () => enabled } }
+    expect(readInlineConfig(live).requestDiagnosticsEnabled).toBe(false)
+    enabled = true
+    expect(readInlineConfig(live).requestDiagnosticsEnabled).toBe(true)
+    expect(() => Config({ ...base, requestDiagnosticsEnabled: 'true' } as unknown as InlineConfig)).toThrow()
+  })
   it('keeps managed Responses request compression default-off and boolean-only', () => {
     expect(readInlineConfig(Config(base)).responsesRequestCompression).toBe(false)
     expect(readInlineConfig(Config({ ...base, responsesRequestCompression: true })).responsesRequestCompression).toBe(true)
@@ -41,7 +53,7 @@ describe('session search settings', () => {
 
   it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['diagnosticsEnabled', 'autoAllocationDiagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['diagnosticsEnabled', 'autoAllocationDiagnosticsEnabled', 'requestDiagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')

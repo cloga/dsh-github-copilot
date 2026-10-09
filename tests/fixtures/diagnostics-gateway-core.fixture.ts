@@ -60,15 +60,17 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     const registry = new TypertRegistry(host)
     registry.register({ package: contribution.package, face: 'host', schemas: [],
       model: { services: [], events: [], objects: [] }, invocations: contribution.descriptors })
-    let revision = 0, enabled = false, autoEnabled = false
+    let revision = 0, enabled = false, autoEnabled = false, requestEnabled = false
     host.provide('settings', {
       describe: () => [{ ns: 'github-copilot', revision, value: {
         diagnosticsEnabled: enabled, autoAllocationDiagnosticsEnabled: autoEnabled,
+        requestDiagnosticsEnabled: requestEnabled,
       } }],
       mutate: vi.fn(async (ns: string, operations: readonly { path: readonly string[]; value: boolean }[], expected: number) => {
         expect(ns).toBe('github-copilot'); expect(expected).toBe(revision)
         if (operations[0]?.path[0] === 'diagnosticsEnabled') enabled = operations[0]!.value
         else if (operations[0]?.path[0] === 'autoAllocationDiagnosticsEnabled') autoEnabled = operations[0]!.value
+        else if (operations[0]?.path[0] === 'requestDiagnosticsEnabled') requestEnabled = operations[0]!.value
         else throw new Error('UNEXPECTED_DIAGNOSTICS_SETTING')
         revision++
       }),
@@ -105,8 +107,21 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     await vi.waitFor(() => expect(diagnostics.get().state).toBe('ready'))
     const remote = client.remote.githubCopilotDiagnostics
     await expect(remote.get()).resolves.toMatchObject({ ok: true, value: {
-      enabled: false, autoAllocationEnabled: false, state: 'ready',
+      enabled: false, autoAllocationEnabled: false, requestEnabled: false, state: 'ready',
     } })
+    await expect(remote.setRequestEnabled(true)).resolves.toMatchObject({ ok: true, value: {
+      enabled: false, autoAllocationEnabled: false, requestEnabled: true,
+    } })
+    const request = diagnostics.collector.beginRequest({
+      streamId: '12345678-1234-4234-8234-123456789abc', dispatchIndex: 1,
+      model: 'fixture-model', protocol: 'openai-responses',
+      composition: { state: 'size-limit', totalBytes: 21355789 }, encoding: 'identity', wireBytes: 21355789,
+    })!
+    request.headers(408, 61375)
+    request.finish('http-error', 'request-body-timeout')
+    await diagnostics.flush()
+    expect(diagnostics.get().snapshot.requests?.rows).toMatchObject([{ httpStatus: 408, reason: 'request-body-timeout' }])
+    await expect(remote.setRequestEnabled(false)).resolves.toMatchObject({ ok: true, value: { requestEnabled: false } })
     await expect(remote.setEnabled(true)).resolves.toMatchObject({ ok: true, value: { enabled: true, dirty: false } })
     await expect(remote.setAutoAllocationEnabled(true)).resolves.toMatchObject({
       ok: true, value: { enabled: true, autoAllocationEnabled: true, dirty: false },

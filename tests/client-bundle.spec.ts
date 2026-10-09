@@ -412,7 +412,7 @@ describe('tsdown client artifact', () => {
       .toEqual(['authorizeNext', 'defaults', 'get', 'set', 'setDefault'])
     const diagnosticsDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
     expect(diagnosticsDescriptors.map(descriptor => descriptor.method).sort())
-      .toEqual(['clear', 'get', 'recordClient', 'setAutoAllocationEnabled', 'setEnabled'])
+      .toEqual(['clear', 'get', 'recordClient', 'setAutoAllocationEnabled', 'setEnabled', 'setRequestEnabled'])
     const diagnosticsView = { enabled: false, autoAllocationEnabled: false, state: 'ready', diagnostic: 'none', dirty: false,
       snapshot: { schemaVersion: 1, coverageVersion: 1, epoch: 0, updatedAt: 0, rows: [], pending: [],
         dropped: 0, clientDropped: 0, clientUnconfirmed: 0, saturated: 0, evicted: 0, interrupted: 0 } }

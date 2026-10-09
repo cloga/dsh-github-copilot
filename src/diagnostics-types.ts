@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { AutoAllocationDiagnosticsSchema } from './auto-allocation-diagnostics.ts'
+import { RequestDiagnosticsSchema } from './request-diagnostics.ts'
 
 export const DIAGNOSTICS_OPERATIONS = [
   'account-global-switch', 'account-session-select', 'account-session-inherit',
@@ -54,6 +55,7 @@ export const DiagnosticsSnapshotSchema = z.object({
   schemaVersion: z.literal(1), coverageVersion: z.literal(1),
   epoch: integer, updatedAt: integer, rows: z.array(DiagnosticsRowSchema).max(DIAGNOSTICS_MAX_ROWS),
   autoAllocation: AutoAllocationDiagnosticsSchema.optional(),
+  requests: RequestDiagnosticsSchema.optional(),
   pending: z.array(DiagnosticsPendingSchema).max(DIAGNOSTICS_MAX_LIVE),
   dropped: integer, clientDropped: integer, clientUnconfirmed: integer,
   saturated: integer, evicted: integer, interrupted: integer,
@@ -62,6 +64,7 @@ export const DiagnosticsSnapshotSchema = z.object({
   .refine(value => JSON.stringify(value).length <= DIAGNOSTICS_MAX_BYTES, 'Diagnostics capacity exceeded')
 export const DiagnosticsViewSchema = z.object({
   enabled: z.boolean(), autoAllocationEnabled: z.boolean(),
+  requestEnabled: z.boolean().optional(),
   state: z.enum(['loading', 'ready', 'unavailable', 'error']),
   diagnostic: z.enum(['none', 'storage-unavailable', 'storage-invalid', 'storage-write-failed',
     'profile-unavailable', 'settings-unavailable', 'settings-conflict', 'client-report-failed', 'client-report-revoked', 'closed']),

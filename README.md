@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared prerelease: `0.4.2-alpha.3`.** `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
+**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared prerelease: `0.4.2-alpha.4`.** `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
 
 **Upgrade from 0.4.0:** that first stable release can interrupt concurrent managed requests with `COPILOT_PREVIEW_CREDENTIAL_CHANGED` during normal same-account native OAuth renewal. In 0.4.1, a proven plugin-owned refresh with unchanged account, endpoint and entitlements preserves already-dispatched HTTP streams; subsequent requests use freshly validated auth and metadata. Unknown/external credential notifications, revocation, cancellation and provider rejections remain explicit—not a promise of invisible recovery or automatic retry. See [the refresh boundary](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385).
 
@@ -43,7 +43,13 @@ and loading the published build, open the plugin detail settings page →
 **Local diagnostics → Read status → Enable local collection**. This enables
 local account/Checking and compaction persistence, not uploads or scheduled
 analysis. Enable **Auto allocation observation** separately to collect only
-Auto allocation aggregates. The package also has an explicit offline analyzer
+Auto allocation aggregates. **Enable request observations** is a third, independent,
+default-off control: up to 128 content-free managed-adapter physical requests
+for 24 hours, with model, JSON/wire byte counts, timings, HTTP status and terminal
+categories. No bodies, headers, credentials or Session/turn IDs are collected.
+Local body-write completion does not prove supplier receipt; these diagnostics
+do not fix timeouts or alter retry/Usage behavior.
+The package also has an explicit offline analyzer
 for a caller-selected persisted unit or reviewed aggregate view; it writes only
 to a new local report file and never scans, uploads or changes collection. Pause
 preserves evidence; Clear requires separate confirmation. Client/Host
@@ -105,10 +111,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.3/dsh-github-copilot-0.4.2-alpha.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.4/dsh-github-copilot-0.4.2-alpha.4.tgz
 ```
 
-For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.3`; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.4`; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -284,14 +290,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.3/dsh-github-copilot-0.4.2-alpha.3.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.3/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.4/dsh-github-copilot-0.4.2-alpha.4.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.4/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.4.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

@@ -104,7 +104,7 @@ const sessionAccountDescriptors = remote.descriptors.filter(descriptor => descri
 const continuationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation')
 const diagnosticsDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 49 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 50 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
@@ -113,11 +113,12 @@ if (remote.descriptors.length !== 49 || JSON.stringify(methods) !== JSON.stringi
   || JSON.stringify(accountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])
   || JSON.stringify(sessionAccountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['ensureIdentity', 'get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])
   || JSON.stringify(continuationDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorizeNext', 'defaults', 'get', 'set', 'setDefault'])
-  || JSON.stringify(diagnosticsDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['clear', 'get', 'recordClient', 'setAutoAllocationEnabled', 'setEnabled'])) {
+  || JSON.stringify(diagnosticsDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['clear', 'get', 'recordClient', 'setAutoAllocationEnabled', 'setEnabled', 'setRequestEnabled'])) {
   throw new Error('built Remote entry must retain existing controls and independent account controls')
 }
 for (const descriptor of diagnosticsDescriptors) {
   const parameterized = descriptor.method === 'setEnabled' || descriptor.method === 'setAutoAllocationEnabled'
+    || descriptor.method === 'setRequestEnabled'
     || descriptor.method === 'recordClient'
   if (descriptor.id !== `dsh-github-copilot:githubCopilotDiagnostics.${descriptor.method}`
     || descriptor.service !== 'githubCopilotDiagnostics' || descriptor.scope !== undefined
@@ -136,9 +137,11 @@ for (const descriptor of diagnosticsDescriptors) {
   if (parameterized) {
     const parameter = descriptor.parameters[0]
     const setting = descriptor.method === 'setEnabled' || descriptor.method === 'setAutoAllocationEnabled'
+      || descriptor.method === 'setRequestEnabled'
     const wire = setting ? 'enabled' : 'batch'
     const typeSymbol = descriptor.method === 'setEnabled' ? 'dsh-github-copilot#DiagnosticsEnabled'
       : descriptor.method === 'setAutoAllocationEnabled' ? 'dsh-github-copilot#AutoAllocationDiagnosticsEnabled'
+        : descriptor.method === 'setRequestEnabled' ? 'dsh-github-copilot#RequestDiagnosticsEnabled'
         : 'dsh-github-copilot#ClientDiagnosticsBatch'
     if (parameter.source !== 'json' || parameter.wire !== wire
       || parameter.codec.mode !== 'strict'

@@ -20,6 +20,14 @@ const persistedOptions = { source: 'persisted-snapshot' as const, observedAt }
 const unitName = diagnosticsUnitName('desktop')
 
 describe('diagnostics analysis', () => {
+  it('explicitly excludes request observations from account/compaction aggregate interpretation', () => {
+    const report = analyzeSnapshot({ ...emptySnapshot(), requests: {
+      rows: [], dropped: 1, evicted: 0, pending: 0,
+    } }, persistedOptions)
+    expect(report.gaps).toContain('request-observations-not-analyzed')
+    expect(report.populations).toEqual([])
+    expect(report.investigationCandidates).toEqual([])
+  })
   it('keeps no observations uncertain and does not claim current collection state', () => {
     const report = analyzeSnapshot(emptySnapshot(), persistedOptions)
     expect(report.populations).toEqual([])

@@ -8,15 +8,47 @@ import type { DiagnosticsRemote } from '../src/diagnostics-card.ts'
 import type { DiagnosticsView } from '../src/diagnostics-types.ts'
 
 describe('local diagnostics control', () => {
+  it('renders request bytes and unknown upload evidence without inventing receipt or aggregate coverage', async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+    const snapshot = emptyDiagnostics()
+    snapshot.requests = { dropped: 1, evicted: 2, pending: 0, interruptedOnReopen: 1, rows: [{
+      streamId: '12345678-1234-4234-8234-123456789abc', dispatchIndex: 1, version: '0.4.2-alpha.4',
+      startedAt: 1_800_000_000_000, elapsedMs: 61375, model: 'fixture-model', protocol: 'openai-responses',
+      composition: { state: 'size-limit', totalBytes: 21355789 }, encoding: 'identity', wireBytes: 21355789,
+      responseHeadersMs: 61375, httpStatus: 408, upload: { state: 'unavailable' },
+      outcome: 'http-error', reason: 'request-body-timeout',
+    }] }
+    const remote: DiagnosticsRemote = {
+      get: async () => ({ ok: true, value: { enabled: false, autoAllocationEnabled: false,
+        requestEnabled: true, state: 'ready', diagnostic: 'none', dirty: false, snapshot } }),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(),
+      clear: vi.fn(), recordClient: vi.fn(),
+    }
+    const element = document.createElement('div')
+    const root = createRoot(element)
+    try {
+      await act(async () => root.render(createElement(DiagnosticsCard, { remote })))
+      expect(element.textContent).toContain('21355789 / 21355789 (identity; composition size-limit)')
+      expect(element.textContent).toContain('61375 / unknown')
+      expect(element.textContent).toContain('not supplier receipt')
+      expect(element.textContent).toContain('1 interrupted on reopen')
+      expect(element.textContent).toContain('Review local diagnostics JSON')
+      expect(element.textContent).not.toContain('Review aggregate-only JSON')
+      expect(remote.setRequestEnabled).not.toHaveBeenCalled()
+    } finally { await act(async () => root.unmount()) }
+  })
   it('requires a confirmed durable enable and a separate destructive clear confirmation', async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-    let view: DiagnosticsView = { enabled: false, autoAllocationEnabled: false, state: 'ready', diagnostic: 'none',
+    let view: DiagnosticsView = { enabled: false, autoAllocationEnabled: false, requestEnabled: false, state: 'ready', diagnostic: 'none',
       dirty: false, snapshot: emptyDiagnostics() }
     const remote: DiagnosticsRemote = {
       get: vi.fn(async () => ({ ok: true as const, value: view })),
       setEnabled: vi.fn(async enabled => ({ ok: true as const, value: view = { ...view, enabled } })),
       setAutoAllocationEnabled: vi.fn(async autoAllocationEnabled => ({
         ok: true as const, value: view = { ...view, autoAllocationEnabled },
+      })),
+      setRequestEnabled: vi.fn(async requestEnabled => ({
+        ok: true as const, value: view = { ...view, requestEnabled },
       })),
       clear: vi.fn(async () => ({ ok: true as const, value: view = { ...view, snapshot: { ...emptyDiagnostics(), epoch: 1 } } })),
       recordClient: vi.fn(async () => ({ ok: true as const, value: view })),
@@ -32,6 +64,13 @@ describe('local diagnostics control', () => {
     try {
       await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
       expect(element.textContent).toContain('Local collection paused')
+      expect(remote.setRequestEnabled).not.toHaveBeenCalled()
+      await click('Enable request observations')
+      expect(remote.setRequestEnabled).toHaveBeenCalledExactlyOnceWith(true)
+      expect(remote.setEnabled).not.toHaveBeenCalled()
+      expect(element.textContent).toContain('Request observations enabled')
+      await click('Pause request observations')
+      expect(remote.setRequestEnabled).toHaveBeenLastCalledWith(false)
       const controls = Array.from(element.querySelectorAll('summary')).find(node => node.textContent === 'Collection controls')
       expect(controls?.parentElement?.hasAttribute('open')).toBe(false)
       await act(async () => { controls?.click() })
@@ -43,10 +82,10 @@ describe('local diagnostics control', () => {
       expect(remote.setEnabled).toHaveBeenCalledWith(true)
       expect(element.textContent).toContain('Local collection enabled')
       expect(element.textContent).toContain('Auto allocation observations')
-      await click('Clear local aggregates')
+      await click('Clear local diagnostics')
       expect(remote.clear).not.toHaveBeenCalled()
       await click('Cancel')
-      await click('Clear local aggregates')
+      await click('Clear local diagnostics')
       await click('Confirm clear')
       expect(remote.clear).toHaveBeenCalledTimes(1)
       const dataScope = Array.from(element.querySelectorAll('summary')).find(node => node.textContent === 'Data scope, limits and JSON')
@@ -62,7 +101,7 @@ describe('local diagnostics control', () => {
     const remote: DiagnosticsRemote = {
       get: async () => ({ ok: true, value: { enabled: false, autoAllocationEnabled: false, state: 'unavailable',
         diagnostic: 'storage-unavailable', dirty: false, snapshot: emptyDiagnostics() } }),
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
@@ -83,7 +122,7 @@ describe('local diagnostics control', () => {
     const remote: DiagnosticsRemote = {
       get: async () => ({ ok: true, value: { enabled: false, autoAllocationEnabled: false, state: 'ready',
         diagnostic: 'none', dirty: false, snapshot } }),
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
@@ -116,7 +155,7 @@ describe('local diagnostics control', () => {
     const remote: DiagnosticsRemote = {
       get: async () => ({ ok: true, value: { enabled: true, autoAllocationEnabled: false, state: 'ready',
         diagnostic: 'none', dirty: false, snapshot } }),
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
@@ -147,7 +186,7 @@ describe('local diagnostics control', () => {
       .mockResolvedValueOnce({ ok: true as const, value: view })
     const remote: DiagnosticsRemote = {
       get,
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
@@ -171,6 +210,7 @@ describe('local diagnostics control', () => {
       get: async () => ({ ok: true, value: view }),
       setEnabled: vi.fn(async enabled => ({ ok: true as const, value: view = { ...view, enabled } })),
       setAutoAllocationEnabled: vi.fn(),
+      setRequestEnabled: vi.fn(),
       clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
