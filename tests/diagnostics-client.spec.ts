@@ -19,7 +19,7 @@ it('rejects stale status responses and settles an unmounted Checking operation o
   const status = new Promise<Awaited<ReturnType<DiagnosticsRemote['get']>>>(resolve => { release = resolve })
   const report = vi.fn<DiagnosticsRemote['recordClient']>(async () => ({ ok: true, value: view(5) }))
   new TestRemote(ctx, { get: () => status, recordClient: report, clear: vi.fn(), setEnabled: vi.fn(),
-    setAutoAllocationEnabled: vi.fn() })
+    setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn() })
   const dispose = installDiagnosticsClient(ctx)
   try {
     updateDiagnosticsClient(view(5))
@@ -45,7 +45,7 @@ it('does not resend uncertain rows and exposes acknowledgement gaps on the next 
     .mockRejectedValueOnce(new Error('synthetic-private-error'))
     .mockResolvedValue({ ok: true, value: view(2) })
   new TestRemote(ctx, { get: async () => ({ ok: true, value: view(2) }), recordClient: report,
-    clear: vi.fn(), setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn() })
+    clear: vi.fn(), setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn() })
   const dispose = installDiagnosticsClient(ctx)
   try {
     updateDiagnosticsClient(view(2))

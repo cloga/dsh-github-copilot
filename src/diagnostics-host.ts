@@ -39,6 +39,7 @@ export class DiagnosticsController extends TypertRemoteService {
   private problem: DiagnosticsView['diagnostic'] = 'storage-unavailable'
   private enabled = false
   private autoAllocationEnabled = false
+  private requestEnabled = false
   private dirty = false
   private persistedAt: number | undefined
   private revision = 0
@@ -59,8 +60,11 @@ export class DiagnosticsController extends TypertRemoteService {
         && value.diagnosticsEnabled === true
       this.autoAllocationEnabled = typeof value === 'object' && value !== null
         && 'autoAllocationDiagnosticsEnabled' in value && value.autoAllocationDiagnosticsEnabled === true
+      this.requestEnabled = typeof value === 'object' && value !== null
+        && 'requestDiagnosticsEnabled' in value && value.requestDiagnosticsEnabled === true
       this.collector.setEnabled(this.enabled && this.state === 'ready')
       this.collector.setAutoAllocationEnabled(this.autoAllocationEnabled && this.state === 'ready')
+      this.collector.setRequestEnabled(this.requestEnabled && this.state === 'ready')
       if (!this.enabled) this.brackets.clear()
     }
     ctx.inject(['settings'], scope => {
@@ -88,6 +92,7 @@ export class DiagnosticsController extends TypertRemoteService {
           ? 'storage-invalid' : 'storage-unavailable'
         this.collector.setEnabled(false)
         this.collector.setAutoAllocationEnabled(false)
+        this.collector.setRequestEnabled(false)
         ctx.logger.warn('[github-copilot] COPILOT_DIAGNOSTICS_STORAGE_UNAVAILABLE')
       }
       if (this.closed) return
@@ -163,10 +168,32 @@ export class DiagnosticsController extends TypertRemoteService {
   }
   @Remote
   get(): DiagnosticsView {
-    return { enabled: this.enabled, autoAllocationEnabled: this.autoAllocationEnabled,
+    return { enabled: this.enabled, autoAllocationEnabled: this.autoAllocationEnabled, requestEnabled: this.requestEnabled,
       state: this.state, diagnostic: this.problem,
       ...(this.persistedAt === undefined ? {} : { persistedAt: this.persistedAt }),
       dirty: this.dirty, snapshot: this.collector.snapshot() }
+  }
+  @Remote
+  async setRequestEnabled(enabled: boolean): Promise<DiagnosticsView> {
+    if (typeof enabled !== 'boolean') throw new Error('COPILOT_DIAGNOSTICS_INVALID_CONTROL')
+    if (this.settingsBusy) throw new Error('COPILOT_DIAGNOSTICS_CONTROL_BUSY')
+    if (enabled && !this.domain) throw new Error('COPILOT_DIAGNOSTICS_STORAGE_UNAVAILABLE')
+    this.settingsBusy = true
+    try {
+      const settings = this.ctx.get('settings')
+      const row = settings?.describe({ redactSecrets: true }).find(item => item.ns === 'github-copilot')
+      if (!settings || !row) throw new Error('COPILOT_DIAGNOSTICS_SETTINGS_UNAVAILABLE')
+      await settings.mutate('github-copilot', [{
+        op: 'set', path: ['requestDiagnosticsEnabled'], value: enabled,
+      }], row.revision)
+      const saved = settings.describe({ redactSecrets: true }).find(item => item.ns === 'github-copilot')?.value
+      if (typeof saved !== 'object' || saved === null || !('requestDiagnosticsEnabled' in saved)
+        || saved.requestDiagnosticsEnabled !== enabled) throw new Error('COPILOT_DIAGNOSTICS_SETTINGS_COMMIT_UNCERTAIN')
+      this.requestEnabled = enabled
+      this.collector.setRequestEnabled(enabled && this.state === 'ready')
+      await this.flush()
+      return this.get()
+    } finally { this.settingsBusy = false }
   }
   @Remote
   async setEnabled(enabled: boolean): Promise<DiagnosticsView> {

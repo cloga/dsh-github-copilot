@@ -47,6 +47,7 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
     return () => { current.active = false; current.generation++; current.busy = false }
   }, [remote])
   const rows = view?.snapshot.rows ?? []
+  const requests = view?.snapshot.requests
   const auto = view?.snapshot.autoAllocation
   const autoOpportunities = auto?.rows.reduce((sum, row) => sum + row.opportunities, 0) ?? 0
   const autoExpected = auto?.rows.reduce((sum, row) => sum + row.expectedSelections, 0) ?? 0
@@ -122,6 +123,26 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
             : view && auto.status !== 'observed' ? h('p', { style: { margin: 0 } }, 'No retained observations yet.') : null,
       autoRows.length ? h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
         `${autoOpportunities} candidate opportunities · ${autoExpected.toFixed(3)} expected selections · ${autoSelections} actual selections · ${autoNoFit} no-fit decisions. Compare expected and selected counts only within matching cohorts; these are not execution, quality or billing evidence.`) : null),
+    view ? h('details', null,
+      h('summary', null, 'Physical request observations'),
+      h('p', { style: { margin: 0 } },
+        requests ? `${requests.rows.length} retained requests · ${requests.pending ?? 0} sampled pending · ${requests.dropped} dropped · ${requests.evicted} expired/evicted · ${requests.interruptedOnReopen ?? 0} interrupted on reopen`
+          : 'No retained request observations. This does not establish zero failures or enabled collection.'),
+      h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
+        'Managed native adapter dispatches only. Local body-write completion is not supplier receipt. Stream-done is a native terminal observation, not tool execution or billing success. No Core retry count or Session/turn attribution is inferred.'),
+      requests?.rows.length ? h('div', { style: { overflowX: 'auto', minWidth: 0 } },
+        h('table', { style: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', font: 'inherit' } },
+          h('caption', { style: { ...nativeCaptionStyle, textAlign: 'left', marginBottom: 8 } }, 'Latest retained physical requests'),
+          h('thead', null, h('tr', null, ...['Time (UTC)', 'Model', 'Outcome / reason', 'HTTP', 'JSON / wire bytes', 'Headers / body-write ms'].map(label =>
+            h('th', { key: label, scope: 'col', style: { padding: 6, font: 'inherit', fontWeight: 500 } }, label)))),
+          h('tbody', null, ...requests.rows.slice().sort((left, right) => right.startedAt - left.startedAt).map((row, index) => h('tr', { key: `${row.streamId}/${row.dispatchIndex}/${index}` },
+            h('td', { style: { padding: 6, whiteSpace: 'nowrap' } }, new Date(row.startedAt).toISOString()),
+            h('td', { style: { padding: 6, overflowWrap: 'anywhere' } }, row.model),
+            h('td', { style: { padding: 6, overflowWrap: 'anywhere' } }, `${row.outcome} / ${row.reason}`),
+            h('td', { style: { padding: 6 } }, row.httpStatus ?? '—'),
+            h('td', { style: { padding: 6 } }, `${row.composition.totalBytes ?? 'unknown'} / ${row.wireBytes ?? 'unknown'} (${row.encoding}; composition ${row.composition.state})`),
+            h('td', { style: { padding: 6 } },
+              `${row.responseHeadersMs ?? 'unknown'} / ${row.upload?.state === 'observed' ? row.upload.bodyWriteCompleteMs ?? 'unknown' : 'unknown'}`)))))) : null) : null,
     view && populations.length ? h('details', null,
       h('summary', null, 'Account and compaction observations'),
       h('div', { style: { overflowX: 'auto', minWidth: 0 } },
@@ -141,6 +162,11 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
       h('p', null, 'No retained operation observations. This is not evidence of zero failures.')) : null,
     h('details', null,
       h('summary', null, 'Collection controls'),
+      h('p', { style: { margin: 0 } },
+        view?.requestEnabled === undefined ? 'Request observations unavailable in this snapshot.'
+          : `Request observations ${view.requestEnabled ? 'enabled' : 'paused'}. ${requests?.rows.length ?? 0} retained physical requests; ${requests?.dropped ?? 0} dropped; ${requests?.evicted ?? 0} expired/evicted.`),
+      h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
+        'Separate opt-in: retain at most 128 content-free physical requests for 24 hours. Includes model, payload byte counts, transport timing, HTTP status and terminal categories, not bodies, credentials, URLs, headers or Session/turn IDs. Random stream IDs correlate native SDK dispatches only; dispatch index is not a Core retry count.'),
       h('p', { role: 'status', style: { margin: 0 } },
         !remote ? 'Diagnostics controls are unavailable in this connection.'
           : !view ? busy ? 'Reading local collection status…' : 'Collection status is unknown.'
@@ -159,20 +185,23 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
         control(view?.autoAllocationEnabled ? 'Pause Auto allocation observation' : 'Enable Auto allocation observation',
           () => { void run(value => value.setAutoAllocationEnabled(!view?.autoAllocationEnabled)) },
           !remote || !view || !view.autoAllocationEnabled && view.state !== 'ready'),
-        control('Clear local aggregates', () => setConfirmClear(true), !remote || !view || view.state !== 'ready')),
+        control(view?.requestEnabled ? 'Pause request observations' : 'Enable request observations',
+          () => { void run(value => value.setRequestEnabled(!view?.requestEnabled)) },
+          !remote || !view || view.requestEnabled === undefined || !view.requestEnabled && view.state !== 'ready'),
+        control('Clear local diagnostics', () => setConfirmClear(true), !remote || !view || view.state !== 'ready')),
       confirmClear ? h('div', { role: 'group', 'aria-label': 'Confirm clearing local diagnostics' },
-        h('p', null, 'Delete collected aggregates only? Both collection controls keep their current enabled/paused settings. This does not clear account settings or conversation history.'),
+        h('p', null, 'Delete collected aggregates and request observations? Collection controls keep their current enabled/paused settings. This does not clear account settings or conversation history.'),
         control('Confirm clear', () => { setConfirmClear(false); void run(value => value.clear()) }),
         control('Cancel', () => setConfirmClear(false))) : null),
     view ? h('details', null,
       h('summary', null, 'Data scope, limits and JSON'),
       h('p', { style: { margin: 0 } },
-        'Observations stay in this profile for 14 days. Auto rows contain policy/model/cohort dimensions and aggregate counts only; no Session or turn IDs, conversation content, upload or automatic tuning. Expired counts are strata, not removed decisions.'),
+        'Aggregates stay in this profile for 14 days; request observations for 24 hours. Auto rows contain policy/model/cohort dimensions and aggregate counts only; no Session or turn IDs, conversation content, upload or automatic tuning. Expired counts are strata, not removed decisions.'),
       h('p', { style: { margin: 0 } },
         `Host pending: ${view.snapshot.pending.reduce((sum, row) => sum + row.count, 0)}. Host dropped: ${view.snapshot.dropped}; Client dropped: ${view.snapshot.clientDropped}; Client unconfirmed: ${view.snapshot.clientUnconfirmed}; evicted/expired: ${view.snapshot.evicted}; saturated: ${view.snapshot.saturated}. At most 4,096 aggregate rows and 2 MiB. Client pending samples are periodic observations, not a live outstanding count. Other settled includes policy rejection, revocation, environment faults and unknown/no-checkpoint results. Stock/custom-engine physical summaries, native recovery opt-out, OAuth, quota and unwrapped RPCs are not covered.`),
-      h('details', null, h('summary', null, 'Review aggregate-only JSON'),
-        h('p', { style: { margin: 0 } }, 'Review before sharing. This includes build versions, hour windows and fixed diagnostic counts, never account or Session identifiers.'),
+      h('details', null, h('summary', null, requests ? 'Review local diagnostics JSON' : 'Review aggregate-only JSON'),
+        h('p', { style: { margin: 0 } }, 'Review before sharing. This includes build versions and diagnostic counts; when request observations were enabled it also includes request times, model IDs, byte counts and random stream IDs, never account or Session identifiers. Client timing does not prove supplier receipt or fault ownership.'),
         control('Prepare current JSON', () => setExported(true)),
-        exported ? h('textarea', { 'aria-label': 'Local diagnostics aggregate JSON', readOnly: true,
+        exported ? h('textarea', { 'aria-label': requests ? 'Local diagnostics JSON' : 'Local diagnostics aggregate JSON', readOnly: true,
           value: JSON.stringify(view, null, 2), rows: 12, style: { width: '100%', boxSizing: 'border-box', font: 'inherit' } }) : null)) : null)
 }

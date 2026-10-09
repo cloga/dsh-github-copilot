@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.2-alpha.4 (prepared)
+
+- Add independently opt-in, content-free managed-adapter physical request
+  observations to Local diagnostics: model/protocol, JSON/wire byte counts,
+  bounded composition, local transport timings, HTTP status and strict terminal
+  categories. Existing aggregate collection does not enable this scope.
+- Retain at most 128 request rows for 24 hours within the shared 2 MiB snapshot.
+  Expose dropped/expired/pending/reopen gaps, independent pause and confirmed
+  clear, a native-style request table and explicit reviewed-JSON scope.
+- Preserve native request bytes, retry decisions, stream results and accounting.
+  Body-write completion is not supplier receipt; missing terminal text is not
+  abort evidence. This improves investigation, not HTTP408/EOF/context recovery.
+- Keep the offline account/compaction analyzer aggregate-only, with an explicit
+  gap when separately collected request observations are omitted.
+
 ## 0.4.2-alpha.3 (prepared)
 
 - Put daily Auto allocation aggregate rows in the primary Local diagnostics view, with UTC date, policy, model, decision cohort, opportunities, expected selections, selected counts and no-fit decisions. Keep cohorts distinct and state that these counts do not prove execution, quality or billing.

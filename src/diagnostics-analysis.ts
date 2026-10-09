@@ -19,6 +19,7 @@ const gaps = [
   'storage-not-ready', 'analysis-count-overflow', 'no-cross-layer-correlation',
   'no-unique-impact', 'hour-boundary-censoring', 'no-collection-coverage-clock',
   'no-calibrated-alert-thresholds', 'no-baseline-trend', 'no-root-cause-proof',
+  'request-observations-not-analyzed',
 ] as const
 const intervals = [
   { lowerMs: 0, upperExclusiveMs: 100 }, { lowerMs: 100, upperExclusiveMs: 500 },
@@ -284,6 +285,7 @@ export function analyzeSnapshot(input: unknown, options: {
     if (snapshot.pending.length) gapSet.add('stored-pending-is-not-live')
   }
   if (!populations.length) gapSet.add('no-retained-operation-observations')
+  if (snapshot.requests !== undefined) gapSet.add('request-observations-not-analyzed')
   if (!populations.some(row => ['account-global-switch', 'account-session-select', 'account-session-inherit'].includes(row.operation)))
     gapSet.add('account-switch-not-observed')
   if (!populations.some(row => row.operation === 'compaction' || row.operation === 'compaction-summary'))

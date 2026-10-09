@@ -783,6 +783,11 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     const enabled = (settings?.chatStreamLiveness ?? streamLiveness ?? true)
       && (template.transport === undefined || template.transport === 'sse')
     const guard: AccountProviderGuard = { ...lifetime.guard(lease), ...hooks,
+      requestDiagnostics: {
+        enabled: () => ctx.get('githubCopilotDiagnostics')?.collector.isRequestEnabled() === true,
+        begin: start => ctx.get('githubCopilotDiagnostics')?.collector.beginRequest(start),
+        failed: () => ctx.logger.warn('[github-copilot] COPILOT_REQUEST_DIAGNOSTICS_FAILED'),
+      },
       responsesRequestCompression: settings?.responsesRequestCompression === true
         && (template.transport === undefined || template.transport === 'sse'),
       responsesOmitTemperature: settings?.responsesOmitTemperature === true,
