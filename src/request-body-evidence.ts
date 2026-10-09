@@ -22,12 +22,13 @@ export type RequestBodyEvidence = {
   readonly opaqueReplayBytes: number
   readonly remainingConversationBytes: number
 } | {
-  readonly state: 'unavailable' | 'size-limit' | 'work-limit' | 'invalid-json' | 'unsupported-shape'
+  readonly state: 'unavailable' | 'size-limit' | 'work-limit' | 'invalid-json' | 'unsupported-shape' | 'cancelled' | 'time-limit'
   readonly totalBytes?: number
 }
 
 export interface RequestBodyDispatchEvidence {
   readonly protocol: RequestBodyProtocol
+  readonly composition?: Promise<RequestBodyEvidence>
   /** Fetch invocation to response headers, not upload duration or clone-observation time. */
   readonly responseHeadersMs: number
   readonly upload?: RequestUploadEvidence

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.2-alpha.5 (prepared)
+
+- Measure large request JSON composition up to 32 MiB with a cooperative,
+  bounded span scanner instead of a full payload object graph. Preserve
+  disjoint image/replay byte subsets, native original spans and explicit
+  cancellation/time/work limits; replay validation keeps its 16 MiB boundary.
+- Start opted-in large-body counting after Fetch invocation without holding
+  up ordinary response/stream delivery. Fence late numeric updates to their
+  own retained row across pause/re-enable, clear, teardown and eviction.
+- Reuse bounded composition work in exact verified-408 guidance. Preserve
+  native bytes, response/error, retries, Usage, timeout and default-off gzip;
+  composition evidence does not establish a proxy or supplier fault.
+
 ## 0.4.2-alpha.4 (prepared)
 
 - Add independently opt-in, content-free managed-adapter physical request

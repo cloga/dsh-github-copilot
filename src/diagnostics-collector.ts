@@ -28,6 +28,7 @@ export class DiagnosticsCollector {
   private autoAllocationEnabled = false
   private requestEnabled = false
   private readonly requestHandles = new Set<RequestDiagnosticHandle>()
+  private requestGeneration = 0
   private lastWall = 0
   private readonly autoAllocation: AutoAllocationDiagnosticsCollector
   constructor(readonly version: string, readonly layer: 'client' | 'host',
@@ -82,6 +83,7 @@ export class DiagnosticsCollector {
     if (!Number.isSafeInteger(epoch)) throw new Error('COPILOT_DIAGNOSTICS_EPOCH_LIMIT')
     this.live.clear()
     this.requestHandles.clear()
+    this.requestGeneration++
     this.autoAllocation.clear()
     this.data = { ...emptyDiagnostics(), epoch }
     this.changed()
@@ -179,6 +181,7 @@ export class DiagnosticsCollector {
   }
   close(): void { this.setEnabled(false); this.setAutoAllocationEnabled(false); this.setRequestEnabled(false) }
   setRequestEnabled(enabled: boolean): void {
+    if (this.requestEnabled !== enabled) this.requestGeneration++
     if (this.requestEnabled && !enabled) {
       for (const handle of this.requestHandles) handle.finish('interrupted', 'unknown')
     }
@@ -193,12 +196,32 @@ export class DiagnosticsCollector {
       return undefined
     }
     const startedAt = this.wall(), startedMono = this.mono()
+    const generation = this.requestGeneration
+    let retainedRow: RequestDiagnostic | undefined
     const base = {
       ...start, version: this.version, startedAt,
       model: /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(start.model) ? start.model : 'unknown',
     }
     let headers: { httpStatus?: number; responseHeadersMs?: number; upload?: RequestDiagnostic['upload'] } = {}
     const handle: RequestDiagnosticHandle = {
+      isCurrent: () => this.requestEnabled && this.requestGeneration === generation
+        && (this.requestHandles.has(handle) || retainedRow !== undefined
+          && retainedRow.startedAt > this.wall() - REQUEST_DIAGNOSTICS_RETENTION_MS
+          && this.data.requests?.rows.includes(retainedRow) === true),
+      composition: evidence => {
+        if (!handle.isCurrent?.()) return
+        const composition = RequestDiagnosticSchema.shape.composition.parse(evidence)
+        if (this.requestHandles.has(handle)) { base.composition = composition; return }
+        const current = this.data.requests
+        if (!current || !retainedRow) return
+        const next = { ...retainedRow, composition }
+        const candidate = { ...this.data, requests: { ...current,
+          rows: current.rows.map(row => row === retainedRow ? next : row) } }
+        if (!DiagnosticsSnapshotSchema.safeParse(candidate).success) throw new Error('COPILOT_DIAGNOSTICS_CAPACITY')
+        this.data = candidate
+        retainedRow = next
+        this.changed()
+      },
       headers: (httpStatus, ms, upload) => {
         if (!this.requestHandles.has(handle)) return
         headers = { ...(httpStatus === undefined ? {} : { httpStatus }),
@@ -227,7 +250,10 @@ export class DiagnosticsCollector {
         }
         const candidate = { ...this.data, requests: { ...current, rows,
           evicted: Math.min(Number.MAX_SAFE_INTEGER, current.evicted + evicted) } }
-        if (DiagnosticsSnapshotSchema.safeParse(candidate).success) this.data = candidate
+        if (DiagnosticsSnapshotSchema.safeParse(candidate).success) {
+          this.data = candidate
+          retainedRow = rows.includes(parsed.data) ? parsed.data : undefined
+        }
         else current.dropped = Math.min(Number.MAX_SAFE_INTEGER, current.dropped + 1)
         this.changed()
       },

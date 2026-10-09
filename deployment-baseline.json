@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.2-alpha.4"
+    "version": "0.4.2-alpha.5"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -297,6 +297,8 @@
         {"file": "src/diagnostics-types.ts", "marker": "DIAGNOSTICS_MAX_BYTES = 2 * 1024 * 1024"},
         {"file": "src/diagnostics-collector.ts", "marker": "noteClientGaps"},
         {"file": "src/request-diagnostics.ts", "marker": "REQUEST_DIAGNOSTICS_MAX_ROWS = 128"},
+        {"file": "src/request-body-composition.ts", "marker": "bytes: 32 * 1024 * 1024"},
+        {"file": "src/request-body-composition.ts", "marker": "concurrent: 4"},
         {"file": "src/request-diagnostics.ts", "marker": "REQUEST_DIAGNOSTICS_RETENTION_MS = 24 * 60 * 60 * 1000"},
         {"file": "src/config.ts", "marker": "requestDiagnosticsEnabled: z.boolean().default(false).hidden().volatile()"},
         {"file": "src/diagnostics-host.ts", "marker": "diagnosticsDomainForProfile"},
@@ -308,6 +310,9 @@
       "tests": [
         {"file": "tests/diagnostics-collector.spec.ts", "name": "is disabled until enabled, records success denominators and settles once"},
         {"file": "tests/request-diagnostics.spec.ts", "name": "requires independent consent, captures status/timing and never infers upload or retry count"},
+        {"file": "tests/request-body-composition.spec.ts", "name": "partitions a 20.4 MiB request without parsing its payload object graph"},
+        {"file": "tests/preview-transport-failures.spec.ts", "name": "does not wait for large-request composition before native success and updates the exact settled row"},
+        {"file": "tests/request-diagnostics.spec.ts", "name": "updates only its own retained record after native settlement, never across clear/pause/eviction"},
         {"file": "tests/preview-transport-failures.spec.ts", "name": "records verified 408 once without changing the native error, serialized input or dispatch count"},
         {"file": "tests/diagnostics-client.spec.ts", "name": "rejects stale status responses and settles an unmounted Checking operation once"},
         {"file": "tests/diagnostics-card.spec.ts", "name": "requires a confirmed durable enable and a separate destructive clear confirmation"},

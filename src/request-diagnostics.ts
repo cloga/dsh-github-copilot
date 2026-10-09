@@ -9,7 +9,7 @@ const composition = z.discriminatedUnion('state', [
     toolSchemaBytes: integer, systemBytes: integer, otherBytes: integer,
     imageBlockBytes: integer, opaqueReplayBytes: integer, remainingConversationBytes: integer,
   }).strict(),
-  z.object({ state: z.enum(['unavailable', 'size-limit', 'work-limit', 'invalid-json', 'unsupported-shape']),
+  z.object({ state: z.enum(['unavailable', 'size-limit', 'work-limit', 'invalid-json', 'unsupported-shape', 'cancelled', 'time-limit']),
     totalBytes: integer.optional() }).strict(),
 ])
 const upload = z.discriminatedUnion('state', [
@@ -42,6 +42,8 @@ export const RequestDiagnosticsSchema = z.object({
 }).strict()
 export type RequestDiagnostic = z.infer<typeof RequestDiagnosticSchema>
 export interface RequestDiagnosticHandle {
+  composition?(evidence: RequestBodyEvidence): void
+  isCurrent?(): boolean
   headers(status: number | undefined, ms: number | undefined, upload?: RequestUploadEvidence): void
   finish(outcome: RequestDiagnostic['outcome'], reason?: RequestDiagnostic['reason']): void
 }
