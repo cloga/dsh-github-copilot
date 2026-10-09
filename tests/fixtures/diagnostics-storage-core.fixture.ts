@@ -36,6 +36,14 @@ it('persists strictly bounded aggregate snapshots across actual public JSON/doma
     collector.setEnabled(true)
     collector.begin('identity-read').finish('success')
     collector.begin('compaction').stage('summary-attempt')
+    collector.setRequestEnabled(true)
+    const requestStart = { streamId: '12345678-1234-4234-8234-123456789abc', dispatchIndex: 1,
+      model: 'fixture-model', protocol: 'openai-responses' as const,
+      composition: { state: 'size-limit' as const, totalBytes: 21355789 }, encoding: 'identity' as const, wireBytes: 21355789 }
+    const observed = collector.beginRequest(requestStart)!
+    observed.headers(408, 61375)
+    observed.finish('http-error', 'request-body-timeout')
+    collector.beginRequest({ ...requestStart, dispatchIndex: 2 })
     await domain.global.set(collector.snapshot())
     await domain.close()
     domain = await facility.open(diagnosticsDomain)
@@ -44,12 +52,16 @@ it('persists strictly bounded aggregate snapshots across actual public JSON/doma
     expect(restarted.snapshot().rows.some(row => row.metric === 'success')).toBe(true)
     expect(restarted.snapshot().interrupted).toBe(1)
     expect(restarted.snapshot().pending).toEqual([])
+    expect(restarted.snapshot().requests).toMatchObject({
+      pending: 0, interruptedOnReopen: 1, rows: [{ reason: 'request-body-timeout', httpStatus: 408 }],
+    })
     restarted.clear()
     await domain.global.set(restarted.snapshot())
     await domain.close()
     domain = await facility.open(diagnosticsDomain)
     expect(domain.global.get().epoch).toBe(2)
     expect(domain.global.get().rows).toEqual([])
+    expect(domain.global.get().requests).toBeUndefined()
     await domain.close()
     const file = join(path, 'github_copilot_diagnostics.json')
     const original = await readFile(file, 'utf8')

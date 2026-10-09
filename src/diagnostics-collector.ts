@@ -6,6 +6,8 @@ import type { DiagnosticsOperation, DiagnosticsStage, DiagnosticsOutcome, Diagno
   DiagnosticsRow, DiagnosticsSnapshot } from './diagnostics-types.ts'
 import { AutoAllocationDiagnosticsCollector, emptyAutoAllocationDiagnostics } from './auto-allocation-diagnostics.ts'
 import type { AutoSelectionExplanation } from './auto-model-routing.ts'
+import { REQUEST_DIAGNOSTICS_MAX_ROWS, REQUEST_DIAGNOSTICS_RETENTION_MS, RequestDiagnosticSchema } from './request-diagnostics.ts'
+import type { RequestDiagnostic, RequestDiagnosticHandle, RequestDiagnosticStart } from './request-diagnostics.ts'
 
 export interface DiagnosticsHandle {
   stage(stage: DiagnosticsStage): void
@@ -24,6 +26,8 @@ export class DiagnosticsCollector {
   private readonly live = new Set<Live>()
   private enabled = false
   private autoAllocationEnabled = false
+  private requestEnabled = false
+  private readonly requestHandles = new Set<RequestDiagnosticHandle>()
   private lastWall = 0
   private readonly autoAllocation: AutoAllocationDiagnosticsCollector
   constructor(readonly version: string, readonly layer: 'client' | 'host',
@@ -43,6 +47,13 @@ export class DiagnosticsCollector {
       this.increment('interrupted', pending.count)
     }
     this.data.pending = []
+    if (this.data.requests) {
+      const requests = this.data.requests
+      requests.interruptedOnReopen = Math.min(Number.MAX_SAFE_INTEGER,
+        (requests.interruptedOnReopen ?? 0) + (requests.pending ?? 0))
+      requests.pending = 0
+      this.changed()
+    }
     this.expire()
   }
   setEnabled(enabled: boolean): void {
@@ -70,6 +81,7 @@ export class DiagnosticsCollector {
     const epoch = this.data.epoch + 1
     if (!Number.isSafeInteger(epoch)) throw new Error('COPILOT_DIAGNOSTICS_EPOCH_LIMIT')
     this.live.clear()
+    this.requestHandles.clear()
     this.autoAllocation.clear()
     this.data = { ...emptyDiagnostics(), epoch }
     this.changed()
@@ -111,6 +123,13 @@ export class DiagnosticsCollector {
     this.increment('evicted', this.data.rows.length - kept.length)
     if (kept.length !== this.data.rows.length) this.changed()
     this.data.rows = kept
+    const requests = this.data.requests
+    if (requests) {
+      const retained = requests.rows.filter(row => row.startedAt > now - REQUEST_DIAGNOSTICS_RETENTION_MS)
+      requests.evicted = Math.min(Number.MAX_SAFE_INTEGER, requests.evicted + requests.rows.length - retained.length)
+      if (retained.length !== requests.rows.length) this.changed()
+      requests.rows = retained
+    }
   }
   private add(operation: DiagnosticsOperation, stage: DiagnosticsStage, metric: DiagnosticsRow['metric'],
     reason: DiagnosticsReason, bucket: number, count = 1, version = this.version): void {
@@ -153,10 +172,71 @@ export class DiagnosticsCollector {
       if (existing) existing.count++
       else pending.push({ version: this.version, operation: live.operation, stage: live.stage, bucket, count: 1 })
     }
-    return DiagnosticsSnapshotSchema.parse({ ...this.data, autoAllocation: this.autoAllocation.snapshot(),
+    return DiagnosticsSnapshotSchema.parse({ ...this.data,
+      ...(this.data.requests ? { requests: { ...this.data.requests, pending: this.requestHandles.size } } : {}),
+      autoAllocation: this.autoAllocation.snapshot(),
       updatedAt: this.wall(), pending })
   }
-  close(): void { this.setEnabled(false); this.setAutoAllocationEnabled(false) }
+  close(): void { this.setEnabled(false); this.setAutoAllocationEnabled(false); this.setRequestEnabled(false) }
+  setRequestEnabled(enabled: boolean): void {
+    if (this.requestEnabled && !enabled) {
+      for (const handle of this.requestHandles) handle.finish('interrupted', 'unknown')
+    }
+    this.requestEnabled = enabled
+  }
+  beginRequest(start: RequestDiagnosticStart): RequestDiagnosticHandle | undefined {
+    if (!this.requestEnabled) return undefined
+    const requests = this.data.requests ??= { rows: [], dropped: 0, evicted: 0 }
+    if (this.requestHandles.size >= DIAGNOSTICS_MAX_LIVE) {
+      requests.dropped = Math.min(Number.MAX_SAFE_INTEGER, requests.dropped + 1)
+      this.changed()
+      return undefined
+    }
+    const startedAt = this.wall(), startedMono = this.mono()
+    const base = {
+      ...start, version: this.version, startedAt,
+      model: /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(start.model) ? start.model : 'unknown',
+    }
+    let headers: { httpStatus?: number; responseHeadersMs?: number; upload?: RequestDiagnostic['upload'] } = {}
+    const handle: RequestDiagnosticHandle = {
+      headers: (httpStatus, ms, upload) => {
+        if (!this.requestHandles.has(handle)) return
+        headers = { ...(httpStatus === undefined ? {} : { httpStatus }),
+          ...(ms === undefined ? {} : { responseHeadersMs: Math.round(ms) }), ...(upload ? { upload } : {}) }
+      },
+      finish: (outcome, reason = 'none') => {
+        if (!this.requestHandles.delete(handle)) return
+        this.expire()
+        const current = this.data.requests
+        if (!current) return
+        const parsed = RequestDiagnosticSchema.safeParse({
+          ...base, ...headers, elapsedMs: Math.max(0, Math.round(this.mono() - startedMono)), outcome, reason,
+        })
+        if (!parsed.success) {
+          current.dropped = Math.min(Number.MAX_SAFE_INTEGER, current.dropped + 1)
+          this.changed()
+          return
+        }
+        const rows = [...current.rows, parsed.data]
+        const evicted = rows.length > REQUEST_DIAGNOSTICS_MAX_ROWS ? 1 : 0
+        if (evicted) {
+          let oldest = 0
+          for (let index = 1; index < rows.length; index++)
+            if (rows[index]!.startedAt < rows[oldest]!.startedAt) oldest = index
+          rows.splice(oldest, 1)
+        }
+        const candidate = { ...this.data, requests: { ...current, rows,
+          evicted: Math.min(Number.MAX_SAFE_INTEGER, current.evicted + evicted) } }
+        if (DiagnosticsSnapshotSchema.safeParse(candidate).success) this.data = candidate
+        else current.dropped = Math.min(Number.MAX_SAFE_INTEGER, current.dropped + 1)
+        this.changed()
+      },
+    }
+    this.requestHandles.add(handle)
+    this.changed()
+    return handle
+  }
+  isRequestEnabled(): boolean { return this.requestEnabled }
   noteDropped(): void { if (this.enabled) { this.increment('dropped'); this.changed() } }
   noteClientGaps(dropped: number, unconfirmed: number): void {
     if (!this.enabled) return

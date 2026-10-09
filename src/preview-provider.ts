@@ -15,6 +15,9 @@ import { requestBodyTimeoutDiagnostic } from './request-body-timeout.ts'
 import { prepareResponsesRequest } from './responses-request-compression.ts'
 import type { RequestCompressionEvidence } from './responses-request-compression.ts'
 import { createRequestUploadObserver } from './request-upload-evidence.ts'
+import { requestBodyEvidence } from './request-body-evidence.ts'
+import type { RequestDiagnosticHandle, RequestDiagnosticStart, RequestDiagnostic } from './request-diagnostics.ts'
+import { randomUUID } from 'node:crypto'
 import { CopilotStreamIdleError, CopilotStreamLiveness } from './copilot-stream-liveness.ts'
 
 export type ManagedWireAbortCode = 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' | 'COPILOT_PREVIEW_DISPOSED'
@@ -45,6 +48,11 @@ export interface PreviewProviderGuard {
   readonly streamIdleTimeoutMs?: number
   onStreamLiveness?(control: Pick<CopilotStreamLiveness, 'pause' | 'resume'>): void
   onStreamIdleTimeout?(error: CopilotStreamIdleError): void
+  requestDiagnostics?: {
+    enabled(): boolean
+    begin(start: RequestDiagnosticStart): RequestDiagnosticHandle | undefined
+    failed(): void
+  }
 }
 
 /** Guard for one selected model in an account-bound descriptor snapshot. */
@@ -258,6 +266,28 @@ export function createAccountProvider(
         }
       } : options.onPayload
       const fetch = options.fetch ?? globalThis.fetch
+      const streamId = randomUUID()
+      let dispatchIndex = 0
+      let requestDiagnostic: RequestDiagnosticHandle | undefined
+      let dispatchSignal: AbortSignal | undefined
+      let diagnosticsFailed = false
+      const observeDiagnostics = <T>(observe: () => T): T | undefined => {
+        try { return observe() } catch {
+          if (!diagnosticsFailed) {
+            diagnosticsFailed = true
+            guard.requestDiagnostics?.failed()
+          }
+          return undefined
+        }
+      }
+      const abortReason = (): RequestDiagnostic['reason'] => {
+        if (options.signal?.aborted) return 'caller-abort'
+        if (lease.signal.reason instanceof ManagedWireAbortError) return lease.signal.reason.code === 'COPILOT_PREVIEW_DISPOSED' ? 'disposed' : 'credential-changed'
+        if (liveness?.signal.reason instanceof CopilotStreamIdleError) return 'byte-idle-timeout'
+        return lease.signal.aborted || dispatchSignal?.aborted ? 'signal-abort' : 'unknown'
+      }
+      const diagnosticAborted = (): boolean =>
+        lease.signal.aborted || options.signal?.aborted === true || liveness?.signal.aborted === true || dispatchSignal?.aborted === true
       const observeResponse: NonNullable<StreamOptions['fetch']> = async (input, init) => {
         guard.requestCheckpoint?.()
         guard.onRequestBodyTimeout?.(undefined)
@@ -286,22 +316,55 @@ export function createAccountProvider(
           compression = prepared.evidence
         }
         lease.dispatch?.()
+        dispatchSignal = dispatchInit?.signal ?? undefined
         liveness?.beginRequest(originalBody)
+        dispatchIndex++
+        observeDiagnostics(() => requestDiagnostic?.finish('interrupted', 'unknown'))
+        requestDiagnostic = undefined
+        if (observeDiagnostics(() => guard.requestDiagnostics?.enabled())) {
+          requestDiagnostic = observeDiagnostics(() => {
+            const wireBody = dispatchInit?.body
+            const wireBytes = typeof wireBody === 'string' ? Buffer.byteLength(wireBody, 'utf8')
+              : ArrayBuffer.isView(wireBody) ? wireBody.byteLength : wireBody instanceof ArrayBuffer ? wireBody.byteLength : undefined
+            return guard.requestDiagnostics?.begin({
+              streamId, dispatchIndex, model: model.id, protocol: entry.api,
+              composition: requestBodyEvidence(originalBody, entry.api),
+              encoding: compression?.encoding ?? (typeof wireBody === 'string'
+                && !new Headers(dispatchInit?.headers).has('content-encoding') ? 'identity' : 'unknown'),
+              ...(wireBytes === undefined ? {} : { wireBytes }),
+            })
+          })
+        }
         let response: Response
-        const upload = guard.onRequestBodyTimeout === undefined ? undefined : createRequestUploadObserver()
+        const upload = guard.onRequestBodyTimeout === undefined && requestDiagnostic === undefined ? undefined : createRequestUploadObserver()
         const startedAt = performance.now()
         try { response = await (upload === undefined
           ? fetch(dispatchInput, dispatchInit)
           : upload.run(() => fetch(dispatchInput, dispatchInit))) }
-        catch (error) { retry?.observe(undefined, 0); throw error }
+        catch (error) {
+          observeDiagnostics(() => requestDiagnostic?.headers(undefined, undefined, upload?.snapshot()))
+          observeDiagnostics(() => requestDiagnostic?.finish(diagnosticAborted()
+            ? 'cancelled' : 'transport-error', abortReason()))
+          requestDiagnostic = undefined
+          retry?.observe(undefined, 0); throw error
+        }
         finally { upload?.close() }
         const responseHeadersMs = performance.now() - startedAt
+        observeDiagnostics(() => requestDiagnostic?.headers(response.status, responseHeadersMs, upload?.snapshot()))
         retry?.observe(originalBody, response.status)
-        if (response.status === 408 && guard.onRequestBodyTimeout !== undefined) {
+        if (response.status === 408 && (guard.onRequestBodyTimeout !== undefined || requestDiagnostic !== undefined)) {
           const diagnostic = await requestBodyTimeoutDiagnostic(response, originalBody, lease.signal,
             { protocol: entry.api, responseHeadersMs, ...upload === undefined ? {} : { upload: upload.snapshot() },
               ...compression === undefined ? {} : { compression } })
-          if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout(diagnostic)
+          if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout?.(diagnostic)
+          if (diagnostic !== undefined) {
+            observeDiagnostics(() => requestDiagnostic?.finish('http-error', 'request-body-timeout'))
+            requestDiagnostic = undefined
+          }
+        }
+        if (response.status >= 400) {
+          observeDiagnostics(() => requestDiagnostic?.finish('http-error', 'unknown'))
+          requestDiagnostic = undefined
         }
         // A bounded clone identifies only the observed request-scope rejection.
         // Preserve the original Response/status/body for the native SDK.
@@ -328,6 +391,14 @@ export function createAccountProvider(
         try {
           for await (const event of native.streamSimple(model, context, wireOptions)) {
             reportIdleFailure()
+            if (event.type === 'done') {
+              observeDiagnostics(() => requestDiagnostic?.finish('stream-done'))
+              requestDiagnostic = undefined
+            } else if (event.type === 'error') {
+              const cancelled = diagnosticAborted()
+              observeDiagnostics(() => requestDiagnostic?.finish(cancelled ? 'cancelled' : 'stream-error', cancelled ? abortReason() : 'unknown'))
+              requestDiagnostic = undefined
+            }
             if (event.type === 'error' && event.reason === 'aborted'
               && lease.signal.reason instanceof ManagedWireAbortError) {
               guard.onWireAbort?.(lease.signal.reason.code)
@@ -335,6 +406,7 @@ export function createAccountProvider(
             yield event
           }
         } finally {
+          observeDiagnostics(() => requestDiagnostic?.finish('interrupted', 'unknown'))
           reportIdleFailure()
           liveness?.dispose()
           if (lease.signal.aborted || options.signal?.aborted) retry?.observe(undefined, 0)

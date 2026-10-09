@@ -479,7 +479,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
       'get', 'set', 'refreshIdentity', 'ensureIdentity', 'usage', 'refreshUsage', 'turn',
       'get', 'set', 'authorizeNext', 'defaults', 'setDefault',
-      'get', 'clear', 'setEnabled', 'setAutoAllocationEnabled', 'recordClient',
+      'get', 'clear', 'setEnabled', 'setAutoAllocationEnabled', 'setRequestEnabled', 'recordClient',
     ])
     for (const descriptor of remote.descriptors.filter(item => item.namespace === 'githubCopilot'
       && item.method !== 'setModelExcluded' && item.method !== 'setModelHighCost')) {

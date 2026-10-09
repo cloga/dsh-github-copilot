@@ -1,4 +1,4 @@
-# Local diagnostics: account, compaction and Auto allocation
+# Local diagnostics: account, compaction, Auto allocation and requests
 
 Roadmap: [#347](https://github.com/cloga/dsh-github-copilot/issues/347).
 Phase 0: [#354](https://github.com/cloga/dsh-github-copilot/issues/354).
@@ -45,17 +45,23 @@ not contain Session/turn identifiers, prompts, outcomes, execution or billing
 attribution. Aggregate rows are capped at 1,024, retained for 14 days and
 included in the existing 2 MiB snapshot limit; expired, dropped, truncated,
 saturated and restart evidence remains explicit. There is no per-turn export,
-automatic tuning or upload. The two controls can be paused independently;
-**Clear local aggregates** clears both diagnostics populations.
+automatic tuning or upload. The aggregate controls can be paused independently.
+The separate **Enable request observations** control uses the hidden volatile
+`github-copilot.requestDiagnosticsEnabled` leaf with path-level CAS and exact
+readback. Existing aggregate consent never enables request observations.
+**Clear local diagnostics** clears all three populations, including request
+observations, without changing the three enabled/paused controls.
 
-**Read status** returns a strict aggregate snapshot; **Review aggregate-only JSON → Prepare current JSON**
+**Read status** returns a strict snapshot; **Review aggregate-only JSON → Prepare current JSON**
 prepares a read-only copy for explicit review/sharing, never a download or upload.
+When retained request observations exist, the disclosure is instead named
+**Review local diagnostics JSON** and includes that separately consented scope.
 The coding session does not automatically gain access to the running Host.
 Pause preserves retained evidence and closes active observations as interrupted.
 It remains available for a configured-on collector when storage is unavailable;
 enabling still requires ready storage.
 Clear requires a separate confirmation, advances an epoch and removes this
-domain's aggregates without changing the enabled setting, accounts or history.
+domain's aggregates and request observations without changing the enabled settings, accounts or history.
 An uncertain write is not automatically replayed by the UI.
 
 ## Storage and limits
@@ -125,7 +131,8 @@ signal evidence; arbitrary native error text cannot establish cancellation.
 
 Stock/custom-engine physical summaries, recovery opt-out/native-only summary
 branches, OAuth Add/reauthorization/removal, quota, ordinary model refresh,
-managed chat/search/classifier transport and unwrapped RPCs remain uncovered.
+canonical/custom transport and unwrapped RPCs remain uncovered. Managed native
+adapter HTTP dispatches have only the separately enabled coverage below.
 Native checkpoint observation is not filesystem durability evidence. Reporting
 loss, crashes, disabled intervals and paging/coverage gaps must never be treated
 as zero failures. No automatic daily analysis, issue creation, account/model
@@ -141,6 +148,54 @@ The published Client gateway fixture captures the unchanged registration-bundle
 factory in its own isolated realm, sharing the actual public Cordis identity.
 It does not substitute tagged source for published bytes or attach to a live
 Client module registry; factory qualification is not Desktop activation proof.
+
+## Content-free physical request observations (#392)
+
+This independent, default-off pilot observes physical Fetch dispatches composed
+by the plugin-managed native adapter. It does not intercept canonical routes,
+change request bodies, timeout settings, retry decisions or native accounting.
+It retains at most 128 completed observations and 128 live handles for 24 hours
+within the same 2 MiB snapshot ceiling. Expiry, capacity drops and sampled
+pending counts are explicit. Pause settles live observations as interrupted;
+clear fences late completions. Saved pending counts become interrupted-on-reopen
+counts, not fabricated request rows. Abrupt loss can still lose the unflushed
+tail and requests that began since the last saved sample.
+
+Rows contain plugin version, request time, bounded model/protocol metadata,
+original JSON and dispatched wire byte counts, encoding, bounded composition
+partitions, local header/elapsed timing, HTTP status and fixed terminal/reason
+categories. Existing public native upload observations add ALPN, local body-write
+timing and writable-buffer bytes only when available. Unsupported/ambiguous
+transport evidence stays explicitly unavailable. Composition is bounded to
+16 MiB and fixed parser work limits; larger bodies retain byte counts with
+`size-limit`, never an invented composition or unlimited body parse. These are
+diagnostic work limits, not provider request limits.
+
+Random stream UUIDs group only dispatches within one native SDK stream.
+`dispatchIndex` is physical Fetch order, **not** Core's retry number or an
+end-to-end Session/turn correlation. No account/Session/turn IDs or hashes,
+URLs, headers, raw errors, prompts, tool parameters/results, attachment or replay
+content, credentials or token accounting are retained. Review timestamps/model
+metadata before explicit sharing; nothing is uploaded automatically.
+
+An exact verified HTTP408 `user_request_timeout` is classified as
+`request-body-timeout`; other provider/transport errors remain fixed unknown
+categories. Real caller, branded plugin-owned and byte-idle abort signals retain
+their strict attribution. Missing terminal/`terminated` text is not reinterpreted
+as a signal abort. `stream-done` means native terminal observation, not execution,
+billing or recovery success. Local body-write completion and zero writable buffer
+do **not** prove TCP acknowledgement, proxy forwarding or supplier receipt.
+These observations can distinguish a repeated large-body timeout from an
+actual cancellation; they do not identify the remote fault owner or fix
+HTTP408, EOF, retries or the native context meter.
+
+The collapsed **Physical request observations** table exposes latest retained
+timings/status/bytes. Detailed composition, transport evidence and random group
+IDs remain in reviewed JSON. Capture failures log only the fixed
+`COPILOT_REQUEST_DIAGNOSTICS_FAILED` code and never replace the native result.
+Synthetic native-SDK tests exercise HTTP408, missing terminal, real abort,
+concurrent stream isolation and unchanged request/error delivery without network
+or live account use.
 
 ## Explicit offline analysis (#368)
 
@@ -165,7 +220,11 @@ must identify the file and profile. The tool never searches DSH homes,
 enumerates storage units, opens a storage-domain writer or RPC, reads Settings,
 credentials or history, or falls back between modes.
 
-Both modes reuse the collector's strict Zod snapshot/view vocabulary. The
+Both modes reuse the collector's strict Zod snapshot/view vocabulary. Request
+observations are validated but deliberately not included in the account/compaction
+aggregate report; `request-observations-not-analyzed` marks their omission.
+Review the source JSON separately for transport investigation; absence of
+aggregate candidates says nothing about request failures. The
 reader rejects symlinks and non-files, caps input at 8 MiB, opens only for
 reading, decodes fatal UTF-8, and checks file identity, size and modification
 metadata before and after reading. These checks bound and detect ordinary
