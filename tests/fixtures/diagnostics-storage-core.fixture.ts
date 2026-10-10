@@ -53,6 +53,10 @@ it('persists strictly bounded aggregate snapshots across actual public JSON/doma
       toolSchemaBytes: 0, systemBytes: 0, otherBytes: 19, imageBlockBytes: 0, opaqueReplayBytes: 0,
       remainingConversationBytes: 21355770 })
     collector.beginRequest({ ...requestStart, dispatchIndex: 2 })
+    collector.beginCredentialChange()!.record({
+      phase: 'notification', reason: 'qualified', preparing: 0, dispatched: 1,
+      alreadyAborted: 0, preserved: 1, revoked: 0,
+    })
     await domain.global.set(collector.snapshot())
     await domain.close()
     domain = await facility.open(diagnosticsDomain)
@@ -67,6 +71,8 @@ it('persists strictly bounded aggregate snapshots across actual public JSON/doma
     expect(restarted.snapshot().requests).toMatchObject({
       pending: 0, interruptedOnReopen: 1, rows: [{ reason: 'request-body-timeout', httpStatus: 408,
         composition: { state: 'complete', totalBytes: 21355789, conversationBytes: 21355770 } }],
+      credentialChanges: { pending: 0, interruptedOnReopen: 1,
+        rows: [{ phase: 'notification', reason: 'qualified', preserved: 1 }] },
     })
     restarted.clear()
     await domain.global.set(restarted.snapshot())

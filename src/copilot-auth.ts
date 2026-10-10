@@ -19,12 +19,16 @@ import { readCopilotCatalog } from './model-protocol.ts'
 import type { CopilotAccountBinding } from './copilot-accounts-types.ts'
 import type {} from './copilot-accounts-host.ts'
 import { readSettingsNamespace } from './settings-reader.ts'
+import type { CredentialChangeReason } from './request-diagnostics.ts'
 
 export { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 
 const nativeRefreshResults = new WeakSet<object>()
+const nativeRefreshRejections = new WeakMap<object, CredentialChangeReason>()
 interface RefreshWrite {
   notifications: number
+  qualification: CredentialChangeReason
+  reason: CredentialChangeReason
   settle(valid: boolean): void
   readonly committed: Promise<boolean>
 }
@@ -39,23 +43,35 @@ export async function certifyCopilotNativeRefresh(
 ): Promise<void> {
   const ids = (grant: GitHubCopilotOAuthCredential) => grant.availableModelIds === undefined
     ? undefined : JSON.stringify([...grant.availableModelIds].sort())
-  if (previous.refresh !== result.refresh || previous.enterpriseUrl !== result.enterpriseUrl
-    || ids(previous) !== ids(result) || result.expires <= Date.now()) return
+  const reject = (reason: CredentialChangeReason) => { nativeRefreshRejections.set(result, reason) }
+  if (previous.refresh !== result.refresh) return reject('account-changed')
+  if (previous.enterpriseUrl !== result.enterpriseUrl) return reject('endpoint-changed')
+  if (ids(previous) !== ids(result)) return reject('entitlements-changed')
+  if (result.expires <= Date.now()) return reject('expired')
   const before = await derive(previous)
   const after = await derive(result)
   signal?.throwIfAborted()
   if (before.apiKey === previous.access && after.apiKey === result.access
     && trustedGitHubCopilotBaseUrl(before.baseUrl, previous) === trustedGitHubCopilotBaseUrl(after.baseUrl, result)) {
     nativeRefreshResults.add(result)
-  }
+  } else reject(before.apiKey !== previous.access || after.apiKey !== result.access ? 'auth-mismatch' : 'endpoint-changed')
 }
 
 /** Consume exactly one notification from the serialized, certified write. */
-export function observeCopilotNativeRefresh(ctx: Context, key: string): Promise<boolean> | undefined {
+export function observeCopilotNativeRefresh(ctx: Context, key: string,
+  diagnostic?: (phase: 'notification' | 'commit', reason: CredentialChangeReason) => void): Promise<boolean> | undefined {
   const service = ctx.get('credentials')
   const write = service === undefined ? undefined : refreshWrites.get(service)?.get(key)
-  if (!write) return undefined
-  if (++write.notifications !== 1) { write.settle(false); return undefined }
+  if (!write) { diagnostic?.('notification', 'unknown-source'); return undefined }
+  if (++write.notifications !== 1) {
+    write.reason = 'duplicate-notification'
+    write.settle(false)
+    diagnostic?.('notification', write.reason)
+    return undefined
+  }
+  diagnostic?.('notification', write.qualification)
+  if (write.qualification !== 'qualified') return undefined
+  if (diagnostic) void write.committed.then(() => diagnostic('commit', write.reason))
   return write.committed
 }
 
@@ -174,13 +190,20 @@ export function createGitHubCopilotCredentialStore(
             const next = await mutate(toCredential(current))
             binding?.assertCurrent()
             const record = next === undefined ? undefined : toRecord(next)
-            if (next !== undefined && nativeRefreshResults.delete(next)) {
+            const qualified = next !== undefined && nativeRefreshResults.delete(next)
+            const rejected = next === undefined ? undefined : nativeRefreshRejections.get(next)
+            if (next !== undefined) nativeRefreshRejections.delete(next)
+            if (qualified || rejected !== undefined && !writes.has(key)) {
               expected = record
               let settle!: (valid: boolean) => void
               const committed = new Promise<boolean>(resolve => { settle = resolve })
-              pending = { notifications: 0, settle, committed }
+              pending = { notifications: 0, settle, committed,
+                qualification: qualified ? 'qualified' : rejected!, reason: 'write-failed' }
               if (writes.has(key)) {
-                writes.get(key)?.settle(false)
+                const previous = writes.get(key)!
+                previous.reason = 'write-conflict'
+                previous.settle(false)
+                pending.reason = 'write-conflict'
                 pending.settle(false)
               } else writes.set(key, pending)
             }
@@ -188,10 +211,13 @@ export function createGitHubCopilotCredentialStore(
           },
         )
         binding?.assertCurrent()
-        pending?.settle(pending.notifications === 1 && stored?.kind === 'grant'
+        const committed = pending?.qualification === 'qualified' && pending.notifications === 1 && stored?.kind === 'grant'
           && expected?.kind === 'grant'
           && JSON.stringify(normalizeGitHubCopilotOAuthCredential(stored.payload))
-            === JSON.stringify(normalizeGitHubCopilotOAuthCredential(expected.payload)))
+            === JSON.stringify(normalizeGitHubCopilotOAuthCredential(expected.payload))
+        if (pending && pending.reason === 'write-failed') pending.reason = committed ? 'qualified'
+          : pending.notifications === 0 ? 'missing-notification' : 'commit-mismatch'
+        pending?.settle(committed)
         return toCredential(stored)
       } finally {
         pending?.settle(false)

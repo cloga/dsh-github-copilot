@@ -6,8 +6,8 @@ import type { DiagnosticsOperation, DiagnosticsStage, DiagnosticsOutcome, Diagno
   DiagnosticsRow, DiagnosticsSnapshot } from './diagnostics-types.ts'
 import { AutoAllocationDiagnosticsCollector, emptyAutoAllocationDiagnostics } from './auto-allocation-diagnostics.ts'
 import type { AutoSelectionExplanation } from './auto-model-routing.ts'
-import { REQUEST_DIAGNOSTICS_MAX_ROWS, REQUEST_DIAGNOSTICS_RETENTION_MS, RequestDiagnosticSchema } from './request-diagnostics.ts'
-import type { RequestDiagnostic, RequestDiagnosticHandle, RequestDiagnosticStart } from './request-diagnostics.ts'
+import { REQUEST_DIAGNOSTICS_MAX_ROWS, REQUEST_DIAGNOSTICS_RETENTION_MS, RequestDiagnosticSchema, CredentialChangeSchema } from './request-diagnostics.ts'
+import type { RequestDiagnostic, RequestDiagnosticHandle, RequestDiagnosticStart, CredentialChangeHandle } from './request-diagnostics.ts'
 
 export interface DiagnosticsHandle {
   stage(stage: DiagnosticsStage): void
@@ -28,6 +28,7 @@ export class DiagnosticsCollector {
   private autoAllocationEnabled = false
   private requestEnabled = false
   private readonly requestHandles = new Set<RequestDiagnosticHandle>()
+  private readonly credentialHandles = new Map<CredentialChangeHandle, number>()
   private requestGeneration = 0
   private lastWall = 0
   private readonly autoAllocation: AutoAllocationDiagnosticsCollector
@@ -53,6 +54,12 @@ export class DiagnosticsCollector {
       requests.interruptedOnReopen = Math.min(Number.MAX_SAFE_INTEGER,
         (requests.interruptedOnReopen ?? 0) + (requests.pending ?? 0))
       requests.pending = 0
+      if (requests.credentialChanges) {
+        const credentials = requests.credentialChanges
+        credentials.interruptedOnReopen = Math.min(Number.MAX_SAFE_INTEGER,
+          (credentials.interruptedOnReopen ?? 0) + (credentials.pending ?? 0))
+        credentials.pending = 0
+      }
       this.changed()
     }
     this.expire()
@@ -83,6 +90,7 @@ export class DiagnosticsCollector {
     if (!Number.isSafeInteger(epoch)) throw new Error('COPILOT_DIAGNOSTICS_EPOCH_LIMIT')
     this.live.clear()
     this.requestHandles.clear()
+    this.credentialHandles.clear()
     this.requestGeneration++
     this.autoAllocation.clear()
     this.data = { ...emptyDiagnostics(), epoch }
@@ -120,6 +128,9 @@ export class DiagnosticsCollector {
   }
   private expire(): void {
     const now = this.wall()
+    for (const [handle, startedAt] of this.credentialHandles) {
+      if (startedAt <= now - REQUEST_DIAGNOSTICS_RETENTION_MS) this.credentialHandles.delete(handle)
+    }
     const oldest = Math.floor((now - DIAGNOSTICS_RETENTION_MS) / 3_600_000) * 3_600_000
     const kept = this.data.rows.filter(row => row.hour > oldest)
     this.increment('evicted', this.data.rows.length - kept.length)
@@ -131,6 +142,13 @@ export class DiagnosticsCollector {
       requests.evicted = Math.min(Number.MAX_SAFE_INTEGER, requests.evicted + requests.rows.length - retained.length)
       if (retained.length !== requests.rows.length) this.changed()
       requests.rows = retained
+      const credentials = requests.credentialChanges
+      if (credentials) {
+        const kept = credentials.rows.filter(row => row.observedAt > now - REQUEST_DIAGNOSTICS_RETENTION_MS)
+        credentials.evicted = Math.min(Number.MAX_SAFE_INTEGER, credentials.evicted + credentials.rows.length - kept.length)
+        if (kept.length !== credentials.rows.length) this.changed()
+        credentials.rows = kept
+      }
     }
   }
   private add(operation: DiagnosticsOperation, stage: DiagnosticsStage, metric: DiagnosticsRow['metric'],
@@ -175,17 +193,64 @@ export class DiagnosticsCollector {
       else pending.push({ version: this.version, operation: live.operation, stage: live.stage, bucket, count: 1 })
     }
     return DiagnosticsSnapshotSchema.parse({ ...this.data,
-      ...(this.data.requests ? { requests: { ...this.data.requests, pending: this.requestHandles.size } } : {}),
+      ...(this.data.requests ? { requests: { ...this.data.requests, pending: this.requestHandles.size,
+        ...(this.data.requests.credentialChanges ? { credentialChanges: {
+          ...this.data.requests.credentialChanges, pending: this.credentialHandles.size,
+        } } : {}) } } : {}),
       autoAllocation: this.autoAllocation.snapshot(),
       updatedAt: this.wall(), pending })
   }
   close(): void { this.setEnabled(false); this.setAutoAllocationEnabled(false); this.setRequestEnabled(false) }
   setRequestEnabled(enabled: boolean): void {
     if (this.requestEnabled !== enabled) this.requestGeneration++
+    if (this.requestEnabled !== enabled) this.credentialHandles.clear()
     if (this.requestEnabled && !enabled) {
       for (const handle of this.requestHandles) handle.finish('interrupted', 'unknown')
     }
     this.requestEnabled = enabled
+  }
+  beginCredentialChange(): CredentialChangeHandle | undefined {
+    if (!this.requestEnabled || this.layer !== 'host') return undefined
+    this.expire()
+    const requests = this.data.requests ??= { rows: [], dropped: 0, evicted: 0 }
+    const credentials = requests.credentialChanges ??= { rows: [], dropped: 0, evicted: 0 }
+    if (this.credentialHandles.size >= DIAGNOSTICS_MAX_LIVE) {
+      credentials.dropped = Math.min(Number.MAX_SAFE_INTEGER, credentials.dropped + 1)
+      this.changed()
+      return undefined
+    }
+    const changeId = crypto.randomUUID(), generation = this.requestGeneration, startedAt = this.wall()
+    const phases = new Set<'notification' | 'commit'>()
+    let cancelled = false
+    const handle: CredentialChangeHandle = {
+      cancel: () => { cancelled = true; this.credentialHandles.delete(handle); this.changed() },
+      record: evidence => {
+        if (cancelled || !this.requestEnabled || generation !== this.requestGeneration
+          || startedAt <= this.wall() - REQUEST_DIAGNOSTICS_RETENTION_MS || phases.has(evidence.phase)) return
+        phases.add(evidence.phase)
+        if (evidence.phase === 'commit' || evidence.reason !== 'qualified') this.credentialHandles.delete(handle)
+        this.expire()
+        const current = this.data.requests?.credentialChanges
+        if (!current) return
+        const parsed = CredentialChangeSchema.safeParse({ ...evidence, changeId, observedAt: this.wall(), version: this.version })
+        if (!parsed.success) {
+          current.dropped = Math.min(Number.MAX_SAFE_INTEGER, current.dropped + 1)
+          this.changed()
+          return
+        }
+        const rows = [...current.rows, parsed.data]
+        const evicted = rows.length > REQUEST_DIAGNOSTICS_MAX_ROWS ? 1 : 0
+        if (evicted) rows.shift()
+        const candidate = { ...this.data, requests: { ...this.data.requests!,
+          credentialChanges: { ...current, rows, evicted: Math.min(Number.MAX_SAFE_INTEGER, current.evicted + evicted) } } }
+        if (DiagnosticsSnapshotSchema.safeParse(candidate).success) this.data = candidate
+        else current.dropped = Math.min(Number.MAX_SAFE_INTEGER, current.dropped + 1)
+        this.changed()
+      },
+    }
+    this.credentialHandles.set(handle, startedAt)
+    this.changed()
+    return handle
   }
   beginRequest(start: RequestDiagnosticStart): RequestDiagnosticHandle | undefined {
     if (!this.requestEnabled) return undefined

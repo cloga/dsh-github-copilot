@@ -13,6 +13,7 @@ import type { CredentialStore } from '@earendil-works/pi-ai'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { estimateContextTokens, estimateMessageTokens } from '@earendil-works/pi-ai/utils/estimate'
 import { createGitHubCopilotCredentialStore, observeCopilotNativeRefresh, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
+import type { CredentialChangeReason, CredentialChangeHandle } from './request-diagnostics.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { normalizeHighCostModelIds } from './auto-allocation.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
@@ -184,6 +185,17 @@ class PreviewLifetime {
     for (const [wire, state] of this.wires) {
       if (!preserveDispatched || !state.dispatched) wire.abort(new ManagedWireAbortError('COPILOT_PREVIEW_CREDENTIAL_CHANGED'))
     }
+  }
+  credentialChangeCounts(preserveDispatched: boolean) {
+    let preparing = 0, dispatched = 0, alreadyAborted = 0, preserved = 0, revoked = 0
+    for (const [wire, state] of this.wires) {
+      if (wire.signal.aborted) { alreadyAborted++; continue }
+      if (state.dispatched) dispatched++
+      else preparing++
+      if (preserveDispatched && state.dispatched) preserved++
+      else revoked++
+    }
+    return { preparing, dispatched, alreadyAborted, preserved, revoked }
   }
   dispose(): void {
     if (!this.active) return
@@ -1088,13 +1100,37 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (event.type === 'turn/end') exclusionTurns.end(session)
   })
   const removeListener = ctx.on('credentials/record-updated', key => {
-    const refresh = observeCopilotNativeRefresh(ctx, key)
+    let notificationReason: CredentialChangeReason = 'unknown-source'
+    let commitReason: CredentialChangeReason = 'write-failed'
+    const refresh = observeCopilotNativeRefresh(ctx, key, (phase, reason) => {
+      if (phase === 'notification') notificationReason = reason
+      else commitReason = reason
+    })
     for (const [accountId, runtime] of runtimes) {
       const record = accountId === 'canonical' ? GITHUB_COPILOT_CREDENTIAL_KEY : `github-copilot/account-${accountId}`
       if (record === key) {
+        let evidence: CredentialChangeHandle | undefined
+        try { evidence = ctx.get('githubCopilotDiagnostics')?.collector.beginCredentialChange() }
+        catch { ctx.logger.warn('COPILOT_CREDENTIAL_DIAGNOSTICS_CAPTURE_FAILED') }
+        const recordEvidence = (phase: 'notification' | 'commit', reason: CredentialChangeReason, preserve: boolean) => {
+          if (!evidence) return
+          try {
+            const counts = runtime.lifetime.credentialChangeCounts(preserve)
+            evidence.record({ phase, reason, ...counts,
+              ...(phase === 'commit' && preserve ? { preserved: counts.preparing + counts.dispatched, revoked: 0 } : {}) })
+          }
+          catch { ctx.logger.warn('COPILOT_CREDENTIAL_DIAGNOSTICS_CAPTURE_FAILED') }
+        }
+        recordEvidence('notification', notificationReason, refresh !== undefined)
         runtime.invalidate(refresh !== undefined)
         if (refresh !== undefined) void refresh.then(committed => {
-          if (!committed && !disposed) runtime.invalidate()
+          if (!disposed) {
+            recordEvidence('commit', commitReason, committed)
+            if (!committed) runtime.invalidate()
+          } else {
+            try { evidence?.cancel() }
+            catch { ctx.logger.warn('COPILOT_CREDENTIAL_DIAGNOSTICS_CAPTURE_FAILED') }
+          }
         })
       }
     }

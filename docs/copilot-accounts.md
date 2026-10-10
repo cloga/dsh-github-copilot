@@ -17,6 +17,12 @@ normal native refresh by another same-account request. Upgrade to 0.4.1 for the
 narrow plugin-owned refresh exception. This is synthetic regression evidence,
 not attribution of a particular live error to refresh.
 
+Separately enabled request diagnostics may now record fixed qualification,
+notification and commit reasons plus bounded live-wire populations; see
+[credential-change decisions](./plugin-diagnostics.md#credential-change-decisions-402).
+Unknown notification source stays unknown. This observes the existing exception,
+not a broader permission to preserve requests or a reconstruction of past failures.
+
 Only a genuine native refresh through the plugin's public credential-store bridge
 may qualify: normalized account grant, model entitlements and official
 OAuth-derived endpoint must remain unchanged. Its exact returned object is

@@ -1,6 +1,19 @@
 # Changelog
 
-## 0.4.2-alpha.7 (prepared)
+## 0.4.2-alpha.8 (prepared)
+
+- Keep every Local diagnostics population independently collapsed by default,
+  including Auto. Compact summaries retain status/counts, while collection,
+  scope and JSON controls remain separate. Opening a group does not collect data.
+- Extend the independently consented request scope with bounded, content-free
+  credential-change qualification and commit evidence: fixed reasons and live
+  managed-wire populations only, with random operation IDs, 24-hour retention,
+  explicit loss/reopen uncertainty and pause/clear/disposal fences.
+- Preserve the exact native-refresh exception and all unknown-change revocation,
+  transport, retry and Usage behavior. Unknown notification source stays unknown;
+  no credentials, identities, history or old incidents are reconstructed.
+
+## 0.4.2-alpha.7
 
 - Raise the auxiliary Auto task-assessment default total budget from eight to
   thirty seconds as a user-approved trial, with a native editable

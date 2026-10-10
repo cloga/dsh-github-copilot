@@ -48,6 +48,7 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
   }, [remote])
   const rows = view?.snapshot.rows ?? []
   const requests = view?.snapshot.requests
+  const credentials = requests?.credentialChanges
   const auto = view?.snapshot.autoAllocation
   const autoOpportunities = auto?.rows.reduce((sum, row) => sum + row.opportunities, 0) ?? 0
   const autoExpected = auto?.rows.reduce((sum, row) => sum + row.expectedSelections, 0) ?? 0
@@ -80,11 +81,17 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
     .reduce((sum, row) => sum + row.count, 0)
   const control = (label: string, action: () => void, disabled = false) =>
     h('button', { type: 'button', style: button, onClick: action, disabled: busy || disabled }, label)
-  return h('section', { 'aria-label': 'Local diagnostics', 'data-copilot-native-ui': true, style: section },
-    h('style', null, nativeSettingsCss),
+  return h('section', { 'aria-label': 'Local diagnostics', 'data-copilot-native-ui': true,
+    'data-copilot-diagnostics': true, style: section },
+    h('style', null, nativeSettingsCss + '\n[data-copilot-diagnostics] details { min-width: 0; }'),
     h('h3', { style: nativeHeadingStyle }, 'Local diagnostics'),
-    h('div', { style: { display: 'grid', gap: 8, minWidth: 0 } },
-      h('h4', { style: nativeHeadingStyle }, 'Auto allocation observations'),
+    h('p', { style: { ...nativeCaptionStyle, margin: 0 } }, 'Expand a diagnostic group to inspect its evidence. Collection controls are independent; opening a group does not enable collection.'),
+    failed ? h('p', { role: 'alert', style: { margin: 0 } },
+      'Could not confirm the operation. Read status before retrying; no write is automatically replayed.') : null,
+    h('details', null,
+      h('summary', null, 'Auto allocation observations',
+        h('span', { style: { ...nativeCaptionStyle, marginInlineStart: 8 } },
+          !view ? 'Status unknown' : `${view.autoAllocationEnabled ? 'Enabled' : 'Paused'} · ${auto ? `${autoRows.length} retained strata` : 'Evidence unavailable'}`)),
       h('p', { role: 'status', style: { margin: 0 } },
         !view ? busy ? 'Reading observation status…' : 'Observation status is unknown.'
           : `${view.autoAllocationEnabled
@@ -124,7 +131,9 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
       autoRows.length ? h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
         `${autoOpportunities} candidate opportunities · ${autoExpected.toFixed(3)} expected selections · ${autoSelections} actual selections · ${autoNoFit} no-fit decisions. Compare expected and selected counts only within matching cohorts; these are not execution, quality or billing evidence. Assessment outcomes explain classification only, not the supplier root cause. Legacy reasons are not recorded; sum Selected or No-fit, not candidate opportunities, when counting decisions by outcome.`) : null),
     view ? h('details', null,
-      h('summary', null, 'Physical request observations'),
+      h('summary', null, 'Physical request observations',
+        h('span', { style: { ...nativeCaptionStyle, marginInlineStart: 8 } },
+          `${view.requestEnabled === undefined ? 'Status unknown' : view.requestEnabled ? 'Enabled' : 'Paused'} · ${requests?.rows.length ?? 0} retained`)),
       h('p', { style: { margin: 0 } },
         requests ? `${requests.rows.length} retained requests · ${requests.pending ?? 0} sampled pending · ${requests.dropped} dropped · ${requests.evicted} expired/evicted · ${requests.interruptedOnReopen ?? 0} interrupted on reopen`
           : 'No retained request observations. This does not establish zero failures or enabled collection.'),
@@ -143,6 +152,28 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
             h('td', { style: { padding: 6 } }, `${row.composition.totalBytes ?? 'unknown'} / ${row.wireBytes ?? 'unknown'} (${row.encoding}; composition ${row.composition.state})`),
             h('td', { style: { padding: 6 } },
               `${row.responseHeadersMs ?? 'unknown'} / ${row.upload?.state === 'observed' ? row.upload.bodyWriteCompleteMs ?? 'unknown' : 'unknown'}`)))))) : null) : null,
+    view ? h('details', null,
+      h('summary', null, 'Credential change observations',
+        h('span', { style: { ...nativeCaptionStyle, marginInlineStart: 8 } },
+          credentials ? `${credentials.rows.length} retained` : 'Not recorded')),
+      h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
+        'Uses the independent request-observation consent. Fixed qualification and commit reasons only; no credentials, account or Session identifiers. Unknown source does not identify an external writer. Counts describe live managed wires at each observation, not native retries or successful completion.'),
+      credentials ? h('p', { style: { margin: 0 } },
+        `${credentials.dropped} dropped · ${credentials.evicted} expired/evicted · ${credentials.pending ?? 0} sampled pending · ${credentials.interruptedOnReopen ?? 0} interrupted on reopen. Matching random change IDs join notification and commit observations only; no historical incident is reconstructed.`)
+        : h('p', { style: { margin: 0 } }, 'Credential-change evidence was not recorded in this snapshot. This does not establish zero changes or failures.'),
+      credentials?.rows.length ? h('div', { style: { overflowX: 'auto', minWidth: 0 } },
+        h('table', { style: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', font: 'inherit' } },
+          h('caption', { style: { ...nativeCaptionStyle, textAlign: 'left', marginBottom: 8 } }, 'Latest retained credential-change decisions'),
+          h('thead', null, h('tr', null, ...['Time (UTC)', 'Change ID', 'Phase / reason', 'Preparing / dispatched', 'Preserved / revoked', 'Already aborted'].map(label =>
+            h('th', { key: label, scope: 'col', style: { padding: 6, font: 'inherit', fontWeight: 500 } }, label)))),
+          h('tbody', null, ...credentials.rows.slice().sort((left, right) => right.observedAt - left.observedAt).map((row, index) =>
+            h('tr', { key: `${row.changeId}/${row.phase}/${index}` },
+              h('td', { style: { padding: 6, whiteSpace: 'nowrap' } }, new Date(row.observedAt).toISOString()),
+              h('td', { style: { padding: 6, overflowWrap: 'anywhere' } }, row.changeId),
+              h('td', { style: { padding: 6 } }, `${row.phase} / ${row.reason}`),
+              h('td', { style: { padding: 6 } }, `${row.preparing} / ${row.dispatched}`),
+              h('td', { style: { padding: 6 } }, `${row.preserved} / ${row.revoked}`),
+              h('td', { style: { padding: 6 } }, row.alreadyAborted)))))) : null) : null,
     view && populations.length ? h('details', null,
       h('summary', null, 'Account and compaction observations'),
       h('div', { style: { overflowX: 'auto', minWidth: 0 } },
@@ -166,15 +197,13 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
         view?.requestEnabled === undefined ? 'Request observations unavailable in this snapshot.'
           : `Request observations ${view.requestEnabled ? 'enabled' : 'paused'}. ${requests?.rows.length ?? 0} retained physical requests; ${requests?.dropped ?? 0} dropped; ${requests?.evicted ?? 0} expired/evicted.`),
       h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        'Separate opt-in: retain at most 128 content-free physical requests for 24 hours. Includes model, payload byte counts, transport timing, HTTP status and terminal categories, not bodies, credentials, URLs, headers or Session/turn IDs. Random stream IDs correlate native SDK dispatches only; dispatch index is not a Core retry count.'),
+        'Separate opt-in: retain at most 128 content-free physical requests and 128 credential-change observations for 24 hours within the shared storage cap. Includes model, payload byte counts, transport timing, HTTP status, terminal categories and fixed credential qualification reasons, not bodies, credentials, URLs, headers or Session/turn IDs. Random stream IDs correlate native SDK dispatches only; dispatch index is not a Core retry count.'),
       h('p', { role: 'status', style: { margin: 0 } },
         !remote ? 'Diagnostics controls are unavailable in this connection.'
           : !view ? busy ? 'Reading local collection status…' : 'Collection status is unknown.'
             : `${view.enabled ? view.state === 'ready' ? 'Local collection enabled' : 'Local collection configured on; storage not ready' : 'Local collection paused'} · Storage ${view.state}`
               + (view.diagnostic === 'none' ? '' : ` · ${view.diagnostic}`)
               + (view.dirty ? ' · Not all observations are persisted yet' : '')),
-      failed ? h('p', { role: 'alert', style: { margin: 0 } },
-        'Could not confirm the operation. Read status before retrying; no write is automatically replayed.') : null,
       clientDiagnosticsReportingFailed() ? h('p', { role: 'alert', style: { margin: 0 } },
         'Some Client observations could not be confirmed. Client counts are incomplete; Host counts are separate.') : null,
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
