@@ -7,6 +7,10 @@ export const AUTO_ALLOCATION_DIAGNOSTIC_RETENTION_MS = 14 * 24 * 60 * 60 * 1000
 const dayMs = 24 * 60 * 60 * 1000
 const integer = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
 const version = z.string().max(64).regex(/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/)
+const assessmentOutcome = z.enum([
+  'local-known', 'local-unknown', 'semantic-known', 'semantic-unknown',
+  'disabled', 'unavailable', 'invalid-result', 'timeout', 'failed', 'context-omitted',
+])
 const allocationRow = z.object({
   day: integer.multipleOf(dayMs),
   version,
@@ -16,6 +20,7 @@ const allocationRow = z.object({
   category: z.enum(['powerful', 'versatile', 'lightweight', 'unknown']),
   demand: z.enum(['simple', 'routine', 'complex', 'unknown']),
   assessmentSource: z.enum(['local', 'semantic']),
+  assessmentOutcome: assessmentOutcome.optional(),
   method: z.enum(['weighted-distribution', 'only-candidate']),
   fallback: z.boolean(),
   highCost: z.boolean(),
@@ -31,6 +36,7 @@ const noFitRow = z.object({
   category: z.enum(['powerful', 'versatile', 'lightweight', 'unknown']),
   demand: z.enum(['simple', 'routine', 'complex', 'unknown']),
   assessmentSource: z.enum(['local', 'semantic']),
+  assessmentOutcome: assessmentOutcome.optional(),
   decisions: integer.min(1),
 }).strict()
 
@@ -61,7 +67,7 @@ export function emptyAutoAllocationDiagnostics(): AutoAllocationDiagnostics {
   }
 }
 
-/** Profile-local rolling aggregates; no per-turn, Session, prompt, or outcome records. */
+/** Profile-local rolling aggregates; no per-turn, Session, prompt, or execution-outcome records. */
 export class AutoAllocationDiagnosticsCollector {
   private data = emptyAutoAllocationDiagnostics()
   private enabled = false
@@ -92,6 +98,10 @@ export class AutoAllocationDiagnosticsCollector {
     const now = this.wall()
     this.expire(now)
     const day = Math.floor(now / dayMs) * dayMs
+    const assessment = explanation.assessment
+    const outcome = assessment.diagnostic ?? (assessment.source === 'local'
+      ? assessment.demand === 'unknown' ? 'local-unknown' : 'local-known'
+      : assessment.demand === 'unknown' ? 'semantic-unknown' : 'semantic-known')
     this.data.observationStart = this.data.observationStart === null
       ? day : Math.min(this.data.observationStart, day)
     this.data.observationEnd = this.data.observationEnd === null
@@ -100,12 +110,13 @@ export class AutoAllocationDiagnosticsCollector {
       const row = this.data.noFitRows.find(item => item.day === day && item.version === this.version
         && item.policyVersion === AUTO_ALLOCATION_POLICY && item.targetCategory === explanation.targetCategory
         && item.category === explanation.selectedCategory && item.demand === explanation.assessment.demand
-        && item.assessmentSource === explanation.assessment.source)
+        && item.assessmentSource === explanation.assessment.source && item.assessmentOutcome === outcome)
       if (row) row.decisions = this.add(row.decisions, 1)
       else if (this.data.rows.length + this.data.noFitRows.length < AUTO_ALLOCATION_DIAGNOSTIC_MAX_ROWS) {
         this.data.noFitRows.push({ day, version: this.version, policyVersion: AUTO_ALLOCATION_POLICY,
           targetCategory: explanation.targetCategory, category: explanation.selectedCategory,
-          demand: explanation.assessment.demand, assessmentSource: explanation.assessment.source, decisions: 1 })
+          demand: explanation.assessment.demand, assessmentSource: explanation.assessment.source,
+          assessmentOutcome: outcome, decisions: 1 })
       } else {
         this.data.rowsTruncated = true
         this.data.dropped = this.add(this.data.dropped, 1)
@@ -127,6 +138,7 @@ export class AutoAllocationDiagnosticsCollector {
         && item.policyVersion === allocation.policyVersion && item.modelId === candidate.modelId
         && item.targetCategory === explanation.targetCategory && item.category === explanation.selectedCategory
         && item.demand === explanation.assessment.demand && item.assessmentSource === explanation.assessment.source
+        && item.assessmentOutcome === outcome
         && item.method === explanation.method && item.fallback === explanation.fallback
         && item.highCost === candidate.highCost && item.previous === candidate.previous && item.weight === candidate.weight)
       if (row) {
@@ -139,6 +151,7 @@ export class AutoAllocationDiagnosticsCollector {
           modelId: candidate.modelId, targetCategory: explanation.targetCategory,
           category: explanation.selectedCategory, demand: explanation.assessment.demand,
           assessmentSource: explanation.assessment.source, method: explanation.method, fallback: explanation.fallback,
+          assessmentOutcome: outcome,
           highCost: candidate.highCost, previous: candidate.previous, weight: candidate.weight,
           opportunities: 1, expectedSelections: candidate.expectedShare,
           selections: allocation.selectedModelId === candidate.modelId ? 1 : 0,

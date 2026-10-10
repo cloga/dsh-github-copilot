@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.2-alpha.4"
+    "version": "0.4.2-alpha.7"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -296,7 +296,10 @@
       "sourceMarkers": [
         {"file": "src/diagnostics-types.ts", "marker": "DIAGNOSTICS_MAX_BYTES = 2 * 1024 * 1024"},
         {"file": "src/diagnostics-collector.ts", "marker": "noteClientGaps"},
+        {"file": "src/auto-allocation-diagnostics.ts", "marker": "assessmentOutcome: assessmentOutcome.optional()"},
         {"file": "src/request-diagnostics.ts", "marker": "REQUEST_DIAGNOSTICS_MAX_ROWS = 128"},
+        {"file": "src/request-body-composition.ts", "marker": "bytes: 32 * 1024 * 1024"},
+        {"file": "src/request-body-composition.ts", "marker": "concurrent: 4"},
         {"file": "src/request-diagnostics.ts", "marker": "REQUEST_DIAGNOSTICS_RETENTION_MS = 24 * 60 * 60 * 1000"},
         {"file": "src/config.ts", "marker": "requestDiagnosticsEnabled: z.boolean().default(false).hidden().volatile()"},
         {"file": "src/diagnostics-host.ts", "marker": "diagnosticsDomainForProfile"},
@@ -307,7 +310,12 @@
       ],
       "tests": [
         {"file": "tests/diagnostics-collector.spec.ts", "name": "is disabled until enabled, records success denominators and settles once"},
+        {"file": "tests/auto-allocation-diagnostics.spec.ts", "name": "separates assessment outcomes without changing model opportunities or exposing errors"},
+        {"file": "tests/auto-allocation-diagnostics.spec.ts", "name": "keeps legacy reasons unrecorded and captures no-fit and successful assessment outcomes"},
         {"file": "tests/request-diagnostics.spec.ts", "name": "requires independent consent, captures status/timing and never infers upload or retry count"},
+        {"file": "tests/request-body-composition.spec.ts", "name": "partitions a 20.4 MiB request without parsing its payload object graph"},
+        {"file": "tests/preview-transport-failures.spec.ts", "name": "does not wait for large-request composition before native success and updates the exact settled row"},
+        {"file": "tests/request-diagnostics.spec.ts", "name": "updates only its own retained record after native settlement, never across clear/pause/eviction"},
         {"file": "tests/preview-transport-failures.spec.ts", "name": "records verified 408 once without changing the native error, serialized input or dispatch count"},
         {"file": "tests/diagnostics-client.spec.ts", "name": "rejects stale status responses and settles an unmounted Checking operation once"},
         {"file": "tests/diagnostics-card.spec.ts", "name": "requires a confirmed durable enable and a separate destructive clear confirmation"},
@@ -733,7 +741,7 @@
         {"file": "tests/request-body-timeout.spec.ts", "name": "reports a skipped opt-in compression reason without changing identity diagnostics"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "rejects late results even before the scheduled timeout callback runs"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "aborts preparation at the monotonic deadline before an adapter can start"},
-        {"file": "tests/preview-route.spec.ts", "name": "does not dispatch an auxiliary request when native preparation outlasts a delayed deadline timer"},
+        {"file": "tests/preview-route.spec.ts", "name": "does not dispatch an auxiliary request when native preparation outlasts a delayed deadline timer (budget %s)"},
         {"file": "tests/preview-provider.spec.ts", "name": "checks the auxiliary deadline immediately before native %s Fetch and releases the lease"},
         {"file": "tests/auto-task-classifier.spec.ts", "name": "prefers advertised reasoning-off candidates without inferring latency or model-name capabilities"},
         {"file": "tests/auto-selection-explanation.spec.ts", "name": "distinguishes continuity and category pool from semantic model merit (%s)"},
@@ -1369,6 +1377,8 @@
         {"file": "src/account-model-catalog.ts", "marker": "model_picker_category"},
         {"file": "src/auto-task-assessment.ts", "marker": "COPILOT_AUTO_ASSESSMENT_CONTEXT_OMITTED"},
         {"file": "src/auto-task-classifier.ts", "marker": "classifyTaskWithAdapter"},
+        {"file": "src/config.ts", "marker": "autoSemanticAssessmentTimeoutMs:"},
+        {"file": "src/config.ts", "marker": "autoSemanticAssessmentModel:"},
         {"file": "src/auto-model-routing.ts", "marker": "targetCategory"},
         {"file": "src/config.ts", "marker": "autoSemanticAssessment"},
         {"file": "src/auto-selection-explanation.ts", "marker": "No candidate fits"},
@@ -1408,6 +1418,10 @@
         {"file": "tests/auto-selection-explanation.spec.ts", "name": "distinguishes local rule coverage from absent conversation context in both languages"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "preserves caller cancellation instead of using a success-shaped fallback"},
         {"file": "tests/config.spec.ts", "name": "defaults semantic Auto assessment on while preserving explicit opt-out"},
+        {"file": "tests/config.spec.ts", "name": "exposes a bounded assessment budget and optional exact classifier without changing opt-out"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "allows a response after the old eight-second budget under the new bounded default"},
+        {"file": "tests/auto-task-assessment.spec.ts", "name": "still rejects a result at the new default deadline without relying on timer delivery"},
+        {"file": "tests/auto-task-classifier.spec.ts", "name": "honors an explicit exact account classifier without category guessing or automatic fallback"},
         {"file": "tests/preview-route.spec.ts", "name": "assesses Auto with setting %s and freezes the captured reason across retries"},
         {"file": "tests/turn-selection-card.spec.ts", "name": "explains a captured task/category decision with progressive details (%s)"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "does not discard a complete Core assistant message when it contains reasoning"},

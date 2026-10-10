@@ -10,6 +10,34 @@ const start: RequestDiagnosticStart = {
   composition: { state: 'size-limit', totalBytes: 21355789 }, encoding: 'identity', wireBytes: 21355789,
 }
 describe('content-free physical request observations', () => {
+  it('updates only its own retained record after native settlement, never across clear/pause/eviction', () => {
+    const collector = new DiagnosticsCollector('0.4.2-alpha.4', 'host')
+    collector.setRequestEnabled(true)
+    const first = collector.beginRequest(start)!
+    const second = collector.beginRequest({ ...start, dispatchIndex: 2 })!
+    first.finish('stream-done')
+    second.finish('stream-error', 'unknown')
+    first.composition!({ state: 'complete', totalBytes: 12, conversationBytes: 2, toolSchemaBytes: 0,
+      systemBytes: 0, otherBytes: 10, imageBlockBytes: 0, opaqueReplayBytes: 0, remainingConversationBytes: 2 })
+    expect(collector.snapshot().requests!.rows.map(row => row.composition.state)).toEqual(['complete', 'size-limit'])
+    collector.setRequestEnabled(false)
+    collector.setRequestEnabled(true)
+    expect(second.isCurrent!()).toBe(false)
+    second.composition!({ state: 'time-limit', totalBytes: 21355789 })
+    expect(collector.snapshot().requests!.rows[1]!.composition.state).toBe('size-limit')
+    const cleared = collector.beginRequest(start)!
+    cleared.finish('stream-done')
+    collector.clear()
+    cleared.composition!({ state: 'time-limit' })
+    expect(cleared.isCurrent!()).toBe(false)
+    expect(collector.snapshot().requests).toBeUndefined()
+    const evicted = collector.beginRequest(start)!
+    evicted.finish('stream-done')
+    for (let i = 0; i < 128; i++) collector.beginRequest({ ...start, dispatchIndex: i + 2 })!.finish('stream-done')
+    expect(evicted.isCurrent!()).toBe(false)
+    evicted.composition!({ state: 'time-limit' })
+    expect(collector.snapshot().requests!.rows.every(row => row.composition.state === 'size-limit')).toBe(true)
+  })
   it('requires independent consent, captures status/timing and never infers upload or retry count', () => {
     let now = 1000
     const collector = new DiagnosticsCollector('0.4.2-alpha.3', 'host', undefined, () => now, () => now)

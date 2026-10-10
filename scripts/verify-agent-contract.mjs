@@ -76,6 +76,12 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && task.requestBodyEvidenceBoundary?.includes('supplier receipt')
     && task.requestBodyEvidenceBoundary?.includes('dispose subscriptions')),
   'request upload diagnostics must retain scoped lifecycle ownership and local-only evidence limits')
+  require(contract.tasks.diagnostics?.read?.includes('src/request-body-composition.ts')
+    && contract.tasks.diagnostics?.tests?.includes('tests/request-body-composition.spec.ts')
+    && contract.tasks.diagnostics?.compositionBoundary?.includes('Keep replay validation/recovery at 16 MiB')
+    && contract.tasks.diagnostics?.compositionBoundary?.includes('without delaying ordinary native delivery')
+    && contract.tasks.diagnostics?.compositionBoundary?.includes('original consent generation, clear, retention and eviction fences'),
+  'large-request composition must remain bounded diagnostic-only work with consent fences and unchanged replay/transport')
   require(contract.tasks.compatibility?.responsesCompressionBoundary?.includes('defaults false')
     && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('original JSON admission/replay/evidence')
     && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('no identity resend')

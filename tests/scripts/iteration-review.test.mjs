@@ -10,8 +10,10 @@ import { verifyAgentContract } from '../../scripts/verify-agent-contract.mjs'
 
 const report = JSON.parse(await readFile(new URL('../../docs/auto-iteration-review.json', import.meta.url), 'utf8'))
 test('missing evidence is explicit and report validation is not a truth claim', () => {
-  assert.equal(validateIterationReview(report).evidenceStatus, 'not-collected')
-  assert.equal(validateIterationReview(report).evidenceTruthVerified, false)
+  const missing = { ...report, status: 'not-collected',
+    observation: { ...report.observation, start: null, end: null, sampleCount: 0 } }
+  assert.equal(validateIterationReview(missing).evidenceStatus, 'not-collected')
+  assert.equal(validateIterationReview(missing).evidenceTruthVerified, false)
   for (const mutate of [
     value => { value.status = 'observed' },
     value => { value.followUp.owner = '' },
@@ -19,9 +21,18 @@ test('missing evidence is explicit and report validation is not a truth claim', 
     value => { value.credential = 'SYNTHETIC_PRIVATE_VALUE' },
     value => { value.observation.sampleCount = 1 },
   ]) {
-    const value = structuredClone(report); mutate(value)
+    const value = structuredClone(missing); mutate(value)
     assert.throws(() => validateIterationReview(value))
   }
+})
+test('the current descriptive assessment review retains insufficient evidence and follow-up', () => {
+  const result = validateIterationReview(report)
+  assert.equal(result.evidenceStatus, 'insufficient-sample')
+  assert.equal(result.sampleCount, 63)
+  assert.equal(result.evidenceTruthVerified, false)
+  assert.match(report.observation.limitations, /No Session\/turn IDs/)
+  assert.match(report.followUp.trigger, /200 new decisions/)
+  assert.match(report.followUp.action, /#334/)
 })
 test('observed and insufficient evidence need ordered windows and positive samples', () => {
   for (const status of ['observed', 'insufficient-sample']) {

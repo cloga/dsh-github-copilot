@@ -15,7 +15,9 @@ import { requestBodyTimeoutDiagnostic } from './request-body-timeout.ts'
 import { prepareResponsesRequest } from './responses-request-compression.ts'
 import type { RequestCompressionEvidence } from './responses-request-compression.ts'
 import { createRequestUploadObserver } from './request-upload-evidence.ts'
-import { requestBodyEvidence } from './request-body-evidence.ts'
+import { requestBodyEvidence, REQUEST_BODY_EVIDENCE_LIMITS } from './request-body-evidence.ts'
+import type { RequestBodyEvidence } from './request-body-evidence.ts'
+import { requestBodyComposition } from './request-body-composition.ts'
 import type { RequestDiagnosticHandle, RequestDiagnosticStart, RequestDiagnostic } from './request-diagnostics.ts'
 import { randomUUID } from 'node:crypto'
 import { CopilotStreamIdleError, CopilotStreamLiveness } from './copilot-stream-liveness.ts'
@@ -336,11 +338,27 @@ export function createAccountProvider(
           })
         }
         let response: Response
+        let composition: Promise<RequestBodyEvidence> | undefined
         const upload = guard.onRequestBodyTimeout === undefined && requestDiagnostic === undefined ? undefined : createRequestUploadObserver()
         const startedAt = performance.now()
-        try { response = await (upload === undefined
+        try {
+          const fetching = upload === undefined
           ? fetch(dispatchInput, dispatchInit)
-          : upload.run(() => fetch(dispatchInput, dispatchInit))) }
+          : upload.run(() => fetch(dispatchInput, dispatchInit))
+          const handle = requestDiagnostic
+          if (handle?.composition && originalBody !== undefined
+            && Buffer.byteLength(originalBody, 'utf8') > REQUEST_BODY_EVIDENCE_LIMITS.bytes) {
+            // Observe cooperatively after actual dispatch; never hold up native response delivery.
+            composition = requestBodyComposition(originalBody, entry.api, {
+              signal: options.signal, isCurrent: handle.isCurrent,
+            }).catch(() => {
+              observeDiagnostics(() => { throw new Error('COPILOT_REQUEST_COMPOSITION_FAILED') })
+              return { state: 'unavailable' }
+            })
+            void composition.then(evidence => observeDiagnostics(() => handle.composition?.(evidence)))
+          }
+          response = await fetching
+        }
         catch (error) {
           observeDiagnostics(() => requestDiagnostic?.headers(undefined, undefined, upload?.snapshot()))
           observeDiagnostics(() => requestDiagnostic?.finish(diagnosticAborted()
@@ -354,7 +372,8 @@ export function createAccountProvider(
         retry?.observe(originalBody, response.status)
         if (response.status === 408 && (guard.onRequestBodyTimeout !== undefined || requestDiagnostic !== undefined)) {
           const diagnostic = await requestBodyTimeoutDiagnostic(response, originalBody, lease.signal,
-            { protocol: entry.api, responseHeadersMs, ...upload === undefined ? {} : { upload: upload.snapshot() },
+            { protocol: entry.api, responseHeadersMs, ...composition === undefined ? {} : { composition },
+              ...upload === undefined ? {} : { upload: upload.snapshot() },
               ...compression === undefined ? {} : { compression } })
           if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout?.(diagnostic)
           if (diagnostic !== undefined) {

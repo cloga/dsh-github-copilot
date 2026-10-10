@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "feature": "autorouting",
-  "status": "not-collected",
+  "status": "insufficient-sample",
   "policyVersion": "high-cost-v1",
   "observation": {
-    "start": null,
-    "end": null,
-    "sampleCount": 0,
-    "limitations": "No live weighted-allocation dataset collected. Initial synthetic tests do not establish real workload quality, billing, cost savings or live Desktop activation."
+    "start": "2026-10-08T00:00:00Z",
+    "end": "2026-10-09T23:59:59Z",
+    "sampleCount": 63,
+    "limitations": "Read-only strict profile-local aggregate review, daily UTC buckets rather than exact event times. Producer 0.4.2-alpha.2; not current loaded-version proof. No Session/turn IDs, sequence, lower-category pool fit or classifier diagnostic retained. completeHistory=false, restarts=1, dropped/expired/saturated=0 in this snapshot. Cannot recover failure causes, transition matrix, execution, quality, billing or savings; no raw export uploaded."
   },
-  "previousReview": "Issue #332 workflow pilot and #333 high-cost requirements; prior category policy used unconditional continuity.",
-  "findings": "Unconditional continuity prevents allocation opportunities. Hard-prioritizing unmarked peers nearly excludes high-cost candidates; extreme-only gating wrongly couples cost to difficulty.",
-  "decision": "Implement positive main-turn weights ordinary=1, marked=0.2 and finite previous-model multiplier=1.5 within the fitting supplier category. Capture local bounded opportunities and expected shares. Defer advisor calls until public evidence/authorization/account seams pass their own acceptance.",
-  "validation": "Focused tests and 19 focused tooling tests passed with a supplemental unchanged pinned resolver; exact commands/counts are in the implementation PR. Native Client/Host gateways and SettingsForms fiber/restart persistence included. Synthetic source-component browser checks passed at widths 1280/390/195 in both themes. Normal pnpm verify blocked by configured mirror HTTP 404 for exact rc.2 dependency. Required full CI/build/tarball/publication results are recorded separately in the implementation PR and Release. This is not live Desktop/model/billing evidence.",
+  "previousReview": "Issues #332/#333 prior allocation review and post-delivery review #334; fixed-outcome diagnostics #398; user-directed budget/config trial #400.",
+  "findings": "63 decisions: 44 local/unknown, 4 semantic/unknown and 15 semantic/complex, all powerful target/selection. Sol selected 57 and Astra 6; 47 marked previous-model retention, not a transition matrix. Local/unknown may include disabled/unavailable/timeout/failed/invalid-result fallbacks. Semantic/unknown may include omitted-context conservatism. Persisted aggregates discarded those diagnostics, so historical causes cannot be established.",
+  "decision": "User explicitly approves a bounded budget/config experiment despite unproven timeout prevalence: default 30000ms, native editable integer 1000-120000ms with 8000 restoring the old budget; empty classifier selects automatically, exact account ID chooses only that eligible concrete model. Following requested overhead research, isolate classifier from configured Chat reasoning effort: reproduce inherited high in synthetic native wire, omit that auxiliary profile default and preserve ordinary Chat high. Native off/omission is not supplier disable proof; do not force low/minimal or invent a hard credit cap. Retain classification, category routing, weights, continuity, 128-token output, omitted-context safety, account/exclusion gates, cancellation and one-call/no-retry ownership. Keep fixed diagnostic cohorts and legacy unrecorded reasons. Defer benchmark/adaptive optimal-model selection until representative accuracy/latency/cost evidence and separate consent; do not infer classifier/network failure from unknown demand.",
+  "validation": "Regression-first tests failed for the hard-coded deadline, missing configuration and inherited high-effort classifier wire. Complete local pnpm verify passed: 2735 Vitest tests with 2 expected skips, 340 tooling tests, source/test types, Agent/baseline checks, clean build and package smoke. A synthetic valid nine-second result is accepted, thirty-second deadline results rejected, explicit 8s/45s budgets reach preparation fences, and fixed/missing/excluded/disabled classifiers plus same-turn settings changes retain ownership. The native wire regression verifies omitted classifier reasoning/tools and 128 output tokens while ordinary Chat preserves high effort. Exact local pack/tarball checks passed; native SettingsForms restart/fiber fixture and required Windows/Linux results are recorded in the implementation PR when executed. Synthetic evidence does not establish live timeout prevalence, classification improvement, supplier thinking disablement or optimal model choice.",
   "followUp": {
     "owner": "Maintainer or Agent assigned to post-delivery review issue #334",
-    "trigger": "Before the next policy change, or after at least 200 eligible opportunities per compared model across at least 20 Sessions, keeping policy/candidate-set windows separate",
-    "metric": "Opportunity-adjusted actual versus expected selections, marked replacement/retention, within-pool switching, assessment latency/failures; outcomes and costs only when independently attributable",
-    "action": "Review local sanitized aggregates, check missing/evicted coverage, and retain/change/defer with reasons. This threshold is not statistical significance. No automatic upload, quality inference from completion, or credit inference from balance deltas."
+    "trigger": "Review assessment outcomes after 200 new decisions with recorded reasons, or before the next assessment policy change. Retain the prior allocation trigger of 200 opportunities per model across 20 Sessions only if independently evidenced; aggregates cannot count Sessions.",
+    "metric": "Selected plus no-fit counts by fixed assessment outcome, producer version, source and demand; explicit unrecorded/truncated/dropped/expired/saturated/restart coverage. Review captured classifier/budget/total/first-text latency only when independently available, not inferred from aggregate counts. Keep 8s and 30s/version/custom-model cohorts separate; session-normalized rates require independently evidenced Sessions.",
+    "action": "Compare unknown/timeout coverage and answer-start latency without assuming causal improvement; retain, lower, raise within bounds or revert the trial based on reviewed evidence. Fix an evidenced dominant failure or defer when uncertain. No automatic upload, optimal-model benchmark, transition reconstruction, quality or billing inference. Implementation #400 and open post-delivery review #334."
   }
 }

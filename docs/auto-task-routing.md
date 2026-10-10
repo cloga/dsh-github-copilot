@@ -3,7 +3,7 @@
 Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
 [evidence refinement #262](https://github.com/cloga/dsh-github-copilot/issues/262).
 
-**Current contract:** source candidate `0.4.0-alpha.99`, targeting official DSH/Windows
+**Current contract:** source candidate `0.4.2-alpha.7`, targeting official DSH/Windows
 Desktop `0.2.0-rc.2`. Semantic assessment is enabled by default with bounded
 auxiliary timing/output evidence. Neither publication nor
 these explanations prove the version loaded in a particular Host.
@@ -22,6 +22,38 @@ namespace; it is not an extra switch on the Web search card. This changes
 subsequent assessments, not an already-admitted turn. Local known-task rules
 still work when auxiliary inference is disabled.
 
+The native plugin configuration exposes these profile-wide settings under
+`github-copilot` (not the Web search routing card):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `autoSemanticAssessmentTimeoutMs` | `30000` | Integer total preparation/response budget from 1000 to 120000 ms. `8000` restores the earlier budget; zero/unlimited is not supported. |
+| `autoSemanticAssessmentModel` | `''` | Empty uses metadata-driven automatic classifier selection. A nonempty value is an exact current-account model ID, not a display name or virtual Auto choice. |
+
+For example, keep automatic selection while allowing the new default budget:
+
+```yaml
+github-copilot:
+  autoSemanticAssessment: true
+  autoSemanticAssessmentTimeoutMs: 30000
+  autoSemanticAssessmentModel: ''
+```
+
+These fields require the new plugin release; adding them to an older version
+does not implement the behavior. Changes apply to subsequent assessments,
+not an admitted turn's steps/retries. The 30-second default is a user-approved
+trial, not calibrated latency or proof that past unknown results were timeouts.
+Larger budgets can increase time before the answer begins and auxiliary charges.
+Native Chat/search deadlines and user cancellation are independent.
+
+An explicit classifier may use any account-advertised category, but still must
+be an entitled, unexcluded concrete model with text capability, validated protocol
+and the existing input/output headroom. A missing, excluded or unsuitable choice
+produces `COPILOT_AUTO_CLASSIFIER_CONFIGURED_MODEL_UNAVAILABLE`, then the existing
+unknown-demand/unavailable diagnostic; no silent alternate classifier is called.
+Answer selection remains a separate Auto decision. The classifier result does
+not choose its own answer model.
+
 Open the reply's selection explanation for the captured decision. Evidence is
 Host-lifetime and bounded; after restart or eviction it can be unavailable.
 Do not infer an old decision from the current picker.
@@ -30,7 +62,7 @@ Do not infer an old decision from the current picker.
 |---|---|
 | `uncertain` / unknown demand | The available evidence does not establish task demand; it is not a failed answer or a claim that the conversation is empty. |
 | `insufficient-evidence` | A local rule or classifier could not justify a demand category. Longer context alone does not guarantee classification. |
-| Semantic timeout | No validated result within the 8-second end-to-end budget. Demand remains unknown; Efficiency/Balance target Versatile, Intelligence targets Powerful, subject to eligibility and category fallback. |
+| Semantic timeout | No validated result within the captured configured end-to-end budget (30 seconds by default). Demand remains unknown; Efficiency/Balance target Versatile, Intelligence targets Powerful, subject to eligibility and category fallback. |
 | Missing auxiliary milestone | That milestone was not observed before assessment settled, not proof the supplier never sent data. |
 | Selection unknown/unavailable | Captured selection evidence is absent or could not be read, distinct from unknown task demand. |
 
@@ -115,7 +147,7 @@ charges and latency, separate from native chat Usage and without inferred cost.
 
 ## Auxiliary latency evidence and bounded output (#272)
 
-The assessment still has one **8-second end-to-end deadline**, including account
+The assessment has one **configured end-to-end deadline, 30 seconds by default**, including account
 discovery/preparation and the native call. It does not retry on timeout or try a
 second classifier. The response budget is now 128 output tokens, with compact
 demand JSON and at most three fixed signals requested. The strict decoder
@@ -131,16 +163,43 @@ this is not a hard real-time guarantee or evidence of a supplier latency cause.
 The owned timer and abort listener are disposed when assessment settles.
 
 Among eligible supplier Lightweight text candidates with the existing input
-headroom, prefer advertised reasoning `off`, then deterministic ID ordering.
+headroom, automatic selection prefers unmarked cost, advertised reasoning `off`,
+then deterministic ID ordering. An explicit exact-ID setting selects only that
+eligible model, without category or cost re-ranking.
 This does not infer speed, health or quality from effort or model names, and
 does not launch a second candidate if native support is absent.
+
+Automatic selection is metadata-driven, not an empirical fastest/best model
+search. No additional benchmark requests, adaptive deadlines, per-model health
+ranking, cooldown or cross-turn cache are introduced. Those require separately
+reviewed representative latency/accuracy/cost observations and consent, not a
+guess from model names or a timeout suspicion. Review outcomes under #334 before
+claiming the increased default improves live classification.
 
 Request `off` reasoning only when both current supplier metadata advertises it
 and the public prepared model lists an `off` effort. Supplier metadata alone
 does not establish native support: current managed reasoning maps can decline
-`off` even when advertised. In that case retain native policy, do not change
+`off` even when advertised. The auxiliary adapter does not inherit the route's
+configured Chat reasoning effort: a synthetic high-effort profile previously
+sent `reasoning.effort: high` on the classifier request. Its isolated public
+profile now omits that default while ordinary Chat retains it. This prevents an
+explicit high-effort instruction, not supplier-side thinking.
+
+Even native `off` can mean omitting the reasoning option rather than sending a
+supplier disable instruction. Do not force `low` or `minimal`: on some protocols
+that enables thinking and enlarges the SDK's requested output budget. Retain
+native assembly, do not change
 shared model maps, guess a wire value or patch Core. No claim that reasoning is
 disabled for all classifiers is made.
+
+Tools and an execution loop are absent. Only locally unknown tasks use one
+classifier call per admitted turn; subsequent steps/retries reuse its result.
+Text projection stays bounded to twelve rows, 1600 characters per row and
+8000 serialized characters; files, images and replay bodies are not included.
+The requested output budget remains 128 tokens. Neither those bounds nor the
+waiting deadline establishes a hard supplier reasoning-token, credit or dollar
+cap. Measure accuracy, elapsed time and auxiliary usage separately before
+reducing context/output or claiming a cheapest/fastest classifier.
 
 Captured Host-lifetime selection evidence now includes a bounded public
 classifier ID, configured waiting budget, total monotonic assessment elapsed

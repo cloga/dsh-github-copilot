@@ -32,6 +32,7 @@ export interface AutoModelHostDependencies {
   followParentModel?: () => boolean
   admitModel?: (agent: Agent, turn: number, model: string, signal: AbortSignal) => void
   semanticAssessment?: () => boolean
+  assessmentTimeoutMs?: () => number | undefined
   highCostModelIds?: () => readonly string[]
   allocationEvidence?: () => boolean
   classifyTask?: TaskAssessmentDependencies['classify']
@@ -65,6 +66,7 @@ async function decide(
     const assessment = await assessAutoTask(messages, {
       enabled: dependencies.semanticAssessment?.() === true, signal,
       classify: dependencies.classifyTask,
+      timeoutMs: dependencies.assessmentTimeoutMs?.(),
       diagnostic: dependencies.assessmentDiagnostic ?? (() => { throw failure('COPILOT_AUTO_ASSESSMENT_DIAGNOSTIC_UNAVAILABLE') }),
     })
     if (signal.aborted) throw signal.reason

@@ -4,6 +4,36 @@ import { assessAutoTask, assessTaskLocally, assessmentInput, TaskAssessmentRevok
 const message = (text: string, role = 'user') => ({ role, content: [{ type: 'text', text }] })
 const signal = () => new AbortController().signal
 describe('bounded contextual Auto task assessment', () => {
+  it('allows a response after the old eight-second budget under the new bounded default', async () => {
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    try {
+      const result = await assessAutoTask([message('Continue')], {
+        enabled: true, signal: signal(), diagnostic: vi.fn(),
+        classify: async () => {
+          now = 9000
+          return '{"demand":"routine","signals":[]}'
+        },
+      })
+      expect(result).toMatchObject({ demand: 'routine', source: 'semantic',
+        semantic: { budgetMs: 30000, elapsedMs: 9000, validation: 'valid' } })
+    } finally { clock.mockRestore() }
+  })
+  it('still rejects a result at the new default deadline without relying on timer delivery', async () => {
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    try {
+      const result = await assessAutoTask([message('Continue')], {
+        enabled: true, signal: signal(), diagnostic: vi.fn(),
+        classify: async () => {
+          now = 30000
+          return '{"demand":"routine","signals":[]}'
+        },
+      })
+      expect(result).toMatchObject({ demand: 'unknown', diagnostic: 'timeout',
+        semantic: { budgetMs: 30000, validation: 'not-validated' } })
+    } finally { clock.mockRestore() }
+  })
   it('rejects late results even before the scheduled timeout callback runs', async () => {
     let now = 0
     const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)

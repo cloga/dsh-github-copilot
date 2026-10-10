@@ -1,6 +1,49 @@
 # Changelog
 
-## 0.4.2-alpha.4 (prepared, #392)
+## 0.4.2-alpha.7 (prepared)
+
+- Raise the auxiliary Auto task-assessment default total budget from eight to
+  thirty seconds as a user-approved trial, with a native editable
+  `autoSemanticAssessmentTimeoutMs` setting bounded to 1000–120000 ms.
+- Expose `autoSemanticAssessmentModel`: empty keeps the existing metadata-driven
+  automatic classifier; an exact current-account ID can select another eligible
+  concrete model. Missing, excluded or unsuitable explicit choices diagnose
+  unavailable without silently calling another classifier.
+- Persist both volatile native settings across restart while preserving admitted
+  steps/retries. Keep cancellation, account proof, monotonic deadline checks,
+  128-token output, context conservatism and one-call/no-retry ownership.
+  No empirical optimal-model search or claim that past unknowns were timeouts.
+- Isolate auxiliary classifier reasoning from the route's configured Chat effort:
+  a high-effort profile no longer adds high reasoning to classification. Preserve
+  ordinary Chat behavior, no tools and native assembly; omitted reasoning or
+  native `off` is not proof of supplier-side disablement or a hard credit cap.
+
+## 0.4.2-alpha.6 (prepared)
+
+- Retain fixed assessment outcomes in existing opted-in daily Auto allocation
+  aggregates and their diagnostic table: timeout, disabled, unavailable, invalid
+  result, failed, omitted context, and known/unknown local or semantic assessment.
+- Preserve legacy missing reasons as unrecorded, keep outcome cohorts separate
+  through strict gateways and storage reopen, and distinguish task counts from
+  repeated candidate opportunities. No prompts, error bodies or Session IDs added.
+- Leave classification, routing, eight-second assessment budget, conservative
+  context handling and collection consent unchanged. Historical unknown causes
+  remain unproven; review new outcome data before changing policy.
+
+## 0.4.2-alpha.5 (prepared)
+
+- Measure large request JSON composition up to 32 MiB with a cooperative,
+  bounded span scanner instead of a full payload object graph. Preserve
+  disjoint image/replay byte subsets, native original spans and explicit
+  cancellation/time/work limits; replay validation keeps its 16 MiB boundary.
+- Start opted-in large-body counting after Fetch invocation without holding
+  up ordinary response/stream delivery. Fence late numeric updates to their
+  own retained row across pause/re-enable, clear, teardown and eviction.
+- Reuse bounded composition work in exact verified-408 guidance. Preserve
+  native bytes, response/error, retries, Usage, timeout and default-off gzip;
+  composition evidence does not establish a proxy or supplier fault.
+
+## 0.4.2-alpha.4 (prepared)
 
 - Add independently opt-in, content-free managed-adapter physical request
   observations to Local diagnostics: model/protocol, JSON/wire byte counts,
@@ -15,7 +58,7 @@
 - Keep the offline account/compaction analyzer aggregate-only, with an explicit
   gap when separately collected request observations are omitted.
 
-## 0.4.2-alpha.3 (prepared, #390)
+## 0.4.2-alpha.3 (prepared)
 
 - Put daily Auto allocation aggregate rows in the primary Local diagnostics view, with UTC date, policy, model, decision cohort, opportunities, expected selections, selected counts and no-fit decisions. Keep cohorts distinct and state that these counts do not prove execution, quality or billing.
 - Move account/Checking and compaction tables, collection controls, and data-scope/limits/JSON guidance into collapsed disclosures. Preserve status retry access, independent default-off switches and separately confirmed clear behavior.

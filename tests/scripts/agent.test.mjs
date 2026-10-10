@@ -134,6 +134,32 @@ test('manual replay recovery plan retains explicit consent and rejects weakened 
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test('large composition plan rejects weakened replay, transport and consent boundaries', async () => {
+  const plan = await planTask('diagnostics')
+  assert.ok(plan.read.includes('src/request-body-composition.ts'))
+  assert.ok(plan.tests.includes('tests/request-body-composition.spec.ts'))
+  const root = await mkdtemp(join(tmpdir(), 'copilot-composition-contract-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    for (const file of original.entrypoints) {
+      await mkdir(dirname(join(root, file)), { recursive: true })
+      await writeFile(join(root, file), '')
+    }
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    await writeFile(join(root, 'AGENTS.md'), await readFile(join(repositoryRoot, 'AGENTS.md')))
+    for (const mutate of [
+      contract => { delete contract.tasks.diagnostics.compositionBoundary },
+      contract => { contract.tasks.diagnostics.compositionBoundary = 'Increase replay limits and wait for diagnostics before sending' },
+      contract => { contract.tasks.diagnostics.tests = contract.tasks.diagnostics.tests.filter(file => file !== 'tests/request-body-composition.spec.ts') },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /large-request composition/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('contract validation rejects a redundant release prompt or weakened release prerequisites', async () => {
   const root = await mkdtemp(join(tmpdir(), 'copilot-release-policy-'))
   try {

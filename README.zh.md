@@ -8,7 +8,7 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-**稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；待发布预览版：`0.4.2-alpha.4`。** `0.4.2-alpha.1` 的发布预检失败，因此未发布；其不可变 tag 不会复用。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。稳定版也发布到 npm 的 `latest` dist-tag；预发布版本仍使用各自渠道 tag。稳定渠道不扩大已验证的宿主基线，也不证明实时账号、模型、搜索或 Desktop 健康状态。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
+**稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；待发布预览版：`0.4.2-alpha.7`。** `0.4.2-alpha.1` 的发布预检失败，因此未发布；其不可变 tag 不会复用。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。稳定版也发布到 npm 的 `latest` dist-tag；预发布版本仍使用各自渠道 tag。稳定渠道不扩大已验证的宿主基线，也不证明实时账号、模型、搜索或 Desktop 健康状态。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
 
 **从 0.4.0 升级：**首个正式版在同账号正常原生 OAuth 刷新时，可能以 `COPILOT_PREVIEW_CREDENTIAL_CHANGED` 中止并行托管请求。0.4.1 仅在插件拥有的原生刷新被精确验证，且账号、端点与权限连续时，保留已发出的 HTTP 流；后续请求重新验证认证与模型元数据。未知／外部凭据通知、撤销、取消与供应商拒绝仍明确报错，不承诺所有刷新无感，也不自动重试。参见[刷新边界](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385)。
 
@@ -38,12 +38,19 @@ Session／turn ID、对话内容，也不推断执行／结果，不自动调参
 **Enable request observations** 开关保留最多 128 条托管适配器的物理请求观测，保留 24 小时：
 仅包含模型、JSON／传输字节数、耗时、HTTP 状态和终止分类，不记录正文、headers、
 凭据或 Session／turn ID。本地写出完成不证明供应方收到了请求；诊断不会修复超时，
-也不改变重试或 Usage。包内另提供显式离线分析器，
+也不改变重试或 Usage。最高 32 MiB 的大 JSON 请求可通过有界、协作式扫描获得组成计数，
+不完整解析 payload 对象图；约 20.4 MiB 的请求不再必然落入旧 16 MiB 诊断盲区。
+耗时／工作量／取消限制仍明确可见，已结束的记录可能在之后读取时才补齐计数。
+不自动启用 gzip、截断历史或增加重试，参见[请求观测](./docs/plugin-diagnostics.md#content-free-physical-request-observations-392)。
+包内另提供显式离线分析器，
 只处理调用者指定的持久化单元或经审阅的聚合视图，并且只新建本地报告文件；不会扫描、
 上传或更改采集设置。暂停保留证据，清除需单独确认。Client／Host 分开统计，未覆盖路径、
 报告丢失与存储故障明确显示。描述性计数不是历史重建、错误率，也不表示优化效果已被验证。诊断页默认显示按 UTC 日期、
 策略、模型和 cohort 划分的 Auto 分配每日汇总表，包含候选机会、预期选择、实际选择及
-no-fit 决策；只能在匹配 cohort 内比较预期与实际选择。账号／Checking 和压缩报告、采集控制、
+no-fit 决策；只能在匹配 cohort 内比较预期与实际选择。新 cohort 区分评估超时、不可用／无效
+结果、上下文缺失、评估关闭及本地／语义判断确实未知；旧数据原因保持 **not recorded**，
+不倒推。按 Selected 加 No-fit 计任务数，不按候选机会计数。这是诊断覆盖，不改变选模策略，
+也不证明供应商根因。账号／Checking 和压缩报告、采集控制、
 详细范围／限制／JSON 位于折叠区；清除仍需单独确认。
 
 在已构建的包或源码 checkout 内，显式分析已核验的文件：
@@ -95,10 +102,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.4/dsh-github-copilot-0.4.2-alpha.4.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.7/dsh-github-copilot-0.4.2-alpha.7.tgz
 ```
 
-**Desktop** 原生包管理器接受精确 npm spec，例如 `dsh-github-copilot@0.4.2-alpha.4`；稳定版发布到 npm `latest` dist-tag，预发布版使用对应渠道 tag。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器接受精确 npm spec，例如 `dsh-github-copilot@0.4.2-alpha.7`；稳定版发布到 npm `latest` dist-tag，预发布版使用对应渠道 tag。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -133,9 +140,13 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 分类来自认证后的供应方元数据，不按模型名、上下文容量或臆测质量排名。在第一个可容纳输入的分类内，按前述正成本权重和有限连续性加权选择；上一模型合适也不会无条件保留。分类回退明确说明。同一已准入 turn 的工具步骤和重试保持同一真实回答模型；压缩保留独立解析的原生摘要路由。
 
-语义判断**默认开启，仅用于本地需求未知的任务**。最多一次辅助请求，**8 秒端到端期限、128 tokens 输出预算**。可用 `github-copilot.autoSemanticAssessment: false` 关闭。超时／无效结果保留未知，再按偏好兜底，不解释为简单，也不换分类模型重试。用户取消和账号失效仍终止请求。辅助调用增加延迟与供应方费用，不计入原生回答 Usage。
+语义判断**默认开启，仅用于本地需求未知的任务**。最多一次辅助请求，**默认 30 秒端到端期限、128 tokens 输出预算**。可用 `github-copilot.autoSemanticAssessment: false` 关闭。原生插件配置提供 `autoSemanticAssessmentTimeoutMs`（1000–120000 毫秒，`8000` 恢复旧预算）和 `autoSemanticAssessmentModel`（空字符串自动选择，或当前账号的精确模型 ID）。只影响后续评估，不改变已准入 turn 的重试。指定分类模型不存在／被排除／不合适时明确报告 unavailable，不偷偷换模型。自动选择依据元数据，不代表实测最优；30 秒是试验默认值，不证明过去主要因超时。参见[评估配置](./docs/auto-task-routing.md#using-auto)。
+
+超时／无效结果保留未知，再按偏好兜底，不解释为简单，也不换分类模型重试。用户取消和账号失效仍终止请求。辅助调用增加延迟与供应方费用，不计入原生回答 Usage。
 
 准备、原生请求和结果边界均用单调时钟检查期限，不依赖定时器及时执行。事件循环延迟可能推迟结束，但不授权超期发起请求或接受结果。合格 Lightweight 分类模型优先考虑声明 reasoning `off` 的候选，同级按 ID 确定顺序；只有公开原生模型也支持时才发送 `off`。这不是实测速率排名。解释分别说明该分类的可容纳候选数和上一模型连续性，不将保留上一模型说成语义优选。
+
+辅助分类器不再继承配置的 Chat reasoning effort，也不传工具。原生 `off` 可能只是省略 reasoning 参数，因此不保证供应商侧关闭思考。单次调用、有界文本输入和 128 tokens 请求输出预算限制额外开销，但不承诺额度硬上限；普通 Chat 的思考与工具保持不变。
 
 回复的选模说明展示捕获的理由和可选的不含内容的辅助里程碑。`uncertain`、`insufficient-evidence` 不等于会话没有上下文。**Selection unknown**表示记录未保留，**Selection unavailable → Retry**表示读取失败；Retry 只重读该 turn，不重新推理。证据有界且仅限 Host 生命周期，重启／淘汰可能丢失。
 
@@ -274,14 +285,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.4/dsh-github-copilot-0.4.2-alpha.4.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.4/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.7/dsh-github-copilot-0.4.2-alpha.7.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.7/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.4.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.7.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
