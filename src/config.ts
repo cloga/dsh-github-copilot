@@ -6,6 +6,7 @@
 
 import z from '@deepseek-ai/schemastery'
 import { DEFAULT_REQUEST_BUDGET_POLICY } from './request-budget.ts'
+import { DEFAULT_AUTO_ASSESSMENT_TIMEOUT_MS } from './auto-task-assessment.ts'
 import type { RequestBudgetPolicy } from './request-budget.ts'
 import { WebSearchRoutingConfigSchema } from './web-search-routing-config.ts'
 import type { WebSearchRoutingConfig } from './web-search-routing-config.ts'
@@ -71,6 +72,10 @@ export interface InlineConfig {
   followParentModel?: boolean
   /** Default-on bounded task assessment; explicit false opts out of auxiliary inference. */
   autoSemanticAssessment?: boolean
+  /** Total preparation/response budget; finite wait, independent of native Chat deadlines. */
+  autoSemanticAssessmentTimeoutMs?: number
+  /** Exact account classifier ID; empty keeps metadata-driven automatic selection. */
+  autoSemanticAssessmentModel?: string
   /** Capture bounded local candidate opportunities for future policy review. */
   autoAllocationEvidence?: boolean
   /** Estimated managed-route input headroom, separate from truthful catalog capacities. */
@@ -91,7 +96,9 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
+  autoSemanticAssessmentTimeoutMs?: number | LiveSetting<number>
+  autoSemanticAssessmentModel?: string | LiveSetting<string>
   continuationDefaultHistory?: InlineConfig['continuationDefaultHistory'] | LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
   sessionContinuation?: SessionContinuationPreference[] | LiveSetting<ArrayLike<SessionContinuationPreference>>
   sessionAccounts?: SessionAccountPreference[] | LiveSetting<ArrayLike<SessionAccountPreference>>
@@ -108,7 +115,9 @@ export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAl
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
+  autoSemanticAssessmentTimeoutMs: LiveSetting<number>
+  autoSemanticAssessmentModel: LiveSetting<string>
   diagnosticsEnabled: LiveSetting<boolean>
   autoAllocationDiagnosticsEnabled: LiveSetting<boolean>
   requestDiagnosticsEnabled: LiveSetting<boolean>
@@ -135,6 +144,8 @@ export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
   const defaults = readConfigValue<ArrayLike<{ enabled: boolean; changedAt: number }> | undefined>(config.continuationDefaultHistory)
   return {
     ...config,
+    autoSemanticAssessmentTimeoutMs: readConfigValue(config.autoSemanticAssessmentTimeoutMs),
+    autoSemanticAssessmentModel: readConfigValue(config.autoSemanticAssessmentModel),
     diagnosticsEnabled: readConfigValue(config.diagnosticsEnabled),
     autoAllocationDiagnosticsEnabled: readConfigValue(config.autoAllocationDiagnosticsEnabled),
     requestDiagnosticsEnabled: readConfigValue(config.requestDiagnosticsEnabled),
@@ -197,6 +208,8 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   })).default([]).hidden().volatile(),
   followParentModel: z.boolean().default(false).volatile(),
   autoSemanticAssessment: z.boolean().default(true),
+  autoSemanticAssessmentTimeoutMs: z.number().step(1).min(1000).max(120_000).default(DEFAULT_AUTO_ASSESSMENT_TIMEOUT_MS).volatile(),
+  autoSemanticAssessmentModel: z.string().max(512).default('').volatile(),
   autoAllocationEvidence: z.boolean().default(true),
   parentModelFollow: z.array(z.object({
     childSessionId: z.string().min(1), parentSessionId: z.string().min(1),

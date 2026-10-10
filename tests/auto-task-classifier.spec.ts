@@ -10,6 +10,15 @@ const model: AccountModelDescriptor = {
     apiSource: 'advertised-native', policySource: 'server-enabled', contextWindowSource: 'max_context_window_tokens' },
 }
 describe('concrete managed task classifier', () => {
+  it('honors an explicit exact account classifier without category guessing or automatic fallback', () => {
+    const explicit = { ...model, id: 'arbitrary-account-choice', category: 'powerful' as const }
+    expect(taskClassifierModel([model, explicit], [explicit.id], explicit.id)).toBe(explicit)
+    expect(taskClassifierModel([model], [], explicit.id)).toBeUndefined()
+    expect(taskClassifierModel([model, { ...explicit, contextWindow: 2000 }], [], explicit.id)).toBeUndefined()
+    expect(taskClassifierModel([model, { ...explicit, input: [] }], [], explicit.id)).toBeUndefined()
+    expect(taskClassifierModel([explicit, model], [], '')).toBe(model)
+    expect(taskClassifierModel([explicit, model], [], 'auto')).toBeUndefined()
+  })
   it('never starts an auxiliary adapter after cancellation during preparation', async () => {
     const controller = new AbortController()
     controller.abort(new Error('CANCELLED'))

@@ -55,7 +55,7 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
     readonly chatRequestSettings?: () => Pick<InlineConfig,
       'chatStreamIdleTimeoutMs' | 'chatStreamLiveness' | 'chatMaxRequestImageBytes'
       | 'responsesRequestCompression' | 'responsesOmitTemperature'>
-    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment' | 'autoAllocationEvidence'>
+    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel' | 'autoAllocationEvidence'>
     readonly requestBudget?: Partial<RequestBudgetPolicy>
     readonly requestBudgetSettings?: () => Partial<RequestBudgetPolicy>
   }
@@ -585,7 +585,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
   publish: () => void) {
   const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings,
     requestBudget, requestBudgetSettings, streamLiveness, chatRequestSettings, ...requestConfig } = config
-  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment' | 'autoAllocationEvidence'>
+  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel' | 'autoAllocationEvidence'>
     = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs, excludedModelIds: [] }))
   const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
   const excludedModels = () => excludedModelSet(cacheSettings().excludedModelIds)
@@ -777,7 +777,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     // stream. Never replay a model wire request or retry generic provider errors.
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
-  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'requestCheckpoint' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'> = {}): PiAiAdapterOptions => {
+  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'requestCheckpoint' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'> = {}, classifier = false): PiAiAdapterOptions => {
     const settings = chatRequestSettings?.()
     const idle = settings?.chatStreamIdleTimeoutMs ?? template.streamIdleTimeoutMs
     const enabled = (settings?.chatStreamLiveness ?? streamLiveness ?? true)
@@ -812,6 +812,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     // Byte-idle retains the original interval; real SSE progress earns only a bounded
     // extra semantic window. WebSocket/auto keep the untouched native policy.
     const profile = resolvedProfile(provider, { ...requestConfig,
+      ...classifier ? { reasoning: undefined } : {},
       streamIdleTimeoutMs: enabled ? Math.min(idle * 2, 2_147_483_647) : idle,
       maxRequestImageBytes: settings?.chatMaxRequestImageBytes ?? template.maxRequestImageBytes,
     })
@@ -832,19 +833,27 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     parentModelBindings: () => cacheSettings().parentModelFollow ?? [],
     followParentModel: () => cacheSettings().followParentModel === true,
     semanticAssessment: () => cacheSettings().autoSemanticAssessment ?? true,
+    assessmentTimeoutMs: () => cacheSettings().autoSemanticAssessmentTimeoutMs,
     highCostModelIds: () => normalizeHighCostModelIds(cacheSettings().highCostModelIds),
     assessmentDiagnostic: (code: string) => ctx.logger.warn(code),
     async classifyTask(...args: Parameters<NonNullable<Parameters<typeof installAutoModelRouting>[1]['classifyTask']>>) {
       const [input, signal, observe, checkpoint] = args
+      const settings = cacheSettings()
+      const classifierId = settings.autoSemanticAssessmentModel ?? ''
+      const highCost = normalizeHighCostModelIds(settings.highCostModelIds)
       checkpoint?.()
       const snapshot = await discoverSnapshot({ signal })
       checkpoint?.()
       const model = taskClassifierModel(snapshot.models.filter(model => !excludedModels().has(model.id)),
-        normalizeHighCostModelIds(cacheSettings().highCostModelIds))
-      if (model === undefined) throw failure('COPILOT_AUTO_CLASSIFIER_UNAVAILABLE')
+        highCost, classifierId)
+      if (model === undefined) {
+        if (classifierId !== '') ctx.logger.warn('COPILOT_AUTO_CLASSIFIER_CONFIGURED_MODEL_UNAVAILABLE')
+        throw failure('COPILOT_AUTO_CLASSIFIER_UNAVAILABLE')
+      }
       observe?.({ stage: 'model-selected', modelId: model.id })
       const revision = lifetime.revision
-      const adapter = new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings,
+      const classifierOptionsFor: typeof optionsFor = (lease, hooks) => optionsFor(lease, hooks, true)
+      const adapter = new PreviewAdapter(lifetime, classifierOptionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings,
         undefined, checkpoint)
       try {
         const prepared = await adapter.prepareCall(GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model.id, signal)
@@ -1034,6 +1043,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     parentModelBindings: () => currentRuntime().auto.parentModelBindings(),
     followParentModel: () => currentRuntime().auto.followParentModel(),
     semanticAssessment: () => currentRuntime().auto.semanticAssessment(),
+    assessmentTimeoutMs: () => currentRuntime().auto.assessmentTimeoutMs(),
     highCostModelIds: () => normalizeHighCostModelIds(config.accountModelSettings?.().highCostModelIds),
     allocationEvidence: () => config.accountModelSettings?.().autoAllocationEvidence !== false,
     assessmentDiagnostic: code => ctx.logger.warn(code),

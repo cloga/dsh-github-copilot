@@ -11,10 +11,11 @@ import { normalizeHighCostModelIds } from './auto-allocation.ts'
 export const TASK_CLASSIFIER_MAX_TOKENS = 128
 
 export function taskClassifierModel(
-  models: readonly AccountModelDescriptor[], highCostModelIds?: readonly string[],
+  models: readonly AccountModelDescriptor[], highCostModelIds?: readonly string[], modelId = '',
 ): AccountModelDescriptor | undefined {
   const highCost = new Set(normalizeHighCostModelIds(highCostModelIds))
-  return models.filter(model => model.category === 'lightweight' && model.input.includes('text'))
+  return models.filter(model => (modelId !== '' ? model.id === modelId : model.category === 'lightweight')
+    && model.input.includes('text'))
     .toSorted((left, right) => Number(highCost.has(left.id)) - Number(highCost.has(right.id))
       || Number(right.reasoning.advertisedEfforts.includes('off'))
       - Number(left.reasoning.advertisedEfforts.includes('off')) || left.id.localeCompare(right.id, 'en'))

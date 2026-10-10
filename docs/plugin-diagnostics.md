@@ -53,8 +53,10 @@ never reconstructed from demand/source. Count decisions using Selected plus
 No-fit, not candidate opportunities (one decision may have many candidates).
 These outcomes explain classifier settlement, not network root cause or model
 execution; no error bodies, signals, prompts or Session/turn IDs are added.
-Classification, its eight-second budget and conservative omitted-context guard
-are unchanged. Older strict plugin versions may reject new snapshot fields on
+Classification and the conservative omitted-context guard stay unchanged.
+The separately configured assessment budget defaults to 30 seconds as of alpha.7;
+producer versions separate this trial from the earlier eight-second budget.
+Older strict plugin versions may reject new snapshot fields on
 rollback; do not delete or silently rewrite retained evidence to make them parse.
 The separate **Enable request observations** control uses the hidden volatile
 `github-copilot.requestDiagnosticsEnabled` leaf with path-level CAS and exact
