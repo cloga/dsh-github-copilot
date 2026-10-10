@@ -1,6 +1,7 @@
 import { hasApi, lazyStream } from '@earendil-works/pi-ai'
 import type { Api, Model, OAuthAuth, StreamOptions, ThinkingLevelMap, TranscriptContext } from '@earendil-works/pi-ai'
 import type { AccountModelApi, AccountModelDescriptor } from './account-model-catalog.ts'
+import { classifierReasoningOffSupported } from './auto-task-classifier.ts'
 import { coreProviderView } from './pi-provider-bridge.ts'
 import type { CoreCompatibleProvider, SimpleNativeProvider } from './pi-provider-bridge.ts'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
@@ -115,7 +116,7 @@ export function accountModelFromDescriptor(
 ): AccountPiModel {
   const map: ThinkingLevelMap = { off: null, minimal: null, low: null, medium: null, high: null, xhigh: null, max: null }
   const advertised = new Set(descriptor.reasoning.advertisedEfforts)
-  if (classifierReasoningOff && advertised.has('off')) map.off = 'none'
+  if (classifierReasoningOff && classifierReasoningOffSupported(descriptor)) map.off = 'none'
   const supported = enabledLevels.filter(level => advertised.has(level)
     && (descriptor.api !== 'anthropic-messages' || descriptor.reasoning.adaptiveThinking === true && level !== 'minimal'))
   for (const level of supported) map[level] = level

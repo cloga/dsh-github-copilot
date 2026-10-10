@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import { classifyTaskWithAdapter, taskClassifierModel } from '../src/auto-task-classifier.ts'
+import { assessmentEvidence, SemanticAssessmentEvidenceSchema } from '../src/auto-assessment-evidence.ts'
 const model: AccountModelDescriptor = {
   id: 'synthetic-arbitrary', name: 'Arbitrary', category: 'lightweight', api: 'openai-responses',
   contextWindow: 64_000, maxTokens: 8000, input: ['text'],
@@ -10,6 +11,41 @@ const model: AccountModelDescriptor = {
     apiSource: 'advertised-native', policySource: 'server-enabled', contextWindowSource: 'max_context_window_tokens' },
 }
 describe('concrete managed task classifier', () => {
+  it('accepts protocol-native disable labels without requiring the Core off spelling', () => {
+    for (const api of ['openai-responses', 'openai-completions', 'anthropic-messages'] as const) {
+      const candidate = { ...model, api, reasoning: {
+        advertisedEfforts: [api === 'anthropic-messages' ? 'disabled' : 'none'], unmappedEfforts: [],
+      } }
+      expect(taskClassifierModel([candidate])).toBe(candidate)
+    }
+    expect(taskClassifierModel([{ ...model, api: 'anthropic-messages',
+      reasoning: { advertisedEfforts: ['none'], unmappedEfforts: [] } }])).toBeUndefined()
+  })
+  it('records bounded fixed-reason rejection counts including missing metadata', () => {
+    const observe = vi.fn()
+    taskClassifierModel([model, { ...model, category: undefined },
+      { ...model, input: [] }], [], '', observe)
+    expect(observe).toHaveBeenCalledWith({ stage: 'candidate-scan', candidates: 3,
+      rejected: { category: 1, input: 1, 'reasoning-disable-unproven': 1 }, eligible: 0 })
+  })
+  it('preserves candidate counts and preparation rejection in strict request-local evidence', () => {
+    const evidence = assessmentEvidence(30_000)
+    const candidate = { ...model, id: 'synthetic-disable', reasoning: {
+      advertisedEfforts: ['none'], unmappedEfforts: ['none'],
+    } }
+    taskClassifierModel([model, candidate], [], '', evidence.observe, new Set([model.id]))
+    evidence.observe({ stage: 'model-selected', modelId: candidate.id })
+    evidence.observe({ stage: 'preparation-failed', reason: 'native-off-unavailable' })
+    expect(evidence.finish('not-validated')).toMatchObject({
+      stage: 'model-selected', preparationFailure: 'native-off-unavailable',
+      candidateScan: { candidates: 2, eligible: 1, rejected: { excluded: 1 } },
+    })
+    const snapshot = evidence.finish('not-validated')
+    expect(SemanticAssessmentEvidenceSchema.safeParse({ ...snapshot,
+      candidateScan: { candidates: 2, eligible: 1, rejected: { excluded: 2 } } }).success).toBe(false)
+    expect(SemanticAssessmentEvidenceSchema.safeParse({ ...snapshot,
+      candidateScan: { candidates: 2, eligible: 1, rejected: { 'raw-model-id': 1 } } }).success).toBe(false)
+  })
   it('honors an explicit exact account classifier without category guessing or automatic fallback', () => {
     const explicit = { ...model, id: 'arbitrary-account-choice', category: 'powerful' as const,
       reasoning: { advertisedEfforts: ['off'], unmappedEfforts: [] } }

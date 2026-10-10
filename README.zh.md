@@ -8,7 +8,7 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-**稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；待发布预览版：`0.4.2-alpha.9`。** `0.4.2-alpha.1` 的发布预检失败，因此未发布；其不可变 tag 不会复用。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。稳定版也发布到 npm 的 `latest` dist-tag；预发布版本仍使用各自渠道 tag。稳定渠道不扩大已验证的宿主基线，也不证明实时账号、模型、搜索或 Desktop 健康状态。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
+**稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；待发布预览版：`0.4.2-alpha.10`。** `0.4.2-alpha.1` 的发布预检失败，因此未发布；其不可变 tag 不会复用。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。稳定版也发布到 npm 的 `latest` dist-tag；预发布版本仍使用各自渠道 tag。稳定渠道不扩大已验证的宿主基线，也不证明实时账号、模型、搜索或 Desktop 健康状态。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
 
 **从 0.4.0 升级：**首个正式版在同账号正常原生 OAuth 刷新时，可能以 `COPILOT_PREVIEW_CREDENTIAL_CHANGED` 中止并行托管请求。0.4.1 仅在插件拥有的原生刷新被精确验证，且账号、端点与权限连续时，保留已发出的 HTTP 流；后续请求重新验证认证与模型元数据。未知／外部凭据通知、撤销、取消与供应商拒绝仍明确报错，不承诺所有刷新无感，也不自动重试。参见[刷新边界](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385)。
 
@@ -106,10 +106,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.9/dsh-github-copilot-0.4.2-alpha.9.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.10/dsh-github-copilot-0.4.2-alpha.10.tgz
 ```
 
-**Desktop** 原生包管理器接受精确 npm spec，例如 `dsh-github-copilot@0.4.2-alpha.9`；稳定版发布到 npm `latest` dist-tag，预发布版使用对应渠道 tag。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器接受精确 npm spec，例如 `dsh-github-copilot@0.4.2-alpha.10`；稳定版发布到 npm `latest` dist-tag，预发布版使用对应渠道 tag。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -148,7 +148,9 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 超时／无效结果保留未知，再按偏好兜底，不解释为简单，也不换分类模型重试。用户取消和账号失效仍终止请求。辅助调用增加延迟与供应方费用，不计入原生回答 Usage。
 
-准备、原生请求和结果边界均用单调时钟检查期限，不依赖定时器及时执行。事件循环延迟可能推迟结束，但不授权超期发起请求或接受结果。Lightweight 分类候选必须由当前账号元数据声明支持 reasoning `off`，再按确定性 ID 顺序选择。这不是实测速率排名。解释分别说明该分类的可容纳候选数和上一模型连续性，不将保留上一模型说成语义优选。
+准备、原生请求和结果边界均用单调时钟检查期限，不依赖定时器及时执行。事件循环延迟可能推迟结束，但不授权超期发起请求或接受结果。Lightweight 分类候选必须由当前账号元数据明确声明禁用 reasoning 的模式：`off`，或 Responses/Completions 的 `none`、Anthropic 的 `disabled`，再按确定性 ID 顺序选择。字段缺失或空列表不证明模型不会 reasoning。这不是实测速率排名。解释分别说明该分类的可容纳候选数和上一模型连续性，不将保留上一模型说成语义优选。
+
+请求内严格选模证据包含候选总数、可用数和每个模型的首个固定排除原因计数：被排除、指定 ID 不匹配、类别、文本输入、禁用能力未证实或预算。不在计数中新增模型 ID。无候选日志仅输出固定原因码，并区分原生适配器无法准备 off 的情况；不记录正文、凭据或原始错误。这是临时证据，不新增持久诊断采集；旧记录缺字段仍为未知。
 
 辅助分类器始终请求协议明确的关闭推理模式（Responses/Completions 为 `none`，Anthropic 为 `disabled`），且不传工具。只有账号元数据和隔离后的公开适配器模型都支持此能力时才发送请求；否则关闭分类请求并按不可用处理。分类器不继承配置的 Chat reasoning effort，关闭映射也不会加到共享账号模型。合成测试验证出站载荷，不证明供应商内部实现。单次调用、有界文本输入和 128 tokens 请求输出预算限制额外开销，但不承诺额度硬上限；普通 Chat 的思考与工具保持不变。
 
@@ -289,14 +291,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.9/dsh-github-copilot-0.4.2-alpha.9.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.9/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.10/dsh-github-copilot-0.4.2-alpha.10.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.10/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.9.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.10.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

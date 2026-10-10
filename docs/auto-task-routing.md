@@ -3,7 +3,7 @@
 Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
 [evidence refinement #262](https://github.com/cloga/dsh-github-copilot/issues/262).
 
-**Current contract:** source candidate `0.4.2-alpha.7`, targeting official DSH/Windows
+**Current contract:** source candidate `0.4.2-alpha.10`, targeting official DSH/Windows
 Desktop `0.2.0-rc.2`. Semantic assessment is enabled by default with bounded
 auxiliary timing/output evidence. Neither publication nor
 these explanations prove the version loaded in a particular Host.
@@ -69,6 +69,21 @@ Do not infer an old decision from the current picker.
 There is no assessment retry or automatic deadline extension. Caller cancellation
 aborts the turn rather than invoking fallback. Auxiliary calls can add latency
 and supplier charges outside native answer Usage.
+
+Classifier capability checks accept only explicit account-advertised disable
+labels: `off`, protocol-native `none` for Responses/Completions, or `disabled`
+for Anthropic. No aliases are applied to ordinary Chat model maps. Missing or
+empty effort metadata does not prove absence of reasoning.
+
+Strict request-local `semantic.candidateScan` evidence records at most 512
+candidates, eligible counts and first-rejection counts for exclusions, explicit
+ID mismatch, category, text input, unproven disable capability and budget.
+Counts partition the examined pool, not all possible rejection reasons per model.
+No candidate IDs, prompts or raw metadata are retained in these counts.
+`preparationFailure: native-off-unavailable` separates native off preparation
+from no-fit selection. No-fit Host warnings use fixed codes only. These fields
+are ephemeral selection evidence, not a new persisted diagnostic population;
+absent legacy evidence cannot be reconstructed.
 
 ## Requirements
 
@@ -163,8 +178,8 @@ this is not a hard real-time guarantee or evidence of a supplier latency cause.
 The owned timer and abort listener are disposed when assessment settles.
 
 Among eligible supplier Lightweight text candidates with the existing input
-headroom, automatic selection prefers unmarked cost, advertised reasoning `off`,
-then deterministic ID ordering. An explicit exact-ID setting selects only that
+headroom and explicit reasoning-disable proof, automatic selection prefers
+unmarked cost, then deterministic ID ordering. An explicit exact-ID setting selects only that
 eligible model, without category or cost re-ranking.
 This does not infer speed, health or quality from effort or model names, and
 does not launch a second candidate if native support is absent.
@@ -177,7 +192,8 @@ guess from model names or a timeout suspicion. Review outcomes under #334 before
 claiming the increased default improves live classification.
 
 The classifier is eligible only when current account metadata advertises
-reasoning `off` and the isolated, public prepared model exposes it. It then
+an explicit protocol-compatible disable mode and the isolated, public prepared
+model exposes `off`. It then
 always requests `off`; otherwise assessment fails closed without dispatching
 the classifier. The classifier-only model mapping serializes the native
 disable form supported by the published adapter: Responses

@@ -152,6 +152,14 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 
 ## Non-negotiable invariants
 
+Auxiliary classifier disable proof accepts explicit supplier `off` or the
+selected protocol's native `none` (Responses/Completions) or `disabled`
+(Anthropic), scoped to the isolated classifier model only. Missing/empty effort
+metadata remains unproven. Strict ephemeral candidate counts record one fixed
+first-rejection reason per candidate and distinguish native off preparation
+failure; no candidate IDs, raw metadata, prompts or new persistent population.
+No-fit warnings contain fixed codes only. Legacy absent evidence stays unknown.
+
 - Explicit replay recovery (#279, #289) is default-off and bound to the initiating native request signal, Session, model and current account proof. Only exact verified scope failures capture bounded full-item fingerprints; no replay bytes reach Client or storage. Public Session running/error snapshots trigger read-only notices on open/settled turns, never polling or durable recovery events. Two-stage confirmation chooses next matching turn (all steps/retries until turn/end) or bounded Session consent, omitting matching old encrypted items and their item summaries only on outgoing requests, never durable history or new reasoning. Preserve get/setEnabled descriptor identities and legacy session-consent semantics; authorize is additive. Active-turn writes, ambient-scope calls and automatic retries are forbidden. Expiry, disposal and proof discontinuity revoke evidence. See `docs/model-compatibility-acceptance.md`.
 
 - Do not implement a second general wire adapter or independently maintained static Copilot model catalog. The account-scoped route composes the published adapter and SDK with validated supplier metadata.

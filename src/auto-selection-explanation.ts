@@ -64,6 +64,25 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
           'invalid-result': 'invalid result', timeout: 'timeout', failed: 'request failed', 'context-omitted': 'incomplete context',
         }[explanation.assessment.diagnostic]}); failure was not treated as simplicity.`
   const evidence = explanation.assessment.semantic
+  const scan = evidence?.candidateScan
+  const rejectionLabels = {
+    excluded: zh ? '已排除' : 'excluded',
+    'configured-id': zh ? '非指定模型' : 'configured ID mismatch',
+    category: zh ? '非轻量分类' : 'not lightweight',
+    input: zh ? '不支持文本' : 'text unsupported',
+    'reasoning-disable-unproven': zh ? '关闭 reasoning 未获证明' : 'reasoning disable unproven',
+    budget: zh ? '输入预算不足' : 'insufficient input budget',
+  }
+  const candidateDetail = scan === undefined ? ''
+    : zh ? ` 候选检查：${scan.candidates} 个模型，${scan.eligible} 个合格。首个排除原因：${Object.entries(scan.rejected)
+      .filter(([, count]) => count > 0).map(([reason, count]) =>
+        `${rejectionLabels[reason as keyof typeof rejectionLabels]} ${count}`).join('；') || '无'}。`
+      : ` Candidate scan: ${scan.candidates} models, ${scan.eligible} eligible. First rejection reasons: ${Object.entries(scan.rejected)
+        .filter(([, count]) => count > 0).map(([reason, count]) =>
+          `${rejectionLabels[reason as keyof typeof rejectionLabels]} ${count}`).join('; ') || 'none'}.`
+  const preparationDetail = evidence?.preparationFailure === undefined ? ''
+    : zh ? ' 原生模型准备未提供 off 控制；未发起分类调用。'
+      : 'Native model preparation did not expose off; classifier call was not started.'
   const semantic = evidence === undefined ? undefined
     : zh ? `辅助分类模型：${evidence.modelId ?? '未选定'}。判断总耗时 ${evidence.elapsedMs} ms，等待预算 ${evidence.budgetMs} ms。${evidence.adapterStartedMs === undefined
       ? '尚未开始适配器调用。' : `适配器调用始于 ${evidence.adapterStartedMs} ms。`}${evidence.firstTextMs === undefined
@@ -77,7 +96,8 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
         ? 'No native finish observed.' : evidence.nativeFinish === 'stop' ? 'Native stop observed.' : 'Native non-stop finish observed.'} Result validation: ${{
           'not-validated': 'not completed', valid: 'passed', invalid: 'invalid', 'context-omitted': 'format passed; omitted context prevented downshift',
         }[evidence.validation]}. These auxiliary milestones do not prove a network/model latency cause and are not main-answer Usage.`
-  return { conclusion, choice, diagnostic, semantic,
+  return { conclusion, choice, diagnostic,
+    semantic: semantic === undefined ? undefined : `${semantic}${candidateDetail}${preparationDetail}`,
     assessment: `${zh ? '判断来源：' : 'Assessment: '}${explanation.assessment.source === 'semantic'
       ? zh ? '语义分类' : 'semantic classification' : zh ? '本地规则' : 'local rules'}${explanation.assessment.signals.length
       ? ` — ${explanation.assessment.signals.map(signal => signals[signal]).join(zh ? '、' : ', ')}` : ''}` }

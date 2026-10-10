@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.4.2-alpha.9 (prepared)
+## 0.4.2-alpha.10 (prepared)
+
+- Accept account-advertised protocol-native reasoning disable labels (`none`
+  for Responses/Completions, `disabled` for Anthropic) as well as `off` for
+  isolated Auto classifiers. Missing/empty capabilities remain unproven;
+  ordinary Chat mapping and single-call/no-tools behavior stay unchanged.
+- Capture bounded first-rejection candidate counts and native-off preparation
+  failures in strict ephemeral selection evidence. No-fit logs use fixed codes
+  without IDs, content, credentials or raw errors. Historical missing fields
+  remain unknown; this is not live account root-cause proof.
+
+## 0.4.2-alpha.9 (published)
 
 - Require the auxiliary Auto classifier to use advertised reasoning `off` and
   the isolated public adapter's native disable mode. Serialize explicit

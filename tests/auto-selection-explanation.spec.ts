@@ -47,3 +47,27 @@ it.each(['en', 'zh'])('distinguishes continuity and category pool from semantic 
   expect(text.choice).toContain('2')
   expect(text.choice).toContain(locale === 'en' ? 'not a semantic ranking' : '不是语义排名')
 })
+
+it.each(['en', 'zh'])('shows bounded rejection counts and preparation failure without claiming a timeout (%s)', locale => {
+  const text = selectionExplanation({ ...explanation,
+    assessment: { demand: 'unknown', source: 'local', signals: [], diagnostic: 'unavailable',
+      semantic: { budgetMs: 30000, elapsedMs: 514, stage: 'preparing', outputCharacters: 0,
+        validation: 'not-validated', candidateScan: { candidates: 6, eligible: 0,
+          rejected: { category: 2, 'reasoning-disable-unproven': 4 } },
+        preparationFailure: 'native-off-unavailable' } },
+  }, locale)
+  expect(text.semantic).toContain(locale === 'en' ? '6 models, 0 eligible' : '6 个模型，0 个合格')
+  expect(text.semantic).toContain(locale === 'en' ? 'reasoning disable unproven 4' : '关闭 reasoning 未获证明 4')
+  expect(text.semantic).toContain(locale === 'en' ? 'did not expose off' : '未提供 off 控制')
+  expect(text.conclusion).not.toContain(locale === 'en' ? 'timed out' : '超时')
+})
+
+it('does not turn missing legacy candidate evidence into an empty scan', () => {
+  const text = selectionExplanation({ ...explanation,
+    assessment: { demand: 'unknown', source: 'local', signals: [], diagnostic: 'unavailable',
+      semantic: { budgetMs: 30000, elapsedMs: 514, stage: 'preparing', outputCharacters: 0,
+        validation: 'not-validated' } },
+  }, 'en')
+  expect(text.semantic).not.toContain('Candidate scan')
+  expect(text.semantic).not.toContain('preparation did not expose')
+})
