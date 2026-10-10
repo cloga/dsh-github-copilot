@@ -176,21 +176,21 @@ reviewed representative latency/accuracy/cost observations and consent, not a
 guess from model names or a timeout suspicion. Review outcomes under #334 before
 claiming the increased default improves live classification.
 
-Request `off` reasoning only when both current supplier metadata advertises it
-and the public prepared model lists an `off` effort. Supplier metadata alone
-does not establish native support: current managed reasoning maps can decline
-`off` even when advertised. The auxiliary adapter does not inherit the route's
-configured Chat reasoning effort: a synthetic high-effort profile previously
-sent `reasoning.effort: high` on the classifier request. Its isolated public
-profile now omits that default while ordinary Chat retains it. This prevents an
-explicit high-effort instruction, not supplier-side thinking.
+The classifier is eligible only when current account metadata advertises
+reasoning `off` and the isolated, public prepared model exposes it. It then
+always requests `off`; otherwise assessment fails closed without dispatching
+the classifier. The classifier-only model mapping serializes the native
+disable form supported by the published adapter: Responses
+`reasoning.effort: "none"`, OpenAI-compatible `reasoning_effort: "none"`, or
+Anthropic `thinking.type: "disabled"`. This mapping is not added to shared
+account models, so ordinary Chat behavior remains unchanged.
 
-Even native `off` can mean omitting the reasoning option rather than sending a
-supplier disable instruction. Do not force `low` or `minimal`: on some protocols
-that enables thinking and enlarges the SDK's requested output budget. Retain
-native assembly, do not change
-shared model maps, guess a wire value or patch Core. No claim that reasoning is
-disabled for all classifiers is made.
+The auxiliary adapter also does not inherit configured Chat reasoning effort:
+its isolated profile omits that default while ordinary Chat retains it. Tools
+and an execution loop are absent. These checks establish the requested wire
+payload in synthetic tests, not that every supplier honors the control
+internally. Models lacking either advertised or native support are not used;
+do not substitute `low` or `minimal`, which can enable reasoning.
 
 Tools and an execution loop are absent. Only locally unknown tasks use one
 classifier call per admitted turn; subsequent steps/retries reuse its result.

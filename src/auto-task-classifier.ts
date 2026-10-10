@@ -15,7 +15,7 @@ export function taskClassifierModel(
 ): AccountModelDescriptor | undefined {
   const highCost = new Set(normalizeHighCostModelIds(highCostModelIds))
   return models.filter(model => (modelId !== '' ? model.id === modelId : model.category === 'lightweight')
-    && model.input.includes('text'))
+    && model.input.includes('text') && model.reasoning.advertisedEfforts.includes('off'))
     .toSorted((left, right) => Number(highCost.has(left.id)) - Number(highCost.has(right.id))
       || Number(right.reasoning.advertisedEfforts.includes('off'))
       - Number(left.reasoning.advertisedEfforts.includes('off')) || left.id.localeCompare(right.id, 'en'))
@@ -35,6 +35,9 @@ export async function classifyTaskWithAdapter(
 ): Promise<string> {
   checkpoint?.()
   if (signal.aborted) throw signal.reason
+  if (!model.reasoning.advertisedEfforts.includes('off') || !reasoningOffSupported) {
+    throw new Error('COPILOT_AUTO_CLASSIFIER_UNAVAILABLE')
+  }
   let output = ''
   let finished = false
   observe?.({ stage: 'adapter-started' })
@@ -45,8 +48,7 @@ export async function classifyTaskWithAdapter(
       type: 'text', text: JSON.stringify({ omittedContext: input.omitted, conversationData: input.text }),
     }] })],
     maxTokens: TASK_CLASSIFIER_MAX_TOKENS,
-    ...reasoningOffSupported && model.reasoning.advertisedEfforts.includes('off')
-      ? { reasoningEffort: ReasoningEffortId('off') } : {},
+    reasoningEffort: ReasoningEffortId('off'),
   })) {
     checkpoint?.()
     checkpoint?.()

@@ -669,9 +669,11 @@ describe('plugin-owned account Copilot route', () => {
   it.each([undefined, 8000, 45000])('does not dispatch an auxiliary request when native preparation outlasts a delayed deadline timer (budget %s)', async timeoutMs => {
     const budgetMs = timeoutMs ?? 30000
     const modelCalls = vi.fn(async (_input: unknown, _init?: RequestInit) => response())
+    const classifierItem = catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' })
+    classifierItem.capabilities.supports.reasoning_effort = ['off', 'high']
     stubFetch(async (input, init) => String(input).endsWith('/models')
       ? catalogResponse([
-        catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' }),
+        classifierItem,
         catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
       ]) : modelCalls(input, init), true)
     const harness = await runtime(grant({ availableModelIds: [] }), {
@@ -710,7 +712,7 @@ describe('plugin-owned account Copilot route', () => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>
       expect(body.model).toBe('classifier-fixture')
       expect(body.max_output_tokens).toBe(128)
-      expect(body.reasoning).toBeUndefined()
+      expect(body.reasoning).toMatchObject({ effort: 'none' })
       expect(body.tools === undefined || Array.isArray(body.tools) && body.tools.length === 0).toBe(true)
       return response(false, undefined, '{"demand":"routine","signals":["bounded-transformation"]}')
     })
@@ -767,10 +769,14 @@ describe('plugin-owned account Copilot route', () => {
         expect(body.model).toBe('fixed-fixture')
         return response(false, undefined, '{"demand":"routine","signals":[]}')
       })
+      const automatic = catalogItem('automatic-fixture', '/responses', { model_picker_category: 'lightweight' })
+      automatic.capabilities.supports.reasoning_effort = ['off', 'high']
+      const fixed = catalogItem('fixed-fixture', '/responses', { model_picker_category: 'powerful' })
+      fixed.capabilities.supports.reasoning_effort = ['off', 'high']
       stubFetch(async (input, init) => String(input).endsWith('/models')
         ? catalogResponse([
-          catalogItem('automatic-fixture', '/responses', { model_picker_category: 'lightweight' }),
-          catalogItem('fixed-fixture', '/responses', { model_picker_category: 'powerful' }),
+          automatic,
+          fixed,
           catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
         ]) : modelCalls(input, init), true)
       const harness = await runtime(grant({ availableModelIds: [] }), {
@@ -808,7 +814,7 @@ describe('plugin-owned account Copilot route', () => {
       expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toEqual(captured)
       expect(modelCalls).toHaveBeenCalledTimes(choice === 'configured' || choice === 'profile-high' ? 1 : 0)
       if (bodies.length) {
-        expect(bodies[0]?.reasoning).toBeUndefined()
+        expect(bodies[0]?.reasoning).toMatchObject({ effort: 'none' })
         expect(bodies[0]?.tools === undefined || Array.isArray(bodies[0]?.tools) && bodies[0]?.tools.length === 0).toBe(true)
         expect(bodies[0]?.max_output_tokens).toBe(128)
       }
