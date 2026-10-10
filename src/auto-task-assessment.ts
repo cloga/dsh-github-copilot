@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { assessmentEvidence } from './auto-assessment-evidence.ts'
 import type { SemanticAssessmentEvidence, TaskClassifierObserver } from './auto-assessment-evidence.ts'
 
+export const DEFAULT_AUTO_ASSESSMENT_TIMEOUT_MS = 30_000
+
 export const TaskAssessmentSchema = z.object({
   demand: z.enum(['simple', 'routine', 'complex', 'unknown']),
   signals: z.array(z.enum(['isolated-greeting', 'bounded-transformation', 'reasoning',
@@ -139,7 +141,7 @@ export async function assessAutoTask(
     return { ...local, diagnostic: 'unavailable' }
   }
   const classify = dependencies.classify
-  const budgetMs = dependencies.timeoutMs ?? 8000
+  const budgetMs = dependencies.timeoutMs ?? DEFAULT_AUTO_ASSESSMENT_TIMEOUT_MS
   const deadline = performance.now() + budgetMs
   const evidence = assessmentEvidence(budgetMs)
   const timeout = new AbortController()

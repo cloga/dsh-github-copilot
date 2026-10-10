@@ -665,14 +665,17 @@ describe('account-local managed runtimes', () => {
 })
 
 describe('plugin-owned account Copilot route', () => {
-  it('does not dispatch an auxiliary request when native preparation outlasts a delayed deadline timer', async () => {
+  it.each([undefined, 8000, 45000])('does not dispatch an auxiliary request when native preparation outlasts a delayed deadline timer (budget %s)', async timeoutMs => {
+    const budgetMs = timeoutMs ?? 30000
     const modelCalls = vi.fn(async (_input: unknown, _init?: RequestInit) => response())
     stubFetch(async (input, init) => String(input).endsWith('/models')
       ? catalogResponse([
         catalogItem('classifier-fixture', '/responses', { model_picker_category: 'lightweight' }),
         catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
       ]) : modelCalls(input, init), true)
-    const harness = await runtime(grant({ availableModelIds: [] }))
+    const harness = await runtime(grant({ availableModelIds: [] }), {
+      accountModelSettings: () => ({ autoSemanticAssessmentTimeoutMs: timeoutMs }),
+    })
     const agent = { ctx: harness.ctx, session: {
       id: 'deadline-session', header: { id: 'deadline-session' }, requestHeader: () => undefined,
     } } as unknown as Agent
@@ -685,7 +688,7 @@ describe('plugin-owned account Copilot route', () => {
     const original = CorePiAi.PiAiAdapter.prototype.prepareCall
     const prepare = vi.spyOn(CorePiAi.PiAiAdapter.prototype, 'prepareCall').mockImplementation(async function (this: CorePiAi.PiAiAdapter, ...args) {
       const result = await original.apply(this, args)
-      now = 9000
+      now = budgetMs + 1000
       return result
     })
     try {
@@ -697,7 +700,7 @@ describe('plugin-owned account Copilot route', () => {
       expect(modelCalls).not.toHaveBeenCalled()
       expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
         mode: 'auto', explanation: { assessment: { demand: 'unknown', diagnostic: 'timeout',
-          semantic: { stage: 'model-selected', elapsedMs: 9000, validation: 'not-validated' } } },
+          semantic: { stage: 'model-selected', budgetMs, elapsedMs: budgetMs + 1000, validation: 'not-validated' } } },
       })
     } finally { prepare.mockRestore(); clock.mockRestore() }
   })
@@ -747,11 +750,72 @@ describe('plugin-owned account Copilot route', () => {
     })
     if (enabled !== false) {
       expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
-        explanation: { assessment: { semantic: { modelId: 'classifier-fixture', budgetMs: 8000,
+        explanation: { assessment: { semantic: { modelId: 'classifier-fixture', budgetMs: 30000,
           stage: 'finished', nativeFinish: 'stop', validation: 'valid' } } },
       })
     }
   })
+  it.each(['configured', 'profile-high', 'missing', 'excluded', 'disabled'] as const)(
+    'uses the configured classifier without another-model fallback and freezes admitted results (%s)', async choice => {
+      let configuredId = choice === 'missing' ? 'missing-fixture' : 'fixed-fixture'
+      let timeoutMs = 45000
+      const bodies: Record<string, unknown>[] = []
+      const modelCalls = vi.fn(async (_input: unknown, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+        bodies.push(body)
+        expect(body.model).toBe('fixed-fixture')
+        return response(false, undefined, '{"demand":"routine","signals":[]}')
+      })
+      stubFetch(async (input, init) => String(input).endsWith('/models')
+        ? catalogResponse([
+          catalogItem('automatic-fixture', '/responses', { model_picker_category: 'lightweight' }),
+          catalogItem('fixed-fixture', '/responses', { model_picker_category: 'powerful' }),
+          catalogItem('answer-fixture', '/responses', { model_picker_category: 'versatile' }),
+        ]) : modelCalls(input, init), true)
+      const harness = await runtime(grant({ availableModelIds: [] }), {
+        ...choice === 'profile-high' ? { reasoning: 'high' } : {},
+        accountModelSettings: () => ({
+          autoSemanticAssessment: choice !== 'disabled',
+          autoSemanticAssessmentModel: configuredId, autoSemanticAssessmentTimeoutMs: timeoutMs,
+          excludedModelIds: choice === 'excluded' ? ['fixed-fixture'] : [],
+        }),
+      })
+      const agent = { ctx: harness.ctx, session: {
+        id: 'configured-assessment', header: { id: 'configured-assessment' }, requestHeader: () => undefined,
+      } } as unknown as Agent
+      harness.ctx.provide('tokenMeter', { estimateMessage: () => 100, measure: () => ({ totalTokens: 100 }) } as never)
+      harness.ctx.provide('sessionProjections', { stateOf: () => ({ pending: { provider: PREVIEW, model: AUTO } }) } as never)
+      const scope = scopeTarget(agent, agent), signal = new AbortController().signal
+      await harness.ctx.serial(scope, 'agent/created', { agent, source: 'startup' })
+      const messages = [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Convert these records.' }] })]
+      const enter = () => harness.ctx.waterfall(scope, 'agent/pre-step', { agent, messages, turn: 1, step: 1, signal },
+        async () => ({ kind: 'enter' as const, messages }))
+      await enter()
+      const request = () => harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
+        async () => ({ provider: PREVIEW, model: AUTO }))
+      await request()
+      const captured = harness.ctx.githubCopilotTurnSelection.get(agent, 1)
+      expect(captured).toMatchObject({
+        explanation: { assessment: choice === 'configured' || choice === 'profile-high'
+          ? { demand: 'routine', semantic: { modelId: 'fixed-fixture', budgetMs: 45000 } }
+          : { demand: 'unknown', diagnostic: choice === 'disabled' ? 'disabled' : 'unavailable' } },
+      })
+      configuredId = 'automatic-fixture'
+      timeoutMs = 1000
+      await enter()
+      await request()
+      expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toEqual(captured)
+      expect(modelCalls).toHaveBeenCalledTimes(choice === 'configured' || choice === 'profile-high' ? 1 : 0)
+      if (bodies.length) {
+        expect(bodies[0]?.reasoning).toBeUndefined()
+        expect(bodies[0]?.tools === undefined || Array.isArray(bodies[0]?.tools) && bodies[0]?.tools.length === 0).toBe(true)
+        expect(bodies[0]?.max_output_tokens).toBe(128)
+      }
+      if (choice === 'profile-high') {
+        await call(harness.ctx, { model: 'fixed-fixture', maxTokens: 128 })
+        expect(bodies[1]?.reasoning).toMatchObject({ effort: 'high' })
+      }
+    })
   it('forwards native SDK failed zero usage without changing the shared accounting stream', async () => {
     stubFetch(async () => new Response('synthetic unavailable', { status: 503 }))
     const harness = await runtime()

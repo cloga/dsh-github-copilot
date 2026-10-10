@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.2-alpha.7 (prepared)
+
+- Raise the auxiliary Auto task-assessment default total budget from eight to
+  thirty seconds as a user-approved trial, with a native editable
+  `autoSemanticAssessmentTimeoutMs` setting bounded to 1000–120000 ms.
+- Expose `autoSemanticAssessmentModel`: empty keeps the existing metadata-driven
+  automatic classifier; an exact current-account ID can select another eligible
+  concrete model. Missing, excluded or unsuitable explicit choices diagnose
+  unavailable without silently calling another classifier.
+- Persist both volatile native settings across restart while preserving admitted
+  steps/retries. Keep cancellation, account proof, monotonic deadline checks,
+  128-token output, context conservatism and one-call/no-retry ownership.
+  No empirical optimal-model search or claim that past unknowns were timeouts.
+- Isolate auxiliary classifier reasoning from the route's configured Chat effort:
+  a high-effort profile no longer adds high reasoning to classification. Preserve
+  ordinary Chat behavior, no tools and native assembly; omitted reasoning or
+  native `off` is not proof of supplier-side disablement or a hard credit cap.
+
 ## 0.4.2-alpha.6 (prepared)
 
 - Retain fixed assessment outcomes in existing opted-in daily Auto allocation

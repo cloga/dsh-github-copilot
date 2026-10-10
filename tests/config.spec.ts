@@ -53,7 +53,7 @@ describe('session search settings', () => {
 
   it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['diagnosticsEnabled', 'autoAllocationDiagnosticsEnabled', 'requestDiagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
+      .toEqual(['diagnosticsEnabled', 'autoAllocationDiagnosticsEnabled', 'requestDiagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'autoSemanticAssessmentTimeoutMs', 'autoSemanticAssessmentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
     const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
@@ -124,6 +124,35 @@ describe('session search settings', () => {
 })
 
 describe('managed request and compaction settings', () => {
+  it('exposes a bounded assessment budget and optional exact classifier without changing opt-out', () => {
+    for (const field of ['autoSemanticAssessmentTimeoutMs', 'autoSemanticAssessmentModel'] as const) {
+      expect(Config.dict?.[field]?.meta.hidden).not.toBe(true)
+      expect(Config.dict?.[field]?.meta.volatile).toBe(true)
+    }
+    expect(readInlineConfig(Config(base))).toMatchObject({
+      autoSemanticAssessmentTimeoutMs: 30000, autoSemanticAssessmentModel: '',
+    })
+    for (const timeout of [1000, 8000, 30000, 120000]) {
+      expect(readInlineConfig(Config({ ...base, autoSemanticAssessment: false,
+        autoSemanticAssessmentTimeoutMs: timeout, autoSemanticAssessmentModel: 'account/model' })))
+        .toMatchObject({ autoSemanticAssessment: false,
+          autoSemanticAssessmentTimeoutMs: timeout, autoSemanticAssessmentModel: 'account/model' })
+    }
+    for (const timeout of [0, -1, 999, 120001, 30000.5, Infinity, NaN]) {
+      expect(() => Config({ ...base, autoSemanticAssessmentTimeoutMs: timeout })).toThrow()
+    }
+    expect(() => Config({ ...base, autoSemanticAssessmentModel: 'x'.repeat(513) })).toThrow()
+    let timeoutMs = 30000, model = ''
+    const live = { ...base, autoSemanticAssessmentTimeoutMs: { get: () => timeoutMs },
+      autoSemanticAssessmentModel: { get: () => model } }
+    expect(readInlineConfig(live)).toMatchObject({
+      autoSemanticAssessmentTimeoutMs: 30000, autoSemanticAssessmentModel: '',
+    })
+    timeoutMs = 8000; model = 'account/model'
+    expect(readInlineConfig(live)).toMatchObject({
+      autoSemanticAssessmentTimeoutMs: 8000, autoSemanticAssessmentModel: 'account/model',
+    })
+  })
   it('defaults semantic Auto assessment on while preserving explicit opt-out', () => {
     expect(readInlineConfig(Config(base)).autoSemanticAssessment).toBe(true)
     expect(readInlineConfig(Config({ ...base, autoSemanticAssessment: true })).autoSemanticAssessment).toBe(true)
