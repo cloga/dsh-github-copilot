@@ -87,11 +87,11 @@ function nativeEvents(api: AccountModelApi): Response {
   return new Response(events.map(value => `event: ${value.type}\n${sse(value)}`).join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
 async function accountCall(api: AccountModelApi, effort?: string, headers?: Record<string, string>, streamIdleTimeoutMs?: number,
-  compression?: { enabled: boolean; text: string }) {
-  const item = descriptor(api)
+  compression?: { enabled: boolean; text: string }, efforts?: string[], classifierReasoningOff = false) {
+  const item = descriptor(api, 'future-lab-r17', efforts)
   const guarded = { ...accountGuard(item.id), ...streamIdleTimeoutMs === undefined ? {} : { streamIdleTimeoutMs },
     ...compression === undefined ? {} : { responsesRequestCompression: compression.enabled } }
-  const { provider } = createAccountProvider([item], guarded, baseURL)
+  const { provider } = createAccountProvider([item], guarded, baseURL, classifierReasoningOff)
   const profile: ResolvedPiAiProviderProfile = { provider: PREVIEW, displayName: 'Account models', piProvider: provider,
     streamIdleTimeoutMs: 300_000, maxRequestImageBytes: 20_971_520,
     requestImagePixelBudget: 4_194_304, requestImageMaxBytes: 1_048_576,
@@ -120,6 +120,20 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('account-driven native provider', () => {
+  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
+    'serializes supplier-advertised off as a native disable for %s', async api => {
+      let request: Record<string, unknown> | undefined
+      vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+        request = JSON.parse(String(init?.body)) as Record<string, unknown>
+        return nativeEvents(api)
+      }))
+      const result = await accountCall(api, 'off', undefined, undefined, undefined, ['off', 'high'], true)
+      expect(result.model.reasoning?.efforts.map(effort => effort.id)).toContain('off')
+      if (api === 'openai-responses') expect(request?.reasoning).toMatchObject({ effort: 'none' })
+      else if (api === 'openai-completions') expect(request?.reasoning_effort).toBe('none')
+      else expect(request?.thinking).toMatchObject({ type: 'disabled' })
+      expect(request?.tools).toBeUndefined()
+    })
   it('preserves published-adapter JSON and usage across identity and gzip encoding', async () => {
     const text = 'Synthetic UTF-8 context. '.repeat(15_000)
     const bodies: string[] = []
@@ -395,6 +409,16 @@ describe('account-driven native provider', () => {
     expect(converted.thinkingLevelMap).toEqual({ off: null, minimal: null, low: null, medium: null, high: null, xhigh: null, max: null })
     expect(converted.unmappedReasoningEfforts).toEqual(['none', 'off', 'turbo'])
     expect(converted.reasoning).toBe(false)
+  })
+  it('exposes explicit reasoning disable only on the isolated classifier model from advertised metadata', () => {
+    const item = descriptor('openai-responses', 'future-lab-r17', ['off', 'high'])
+    const ordinary = accountModelFromDescriptor(item, baseURL)
+    const classifier = accountModelFromDescriptor(item, baseURL, true)
+    expect(ordinary.thinkingLevelMap?.off).toBeNull()
+    expect(ordinary.reasoning).toBe(true)
+    expect(classifier.thinkingLevelMap?.off).toBe('none')
+    expect(classifier.reasoning).toBe(true)
+    expect(classifier.unmappedReasoningEfforts).toEqual([])
   })
   it('does not invent budget-mode effort mappings without advertised adaptive support', () => {
     const converted = accountModelFromDescriptor(descriptor('anthropic-messages', 'future-lab-r17', ['low', 'high'], false), baseURL)

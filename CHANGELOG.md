@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.4.2-alpha.8 (prepared)
+## 0.4.2-alpha.9 (prepared)
+
+- Require the auxiliary Auto classifier to use advertised reasoning `off` and
+  the isolated public adapter's native disable mode. Serialize explicit
+  Responses/Completions `none` or Anthropic `disabled`; fail closed when either
+  capability is unavailable. Preserve ordinary Chat mappings and no-tools
+  behavior. Synthetic wire tests do not establish supplier-side implementation.
+
+## 0.4.2-alpha.8 (published)
 
 - Keep every Local diagnostics population independently collapsed by default,
   including Auto. Compact summaries retain status/counts, while collection,

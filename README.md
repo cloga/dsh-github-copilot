@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared prerelease: `0.4.2-alpha.8`.** `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
+**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared prerelease: `0.4.2-alpha.9`.** `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
 
 **Upgrade from 0.4.0:** that first stable release can interrupt concurrent managed requests with `COPILOT_PREVIEW_CREDENTIAL_CHANGED` during normal same-account native OAuth renewal. In 0.4.1, a proven plugin-owned refresh with unchanged account, endpoint and entitlements preserves already-dispatched HTTP streams; subsequent requests use freshly validated auth and metadata. Unknown/external credential notifications, revocation, cancellation and provider rejections remain explicit—not a promise of invisible recovery or automatic retry. See [the refresh boundary](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385).
 
@@ -126,10 +126,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.8/dsh-github-copilot-0.4.2-alpha.8.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.9/dsh-github-copilot-0.4.2-alpha.9.tgz
 ```
 
-For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.8`; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.9`; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -168,9 +168,9 @@ Semantic assessment is **enabled by default only for locally unknown tasks**. It
 
 Timeout/invalid output leaves demand unknown and uses the preference fallback; it never means simple or triggers another classifier. Caller cancellation and account invalidation remain terminal. Auxiliary calls add latency and supplier charges outside native answer Usage.
 
-The deadline is checked against a monotonic clock at preparation, native request and result boundaries, even if the event loop delays the timer. Such delays can postpone settlement; they do not authorize late dispatch or late-result acceptance. Eligible Lightweight classifiers advertising reasoning `off` take precedence, with deterministic ID tie-breaking; the request uses `off` only if the public native model also supports it. This is not a measured speed ranking. Explanations distinguish the fitting category pool and previous-model continuity from semantic merit.
+The deadline is checked against a monotonic clock at preparation, native request and result boundaries, even if the event loop delays the timer. Such delays can postpone settlement; they do not authorize late dispatch or late-result acceptance. Eligible Lightweight classifiers must advertise reasoning `off`; deterministic ID tie-breaking follows. This is not a measured speed ranking. Explanations distinguish the fitting category pool and previous-model continuity from semantic merit.
 
-The auxiliary classifier does not inherit configured Chat reasoning effort and receives no tools. Native `off` may only omit a reasoning option, so supplier-side thinking is not guaranteed disabled. One call, bounded text input and 128 requested output tokens constrain overhead without promising a hard credit cap; ordinary Chat reasoning/tools remain unchanged.
+The auxiliary classifier always requests the protocol's explicit disabled-reasoning mode (`none` for Responses/Completions, `disabled` for Anthropic) and receives no tools. A candidate is not dispatched unless both account metadata and the isolated public adapter model expose that capability; otherwise assessment fails closed. The classifier does not inherit configured Chat reasoning effort, and its off mapping is not added to shared account models. Synthetic tests verify the outgoing payload, not supplier-side implementation. One call, bounded text input and 128 requested output tokens constrain overhead without promising a hard credit cap; ordinary Chat reasoning/tools remain unchanged.
 
 The reply's selection disclosure shows captured reasons and optional content-free auxiliary milestones. `uncertain` and `insufficient-evidence` do not mean the conversation is empty. **Selection unknown** means no retained record; **Selection unavailable → Retry** means the read failed. Retry rereads that turn, not inference. Evidence is bounded and Host-local, so restart/eviction can lose it.
 
@@ -309,14 +309,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.8/dsh-github-copilot-0.4.2-alpha.8.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.8/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.9/dsh-github-copilot-0.4.2-alpha.9.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.9/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.8.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.9.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
