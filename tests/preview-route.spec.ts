@@ -21,6 +21,7 @@ import * as timeoutDiagnostics from '../src/request-body-timeout.ts'
 import type { PreviewRouteConfig } from '../src/preview-route.ts'
 import { ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS } from '../src/account-model-auth.ts'
 import { createGitHubCopilotTokenResolver } from '../src/copilot-auth.ts'
+import { DiagnosticsController } from '../src/diagnostics-host.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
 import type { CopilotAccountBinding } from '../src/copilot-accounts-types.ts'
 import {
@@ -2215,6 +2216,9 @@ describe('plugin-owned account Copilot route', () => {
     }, true)
     try {
       const harness = await runtime(grant({ access: old, expires: start + 400_000, availableModelIds: [MODEL] }))
+      let diagnostics!: DiagnosticsController
+      await harness.ctx.plugin({ apply(ctx) { diagnostics = new DiagnosticsController(ctx) } })
+      diagnostics.collector.setRequestEnabled(true)
       const a = call(harness.ctx)
       await vi.waitFor(() => expect(pending).toHaveLength(1))
       const b = call(harness.ctx)
@@ -2225,6 +2229,10 @@ describe('plugin-owned account Copilot route', () => {
       } else expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
       expect(harness.modify).toHaveBeenCalledTimes(1)
       expect(pending.every(wire => !wire.signal.aborted)).toBe(true)
+      expect(diagnostics.collector.snapshot().requests?.credentialChanges?.rows).toMatchObject([
+        { phase: 'notification', reason: 'qualified', dispatched: 2, preserved: 2, revoked: 0 },
+        { phase: 'commit', reason: 'qualified', revoked: 0 },
+      ])
       for (const wire of pending) wire.finish(response())
       expect((await a).assembler.finish).toEqual({ kind: 'stop' })
       expect((await b).assembler.finish).toEqual({ kind: 'stop' })
@@ -2263,6 +2271,9 @@ describe('plugin-owned account Copilot route', () => {
       try {
         harness = await runtime(grant({ access: 'tid=old;proxy-ep=proxy.individual.githubcopilot.com;',
           expires: start + 400_000, availableModelIds: [MODEL] }))
+        let diagnostics!: DiagnosticsController
+        await harness.ctx.plugin({ apply(ctx) { diagnostics = new DiagnosticsController(ctx) } })
+        diagnostics.collector.setRequestEnabled(true)
         const ongoing = call(harness.ctx)
         await vi.waitFor(() => expect(wireSignal).toBeDefined())
         if (mode === 'unchanged-notification') harness.replace(harness.current())
@@ -2274,6 +2285,17 @@ describe('plugin-owned account Copilot route', () => {
         expect((await ongoing).assembler.finish).toMatchObject({
           kind: 'aborted', failure: { message: 'COPILOT_PREVIEW_CREDENTIAL_CHANGED' },
         })
+        const decisions = diagnostics.collector.snapshot().requests?.credentialChanges?.rows
+        expect(decisions?.[0]).toMatchObject({
+          phase: 'notification', reason: mode === 'endpoint' ? 'endpoint-changed'
+            : mode === 'entitlements' ? 'entitlements-changed' : 'unknown-source',
+          dispatched: 1, preserved: 0, revoked: 1,
+        })
+        if (mode === 'external') expect(decisions?.slice(1)).toMatchObject([
+          { phase: 'notification', reason: 'qualified', dispatched: 0, revoked: 0 },
+          { phase: 'commit', reason: 'qualified', dispatched: 0, revoked: 0 },
+        ])
+        else expect(decisions).toHaveLength(1)
       } finally { release?.(response()); clock.mockRestore() }
     },
   )

@@ -11,6 +11,7 @@ import {
 import { GITHUB_COPILOT_CREDENTIAL_KEY } from '../src/authorization-controller.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../src/copilot-identity.ts'
 import { applyRequestAuth } from '../src/copilot-request.ts'
+import type { CredentialChangeReason } from '../src/request-diagnostics.ts'
 
 interface GrantRecord {
   kind: 'grant'
@@ -89,14 +90,16 @@ describe('GitHub Copilot credential adapter', () => {
       const next: Credential = { type: 'oauth', refresh: 'synthetic', access: 'rotated', expires: Date.now() + 60_000 }
       let result: Promise<boolean> | undefined
       let duplicate: Promise<boolean> | undefined
+      const evidence: { phase: string; reason: CredentialChangeReason }[] = []
+      const diagnostic = (phase: string, reason: CredentialChangeReason) => { evidence.push({ phase, reason }) }
       const service = {
         readRecord: async () => undefined,
         listRecords: async () => [],
         deleteRecord: async () => undefined,
         modifyRecord: async (_key: string, mutate: (value: GrantRecord | undefined) => Promise<GrantRecord | undefined>) => {
           const record = await mutate(undefined)
-          if (mode !== 'missing' && mode !== 'delayed') result = observeCopilotNativeRefresh(ctx, key)
-          if (mode === 'duplicate') duplicate = observeCopilotNativeRefresh(ctx, key)
+          if (mode !== 'missing' && mode !== 'delayed') result = observeCopilotNativeRefresh(ctx, key, diagnostic)
+          if (mode === 'duplicate') duplicate = observeCopilotNativeRefresh(ctx, key, diagnostic)
           if (mode === 'failed') throw new Error('Synthetic write failure')
           return mode === 'changed' ? { kind: 'grant', payload: { ...next, access: 'external' } } : record
         },
@@ -110,9 +113,39 @@ describe('GitHub Copilot credential adapter', () => {
       if (mode === 'failed') await expect(operation).rejects.toThrow('Synthetic write failure')
       else await operation
       if (result) expect(await result).toBe(mode === 'commit')
+      if (result) expect(evidence).toContainEqual({ phase: 'commit', reason:
+        mode === 'commit' ? 'qualified' : mode === 'duplicate' ? 'duplicate-notification'
+          : mode === 'changed' ? 'commit-mismatch' : 'write-failed' })
       expect(duplicate).toBeUndefined()
       expect(observeCopilotNativeRefresh(ctx, key)).toBeUndefined()
       expect(observeCopilotNativeRefresh(ctx, 'unrelated')).toBeUndefined()
+    },
+  )
+  it.each(['account-changed', 'endpoint-changed', 'entitlements-changed', 'expired', 'auth-mismatch'] as const)(
+    'reports only the fixed qualification reason without preserving rejected refreshes (%s)', async reason => {
+      const ctx = new Context(), key = GITHUB_COPILOT_CREDENTIAL_KEY
+      const previous = { type: 'oauth' as const, refresh: 'synthetic', access: 'old', expires: Date.now() + 60_000 }
+      const next = { ...previous, access: 'new',
+        ...(reason === 'account-changed' ? { refresh: 'synthetic-other' } : {}),
+        ...(reason === 'endpoint-changed' ? { enterpriseUrl: 'https://synthetic.ghe.com' } : {}),
+        ...(reason === 'entitlements-changed' ? { availableModelIds: ['fixture'] } : {}),
+        ...(reason === 'expired' ? { expires: 1 } : {}) }
+      const diagnostic = vi.fn()
+      const service = {
+        readRecord: async () => undefined, listRecords: async () => [], deleteRecord: async () => undefined,
+        modifyRecord: async (_key: string, mutate: (value: undefined) => Promise<unknown>) => {
+          const record = await mutate(undefined)
+          expect(observeCopilotNativeRefresh(ctx, key, diagnostic)).toBeUndefined()
+          return record
+        },
+      }
+      ctx.get = ((name: string) => name === 'credentials' ? service : undefined) as typeof ctx.get
+      await certifyCopilotNativeRefresh(previous, next, async grant => ({
+        apiKey: reason === 'auth-mismatch' ? 'synthetic-mismatch' : grant.access,
+        baseUrl: 'https://api.individual.githubcopilot.com',
+      }))
+      await createGitHubCopilotCredentialStore(ctx).modify('github-copilot', async () => next)
+      expect(diagnostic).toHaveBeenCalledExactlyOnceWith('notification', reason)
     },
   )
 

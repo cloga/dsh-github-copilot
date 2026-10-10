@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.2-alpha.7"
+    "version": "0.4.2-alpha.8"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -298,6 +298,8 @@
         {"file": "src/diagnostics-collector.ts", "marker": "noteClientGaps"},
         {"file": "src/auto-allocation-diagnostics.ts", "marker": "assessmentOutcome: assessmentOutcome.optional()"},
         {"file": "src/request-diagnostics.ts", "marker": "REQUEST_DIAGNOSTICS_MAX_ROWS = 128"},
+        {"file": "src/request-diagnostics.ts", "marker": "CredentialChangeSchema"},
+        {"file": "src/diagnostics-collector.ts", "marker": "beginCredentialChange"},
         {"file": "src/request-body-composition.ts", "marker": "bytes: 32 * 1024 * 1024"},
         {"file": "src/request-body-composition.ts", "marker": "concurrent: 4"},
         {"file": "src/request-diagnostics.ts", "marker": "REQUEST_DIAGNOSTICS_RETENTION_MS = 24 * 60 * 60 * 1000"},
@@ -313,6 +315,8 @@
         {"file": "tests/auto-allocation-diagnostics.spec.ts", "name": "separates assessment outcomes without changing model opportunities or exposing errors"},
         {"file": "tests/auto-allocation-diagnostics.spec.ts", "name": "keeps legacy reasons unrecorded and captures no-fit and successful assessment outcomes"},
         {"file": "tests/request-diagnostics.spec.ts", "name": "requires independent consent, captures status/timing and never infers upload or retry count"},
+        {"file": "tests/request-diagnostics.spec.ts", "name": "bounds credential evidence under request consent and fences late commit updates"},
+        {"file": "tests/diagnostics-card.spec.ts", "name": "keeps every diagnostic population collapsed independently without changing collection"},
         {"file": "tests/request-body-composition.spec.ts", "name": "partitions a 20.4 MiB request without parsing its payload object graph"},
         {"file": "tests/preview-transport-failures.spec.ts", "name": "does not wait for large-request composition before native success and updates the exact settled row"},
         {"file": "tests/request-diagnostics.spec.ts", "name": "updates only its own retained record after native settlement, never across clear/pause/eviction"},

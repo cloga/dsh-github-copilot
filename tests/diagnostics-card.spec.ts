@@ -8,6 +8,35 @@ import type { DiagnosticsRemote } from '../src/diagnostics-card.ts'
 import type { DiagnosticsView } from '../src/diagnostics-types.ts'
 
 describe('local diagnostics control', () => {
+  it('keeps every diagnostic population collapsed independently without changing collection', async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+    const remote: DiagnosticsRemote = {
+      get: vi.fn(async () => ({ ok: true as const, value: { enabled: true, autoAllocationEnabled: true,
+        requestEnabled: true, state: 'ready' as const, diagnostic: 'none' as const,
+        dirty: false, snapshot: emptyDiagnostics() } })),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(),
+      clear: vi.fn(), recordClient: vi.fn(),
+    }
+    const element = document.createElement('div')
+    const root = createRoot(element)
+    try {
+      await act(async () => root.render(createElement(DiagnosticsCard, { remote })))
+      for (const label of ['Auto allocation observations', 'Physical request observations',
+        'Credential change observations', 'Account and compaction observations']) {
+        const summary = Array.from(element.querySelectorAll('summary')).find(node => node.textContent?.startsWith(label))
+        expect(summary, label).toBeDefined()
+        expect(summary?.parentElement?.hasAttribute('open')).toBe(false)
+      }
+      const auto = Array.from(element.querySelectorAll('summary')).find(node => node.textContent?.startsWith('Auto allocation observations'))!
+      await act(async () => auto.click())
+      expect(auto.parentElement?.hasAttribute('open')).toBe(true)
+      expect(element.querySelectorAll('details[open]')).toHaveLength(1)
+      expect(remote.get).toHaveBeenCalledTimes(1)
+      expect(remote.setEnabled).not.toHaveBeenCalled()
+      expect(remote.setAutoAllocationEnabled).not.toHaveBeenCalled()
+      expect(remote.setRequestEnabled).not.toHaveBeenCalled()
+    } finally { await act(async () => root.unmount()) }
+  })
   it('renders request bytes and unknown upload evidence without inventing receipt or aggregate coverage', async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     const snapshot = emptyDiagnostics()

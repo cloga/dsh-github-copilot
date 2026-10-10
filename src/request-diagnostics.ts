@@ -21,6 +21,23 @@ const upload = z.discriminatedUnion('state', [
 ])
 export const REQUEST_DIAGNOSTICS_MAX_ROWS = 128
 export const REQUEST_DIAGNOSTICS_RETENTION_MS = 24 * 60 * 60 * 1000
+export const CredentialChangeReasonSchema = z.enum([
+  'qualified', 'unknown-source', 'account-changed', 'endpoint-changed', 'entitlements-changed',
+  'expired', 'auth-mismatch', 'duplicate-notification', 'missing-notification',
+  'commit-mismatch', 'write-failed', 'write-conflict',
+])
+export const CredentialChangeSchema = z.object({
+  changeId: z.string().uuid(), observedAt: integer,
+  version: z.string().max(64).regex(/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/),
+  phase: z.enum(['notification', 'commit']), reason: CredentialChangeReasonSchema,
+  preparing: integer, dispatched: integer, alreadyAborted: integer, preserved: integer, revoked: integer,
+}).strict()
+export type CredentialChangeReason = z.infer<typeof CredentialChangeReasonSchema>
+export type CredentialChangeEvidence = Omit<z.infer<typeof CredentialChangeSchema>, 'changeId' | 'observedAt' | 'version'>
+export interface CredentialChangeHandle {
+  record(evidence: CredentialChangeEvidence): void
+  cancel(): void
+}
 export const RequestDiagnosticSchema = z.object({
   streamId: z.string().uuid(), dispatchIndex: integer.min(1),
   version: z.string().max(64).regex(/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/),
@@ -39,6 +56,12 @@ export const RequestDiagnosticsSchema = z.object({
   dropped: integer, evicted: integer,
   pending: integer.max(REQUEST_DIAGNOSTICS_MAX_ROWS).optional(),
   interruptedOnReopen: integer.optional(),
+  credentialChanges: z.object({
+    rows: z.array(CredentialChangeSchema).max(REQUEST_DIAGNOSTICS_MAX_ROWS),
+    dropped: integer, evicted: integer,
+    pending: integer.max(REQUEST_DIAGNOSTICS_MAX_ROWS).optional(),
+    interruptedOnReopen: integer.optional(),
+  }).strict().optional(),
 }).strict()
 export type RequestDiagnostic = z.infer<typeof RequestDiagnosticSchema>
 export interface RequestDiagnosticHandle {

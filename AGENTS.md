@@ -59,6 +59,16 @@ unrecorded and separate from new cohorts. Count decisions by selected/no-fit cou
 not repeated candidate opportunities. Never change assessment policy, deadline or
 context safety merely to populate diagnostics; retain the shared storage/row bounds.
 
+Credential-change observations (#402) use the existing independent request
+consent: at most 128 fixed notification/commit rows and pending handles for 24
+hours within the shared 2 MiB cap. Derive reasons only from existing refresh
+checks, never new credential reads. No grant/record/identity/endpoint values or
+hashes; random change IDs join verdict phases only. Live-wire counts are not
+unique requests, retries or execution proof. Unknown source and missing legacy
+evidence stay unknown. Preserve #385 qualification/revocation; clear, pause,
+expiry and disposal fence later callbacks. Each diagnostic population, including
+Auto, is independently collapsed by default; opening it never enables collection.
+
 ## Session-policy compaction replay consent (#349, #352)
 
 `/copilot-compact visible-history` explicitly authorizes one lossy managed Responses

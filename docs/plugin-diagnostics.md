@@ -22,13 +22,19 @@ through native path-level Settings CAS and confirm readback. This enables
 collection **and bounded local aggregate persistence**, not exports or uploads.
 The normal installation does not change this default-off setting.
 
-The page opens with the daily Auto allocation table: UTC date, policy, model,
+The dedicated Local diagnostics region opens with independently collapsed
+**Auto allocation observations**, **Physical request observations**,
+**Credential change observations**, and **Account and compaction observations**.
+Summaries retain compact status/count information; expanding a group neither
+enables collection nor performs another status/request call. The Auto group contains
+the daily table: UTC date, policy, model,
 decision cohort, opportunities, expected selections, selected counts and no-fit
 decisions. Compare expected and selected counts only within matching cohorts;
 these aggregates do not establish execution, quality or billing. Account and
 compaction summaries, collection controls, and detailed data-scope/limits/JSON
-guidance are in collapsed disclosures. If a status read fails, expand Collection
-controls to find **Read status**; no failed operation is automatically replayed.
+guidance are in collapsed disclosures. A failed operation remains visible outside
+the collapsed controls; expand Collection controls to find **Read status**.
+No failed operation is automatically replayed.
 Clearing aggregates still requires its separate confirmation.
 
 Use the plugin normally: account selection, Identity/Checking and compaction
@@ -63,6 +69,38 @@ The separate **Enable request observations** control uses the hidden volatile
 readback. Existing aggregate consent never enables request observations.
 **Clear local diagnostics** clears all three populations, including request
 observations, without changing the three enabled/paused controls.
+
+### Credential-change decisions (#402)
+
+The request-observation consent also covers up to 128 content-free credential
+notification/commit observations for 24 hours within the shared 2 MiB cap.
+This user-requested extension does not add a fourth collection switch or
+automatically enable an existing disabled control. It adds no credential reads:
+fixed reasons are derived only from the refresh checks already required by the
+native credential-store bridge. Reasons distinguish qualified refresh, unknown
+source, account/endpoint/entitlement mismatch, expired result, auth mismatch,
+duplicate notification, missing notification, commit mismatch, failed write and
+conflicting write. Not every failure produces a notification; absent evidence
+does not establish a successful refresh.
+
+Each observation counts live managed wires that are preparing, dispatched or
+already aborted and records which wires the existing decision preserves or
+revokes. A qualified notification is provisional; a matching commit observation
+is required to confirm its write. Counts are snapshots, not unique requests,
+Session/turn attribution, native retry counts, supplier receipt or eventual
+success. A random change ID joins at most one notification and one commit;
+it does not join physical request rows or identify an account. Unknown source
+does not prove an external/Core writer. Missing legacy fields remain **not
+recorded**, never reconstructed from today's settings or a historical error.
+
+Pending handles are capped at 128; clear/pause/expiry/teardown fence later
+callbacks. Saved pending counts become interrupted-on-reopen without fabricated
+commit rows. No grant values, record keys, identities/hashes, endpoints, raw
+errors or conversation data enter storage/Remotes. The #385 qualification and
+native cancellation/retry behavior are unchanged. Capture failures emit only
+`COPILOT_CREDENTIAL_DIAGNOSTICS_CAPTURE_FAILED`; they do not reject business work.
+The aggregate-only offline analyzer validates but does not analyze these rows,
+retaining its `request-observations-not-analyzed` gap.
 
 **Read status** returns a strict snapshot; **Review aggregate-only JSON → Prepare current JSON**
 prepares a read-only copy for explicit review/sharing, never a download or upload.

@@ -122,10 +122,15 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     request.composition!({ state: 'complete', totalBytes: 21355789, conversationBytes: 21355770,
       toolSchemaBytes: 0, systemBytes: 0, otherBytes: 19, imageBlockBytes: 0, opaqueReplayBytes: 0,
       remainingConversationBytes: 21355770 })
+    diagnostics.collector.beginCredentialChange()!.record({
+      phase: 'notification', reason: 'unknown-source', preparing: 1, dispatched: 2,
+      alreadyAborted: 0, preserved: 0, revoked: 3,
+    })
     await diagnostics.flush()
     expect(diagnostics.get().snapshot.requests?.rows).toMatchObject([{ httpStatus: 408, reason: 'request-body-timeout' }])
     await expect(remote.get()).resolves.toMatchObject({ ok: true, value: { snapshot: { requests: {
       rows: [{ composition: { state: 'complete', totalBytes: 21355789, conversationBytes: 21355770 } }],
+      credentialChanges: { rows: [{ reason: 'unknown-source', dispatched: 2, revoked: 3 }] },
     } } } })
     await expect(remote.setRequestEnabled(false)).resolves.toMatchObject({ ok: true, value: { requestEnabled: false } })
     await expect(remote.setEnabled(true)).resolves.toMatchObject({ ok: true, value: { enabled: true, dirty: false } })

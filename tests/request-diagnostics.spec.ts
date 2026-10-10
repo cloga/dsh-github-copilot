@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DiagnosticsCollector, emptyDiagnostics } from '../src/diagnostics-collector.ts'
-import { RequestDiagnosticSchema, REQUEST_DIAGNOSTICS_RETENTION_MS } from '../src/request-diagnostics.ts'
+import { RequestDiagnosticSchema, CredentialChangeSchema, REQUEST_DIAGNOSTICS_RETENTION_MS } from '../src/request-diagnostics.ts'
 import { DiagnosticsSnapshotSchema } from '../src/diagnostics-types.ts'
 import type { RequestDiagnosticStart } from '../src/request-diagnostics.ts'
 
@@ -10,6 +10,70 @@ const start: RequestDiagnosticStart = {
   composition: { state: 'size-limit', totalBytes: 21355789 }, encoding: 'identity', wireBytes: 21355789,
 }
 describe('content-free physical request observations', () => {
+  it('rejects credential identities, values, raw causes and invalid numeric populations', () => {
+    const row = { changeId: start.streamId, observedAt: 1, version: '0.4.2-alpha.7',
+      phase: 'notification', reason: 'unknown-source', preparing: 0, dispatched: 1,
+      alreadyAborted: 0, preserved: 0, revoked: 1 }
+    expect(CredentialChangeSchema.safeParse(row).success).toBe(true)
+    for (const field of ['accountId', 'key', 'token', 'fingerprint', 'endpoint', 'rawError', 'sessionId', 'body']) {
+      expect(CredentialChangeSchema.safeParse({ ...row, [field]: 'synthetic-sensitive-sentinel' }).success).toBe(false)
+    }
+    expect(CredentialChangeSchema.safeParse({ ...row, reason: 'synthetic-sensitive-sentinel' }).success).toBe(false)
+    expect(CredentialChangeSchema.safeParse({ ...row, revoked: Infinity }).success).toBe(false)
+    const collector = new DiagnosticsCollector('0.4.2-alpha.7', 'client')
+    collector.setRequestEnabled(true)
+    expect(collector.beginCredentialChange()).toBeUndefined()
+  })
+  it('bounds pending credential handles and reports lost commits without fabricated rows', () => {
+    let now = 1000
+    const collector = new DiagnosticsCollector('0.4.2-alpha.7', 'host', undefined, () => now)
+    collector.setRequestEnabled(true)
+    const handles = Array.from({ length: 128 }, () => collector.beginCredentialChange()!)
+    expect(collector.beginCredentialChange()).toBeUndefined()
+    handles[0]!.cancel()
+    collector.beginCredentialChange()!.record({ phase: 'notification', reason: 'qualified',
+      preparing: 0, dispatched: 1, alreadyAborted: 0, preserved: 1, revoked: 0 })
+    const saved = collector.snapshot()
+    expect(saved.requests?.credentialChanges).toMatchObject({ pending: 128, dropped: 1 })
+    const reopened = new DiagnosticsCollector('0.4.2-alpha.7', 'host', undefined, () => now)
+    reopened.restore(saved)
+    expect(reopened.snapshot().requests?.credentialChanges).toMatchObject({
+      pending: 0, interruptedOnReopen: 128, rows: [{ phase: 'notification' }],
+    })
+    now += REQUEST_DIAGNOSTICS_RETENTION_MS + 1
+    expect(collector.beginCredentialChange()).toBeDefined()
+  })
+  it('bounds credential evidence under request consent and fences late commit updates', () => {
+    let now = 1000
+    const collector = new DiagnosticsCollector('0.4.2-alpha.7', 'host', undefined, () => now)
+    const evidence = { phase: 'notification' as const, reason: 'unknown-source' as const,
+      preparing: 1, dispatched: 2, alreadyAborted: 0, preserved: 0, revoked: 3 }
+    collector.setEnabled(true)
+    expect(collector.beginCredentialChange()).toBeUndefined()
+    collector.setRequestEnabled(true)
+    const handle = collector.beginCredentialChange()!
+    handle.record(evidence)
+    handle.record({ ...evidence, phase: 'commit', reason: 'commit-mismatch' })
+    const saved = collector.snapshot()
+    expect(saved.requests?.credentialChanges?.rows).toHaveLength(2)
+    expect(new Set(saved.requests?.credentialChanges?.rows.map(row => row.changeId)).size).toBe(1)
+    const reopened = new DiagnosticsCollector('0.4.2-alpha.7', 'host', undefined, () => now)
+    reopened.restore(saved)
+    expect(reopened.snapshot().requests?.credentialChanges?.rows).toHaveLength(2)
+    collector.setRequestEnabled(false)
+    collector.setRequestEnabled(true)
+    handle.record(evidence)
+    expect(collector.snapshot().requests?.credentialChanges?.rows).toHaveLength(2)
+    const cleared = collector.beginCredentialChange()!
+    collector.clear()
+    cleared.record(evidence)
+    expect(collector.snapshot().requests).toBeUndefined()
+    for (let index = 0; index < 129; index++) collector.beginCredentialChange()!.record(evidence)
+    expect(collector.snapshot().requests?.credentialChanges).toMatchObject({ evicted: 1 })
+    expect(collector.snapshot().requests?.credentialChanges?.rows).toHaveLength(128)
+    now += REQUEST_DIAGNOSTICS_RETENTION_MS + 1
+    expect(collector.snapshot().requests?.credentialChanges).toMatchObject({ rows: [], evicted: 129 })
+  })
   it('updates only its own retained record after native settlement, never across clear/pause/eviction', () => {
     const collector = new DiagnosticsCollector('0.4.2-alpha.4', 'host')
     collector.setRequestEnabled(true)
