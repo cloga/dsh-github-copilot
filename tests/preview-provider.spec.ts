@@ -120,14 +120,19 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('account-driven native provider', () => {
-  it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
-    'serializes supplier-advertised off as a native disable for %s', async api => {
+  it.each([
+    ['openai-responses', 'off'], ['openai-responses', 'none'],
+    ['openai-completions', 'off'], ['openai-completions', 'none'],
+    ['anthropic-messages', 'off'], ['anthropic-messages', 'disabled'],
+  ] as const)(
+    'serializes supplier-advertised %s/%s as a native disable', async (api, advertised) => {
       let request: Record<string, unknown> | undefined
       vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
         request = JSON.parse(String(init?.body)) as Record<string, unknown>
         return nativeEvents(api)
       }))
-      const result = await accountCall(api, 'off', undefined, undefined, undefined, ['off', 'high'], true)
+      const result = await accountCall(api, 'off', undefined, undefined, undefined,
+        [advertised, 'high'], true)
       expect(result.model.reasoning?.efforts.map(effort => effort.id)).toContain('off')
       if (api === 'openai-responses') expect(request?.reasoning).toMatchObject({ effort: 'none' })
       else if (api === 'openai-completions') expect(request?.reasoning_effort).toBe('none')

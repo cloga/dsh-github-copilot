@@ -858,8 +858,15 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
       checkpoint?.()
       const snapshot = await discoverSnapshot({ signal })
       checkpoint?.()
-      const model = taskClassifierModel(snapshot.models.filter(model => !excludedModels().has(model.id)),
-        highCost, classifierId)
+      const model = taskClassifierModel(snapshot.models, highCost, classifierId, observation => {
+        observe?.(observation)
+        if (observation.stage === 'candidate-scan' && observation.eligible === 0) {
+          if (observation.candidates === 0) ctx.logger.warn('COPILOT_AUTO_CLASSIFIER_EMPTY_CATALOG')
+          for (const reason of Object.keys(observation.rejected)) {
+            ctx.logger.warn(`COPILOT_AUTO_CLASSIFIER_REJECTED_${reason.toUpperCase().replaceAll('-', '_')}`)
+          }
+        }
+      }, excludedModels())
       if (model === undefined) {
         if (classifierId !== '') ctx.logger.warn('COPILOT_AUTO_CLASSIFIER_CONFIGURED_MODEL_UNAVAILABLE')
         throw failure('COPILOT_AUTO_CLASSIFIER_UNAVAILABLE')
@@ -874,6 +881,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
         checkpoint?.()
         if (signal.aborted) throw signal.reason
         const offSupported = prepared.model.reasoning?.efforts.some(effort => effort.id === 'off') === true
+        if (!offSupported) ctx.logger.warn('COPILOT_AUTO_CLASSIFIER_NATIVE_OFF_UNAVAILABLE')
         return await classifyTaskWithAdapter(model, input, signal,
           request => prepared.stream(request), observe, offSupported, checkpoint)
       }
