@@ -120,8 +120,8 @@ test('README contracts stay bilingual, current and separate native summary route
     assert.doesNotMatch(text, /prepared.*0\.4\.0-alpha\.130|0\.4\.0-alpha\.88/i)
   }
   assert.match(texts[0], /finite continuity bonus/)
-  assert.match(texts[0], /marked weight `0.2` never gets continuity/)
-  assert.match(texts[1], /高成本权重 `0.2` 不获得连续性加权/)
+  assert.match(texts[0], /weight decays tenfold to `0.02`/)
+  assert.match(texts[1], /权重十倍衰减到 `0.02`/)
   assert.match(texts[0], /independently resolved native summary route/)
   assert.match(texts[0], /additional accounts are independently authorized/)
   assert.match(texts[1], /独立解析的原生摘要路由/)

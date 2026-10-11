@@ -34,7 +34,10 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
         : `This task was assessed as ${demand[explanation.assessment.demand]}; the preference policy selected ${category[explanation.selectedCategory]}.`
   const allocation = explanation.allocation
   const selected = allocation?.candidates.find(row => row.modelId === allocation.selectedModelId)
-  const tier = allocation?.policyVersion !== 'high-cost-v2' ? ''
+  const tier = allocation?.policyVersion === 'high-cost-v3'
+    ? zh ? '所有可容纳的同类候选保留正机会；高成本基础权重 0.2，上一轮高成本模型衰减至 0.02，普通上一轮模型加权至 1.5。这是一轮近期惩罚，不是能力或实际费用判断。'
+      : 'All fitting category candidates retain positive opportunity. High-cost base weight is 0.2; a previous high-cost model decays to 0.02, while an ordinary previous model has weight 1.5. This is one-turn recency decay, not capability or actual cost evidence.'
+    : allocation?.policyVersion !== 'high-cost-v2' ? ''
     : (allocation.deferredHighCostCount ?? 0) > 0
       ? zh ? `本轮成本层有未标记候选，暂缓 ${allocation.deferredHighCostCount} 个同类高成本候选。`
         : `The unmarked cost tier deferred ${allocation.deferredHighCostCount} fitting high-cost category candidates.`

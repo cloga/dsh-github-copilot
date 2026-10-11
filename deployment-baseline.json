@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.2-alpha.11"
+    "version": "0.4.2-alpha.12"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1342,6 +1342,7 @@
       "sourceMarkers": [
         {"file": "src/auto-allocation.ts", "marker": "high-cost-v1"},
         {"file": "src/auto-allocation.ts", "marker": "high-cost-v2"},
+        {"file": "src/auto-allocation.ts", "marker": "high-cost-v3"},
         {"file": "src/auto-allocation.ts", "marker": "deferredHighCostCount"},
         {"file": "src/config.ts", "marker": "highCostModelIds"},
         {"file": "src/model-preferences-card.ts", "marker": "High cost"},
@@ -1351,7 +1352,9 @@
         {"file": "docs/auto-high-cost.md", "marker": "separate acceptance"}
       ],
       "tests": [
-        {"file": "tests/auto-allocation.spec.ts", "name": "simulates 20000 turns per previous state without selecting a deferred high-cost peer"},
+        {"file": "tests/auto-allocation.spec.ts", "name": "simulates 20000 turns per previous state with positive cost-decayed opportunity"},
+        {"file": "tests/auto-allocation.spec.ts", "name": "decays a marked previous model tenfold without eliminating its opportunity"},
+        {"file": "tests/auto-allocation.spec.ts", "name": "keeps v2 hard-deferral evidence readable without relabeling it as v3"},
         {"file": "tests/auto-allocation.spec.ts", "name": "keeps v1 historical weights readable without relabeling them as v2"},
         {"file": "tests/auto-allocation-evidence.spec.ts", "name": "keeps legacy-only summaries v1 and separates mixed-policy decisions explicitly"},
         {"file": "tests/auto-allocation-evidence.spec.ts", "name": "counts each turn once, bounds retention and never recovers missing evidence after removal"},

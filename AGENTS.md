@@ -368,11 +368,12 @@ Completed-turn Usage diagnostics (#259) are read-only plugin conversation data a
 Auto task routing (#258) uses current `model_picker_category` facts, never model
 names, effort or context capacity as a quality category. Hard eligibility/input
 fit precede task/preference policy; unknown category and uncertain task evidence
-remain explicit. Within the first fitting category, high-cost-v2 uses the
-unmarked tier whenever it has fitting candidates; otherwise use the marked tier.
-Ordinary weight 1 receives finite previous-model multiplier 1.5; marked weight
-0.2 never receives continuity. Preserve positive within-tier opportunity and v1
-historical codecs/cohorts, and disclose deferred candidates. Fit is not task
+remain explicit. Within the first fitting category, high-cost-v3 retains every
+fitting candidate with positive weight. Ordinary weight 1 receives finite
+previous-model multiplier 1.5; marked base 0.2 decays to 0.02 only for the previous
+model. One-turn recency resets after a different model, not a hidden streak
+counter or task-failure inference. Preserve v1/v2 historical codecs/cohorts and
+their original explanation. Fit is not task
 success; never switch categories for cost, infer incapability or add escalation.
 Capture actual reasons once
 per turn without durable decision events or changing Usage.

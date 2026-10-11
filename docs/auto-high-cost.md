@@ -42,35 +42,43 @@ unchanged official Core fixture, not that the affected live Host read the mark
 before the historical Astra decision. Do not hardcode a model, change live
 preferences or rewrite a frozen explanation to manufacture a repair.
 
-## Routing policy v2 (#410)
+## Routing policy v3 (#412)
 
 1. Account ownership, metadata validity, exclusion, input modality and input
    headroom are hard requirements.
 2. Assess each new turn using existing contextual local/semantic evidence.
    Preserve existing demand categories and supplier-category fallback.
-3. Inside the first fitting category only, use unmarked candidates if any fit.
-   Defer fitting marked candidates; otherwise use the marked-only fallback tier.
+3. Inside the first fitting category only, retain all fitting candidates.
    Ordinary candidates have weight 1 and an eligible previous ordinary model
-   receives multiplier 1.5. Marked candidates have weight 0.2 without continuity.
+   receives multiplier 1.5. Marked candidates have base weight 0.2; the previous
+   marked model decays tenfold to 0.02 instead of receiving a continuity bonus.
 4. Select from cumulative positive weights using a stable Agent/turn seed.
    Capture the selected ID, candidate weights and conditional expected shares.
    No additional model calls are made to give candidates a chance.
 5. When no model fits, retain the largest-input-budget native recovery path.
    Cost cannot justify choosing a model that cannot fit.
 
-This is a user-requested stronger cost preference, not calibrated quality or
-billing facts. A marked previous model cannot retain the turn when an unmarked
-peer fits the selected category. A lone fitting marked model is selected and an
-all-marked pool remains usable. A marked Lightweight model can still serve a
-simple task if that category has no fitting unmarked peer. Fit and supplier
+This corrects v2's over-strong hard deferral after the user clarified that high
+cost should have rare opportunity and strongly decay after selection, not become
+permanently unavailable. The 10x repeat penalty is a declared trial, not a
+calibrated optimum. It uses existing previous-route evidence only; there is no
+hidden multi-turn counter, persistent penalty, time cooldown or failed-task guess.
+If the same marked model repeats, it remains at 0.02 rather than recursively
+shrinking. A different model's turn resets it to 0.2. Other marked models retain
+base weight. A lone fitting marked model is selected and an all-marked pool
+remains usable. Fit and supplier
 category cannot prove peers can solve the task; no automatic escalation, extra
 calls, in-turn switch or lower-category substitution is introduced.
-Every participating final-tier candidate has positive opportunity; deferred
-marked candidates have none. The bounded explanation reports their count,
-not fake positive shares. Stable seeds do not prove independent random trials.
+Every fitting final-pool candidate has positive opportunity. With one ordinary
+peer, a marked model has share 2/17 (11.8%) when the ordinary model was previous,
+then 1/51 (2.0%) when it was itself previous. The independent-draw approximation
+for a predeclared pair is 2/867 (0.23%), not the probability of any streak in a
+long Session or a guarantee against repeats. Stable seeds do not prove
+independent random trials. Conditional shares are not observed billing.
 
-Historical v1 remains readable with its original mixed-pool weights and marked
-continuity multiplier. Persistent cohorts retain original policy versions.
+Historical v1 retains mixed-pool weights and marked continuity; v2 retains hard
+cost-tier deferral and its deferred count. Both remain readable unchanged.
+Persistent cohorts retain original policy versions.
 The Session summary separates incompatible policy cohorts and reports omitted
 decisions instead of relabeling them or merging different opportunities.
 
@@ -81,7 +89,9 @@ five Sol turns followed by two Astra turns; its last 178 messages belonged to
 one frozen turn. This does not establish a distribution violation. A conditional
 two-peer seeded reproduction matches the two Astra choices, but the exact
 historical pool was not retained. V2 implements the user's stricter preference,
-not a claimed repair to a proven random-number defect.
+not a claimed repair to a proven random-number defect. V3 supersedes v2's hard
+exclusion with positive recency-decayed opportunity, without a live performance
+claim.
 
 The auxiliary semantic classifier is a separate call, not another main-turn
 allocation. It prefers an unmarked eligible Lightweight classifier; if only
@@ -98,8 +108,8 @@ Synthetic acceptance covers ordinary/marked/all-marked/single pools, every
 supplier category, exclusions, capacity, category changes, stable seeds,
 preference changes and admitted-turn freezing. Distribution checks use large
 declared seed sets and compare actual allocation with conditional expected
-shares, including a marked previous model in a marked-only tier, deferred
-high-cost candidates, and backward-compatible v1 evidence.
+shares, including marked previous models, all-marked/single pools, sequential
+previous-route updates and backward-compatible v1/v2 evidence.
 
 Runtime evidence must distinguish a selected decision from native attempted,
 delivered, finished, failed and cancelled calls. Count a decision once per

@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.4.2-alpha.11 (prepared)
+## 0.4.2-alpha.12 (prepared)
+
+- Restore positive opportunity for all fitting same-category candidates instead
+  of v2's hard high-cost deferral. Marked base weight remains 0.2; the previous
+  marked model decays tenfold to 0.02, with ordinary continuity unchanged.
+  No hidden streak counter, permanent penalty, automatic escalation or task
+  success inference. Single/all-marked pools and admitted turns stay usable.
+- Explain high-cost-v3 one-turn recency decay and preserve original v1/v2
+  evidence, summaries and diagnostic cohorts. Sequential synthetic simulations
+  show fewer repeat selections, not measured production quality or savings.
+
+## 0.4.2-alpha.11 (published)
 
 - Prefer fitting unmarked models inside the selected supplier category and defer
   high-cost peers. Marked-only fallback stays usable without a continuity bonus.

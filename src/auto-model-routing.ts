@@ -184,7 +184,7 @@ function targetCategory(assessment: TaskAssessment, preference: AutoModelPrefere
 
 /**
  * Filter input headroom before task-aware supplier categories.
- * Prefer the unmarked tier, with finite ordinary continuity, inside the fitting category.
+ * Apply positive cost weights and marked recency decay inside the fitting category.
  * Preserves Core compaction ownership if no candidate currently fits.
  */
 export function selectAutoModel(

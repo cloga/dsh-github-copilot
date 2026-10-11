@@ -16,19 +16,19 @@ function explanation(): AutoSelectionExplanation {
 }
 
 describe('persistent Auto allocation diagnostics', () => {
-  it('records only participating v2 opportunities and retains historical v1 strata unchanged', () => {
+  it('records positive v3 decayed opportunities and retains historical v1 and v2 strata unchanged', () => {
     const collector = new AutoAllocationDiagnosticsCollector('0.4.2-alpha.11', undefined, () => day)
     collector.setEnabled(true)
     const value = explanation()
     const allocation = allocateAutoModel([{ id: 'ordinary' }, { id: 'costly' }], ['costly'], 'costly', 1)
-    collector.record({ ...value, categoryCandidateCount: 1, method: 'only-candidate', allocation })
+    collector.record({ ...value, allocation })
     const snapshot = collector.snapshot()
-    expect(snapshot.rows).toHaveLength(1)
-    expect(snapshot.rows[0]).toMatchObject({ policyVersion: 'high-cost-v2', modelId: 'ordinary', opportunities: 1, expectedSelections: 1, selections: 1 })
+    expect(snapshot.rows).toHaveLength(2)
+    expect(snapshot.rows[1]).toMatchObject({ policyVersion: 'high-cost-v3', modelId: 'costly', weight: 0.02, opportunities: 1, expectedSelections: 1 / 51 })
     const legacy = { ...snapshot.rows[0]!, policyVersion: 'high-cost-v1' }
-    collector.restore({ ...snapshot, rows: [legacy] }, false)
-    collector.record({ ...value, categoryCandidateCount: 1, method: 'only-candidate', allocation })
-    expect(collector.snapshot().rows.map(row => row.policyVersion)).toEqual(['high-cost-v1', 'high-cost-v2'])
+    collector.restore({ ...snapshot, rows: [legacy, { ...legacy, policyVersion: 'high-cost-v2' }] }, false)
+    collector.record({ ...value, allocation })
+    expect(collector.snapshot().rows.map(row => row.policyVersion)).toEqual(['high-cost-v1', 'high-cost-v2', 'high-cost-v3', 'high-cost-v3'])
   })
   it('separates assessment outcomes without changing model opportunities or exposing errors', () => {
     const collector = new AutoAllocationDiagnosticsCollector('0.4.2-alpha.6', undefined, () => day)

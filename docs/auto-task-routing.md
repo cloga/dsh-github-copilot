@@ -285,10 +285,11 @@ explicit fallback only, not fabricated categories. Unknown/new category values
 remain unclassified with a bounded catalog diagnostic.
 
 Within the first fitting category, use stable positive weighted Session/turn
-allocation within the unmarked tier when available, otherwise the high-cost
-fallback tier. Ordinary weight 1 has finite previous-model multiplier 1.5;
-marked weight 0.2 has no continuity bonus. Deferred candidates have no allocation
-opportunity in that turn. Cost is independent of task difficulty and supplier
+allocation across all fitting candidates. Ordinary weight 1 has finite
+previous-model multiplier 1.5; high-cost base weight 0.2 decays tenfold to 0.02
+only for the previous model. Every candidate keeps positive opportunity; a lone
+candidate still has share 1. A different model's turn resets the penalty, without
+extra streak state. Cost is independent of task difficulty and supplier
 category; input fit does not prove task success. Never weaken category or
 automatically escalate to establish whether another model can solve the task.
 These are reviewed policy parameters, not measured quality or prices. Once

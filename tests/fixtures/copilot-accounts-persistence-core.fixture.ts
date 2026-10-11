@@ -28,10 +28,11 @@ import { normalizeHighCostModelIds } from '../../src/auto-allocation.ts'
 import { readSettingsNamespace } from '../../src/settings-reader.ts'
 import { GITHUB_COPILOT_AUTO_MODEL_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../../src/copilot-identity.ts'
 
-async function verifySavedAutoPreferences(profile: Context, config: ResolvedInlineConfig): Promise<void> {
+async function verifySavedAutoPreferences(profile: Context, config: ResolvedInlineConfig, previousHighCost = false): Promise<void> {
   const ctx = new Context()
   ctx.provide('tokenMeter', { estimateMessage: () => 10, measure: () => ({ totalTokens: 10 }) })
-  const agent = { ctx, session: { id: 'synthetic-auto', append: vi.fn(), requestHeader: () => undefined } } as unknown as Agent
+  const agent = { ctx, session: { id: 'synthetic-auto', append: vi.fn(), requestHeader: () => previousHighCost
+    ? { config: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'synthetic-costly-fast' } } : undefined } } as unknown as Agent
   const models: AccountModelDescriptor[] = ['synthetic-costly-fast', 'synthetic-peer'].map(id => ({
     id, name: id, api: 'openai-responses', category: 'powerful',
     contextWindow: 128000, maxTokens: 8192, input: ['text'],
@@ -58,10 +59,14 @@ async function verifySavedAutoPreferences(profile: Context, config: ResolvedInli
     const captured = ctx.githubCopilotTurnSelection.get(agent, 1)
     expect(captured.mode === 'auto' && captured.explanation?.allocation?.candidates)
       .toEqual([
-        expect.objectContaining({ modelId: 'synthetic-peer', highCost: false, weight: 1, expectedShare: 1 }),
+        expect.objectContaining({ modelId: 'synthetic-costly-fast', highCost: true,
+          previous: previousHighCost, weight: previousHighCost ? 0.02 : 0.2,
+          expectedShare: previousHighCost ? 1 / 51 : 1 / 6 }),
+        expect.objectContaining({ modelId: 'synthetic-peer', highCost: false, weight: 1,
+          expectedShare: previousHighCost ? 50 / 51 : 5 / 6 }),
       ])
     expect(captured.mode === 'auto' && captured.explanation?.allocation)
-      .toMatchObject({ policyVersion: 'high-cost-v2', deferredHighCostCount: 1 })
+      .toMatchObject({ policyVersion: 'high-cost-v3' })
     expect(highCost).toHaveBeenCalledTimes(1)
     expect(agent.session.append).not.toHaveBeenCalled()
   } finally { dispose(); await ctx.fiber.dispose() }
@@ -160,6 +165,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
       .toMatchObject({ state: 'ready', highCostModelIds: ['synthetic-costly-fast'] })
     expect(readInlineConfig(configs.at(-1)!).highCostModelIds).toEqual(['synthetic-costly-fast'])
     await verifySavedAutoPreferences(ctx, configs.at(-1)!)
+    await verifySavedAutoPreferences(ctx, configs.at(-1)!, true)
     expect([...ctx.loader.entries()].find(entry => entry.options.id === 'github-copilot')!.fiber).toBe(selectorFiber)
     const viewedSession = { session: { id: 'synthetic-session-override' } }
     const defaults = await ctx.githubCopilotSessionContinuation.defaults()
@@ -213,6 +219,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
       autoSemanticAssessmentTimeoutMs: 45000, autoSemanticAssessmentModel: 'synthetic-peer',
     })
     await verifySavedAutoPreferences(ctx, configs.at(-1)!)
+    await verifySavedAutoPreferences(ctx, configs.at(-1)!, true)
     expect(readInlineConfig(configs.at(-1)!).requestDiagnosticsEnabled).toBe(true)
     expect((await ctx.githubCopilotSessionContinuation.get(viewedSession as Agent)).enabled).toBe(true)
     expect((await ctx.githubCopilotSessionContinuation.defaults()).enabled).toBe(false)
