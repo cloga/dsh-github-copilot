@@ -366,8 +366,15 @@ it.each(['source', 'strict'] as const)('reads retained selection through actual 
       allocation: allocateAutoModel([{ id: 'regular' }, { id: 'marked' }], ['marked'], undefined, 7),
     } })
     await expect(client.remote.githubCopilotTurnSelection.allocationSummary(master.id))
-      .resolves.toMatchObject({ ok: true, value: { retainedDecisions: 1, completeHistory: false,
-        rows: [{ modelId: 'regular', opportunities: 1 }, { modelId: 'marked', opportunities: 1 }] } })
+      .resolves.toMatchObject({ ok: true, value: { policyVersion: 'high-cost-v3', retainedDecisions: 1, completeHistory: false,
+        rows: [{ modelId: 'regular', opportunities: 1, expectedSelections: 5 / 6 },
+          { modelId: 'marked', opportunities: 1, expectedSelections: 1 / 6 }] } })
+    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 10))
+      .resolves.toMatchObject({ ok: true, value: { mode: 'auto', explanation: { allocation: {
+        policyVersion: 'high-cost-v3',
+        candidates: [{ modelId: 'regular', highCost: false, expectedShare: 5 / 6 },
+          { modelId: 'marked', highCost: true, expectedShare: 1 / 6 }],
+      } } } })
     await expect(client.remote.githubCopilotTurnSelection.allocationSummary('missing-master'))
       .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-not-found' } })
     await expect(client.remote.githubCopilotTurnSelection.allocationSummary('denied-master'))

@@ -7,7 +7,7 @@ import { DiagnosticsSnapshotSchema } from '../src/diagnostics-types.ts'
 
 const day = 24 * 60 * 60 * 1000
 function explanation(): AutoSelectionExplanation {
-  const allocation = allocateAutoModel([{ id: 'ordinary' }, { id: 'costly' }], ['costly'], 'ordinary', 1)
+  const allocation = allocateAutoModel([{ id: 'ordinary' }, { id: 'costly' }], [], 'ordinary', 1)
   return {
     assessment: { demand: 'unknown', source: 'local', signals: ['insufficient-evidence'] },
     targetCategory: 'versatile', selectedCategory: 'versatile', categoryCandidateCount: 2,
@@ -16,6 +16,20 @@ function explanation(): AutoSelectionExplanation {
 }
 
 describe('persistent Auto allocation diagnostics', () => {
+  it('records positive v3 decayed opportunities and retains historical v1 and v2 strata unchanged', () => {
+    const collector = new AutoAllocationDiagnosticsCollector('0.4.2-alpha.11', undefined, () => day)
+    collector.setEnabled(true)
+    const value = explanation()
+    const allocation = allocateAutoModel([{ id: 'ordinary' }, { id: 'costly' }], ['costly'], 'costly', 1)
+    collector.record({ ...value, allocation })
+    const snapshot = collector.snapshot()
+    expect(snapshot.rows).toHaveLength(2)
+    expect(snapshot.rows[1]).toMatchObject({ policyVersion: 'high-cost-v3', modelId: 'costly', weight: 0.02, opportunities: 1, expectedSelections: 1 / 51 })
+    const legacy = { ...snapshot.rows[0]!, policyVersion: 'high-cost-v1' }
+    collector.restore({ ...snapshot, rows: [legacy, { ...legacy, policyVersion: 'high-cost-v2' }] }, false)
+    collector.record({ ...value, allocation })
+    expect(collector.snapshot().rows.map(row => row.policyVersion)).toEqual(['high-cost-v1', 'high-cost-v2', 'high-cost-v3', 'high-cost-v3'])
+  })
   it('separates assessment outcomes without changing model opportunities or exposing errors', () => {
     const collector = new AutoAllocationDiagnosticsCollector('0.4.2-alpha.6', undefined, () => day)
     collector.setEnabled(true)

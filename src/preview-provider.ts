@@ -1,6 +1,7 @@
 import { hasApi, lazyStream } from '@earendil-works/pi-ai'
 import type { Api, Model, OAuthAuth, StreamOptions, ThinkingLevelMap, TranscriptContext } from '@earendil-works/pi-ai'
 import type { AccountModelApi, AccountModelDescriptor } from './account-model-catalog.ts'
+import { classifierReasoningOffSupported } from './auto-task-classifier.ts'
 import { coreProviderView } from './pi-provider-bridge.ts'
 import type { CoreCompatibleProvider, SimpleNativeProvider } from './pi-provider-bridge.ts'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
@@ -110,13 +111,17 @@ function accountBaseURL(value: string): string {
 }
 
 /** Materialize advertised capabilities only; model names and the local static catalog never select the API. */
-export function accountModelFromDescriptor(descriptor: AccountModelDescriptor, baseURL: string): AccountPiModel {
+export function accountModelFromDescriptor(
+  descriptor: AccountModelDescriptor, baseURL: string, classifierReasoningOff = false,
+): AccountPiModel {
   const map: ThinkingLevelMap = { off: null, minimal: null, low: null, medium: null, high: null, xhigh: null, max: null }
   const advertised = new Set(descriptor.reasoning.advertisedEfforts)
+  if (classifierReasoningOff && classifierReasoningOffSupported(descriptor)) map.off = 'none'
   const supported = enabledLevels.filter(level => advertised.has(level)
     && (descriptor.api !== 'anthropic-messages' || descriptor.reasoning.adaptiveThinking === true && level !== 'minimal'))
   for (const level of supported) map[level] = level
   const mapped = new Set<string>(supported)
+  if (map.off !== null) mapped.add('off')
   const unmapped = [...new Set([...descriptor.reasoning.unmappedEfforts,
     ...descriptor.reasoning.advertisedEfforts.filter(level => !mapped.has(level))])].sort()
   const model: AccountPiModel = {
@@ -124,7 +129,7 @@ export function accountModelFromDescriptor(descriptor: AccountModelDescriptor, b
     api: descriptor.api, baseUrl: accountBaseURL(baseURL),
     contextWindow: descriptor.contextWindow, maxTokens: descriptor.maxTokens,
     ...descriptor.maxInputTokens === undefined ? {} : { maxInputTokens: descriptor.maxInputTokens },
-    input: [...descriptor.input], reasoning: supported.length > 0,
+    input: [...descriptor.input], reasoning: supported.length > 0 || map.off !== null,
     thinkingLevelMap: Object.freeze(map),
     unmappedReasoningEfforts: Object.freeze(unmapped),
     ...descriptor.reasoning.minThinkingBudget === undefined ? {} : { minThinkingBudget: descriptor.reasoning.minThinkingBudget },
@@ -147,11 +152,13 @@ export function createAccountProvider(
   descriptors: readonly AccountModelDescriptor[],
   guard: AccountProviderGuard,
   baseURL: string,
+  classifierReasoningOff = false,
 ): { provider: CoreCompatibleProvider; models: readonly AccountPiModel[] } {
   const native = githubCopilotProvider()
   const oauth = native.auth.oauth
   if (oauth === undefined) throw new Error('COPILOT_MANAGED_OAUTH_UNAVAILABLE')
-  const models = Object.freeze(descriptors.map(descriptor => accountModelFromDescriptor(descriptor, baseURL)))
+  const models = Object.freeze(descriptors.map(descriptor =>
+    accountModelFromDescriptor(descriptor, baseURL, classifierReasoningOff)))
   const table = new Map(models.map(model => [model.id, model]))
   if (table.size !== models.length) throw new Error('COPILOT_MANAGED_DUPLICATE_MODEL')
   const selected = (): string => {

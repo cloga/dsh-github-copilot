@@ -1,12 +1,33 @@
 import { expect, it } from 'vitest'
 import { selectionExplanation } from '../src/auto-selection-explanation.ts'
 import type { AutoSelectionExplanation } from '../src/auto-model-routing.ts'
+import { allocateAutoModel } from '../src/auto-allocation.ts'
 
 const explanation: AutoSelectionExplanation = {
   assessment: { demand: 'unknown', source: 'local', signals: ['continuation', 'insufficient-evidence'], diagnostic: 'disabled' },
   targetCategory: 'powerful', selectedCategory: 'powerful', categoryCandidateCount: 2,
   fallback: false, method: 'continuity',
 }
+
+it.each(['en', 'zh'])('explains positive high-cost opportunity and recency decay without implying task failure (%s)', locale => {
+  const tier = { ...explanation, method: 'weighted-distribution' as const, categoryCandidateCount: 2,
+    allocation: allocateAutoModel([{ id: 'ordinary' }, { id: 'marked' }], ['marked'], 'marked', 1) }
+  const text = selectionExplanation(tier, locale).choice
+  expect(text).toContain(locale === 'en' ? 'decays to 0.02' : '衰减至 0.02')
+  expect(text).toContain(locale === 'en' ? 'positive opportunity' : '正机会')
+  const fallback = selectionExplanation({ ...tier,
+    method: 'only-candidate', categoryCandidateCount: 1,
+    allocation: allocateAutoModel([{ id: 'marked' }], ['marked'], 'marked', 1) }, locale).choice
+  expect(fallback).toContain(locale === 'en' ? 'one-turn recency' : '一轮近期')
+})
+
+it('retains historical v2 hard-deferral explanation rather than describing it as decay', () => {
+  const text = selectionExplanation({ ...explanation, method: 'only-candidate', categoryCandidateCount: 1,
+    allocation: { policyVersion: 'high-cost-v2', deferredHighCostCount: 1, selectedModelId: 'ordinary',
+      candidates: [{ modelId: 'ordinary', highCost: false, previous: false, weight: 1, expectedShare: 1 }] } }, 'en').choice
+  expect(text).toContain('deferred 1')
+  expect(text).not.toContain('decays to')
+})
 
 it('distinguishes local rule coverage from absent conversation context in both languages', () => {
   const en = selectionExplanation(explanation, 'en')
@@ -46,4 +67,42 @@ it.each(['en', 'zh'])('distinguishes continuity and category pool from semantic 
   }, locale)
   expect(text.choice).toContain('2')
   expect(text.choice).toContain(locale === 'en' ? 'not a semantic ranking' : '不是语义排名')
+})
+
+it.each(['en', 'zh'])('shows bounded rejection counts and preparation failure without claiming a timeout (%s)', locale => {
+  const text = selectionExplanation({ ...explanation,
+    assessment: { demand: 'unknown', source: 'local', signals: [], diagnostic: 'unavailable',
+      semantic: { budgetMs: 30000, elapsedMs: 514, stage: 'preparing', outputCharacters: 0,
+        validation: 'not-validated', candidateScan: { candidates: 6, eligible: 0,
+          rejected: { category: 2, 'reasoning-disable-unproven': 4 } },
+        preparationFailure: 'native-off-unavailable' } },
+  }, locale)
+  expect(text.semantic).toContain(locale === 'en' ? '6 models, 0 eligible' : '6 个模型，0 个合格')
+  expect(text.semantic).toContain(locale === 'en' ? 'reasoning disable unproven 4' : '关闭 reasoning 未获证明 4')
+  expect(text.semantic).toContain(locale === 'en' ? 'did not expose off' : '未提供 off 控制')
+  expect(text.conclusion).not.toContain(locale === 'en' ? 'timed out' : '超时')
+})
+
+it('does not turn missing legacy candidate evidence into an empty scan', () => {
+  const text = selectionExplanation({ ...explanation,
+    assessment: { demand: 'unknown', source: 'local', signals: [], diagnostic: 'unavailable',
+      semantic: { budgetMs: 30000, elapsedMs: 514, stage: 'preparing', outputCharacters: 0,
+        validation: 'not-validated' } },
+  }, 'en')
+  expect(text.semantic).not.toContain('Candidate scan')
+  expect(text.semantic).not.toContain('preparation did not expose')
+  expect(text.semantic).not.toContain('Assessment text')
+  expect(text.semantic).not.toContain('Classifier returned')
+})
+
+it.each(['en', 'zh'])('separates classifier unknown from projection limitations (%s)', locale => {
+  const text = selectionExplanation({ ...explanation,
+    assessment: { demand: 'unknown', source: 'semantic', signals: ['insufficient-evidence'],
+      semantic: { budgetMs: 30000, elapsedMs: 5492, stage: 'preparing', outputCharacters: 0,
+        validation: 'valid', classifierDemand: 'unknown', projection: { retainedMessages: 12,
+          historyOmitted: true, taskTextLimited: false, continuationAnchor: 'retained' } } },
+  }, locale)
+  expect(text.semantic).toContain(locale === 'en' ? 'Classifier returned: unknown' : '分类器返回：需求不确定')
+  expect(text.semantic).toContain(locale === 'en' ? 'task text retained' : '任务文本已保留')
+  expect(text.semantic).toContain(locale === 'en' ? 'does not guarantee' : '不保证')
 })

@@ -237,8 +237,10 @@ describe('Auto model routing policy', () => {
     const context = { sessionId: 'weighted-fast', turn: 3, highCostModelIds: [fast.id], previousModelId: fast.id }
     const captured = selectAutoModel([fast, peer, strong], [message('Hello!')], 'intelligence', context)
     expect(captured.explanation.selectedCategory).toBe('lightweight')
+    expect(captured.model.id).toBe(peer.id)
+    expect(captured.explanation.allocation).toMatchObject({ policyVersion: 'high-cost-v3' })
     expect(captured.explanation.allocation?.candidates.find(row => row.modelId === fast.id))
-      .toMatchObject({ highCost: true, previous: true, weight: 0.3 })
+      .toMatchObject({ highCost: true, previous: true, weight: 0.02, expectedShare: 1 / 51 })
     const optedOut = selectAutoModel([fast, peer, strong], [message('Hello!')], 'intelligence',
       { ...context, collectAllocationEvidence: false })
     expect(optedOut.model).toBe(captured.model)

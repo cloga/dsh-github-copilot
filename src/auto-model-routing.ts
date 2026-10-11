@@ -184,7 +184,7 @@ function targetCategory(assessment: TaskAssessment, preference: AutoModelPrefere
 
 /**
  * Filter input headroom before task-aware supplier categories.
- * Apply finite continuity and positive cost weights within the fitting category.
+ * Apply positive cost weights and marked recency decay inside the fitting category.
  * Preserves Core compaction ownership if no candidate currently fits.
  */
 export function selectAutoModel(
@@ -231,8 +231,8 @@ export function selectAutoModel(
     const allocation = allocateAutoModel(pool, context?.highCostModelIds, context?.previousModelId, seed)
     selectedModel = pool.find(model => model.id === allocation.selectedModelId)!
     explanation = {
-      assessment, targetCategory: target, selectedCategory, categoryCandidateCount: pool.length,
-      method: pool.length === 1 ? 'only-candidate' : 'weighted-distribution',
+      assessment, targetCategory: target, selectedCategory, categoryCandidateCount: allocation.candidates.length,
+      method: allocation.candidates.length === 1 ? 'only-candidate' : 'weighted-distribution',
       fallback: selectedCategory !== target,
       ...context?.collectAllocationEvidence === false ? {} : { allocation },
     }

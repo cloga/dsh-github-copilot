@@ -3,7 +3,7 @@
 Tracking: [#258](https://github.com/cloga/dsh-github-copilot/issues/258) and
 [evidence refinement #262](https://github.com/cloga/dsh-github-copilot/issues/262).
 
-**Current contract:** source candidate `0.4.2-alpha.7`, targeting official DSH/Windows
+**Current contract:** source candidate `0.4.2-alpha.10`, targeting official DSH/Windows
 Desktop `0.2.0-rc.2`. Semantic assessment is enabled by default with bounded
 auxiliary timing/output evidence. Neither publication nor
 these explanations prove the version loaded in a particular Host.
@@ -70,6 +70,21 @@ There is no assessment retry or automatic deadline extension. Caller cancellatio
 aborts the turn rather than invoking fallback. Auxiliary calls can add latency
 and supplier charges outside native answer Usage.
 
+Classifier capability checks accept only explicit account-advertised disable
+labels: `off`, protocol-native `none` for Responses/Completions, or `disabled`
+for Anthropic. No aliases are applied to ordinary Chat model maps. Missing or
+empty effort metadata does not prove absence of reasoning.
+
+Strict request-local `semantic.candidateScan` evidence records at most 512
+candidates, eligible counts and first-rejection counts for exclusions, explicit
+ID mismatch, category, text input, unproven disable capability and budget.
+Counts partition the examined pool, not all possible rejection reasons per model.
+No candidate IDs, prompts or raw metadata are retained in these counts.
+`preparationFailure: native-off-unavailable` separates native off preparation
+from no-fit selection. No-fit Host warnings use fixed codes only. These fields
+are ephemeral selection evidence, not a new persisted diagnostic population;
+absent legacy evidence cannot be reconstructed.
+
 ## Requirements
 
 Auto must explain why the initiating turn chose its actual route, not display a
@@ -125,17 +140,31 @@ existing managed native adapter, never an Auto ID and never `ctx.llm` routing
 recursion. It has no tools, bounded text-only assessment context, bounded JSON
 output, one deadline, cancellation and no new retry loop. Text from messages is
 untrusted data, not router instructions. Files/images/reasoning/replay bodies
-are not read; omitted context makes classification uncertain and cannot justify
-downshifting. Assessment input is a separate projection: the actual chat
+are not read; limited task text cannot justify downshifting. Assessment input is a separate projection: the actual chat
 messages, system prompt, tools, attachments and history stay untouched.
 
 Only locally unknown tasks invoke the enabled assessment. Context packing keeps
-the current and nearest preceding user requests before recent output, then
-restores chronological order. At most twelve complete JSON rows, 1600 text
+the current and nearest preceding user requests before recent output. An explicit
+continuation also reserves the nearest substantive user anchor among the previous
+twelve user messages and the intervening user chain, then restores chronological
+order. No expired anchor, task summary or semantic task boundary is invented.
+At most twelve complete JSON rows, 1600 text
 characters per row and 8000 serialized characters are retained; JSON escape
 expansion is included in this bound. Any truncation, skipped row or non-text
-content still marks omitted context and prevents a semantic simple/routine
-downshift. Prioritization does not prove omitted output irrelevant.
+content still marks projection omission. A missing current request/continuation
+anchor, a missing reserved user row, truncated reserved task text, or nontext
+content in the reserved user chain separately marks `taskTextLimited` and prevents
+a semantic simple/routine downshift. Incidental assistant/tool/history omissions
+alone no longer force that downgrade. The classifier must still judge whether
+the retained evidence establishes demand; retained text is not semantic
+completeness and missing required details must remain unknown.
+
+The instruction requests a schema without a pre-filled unknown answer and
+distinguishes projected data omissions from missing relevant task evidence.
+Unknown is permitted for genuinely indeterminate demand, not required merely
+because a long conversation exceeds the projection bounds. No reasoning/tool
+enablement, second inference, larger context/output budget or full-history
+serialization is introduced.
 
 The strict result contains demand (`simple`, `routine`, `complex`, `unknown`)
 and finite evidence signals, not a model ID, raw reasoning or an uncalibrated
@@ -144,6 +173,13 @@ assessment with an explicit diagnostic. Caller cancellation aborts the turn
 instead of falling back. Credential, metadata and account revocation remain
 fatal through existing lease/admission guards. Extra calls incur supplier
 charges and latency, separate from native chat Usage and without inferred cost.
+
+Strict ephemeral explanation evidence optionally records retained row count
+(0–12), the projection omission flag, task-text limitation, fixed continuation
+anchor status and the classifier's decoded demand. No text, attachment values
+or new persistent population is recorded. Legacy absent fields stay absent.
+These fields distinguish a valid classifier `unknown` from plugin-side
+simple/routine blocking; they do not establish accuracy or a live unknown rate.
 
 ## Auxiliary latency evidence and bounded output (#272)
 
@@ -163,8 +199,8 @@ this is not a hard real-time guarantee or evidence of a supplier latency cause.
 The owned timer and abort listener are disposed when assessment settles.
 
 Among eligible supplier Lightweight text candidates with the existing input
-headroom, automatic selection prefers unmarked cost, advertised reasoning `off`,
-then deterministic ID ordering. An explicit exact-ID setting selects only that
+headroom and explicit reasoning-disable proof, automatic selection prefers
+unmarked cost, then deterministic ID ordering. An explicit exact-ID setting selects only that
 eligible model, without category or cost re-ranking.
 This does not infer speed, health or quality from effort or model names, and
 does not launch a second candidate if native support is absent.
@@ -176,21 +212,22 @@ reviewed representative latency/accuracy/cost observations and consent, not a
 guess from model names or a timeout suspicion. Review outcomes under #334 before
 claiming the increased default improves live classification.
 
-Request `off` reasoning only when both current supplier metadata advertises it
-and the public prepared model lists an `off` effort. Supplier metadata alone
-does not establish native support: current managed reasoning maps can decline
-`off` even when advertised. The auxiliary adapter does not inherit the route's
-configured Chat reasoning effort: a synthetic high-effort profile previously
-sent `reasoning.effort: high` on the classifier request. Its isolated public
-profile now omits that default while ordinary Chat retains it. This prevents an
-explicit high-effort instruction, not supplier-side thinking.
+The classifier is eligible only when current account metadata advertises
+an explicit protocol-compatible disable mode and the isolated, public prepared
+model exposes `off`. It then
+always requests `off`; otherwise assessment fails closed without dispatching
+the classifier. The classifier-only model mapping serializes the native
+disable form supported by the published adapter: Responses
+`reasoning.effort: "none"`, OpenAI-compatible `reasoning_effort: "none"`, or
+Anthropic `thinking.type: "disabled"`. This mapping is not added to shared
+account models, so ordinary Chat behavior remains unchanged.
 
-Even native `off` can mean omitting the reasoning option rather than sending a
-supplier disable instruction. Do not force `low` or `minimal`: on some protocols
-that enables thinking and enlarges the SDK's requested output budget. Retain
-native assembly, do not change
-shared model maps, guess a wire value or patch Core. No claim that reasoning is
-disabled for all classifiers is made.
+The auxiliary adapter also does not inherit configured Chat reasoning effort:
+its isolated profile omits that default while ordinary Chat retains it. Tools
+and an execution loop are absent. These checks establish the requested wire
+payload in synthetic tests, not that every supplier honors the control
+internally. Models lacking either advertised or native support are not used;
+do not substitute `low` or `minimal`, which can enable reasoning.
 
 Tools and an execution loop are absent. Only locally unknown tasks use one
 classifier call per admitted turn; subsequent steps/retries reuse its result.
@@ -248,9 +285,13 @@ explicit fallback only, not fabricated categories. Unknown/new category values
 remain unclassified with a bounded catalog diagnostic.
 
 Within the first fitting category, use stable positive weighted Session/turn
-allocation: ordinary weight 1, user-marked high-cost weight 0.2, eligible previous
-model multiplier 1.5. Cost is independent of task difficulty and supplier
-category. There is no absolute continuity shortcut or extreme-only gate.
+allocation across all fitting candidates. Ordinary weight 1 has finite
+previous-model multiplier 1.5; high-cost base weight 0.2 decays tenfold to 0.02
+only for the previous model. Every candidate keeps positive opportunity; a lone
+candidate still has share 1. A different model's turn resets the penalty, without
+extra streak state. Cost is independent of task difficulty and supplier
+category; input fit does not prove task success. Never weaken category or
+automatically escalate to establish whether another model can solve the task.
 These are reviewed policy parameters, not measured quality or prices. Once
 admitted, all steps/retries share the decision. No supplier cache savings are
 claimed. See [high-cost requirements](./auto-high-cost.md) and

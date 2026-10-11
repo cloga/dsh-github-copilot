@@ -1,13 +1,14 @@
 import { z } from 'zod'
-import { AUTO_ALLOCATION_POLICY } from './auto-allocation.ts'
+import { AUTO_ALLOCATION_POLICIES, AUTO_ALLOCATION_POLICY } from './auto-allocation.ts'
 import type { AutoSelectionExplanation } from './auto-model-routing.ts'
 
 export const AutoAllocationSummarySchema = z.object({
-  policyVersion: z.literal(AUTO_ALLOCATION_POLICY),
+  policyVersion: z.enum(AUTO_ALLOCATION_POLICIES),
   scope: z.literal('viewed-session-host-lifetime'),
   status: z.enum(['observed', 'not-collected']),
   retainedDecisions: z.number().int().nonnegative().max(128),
   noFitDecisions: z.number().int().nonnegative().max(128),
+  omittedPolicyDecisions: z.number().int().nonnegative().max(128).optional(),
   rowsTruncated: z.boolean(),
   completeHistory: z.literal(false),
   observationStart: z.number().int().nonnegative().nullable(),
@@ -34,10 +35,14 @@ export function summarizeAutoAllocations(
   let noFitDecisions = 0
   let retainedDecisions = 0
   let rowsTruncated = false
+  const policyVersion = explanations.some(row => row.allocation?.policyVersion === AUTO_ALLOCATION_POLICY)
+    ? AUTO_ALLOCATION_POLICY : explanations.find(row => row.allocation !== undefined)?.allocation?.policyVersion ?? AUTO_ALLOCATION_POLICY
+  let omittedPolicyDecisions = 0
   for (const explanation of explanations) {
     if (explanation.method === 'no-fit') { noFitDecisions++; continue }
     const allocation = explanation.allocation
-    if (allocation?.policyVersion !== AUTO_ALLOCATION_POLICY) continue
+    if (allocation === undefined) continue
+    if (allocation.policyVersion !== policyVersion) { omittedPolicyDecisions++; continue }
     retainedDecisions++
     for (const row of allocation.candidates) {
       const key = JSON.stringify([row.modelId, explanation.selectedCategory, row.highCost, row.previous, row.weight])
@@ -55,7 +60,7 @@ export function summarizeAutoAllocations(
     }
   }
   return AutoAllocationSummarySchema.parse({
-    policyVersion: AUTO_ALLOCATION_POLICY, scope: 'viewed-session-host-lifetime',
+    policyVersion, omittedPolicyDecisions, scope: 'viewed-session-host-lifetime',
     status: retainedDecisions + noFitDecisions === 0 ? 'not-collected' : 'observed',
     retainedDecisions, noFitDecisions, rowsTruncated, completeHistory: false, rows: [...rows.values()],
     observationStart: window?.start ?? null, observationEnd: window?.end ?? null,

@@ -1,6 +1,54 @@
 # Changelog
 
-## 0.4.2-alpha.8 (prepared)
+## 0.4.2-alpha.12 (prepared)
+
+- Restore positive opportunity for all fitting same-category candidates instead
+  of v2's hard high-cost deferral. Marked base weight remains 0.2; the previous
+  marked model decays tenfold to 0.02, with ordinary continuity unchanged.
+  No hidden streak counter, permanent penalty, automatic escalation or task
+  success inference. Single/all-marked pools and admitted turns stay usable.
+- Explain high-cost-v3 one-turn recency decay and preserve original v1/v2
+  evidence, summaries and diagnostic cohorts. Sequential synthetic simulations
+  show fewer repeat selections, not measured production quality or savings.
+
+## 0.4.2-alpha.11 (published)
+
+- Prefer fitting unmarked models inside the selected supplier category and defer
+  high-cost peers. Marked-only fallback stays usable without a continuity bonus.
+  Explain the cost tier and preserve v1 historical evidence; no category
+  weakening, task-success inference, automatic escalation or in-turn switch.
+- Preserve a bounded substantive task anchor and its user continuation chain
+  ahead of verbose historical output in the auxiliary classifier projection.
+  Separate incidental omissions from limited task text; missing anchors,
+  truncated task text and task attachments still prevent simple/routine
+  downshift. Actual Chat input and native context admission stay untouched.
+- Remove the fixed unknown example from the classifier instruction and explain
+  that historical omission alone is not evidence of unknown demand. Keep genuine
+  unknown, reasoning off, no tools, one call/no retry and the existing bounds.
+- Expose strict content-free projection facts and the classifier's returned
+  demand in the existing selection explanation. These are diagnostics, not
+  measured classification accuracy or proof of reduced live unknown rates.
+
+## 0.4.2-alpha.10 (published)
+
+- Accept account-advertised protocol-native reasoning disable labels (`none`
+  for Responses/Completions, `disabled` for Anthropic) as well as `off` for
+  isolated Auto classifiers. Missing/empty capabilities remain unproven;
+  ordinary Chat mapping and single-call/no-tools behavior stay unchanged.
+- Capture bounded first-rejection candidate counts and native-off preparation
+  failures in strict ephemeral selection evidence. No-fit logs use fixed codes
+  without IDs, content, credentials or raw errors. Historical missing fields
+  remain unknown; this is not live account root-cause proof.
+
+## 0.4.2-alpha.9 (published)
+
+- Require the auxiliary Auto classifier to use advertised reasoning `off` and
+  the isolated public adapter's native disable mode. Serialize explicit
+  Responses/Completions `none` or Anthropic `disabled`; fail closed when either
+  capability is unavailable. Preserve ordinary Chat mappings and no-tools
+  behavior. Synthetic wire tests do not establish supplier-side implementation.
+
+## 0.4.2-alpha.8 (published)
 
 - Keep every Local diagnostics population independently collapsed by default,
   including Auto. Compact summaries retain status/counts, while collection,

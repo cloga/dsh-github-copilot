@@ -358,6 +358,7 @@ class PreviewAdapter extends PiAiAdapter {
     private readonly refreshRejected: (snapshot: AccountModelSnapshot, signal?: AbortSignal, missingOnly?: boolean) => Promise<void>,
     private readonly requestBudgetSettings: () => Partial<RequestBudgetPolicy>,
     private readonly accountModelSettings: () => Pick<InlineConfig, 'excludedModelIds'>,
+    private readonly classifierReasoningOff = false,
     private readonly replayRecovery?: ReturnType<typeof installReplayRecovery>,
     private readonly requestCheckpoint?: () => void,
     private readonly captureRequest: (signal?: AbortSignal) => void = () => undefined,
@@ -479,7 +480,7 @@ class PreviewAdapter extends PiAiAdapter {
       const signal = AbortSignal.any([lease.signal, ...options.signal === undefined ? [] : [options.signal]])
       if (signal.aborted) throw abortFailure(signal)
       const policy = resolveRequestBudgetPolicy(owner.requestBudgetSettings())
-      const model = accountModelFromDescriptor(lease.descriptor, lease.proof.baseURL)
+      const model = accountModelFromDescriptor(lease.descriptor, lease.proof.baseURL, owner.classifierReasoningOff)
       if (options.reasoningEffort !== undefined) {
         const mapping = Object.entries(model.thinkingLevelMap ?? {}).find(([level]) => level === options.reasoningEffort)?.[1]
         if (typeof mapping !== 'string' || mapping.length === 0) throw failure('COPILOT_PREVIEW_REASONING_UNSUPPORTED', 'INVALID_REQUEST')
@@ -820,7 +821,8 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
         // next independent caller through the shared discovery single flight.
       },
     }
-    const { provider } = createAccountProvider(lease?.snapshot.models ?? [], guard, lease?.proof.baseURL ?? 'https://api.individual.githubcopilot.com')
+    const { provider } = createAccountProvider(lease?.snapshot.models ?? [], guard,
+      lease?.proof.baseURL ?? 'https://api.individual.githubcopilot.com', classifier)
     // Byte-idle retains the original interval; real SSE progress earns only a bounded
     // extra semantic window. WebSocket/auto keep the untouched native policy.
     const profile = resolvedProfile(provider, { ...requestConfig,
@@ -856,8 +858,15 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
       checkpoint?.()
       const snapshot = await discoverSnapshot({ signal })
       checkpoint?.()
-      const model = taskClassifierModel(snapshot.models.filter(model => !excludedModels().has(model.id)),
-        highCost, classifierId)
+      const model = taskClassifierModel(snapshot.models, highCost, classifierId, observation => {
+        observe?.(observation)
+        if (observation.stage === 'candidate-scan' && observation.eligible === 0) {
+          if (observation.candidates === 0) ctx.logger.warn('COPILOT_AUTO_CLASSIFIER_EMPTY_CATALOG')
+          for (const reason of Object.keys(observation.rejected)) {
+            ctx.logger.warn(`COPILOT_AUTO_CLASSIFIER_REJECTED_${reason.toUpperCase().replaceAll('-', '_')}`)
+          }
+        }
+      }, excludedModels())
       if (model === undefined) {
         if (classifierId !== '') ctx.logger.warn('COPILOT_AUTO_CLASSIFIER_CONFIGURED_MODEL_UNAVAILABLE')
         throw failure('COPILOT_AUTO_CLASSIFIER_UNAVAILABLE')
@@ -866,12 +875,13 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
       const revision = lifetime.revision
       const classifierOptionsFor: typeof optionsFor = (lease, hooks) => optionsFor(lease, hooks, true)
       const adapter = new PreviewAdapter(lifetime, classifierOptionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings,
-        undefined, checkpoint)
+        true, undefined, checkpoint)
       try {
         const prepared = await adapter.prepareCall(GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model.id, signal)
         checkpoint?.()
         if (signal.aborted) throw signal.reason
         const offSupported = prepared.model.reasoning?.efforts.some(effort => effort.id === 'off') === true
+        if (!offSupported) ctx.logger.warn('COPILOT_AUTO_CLASSIFIER_NATIVE_OFF_UNAVAILABLE')
         return await classifyTaskWithAdapter(model, input, signal,
           request => prepared.stream(request), observe, offSupported, checkpoint)
       }
@@ -888,7 +898,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     },
   }
   const adapter = new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings,
-    replayRecovery, undefined, signal => ctx.get('githubCopilotSessionAccounts')?.recordRequest(signal))
+    false, replayRecovery, undefined, signal => ctx.get('githubCopilotSessionAccounts')?.recordRequest(signal))
   const pressureCallbacks = { resolve(request: GenerateOptions) {
     const snapshot = source.readSnapshot()
     if (snapshot === undefined || proofFor(snapshot) === undefined) return undefined

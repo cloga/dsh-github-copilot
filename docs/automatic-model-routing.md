@@ -58,7 +58,8 @@ remains authoritative after final framing/attachment projection.
 Task preference uses supplier `model_picker_category`, not capacity, model
 names or reasoning effort as quality rankings. [Task policy](./auto-task-routing.md)
 owns the demand matrix, default semantic assessment, category fallback,
-finite continuity and stable positive-weight same-category allocation.
+high-cost one-turn recency decay, ordinary finite continuity and stable
+positive-weight same-category allocation.
 User-marked high cost is orthogonal to demand and category; see
 [high-cost requirements](./auto-high-cost.md). Future policy changes must read
 the [latest review](./auto-iteration-review.json) before implementation.
