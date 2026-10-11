@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.4.2-alpha.13 (prepared)
+## 0.4.2-alpha.14 (prepared)
+
+- Correlate certified native OAuth refresh writes across Cordis traced credentials
+  faces using the published original service identity. Keep actual credential
+  operations traced; no Core patch, private registry, timing exemption or retry.
+- Exercise real Cordis Services and distinct contexts instead of a same-object
+  mock. Separate service/record isolation, duplicate/missing/delayed notifications
+  and failed/mismatched commits remain fail-closed. A historical unknown-source
+  observation still does not establish who wrote the credential.
+
+## 0.4.2-alpha.13 (published)
 
 - Give every hard-eligible fitting model positive opportunity across supplier
   categories. Replace hard category filtering with per-model target/second/third

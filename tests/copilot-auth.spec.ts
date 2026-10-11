@@ -1,4 +1,4 @@
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import type { Credential } from '@earendil-works/pi-ai'
 import vm from 'node:vm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -92,19 +92,26 @@ describe('GitHub Copilot credential adapter', () => {
       let duplicate: Promise<boolean> | undefined
       const evidence: { phase: string; reason: CredentialChangeReason }[] = []
       const diagnostic = (phase: string, reason: CredentialChangeReason) => { evidence.push({ phase, reason }) }
-      const service = {
-        readRecord: async () => undefined,
-        listRecords: async () => [],
-        deleteRecord: async () => undefined,
-        modifyRecord: async (_key: string, mutate: (value: GrantRecord | undefined) => Promise<GrantRecord | undefined>) => {
+      const observer = ctx.extend()
+      const isolated = new Context()
+      class SyntheticCredentials extends Service {
+        constructor(context: Context) { super(context, 'credentials') }
+        async readRecord() { return undefined }
+        async listRecords() { return [] }
+        async deleteRecord() { return undefined }
+        async modifyRecord(_key: string, mutate: (value: GrantRecord | undefined) => Promise<GrantRecord | undefined>) {
           const record = await mutate(undefined)
-          if (mode !== 'missing' && mode !== 'delayed') result = observeCopilotNativeRefresh(ctx, key, diagnostic)
-          if (mode === 'duplicate') duplicate = observeCopilotNativeRefresh(ctx, key, diagnostic)
+          expect(observeCopilotNativeRefresh(isolated, key)).toBeUndefined()
+          expect(observeCopilotNativeRefresh(observer, 'unrelated')).toBeUndefined()
+          if (mode !== 'missing' && mode !== 'delayed') result = observeCopilotNativeRefresh(observer, key, diagnostic)
+          if (mode === 'duplicate') duplicate = observeCopilotNativeRefresh(observer, key, diagnostic)
           if (mode === 'failed') throw new Error('Synthetic write failure')
           return mode === 'changed' ? { kind: 'grant', payload: { ...next, access: 'external' } } : record
-        },
+        }
       }
-      ctx.get = ((name: string) => name === 'credentials' ? service : undefined) as typeof ctx.get
+      new SyntheticCredentials(ctx)
+      new SyntheticCredentials(isolated)
+      expect(ctx.get('credentials')).not.toBe(observer.get('credentials'))
       expect(observeCopilotNativeRefresh(ctx, key)).toBeUndefined()
       await certifyCopilotNativeRefresh(next, next, async grant => ({
         apiKey: grant.access, baseUrl: 'https://api.individual.githubcopilot.com',
@@ -112,6 +119,7 @@ describe('GitHub Copilot credential adapter', () => {
       const operation = createGitHubCopilotCredentialStore(ctx).modify('github-copilot', async () => next)
       if (mode === 'failed') await expect(operation).rejects.toThrow('Synthetic write failure')
       else await operation
+      if (mode !== 'missing' && mode !== 'delayed') expect(result).toBeDefined()
       if (result) expect(await result).toBe(mode === 'commit')
       if (result) expect(evidence).toContainEqual({ phase: 'commit', reason:
         mode === 'commit' ? 'qualified' : mode === 'duplicate' ? 'duplicate-notification'
