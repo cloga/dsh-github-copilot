@@ -4,11 +4,69 @@ import { assessAutoTask, assessTaskLocally, assessmentInput, TaskAssessmentRevok
 const message = (text: string, role = 'user') => ({ role, content: [{ type: 'text', text }] })
 const signal = () => new AbortController().signal
 describe('bounded contextual Auto task assessment', () => {
+  it('retains a bounded substantive continuation anchor across repeated acknowledgements', () => {
+    const history = [message('Convert the supplied table to CSV.'),
+      ...Array.from({ length: 10 }, () => [
+        message('Continue'), message('Working on the table. '.repeat(100), 'assistant'),
+      ]).flat(), message('Continue')]
+    const input = assessmentInput(history)
+    expect(input.text).toContain('Convert the supplied table to CSV.')
+    expect(input.projection).toMatchObject({ continuationAnchor: 'retained', taskTextLimited: false })
+    expect(input.text.length).toBeLessThanOrEqual(8000)
+  })
+  it('does not turn incidental verbose tool/reasoning omissions into missing task text', async () => {
+    const reasoning = { type: 'reasoning', get text() { throw new Error('READ_REASONING') } }
+    const history = [message('Write a short birthday greeting.'),
+      ...Array.from({ length: 15 }, () => message('Old output '.repeat(300), 'tool')),
+      { role: 'assistant', content: [{ type: 'text', text: 'Ready to continue the greeting.' }, reasoning] },
+      message('Continue')]
+    const input = assessmentInput(history)
+    expect(input.omitted).toBe(true)
+    expect(input.projection).toMatchObject({ historyOmitted: true, taskTextLimited: false,
+      continuationAnchor: 'retained' })
+    const result = await assessAutoTask(history, { enabled: true, signal: signal(), diagnostic: vi.fn(),
+      classify: async () => '{"demand":"routine","signals":["continuation"]}' })
+    expect(result).toMatchObject({ demand: 'routine', semantic: { validation: 'valid',
+      classifierDemand: 'routine', projection: { taskTextLimited: false, historyOmitted: true } } })
+  })
+  it('does not guess a continuation anchor outside the bounded user window', async () => {
+    const history = [message('Write a greeting.'),
+      ...Array.from({ length: 13 }, () => message('Continue'))]
+    const input = assessmentInput(history)
+    expect(input.projection).toMatchObject({ continuationAnchor: 'missing', taskTextLimited: true })
+    expect(await assessAutoTask(history, { enabled: true, signal: signal(), diagnostic: vi.fn(),
+      classify: async () => '{"demand":"routine","signals":[]}' }))
+      .toMatchObject({ demand: 'unknown', diagnostic: 'context-omitted',
+        semantic: { classifierDemand: 'routine' } })
+  })
+  it('keeps nontext instructions inside the continuation chain conservative without reading their contents', async () => {
+    const image = { type: 'image', get attachment() { throw new Error('READ_ATTACHMENT') } }
+    const history = [message('Create a greeting.'),
+      { role: 'user', content: [{ type: 'text', text: 'Continue' }, image] },
+      message('Continue'), message('Continue')]
+    expect(assessmentInput(history).projection).toMatchObject({ taskTextLimited: true,
+      continuationAnchor: 'retained' })
+    expect(await assessAutoTask(history, { enabled: true, signal: signal(), diagnostic: vi.fn(),
+      classify: async () => '{"demand":"simple","signals":[]}' }))
+      .toMatchObject({ demand: 'unknown', diagnostic: 'context-omitted' })
+  })
+  it('keeps a valid unknown result unknown even when all task text is retained', async () => {
+    expect(await assessAutoTask([message('Decide what I should do.')], {
+      enabled: true, signal: signal(), diagnostic: vi.fn(),
+      classify: async () => '{"demand":"unknown","signals":["insufficient-evidence"]}',
+    })).toMatchObject({ demand: 'unknown', source: 'semantic',
+      semantic: { classifierDemand: 'unknown', validation: 'valid', projection: { taskTextLimited: false } } })
+  })
+  it('uses the nearest substantive continuation anchor rather than an older unrelated task', () => {
+    const input = assessmentInput([message('An older task.'), message('A newer task.'), message('Continue')])
+    expect(input.projection).toMatchObject({ continuationAnchor: 'retained', taskTextLimited: false })
+    expect(input.text).toContain('A newer task.')
+  })
   it('allows a response after the old eight-second budget under the new bounded default', async () => {
     let now = 0
     const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
     try {
-      const result = await assessAutoTask([message('Continue')], {
+      const result = await assessAutoTask([message('Write a short greeting.'), message('Continue')], {
         enabled: true, signal: signal(), diagnostic: vi.fn(),
         classify: async () => {
           now = 9000

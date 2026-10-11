@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import { classifyTaskWithAdapter, taskClassifierModel } from '../src/auto-task-classifier.ts'
-import { assessmentEvidence, SemanticAssessmentEvidenceSchema } from '../src/auto-assessment-evidence.ts'
+import { AssessmentProjectionSchema, assessmentEvidence, SemanticAssessmentEvidenceSchema } from '../src/auto-assessment-evidence.ts'
 const model: AccountModelDescriptor = {
   id: 'synthetic-arbitrary', name: 'Arbitrary', category: 'lightweight', api: 'openai-responses',
   contextWindow: 64_000, maxTokens: 8000, input: ['text'],
@@ -11,6 +11,23 @@ const model: AccountModelDescriptor = {
     apiSource: 'advertised-native', policySource: 'server-enabled', contextWindowSource: 'max_context_window_tokens' },
 }
 describe('concrete managed task classifier', () => {
+  it('keeps projection diagnostics strict, bounded and separate from failed result validation', () => {
+    const projection = { retainedMessages: 12, historyOmitted: true, taskTextLimited: false,
+      continuationAnchor: 'retained' as const }
+    expect(AssessmentProjectionSchema.safeParse(projection).success).toBe(true)
+    for (const invalid of [{ ...projection, retainedMessages: 13 }, { ...projection, rawText: 'PRIVATE' },
+      { ...projection, continuationAnchor: 'missing' }, { ...projection, retainedMessages: 0 }]) {
+      expect(AssessmentProjectionSchema.safeParse(invalid).success).toBe(false)
+    }
+    const evidence = assessmentEvidence(30000)
+    evidence.observe({ stage: 'context-projection', projection })
+    evidence.observe({ stage: 'classified', demand: 'unknown' })
+    const snapshot = evidence.finish('valid')
+    expect(snapshot).toMatchObject({ projection, classifierDemand: 'unknown' })
+    expect(SemanticAssessmentEvidenceSchema.safeParse({ ...snapshot, validation: 'invalid' }).success).toBe(false)
+    evidence.observe({ stage: 'classified', demand: 'simple' })
+    expect(snapshot.classifierDemand).toBe('unknown')
+  })
   it('accepts protocol-native disable labels without requiring the Core off spelling', () => {
     for (const api of ['openai-responses', 'openai-completions', 'anthropic-messages'] as const) {
       const candidate = { ...model, api, reasoning: {
@@ -91,10 +108,14 @@ describe('concrete managed task classifier', () => {
       expect(request.purpose).toBeUndefined()
       expect(request.reasoningEffort).toBe('off')
       expect(JSON.stringify(request.messages)).toContain('conversationData')
+      expect(JSON.stringify(request.messages)).toContain('\\"taskTextLimited\\":false')
+      expect(request.system).not.toContain('Return compact JSON only: {"demand":"unknown"')
+      expect(request.system).toContain('Do not return unknown solely')
       yield { type: 'text-delta', index: 0, text: '{"demand":"routine","signals":[]}' }
       yield { type: 'finish', reason: { kind: 'stop' } }
     })
-    expect(await classifyTaskWithAdapter(classifier, { text: 'untrusted task', omitted: false },
+    expect(await classifyTaskWithAdapter(classifier, { text: 'untrusted task', omitted: false,
+      projection: { retainedMessages: 1, historyOmitted: false, taskTextLimited: false, continuationAnchor: 'not-needed' } },
       new AbortController().signal, stream, undefined, true)).toContain('"routine"')
     expect(stream).toHaveBeenCalledOnce()
   })

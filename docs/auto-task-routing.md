@@ -140,17 +140,31 @@ existing managed native adapter, never an Auto ID and never `ctx.llm` routing
 recursion. It has no tools, bounded text-only assessment context, bounded JSON
 output, one deadline, cancellation and no new retry loop. Text from messages is
 untrusted data, not router instructions. Files/images/reasoning/replay bodies
-are not read; omitted context makes classification uncertain and cannot justify
-downshifting. Assessment input is a separate projection: the actual chat
+are not read; limited task text cannot justify downshifting. Assessment input is a separate projection: the actual chat
 messages, system prompt, tools, attachments and history stay untouched.
 
 Only locally unknown tasks invoke the enabled assessment. Context packing keeps
-the current and nearest preceding user requests before recent output, then
-restores chronological order. At most twelve complete JSON rows, 1600 text
+the current and nearest preceding user requests before recent output. An explicit
+continuation also reserves the nearest substantive user anchor among the previous
+twelve user messages and the intervening user chain, then restores chronological
+order. No expired anchor, task summary or semantic task boundary is invented.
+At most twelve complete JSON rows, 1600 text
 characters per row and 8000 serialized characters are retained; JSON escape
 expansion is included in this bound. Any truncation, skipped row or non-text
-content still marks omitted context and prevents a semantic simple/routine
-downshift. Prioritization does not prove omitted output irrelevant.
+content still marks projection omission. A missing current request/continuation
+anchor, a missing reserved user row, truncated reserved task text, or nontext
+content in the reserved user chain separately marks `taskTextLimited` and prevents
+a semantic simple/routine downshift. Incidental assistant/tool/history omissions
+alone no longer force that downgrade. The classifier must still judge whether
+the retained evidence establishes demand; retained text is not semantic
+completeness and missing required details must remain unknown.
+
+The instruction requests a schema without a pre-filled unknown answer and
+distinguishes projected data omissions from missing relevant task evidence.
+Unknown is permitted for genuinely indeterminate demand, not required merely
+because a long conversation exceeds the projection bounds. No reasoning/tool
+enablement, second inference, larger context/output budget or full-history
+serialization is introduced.
 
 The strict result contains demand (`simple`, `routine`, `complex`, `unknown`)
 and finite evidence signals, not a model ID, raw reasoning or an uncalibrated
@@ -159,6 +173,13 @@ assessment with an explicit diagnostic. Caller cancellation aborts the turn
 instead of falling back. Credential, metadata and account revocation remain
 fatal through existing lease/admission guards. Extra calls incur supplier
 charges and latency, separate from native chat Usage and without inferred cost.
+
+Strict ephemeral explanation evidence optionally records retained row count
+(0–12), the projection omission flag, task-text limitation, fixed continuation
+anchor status and the classifier's decoded demand. No text, attachment values
+or new persistent population is recorded. Legacy absent fields stay absent.
+These fields distinguish a valid classifier `unknown` from plugin-side
+simple/routine blocking; they do not establish accuracy or a live unknown rate.
 
 ## Auxiliary latency evidence and bounded output (#272)
 
@@ -264,9 +285,12 @@ explicit fallback only, not fabricated categories. Unknown/new category values
 remain unclassified with a bounded catalog diagnostic.
 
 Within the first fitting category, use stable positive weighted Session/turn
-allocation: ordinary weight 1, user-marked high-cost weight 0.2, eligible previous
-model multiplier 1.5. Cost is independent of task difficulty and supplier
-category. There is no absolute continuity shortcut or extreme-only gate.
+allocation within the unmarked tier when available, otherwise the high-cost
+fallback tier. Ordinary weight 1 has finite previous-model multiplier 1.5;
+marked weight 0.2 has no continuity bonus. Deferred candidates have no allocation
+opportunity in that turn. Cost is independent of task difficulty and supplier
+category; input fit does not prove task success. Never weaken category or
+automatically escalate to establish whether another model can solve the task.
 These are reviewed policy parameters, not measured quality or prices. Once
 admitted, all steps/retries share the decision. No supplier cache savings are
 claimed. See [high-cost requirements](./auto-high-cost.md) and

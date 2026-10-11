@@ -42,28 +42,46 @@ unchanged official Core fixture, not that the affected live Host read the mark
 before the historical Astra decision. Do not hardcode a model, change live
 preferences or rewrite a frozen explanation to manufacture a repair.
 
-## Routing policy v1
+## Routing policy v2 (#410)
 
 1. Account ownership, metadata validity, exclusion, input modality and input
    headroom are hard requirements.
 2. Assess each new turn using existing contextual local/semantic evidence.
    Preserve existing demand categories and supplier-category fallback.
-3. Inside the first fitting category only, give ordinary candidates weight 1
-   and marked candidates weight 0.2. Multiply an eligible previous model's
-   weight by 1.5. Continuity is finite, never an early unconditional return.
+3. Inside the first fitting category only, use unmarked candidates if any fit.
+   Defer fitting marked candidates; otherwise use the marked-only fallback tier.
+   Ordinary candidates have weight 1 and an eligible previous ordinary model
+   receives multiplier 1.5. Marked candidates have weight 0.2 without continuity.
 4. Select from cumulative positive weights using a stable Agent/turn seed.
    Capture the selected ID, candidate weights and conditional expected shares.
    No additional model calls are made to give candidates a chance.
 5. When no model fits, retain the largest-input-budget native recovery path.
    Cost cannot justify choosing a model that cannot fit.
 
-These initial parameters are a routing policy to evaluate, not calibrated
-quality or billing facts. A marked previous model has weight 0.3, lower than an
-ordinary peer's 1. An ordinary previous model has 1.5. A lone fitting marked
-model is selected; an all-marked pool remains usable. A marked Fast model can
-answer a simple task: it has a smaller share, not an extreme-only gate.
-Every eligible final-pool candidate has positive opportunity; finite workloads
-need not visit every model. Stable seeds do not prove independent random trials.
+This is a user-requested stronger cost preference, not calibrated quality or
+billing facts. A marked previous model cannot retain the turn when an unmarked
+peer fits the selected category. A lone fitting marked model is selected and an
+all-marked pool remains usable. A marked Lightweight model can still serve a
+simple task if that category has no fitting unmarked peer. Fit and supplier
+category cannot prove peers can solve the task; no automatic escalation, extra
+calls, in-turn switch or lower-category substitution is introduced.
+Every participating final-tier candidate has positive opportunity; deferred
+marked candidates have none. The bounded explanation reports their count,
+not fake positive shares. Stable seeds do not prove independent random trials.
+
+Historical v1 remains readable with its original mixed-pool weights and marked
+continuity multiplier. Persistent cohorts retain original policy versions.
+The Session summary separates incompatible policy cohorts and reports omitted
+decisions instead of relabeling them or merging different opportunities.
+
+Read-only October 11 alpha.10 aggregates showed 3 Astra selections against
+2.868 summed expected selections across 18 opportunities, without Session or
+sequence identity. The requested local Session's bounded native metadata showed
+five Sol turns followed by two Astra turns; its last 178 messages belonged to
+one frozen turn. This does not establish a distribution violation. A conditional
+two-peer seeded reproduction matches the two Astra choices, but the exact
+historical pool was not retained. V2 implements the user's stricter preference,
+not a claimed repair to a proven random-number defect.
 
 The auxiliary semantic classifier is a separate call, not another main-turn
 allocation. It prefers an unmarked eligible Lightweight classifier; if only
@@ -80,7 +98,8 @@ Synthetic acceptance covers ordinary/marked/all-marked/single pools, every
 supplier category, exclusions, capacity, category changes, stable seeds,
 preference changes and admitted-turn freezing. Distribution checks use large
 declared seed sets and compare actual allocation with conditional expected
-shares, including a marked previous model.
+shares, including a marked previous model in a marked-only tier, deferred
+high-cost candidates, and backward-compatible v1 evidence.
 
 Runtime evidence must distinguish a selected decision from native attempted,
 delivered, finished, failed and cancelled calls. Count a decision once per

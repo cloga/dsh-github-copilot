@@ -34,7 +34,15 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
         : `This task was assessed as ${demand[explanation.assessment.demand]}; the preference policy selected ${category[explanation.selectedCategory]}.`
   const allocation = explanation.allocation
   const selected = allocation?.candidates.find(row => row.modelId === allocation.selectedModelId)
-  const choice = explanation.method === 'weighted-distribution'
+  const tier = allocation?.policyVersion !== 'high-cost-v2' ? ''
+    : (allocation.deferredHighCostCount ?? 0) > 0
+      ? zh ? `本轮成本层有未标记候选，暂缓 ${allocation.deferredHighCostCount} 个同类高成本候选。`
+        : `The unmarked cost tier deferred ${allocation.deferredHighCostCount} fitting high-cost category candidates.`
+      : selected?.highCost
+        ? zh ? '该分类无可容纳的未标记候选，使用高成本兜底层；高成本模型不享受连续性加权。'
+          : 'No fitting unmarked candidate exists in this category; the high-cost fallback tier has no continuity bonus.'
+        : ''
+  const weightedChoice = explanation.method === 'weighted-distribution'
     ? selected === undefined
       ? zh ? '按同类正权重政策分配；本轮候选观察未保留，不从当前设置推断。连续性仅为有限加权。'
         : 'Allocated by positive within-category weights. Candidate observations were not retained; current settings cannot reconstruct them. Continuity is a finite bonus.'
@@ -49,6 +57,7 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
         ? zh ? `该分类有 ${explanation.categoryCandidateCount} 个可容纳候选；按本轮稳定等权规则选中，不代表质量排名。`
           : `Selected among ${explanation.categoryCandidateCount} fitting category candidates by stable equal-weight allocation, not a quality ranking.`
         : zh ? '所有候选均不适配；这不是成功的偏好匹配。' : 'All candidates are oversized; this is not a successful preference match.'
+  const choice = tier === '' ? weightedChoice : `${tier} ${weightedChoice}`
   const diagnostic = explanation.assessment.diagnostic === undefined ? undefined
     : explanation.assessment.diagnostic === 'disabled'
       ? zh ? '语义判断实验未开启；这是本地规则的判断边界，不代表会话没有上下文。'
@@ -83,6 +92,17 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
   const preparationDetail = evidence?.preparationFailure === undefined ? ''
     : zh ? ' 原生模型准备未提供 off 控制；未发起分类调用。'
       : 'Native model preparation did not expose off; classifier call was not started.'
+  const projection = evidence?.projection
+  const projectionDetail = projection === undefined ? ''
+    : zh ? ` 判断文本：保留 ${projection.retainedMessages} 条；历史省略${projection.historyOmitted ? '有' : '无'}；任务文本${projection.taskTextLimited ? '受限' : '已保留'}；续接目标${{
+      'not-needed': '不适用', retained: '已保留', missing: '未找到',
+    }[projection.continuationAnchor]}。文本保留不保证语义信息充分。`
+      : ` Assessment text: ${projection.retainedMessages} rows retained; historical omissions ${projection.historyOmitted ? 'present' : 'absent'}; task text ${projection.taskTextLimited ? 'limited' : 'retained'}; continuation anchor ${{
+        'not-needed': 'not applicable', retained: 'retained', missing: 'missing',
+      }[projection.continuationAnchor]}. Retained text does not guarantee sufficient task evidence.`
+  const classifierDetail = evidence?.classifierDemand === undefined ? ''
+    : zh ? ` 分类器返回：${demand[evidence.classifierDemand]}。`
+      : ` Classifier returned: ${evidence.classifierDemand}.`
   const semantic = evidence === undefined ? undefined
     : zh ? `辅助分类模型：${evidence.modelId ?? '未选定'}。判断总耗时 ${evidence.elapsedMs} ms，等待预算 ${evidence.budgetMs} ms。${evidence.adapterStartedMs === undefined
       ? '尚未开始适配器调用。' : `适配器调用始于 ${evidence.adapterStartedMs} ms。`}${evidence.firstTextMs === undefined
@@ -97,7 +117,7 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
           'not-validated': 'not completed', valid: 'passed', invalid: 'invalid', 'context-omitted': 'format passed; omitted context prevented downshift',
         }[evidence.validation]}. These auxiliary milestones do not prove a network/model latency cause and are not main-answer Usage.`
   return { conclusion, choice, diagnostic,
-    semantic: semantic === undefined ? undefined : `${semantic}${candidateDetail}${preparationDetail}`,
+    semantic: semantic === undefined ? undefined : `${semantic}${candidateDetail}${preparationDetail}${projectionDetail}${classifierDetail}`,
     assessment: `${zh ? '判断来源：' : 'Assessment: '}${explanation.assessment.source === 'semantic'
       ? zh ? '语义分类' : 'semantic classification' : zh ? '本地规则' : 'local rules'}${explanation.assessment.signals.length
       ? ` — ${explanation.assessment.signals.map(signal => signals[signal]).join(zh ? '、' : ', ')}` : ''}` }

@@ -63,7 +63,8 @@ export async function classifyTaskWithAdapter(
     provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: model.id, signal,
     system: TASK_ASSESSMENT_INSTRUCTION,
     messages: [createUserMessage({ source: { kind: 'user' }, content: [{
-      type: 'text', text: JSON.stringify({ omittedContext: input.omitted, conversationData: input.text }),
+      type: 'text', text: JSON.stringify({ omittedContext: input.omitted, projection: input.projection,
+        conversationData: input.text }),
     }] })],
     maxTokens: TASK_CLASSIFIER_MAX_TOKENS,
     reasoningEffort: ReasoningEffortId('off'),

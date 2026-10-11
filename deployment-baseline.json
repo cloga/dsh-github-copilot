@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.2-alpha.10"
+    "version": "0.4.2-alpha.11"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1341,6 +1341,8 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/auto-allocation.ts", "marker": "high-cost-v1"},
+        {"file": "src/auto-allocation.ts", "marker": "high-cost-v2"},
+        {"file": "src/auto-allocation.ts", "marker": "deferredHighCostCount"},
         {"file": "src/config.ts", "marker": "highCostModelIds"},
         {"file": "src/model-preferences-card.ts", "marker": "High cost"},
         {"file": "src/turn-selection-host.ts", "marker": "allocationSummary"},
@@ -1349,7 +1351,9 @@
         {"file": "docs/auto-high-cost.md", "marker": "separate acceptance"}
       ],
       "tests": [
-        {"file": "tests/auto-allocation.spec.ts", "name": "gives every candidate opportunity without an absolute previous-model shortcut"},
+        {"file": "tests/auto-allocation.spec.ts", "name": "simulates 20000 turns per previous state without selecting a deferred high-cost peer"},
+        {"file": "tests/auto-allocation.spec.ts", "name": "keeps v1 historical weights readable without relabeling them as v2"},
+        {"file": "tests/auto-allocation-evidence.spec.ts", "name": "keeps legacy-only summaries v1 and separates mixed-policy decisions explicitly"},
         {"file": "tests/auto-allocation-evidence.spec.ts", "name": "counts each turn once, bounds retention and never recovers missing evidence after removal"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "keeps costly Fast models eligible and evidence opt-out independent of the selected route"},
         {"file": "tests/authorization-controller.spec.ts", "name": "saves orthogonal high-cost preferences narrowly without credential or Session reads"},

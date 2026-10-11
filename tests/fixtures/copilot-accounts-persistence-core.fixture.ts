@@ -57,10 +57,11 @@ async function verifySavedAutoPreferences(profile: Context, config: ResolvedInli
       async () => ({ provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: GITHUB_COPILOT_AUTO_MODEL_ID }))
     const captured = ctx.githubCopilotTurnSelection.get(agent, 1)
     expect(captured.mode === 'auto' && captured.explanation?.allocation?.candidates)
-      .toEqual(expect.arrayContaining([
-        expect.objectContaining({ modelId: 'synthetic-costly-fast', highCost: true, weight: 0.2, expectedShare: 1 / 6 }),
-        expect.objectContaining({ modelId: 'synthetic-peer', highCost: false, weight: 1, expectedShare: 5 / 6 }),
-      ]))
+      .toEqual([
+        expect.objectContaining({ modelId: 'synthetic-peer', highCost: false, weight: 1, expectedShare: 1 }),
+      ])
+    expect(captured.mode === 'auto' && captured.explanation?.allocation)
+      .toMatchObject({ policyVersion: 'high-cost-v2', deferredHighCostCount: 1 })
     expect(highCost).toHaveBeenCalledTimes(1)
     expect(agent.session.append).not.toHaveBeenCalled()
   } finally { dispose(); await ctx.fiber.dispose() }

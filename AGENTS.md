@@ -160,6 +160,15 @@ first-rejection reason per candidate and distinguish native off preparation
 failure; no candidate IDs, raw metadata, prompts or new persistent population.
 No-fit warnings contain fixed codes only. Legacy absent evidence stays unknown.
 
+Auxiliary context projection reserves current/nearest user text and, for exact
+continuations, a substantive anchor within twelve preceding user messages plus
+its user chain. Keep 12 rows/1600 characters per row/8000 serialized characters.
+Task text limitations, absent anchors and task nontext content block downshift;
+incidental history omissions alone do not. Retained text is not semantic
+completeness. Preserve genuine classifier unknown, off/no-tools/one-call
+behavior and native Chat input. Optional strict projection/returned-demand
+evidence is content-free and ephemeral, never a new persistent population.
+
 - Explicit replay recovery (#279, #289) is default-off and bound to the initiating native request signal, Session, model and current account proof. Only exact verified scope failures capture bounded full-item fingerprints; no replay bytes reach Client or storage. Public Session running/error snapshots trigger read-only notices on open/settled turns, never polling or durable recovery events. Two-stage confirmation chooses next matching turn (all steps/retries until turn/end) or bounded Session consent, omitting matching old encrypted items and their item summaries only on outgoing requests, never durable history or new reasoning. Preserve get/setEnabled descriptor identities and legacy session-consent semantics; authorize is additive. Active-turn writes, ambient-scope calls and automatic retries are forbidden. Expiry, disposal and proof discontinuity revoke evidence. See `docs/model-compatibility-acceptance.md`.
 
 - Do not implement a second general wire adapter or independently maintained static Copilot model catalog. The account-scoped route composes the published adapter and SDK with validated supplier metadata.
@@ -359,9 +368,13 @@ Completed-turn Usage diagnostics (#259) are read-only plugin conversation data a
 Auto task routing (#258) uses current `model_picker_category` facts, never model
 names, effort or context capacity as a quality category. Hard eligibility/input
 fit precede task/preference policy; unknown category and uncertain task evidence
-remain explicit. Within the first fitting category, apply positive cost weights
-(ordinary 1, marked 0.2) and finite continuity (previous model multiplier 1.5),
-never unconditional retention or extreme-only cost gating. Capture actual reasons once
+remain explicit. Within the first fitting category, high-cost-v2 uses the
+unmarked tier whenever it has fitting candidates; otherwise use the marked tier.
+Ordinary weight 1 receives finite previous-model multiplier 1.5; marked weight
+0.2 never receives continuity. Preserve positive within-tier opportunity and v1
+historical codecs/cohorts, and disclose deferred candidates. Fit is not task
+success; never switch categories for cost, infer incapability or add escalation.
+Capture actual reasons once
 per turn without durable decision events or changing Usage.
 `autoSemanticAssessment` is default-on by explicit user rollout request (#267),
 only for locally unknown demand; preserve explicit false opt-out. One bounded concrete

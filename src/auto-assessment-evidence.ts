@@ -2,6 +2,14 @@ import { z } from 'zod'
 
 const milliseconds = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
 const candidateCount = z.number().int().min(0).max(512)
+export const AssessmentProjectionSchema = z.object({
+  retainedMessages: z.number().int().min(0).max(12),
+  historyOmitted: z.boolean(),
+  taskTextLimited: z.boolean(),
+  continuationAnchor: z.enum(['not-needed', 'retained', 'missing']),
+}).strict().refine(value => value.taskTextLimited
+  || value.retainedMessages > 0 && value.continuationAnchor !== 'missing', 'Inconsistent task text evidence')
+export type AssessmentProjection = Readonly<z.infer<typeof AssessmentProjectionSchema>>
 export const ClassifierRejectionSchema = z.enum([
   'excluded', 'configured-id', 'category', 'input', 'reasoning-disable-unproven', 'budget',
 ])
@@ -24,6 +32,8 @@ export const SemanticAssessmentEvidenceSchema = z.object({
   validation: z.enum(['not-validated', 'valid', 'invalid', 'context-omitted']),
   candidateScan: candidateScan.optional(),
   preparationFailure: z.enum(['native-off-unavailable']).optional(),
+  projection: AssessmentProjectionSchema.optional(),
+  classifierDemand: z.enum(['simple', 'routine', 'complex', 'unknown']).optional(),
 }).strict().superRefine((value, ctx) => {
   if (value.adapterStartedMs !== undefined && value.adapterStartedMs > value.elapsedMs
     || value.firstTextMs !== undefined && (value.adapterStartedMs === undefined
@@ -36,12 +46,15 @@ export const SemanticAssessmentEvidenceSchema = z.object({
     || value.stage === 'finished' && value.nativeFinish === undefined
     || value.nativeFinish !== undefined && value.stage !== 'finished'
     || value.outputCharacters > 0 && value.firstTextMs === undefined
-    || value.firstTextMs !== undefined && value.outputCharacters === 0) {
+    || value.firstTextMs !== undefined && value.outputCharacters === 0
+    || value.classifierDemand !== undefined && !['valid', 'context-omitted'].includes(value.validation)) {
     ctx.addIssue({ code: 'custom', message: 'Inconsistent assessment phase' })
   }
 })
 export type SemanticAssessmentEvidence = Readonly<z.infer<typeof SemanticAssessmentEvidenceSchema>>
 export type TaskClassifierObservation =
+  | { readonly stage: 'context-projection'; readonly projection: AssessmentProjection }
+  | { readonly stage: 'classified'; readonly demand: NonNullable<SemanticAssessmentEvidence['classifierDemand']> }
   | { readonly stage: 'candidate-scan'; readonly candidates: number; readonly eligible: number;
     readonly rejected: Partial<Record<ClassifierRejection, number>> }
   | { readonly stage: 'preparation-failed'; readonly reason: 'native-off-unavailable' }
@@ -65,7 +78,11 @@ export function assessmentEvidence(budgetMs: number): {
   return {
     observe(observation) {
       if (closed) return
-      if (observation.stage === 'candidate-scan') {
+      if (observation.stage === 'context-projection') {
+        evidence = { ...evidence, projection: AssessmentProjectionSchema.parse(observation.projection) }
+      } else if (observation.stage === 'classified') {
+        evidence = { ...evidence, classifierDemand: observation.demand }
+      } else if (observation.stage === 'candidate-scan') {
         evidence = { ...evidence, candidateScan: candidateScan.parse({
           candidates: observation.candidates, eligible: observation.eligible, rejected: observation.rejected,
         }) }
