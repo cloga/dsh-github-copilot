@@ -9,14 +9,24 @@ const explanation: AutoSelectionExplanation = {
   fallback: false, method: 'continuity',
 }
 
-it.each(['en', 'zh'])('explains deferred cost tier and marked-only fallback without implying task failure (%s)', locale => {
-  const tier = { ...explanation, method: 'only-candidate' as const, categoryCandidateCount: 1,
+it.each(['en', 'zh'])('explains positive high-cost opportunity and recency decay without implying task failure (%s)', locale => {
+  const tier = { ...explanation, method: 'weighted-distribution' as const, categoryCandidateCount: 2,
     allocation: allocateAutoModel([{ id: 'ordinary' }, { id: 'marked' }], ['marked'], 'marked', 1) }
   const text = selectionExplanation(tier, locale).choice
-  expect(text).toContain(locale === 'en' ? 'deferred 1' : '暂缓 1')
+  expect(text).toContain(locale === 'en' ? 'decays to 0.02' : '衰减至 0.02')
+  expect(text).toContain(locale === 'en' ? 'positive opportunity' : '正机会')
   const fallback = selectionExplanation({ ...tier,
+    method: 'only-candidate', categoryCandidateCount: 1,
     allocation: allocateAutoModel([{ id: 'marked' }], ['marked'], 'marked', 1) }, locale).choice
-  expect(fallback).toContain(locale === 'en' ? 'no continuity bonus' : '不享受连续性加权')
+  expect(fallback).toContain(locale === 'en' ? 'one-turn recency' : '一轮近期')
+})
+
+it('retains historical v2 hard-deferral explanation rather than describing it as decay', () => {
+  const text = selectionExplanation({ ...explanation, method: 'only-candidate', categoryCandidateCount: 1,
+    allocation: { policyVersion: 'high-cost-v2', deferredHighCostCount: 1, selectedModelId: 'ordinary',
+      candidates: [{ modelId: 'ordinary', highCost: false, previous: false, weight: 1, expectedShare: 1 }] } }, 'en').choice
+  expect(text).toContain('deferred 1')
+  expect(text).not.toContain('decays to')
 })
 
 it('distinguishes local rule coverage from absent conversation context in both languages', () => {

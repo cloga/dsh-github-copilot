@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { normalizeExcludedModelIds } from './model-exclusions.ts'
 
-export const AUTO_ALLOCATION_POLICIES = ['high-cost-v1', 'high-cost-v2'] as const
-export const AUTO_ALLOCATION_POLICY = 'high-cost-v2'
+export const AUTO_ALLOCATION_POLICIES = ['high-cost-v1', 'high-cost-v2', 'high-cost-v3'] as const
+export const AUTO_ALLOCATION_POLICY = 'high-cost-v3'
 export const AutoAllocationSchema = z.object({
   policyVersion: z.enum(AUTO_ALLOCATION_POLICIES),
   deferredHighCostCount: z.number().int().min(0).max(511).optional(),
@@ -17,14 +17,16 @@ export const AutoAllocationSchema = z.object({
 }).strict().refine(value => {
   const total = value.candidates.reduce((sum, row) => sum + row.weight, 0)
   const legacy = value.policyVersion === 'high-cost-v1'
-  const tierValid = legacy ? value.deferredHighCostCount === undefined
+  const decay = value.policyVersion === 'high-cost-v3'
+  const tierValid = legacy || decay ? value.deferredHighCostCount === undefined
     : value.deferredHighCostCount !== undefined && value.candidates.length + value.deferredHighCostCount <= 512
       && value.candidates.every(row => row.highCost === value.candidates[0]!.highCost)
       && (!value.candidates[0]!.highCost || value.deferredHighCostCount === 0)
   return tierValid && new Set(value.candidates.map(row => row.modelId)).size === value.candidates.length
     && value.candidates.some(row => row.modelId === value.selectedModelId)
     && value.candidates.filter(row => row.previous).length <= 1
-    && value.candidates.every(row => row.weight === (row.highCost ? 2 : 10) * (row.previous && (legacy || !row.highCost) ? 1.5 : 1) / 10
+    && value.candidates.every(row => row.weight === (decay && row.highCost && row.previous ? 2
+      : (row.highCost ? 20 : 100) * (row.previous && (legacy || !row.highCost) ? 1.5 : 1)) / 100
       && Math.abs(row.expectedShare - row.weight / total) <= 1e-12)
 }, { message: 'Invalid allocation policy evidence' })
 type AllocationValue = z.infer<typeof AutoAllocationSchema>
@@ -54,12 +56,10 @@ export function allocateAutoModel(
     throw new Error('COPILOT_AUTO_ALLOCATION_INVALID')
   }
   const marked = new Set(normalizeHighCostModelIds(highCostModelIds))
-  const unmarked = pool.filter(model => !marked.has(model.id))
-  const participating = unmarked.length > 0 ? unmarked : pool
-  const rows = participating.map(model => {
+  const rows = pool.map(model => {
     const highCost = marked.has(model.id)
     const previous = model.id === previousModelId
-    const units = (highCost ? 2 : 10) * (previous && !highCost ? 1.5 : 1)
+    const units = highCost ? previous ? 2 : 20 : previous ? 150 : 100
     return { modelId: model.id, highCost, previous, units }
   })
   const total = rows.reduce((sum, row) => sum + row.units, 0)
@@ -74,10 +74,9 @@ export function allocateAutoModel(
   })!
   return Object.freeze({
     policyVersion: AUTO_ALLOCATION_POLICY,
-    deferredHighCostCount: pool.length - participating.length,
     selectedModelId: selected.modelId,
     candidates: Object.freeze(rows.map(({ units, ...row }) => Object.freeze({
-      ...row, weight: units / 10, expectedShare: units / total,
+      ...row, weight: units / 100, expectedShare: units / total,
     }))),
   })
 }

@@ -31,7 +31,7 @@ test('the current descriptive assessment review retains insufficient evidence an
   assert.equal(result.sampleCount, 63)
   assert.equal(result.evidenceTruthVerified, false)
   assert.match(report.observation.limitations, /No Session IDs or sequence in aggregates/)
-  assert.equal(report.policyVersion, 'high-cost-v2')
+  assert.equal(report.policyVersion, 'high-cost-v3')
   assert.match(report.decision, /first fitting supplier category/)
   assert.match(report.decision, /no automatic escalation/)
   assert.match(report.followUp.trigger, /200 new decisions/)

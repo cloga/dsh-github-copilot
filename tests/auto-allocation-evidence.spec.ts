@@ -16,8 +16,8 @@ it('sums conditional opportunities and selections rather than assuming equal can
   expect(summary).toMatchObject({ retainedDecisions: 2, completeHistory: false })
   expect(summary.rows.reduce((sum, row) => sum + row.selections, 0)).toBe(2)
   expect(summary.rows.reduce((sum, row) => sum + row.expectedSelections, 0)).toBeCloseTo(2)
-  expect(summary.rows.find(row => row.highCost)).toBeUndefined()
-  expect(summary.rows[0]).toMatchObject({ opportunities: 2, weight: 1, expectedSelections: 2 })
+  expect(summary.rows.find(row => row.highCost)).toMatchObject({ opportunities: 2, weight: 0.2 })
+  expect(summary.rows[0]).toMatchObject({ opportunities: 2, weight: 1, expectedSelections: 5 / 3 })
   expect(summarizeAutoAllocations([])).toMatchObject({ status: 'not-collected', rows: [] })
 })
 
@@ -32,8 +32,8 @@ it('keeps legacy-only summaries v1 and separates mixed-policy decisions explicit
     policyVersion: 'high-cost-v1', retainedDecisions: 1, omittedPolicyDecisions: 0,
   })
   const mixed = summarizeAutoAllocations([legacy, explanation(2)])
-  expect(mixed).toMatchObject({ policyVersion: 'high-cost-v2', retainedDecisions: 1, omittedPolicyDecisions: 1 })
-  expect(mixed.rows.find(row => row.highCost)).toBeUndefined()
+  expect(mixed).toMatchObject({ policyVersion: 'high-cost-v3', retainedDecisions: 1, omittedPolicyDecisions: 1 })
+  expect(mixed.rows.find(row => row.highCost)).toMatchObject({ opportunities: 1, weight: 0.2 })
 })
 
 it('counts each turn once, bounds retention and never recovers missing evidence after removal', () => {
@@ -71,7 +71,7 @@ it('freezes copied evidence and reports the actual retained capture window', () 
   const saved = store.get(agent, 1)
   expect(saved.mode).toBe('auto')
   if (saved.mode !== 'auto') throw new Error('Missing captured turn')
-  expect(saved.explanation?.allocation?.candidates[0]?.expectedShare).toBe(1)
+  expect(saved.explanation?.allocation?.candidates[0]?.expectedShare).toBe(5 / 6)
   const summary = store.allocationSummary(agent)
   expect(summary.observationStart).not.toBeNull()
   expect(summary.observationEnd).toBe(summary.observationStart)
