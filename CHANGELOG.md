@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.4.2-alpha.12 (prepared)
+## 0.4.2-alpha.13 (prepared)
+
+- Give every hard-eligible fitting model positive opportunity across supplier
+  categories. Replace hard category filtering with per-model target/second/third
+  factors 1/0.25/0.05 and explicit unknown 0.02, multiplied by existing cost and
+  one-turn recency weights. These are uncalibrated trial coefficients.
+- Explain intentional non-target draws separately from target absence, record
+  each candidate's actual category, and preserve unchanged v1/v2/v3 evidence.
+  Keep exclusions, capability/account proof, input fit, native no-fit recovery,
+  frozen turns and auxiliary classifier ownership unchanged.
+
+## 0.4.2-alpha.12 (published)
 
 - Restore positive opportunity for all fitting same-category candidates instead
   of v2's hard high-cost deferral. Marked base weight remains 0.2; the previous

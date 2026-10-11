@@ -45,11 +45,12 @@ export function summarizeAutoAllocations(
     if (allocation.policyVersion !== policyVersion) { omittedPolicyDecisions++; continue }
     retainedDecisions++
     for (const row of allocation.candidates) {
-      const key = JSON.stringify([row.modelId, explanation.selectedCategory, row.highCost, row.previous, row.weight])
+      const category = row.category ?? explanation.selectedCategory
+      const key = JSON.stringify([row.modelId, category, row.highCost, row.previous, row.weight])
       let aggregate = rows.get(key)
       if (aggregate === undefined) {
         if (rows.size === 512) { rowsTruncated = true; continue }
-        aggregate = { modelId: row.modelId, category: explanation.selectedCategory,
+        aggregate = { modelId: row.modelId, category,
           highCost: row.highCost, previous: row.previous, weight: row.weight,
           opportunities: 0, expectedSelections: 0, selections: 0 }
         rows.set(key, aggregate)

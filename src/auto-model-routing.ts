@@ -38,6 +38,7 @@ export interface AutoModelDecision {
 }
 
 export interface AutoSelectionExplanation {
+  readonly allocationPolicy?: 'high-cost-v4'
   readonly assessment: TaskAssessment
   readonly targetCategory: AccountModelCategory
   readonly selectedCategory: AccountModelCategory | 'unknown'
@@ -184,7 +185,7 @@ function targetCategory(assessment: TaskAssessment, preference: AutoModelPrefere
 
 /**
  * Filter input headroom before task-aware supplier categories.
- * Apply positive cost weights and marked recency decay inside the fitting category.
+ * Apply soft category, cost and recency weights across every fitting candidate.
  * Preserves Core compaction ownership if no candidate currently fits.
  */
 export function selectAutoModel(
@@ -215,25 +216,20 @@ export function selectAutoModel(
   const seed = resolveSeed(messages, context)
   const assessment = context?.assessment ?? assessTaskLocally(messages)
   const target = targetCategory(assessment, preference)
-  const order: readonly (AccountModelCategory | 'unknown')[] = target === 'powerful'
-    ? ['powerful', 'versatile', 'lightweight', 'unknown']
-    : target === 'lightweight' ? ['lightweight', 'versatile', 'powerful', 'unknown']
-      : ['versatile', 'powerful', 'lightweight', 'unknown']
-
   let selectedModel: AccountModelDescriptor
   let inputFitDiagnostic: AutoModelInputFitDiagnostic
   let selectedInputBudget: number
   let explanation: AutoSelectionExplanation
 
   if (fitting.length > 0) {
-    const selectedCategory = order.find(category => fitting.some(model => (model.category ?? 'unknown') === category))!
-    const pool = fitting.filter(model => (model.category ?? 'unknown') === selectedCategory)
-    const allocation = allocateAutoModel(pool, context?.highCostModelIds, context?.previousModelId, seed)
-    selectedModel = pool.find(model => model.id === allocation.selectedModelId)!
+    const allocation = allocateAutoModel(fitting, context?.highCostModelIds, context?.previousModelId, seed, target)
+    selectedModel = fitting.find(model => model.id === allocation.selectedModelId)!
+    const selectedCategory = selectedModel.category ?? 'unknown'
     explanation = {
+      allocationPolicy: 'high-cost-v4',
       assessment, targetCategory: target, selectedCategory, categoryCandidateCount: allocation.candidates.length,
       method: allocation.candidates.length === 1 ? 'only-candidate' : 'weighted-distribution',
-      fallback: selectedCategory !== target,
+      fallback: !fitting.some(model => model.category === target),
       ...context?.collectAllocationEvidence === false ? {} : { allocation },
     }
     selectedInputBudget = candidateInputLimit(selectedModel, requestedMaxTokens, policy)

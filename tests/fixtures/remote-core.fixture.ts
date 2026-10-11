@@ -363,17 +363,18 @@ it.each(['source', 'strict'] as const)('reads retained selection through actual 
       assessment: { demand: 'complex', source: 'local', signals: ['investigation'] },
       targetCategory: 'powerful', selectedCategory: 'powerful', categoryCandidateCount: 2,
       method: 'weighted-distribution', fallback: false,
-      allocation: allocateAutoModel([{ id: 'regular' }, { id: 'marked' }], ['marked'], undefined, 7),
+      allocation: allocateAutoModel([{ id: 'regular', category: 'powerful' }, { id: 'marked', category: 'versatile' }], ['marked'], undefined, 7),
     } })
     await expect(client.remote.githubCopilotTurnSelection.allocationSummary(master.id))
-      .resolves.toMatchObject({ ok: true, value: { policyVersion: 'high-cost-v3', retainedDecisions: 1, completeHistory: false,
-        rows: [{ modelId: 'regular', opportunities: 1, expectedSelections: 5 / 6 },
-          { modelId: 'marked', opportunities: 1, expectedSelections: 1 / 6 }] } })
+      .resolves.toMatchObject({ ok: true, value: { policyVersion: 'high-cost-v4', retainedDecisions: 1, completeHistory: false,
+        rows: [{ modelId: 'regular', category: 'powerful', opportunities: 1, expectedSelections: 20 / 21 },
+          { modelId: 'marked', category: 'versatile', opportunities: 1, expectedSelections: 1 / 21 }] } })
     await expect(client.remote.githubCopilotTurnSelection.get(master.id, 10))
       .resolves.toMatchObject({ ok: true, value: { mode: 'auto', explanation: { allocation: {
-        policyVersion: 'high-cost-v3',
-        candidates: [{ modelId: 'regular', highCost: false, expectedShare: 5 / 6 },
-          { modelId: 'marked', highCost: true, expectedShare: 1 / 6 }],
+        policyVersion: 'high-cost-v4',
+        targetCategory: 'powerful',
+        candidates: [{ modelId: 'regular', category: 'powerful', categoryWeight: 1, highCost: false, expectedShare: 20 / 21 },
+          { modelId: 'marked', category: 'versatile', categoryWeight: 0.25, highCost: true, expectedShare: 1 / 21 }],
       } } } })
     await expect(client.remote.githubCopilotTurnSelection.allocationSummary('missing-master'))
       .resolves.toMatchObject({ ok: false, error: { code: 'gateway/lookup-not-found' } })
