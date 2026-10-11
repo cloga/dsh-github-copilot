@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared prerelease: `0.4.2-alpha.10`.** `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
+**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared prerelease: `0.4.2-alpha.11`.** `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
 
 **Upgrade from 0.4.0:** that first stable release can interrupt concurrent managed requests with `COPILOT_PREVIEW_CREDENTIAL_CHANGED` during normal same-account native OAuth renewal. In 0.4.1, a proven plugin-owned refresh with unchanged account, endpoint and entitlements preserves already-dispatched HTTP streams; subsequent requests use freshly validated auth and metadata. Unknown/external credential notifications, revocation, cancellation and provider rejections remain explicit—not a promise of invisible recovery or automatic retry. See [the refresh boundary](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385).
 
@@ -16,9 +16,11 @@ GitHub Copilot account discovery, contextual Auto routing and hosted search for 
 
 **High-cost Auto:** in **Manage → Model preferences**, mark costly models with
 **High cost**. Cost and task difficulty are independent: within the first
-fitting category, ordinary models have weight `1`, marked models `0.2`, and the
-previous model gets a finite `1.5×` bonus. All candidates keep a nonzero chance;
-marking does not change fixed choices or admitted turns. This is a declared
+fitting category, use unmarked models whenever any fit; marked models are a
+fallback tier only. Ordinary weight `1` gets a finite continuity bonus (`1.5×`
+for the previous model); marked weight `0.2` never gets continuity. Participating candidates keep
+a nonzero chance; deferred marked peers do not.
+Marking does not change fixed choices or admitted turns. This is a declared
 policy, not a price/quality ranking or proven savings.
 
 The existing turn selection dialog exposes **Auto allocation observations**:
@@ -126,10 +128,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.10/dsh-github-copilot-0.4.2-alpha.10.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.11/dsh-github-copilot-0.4.2-alpha.11.tgz
 ```
 
-For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.10`; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.11`; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -162,7 +164,7 @@ All three Auto preferences use the same account-verified, non-excluded eligible 
 | Complex | Powerful | Powerful | Powerful |
 | Unknown | Versatile | Versatile | Powerful |
 
-Categories come from authenticated supplier metadata, not model names, context capacity or measured quality rankings. Within the first fitting category, positive cost weights and the finite continuity bonus described above choose the model; a suitable previous model is not unconditionally retained. Category fallback is explained explicitly. One real answer model stays fixed throughout each admitted turn's steps and retries; compaction preserves its independently resolved native summary route.
+Categories come from authenticated supplier metadata, not model names, context capacity or measured quality rankings. Within the first fitting category, the cost tier and positive weights described above choose the model; a suitable previous high-cost model is deferred when an unmarked peer fits. Fit does not prove task success, and Auto does not add escalation or choose a weaker category for cost. Category fallback is explained explicitly. One real answer model stays fixed throughout each admitted turn's steps and retries; compaction preserves its independently resolved native summary route.
 
 Semantic assessment is **enabled by default only for locally unknown tasks**. It makes at most one bounded auxiliary call with a **30-second default end-to-end deadline** and **128-token output budget**. Set `github-copilot.autoSemanticAssessment: false` to opt out. The native plugin configuration exposes `autoSemanticAssessmentTimeoutMs` (1000–120000 ms; `8000` restores the old budget) and `autoSemanticAssessmentModel` (empty for automatic selection, or an exact current-account model ID). They apply to subsequent assessments, not admitted retries. An unavailable/excluded/unsuitable explicit classifier reports unavailable, never silently switches. Automatic selection is metadata-driven, not measured optimal; the new default is a trial, not proof of past timeout causes. See [assessment settings](./docs/auto-task-routing.md#using-auto).
 
@@ -171,6 +173,14 @@ Timeout/invalid output leaves demand unknown and uses the preference fallback; i
 The deadline is checked against a monotonic clock at preparation, native request and result boundaries, even if the event loop delays the timer. Such delays can postpone settlement; they do not authorize late dispatch or late-result acceptance. Eligible Lightweight classifiers must advertise an explicit reasoning-disable mode: `off`, or protocol-native `none` for Responses/Completions or `disabled` for Anthropic. Deterministic ID tie-breaking follows. This is not a measured speed ranking. Explanations distinguish the fitting category pool and previous-model continuity from semantic merit.
 
 The auxiliary classifier always requests the protocol's explicit disabled-reasoning mode (`none` for Responses/Completions, `disabled` for Anthropic) and receives no tools. A candidate is not dispatched unless both account metadata and the isolated public adapter model expose that capability; otherwise assessment fails closed. Missing or empty effort metadata is not proof that a model never reasons. The classifier does not inherit configured Chat reasoning effort, and its off mapping is not added to shared account models. Synthetic tests verify the outgoing payload, not supplier-side implementation. One call, bounded text input and 128 requested output tokens constrain overhead without promising a hard credit cap; ordinary Chat reasoning/tools remain unchanged.
+
+Classification preserves the current request and a bounded substantive continuation
+anchor before verbose historical output. Incidental historical omission alone no
+longer forces a valid simple/routine result to unknown; missing anchors, limited
+task text and nontext task dependencies still block downshift. The prompt does not
+pre-fill an unknown answer. Assessment details distinguish projection limitations
+from the classifier's returned demand. Unknown remains valid; retained text and
+synthetic regressions do not prove calibrated accuracy or a reduced live unknown rate.
 
 Request-local strict selection evidence includes candidate counts and one fixed first-rejection reason per model: exclusion, configured-ID mismatch, category, text input, unproven disable capability or budget. No model IDs are added to these counts. No-fit warnings use fixed codes only, and native off preparation failure is distinguished from selection failure. This evidence is ephemeral, not a new persisted diagnostic population; legacy records without these fields remain unknown.
 
@@ -311,14 +321,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.10/dsh-github-copilot-0.4.2-alpha.10.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.10/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.11/dsh-github-copilot-0.4.2-alpha.11.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.11/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.10.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.11.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

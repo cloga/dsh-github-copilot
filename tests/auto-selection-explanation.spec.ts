@@ -1,12 +1,23 @@
 import { expect, it } from 'vitest'
 import { selectionExplanation } from '../src/auto-selection-explanation.ts'
 import type { AutoSelectionExplanation } from '../src/auto-model-routing.ts'
+import { allocateAutoModel } from '../src/auto-allocation.ts'
 
 const explanation: AutoSelectionExplanation = {
   assessment: { demand: 'unknown', source: 'local', signals: ['continuation', 'insufficient-evidence'], diagnostic: 'disabled' },
   targetCategory: 'powerful', selectedCategory: 'powerful', categoryCandidateCount: 2,
   fallback: false, method: 'continuity',
 }
+
+it.each(['en', 'zh'])('explains deferred cost tier and marked-only fallback without implying task failure (%s)', locale => {
+  const tier = { ...explanation, method: 'only-candidate' as const, categoryCandidateCount: 1,
+    allocation: allocateAutoModel([{ id: 'ordinary' }, { id: 'marked' }], ['marked'], 'marked', 1) }
+  const text = selectionExplanation(tier, locale).choice
+  expect(text).toContain(locale === 'en' ? 'deferred 1' : '暂缓 1')
+  const fallback = selectionExplanation({ ...tier,
+    allocation: allocateAutoModel([{ id: 'marked' }], ['marked'], 'marked', 1) }, locale).choice
+  expect(fallback).toContain(locale === 'en' ? 'no continuity bonus' : '不享受连续性加权')
+})
 
 it('distinguishes local rule coverage from absent conversation context in both languages', () => {
   const en = selectionExplanation(explanation, 'en')
@@ -70,4 +81,18 @@ it('does not turn missing legacy candidate evidence into an empty scan', () => {
   }, 'en')
   expect(text.semantic).not.toContain('Candidate scan')
   expect(text.semantic).not.toContain('preparation did not expose')
+  expect(text.semantic).not.toContain('Assessment text')
+  expect(text.semantic).not.toContain('Classifier returned')
+})
+
+it.each(['en', 'zh'])('separates classifier unknown from projection limitations (%s)', locale => {
+  const text = selectionExplanation({ ...explanation,
+    assessment: { demand: 'unknown', source: 'semantic', signals: ['insufficient-evidence'],
+      semantic: { budgetMs: 30000, elapsedMs: 5492, stage: 'preparing', outputCharacters: 0,
+        validation: 'valid', classifierDemand: 'unknown', projection: { retainedMessages: 12,
+          historyOmitted: true, taskTextLimited: false, continuationAnchor: 'retained' } } },
+  }, locale)
+  expect(text.semantic).toContain(locale === 'en' ? 'Classifier returned: unknown' : '分类器返回：需求不确定')
+  expect(text.semantic).toContain(locale === 'en' ? 'task text retained' : '任务文本已保留')
+  expect(text.semantic).toContain(locale === 'en' ? 'does not guarantee' : '不保证')
 })

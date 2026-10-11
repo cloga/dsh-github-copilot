@@ -1,6 +1,24 @@
 # Changelog
 
-## 0.4.2-alpha.10 (prepared)
+## 0.4.2-alpha.11 (prepared)
+
+- Prefer fitting unmarked models inside the selected supplier category and defer
+  high-cost peers. Marked-only fallback stays usable without a continuity bonus.
+  Explain the cost tier and preserve v1 historical evidence; no category
+  weakening, task-success inference, automatic escalation or in-turn switch.
+- Preserve a bounded substantive task anchor and its user continuation chain
+  ahead of verbose historical output in the auxiliary classifier projection.
+  Separate incidental omissions from limited task text; missing anchors,
+  truncated task text and task attachments still prevent simple/routine
+  downshift. Actual Chat input and native context admission stay untouched.
+- Remove the fixed unknown example from the classifier instruction and explain
+  that historical omission alone is not evidence of unknown demand. Keep genuine
+  unknown, reasoning off, no tools, one call/no retry and the existing bounds.
+- Expose strict content-free projection facts and the classifier's returned
+  demand in the existing selection explanation. These are diagnostics, not
+  measured classification accuracy or proof of reduced live unknown rates.
+
+## 0.4.2-alpha.10 (published)
 
 - Accept account-advertised protocol-native reasoning disable labels (`none`
   for Responses/Completions, `disabled` for Anthropic) as well as `off` for

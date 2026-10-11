@@ -35,6 +35,9 @@ export function AutoAllocationCard({ read, locale }: {
             : h('p', null, `${new Date(summary.observationStart).toLocaleString()} — ${new Date(summary.observationEnd).toLocaleString()}`),
           summary.status === 'not-collected' ? h('p', null, zh ? '尚无保留样本。' : 'No retained samples.') : null,
           summary.rowsTruncated ? h('p', { role: 'status' }, zh ? '候选明细达到上限；导出不完整。' : 'Candidate detail limit reached; export is incomplete.') : null,
+          (summary.omittedPolicyDecisions ?? 0) > 0 ? h('p', { role: 'status' },
+            zh ? `另有 ${summary.omittedPolicyDecisions} 次不同策略版本的分配，未混入本汇总。`
+              : `${summary.omittedPolicyDecisions} allocations from another policy version are excluded from this summary.`) : null,
           h('p', null, zh ? '导出包含模型 ID 与分配计数，不包含对话内容；不会自动上传。跨 Session 汇总和效果判断需另行审阅。'
             : 'Export contains model IDs and allocation counts, not conversation content. Nothing is uploaded automatically. Cross-Session aggregation and effectiveness require a separate review.'),
           h('label', { style: { display: 'grid', gap: 6 } }, zh ? '只读本地观察 JSON' : 'Read-only local observation JSON',
