@@ -3,7 +3,7 @@
  * that DSH's built-in llm-pi-ai adapter owns.
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import { symbols, type Context } from '@deepseek-ai/cordis'
 import {
   createModels,
   type Credential,
@@ -34,6 +34,12 @@ interface RefreshWrite {
 }
 const refreshWrites = new WeakMap<object, Map<string, RefreshWrite>>()
 
+function credentialServiceIdentity(service: object): object {
+  // Cordis service reads return distinct traced faces of the same public service.
+  const original: unknown = Reflect.get(service, symbols.original)
+  return typeof original === 'object' && original !== null ? original : service
+}
+
 /** Only a validated native OAuth refresh may certify its exact returned object. */
 export async function certifyCopilotNativeRefresh(
   previous: GitHubCopilotOAuthCredential,
@@ -61,7 +67,7 @@ export async function certifyCopilotNativeRefresh(
 export function observeCopilotNativeRefresh(ctx: Context, key: string,
   diagnostic?: (phase: 'notification' | 'commit', reason: CredentialChangeReason) => void): Promise<boolean> | undefined {
   const service = ctx.get('credentials')
-  const write = service === undefined ? undefined : refreshWrites.get(service)?.get(key)
+  const write = service === undefined ? undefined : refreshWrites.get(credentialServiceIdentity(service))?.get(key)
   if (!write) { diagnostic?.('notification', 'unknown-source'); return undefined }
   if (++write.notifications !== 1) {
     write.reason = 'duplicate-notification'
@@ -178,10 +184,11 @@ export function createGitHubCopilotCredentialStore(
       assertProvider(providerId)
       binding?.assertCurrent()
       const service = credentialService(ctx)
+      const identity = credentialServiceIdentity(service)
       let pending: RefreshWrite | undefined
       let expected: CredentialRecord | undefined
-      let writes = refreshWrites.get(service)
-      if (!writes) { writes = new Map(); refreshWrites.set(service, writes) }
+      let writes = refreshWrites.get(identity)
+      if (!writes) { writes = new Map(); refreshWrites.set(identity, writes) }
       try {
         const stored = await service.modifyRecord(
           key,
