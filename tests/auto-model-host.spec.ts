@@ -315,7 +315,10 @@ describe('Auto model Host integration', () => {
       const assembled = await ctx.waterfall(promptScope, 'system-prompt/assemble', assembly, {}, async () => assembly)
       expect(assembled.variables).toMatchObject({ provider: PREVIEW, model: INTELLIGENCE })
       await enter(2, 'detail '.repeat(1_000))
-      expect((await request(2, first.model)).model).toBe('fixture-strong')
+      expect((await request(2, first.model)).model).toBe('fixture-middle')
+      expect(ctx.githubCopilotTurnSelection.get(agent, 2)).toMatchObject({
+        mode: 'auto', explanation: { targetCategory: 'powerful', selectedCategory: 'versatile', fallback: false },
+      })
       expect(selection.pending?.model).toBe(INTELLIGENCE)
       selection.pending = { provider: PREVIEW, model: EFFICIENCY }
       await enter(3, 'detail '.repeat(1_000))
@@ -368,7 +371,10 @@ describe('Auto model Host integration', () => {
     try {
       await enter(1, 'Hello!')
       const first = await request(1, AUTO)
-      expect(first.model).toBe('fixture-fast')
+      expect(first.model).toBe('fixture-strong')
+      expect(ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
+        mode: 'auto', explanation: { targetCategory: 'lightweight', selectedCategory: 'powerful', fallback: false },
+      })
       expect(selection.pending).toEqual({ provider: PREVIEW, model: AUTO })
       expect(append.mock.calls.filter(([type]) => type === 'model/selection')).toHaveLength(1)
       header = { config: { provider: PREVIEW, model: first.model } }
@@ -429,19 +435,19 @@ describe('Auto model Host integration', () => {
       { agent, turn, step, signal }, async () => ({ provider: 'fixture-seed', model: 'fixture-seed' }))
     try {
       await enter(1, 'Hello!')
-      await expect(request(1)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
+      await expect(request(1)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-strong' })
       const first = ctx.githubCopilotTurnSelection.get(agent, 1)
       expect(first.mode === 'auto' && first.explanation?.allocation?.candidates[0]?.highCost).toBe(true)
       marked = ['fixture-strong']
       await enter(1, 'detail '.repeat(1_000))
-      await expect(request(1, 2)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-fast' })
+      await expect(request(1, 2)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-strong' })
       expect(loadModels).toHaveBeenCalledTimes(1)
       expect(ctx.githubCopilotTurnSelection.get(agent, 1)).toBe(first)
 
       await enter(2, 'Prove this theorem.')
       await expect(request(2)).resolves.toMatchObject({ provider: PREVIEW, model: 'fixture-strong' })
       const second = ctx.githubCopilotTurnSelection.get(agent, 2)
-      expect(second.mode === 'auto' && second.explanation?.allocation?.candidates[0]?.highCost).toBe(true)
+      expect(second.mode === 'auto' && second.explanation?.allocation?.candidates.find(row => row.modelId === 'fixture-strong')?.highCost).toBe(true)
       expect(loadModels).toHaveBeenCalledTimes(2)
       // Optional attribution must not add unknown required events to the durable log.
       expect(append).not.toHaveBeenCalled()

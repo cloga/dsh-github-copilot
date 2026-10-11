@@ -134,9 +134,10 @@ export class AutoAllocationDiagnosticsCollector {
     }
     const allocation = parsed.data
     for (const candidate of allocation.candidates) {
+      const category = candidate.category ?? explanation.selectedCategory
       const row = this.data.rows.find(item => item.day === day && item.version === this.version
         && item.policyVersion === allocation.policyVersion && item.modelId === candidate.modelId
-        && item.targetCategory === explanation.targetCategory && item.category === explanation.selectedCategory
+        && item.targetCategory === explanation.targetCategory && item.category === category
         && item.demand === explanation.assessment.demand && item.assessmentSource === explanation.assessment.source
         && item.assessmentOutcome === outcome
         && item.method === explanation.method && item.fallback === explanation.fallback
@@ -149,7 +150,7 @@ export class AutoAllocationDiagnosticsCollector {
         this.data.rows.push({
           day, version: this.version, policyVersion: allocation.policyVersion,
           modelId: candidate.modelId, targetCategory: explanation.targetCategory,
-          category: explanation.selectedCategory, demand: explanation.assessment.demand,
+          category, demand: explanation.assessment.demand,
           assessmentSource: explanation.assessment.source, method: explanation.method, fallback: explanation.fallback,
           assessmentOutcome: outcome,
           highCost: candidate.highCost, previous: candidate.previous, weight: candidate.weight,

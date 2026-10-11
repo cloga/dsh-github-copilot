@@ -8,7 +8,7 @@ function explanation(seed: number): AutoSelectionExplanation {
   return { assessment: { demand: 'complex', source: 'local', signals: ['investigation'] },
     targetCategory: 'powerful', selectedCategory: 'powerful', categoryCandidateCount: 2,
     method: 'weighted-distribution', fallback: false,
-    allocation: allocateAutoModel([{ id: 'regular' }, { id: 'marked' }], ['marked'], undefined, seed) }
+    allocation: allocateAutoModel([{ id: 'regular', category: 'powerful' }, { id: 'marked', category: 'powerful' }], ['marked'], undefined, seed) }
 }
 
 it('sums conditional opportunities and selections rather than assuming equal candidate access', () => {
@@ -32,7 +32,7 @@ it('keeps legacy-only summaries v1 and separates mixed-policy decisions explicit
     policyVersion: 'high-cost-v1', retainedDecisions: 1, omittedPolicyDecisions: 0,
   })
   const mixed = summarizeAutoAllocations([legacy, explanation(2)])
-  expect(mixed).toMatchObject({ policyVersion: 'high-cost-v3', retainedDecisions: 1, omittedPolicyDecisions: 1 })
+  expect(mixed).toMatchObject({ policyVersion: 'high-cost-v4', retainedDecisions: 1, omittedPolicyDecisions: 1 })
   expect(mixed.rows.find(row => row.highCost)).toMatchObject({ opportunities: 1, weight: 0.2 })
 })
 

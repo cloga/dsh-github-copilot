@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { allocateAutoModel, AutoAllocationSchema } from '../src/auto-allocation.ts'
+import { allocateAutoModel as allocate, AutoAllocationSchema } from '../src/auto-allocation.ts'
+const allocateAutoModel = (...[pool, marks, previous, seed]: Parameters<typeof allocate>) =>
+  allocate(pool.map(row => ({ ...row, category: 'powerful' as const })), marks, previous, seed, 'powerful')
 
 describe('positive weighted Auto allocation', () => {
   const pool = [{ id: 'ordinary' }, { id: 'marked' }]
@@ -18,11 +20,11 @@ describe('positive weighted Auto allocation', () => {
 
   it('keeps marking orthogonal and captures finite continuity weights', () => {
     const allocation = allocateAutoModel(pool, ['marked'], 'marked', 42)
-    expect(allocation.policyVersion).toBe('high-cost-v3')
+    expect(allocation.policyVersion).toBe('high-cost-v4')
     expect(allocation.deferredHighCostCount).toBeUndefined()
     expect(allocation.candidates).toEqual([
-      { modelId: 'ordinary', highCost: false, previous: false, weight: 1, expectedShare: 50 / 51 },
-      { modelId: 'marked', highCost: true, previous: true, weight: 0.02, expectedShare: 1 / 51 },
+      { modelId: 'ordinary', category: 'powerful', categoryWeight: 1, highCost: false, previous: false, weight: 1, expectedShare: 50 / 51 },
+      { modelId: 'marked', category: 'powerful', categoryWeight: 1, highCost: true, previous: true, weight: 0.02, expectedShare: 1 / 51 },
     ])
     expect(AutoAllocationSchema.safeParse(allocation).success).toBe(true)
     expect(allocateAutoModel([{ id: 'marked' }], ['marked'], undefined, 0).selectedModelId).toBe('marked')

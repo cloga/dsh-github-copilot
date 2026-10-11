@@ -8,6 +8,7 @@ import { summarizeAutoAllocations } from './auto-allocation-evidence.ts'
 import type { AutoAllocationSummary } from './auto-allocation-evidence.ts'
 
 const ExplanationSchema = z.object({
+  allocationPolicy: z.literal('high-cost-v4').optional(),
   assessment: TaskAssessmentSchema.extend({
     source: z.enum(['local', 'semantic']),
     diagnostic: z.enum(['disabled', 'unavailable', 'invalid-result', 'timeout', 'failed', 'context-omitted']).optional(),

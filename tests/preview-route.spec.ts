@@ -741,15 +741,19 @@ describe('plugin-owned account Copilot route', () => {
     await Promise.all([enter(), enter()])
     const request = () => harness.ctx.waterfall(scope, 'agent/request', { agent, turn: 1, step: 1, signal },
       async () => ({ provider: PREVIEW, model: AUTO }))
-    expect(await request()).toMatchObject({ model: 'answer-fixture' })
+    expect(await request()).toMatchObject({ model: 'classifier-fixture' })
     await enter()
-    expect(await request()).toMatchObject({ model: 'answer-fixture' })
+    expect(await request()).toMatchObject({ model: 'classifier-fixture' })
     expect(modelCalls).toHaveBeenCalledTimes(enabled === false ? 0 : 1)
     expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({
       mode: 'auto', explanation: { assessment: enabled === false
         ? { demand: 'unknown', source: 'local', diagnostic: 'disabled' }
         : { demand: 'routine', source: 'semantic' },
-        targetCategory: 'versatile', selectedCategory: 'versatile', method: 'only-candidate' },
+        targetCategory: 'versatile', selectedCategory: 'lightweight', method: 'weighted-distribution',
+        allocation: { candidates: [
+          { modelId: 'answer-fixture', category: 'versatile', categoryWeight: 1 },
+          { modelId: 'classifier-fixture', category: 'lightweight', categoryWeight: 0.05 },
+        ] } },
     })
     if (enabled !== false) {
       expect(harness.ctx.githubCopilotTurnSelection.get(agent, 1)).toMatchObject({

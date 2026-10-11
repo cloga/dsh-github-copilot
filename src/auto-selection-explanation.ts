@@ -21,9 +21,13 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
     'context-omitted': zh ? '判断上下文不完整' : 'incomplete assessment context',
     'insufficient-evidence': zh ? '本地规则尚不能确定任务需求' : 'local rules cannot establish task demand',
   }
+  const soft = explanation.allocationPolicy === 'high-cost-v4' || explanation.allocation?.policyVersion === 'high-cost-v4'
   const conclusion = explanation.method === 'no-fit'
     ? zh ? '没有候选能直接容纳估算输入；选中输入预算最大的模型，保留原生压缩或失败处理。'
       : 'No candidate fits the estimated input. Selected the largest input budget for native recovery or failure.'
+    : soft
+      ? zh ? `本轮判断为${demand[explanation.assessment.demand]}；偏向 ${category[explanation.targetCategory]}，本轮抽中 ${category[explanation.selectedCategory]}。${explanation.fallback ? '目标分类没有可容纳的合格候选。' : ''}`
+        : `This task was assessed as ${demand[explanation.assessment.demand]}; weights favor ${category[explanation.targetCategory]}, and this draw selected ${category[explanation.selectedCategory]}.${explanation.fallback ? ' No eligible fitting target-category candidate remains.' : ''}`
     : explanation.fallback
       ? zh ? `目标分类 ${category[explanation.targetCategory]} 没有合格的可容纳候选，回退到 ${category[explanation.selectedCategory]}。`
         : `No eligible fitting ${category[explanation.targetCategory]} candidate; fell back to ${category[explanation.selectedCategory]}.`
@@ -34,7 +38,10 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
         : `This task was assessed as ${demand[explanation.assessment.demand]}; the preference policy selected ${category[explanation.selectedCategory]}.`
   const allocation = explanation.allocation
   const selected = allocation?.candidates.find(row => row.modelId === allocation.selectedModelId)
-  const tier = allocation?.policyVersion === 'high-cost-v3'
+  const tier = soft
+    ? zh ? '所有合格且可容纳输入的模型保留正机会；目标、第二、第三分类权重为 1 / 0.25 / 0.05，分类未知为 0.02。再乘成本与近期因素：普通 1，普通上一轮 1.5，高成本 0.2，高成本上一轮 0.02。系数是未校准试验，不是能力或实际费用判断。'
+      : 'Every eligible fitting model retains positive opportunity. Target/second/third category factors are 1 / 0.25 / 0.05; unclassified is 0.02. Multiply by cost/recency factors: ordinary 1, previous ordinary 1.5, high cost 0.2, previous high cost 0.02. These are uncalibrated trial coefficients, not capability or actual cost evidence.'
+    : allocation?.policyVersion === 'high-cost-v3'
     ? zh ? '所有可容纳的同类候选保留正机会；高成本基础权重 0.2，上一轮高成本模型衰减至 0.02，普通上一轮模型加权至 1.5。这是一轮近期惩罚，不是能力或实际费用判断。'
       : 'All fitting category candidates retain positive opportunity. High-cost base weight is 0.2; a previous high-cost model decays to 0.02, while an ordinary previous model has weight 1.5. This is one-turn recency decay, not capability or actual cost evidence.'
     : allocation?.policyVersion !== 'high-cost-v2' ? ''
@@ -47,15 +54,15 @@ export function selectionExplanation(explanation: AutoSelectionExplanation, loca
         : ''
   const weightedChoice = explanation.method === 'weighted-distribution'
     ? selected === undefined
-      ? zh ? '按同类正权重政策分配；本轮候选观察未保留，不从当前设置推断。连续性仅为有限加权。'
-        : 'Allocated by positive within-category weights. Candidate observations were not retained; current settings cannot reconstruct them. Continuity is a finite bonus.'
-      : zh ? `在 ${explanation.categoryCandidateCount} 个同类可容纳候选中按正权重分配；选中模型${selected.highCost ? '已标记高成本' : '未标记高成本'}，有效权重 ${selected.weight}，本轮条件份额 ${(selected.expectedShare * 100).toFixed(1)}%。连续性仅为有限加权，不保证保留；这不是质量排名或实际费用。`
-      : `Positive weighted allocation among ${explanation.categoryCandidateCount} fitting category candidates. Selected model is ${selected.highCost ? 'marked high cost' : 'unmarked'}, effective weight ${selected.weight}, conditional share ${(selected.expectedShare * 100).toFixed(1)}%. Continuity is a finite bonus, not a lock; this is not quality ranking or actual cost.`
+      ? zh ? `按${soft ? '跨分类' : '同类'}正权重政策分配；本轮候选观察未保留，不从当前设置推断。连续性仅为有限加权。`
+        : `Allocated by positive ${soft ? 'cross-category' : 'within-category'} weights. Candidate observations were not retained; current settings cannot reconstruct them. Continuity is a finite bonus.`
+      : zh ? `在 ${explanation.categoryCandidateCount} 个${soft ? '跨分类' : '同类'}可容纳候选中按正权重分配；选中模型${selected.highCost ? '已标记高成本' : '未标记高成本'}，有效权重 ${selected.weight}，本轮条件份额 ${(selected.expectedShare * 100).toFixed(1)}%。连续性仅为有限加权，不保证保留；这不是质量排名或实际费用。`
+      : `Positive weighted allocation among ${explanation.categoryCandidateCount} fitting ${soft ? 'cross-category' : 'category'} candidates. Selected model is ${selected.highCost ? 'marked high cost' : 'unmarked'}, effective weight ${selected.weight}, conditional share ${(selected.expectedShare * 100).toFixed(1)}%. Continuity is a finite bonus, not a lock; this is not quality ranking or actual cost.`
     : explanation.method === 'continuity'
     ? zh ? `该分类有 ${explanation.categoryCandidateCount} 个可容纳候选；上一轮模型仍合格，因此按连续性策略保留。这不是语义排名，也不证明它最适合任务。`
       : `This category has ${explanation.categoryCandidateCount} fitting candidates. Kept the previous model because it remains eligible, prioritizing continuity; this is not a semantic ranking or proof it is best for the task.`
     : explanation.method === 'only-candidate'
-      ? zh ? '该分类只有一个可容纳的合格候选。' : 'Only one eligible fitting candidate remains in this category.'
+      ? zh ? `${soft ? '所有分类中' : '该分类'}只有一个可容纳的合格候选。` : `Only one eligible fitting candidate remains ${soft ? 'across all categories' : 'in this category'}.`
       : explanation.method === 'equal-distribution'
         ? zh ? `该分类有 ${explanation.categoryCandidateCount} 个可容纳候选；按本轮稳定等权规则选中，不代表质量排名。`
           : `Selected among ${explanation.categoryCandidateCount} fitting category candidates by stable equal-weight allocation, not a quality ranking.`

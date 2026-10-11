@@ -66,7 +66,7 @@ async function verifySavedAutoPreferences(profile: Context, config: ResolvedInli
           expectedShare: previousHighCost ? 50 / 51 : 5 / 6 }),
       ])
     expect(captured.mode === 'auto' && captured.explanation?.allocation)
-      .toMatchObject({ policyVersion: 'high-cost-v3' })
+      .toMatchObject({ policyVersion: 'high-cost-v4' })
     expect(highCost).toHaveBeenCalledTimes(1)
     expect(agent.session.append).not.toHaveBeenCalled()
   } finally { dispose(); await ctx.fiber.dispose() }

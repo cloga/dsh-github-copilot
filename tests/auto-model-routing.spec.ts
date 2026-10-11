@@ -145,18 +145,20 @@ describe('Auto model routing policy', () => {
     const ordinary = [message('Convert this table.')]
     const demanding = [message('Prove this theorem.')]
     const routine = { assessment: { demand: 'routine', source: 'semantic', signals: ['bounded-transformation'] } } as const
-    expect(selectAutoModel(pool, short, 'efficiency').model).toBe(fast)
-    expect(selectAutoModel(pool, short, 'balance').model).toBe(fast)
-    expect(selectAutoModel(pool, short, 'intelligence').model).toBe(fast)
-    expect(selectAutoModel(pool, ordinary, 'efficiency', routine).model).toBe(fast)
-    expect(selectAutoModel(pool, ordinary, 'balance', routine).model).toBe(balanced)
-    expect(selectAutoModel(pool, ordinary, 'intelligence', routine).model).toBe(strong)
-    expect(selectAutoModel(pool, demanding, 'efficiency').model).toBe(strong)
-    expect(selectAutoModel(pool, demanding, 'balance').model).toBe(strong)
-    expect(selectAutoModel(pool, demanding, 'intelligence').model).toBe(strong)
+    for (const preference of ['efficiency', 'balance', 'intelligence'] as const) {
+      expect(selectAutoModel(pool, short, preference).explanation.targetCategory).toBe('lightweight')
+      expect(selectAutoModel(pool, demanding, preference).explanation.targetCategory).toBe('powerful')
+      const decision = selectAutoModel(pool, ordinary, preference, routine)
+      expect(decision.explanation.targetCategory).toBe(
+        preference === 'efficiency' ? 'lightweight' : preference === 'balance' ? 'versatile' : 'powerful')
+      expect(decision.explanation.allocation?.candidates).toHaveLength(3)
+      expect(decision.explanation.allocation?.candidates.every(row => row.expectedShare > 0)).toBe(true)
+    }
     for (const preference of ['efficiency', 'balance', 'intelligence'] as const) {
       expect(selectAutoModel([strong], short, preference).model).toBe(strong)
-      expect(selectAutoModel([fast, strong], demanding, preference).model).toBe(strong)
+      expect(selectAutoModel([fast, strong], demanding, preference).explanation.allocation?.candidates)
+        .toEqual([expect.objectContaining({ modelId: fast.id, categoryWeight: 0.05 }),
+          expect.objectContaining({ modelId: strong.id, categoryWeight: 1 })])
       expect(selectAutoModel(pool, short, preference).candidateCount).toBe(3)
     }
   })
@@ -171,7 +173,7 @@ describe('Auto model routing policy', () => {
     }
   })
 
-  it('distributes only equally categorized fitting candidates without capacity-based weights', () => {
+  it('distributes across all fitting categories without capacity-based weights', () => {
     const m1 = model('fixture-fast', { contextWindow: 64_000, maxTokens: 8_000, efforts: ['low'] })
     const m2 = model('fixture-mid-1', { contextWindow: 128_000, maxTokens: 16_000, efforts: ['medium'] })
     const m3 = model('fixture-mid-2', { contextWindow: 200_000, maxTokens: 24_000, efforts: ['medium'], category: 'powerful' })
@@ -187,8 +189,9 @@ describe('Auto model routing policy', () => {
         turn: 1,
       })
       chosen.add(decision.model.id)
-      expect([m3.id, m4.id, m5.id]).toContain(decision.model.id)
-      expect(decision.explanation).toMatchObject({ selectedCategory: 'powerful', method: 'weighted-distribution', categoryCandidateCount: 3 })
+      expect(pool5.map(row => row.id)).toContain(decision.model.id)
+      expect(decision.explanation).toMatchObject({ targetCategory: 'powerful', method: 'weighted-distribution', categoryCandidateCount: 5 })
+      expect(decision.explanation.allocation?.candidates.map(row => row.weight)).toEqual([0.02, 0.02, 1, 1, 1])
     }
     expect(chosen.size).toBeGreaterThan(1)
   })
@@ -206,20 +209,22 @@ describe('Auto model routing policy', () => {
     expect(retry.selectedInputBudget).toBe(first.selectedInputBudget)
   })
 
-  it('uses lightweight for an isolated greeting even with Intelligence and powerful for short hard Efficiency work', () => {
-    expect(selectAutoModel([fast, balanced, strong], [message('Hello!')], 'intelligence').model).toBe(fast)
-    expect(selectAutoModel([fast, balanced, strong], [message('Prove this theorem.')], 'efficiency').model).toBe(strong)
-    expect(selectAutoModel([fast, balanced, strong], [message('Continue.')], 'intelligence').model).toBe(strong)
+  it('favors lightweight for greetings and powerful for hard work without excluding other fitting models', () => {
+    expect(selectAutoModel([fast, balanced, strong], [message('Hello!')], 'intelligence').explanation.targetCategory).toBe('lightweight')
+    expect(selectAutoModel([fast, balanced, strong], [message('Prove this theorem.')], 'efficiency').explanation.targetCategory).toBe('powerful')
+    expect(selectAutoModel([fast, balanced, strong], [message('Continue.')], 'intelligence').explanation.targetCategory).toBe('powerful')
   })
 
-  it('uses finite continuity but never lets it override task category or input fit', () => {
+  it('uses finite continuity as a multiplier and never lets it override input fit', () => {
     const second = { ...balanced, id: 'second-versatile' }
     expect(selectAutoModel([fast, balanced, second, strong], [message('Continue.')], 'balance',
       { previousModelId: second.id }).explanation.method).toBe('weighted-distribution')
     expect(selectAutoModel([fast, balanced, strong], [message('Prove it.')], 'balance',
-      { previousModelId: balanced.id }).model).toBe(strong)
+      { previousModelId: balanced.id }).explanation.allocation?.candidates.find(row => row.modelId === balanced.id))
+      .toMatchObject({ categoryWeight: 0.25, weight: 0.375 })
     expect(selectAutoModel([fast, balanced, strong], [message('Hello!')], 'intelligence',
-      { previousModelId: strong.id }).model).toBe(fast)
+      { previousModelId: strong.id }).explanation.allocation?.candidates.find(row => row.modelId === strong.id))
+      .toMatchObject({ categoryWeight: 0.05, weight: 0.075 })
     expect(selectAutoModel([fast, balanced, strong], [message('Continue.')], 'balance',
       { previousModelId: balanced.id, inputTokenFloor: 150_000 }).model).toBe(strong)
   })
@@ -238,9 +243,9 @@ describe('Auto model routing policy', () => {
     const captured = selectAutoModel([fast, peer, strong], [message('Hello!')], 'intelligence', context)
     expect(captured.explanation.selectedCategory).toBe('lightweight')
     expect(captured.model.id).toBe(peer.id)
-    expect(captured.explanation.allocation).toMatchObject({ policyVersion: 'high-cost-v3' })
+    expect(captured.explanation.allocation).toMatchObject({ policyVersion: 'high-cost-v4' })
     expect(captured.explanation.allocation?.candidates.find(row => row.modelId === fast.id))
-      .toMatchObject({ highCost: true, previous: true, weight: 0.02, expectedShare: 1 / 51 })
+      .toMatchObject({ highCost: true, previous: true, weight: 0.02, expectedShare: 2 / 107 })
     const optedOut = selectAutoModel([fast, peer, strong], [message('Hello!')], 'intelligence',
       { ...context, collectAllocationEvidence: false })
     expect(optedOut.model).toBe(captured.model)
