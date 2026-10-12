@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2-alpha.15 (prepared)
+
+- Plan selected compaction recovery in public native token-meter units rather than comparing UTF-8 bytes directly with token budgets (#418). This prevents false indivisible rejection of long balanced tool spans that fit the planning budget.
+- Keep tools, tool-history allowance, fixed head and intermediate checkpoints in the same token units; validate estimates and retain final native admission, complete tool relations, output caps and bounded calls. No history trimming, model switch or guarantee of live summary success.
+
 ## 0.4.2-alpha.14 (prepared)
 
 - Correlate certified native OAuth refresh writes across Cordis traced credentials

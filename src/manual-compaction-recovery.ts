@@ -14,7 +14,7 @@ import { calculateRequestBudget, resolveRequestBudgetPolicy } from './request-bu
 import type {} from './preview-route.ts'
 import { installBackgroundCompaction } from './background-compaction.ts'
 import type {} from './compaction-replay.ts'
-import { compactionSafeBoundaries, estimateCompactionInputBytes, reduceCompactionInputLimit } from './compaction-input-estimate.ts'
+import { compactionSafeBoundaries, createCompactionTokenEstimator, reduceCompactionInputLimit } from './compaction-input-estimate.ts'
 
 interface RecoveryMessage {
   readonly role: string
@@ -220,10 +220,13 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
     if (!budget.ok) throw recoverError(budget.code)
     // Reserve space for the Core-added summary directive and estimator
     // variance. The provider's final native guard remains authoritative.
-    const toolHistoryBytes = Buffer.byteLength(JSON.stringify(agent.session.toolHistory()), 'utf8')
-    let inputLimit = budget.budget.hardInputLimit - 4096 - toolHistoryBytes
+    const meter = this.ctx.get('tokenMeter')
+    if (!meter || typeof meter.estimateMessage !== 'function') throw recoverError('TOKEN_METER_UNAVAILABLE')
+    const estimate = createCompactionTokenEstimator(meter)
+    const toolHistoryTokens = estimate({ messages: [createUserMessage({ source: { kind: 'user' },
+      content: [{ type: 'text', text: JSON.stringify(agent.session.toolHistory()) }] })] })
+    let inputLimit = budget.budget.hardInputLimit - 4096 - toolHistoryTokens
     if (inputLimit <= 0) throw recoverError('FIXED_PREFIX')
-    const estimate = estimateCompactionInputBytes
     operationSignal.throwIfAborted()
     lease.assertCurrent()
     const originalSize = estimate(input)
@@ -237,7 +240,7 @@ export class CopilotManualRecoveryCompactionEngine extends BasicCompactionEngine
         lease.assertCurrent()
         // A capacity failure is not a measurement. Reduce partitionable
         // history once while retaining fixed prefixes and balanced units.
-        inputLimit = reduceCompactionInputLimit(input, inputLimit)
+        inputLimit = reduceCompactionInputLimit(input, inputLimit, estimate)
         failedAttempt = true
       }
     }

@@ -1,4 +1,44 @@
 import type { Message, ToolSchema } from '@deepseek-ai/dsh-llm'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+
+interface CompactionPlanningInput {
+  readonly messages: readonly Message[]
+  readonly tools?: readonly ToolSchema[]
+}
+
+export function createCompactionTokenEstimator(meter: { estimateMessage(message: Message): number }) {
+  const messages = new WeakMap<Message, number>()
+  const tools = new WeakMap<readonly ToolSchema[], number>()
+  const valid = (value: number): number => {
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new Error('COPILOT_MANUAL_RECOVERY_TOKEN_ESTIMATE_INVALID')
+    return value
+  }
+  const price = (message: Message): number => {
+    let value = messages.get(message)
+    if (value === undefined) {
+      value = valid(meter.estimateMessage(message))
+      messages.set(message, value)
+    }
+    return value
+  }
+  return (input: CompactionPlanningInput): number => {
+    let total = 0
+    if (input.tools?.length) {
+      let value = tools.get(input.tools)
+      if (value === undefined) {
+        // Price the full schema text conservatively through the same public
+        // meter, without inventing a bytes-to-tokens conversion.
+        value = price(createUserMessage({ source: { kind: 'user' },
+          content: [{ type: 'text', text: JSON.stringify(input.tools) }] }))
+        tools.set(input.tools, value)
+      }
+      total = value
+    }
+    for (const message of input.messages) total = valid(total + price(message))
+    return total
+  }
+}
 
 interface CompactionPlanningMessage {
   readonly role: string
@@ -46,12 +86,13 @@ export function estimateCompactionInputBytes(input: {
   }), 'utf8')
 }
 
-export function reduceCompactionInputLimit(input: {
-  readonly messages: readonly Message[]
-  readonly tools?: readonly ToolSchema[]
-}, inputLimit: number): number {
-  const originalSize = estimateCompactionInputBytes(input)
-  const fixedSize = estimateCompactionInputBytes({
+export function reduceCompactionInputLimit(
+  input: CompactionPlanningInput,
+  inputLimit: number,
+  estimate: (input: CompactionPlanningInput) => number = estimateCompactionInputBytes,
+): number {
+  const originalSize = estimate(input)
+  const fixedSize = estimate({
     tools: input.tools,
     messages: input.messages[0]?.role === 'system' ? input.messages.slice(0, 1) : [],
   })
@@ -60,7 +101,7 @@ export function reduceCompactionInputLimit(input: {
   let start = 0
   let minimum = fixedSize
   for (const end of compactionSafeBoundaries(messages).slice(1)) {
-    minimum = Math.max(minimum, estimateCompactionInputBytes({
+    minimum = Math.max(minimum, estimate({
       tools: input.tools, messages: [...prefix, ...messages.slice(start, end)],
     }))
     start = end

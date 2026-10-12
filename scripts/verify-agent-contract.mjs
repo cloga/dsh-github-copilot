@@ -98,6 +98,10 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.compaction?.automaticRecoveryBoundary?.includes('No 408/network/auth/quota fallback')
     && agentGuide.includes('automaticRecovery: false'),
   'automatic segmented recovery must retain explicit composition, capacity-only escalation and bounded native ownership')
+  require(contract.tasks.compaction?.planningBoundary?.includes('tokenMeter.estimateMessage')
+    && contract.tasks.compaction?.planningBoundary?.includes('never compare content bytes directly with a token budget')
+    && contract.tasks.compaction?.planningBoundary?.includes('final native converted admission'),
+  'compaction planning must use native token units without weakening final admission')
   require(contract.tasks.compaction?.visibleHistoryBoundary?.includes('Persistent Session visible-history policy')
     && contract.tasks.compaction?.visibleHistoryBoundary?.includes('revoked after settlement or teardown')
     && contract.tasks.compaction?.visibleHistoryBoundary?.includes('legacy next-turn-only consent is not summary consent')
