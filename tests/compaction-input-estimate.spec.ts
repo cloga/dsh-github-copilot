@@ -1,13 +1,65 @@
 import { describe, expect, it } from 'vitest'
 import { createAssistantMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, Message, ToolSchema } from '@deepseek-ai/dsh-llm'
-import { estimateCompactionInputBytes, reduceCompactionInputLimit } from '../src/compaction-input-estimate.ts'
+import { createCompactionTokenEstimator, estimateCompactionInputBytes, reduceCompactionInputLimit } from '../src/compaction-input-estimate.ts'
 import { summarizeOversizedManualInput } from '../src/manual-compaction-recovery.ts'
 
 const checkpoint = [{ type: 'text' as const, text: 'Synthetic checkpoint' }]
 const makeCheckpoint = (content: readonly ContentBlock[]): Message => createUserMessage({ source: { kind: 'user' }, content })
 
 describe('compaction content planning', () => {
+  it('uses token units for a long balanced span instead of treating bytes as tokens', async () => {
+    const callId = ToolCallId('long-lived-call')
+    const call = createAssistantMessage({ source: { provider: 'test', model: 'test' },
+      content: [{ type: 'tool-call', id: callId, name: 'test', arguments: '{}' }] })
+    const messages: Message[] = [call,
+      ...Array.from({ length: 40 }, () => makeCheckpoint([{ type: 'text', text: 'x'.repeat(2000) }])),
+      { role: 'tool', id: call.id, source: { kind: 'tool', callId }, toolCallId: callId,
+        content: [{ type: 'text', text: 'complete result' }] },
+    ]
+    const meter = { estimateMessage: (message: Message) => 4 + message.content.reduce((sum, block) =>
+      sum + (block.type === 'text' ? Math.ceil(block.text.length / 4) : 20), 0) }
+    const estimate = createCompactionTokenEstimator(meter)
+    const input = { messages }
+    const before = JSON.stringify(input)
+    const summarize = async () => ({ summary: checkpoint, provider: 'test', model: 'test' })
+    expect(estimateCompactionInputBytes(input)).toBeGreaterThan(30000)
+    expect(estimate(input)).toBeLessThan(30000)
+    await expect(summarizeOversizedManualInput({
+      input, inputLimit: 30000, estimate: estimateCompactionInputBytes, summarize, makeCheckpoint,
+      signal: new AbortController().signal,
+    })).rejects.toThrow('COPILOT_MANUAL_RECOVERY_INDIVISIBLE')
+    await expect(summarizeOversizedManualInput({
+      input, inputLimit: 30000, estimate, summarize, makeCheckpoint, signal: new AbortController().signal,
+    })).resolves.toMatchObject({ summary: checkpoint })
+    expect(JSON.stringify(input)).toBe(before)
+  })
+
+  it('prices tools through the same meter and rejects invalid or overflowing estimates', () => {
+    const input = { tools: [{ name: 'test', description: 'Synthetic tool', parameters: {} }],
+      messages: [makeCheckpoint(checkpoint)] }
+    let calls = 0
+    const estimate = createCompactionTokenEstimator({ estimateMessage: () => { calls++; return 50 } })
+    expect(estimate(input)).toBe(100)
+    expect(estimate(input)).toBe(100)
+    expect(calls).toBe(2)
+    for (const value of [-1, NaN, Infinity, 1.5]) {
+      expect(() => createCompactionTokenEstimator({ estimateMessage: () => value })(input))
+        .toThrow('COPILOT_MANUAL_RECOVERY_TOKEN_ESTIMATE_INVALID')
+    }
+    expect(() => createCompactionTokenEstimator({ estimateMessage: () => Number.MAX_SAFE_INTEGER })(input))
+      .toThrow('COPILOT_MANUAL_RECOVERY_TOKEN_ESTIMATE_INVALID')
+  })
+
+  it('reduces a native capacity fallback in token units while retaining its largest balanced unit', () => {
+    const input = { messages: Array.from({ length: 4 }, () => makeCheckpoint(checkpoint)) }
+    const estimate = createCompactionTokenEstimator({ estimateMessage: () => 100 })
+    expect(reduceCompactionInputLimit(input, 350, estimate)).toBe(200)
+    expect(reduceCompactionInputLimit(input, 150, estimate)).toBe(150)
+    expect(() => reduceCompactionInputLimit({ messages: [input.messages[0]!] }, 500, estimate))
+      .toThrow('COPILOT_MANUAL_RECOVERY_INDIVISIBLE')
+  })
+
   it('reduces partitionable history without halving the mandatory fixed tools', () => {
     const messages = Array.from({ length: 4 }, () =>
       createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'x'.repeat(250) }] }))

@@ -32,6 +32,8 @@ import { installAutoModelRouting } from '../../src/auto-model-host.ts'
 import { estimateTurnInputTokens } from '../../src/auto-model-routing.ts'
 import { installSessionContinuation } from '../../src/session-continuation-host.ts'
 import CopilotManualRecoveryCompactionEngine from '../../src/manual-compaction-recovery.ts'
+import { summarizeOversizedManualInput } from '../../src/manual-compaction-recovery.ts'
+import { createCompactionTokenEstimator, estimateCompactionInputBytes } from '../../src/compaction-input-estimate.ts'
 import previewPlugin from '../../src/preview-route.ts'
 import { installCompactionReplay } from '../../src/compaction-replay.ts'
 import type { CompactionReplayRecovery } from '../../src/compaction-replay.ts'
@@ -135,9 +137,11 @@ class FixtureAdapter extends LlmAdapter {
           options.signal?.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
         })
       }
-      if (this.summaryMode === 'reject-overflow' && Buffer.byteLength(JSON.stringify({
-        messages: options.messages, tools: options.tools,
-      }), 'utf8') > 12000) throw new Error('COPILOT_REQUEST_INPUT_LIMIT_EXCEEDED')
+      if (this.summaryMode === 'reject-overflow') {
+        const tokens = options.messages.reduce((sum, message) =>
+          sum + TokenMeter.prototype.estimateMessage(message), 0)
+        if (tokens > 12000) throw new LlmError('Synthetic summary input exceeds token capacity', 'CONTEXT_WINDOW_EXCEEDED')
+      }
       if (this.summaryMode === 'await-abort') {
         const signal = options.signal
         if (signal === undefined) throw new Error('fixture summary requires the Core cancellation signal')
@@ -444,6 +448,41 @@ function installController(ctx: Context): void {
 }
 
 describe('alpha2 stock compaction driven by the Copilot local pressure signal', () => {
+  it('prices a long-lived balanced tool span in native tokens, retaining indivisible admission limits', async () => {
+    const f = await fixture('stop', true, true, true)
+    const callId = ToolCallId('long-lived-synthetic-call')
+    const call = createAssistantMessage({ source: { provider, model: 'fixture-model-A' },
+      content: [{ type: 'tool-call', id: callId, name: 'fixture', arguments: '{}' }] })
+    const messages = [call,
+      ...Array.from({ length: 40 }, () => createUserMessage({ source: { kind: 'user' },
+        content: [{ type: 'text', text: 'engineering detail '.repeat(100) }] })),
+      { role: 'tool' as const, id: call.id, source: { kind: 'tool' as const, callId }, toolCallId: callId,
+        content: [{ type: 'text' as const, text: 'complete result' }] },
+    ]
+    const input = { messages }
+    const before = JSON.stringify(input)
+    const estimate = createCompactionTokenEstimator(f.ctx.tokenMeter)
+    const tokenCount = estimate(input)
+    expect(tokenCount).toBe(messages.reduce((sum, message) => sum + f.ctx.tokenMeter.estimateMessage(message), 0))
+    expect(estimateCompactionInputBytes(input)).toBeGreaterThan(tokenCount * 3)
+    let calls = 0
+    const options = {
+      input, signal: new AbortController().signal, estimate,
+      summarize: async () => { calls++; return { provider, model: 'fixture-model-A',
+        summary: [{ type: 'text' as const, text: checkpoint }], maxTokens: 8192 } },
+      makeCheckpoint: (summary: readonly import('@deepseek-ai/dsh-llm').ContentBlock[]) =>
+        createUserMessage({ source: { kind: 'user' }, content: summary }),
+    }
+    await expect(summarizeOversizedManualInput({ ...options, inputLimit: tokenCount }))
+      .resolves.toMatchObject({ summary: [{ type: 'text', text: checkpoint }] })
+    expect(calls).toBe(1)
+    await expect(summarizeOversizedManualInput({ ...options, inputLimit: tokenCount - 1 }))
+      .rejects.toThrow('COPILOT_MANUAL_RECOVERY_INDIVISIBLE')
+    expect(calls).toBe(1)
+    expect(JSON.stringify(input)).toBe(before)
+    expect(f.forbiddenFetch).not.toHaveBeenCalled()
+  })
+
   it.each([false, true])('persistent policy restores automatic replay-blocked compaction without a command, recovery engine=%s', async recoveryEngine => {
     const f = await fixture('stop', recoveryEngine, false, recoveryEngine, true)
     const value = { continuationDefaultHistory: [{ enabled: false, changedAt: 0 }],
@@ -667,7 +706,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
   it('recovers oversized manual history with one native transaction and honest multi-call audit', async () => {
     const f = await fixture('reject-overflow', true, false, true, false, { automaticRecovery: false })
     for (let turn = 0; turn < 6; turn++) {
-      f.send(`HISTORICAL_TURN_${turn} ${'historical detail '.repeat(100)}`)
+      f.send(`HISTORICAL_TURN_${turn} ${'historical detail '.repeat(500)}`)
       await f.agent.whenIdle()
     }
     const before = f.agent.session.surface.replaceGeneration
@@ -691,7 +730,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     const f = await fixture('reject-overflow', true, false, true, false,
       enabled ? {} : mode === 'disabled' ? { automaticRecovery: false } : { auto: false })
     for (let turn = 0; turn < 6; turn++) {
-      f.send(`AUTOMATIC_HISTORY_${turn} ${'historical detail '.repeat(100)}`)
+      f.send(`AUTOMATIC_HISTORY_${turn} ${'historical detail '.repeat(500)}`)
       await f.agent.whenIdle()
     }
     const generation = f.agent.session.surface.replaceGeneration
@@ -721,7 +760,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
   it('cancels automatic segmented recovery without a partial checkpoint', async () => {
     const f = await fixture('await-abort', true)
     for (let turn = 0; turn < 6; turn++) {
-      f.send(`CANCEL_HISTORY_${turn} ${'historical detail '.repeat(100)}`)
+      f.send(`CANCEL_HISTORY_${turn} ${'historical detail '.repeat(500)}`)
       await f.agent.whenIdle()
     }
     const generation = f.agent.session.surface.replaceGeneration
@@ -768,7 +807,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
   it('closes a cancelled oversized manual transaction without replacing its source', async () => {
     const f = await fixture('await-abort', true)
     for (let turn = 0; turn < 6; turn++) {
-      f.send(`HISTORICAL_TURN_${turn} ${'historical detail '.repeat(100)}`)
+      f.send(`HISTORICAL_TURN_${turn} ${'historical detail '.repeat(500)}`)
       await f.agent.whenIdle()
     }
     const generation = f.agent.session.surface.replaceGeneration

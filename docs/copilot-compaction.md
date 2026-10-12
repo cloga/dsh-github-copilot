@@ -110,6 +110,13 @@ Analysis up to 16 MiB retains the existing span validator. Larger verified-408 J
 
 This implementation is preventive, not a general rescue summarizer. A manual summary whose full input already exceeds the hard budget fails before model transport. It does not silently trim, fabricate a partial checkpoint, or claim that refusing the request recovered the history. Giant fixed prefixes or an indivisible latest unit can also prevent useful reduction.
 
+The separately selected recovery engine now plans through the published native
+token meter, in the same token units as its budget (#418). Earlier content-byte
+planning could falsely reject a long balanced tool span even when its token
+estimate fits. This correction changes no final managed admission, output cap,
+tool pairing, native transaction or retry bound. A fitting planning estimate is
+not proof of supplier acceptance.
+
 The #228 investigation confirmed a separate Auto undercount (#230): Core reasoning blocks caused the incompatible pi-ai estimator to throw and drop complete assistant messages. Auto now uses the native Core meter, without changing final native provider admission. This fixes candidate selection evidence, not a genuinely oversized summary. In the reported failure class, a roughly 508k-token summary input exceeded a roughly 368k-token input budget even with a 65,536-token output reservation. Reducing output reservation cannot remove an independently binding prompt ceiling.
 
 On official `0.2.0-rc.2`, the stock summarizer uses an explicitly configured summary route, otherwise the latest committed request header, otherwise the Agent's initial options. Changing only a pending picker selection therefore does not necessarily change a manual `/compact` request's model. Repeating the same over-budget summary or disabling admission is not a recovery procedure.
