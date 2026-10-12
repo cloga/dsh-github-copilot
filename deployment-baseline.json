@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.2-alpha.13"
+    "version": "0.4.2-alpha.14"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1342,7 +1342,7 @@
       "sourceMarkers": [
         {"file": "src/auto-allocation.ts", "marker": "high-cost-v1"},
         {"file": "src/auto-allocation.ts", "marker": "high-cost-v2"},
-        {"file": "src/auto-allocation.ts", "marker": "high-cost-v3"},
+        {"file": "src/auto-allocation.ts", "marker": "high-cost-v4"},
         {"file": "src/auto-allocation.ts", "marker": "deferredHighCostCount"},
         {"file": "src/config.ts", "marker": "highCostModelIds"},
         {"file": "src/model-preferences-card.ts", "marker": "High cost"},
@@ -1420,7 +1420,9 @@
         {"file": "tests/scripts/parent-model-follow.test.mjs", "name": "explicit same-model and different-model child selections both win"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "retains legacy length evidence but does not use it as task or supplier category evidence"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "uses the task/category policy with one hard-eligible pool for all preferences"},
-        {"file": "tests/auto-model-routing.spec.ts", "name": "uses finite continuity but never lets it override task category or input fit"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "uses finite continuity as a multiplier and never lets it override input fit"},
+        {"file": "tests/auto-category-distribution.spec.ts", "name": "retains positive opportunity for every fitting model for %s demand"},
+        {"file": "tests/auto-category-distribution.spec.ts", "name": "attributes each candidate to its own category in bounded summaries and persistent cohorts"},
         {"file": "tests/auto-model-routing.spec.ts", "name": "discloses category fallbacks and never guesses missing category from ID or capacity"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "bounds context, never reads attachment/reasoning bodies, and does not downshift omitted context"},
         {"file": "tests/auto-task-assessment.spec.ts", "name": "inherits difficult-task evidence only through explicit bounded continuations"},

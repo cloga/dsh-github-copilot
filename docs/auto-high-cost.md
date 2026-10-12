@@ -42,23 +42,38 @@ unchanged official Core fixture, not that the affected live Host read the mark
 before the historical Astra decision. Do not hardcode a model, change live
 preferences or rewrite a frozen explanation to manufacture a repair.
 
-## Routing policy v3 (#412)
+## Routing policy v4 (#414)
 
 1. Account ownership, metadata validity, exclusion, input modality and input
    headroom are hard requirements.
 2. Assess each new turn using existing contextual local/semantic evidence.
-   Preserve existing demand categories and supplier-category fallback.
-3. Inside the first fitting category only, retain all fitting candidates.
+   Preserve existing demand categories as the target, not a hard pool filter.
+3. Retain every eligible fitting candidate across categories. Multiply each
+   model's cost/recency weight by its category factor: target 1, second 0.25,
+   third 0.05, unknown 0.02. The order is Powerful/Versatile/Lightweight for a
+   Powerful target, Lightweight/Versatile/Powerful for Lightweight, and
+   Versatile/Powerful/Lightweight for Versatile. Unknown stays explicit, never
+   inferred from names or capacities. Missing protocol/capability proof remains
+   a hard admission failure, not an unknown-category opportunity.
    Ordinary candidates have weight 1 and an eligible previous ordinary model
    receives multiplier 1.5. Marked candidates have base weight 0.2; the previous
    marked model decays tenfold to 0.02 instead of receiving a continuity bonus.
 4. Select from cumulative positive weights using a stable Agent/turn seed.
-   Capture the selected ID, candidate weights and conditional expected shares.
+   Capture the selected ID, each candidate's actual category and category factor,
+   final weights and conditional expected shares.
    No additional model calls are made to give candidates a chance.
 5. When no model fits, retain the largest-input-budget native recovery path.
    Cost cannot justify choosing a model that cannot fit.
 
-This corrects v2's over-strong hard deferral after the user clarified that high
+V4 corrects v3's hard category exclusion: a fitting non-target category now has
+positive opportunity, even while the target has fitting models. Category factors
+are deliberately biased but uncalibrated trial coefficients; task-quality,
+switching-cost and real workload acceptance remain unverified. More models in
+a category increase its total opportunity; these are per-model factors, not
+fixed category probability quotas. A category with only high-cost models can
+have lower total probability than an ordinary non-target category.
+
+V3 corrected v2's over-strong hard deferral after the user clarified that high
 cost should have rare opportunity and strongly decay after selection, not become
 permanently unavailable. The 10x repeat penalty is a declared trial, not a
 calibrated optimum. It uses existing previous-route evidence only; there is no
@@ -68,8 +83,10 @@ shrinking. A different model's turn resets it to 0.2. Other marked models retain
 base weight. A lone fitting marked model is selected and an all-marked pool
 remains usable. Fit and supplier
 category cannot prove peers can solve the task; no automatic escalation, extra
-calls, in-turn switch or lower-category substitution is introduced.
-Every fitting final-pool candidate has positive opportunity. With one ordinary
+calls or in-turn switch is introduced. V4 intentionally permits non-target
+categories; it does not infer they can solve the task.
+Every fitting candidate has positive opportunity. In an isolated same-category
+two-model pool, with one ordinary
 peer, a marked model has share 2/17 (11.8%) when the ordinary model was previous,
 then 1/51 (2.0%) when it was itself previous. The independent-draw approximation
 for a predeclared pair is 2/867 (0.23%), not the probability of any streak in a
@@ -77,7 +94,8 @@ long Session or a guarantee against repeats. Stable seeds do not prove
 independent random trials. Conditional shares are not observed billing.
 
 Historical v1 retains mixed-pool weights and marked continuity; v2 retains hard
-cost-tier deferral and its deferred count. Both remain readable unchanged.
+cost-tier deferral and its deferred count; v3 retains hard category filtering
+with positive cost/recency weights. All remain readable unchanged.
 Persistent cohorts retain original policy versions.
 The Session summary separates incompatible policy cohorts and reports omitted
 decisions instead of relabeling them or merging different opportunities.
@@ -102,6 +120,48 @@ never count it as an ordinary Auto decision or hide auxiliary costs in Chat
 Usage.
 
 ## Measurements and acceptance
+
+### Reproducible v4 distribution trial
+
+From a source checkout with dependencies installed and Node 24:
+
+```sh
+node --experimental-transform-types scripts/simulate-auto-distribution.mjs
+```
+
+This calls the real selector for 19 scenarios, 100000 draws each, using one
+synthetic Session and ascending turns. Six synthetic models have two per
+category; only Powerful A is marked. All capacities are 128000 with 8000 output
+unless a scenario explicitly changes fit. IDs are fixtures, not an account
+catalog. No credentials, discovery, model calls or profile mutation occur.
+Rows report counts, averaged conditional expected share and observed frequency;
+every positive-share row must be observed and differ by less than 0.5 percentage
+points. Seed determinism does not establish independent random trials.
+
+With no previous model, the twelve task/preference combinations collapse to
+these three distinct pools. Observed percentages for 100000 draws each:
+
+| Preferred target | Powerful A marked | Powerful B ordinary | Versatile A | Versatile B | Lightweight A | Lightweight B |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Lightweight | 0.355 | 1.985 | 9.793 | 9.619 | 39.001 | 39.247 |
+| Versatile | 2.157 | 10.346 | 41.589 | 41.725 | 2.058 | 2.125 |
+| Powerful | 11.080 | 55.708 | 13.830 | 13.776 | 2.750 | 2.856 |
+
+The respective theoretical percentages are:
+Lightweight 0.390625/1.953125/9.765625/9.765625/39.0625/39.0625;
+Versatile 2.083333/10.416667/41.666667/41.666667/2.083333/2.083333;
+Powerful 11.111111/55.555556/13.888889/13.888889/2.777778/2.777778.
+The task/preference target matrix still applies; it biases these probabilities.
+
+For a Powerful target, fixed previous ordinary gives the marked model theoretical
+8.6957%, observed 8.663%; fixed previous marked gives 1.2346%, observed 1.296%.
+The sequential simulation updates previous after every draw: marked 8.577%,
+ordinary Powerful 61.215%, Versatile 12.705%/12.632%, Lightweight 2.410%/2.461%,
+with 93 adjacent marked pairs. These are fixture frequencies, not predictions
+for current account pools. The script also covers both Powerful models marked,
+one/both Powerful models failing input fit and mixed image support.
+Hard-ineligible rows retain zero opportunity; there is no guaranteed finite
+waiting time for any model.
 
 Review the previous policy report before changing weights or continuity.
 Synthetic acceptance covers ordinary/marked/all-marked/single pools, every

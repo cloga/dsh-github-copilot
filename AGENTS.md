@@ -368,13 +368,18 @@ Completed-turn Usage diagnostics (#259) are read-only plugin conversation data a
 Auto task routing (#258) uses current `model_picker_category` facts, never model
 names, effort or context capacity as a quality category. Hard eligibility/input
 fit precede task/preference policy; unknown category and uncertain task evidence
-remain explicit. Within the first fitting category, high-cost-v3 retains every
-fitting candidate with positive weight. Ordinary weight 1 receives finite
+remain explicit. High-cost-v4 retains every eligible fitting model across
+categories with positive weight. Task/preference sets the favored target, not
+hard category exclusion. Per-model category factors are target 1, second 0.25,
+third 0.05, unknown 0.02 in the existing order, then multiplied by cost/recency.
+These are uncalibrated trial factors, not fixed category probability quotas;
+candidate populations affect shares. Ordinary weight 1 receives finite
 previous-model multiplier 1.5; marked base 0.2 decays to 0.02 only for the previous
 model. One-turn recency resets after a different model, not a hidden streak
-counter or task-failure inference. Preserve v1/v2 historical codecs/cohorts and
+counter or task-failure inference. Preserve v1/v2/v3 historical codecs/cohorts and
 their original explanation. Fit is not task
-success; never switch categories for cost, infer incapability or add escalation.
+success; non-target draws are intentional opportunity, not absence/failure of
+target candidates. Never infer incapability or add task-failure escalation.
 Capture actual reasons once
 per turn without durable decision events or changing Usage.
 `autoSemanticAssessment` is default-on by explicit user rollout request (#267),

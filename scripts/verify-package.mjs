@@ -231,6 +231,7 @@ const emptyAllocation = { policyVersion: 'high-cost-v1', scope: 'viewed-session-
 allocation.result.schema.parse(emptyAllocation)
 allocation.result.schema.parse({ ...emptyAllocation, policyVersion: 'high-cost-v2', omittedPolicyDecisions: 0 })
 allocation.result.schema.parse({ ...emptyAllocation, policyVersion: 'high-cost-v3', omittedPolicyDecisions: 0 })
+allocation.result.schema.parse({ ...emptyAllocation, policyVersion: 'high-cost-v4', omittedPolicyDecisions: 0 })
 if (allocation.result.schema.safeParse({ ...emptyAllocation, credentials: 'private' }).success
   || allocation.result.schema.safeParse({ ...emptyAllocation, completeHistory: true }).success) {
   throw new Error('allocation observations accept sensitive fields or fabricated complete history')

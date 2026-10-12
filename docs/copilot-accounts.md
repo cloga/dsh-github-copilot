@@ -17,7 +17,7 @@ normal native refresh by another same-account request. Upgrade to 0.4.1 for the
 narrow plugin-owned refresh exception. This is synthetic regression evidence,
 not attribution of a particular live error to refresh.
 
-Versions through 0.4.2-alpha.12 keyed refresh evidence by a traced credentials
+Versions through 0.4.2-alpha.13 keyed refresh evidence by a traced credentials
 service face. Official rc.2 Cordis returns distinct faces on repeated reads,
 so even certified refresh notifications could be classified as unknown source.
 The plugin now correlates by the published `symbols.original` service identity,

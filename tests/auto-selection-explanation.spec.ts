@@ -11,14 +11,14 @@ const explanation: AutoSelectionExplanation = {
 
 it.each(['en', 'zh'])('explains positive high-cost opportunity and recency decay without implying task failure (%s)', locale => {
   const tier = { ...explanation, method: 'weighted-distribution' as const, categoryCandidateCount: 2,
-    allocation: allocateAutoModel([{ id: 'ordinary' }, { id: 'marked' }], ['marked'], 'marked', 1) }
+    allocation: allocateAutoModel([{ id: 'ordinary', category: 'powerful' }, { id: 'marked', category: 'powerful' }], ['marked'], 'marked', 1) }
   const text = selectionExplanation(tier, locale).choice
-  expect(text).toContain(locale === 'en' ? 'decays to 0.02' : '衰减至 0.02')
+  expect(text).toContain(locale === 'en' ? 'previous high cost 0.02' : '高成本上一轮 0.02')
   expect(text).toContain(locale === 'en' ? 'positive opportunity' : '正机会')
   const fallback = selectionExplanation({ ...tier,
     method: 'only-candidate', categoryCandidateCount: 1,
     allocation: allocateAutoModel([{ id: 'marked' }], ['marked'], 'marked', 1) }, locale).choice
-  expect(fallback).toContain(locale === 'en' ? 'one-turn recency' : '一轮近期')
+  expect(fallback).toContain(locale === 'en' ? 'uncalibrated trial' : '未校准试验')
 })
 
 it('retains historical v2 hard-deferral explanation rather than describing it as decay', () => {

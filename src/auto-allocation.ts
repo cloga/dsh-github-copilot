@@ -1,14 +1,26 @@
 import { z } from 'zod'
 import { normalizeExcludedModelIds } from './model-exclusions.ts'
 
-export const AUTO_ALLOCATION_POLICIES = ['high-cost-v1', 'high-cost-v2', 'high-cost-v3'] as const
-export const AUTO_ALLOCATION_POLICY = 'high-cost-v3'
+export const AUTO_ALLOCATION_POLICIES = ['high-cost-v1', 'high-cost-v2', 'high-cost-v3', 'high-cost-v4'] as const
+export const AUTO_ALLOCATION_POLICY = 'high-cost-v4'
+const categories = ['powerful', 'versatile', 'lightweight', 'unknown'] as const
+type Category = typeof categories[number]
+export function autoCategoryWeight(category: Category, target: Exclude<Category, 'unknown'>): number {
+  if (category === 'unknown') return 0.02
+  const order = target === 'powerful' ? ['powerful', 'versatile', 'lightweight']
+    : target === 'lightweight' ? ['lightweight', 'versatile', 'powerful']
+      : ['versatile', 'powerful', 'lightweight']
+  return [1, 0.25, 0.05][order.indexOf(category)]!
+}
 export const AutoAllocationSchema = z.object({
   policyVersion: z.enum(AUTO_ALLOCATION_POLICIES),
+  targetCategory: z.enum(['powerful', 'versatile', 'lightweight']).optional(),
   deferredHighCostCount: z.number().int().min(0).max(511).optional(),
   selectedModelId: z.string().min(1).max(512),
   candidates: z.array(z.object({
     modelId: z.string().min(1).max(512),
+    category: z.enum(categories).optional(),
+    categoryWeight: z.number().positive().max(1).optional(),
     highCost: z.boolean(),
     previous: z.boolean(),
     weight: z.number().positive().max(1.5),
@@ -17,16 +29,22 @@ export const AutoAllocationSchema = z.object({
 }).strict().refine(value => {
   const total = value.candidates.reduce((sum, row) => sum + row.weight, 0)
   const legacy = value.policyVersion === 'high-cost-v1'
-  const decay = value.policyVersion === 'high-cost-v3'
+  const soft = value.policyVersion === 'high-cost-v4'
+  const decay = value.policyVersion === 'high-cost-v3' || soft
+  const categoryValid = soft ? value.targetCategory !== undefined && value.candidates.every(row =>
+    row.category !== undefined && row.categoryWeight === autoCategoryWeight(row.category, value.targetCategory!))
+    : value.targetCategory === undefined && value.candidates.every(row =>
+      row.category === undefined && row.categoryWeight === undefined)
   const tierValid = legacy || decay ? value.deferredHighCostCount === undefined
     : value.deferredHighCostCount !== undefined && value.candidates.length + value.deferredHighCostCount <= 512
       && value.candidates.every(row => row.highCost === value.candidates[0]!.highCost)
       && (!value.candidates[0]!.highCost || value.deferredHighCostCount === 0)
-  return tierValid && new Set(value.candidates.map(row => row.modelId)).size === value.candidates.length
+  return categoryValid && tierValid && new Set(value.candidates.map(row => row.modelId)).size === value.candidates.length
     && value.candidates.some(row => row.modelId === value.selectedModelId)
     && value.candidates.filter(row => row.previous).length <= 1
     && value.candidates.every(row => row.weight === (decay && row.highCost && row.previous ? 2
-      : (row.highCost ? 20 : 100) * (row.previous && (legacy || !row.highCost) ? 1.5 : 1)) / 100
+      : (row.highCost ? 20 : 100) * (row.previous && (legacy || !row.highCost) ? 1.5 : 1))
+      * (soft ? Math.round(row.categoryWeight! * 100) : 100) / 10_000
       && Math.abs(row.expectedShare - row.weight / total) <= 1e-12)
 }, { message: 'Invalid allocation policy evidence' })
 type AllocationValue = z.infer<typeof AutoAllocationSchema>
@@ -46,10 +64,11 @@ export function normalizeHighCostModelIds(value: unknown): readonly string[] {
 
 /** Integer policy units avoid cumulative decimal drift; avalanche sequential turn seeds. */
 export function allocateAutoModel(
-  pool: readonly { readonly id: string }[],
+  pool: readonly { readonly id: string; readonly category?: Exclude<Category, 'unknown'> }[],
   highCostModelIds: unknown,
   previousModelId: string | undefined,
   seed: number,
+  targetCategory: Exclude<Category, 'unknown'> = 'powerful',
 ): AutoAllocation {
   if (!Number.isSafeInteger(seed) || pool.length === 0 || pool.length > 512
     || normalizeExcludedModelIds(pool.map(model => model.id)).length !== pool.length) {
@@ -59,8 +78,10 @@ export function allocateAutoModel(
   const rows = pool.map(model => {
     const highCost = marked.has(model.id)
     const previous = model.id === previousModelId
-    const units = highCost ? previous ? 2 : 20 : previous ? 150 : 100
-    return { modelId: model.id, highCost, previous, units }
+    const category: Category = model.category ?? 'unknown'
+    const categoryWeight = autoCategoryWeight(category, targetCategory)
+    const units = (highCost ? previous ? 2 : 20 : previous ? 150 : 100) * Math.round(categoryWeight * 100)
+    return { modelId: model.id, category, categoryWeight, highCost, previous, units }
   })
   const total = rows.reduce((sum, row) => sum + row.units, 0)
   let hash = seed >>> 0
@@ -74,9 +95,10 @@ export function allocateAutoModel(
   })!
   return Object.freeze({
     policyVersion: AUTO_ALLOCATION_POLICY,
+    targetCategory,
     selectedModelId: selected.modelId,
     candidates: Object.freeze(rows.map(({ units, ...row }) => Object.freeze({
-      ...row, weight: units / 100, expectedShare: units / total,
+      ...row, weight: units / 10_000, expectedShare: units / total,
     }))),
   })
 }

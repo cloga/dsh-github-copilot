@@ -275,23 +275,28 @@ same-turn single-flight, eligibility and category policy remain unchanged.
 | Unknown | Versatile | Versatile | Powerful |
 
 These are declared routing policies, not benchmark rankings. Efficiency's
-routine lightweight selection is an economical approximation, not proof of
+routine lightweight target is an economical approximation, not proof of
 equal output quality. Intelligence never treats short length alone as simple.
 
-When the target has no fitting candidates, use the disclosed category fallback:
+The target and remaining categories have this declared weight order:
 powerful -> versatile -> lightweight; versatile -> powerful -> lightweight;
-lightweight -> versatile -> powerful. Unclassified candidates are a final
-explicit fallback only, not fabricated categories. Unknown/new category values
+lightweight -> versatile -> powerful. Unclassified candidates retain a small
+explicit opportunity, not fabricated categories. Unknown/new category values
 remain unclassified with a bounded catalog diagnostic.
 
-Within the first fitting category, use stable positive weighted Session/turn
-allocation across all fitting candidates. Ordinary weight 1 has finite
+Across every eligible fitting category, use stable positive weighted Session/turn
+allocation. The task/preference matrix is a preferred target, not exclusion.
+Multiply per-model cost/recency weights by category factors 1 / 0.25 / 0.05
+in the existing target/second/third order; unknown category uses 0.02 explicitly.
+These factors are an uncalibrated trial. Ordinary weight 1 has finite
 previous-model multiplier 1.5; high-cost base weight 0.2 decays tenfold to 0.02
 only for the previous model. Every candidate keeps positive opportunity; a lone
 candidate still has share 1. A different model's turn resets the penalty, without
 extra streak state. Cost is independent of task difficulty and supplier
-category; input fit does not prove task success. Never weaken category or
-automatically escalate to establish whether another model can solve the task.
+category; input fit does not prove task success. Non-target selection is
+intentional weighted opportunity, not absence of a target candidate or proof
+of task suitability. Never automatically escalate to establish whether
+another model can solve the task.
 These are reviewed policy parameters, not measured quality or prices. Once
 admitted, all steps/retries share the decision. No supplier cache savings are
 claimed. See [high-cost requirements](./auto-high-cost.md) and
@@ -304,7 +309,7 @@ never label this as a successful preference match or silently trim history.
 ## Explanation contract
 
 Capture task source/demand/signals, assessment diagnostic, target/selected
-category, fitting category count, category fallback and continuity/tie-break or
+category, fitting cross-category count, target absence and continuity/tie-break or
 no-fit selection at decision time. Client reads the explicit viewed Session and
 turn through the existing strict Remote. It does not rerun classification or
 consult today's picker. Show a decisive first sentence, bounded supporting
