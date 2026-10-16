@@ -80,6 +80,37 @@ function assembly(provider: string) {
 }
 
 describe('Copilot tool-schema compatibility', () => {
+  it('preserves code-first PTC instructions, timeout and native schema ownership', () => {
+    const parameters = {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'The body of an async TypeScript function.' },
+        description: { type: 'string', description: 'Short program summary' },
+        timeoutMs: { type: 'number', description: 'Includes nested tool and approval waits' },
+        sandbox_permissions: { type: 'string' },
+        justification: { type: 'string' },
+      },
+      required: ['code', 'description'],
+    }
+    const tool = {
+      name: 'run_code',
+      description: 'Execute the BODY of an async function; top-level await and return work. Programs are never replayed automatically.',
+      parameters,
+    }
+    const input = { variables: { provider: 'github-copilot-preview' }, tools: [tool] }
+    expect(filterCopilotToolAssembly(input)).toBe(input)
+    const filtered = filterCopilotToolAssembly(input, true)
+    const result = filtered.tools[0]!
+    expect(result.description).toBe(tool.description)
+    expect(Object.keys(result.parameters.properties!)).toEqual(['code', 'description', 'timeoutMs'])
+    expect(result.parameters.required).toEqual(['code', 'description'])
+    expect(result.parameters.properties!.code).toBe(parameters.properties.code)
+    expect(result.parameters.properties!.timeoutMs).toBe(parameters.properties.timeoutMs)
+    expect(tool.parameters).toBe(parameters)
+    expect(parameters.properties).toHaveProperty('sandbox_permissions')
+    expect(filterCopilotToolAssembly({ ...input, variables: { provider: 'deepseek' } }, true).tools[0]).toBe(tool)
+  })
+
   it('removes escalation properties and required entries only for Copilot', () => {
     const input = assembly('github-copilot')
     const filtered = filterCopilotToolAssembly(input)

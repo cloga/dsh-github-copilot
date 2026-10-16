@@ -1,0 +1,22 @@
+name: Alpha5 dependency lock
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: pnpm install --lockfile-only --ignore-scripts --strict-peer-dependencies --registry=https://registry.npmjs.org
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alpha5-lock
+          path: pnpm-lock.yaml

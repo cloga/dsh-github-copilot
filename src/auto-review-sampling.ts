@@ -6,7 +6,7 @@ import { currentSearchInitiator } from './current-provider.ts'
 import type {} from './preview-route.ts'
 
 const REVIEWER = '@deepseek-ai/dsh-experimental-auto-review'
-const CORE_VERSIONS = new Set(['0.2.0-rc.2', '0.2.1-alpha.4'])
+const CORE_VERSIONS = new Set(['0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5'])
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object'

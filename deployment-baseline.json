@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.2-alpha.16"
+    "version": "0.4.2-alpha.17"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -19,12 +19,12 @@
     "platforms": ["windows", "linux"],
     "node": ">=22.19.0",
     "dsh": {
-      "release": "0.2.1-alpha.4",
-      "tag": "dsh-v0.2.1-alpha.4",
-      "commit": "86a402200d95fecef4529d969836f1fe13c6cb0d",
-      "developmentRelease": "0.2.1-alpha.4",
-      "admittedReleases": ["0.2.1-alpha.4"],
-      "peerRange": "0.2.1-alpha.4",
+      "release": "0.2.1-alpha.5",
+      "tag": "dsh-v0.2.1-alpha.5",
+      "commit": "1517a4dbca0a2789ff1d41ba439600f8547d23fa",
+      "developmentRelease": "0.2.1-alpha.5",
+      "admittedReleases": ["0.2.1-alpha.5"],
+      "peerRange": "0.2.1-alpha.5",
       "baselines": [
         {
           "release": "0.1.1-rc.2",
@@ -226,9 +226,9 @@
           "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts"]
         },
         {
-          "release": "0.2.1-alpha.4",
-          "tag": "dsh-v0.2.1-alpha.4",
-          "commit": "86a402200d95fecef4529d969836f1fe13c6cb0d",
+          "release": "0.2.1-alpha.5",
+          "tag": "dsh-v0.2.1-alpha.5",
+          "commit": "1517a4dbca0a2789ff1d41ba439600f8547d23fa",
           "source": "https://github.com/deepseek-ai/deepseek-harness",
           "desktopRelease": "not-verified",
           "modelsUi": "provider-card",
@@ -281,7 +281,7 @@
       "zod": "4.4.3"
     },
     "sharedPeerDependencies": {
-      "@deepseek-ai/dsh-authorization": "0.2.1-alpha.4",
+      "@deepseek-ai/dsh-authorization": "0.2.1-alpha.5",
       "@deepseek-ai/schemastery": "3.18.5-alpha.2"
     },
     "clientExternals": {
@@ -1325,7 +1325,7 @@
       "id": "dsh-supported-baselines-fail-loud-guard",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/compatibility.ts", "marker": "peerRange: '0.2.1-alpha.4'"}
+        {"file": "src/compatibility.ts", "marker": "peerRange: '0.2.1-alpha.5'"}
       ],
       "tests": [
         {"file": "tests/compatibility.spec.ts", "name": "admits only the exact current official release"},

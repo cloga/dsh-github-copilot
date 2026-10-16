@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2-alpha.17 (prepared)
+
+- Target exact official DSH 0.2.1-alpha.5 at `1517a4dbca0a2789ff1d41ba439600f8547d23fa` (#422). Align engines, public peers, exact reviewer ownership and Windows/Linux source/npm acceptance without Core patches or version exemptions.
+- Preserve native code-first PTC schemas and function-body versus REPL instructions while retaining Copilot-only escalation/action filtering. Native execution, output, permissions and retries remain unchanged.
+- Document the new inline model-label slot as an opportunity only; no label redesign or historical execution claim. Preserve alpha.16 blank-Thinking retirement and alpha.15 token-based compaction/refresh protections.
+- Retain accounts, Auto policy, replay consent, Usage, search, byte/semantic liveness and independent diagnostics/gzip controls. No new durable records, live calls, migrations or consent changes.
+- Desktop alpha.5 artifacts/signatures and live activation remain unverified. No installation, upgrade or restart is included; rc.2 hosts must retain alpha.15, and alpha.4 hosts may retain alpha.16.
+
 ## 0.4.2-alpha.16 (prepared)
 
 - Target exact official DSH 0.2.1-alpha.4 through unchanged public APIs, pi-ai 1.1.0, Cordis 4.0.5-alpha.2, schemastery 3.18.5-alpha.2 and storage-compatible Zod 4.4.3 (#420). Earlier rc.2 hosts must retain alpha.15; no version exemption or Core patch.

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { CANDIDATE_CORE_RELEASES, PUBLISHED_CORE_RELEASES, preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
 
-const release = '0.2.1-alpha.4'
+const release = '0.2.1-alpha.5'
 async function sourceFixture() {
   // Windows runners may expose TEMP through an 8.3 alias or redirected parent.
   // Give the subject a real physical source; explicit link rejection tests below
@@ -76,10 +76,10 @@ test('refuses an unknown release before creating any target', async () => withSo
   assert.deepEqual(await readdir(base), ['source'])
 }))
 
-test('retains exact alpha.4 dependency qualification after production admission', async () => withSource(async ({ root, target }) => {
-  const release = '0.2.1-alpha.4'
+test('retains exact alpha.5 dependency qualification after production admission', async () => withSource(async ({ root, target }) => {
+  const release = '0.2.1-alpha.5'
   assert.deepEqual(CANDIDATE_CORE_RELEASES, {
-    [release]: { commit: '86a402200d95fecef4529d969836f1fe13c6cb0d', piAi: '1.1.0',
+    [release]: { commit: '1517a4dbca0a2789ff1d41ba439600f8547d23fa', piAi: '1.1.0',
       cordis: '4.0.5-alpha.2', loader: '1.0.6-alpha.2', schemastery: '3.18.5-alpha.2', zod: '4.4.3' },
   })
   const original = await readFile(join(root, 'package.json'), 'utf8')
@@ -94,11 +94,11 @@ test('retains exact alpha.4 dependency qualification after production admission'
   assert.equal(report.admission, 'admitted')
   assert.equal(report.commit, CANDIDATE_CORE_RELEASES[release].commit)
   assert.equal(await readFile(join(root, 'package.json'), 'utf8'), original)
-  assert.deepEqual(PUBLISHED_CORE_RELEASES, ['0.2.1-alpha.4'])
+  assert.deepEqual(PUBLISHED_CORE_RELEASES, ['0.2.1-alpha.5'])
 }))
 
 test('candidate mode refuses floating or unreviewed releases before target creation', async () => withSource(async ({ root, target, base }) => {
-  for (const release of ['latest', '0.2.1-alpha.2', '0.2.1-alpha.5', '0.2.0-rc.2']) {
+  for (const release of ['latest', '0.2.1-alpha.2', '0.2.1-alpha.4', '0.2.1-alpha.6', '0.2.0-rc.2']) {
     await assert.rejects(preparePublishedCoreFixture({ root, target, release, candidate: true }), /unsupported candidate Core/)
   }
   assert.deepEqual(await readdir(base), ['source'])

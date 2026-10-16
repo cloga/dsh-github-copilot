@@ -3,10 +3,10 @@ import { createRequire, findPackageJSON } from 'node:module'
 import { dirname, isAbsolute, join, relative, resolve, sep, extname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.1-alpha.4'])
+export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.1-alpha.5'])
 export const CANDIDATE_CORE_RELEASES = Object.freeze({
-  '0.2.1-alpha.4': Object.freeze({
-    commit: '86a402200d95fecef4529d969836f1fe13c6cb0d',
+  '0.2.1-alpha.5': Object.freeze({
+    commit: '1517a4dbca0a2789ff1d41ba439600f8547d23fa',
     piAi: '1.1.0',
     cordis: '4.0.5-alpha.2',
     loader: '1.0.6-alpha.2',
