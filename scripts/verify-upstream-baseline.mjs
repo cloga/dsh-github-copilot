@@ -51,6 +51,17 @@ if (baseline.modelsUi === 'provider-card') {
   ])
 }
 if (baseline.release === '0.2.1-alpha.5') {
+  await assertMarkers('packages/client/ui-model-selection/src/client/slots.ts', [
+    "'conversation.input.model.label'", "kind: 'single'", "scope: 'session'",
+    "placement: 'trigger' | 'menu' | 'option'", 'inline: true',
+  ])
+  await assertMarkers('packages/core/tools/src/ptc.ts', [
+    'code: { type:', 'the BODY of an async function',
+    "runtime.programFormat === 'function-body'", 'Programs are never replayed automatically.',
+  ])
+  await assertMarkers('packages/core/tools/src/ts-types.ts', [
+    "programFormat: 'function-body' | 'repl'", 'Only what you print or return is program output.',
+  ])
   await assertMarkers('packages/client/ui-chat/src/client/chat/AssistantMarkdown.tsx', [
     "if (block.text.trim() === '') break",
   ])
