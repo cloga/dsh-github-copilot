@@ -19,7 +19,8 @@ import { DiagnosticsController } from '../../src/diagnostics-host.ts'
 import contribution from '../../src/diagnostics-remote.ts'
 
 async function loadClientGateway(): Promise<{ apply(ctx: Context): void }> {
-  if (process.env.DSH_CORE_EVIDENCE === 'tagged-source-runtime') {
+  if (process.env.DSH_CORE_EVIDENCE === 'tagged-source-runtime'
+    || process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.1-alpha.4') {
     return import('@deepseek-ai/dsh-api-gateway/client')
   }
   // Published Client entries register a factory, rather than exporting Node ESM.

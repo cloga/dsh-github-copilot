@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { findPackageJSON } from 'node:module'
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai'
 import type { Model, SimpleStreamOptions } from '@earendil-works/pi-ai'
-import { createDeveloperMessage, createUserMessage, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { createDeveloperMessage, createUserMessage, ReasoningEffortId, resolveRetryPolicy, type ToolSchema } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { coreProviderView } from '../../src/pi-provider-bridge.ts'
@@ -32,7 +32,7 @@ beforeAll(() => {
 function adapter(simple: SimpleNativeProvider['streamSimple'], streamIdleTimeoutMs = 1000) {
   const native: SimpleNativeProvider = {
     id: provider, name: 'Synthetic candidate', getModels: () => [model],
-    auth: { apiKey: { name: 'Synthetic credential', resolve: async () => 'synthetic-key' } },
+    auth: { apiKey: { name: 'Synthetic credential', resolve: async () => ({ apiKey: 'synthetic-key' }) } },
     streamSimple: simple,
   }
   const profile = {
@@ -65,20 +65,24 @@ function complete() {
   return stream
 }
 
+function user(text: string) {
+  return createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] })
+}
+
 describe('fixed alpha.4 public adapter and SDK contracts', () => {
   it('preserves initial prompt, in-history system/tool updates and exact effort through the provider bridge', async () => {
     const simple = vi.fn<SimpleNativeProvider['streamSimple']>((_model, _context, _options) => complete())
     const native = adapter(simple)
     const prepared = await native.prepareCall(provider, model.id)
     expect(prepared.model).toMatchObject({ systemPromptUpdate: 'in-history', toolUpdate: 'addition-only' })
-    const tools = [{ name: 'late_tool', description: 'Synthetic deferred tool',
+    const tools: ToolSchema[] = [{ name: 'late_tool', description: 'Synthetic deferred tool',
       parameters: { type: 'object', properties: {} }, deferLoading: true }]
     for await (const _chunk of prepared.stream({
       provider, model: model.id, system: 'Initial prompt', reasoningEffort: ReasoningEffortId('high'),
-      messages: [createUserMessage('Original task'), createDeveloperMessage({
+      messages: [user('Original task'), createDeveloperMessage({
         source: { kind: 'user' }, content: [{ type: 'text', text: 'Updated instruction' },
           { type: 'tool-addition', toolName: 'late_tool' }],
-      }), createUserMessage('Continue')], tools,
+      }), user('Continue')], tools,
     })) { /* consume native output */ }
     expect(simple).toHaveBeenCalledTimes(1)
     const [, context, options] = simple.mock.calls[0]!
@@ -112,7 +116,7 @@ describe('fixed alpha.4 public adapter and SDK contracts', () => {
     let timer: ReturnType<typeof setTimeout> | undefined
     const consume = async () => {
       for await (const _chunk of native.stream({ provider, model: model.id,
-        messages: [createUserMessage('Synthetic task')] })) { /* consume native output */ }
+        messages: [user('Synthetic task')] })) { /* consume native output */ }
     }
     try {
       await expect(Promise.race([consume(), new Promise((_, reject) => {

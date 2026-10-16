@@ -13,11 +13,11 @@ import { DiagnosticsSnapshotSchema } from '../../src/diagnostics-types.ts'
 it('uses the strict owned schema with the published storage validation contract', async () => {
   const schema = diagnosticsDomain.global.schema
   expect(schema).toBe(DiagnosticsSnapshotSchema)
-  expect(schema.validate(emptyDiagnostics())).toBe(true)
-  expect(await schema.validateAsync(emptyDiagnostics())).toBe(true)
   const invalid = { ...emptyDiagnostics(), accountId: 'synthetic-sensitive-sentinel' }
-  expect(schema.validate(invalid)).toBe(false)
-  expect(await schema.validateAsync(invalid)).toBe(false)
+  expect(schema.safeParse(emptyDiagnostics()).success).toBe(true)
+  expect((await schema.safeParseAsync(emptyDiagnostics())).success).toBe(true)
+  expect(schema.safeParse(invalid).success).toBe(false)
+  expect((await schema.safeParseAsync(invalid)).success).toBe(false)
   expect(() => schema.parse(invalid)).toThrow()
 })
 

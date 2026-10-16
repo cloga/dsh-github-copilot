@@ -66,7 +66,7 @@ describe('managed Responses failure boundaries with native SDK and no network', 
     })
     const native = await call(false, fetch, new AbortController(), new AbortController(), undefined, 0, large)
     const managed = await call(true, fetch, new AbortController(), new AbortController(), requestDiagnostics, 0, large)
-    expect({ ...managed.result, timestamp: 0 }).toEqual({ ...native.result, timestamp: 0 })
+    expect({ ...managed.result, timestamp: 0, durationMs: 0 }).toEqual({ ...native.result, timestamp: 0, durationMs: 0 })
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(bodies[1]).toBe(bodies[0])
     expect(collector.snapshot().requests!.rows[0]!.composition.state).toBe('size-limit')

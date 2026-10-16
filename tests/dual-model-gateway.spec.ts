@@ -37,7 +37,11 @@ const saveInput = { configuration, expectedRevision: 7 }
 const createInput = { requestId, workspaceId: 'workspace-a', expectedRevision: 7 }
 
 /** Execute the unchanged installed Client carrier, not a mock gateway or plugin build. */
-function gatewayArtifact() {
+async function gatewayArtifact() {
+  const require = createRequire(import.meta.url)
+  if (require('@deepseek-ai/dsh-api-gateway/package.json').version === '0.2.1-alpha.4') {
+    return import('@deepseek-ai/dsh-api-gateway/client')
+  }
   const source = readFileSync(resolve('node_modules/@deepseek-ai/dsh-api-gateway/lib/client.js'), 'utf8')
   let handoff: Handoff | undefined
   ;(window as ModuleLoaderWindow).__ModuleLoader__ = { load(value) { handoff = value } }
@@ -61,7 +65,7 @@ async function fixture() {
     rpc: { call: rpcCall }, registerGenerationSource: () => () => undefined,
     start: () => ({ stop() {} }), generation: { getSnapshot: () => undefined },
   })
-  const gateway = gatewayArtifact()
+  const gateway = await gatewayArtifact()
   expect(gateway.apply).toBeTypeOf('function')
   ;(gateway.apply as (ctx: Cordis.Context) => void)(ctx)
   cleanups.push(async () => { await ctx.fiber.dispose() })

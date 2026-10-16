@@ -71,10 +71,12 @@ describe('assertDshCompatibility', () => {
     expect(baseline.evidence.peerRangeMeaning).toBe('package-admission-not-runtime-validation')
     expect(baseline.evidence.doesNotProve).toEqual(expect.arrayContaining(['live-discovery', 'live-model-transport', 'published-release', 'local-upgrade']))
     expect(baseline.package.version).toBe(pkg.version)
+    const artifactRelease = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.1-alpha.4'
+      ? '0.2.1-alpha.4' : DSH_COMPATIBILITY.developmentRelease
     for (const [name, version] of Object.entries(pkg.devDependencies)) {
-      if (name.startsWith('@deepseek-ai/dsh-')) expect(version).toBe('0.2.0-rc.2')
+      if (name.startsWith('@deepseek-ai/dsh-')) expect(version).toBe(artifactRelease)
     }
-    for (const name of current.packages) expect(pkg.peerDependencies[name]).toBe(DSH_COMPATIBILITY.peerRange)
+    for (const name of current.packages) expect(pkg.peerDependencies[name]).toBe(artifactRelease)
     expect(pkg.engines.dsh).toBe(DSH_COMPATIBILITY.peerRange)
   })
 

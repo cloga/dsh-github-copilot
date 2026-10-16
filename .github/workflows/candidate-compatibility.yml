@@ -57,6 +57,7 @@ jobs:
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit || status=1
           node node_modules/typescript/bin/tsc -p tsconfig.tests.json || status=1
           node node_modules/typescript/bin/tsc -p tsconfig.candidate-tests.json || status=1
+          node node_modules/tsdown/dist/run.mjs || status=1
           node node_modules/vitest/vitest.mjs run || status=1
           node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts || status=1
           node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts || status=1
