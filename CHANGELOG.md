@@ -4,6 +4,7 @@
 
 - Target exact official DSH 0.2.1-alpha.4 through unchanged public APIs, pi-ai 1.1.0, Cordis 4.0.5-alpha.2, schemastery 3.18.5-alpha.2 and storage-compatible Zod 4.4.3 (#420). Earlier rc.2 hosts must retain alpha.15; no version exemption or Core patch.
 - Qualify the exact official reviewer package and exported callback, preserving fail-closed ownership, frozen requests and ordinary concurrent Chat. Exercise native dynamic system/tool conversion, noncooperative timeout settlement, account/Remote/compaction/replay and real selector mounting on Windows/Linux.
+- Retire the redundant blank-Thinking renderer wrapper and its plugin-only provenance projection after native alpha.4 rendering demonstrates parity. Retain native settled/running/interrupted presentation acceptance and independent Auto/Usage explanations; never change messages or replay.
 - Retain token-based recovery planning, certified-refresh identity, byte/semantic liveness, Usage ownership and independent diagnostics/gzip consent. Defer experimental durable plugin records; no routing-policy, history, settings or consent migration.
 - Desktop alpha.4 artifacts/signatures, installed/loaded state and live OAuth/model/search remain unverified. This release does not authorize Desktop upgrade, profile installation or restart.
 

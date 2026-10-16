@@ -50,6 +50,11 @@ if (baseline.modelsUi === 'provider-card') {
     'ProviderEditor',
   ])
 }
+if (baseline.release === '0.2.1-alpha.4') {
+  await assertMarkers('packages/client/ui-chat/src/client/chat/AssistantMarkdown.tsx', [
+    "if (block.text.trim() === '') break",
+  ])
+}
 if (baseline.providerHeaders === 'fetch-validated-discovery') {
   await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', [
     'assertValidHeaders',

@@ -17,7 +17,9 @@
 **DSH alpha.4 适配：**公开 API 对齐 pi-ai `1.1.0`、官方 Cordis／schemastery peer，
 以及 storage-domain 的 Zod `4.4.3`。
 [固定目标的 official-first 调研](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha4.md)
-逐项记录保留／迁移／延期决定。精确原生 reviewer 身份、动态 system／tool 转换、
+逐项记录保留／迁移／退役／延期决定。alpha.4 原生隐藏空白 Thinking 折叠行，
+因此移除重复的插件 renderer 与来源投影，不改变消息或 replay。
+精确原生 reviewer 身份、动态 system／tool 转换、
 replay、账号／Remote／压缩与真实 selector 挂载回归共同约束准入。
 不修改 Core，不豁免版本，不新增 wire／目录、迁移策略或持久决策记录。
 

@@ -16,7 +16,6 @@ import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './rem
 import { DiagnosticsCard } from './diagnostics-card.ts'
 import type { DiagnosticsRemote } from './diagnostics-card.ts'
 import { installDiagnosticsClient } from './diagnostics-client.ts'
-import { installReasoningPresentation } from './reasoning-presentation.ts'
 import { installAutoModelPresentation, installAutoModelProjections } from './auto-model-presentation.ts'
 import { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
 import { ParentModelFollowCard } from './parent-model-follow-card.ts'
@@ -1166,12 +1165,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       locale: scope.get('locale'),
       diagnostic: (code: string) => scope.logger.warn(`[github-copilot] ${code}`),
     }
-    const reasoning = installReasoningPresentation(capabilities)
-    const auto = installAutoModelProjections(capabilities)
-    return () => {
-      auto()
-      reasoning()
-    }
+    return installAutoModelProjections(capabilities)
   })
   return async () => {
     await diagnosticsUi.dispose()

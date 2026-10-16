@@ -17,7 +17,9 @@ GitHub Copilot account discovery, contextual Auto routing and hosted search for 
 **DSH alpha.4 adaptation:** exact public APIs use pi-ai `1.1.0`, the official
 Cordis/schemastery peers and storage-domain's Zod `4.4.3`. The
 [fixed-target official-first review](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha4.md)
-records every retain/migrate/defer decision. Exact native reviewer identity,
+records every retain/migrate/retire/defer decision. Alpha.4 natively hides blank
+Thinking disclosures; the redundant plugin renderer and provenance projection
+are retired without changing messages or replay. Exact native reviewer identity,
 dynamic system/tool conversion, replay, account/Remote/compaction and mounted
 selector regressions gate admission. No Core patch, version exemption, new
 wire/catalog, policy migration or durable decision recording is introduced.

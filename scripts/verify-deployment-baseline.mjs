@@ -381,7 +381,9 @@ assert(legacyRestore?.activation === 'legacy-restoration-only' && legacyRestore.
 assert(manifest.capabilities?.some(capability => capability.id === 'responses-public-reasoning-and-safe-replay-delegation'), 'Responses reasoning and Core replay delegation evidence is missing')
 
 const reasoningPresentation = manifest.capabilities?.find(capability => capability.id === 'replay-safe-copilot-reasoning-presentation')
-assert(reasoningPresentation?.activation === 'optional-guarded-client-seam', 'reasoning presentation must remain optional and guarded')
+assert(reasoningPresentation?.activation === 'native-alpha4-client-renderer'
+  && reasoningPresentation.owner === '@deepseek-ai/dsh-client-ui-chat', 'empty reasoning presentation must remain native-owned')
+assert(!(await read('src/client.ts')).includes('installReasoningPresentation'), 'retired reasoning renderer interception must not return')
 assert((await read('src/client.ts')).includes("export const inject = ['remote', 'slots']"), 'optional Chat services must not become authorization prerequisites')
 
 const compatibility = await read('src/compatibility.ts')

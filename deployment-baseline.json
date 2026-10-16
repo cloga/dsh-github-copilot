@@ -1012,18 +1012,14 @@
     {
       "id": "replay-safe-copilot-reasoning-presentation",
       "required": true,
-      "activation": "optional-guarded-client-seam",
+      "activation": "native-alpha4-client-renderer",
+      "owner": "@deepseek-ai/dsh-client-ui-chat",
       "sourceMarkers": [
-        {"file": "src/client.ts", "marker": "ctx.inject(['uiConversation', 'slots']"},
-        {"file": "src/reasoning-presentation.ts", "marker": "projectReasoningPresentation"},
-        {"file": "src/reasoning-presentation.ts", "marker": "github-copilot-assistant-origin"}
+        {"file": "scripts/verify-upstream-baseline.mjs", "marker": "if (block.text.trim() === '') break"}
       ],
       "tests": [
-        {"file": "tests/reasoning-presentation.spec.ts", "name": "removes fifteen empty rows without reading or changing encrypted durable replay material"},
-        {"file": "tests/reasoning-presentation.spec.ts", "name": "reconstructs cold/prepended history without step/start and never borrows a current route"},
-        {"file": "tests/reasoning-presentation.spec.ts", "name": "retires on any third-party override conflict and resumes only when safe"},
-        {"file": "tests/client.spec.ts", "name": "does not delay authorization while the optional reasoning presentation waits for Core services"},
-        {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "renders answers and public summaries without the fifteen empty native Think rows"}
+        {"file": "tests/client.spec.ts", "name": "does not delay authorization while optional Auto projections wait for Core services"},
+        {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "renders native answers and summaries without blank Thinking disclosures (%s)"}
       ]
     },
     {
