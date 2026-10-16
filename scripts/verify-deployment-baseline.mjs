@@ -599,8 +599,8 @@ for (const path of [
   '.github/PULL_REQUEST_TEMPLATE.md',
 ]) {
   const source = await read(path)
-  assert(!source.includes('0.1.2-alpha.4'), `${path} retains the superseded alpha.4 release`)
-  assert(!source.includes('db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5'), `${path} retains the superseded alpha.4 commit`)
+  assert(!source.includes('0.1.2-alpha.5'), `${path} retains the superseded alpha.5 release`)
+  assert(!source.includes('db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5'), `${path} retains the superseded alpha.5 commit`)
 }
 
 const workflow = (await read('.github/workflows/ci.yml')).replaceAll('\r\n', '\n')
