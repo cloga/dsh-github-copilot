@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.4.2-alpha.17 (prepared)
+## 0.1.0-alpha.1.dsh.0.2.1.alpha.5 (prepared)
 
+- Start an independent plugin sequence for each exact DSH Core at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. Validate the explicit mapping, suffix, engines and baseline together. Retain published alpha.15/alpha.16 anchors; no code/history reset, new npm channel or automatic updater integration.
 - Target exact official DSH 0.2.1-alpha.5 at `1517a4dbca0a2789ff1d41ba439600f8547d23fa` (#422). Align engines, public peers, exact reviewer ownership and Windows/Linux source/npm acceptance without Core patches or version exemptions.
 - Preserve native code-first PTC schemas and function-body versus REPL instructions while retaining Copilot-only escalation/action filtering. Native execution, output, permissions and retries remain unchanged.
 - Document the new inline model-label slot as an opportunity only; no label redesign or historical execution claim. Preserve alpha.16 blank-Thinking retirement and alpha.15 token-based compaction/refresh protections.

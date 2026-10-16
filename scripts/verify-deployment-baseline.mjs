@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { assertTaggedRuntimeClosure } from './tagged-runtime-closure.mjs'
 import { validatePublicPackage } from './publish-npm.mjs'
+import { assertDshVersionIdentity, assertReleaseLines } from './release-policy.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -127,6 +128,12 @@ assert(readme.includes('[简体中文](./README.zh.md)'), 'README.md must link t
 assert(readmeZh.includes('[English](./README.md)'), 'README.zh.md must link the English guide')
 assert(manifest.supportedBaselines?.node === packageJson.engines?.node, 'Node baseline differs')
 assert(packageJson.engines.node === '>=22.19.0', 'Node floor must cover the pi-ai runtime dependency')
+assertDshVersionIdentity(
+  packageJson.version,
+  packageJson.engines?.dsh,
+  manifest.supportedBaselines?.dsh?.release,
+)
+assertReleaseLines(manifest)
 assert(
   packageJson.dependencies?.['@earendil-works/pi-ai'] === manifest.supportedBaselines?.piAi,
   'pi-ai runtime range differs',

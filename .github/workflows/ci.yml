@@ -39,6 +39,8 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Verify exact-Core release selection and original-byte publication policy
+        run: node --test tests/scripts/release-policy.test.mjs tests/scripts/npm-distribution.test.mjs tests/scripts/tarball.test.mjs
       - name: Report complete candidate publication window
         shell: bash
         env:

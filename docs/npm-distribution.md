@@ -16,6 +16,46 @@ Versions align package, deployment baseline, both README URLs and annotated tag.
 Channel is `alpha`, `beta`, `rc` or stable `latest`; never silently rename a
 package, move/reuse tags, repack immutable assets or publish placeholders.
 
+## Exact-Core release lines
+
+Each exact DSH Core starts its own plugin sequence at
+`0.1.0-alpha.1.dsh.<normalized-Core>`; fixes for that Core increment `alpha.N`.
+Core `0.2.1-alpha.5` therefore starts at
+`0.1.0-alpha.1.dsh.0.2.1.alpha.5`, not a new global plugin minor. This is
+numbering only: implementation, Git history and reviewed compatibility evidence
+continue. No old release/tag is renamed or reused.
+
+`deployment-baseline.json.releaseLines` is the explicit selection map. It retains
+published anchors Core `0.2.0-rc.2` → plugin `0.4.2-alpha.15` and Core
+`0.2.1-alpha.4` → plugin `0.4.2-alpha.16`; the alpha.5 line is **pending**.
+Run `node scripts/select-core-release.mjs <exact-Core>` in a current source
+checkout or verified package. This local, read-only command returns an exact npm
+spec and Release/archive URLs only for published entries. Pending entries report
+their state without installation URLs; unknown Core versions fail explicitly.
+The map is a reviewed snapshot, not a live registry read or an updater hook.
+
+Release validation checks the suffix against exact `engines.dsh`, baseline and
+Core peer metadata. It permits a lower numeric plugin version only for a new
+exact-Core line starting at alpha.1 with the previous published anchor retained;
+same-Core downgrades remain forbidden. Historical releases without a suffix stay
+valid historical anchors, not guessed current compatibility.
+
+The shared npm `alpha` pointer is chronological distribution state, **not**
+compatibility-aware selection, and can move to a lower SemVer for an explicitly
+mapped independent Core line. Never install from global `latest`/`alpha` or
+choose the global maximum without checking the exact-Core mapping. No new npm
+channels or old-Core maintenance commitment is introduced.
+
+Read-only inspection of official alpha.5 CLI `apps/cli/src/plugin.ts`,
+`packages/boot/plugin-manager/src/operations.ts` and native boot compatibility
+contracts establishes install-spec handling and exact engine admission.
+Registry specs use pnpm's selected version and engine preflight; git/tarball
+specs rely on post-fetch admission. These are not consumption of this
+plugin-owned map. No compatibility-aware
+native updater integration is qualified here. Continue to use separately approved
+exact-version/profile commands and the applicable Desktop CLI/preflight checks;
+the suffix alone does not make an incompatible package safe or migrate a profile.
+
 ## Trusted publishing
 
 [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) requires npm
@@ -62,9 +102,11 @@ Visibility can lag a successful write. After successful/uncertain publication,
 wait for visibility and reconcile read-only; **never automatically republish**.
 A missing/older tag needs review, not a hidden dist-tag write.
 
-SemVer ordering prevents downgrades. Missing older releases are not published
-when their channel already points newer; reconciling existing older bytes never
-lowers the pointer. Report GitHub tag/commit/assets/SHA-256 and npm version/SRI
+Within one exact-Core line, SemVer ordering prevents downgrades. A new mapped
+Core line may start lower than the historical global pointer; the publisher uses
+the archive's explicit mapping or exact published package engine metadata, never
+the suffix alone, to distinguish that transition. Unknown metadata fails closed.
+Reconciling existing older bytes never changes the pointer. Report GitHub tag/commit/assets/SHA-256 and npm version/SRI
 separately. A stable release may advance `latest` from a prerelease only when
 that pointer names a prerelease of the exact same SemVer core version; other
 cross-channel pointers and newer versions still fail closed. One channel

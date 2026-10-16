@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "DSH companion for GitHub Copilot sign-in, account-aware model profiles, tool compatibility, and provider-hosted search.",
-  "version": "0.4.2-alpha.17",
+  "version": "0.1.0-alpha.1.dsh.0.2.1.alpha.5",
   "releaseNotes": "CHANGELOG.md",
   "publishConfig": {
     "access": "public",
@@ -87,6 +87,8 @@
     "output/auto-model-mockup/index.html",
     "docs/images/dual-model-provenance.json",
     "scripts/check-search-composition.mjs",
+    "scripts/select-core-release.mjs",
+    "scripts/release-policy.mjs",
     "docs/images/"
   ],
   "keywords": [
@@ -130,6 +132,7 @@
     "verify:reasoning-ui": "node scripts/verify-reasoning-presentation.mjs",
     "verify:upstream": "node scripts/verify-upstream-baseline.mjs",
     "release:check": "node scripts/release-policy.mjs",
+    "release:select": "node scripts/select-core-release.mjs",
     "verify": "pnpm verify:agent && pnpm typecheck && pnpm typecheck:tests && pnpm verify:baseline && pnpm build && pnpm test && pnpm test:scripts && pnpm verify:package"
   },
   "peerDependencies": {

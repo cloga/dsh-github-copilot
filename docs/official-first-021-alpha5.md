@@ -7,6 +7,13 @@ The plugin starts from alpha.16, main commit
 `bb25d425342ee660049a8320585f967671d49ec4`, not an earlier feature branch.
 Later upstream targets are outside this qualification.
 
+The prepared version is `0.1.0-alpha.1.dsh.0.2.1.alpha.5`. User-directed
+independent numbering starts at `0.1.0-alpha.1` for each exact Core, continuing
+the plugin implementation/history rather than increasing a global minor.
+The explicit `deployment-baseline.json.releaseLines` mapping preserves published
+rc.2/alpha.4 anchors and marks this candidate pending. Global npm tags and SemVer
+ordering are not compatibility selectors; see [distribution](./npm-distribution.md#exact-core-release-lines).
+
 ## Exact delta and decisions
 
 The complete, nontruncated alpha.4/alpha.5 Git-tree comparison identifies the

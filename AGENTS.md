@@ -270,6 +270,7 @@ For alpha.25, source markers, local rc.1-backed focused tests and fifteen scoped
 - User-facing install commands must include the required DSH `--profile` option and derive the versioned Release URL from `package.json`.
 - Package version, deployment-baseline version, README URLs, and the annotated `v<version>` tag must agree.
 - New versions use standard SemVer prerelease identifiers (`alpha`, `beta`, `rc`); do not add owner/user names to new version strings.
+- Each exact DSH Core starts an independent plugin line at `0.1.0-alpha.1.dsh.<normalized-Core>`; same-Core fixes increment `alpha.N`. Preserve historical versions/tags. Validate suffix, exact engines/peers, baseline and `releaseLines` together. Select by the explicit Core mapping using `scripts/select-core-release.mjs`, never global SemVer maximum or npm `latest`/`alpha`. New-line numeric resets are not same-Core downgrades or a code/history restart; do not promise native updater integration or old-Core maintenance.
 - The Release workflow must run the complete gate, pack the versioned tarball, publish `SHA256SUMS`, and create the Release only after every preceding step succeeds.
 - Release tags must never move or be reused. Repository tag rules and immutable-release settings enforce this for new releases.
 

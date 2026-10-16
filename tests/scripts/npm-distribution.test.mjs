@@ -167,6 +167,50 @@ test('older verified versions do not lower a newer dist-tag on reconciliation', 
   assert.equal(api.calls.length, 0)
 })
 
+test('independent Core line publishes original bytes across a known historical global alpha pointer', async () => {
+  const qualifiedVersion = '0.1.0-alpha.1.dsh.0.2.1.alpha.5'
+  const core = '0.2.1-alpha.5'
+  const baseline = {
+    package: { name, version: qualifiedVersion },
+    supportedBaselines: { dsh: {
+      release: core, baselines: [{ release: '0.2.1-alpha.4' }, { release: core }],
+    } },
+    releaseLines: [
+      { core: '0.2.1-alpha.4', version: '0.4.2-alpha.16', status: 'published' },
+      { core, version: qualifiedVersion, status: 'pending' },
+    ],
+  }
+  const candidate = { ...manifest(), version: qualifiedVersion, engines: { dsh: core } }
+  let tag = '0.4.2-alpha.16'
+  let existing = null
+  const calls = []
+  const api = {
+    manifest: candidate, baseline, bytes, archive: 'artifacts/original.tgz',
+    readPackage: async () => ({ name, 'dist-tags': { alpha: tag } }),
+    readVersion: async () => existing,
+    publish: async args => {
+      calls.push(args)
+      existing = { name, version: qualifiedVersion, dist: { integrity: sri } }
+      tag = qualifiedVersion
+    },
+  }
+  assert.equal((await publishNpm(api)).reconciled, false)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][1], 'artifacts/original.tgz')
+  assert.equal(calls[0][3], 'alpha')
+  tag = '0.4.2-alpha.16'
+  assert.equal((await publishNpm(api)).reconciled, true)
+  assert.equal(calls.length, 1)
+  existing = null
+  tag = '0.1.0-alpha.2.dsh.0.2.1.alpha.5'
+  await assert.rejects(publishNpm({
+    ...api, readTaggedVersion: async version => ({ name, version, engines: { dsh: core } }),
+  }), /Refusing to lower/)
+  await assert.rejects(publishNpm({ ...api, readTaggedVersion: async () => null }), /no verified exact Core/)
+  await assert.rejects(publishNpm({ ...api, baseline: undefined }), /requires engines.dsh/)
+  assert.equal(calls.length, 1)
+})
+
 test('artifact recovery uses remote original bytes and rejects commit, digest and state drift', async () => {
   const tarName = `${name}-${version}.tgz`
   const sums = Buffer.from(`${sha256}  ${tarName}\n`)
