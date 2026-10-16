@@ -3,7 +3,7 @@ import { createRequire, findPackageJSON } from 'node:module'
 import { dirname, isAbsolute, join, relative, resolve, sep, extname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.0-rc.2'])
+export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.1-alpha.4'])
 export const CANDIDATE_CORE_RELEASES = Object.freeze({
   '0.2.1-alpha.4': Object.freeze({
     commit: '86a402200d95fecef4529d969836f1fe13c6cb0d',
@@ -31,7 +31,7 @@ function ownPiVersion(release, candidate) {
     return target.piAi
   }
   if (!PUBLISHED_CORE_RELEASES.includes(release)) throw new Error('unsupported published Core release')
-  return '0.87.1'
+  return CANDIDATE_CORE_RELEASES[release].piAi
 }
 function samePath(a, b) { return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b }
 function contains(root, path) {
@@ -64,8 +64,8 @@ async function collectTree(root, path, paths) {
   } else if (info.isFile() && extensions.has(extname(path).toLowerCase())) paths.push(relative(root, path))
 }
 function fixtureManifest(original, release, piAi, candidate) {
-  if (original.name !== 'dsh-github-copilot' || original.dependencies?.['@earendil-works/pi-ai'] !== '0.87.1') {
-    throw new Error('fixture requires this plugin and its exact own pi-ai 0.87.1 dependency')
+  if (original.name !== 'dsh-github-copilot' || original.dependencies?.['@earendil-works/pi-ai'] !== '1.1.0') {
+    throw new Error('fixture requires this plugin and its exact own pi-ai 1.1.0 dependency')
   }
   const manifest = { ...original, private: true, scripts: {} }
   for (const section of sections) {
@@ -81,7 +81,7 @@ function fixtureManifest(original, release, piAi, candidate) {
     '@deepseek-ai/dsh-user-approval': release,
   }
   manifest.dependencies = { ...manifest.dependencies, '@earendil-works/pi-ai': piAi }
-  if (candidate) {
+  if (CANDIDATE_CORE_RELEASES[release] !== undefined) {
     const target = CANDIDATE_CORE_RELEASES[release]
     for (const section of ['devDependencies', 'peerDependencies']) {
       manifest[section] = { ...manifest[section],
@@ -129,7 +129,8 @@ export async function preparePublishedCoreFixture({ root, target, release, candi
   await physicalDirectory(destination)
   await writeFile(join(destination, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
   const report = { schemaVersion: 1, kind: 'published-core-fixture', root: destination, release, candidate,
-    ...candidate ? { commit: CANDIDATE_CORE_RELEASES[release].commit, admission: 'not-admitted' } : {},
+    commit: CANDIDATE_CORE_RELEASES[release].commit,
+    admission: PUBLISHED_CORE_RELEASES.includes(release) ? 'admitted' : 'not-admitted',
     files: paths.length + 1, ownPi: manifest.dependencies['@earendil-works/pi-ai'],
     coreDependencies: Object.fromEntries(sections.flatMap(section => Object.entries(manifest[section] ?? {})
       .filter(([name]) => name.startsWith('@deepseek-ai/dsh-')))),

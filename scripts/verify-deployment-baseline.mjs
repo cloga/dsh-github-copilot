@@ -192,20 +192,20 @@ assert(
 
 const peerRange = manifest.supportedBaselines?.dsh?.peerRange
 assert(
-  peerRange === '0.2.0-rc.2',
+  peerRange === '0.2.1-alpha.4',
   'DSH peer range must admit only the exact current official target',
 )
 assert(packageJson.engines?.dsh === peerRange, 'top-level engines.dsh must declare the same host compatibility range')
 const dshBaselines = manifest.supportedBaselines?.dsh?.baselines ?? []
-assert(dshBaselines.length === 11, 'all eleven DSH pins must remain as historical evidence')
-assert(new Set(dshBaselines.map(entry => entry.release)).size === 11, 'historical DSH baseline releases must be unique')
+assert(dshBaselines.length === 12, 'all twelve DSH pins must remain as qualification evidence')
+assert(new Set(dshBaselines.map(entry => entry.release)).size === 12, 'DSH baseline releases must be unique')
 const currentDsh = manifest.supportedBaselines.dsh
-assert(JSON.stringify(currentDsh.admittedReleases) === JSON.stringify(['0.2.0-rc.2']),
+assert(JSON.stringify(currentDsh.admittedReleases) === JSON.stringify(['0.2.1-alpha.4']),
   'only the exact current DSH release may be admitted')
-assert(currentDsh.release === '0.2.0-rc.2'
-  && currentDsh.tag === 'dsh-v0.2.0-rc.2'
-  && currentDsh.commit === '639ed015397290b3745d163aafe02ffee4aa3f84',
-  'current Core target must be the exact official 0.2.0-rc.2 tag')
+assert(currentDsh.release === '0.2.1-alpha.4'
+  && currentDsh.tag === 'dsh-v0.2.1-alpha.4'
+  && currentDsh.commit === '86a402200d95fecef4529d969836f1fe13c6cb0d',
+  'current Core target must be the exact official 0.2.1-alpha.4 tag')
 assert(
   dshBaselines.some(entry => entry.release === '0.1.1-rc.2'
     && entry.commit === 'a772dbbde82780bff2b9394427e9f0a24cafa1d5'
@@ -280,7 +280,7 @@ for (const dependency of manifest.supportedBaselines?.dsh?.packages ?? []) {
   )
 }
 
-assert(manifest.supportedBaselines.dsh.developmentRelease === '0.2.0-rc.2', 'development must use the current official API baseline')
+assert(manifest.supportedBaselines.dsh.developmentRelease === '0.2.1-alpha.4', 'development must use the current official API baseline')
 const declaredPackages = [...manifest.supportedBaselines.dsh.packages].sort()
 const actualDshPeers = Object.keys(packageJson.peerDependencies).filter(name => name.startsWith('@deepseek-ai/dsh-')).sort()
 assert(JSON.stringify(declaredPackages) === JSON.stringify(actualDshPeers), 'Core peer package inventory differs')
@@ -288,9 +288,9 @@ for (const [name, version] of Object.entries(packageJson.devDependencies)) {
   if (name.startsWith('@deepseek-ai/dsh-')) assert(version === manifest.supportedBaselines.dsh.developmentRelease, `${name} must use the exact development Core version`)
 }
 assert(packageJson.dependencies?.['@deepseek-ai/dsh-authorization'] === undefined
-  && packageJson.devDependencies['@deepseek-ai/dsh-authorization'] === '0.2.0-rc.2',
+  && packageJson.devDependencies['@deepseek-ai/dsh-authorization'] === '0.2.1-alpha.4',
   'authorization must use the Host peer at runtime and the current official development baseline')
-assert(manifest.supportedBaselines.piAi === '0.87.1', 'managed provider evidence targets exact pi-ai 0.87.1')
+assert(manifest.supportedBaselines.piAi === '1.1.0', 'managed provider evidence targets exact pi-ai 1.1.0')
 const oldCore = dshBaselines.find(entry => entry.release === '0.1.1-rc.2')
 assert(oldCore.evidenceScope === 'historical-regression-only' && oldCore.managedProviderValidation === 'not-verified', 'historical rc.2 must not claim new managed-provider validation')
 const devCore = dshBaselines.find(entry => entry.release === '0.1.2-rc.1')
@@ -489,7 +489,7 @@ assert(rc020Core?.tag === 'dsh-v0.2.0-rc.1' && rc020Core.commit === '4878cdabd87
   '0.2.0-rc.1 must declare exact source, package and bounded compatibility evidence without claiming Desktop package-set validation')
 for (const path of rc020Core.runtimeTests) await access(resolve(root, path))
 const rc0202Core = dshBaselines.find(entry => entry.release === '0.2.0-rc.2')
-assert(rc0202Core?.tag === currentDsh.tag && rc0202Core.commit === currentDsh.commit
+assert(rc0202Core?.tag === 'dsh-v0.2.0-rc.2' && rc0202Core.commit === '639ed015397290b3745d163aafe02ffee4aa3f84'
   && rc0202Core.source === rc020Core.source && rc0202Core.desktopRelease === '0.2.0-rc.2'
   && rc0202Core.modelsUi === rc020Core.modelsUi
   && rc0202Core.providerHeaders === rc020Core.providerHeaders
@@ -504,6 +504,21 @@ assert(rc0202Core?.tag === currentDsh.tag && rc0202Core.commit === currentDsh.co
   ]),
   '0.2.0-rc.2 must retain bounded source, npm and signed Desktop peer evidence')
 for (const path of rc0202Core.runtimeTests) await access(resolve(root, path))
+const alpha0214Core = dshBaselines.find(entry => entry.release === currentDsh.release)
+assert(alpha0214Core?.tag === currentDsh.tag && alpha0214Core.commit === currentDsh.commit
+  && alpha0214Core.source === rc0202Core.source
+  && alpha0214Core.desktopRelease === 'not-verified'
+  && alpha0214Core.desktopPackageSet === 'not-materialized'
+  && alpha0214Core.strictRemoteCodecs === rc0202Core.strictRemoteCodecs
+  && alpha0214Core.roleChildDescriptorVersion === 3 && alpha0214Core.sessionFormatVersion === 4
+  && alpha0214Core.standaloneNpmArtifacts === 'tested'
+  && alpha0214Core.evidenceScope === 'unchanged-tagged-source-target',
+  'alpha.4 must retain exact public runtime evidence without claiming Desktop artifact acceptance')
+for (const path of alpha0214Core.runtimeTests) await access(resolve(root, path))
+for (const path of ['tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts',
+  'tests/fixtures/auto-review-copilot-core.fixture.ts', 'tests/fixtures/copilot-accounts-persistence-core.fixture.ts']) {
+  assert(alpha0214Core.runtimeTests.includes(path), `alpha.4 native qualification is missing ${path}`)
+}
 
 const pluginSourcePaths = (await readdir(resolve(root, 'src'), { recursive: true }))
   .filter(path => path.endsWith('.ts'))
@@ -589,7 +604,7 @@ for (const path of [
 const workflow = (await read('.github/workflows/ci.yml')).replaceAll('\r\n', '\n')
 assertTaggedRuntimeClosure(workflow)
 assertTaggedRuntimeClosure(releaseWorkflow)
-assert(workflow.includes('commit: 639ed015397290b3745d163aafe02ffee4aa3f84')
+assert(workflow.includes('commit: 86a402200d95fecef4529d969836f1fe13c6cb0d')
   && workflow.includes('ref: ${{ matrix.commit }}')
   && !workflow.includes('matrix.dsh.'), 'CI must gate the exact current DSH source, not historical pins')
 const publishedAdapterJob = workflow.split('\n  published-adapter:\n')[1]?.split('\n  release-ready:\n')[0] ?? ''
@@ -597,9 +612,10 @@ for (const file of ['tests/copilot-stream-liveness.spec.ts', 'tests/copilot-stre
   assert(publishedAdapterJob.includes(file) && (await read('scripts/verify-tagged-core.mjs')).includes(file),
     `managed liveness regression must run against published and tagged adapters: ${file}`)
 }
-assert(publishedAdapterJob.includes('--release 0.2.0-rc.2')
-  && publishedAdapterJob.includes('DSH_PUBLISHED_CORE_RELEASE: 0.2.0-rc.2')
-  && !publishedAdapterJob.includes('matrix.release'), 'published-artifact CI must target only exact DSH 0.2.0-rc.2')
+assert(publishedAdapterJob.includes('--release 0.2.1-alpha.4')
+  && publishedAdapterJob.includes('DSH_PUBLISHED_CORE_RELEASE: 0.2.1-alpha.4')
+  && publishedAdapterJob.includes('vitest.candidate-published.config.ts')
+  && !publishedAdapterJob.includes('matrix.release'), 'published-artifact CI must target only exact DSH 0.2.1-alpha.4')
 const subagentClosure = "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'"
 for (const [path, source] of [['CI', workflow], ['Release', releaseWorkflow]]) {
   assert(source.includes(subagentClosure), `${path} must install the alpha2 native child-descriptor closure`)
@@ -607,7 +623,7 @@ for (const [path, source] of [['CI', workflow], ['Release', releaseWorkflow]]) {
 assert(workflow.includes(`working-directory: dsh-upstream\n        run: ${subagentClosure}`),
   'CI must install the native child-descriptor closure in its exact pinned Core checkout')
 for (const command of [
-  '639ed015397290b3745d163aafe02ffee4aa3f84',
+  '86a402200d95fecef4529d969836f1fe13c6cb0d',
   'pnpm install --frozen-lockfile',
   "pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'",
   'node scripts/verify-tagged-core.mjs prepare',
@@ -625,8 +641,8 @@ for (const marker of [
   "github.event_name == 'push' && github.ref == 'refs/heads/main'",
   'fetch-depth: 0',
   'scripts/release-policy.mjs --plan',
-  '639ed015397290b3745d163aafe02ffee4aa3f84',
-  '--release 0.2.0-rc.2',
+  '86a402200d95fecef4529d969836f1fe13c6cb0d',
+  '--release 0.2.1-alpha.4',
   'node scripts/verify-tagged-core.mjs prepare',
   'node node_modules/vitest/vitest.mjs run --config',
   'pnpm verify:upstream -- dsh-upstream',

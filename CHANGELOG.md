@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2-alpha.16 (prepared)
+
+- Target exact official DSH 0.2.1-alpha.4 through unchanged public APIs, pi-ai 1.1.0, Cordis 4.0.5-alpha.2, schemastery 3.18.5-alpha.2 and storage-compatible Zod 4.4.3 (#420). Earlier rc.2 hosts must retain alpha.15; no version exemption or Core patch.
+- Qualify the exact official reviewer package and exported callback, preserving fail-closed ownership, frozen requests and ordinary concurrent Chat. Exercise native dynamic system/tool conversion, noncooperative timeout settlement, account/Remote/compaction/replay and real selector mounting on Windows/Linux.
+- Retain token-based recovery planning, certified-refresh identity, byte/semantic liveness, Usage ownership and independent diagnostics/gzip consent. Defer experimental durable plugin records; no routing-policy, history, settings or consent migration.
+- Desktop alpha.4 artifacts/signatures, installed/loaded state and live OAuth/model/search remain unverified. This release does not authorize Desktop upgrade, profile installation or restart.
+
 ## 0.4.2-alpha.15 (prepared)
 
 - Plan selected compaction recovery in public native token-meter units rather than comparing UTF-8 bytes directly with token budgets (#418). This prevents false indivisible rejection of long balanced tool spans that fit the planning budget.
