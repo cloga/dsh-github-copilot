@@ -146,6 +146,10 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 The command above requires official DSH `0.2.1-alpha.4`. **Desktop rc.2 must not install alpha.16**; retain `dsh-github-copilot@0.4.2-alpha.15` there. Candidate Desktop package/signature and profile peer composition remain unverified. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) is not alpha.4 acceptance; a generic/global `dsh` shim is not equivalent. No install, restart, registry-policy bypass, peer patch or configuration deletion is authorized by this release.
 
+Desktop's native package manager and qualified bundled CLI are profile-specific.
+[Standalone offline maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
+is not a workaround for a Desktop-managed/reserved profile.
+
 After an approved reload/restart:
 
 1. Open **Settings → Models → GitHub Copilot** and select **Sign in with GitHub**. No native provider or manual model definition is needed.

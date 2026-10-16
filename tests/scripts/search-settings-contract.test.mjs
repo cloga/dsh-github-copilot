@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import vm from 'node:vm'
+import { createRequire } from 'node:module'
 import { test } from 'node:test'
-import * as cordis from '@deepseek-ai/cordis'
 import { Context } from '@deepseek-ai/cordis'
 import * as dshSettings from '@deepseek-ai/dsh-settings'
 import { SettingsForms } from '@deepseek-ai/dsh-settings'
@@ -76,14 +76,16 @@ async function fixture(t) {
 // Execute the unchanged generated Client bundle in an isolated ModuleLoader stub
 // to obtain its actual strict descriptors, rather than inventing Remote codecs.
 async function clientPlugin(packageName) {
+  if (packageName === '@deepseek-ai/dsh-api-gateway') return import('@deepseek-ai/dsh-api-gateway/client')
   const bundle = new URL('./client.js', import.meta.resolve(packageName))
+  const require = createRequire(import.meta.resolve(packageName))
   let plugin
   vm.runInNewContext(await readFile(bundle, 'utf8'), {
     AbortController, AbortSignal, crypto, TextEncoder, TextDecoder, URL, setTimeout, clearTimeout,
     window: { __ModuleLoader__: { load(entry) {
       plugin = entry.factory(name => {
-        assert.equal(name, '@deepseek-ai/cordis', 'only the real pinned Cordis external is permitted')
-        return cordis
+        assert.ok(['@deepseek-ai/cordis', 'zod'].includes(name), 'only declared pinned Client externals are permitted')
+        return require(name)
       })
     } } },
   }, { filename: `${packageName}/client.js` })

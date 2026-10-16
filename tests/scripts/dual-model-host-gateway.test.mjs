@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
-import { HostConnectionService } from '@deepseek-ai/dsh-client-connection'
+import { HostConnectionService, Peer } from '@deepseek-ai/dsh-client-connection'
 import { TypertGatewayService } from '@deepseek-ai/dsh-api-gateway'
 import GitHubCopilotDualModel, { DUAL_MODEL_NAMESPACE, DUAL_MODEL_POLICY_EVENT, dualModelSessionId } from '../../lib/types/dual-model-host.js'
 import { GitHubCopilotAuthorizationController } from '../../lib/index.js'
@@ -24,13 +24,14 @@ async function fixture(t, setup = () => {}) {
   // Cordis dependency injections settle without a server, credentials or timers.
   await Promise.resolve(); await Promise.resolve()
   const handler = connection.createSharedFetchHandler('/api')
+  const peer = new Peer(ctx, { principal: { kind: 'owner' } })
   let sequence = 0
   async function call(endpoint, args = {}) {
     const rpcId = `fixture-${++sequence}`
     const response = await handler.fetch(new Request(`http://fixture.invalid/api/${endpoint}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: { args } }),
-    }))
+    }), peer)
     const text = await response.text()
     assert.equal(response.status, 200, `${endpoint}: HTTP ${response.status}: ${text}`)
     const envelope = JSON.parse(text)
@@ -43,7 +44,7 @@ async function fixture(t, setup = () => {}) {
     const response = await handler.fetch(new Request(`http://fixture.invalid/api/${endpoint}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'client-request', rpcId: `fixture-${++sequence}`, method: endpoint, payload: { args: {} } }),
-    }))
+    }), peer)
     assert.equal(response.status, 404, endpoint)
   }
   return { ctx, roles, call, absent }

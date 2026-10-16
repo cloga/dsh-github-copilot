@@ -127,6 +127,10 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 上面的命令要求官方 DSH `0.2.1-alpha.4`。**Desktop rc.2 不得安装 alpha.16**，应保留 `dsh-github-copilot@0.4.2-alpha.15`。候选 Desktop 包／签名及 profile peer 组合仍未核验。[历史 rc.2 随附 CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)不代表 alpha.4 验收；全局／普通 `dsh` shim 不等价。此版本不授权安装、重启、绕过包源政策、修改 peer 或删除配置。
 
+Desktop 原生包管理器和已核验的随附 CLI 都有 profile 边界。
+[独立 profile 离线维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
+不能用来绕过 Desktop 托管／保留 profile 的限制。
+
 经批准 reload/restart 后：
 
 1. 打开**设置 → 模型 → GitHub Copilot**，选择 **Sign in with GitHub**。不需要添加原生 provider 或手工定义模型。

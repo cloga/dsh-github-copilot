@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { WebRuntime } from '@deepseek-ai/dsh-web'
 import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
-import { HostConnectionService } from '@deepseek-ai/dsh-client-connection'
+import { HostConnectionService, Peer } from '@deepseek-ai/dsh-client-connection'
 import { TypertGatewayService } from '@deepseek-ai/dsh-api-gateway'
 import CopilotRoutedWeb from '../../lib/routed-web.js'
 import SearchRoutingController from '../../lib/types/search-routing-host.js'
@@ -19,13 +19,14 @@ test('search catalog Remote reaches actual facade registrations and unloads clea
   ctx.provide('githubCopilotOriginalWeb', original)
   const remote = ctx.plugin(SearchRoutingController); await remote
   const handler = connection.createSharedFetchHandler('/api')
+  const peer = new Peer(ctx, { principal: { kind: 'owner' } })
   let sequence = 0
   async function call(status = 200) {
     const endpoint = 'githubCopilotSearchRouting/providers', rpcId = `catalog-${++sequence}`
     const response = await handler.fetch(new Request(`http://fixture.invalid/api/${endpoint}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: { args: {} } }),
-    }))
+    }), peer)
     assert.equal(response.status, status)
     if (status !== 200) return undefined
     const envelope = await response.json()
