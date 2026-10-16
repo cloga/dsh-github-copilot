@@ -1,0 +1,61 @@
+name: Candidate compatibility (not release admission)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/candidate-compatibility.yml'
+      - 'scripts/verify-published-core.mjs'
+      - 'tests/fixtures/alpha4-contracts-core.fixture.ts'
+      - 'docs/official-first-021-alpha4.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-artifacts:
+    name: Alpha.4 artifacts (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Check unchanged official artifact availability
+        shell: bash
+        run: |
+          npm view @deepseek-ai/dsh-agent@0.2.1-alpha.4 version dist.integrity --registry=https://registry.npmjs.org
+          npm view @deepseek-ai/dsh-llm-pi-ai@0.2.1-alpha.4 version dist.integrity --registry=https://registry.npmjs.org
+      - name: Prepare isolated candidate without broadening shipped admission
+        shell: bash
+        run: node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-alpha4" --release 0.2.1-alpha.4 --candidate true
+      - name: Install unchanged candidate artifacts
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/copilot-alpha4"
+          pnpm install --ignore-scripts --strict-peer-dependencies --registry=https://registry.npmjs.org
+      - name: Inspect actual public identities and SDK resolution
+        shell: bash
+        run: node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-alpha4" --release 0.2.1-alpha.4 --candidate true
+      - name: Typecheck and exercise candidate contracts
+        shell: bash
+        env:
+          DSH_CORE_EVIDENCE: published-artifact-runtime
+          DSH_PUBLISHED_CORE_RELEASE: 0.2.1-alpha.4
+        run: |
+          cd "$RUNNER_TEMP/copilot-alpha4"
+          node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
+          node node_modules/typescript/bin/tsc -p tsconfig.tests.json
+          node node_modules/vitest/vitest.mjs run
+          node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts
+          node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts
+          node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts

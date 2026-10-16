@@ -14,6 +14,11 @@
 
 **压缩规划：**alpha.15 修复独立选择的恢复引擎将字节数与 token 预算直接比较的问题，改用公开的原生 token meter，保留完整工具关系和最终原生准入。真正超大的配对历史单元仍明确失败；这不是历史修复，也不保证恢复成功。参见[压缩恢复](./docs/manual-compaction-recovery.md)。
 
+**DSH alpha.4 资格认证：**尚未准入 DSH `0.2.1-alpha.4`。
+[固定目标的 official-first 调研](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha4.md)
+将 SDK、reviewer 身份与运行时验收和源码可读性分开记录。候选 CI 使用隔离的未修改官方制品，
+不会改变正式支持的 rc.2 基线，也不授权安装或版本豁免。
+
 ## 你可以做什么
 
 **高成本 Auto：**在 **Manage → Model preferences** 中用 **High cost** 标记

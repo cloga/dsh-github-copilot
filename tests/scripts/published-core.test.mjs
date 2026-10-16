@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { PUBLISHED_CORE_RELEASES, preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
+import { CANDIDATE_CORE_RELEASES, PUBLISHED_CORE_RELEASES, preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
 
 const release = '0.2.0-rc.2'
 async function sourceFixture() {
@@ -73,6 +73,30 @@ test('admits and inspects only the exact current official published release', as
 
 test('refuses an unknown release before creating any target', async () => withSource(async ({ root, target, base }) => {
   await assert.rejects(preparePublishedCoreFixture({ root, target, release: 'latest' }), /unsupported published Core/)
+  assert.deepEqual(await readdir(base), ['source'])
+}))
+
+test('isolates the fixed alpha.4 SDK experiment from shipped rc.2 admission', async () => withSource(async ({ root, target }) => {
+  const release = '0.2.1-alpha.4'
+  assert.deepEqual(CANDIDATE_CORE_RELEASES, {
+    [release]: { commit: '86a402200d95fecef4529d969836f1fe13c6cb0d', piAi: '1.1.0' },
+  })
+  await assert.rejects(preparePublishedCoreFixture({ root, target, release }), /unsupported published Core/)
+  const original = await readFile(join(root, 'package.json'), 'utf8')
+  const report = await preparePublishedCoreFixture({ root, target, release, candidate: true })
+  const output = JSON.parse(await readFile(join(target, 'package.json'), 'utf8'))
+  assert.equal(output.dependencies['@earendil-works/pi-ai'], '1.1.0')
+  assert.equal(output.devDependencies['@deepseek-ai/dsh-llm-pi-ai'], release)
+  assert.equal(report.admission, 'not-admitted')
+  assert.equal(report.commit, CANDIDATE_CORE_RELEASES[release].commit)
+  assert.equal(await readFile(join(root, 'package.json'), 'utf8'), original)
+  assert.deepEqual(PUBLISHED_CORE_RELEASES, ['0.2.0-rc.2'])
+}))
+
+test('candidate mode refuses floating or unreviewed releases before target creation', async () => withSource(async ({ root, target, base }) => {
+  for (const release of ['latest', '0.2.1-alpha.2', '0.2.1-alpha.5', '0.2.0-rc.2']) {
+    await assert.rejects(preparePublishedCoreFixture({ root, target, release, candidate: true }), /unsupported candidate Core/)
+  }
   assert.deepEqual(await readdir(base), ['source'])
 }))
 

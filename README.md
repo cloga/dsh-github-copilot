@@ -14,6 +14,12 @@ GitHub Copilot account discovery, contextual Auto routing and hosted search for 
 
 **Compaction planning:** alpha.15 fixes byte counts being compared with token budgets in the separately selected recovery engine. Planning now uses the public native token meter, preserving complete tool relations and final native admission. Truly oversized balanced units still fail explicitly; this is not history repair or guaranteed recovery. See [compaction recovery](./docs/manual-compaction-recovery.md).
 
+**DSH alpha.4 qualification:** DSH `0.2.1-alpha.4` is not admitted yet. The
+[fixed-target official-first review](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha4.md)
+tracks SDK, reviewer identity and runtime acceptance separately from source
+availability. Candidate CI uses isolated unchanged artifacts; it does not change
+the supported rc.2 baseline or authorize an installation/version exemption.
+
 ## What you can do
 
 **High-cost Auto:** in **Manage → Model preferences**, mark costly models with
