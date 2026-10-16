@@ -80,7 +80,7 @@ test('isolates the fixed alpha.4 SDK experiment from shipped rc.2 admission', as
   const release = '0.2.1-alpha.4'
   assert.deepEqual(CANDIDATE_CORE_RELEASES, {
     [release]: { commit: '86a402200d95fecef4529d969836f1fe13c6cb0d', piAi: '1.1.0',
-      cordis: '4.0.5-alpha.2', loader: '1.0.6-alpha.2', schemastery: '3.18.5-alpha.2' },
+      cordis: '4.0.5-alpha.2', loader: '1.0.6-alpha.2', schemastery: '3.18.5-alpha.2', zod: '4.4.3' },
   })
   await assert.rejects(preparePublishedCoreFixture({ root, target, release }), /unsupported published Core/)
   const original = await readFile(join(root, 'package.json'), 'utf8')
@@ -91,6 +91,7 @@ test('isolates the fixed alpha.4 SDK experiment from shipped rc.2 admission', as
   assert.equal(output.peerDependencies['@deepseek-ai/cordis'], '4.0.5-alpha.2')
   assert.equal(output.devDependencies['@deepseek-ai/cordis-plugin-loader'], '1.0.6-alpha.2')
   assert.equal(output.devDependencies['@deepseek-ai/schemastery'], '3.18.5-alpha.2')
+  assert.equal(output.dependencies.zod, '4.4.3')
   assert.equal(report.admission, 'not-admitted')
   assert.equal(report.commit, CANDIDATE_CORE_RELEASES[release].commit)
   assert.equal(await readFile(join(root, 'package.json'), 'utf8'), original)

@@ -11,6 +11,7 @@ export const CANDIDATE_CORE_RELEASES = Object.freeze({
     cordis: '4.0.5-alpha.2',
     loader: '1.0.6-alpha.2',
     schemastery: '3.18.5-alpha.2',
+    zod: '4.4.3',
   }),
 })
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
@@ -87,6 +88,7 @@ function fixtureManifest(original, release, piAi, candidate) {
         '@deepseek-ai/cordis': target.cordis, '@deepseek-ai/schemastery': target.schemastery }
     }
     manifest.devDependencies['@deepseek-ai/cordis-plugin-loader'] = target.loader
+    manifest.dependencies.zod = target.zod
   }
   // The fixture owns only top-level requirements, never Core's transitive SDK resolution.
   for (const key of ['overrides', 'resolutions', 'pnpm', 'bundledDependencies', 'bundleDependencies', 'workspaces']) delete manifest[key]

@@ -53,10 +53,12 @@ jobs:
           DSH_PUBLISHED_CORE_RELEASE: 0.2.1-alpha.4
         run: |
           cd "$RUNNER_TEMP/copilot-alpha4"
-          node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
-          node node_modules/typescript/bin/tsc -p tsconfig.tests.json
-          node node_modules/typescript/bin/tsc -p tsconfig.candidate-tests.json
-          node node_modules/vitest/vitest.mjs run
-          node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts
-          node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts
-          node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts
+          status=0
+          node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit || status=1
+          node node_modules/typescript/bin/tsc -p tsconfig.tests.json || status=1
+          node node_modules/typescript/bin/tsc -p tsconfig.candidate-tests.json || status=1
+          node node_modules/vitest/vitest.mjs run || status=1
+          node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts || status=1
+          node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts || status=1
+          node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts || status=1
+          exit "$status"

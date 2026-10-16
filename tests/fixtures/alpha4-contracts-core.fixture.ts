@@ -2,8 +2,8 @@
 import { readFileSync } from 'node:fs'
 import { findPackageJSON } from 'node:module'
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai'
-import type { Model, TranscriptContext, SimpleStreamOptions } from '@earendil-works/pi-ai'
-import { createUserMessage, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import type { Model, SimpleStreamOptions } from '@earendil-works/pi-ai'
+import { createDeveloperMessage, createUserMessage, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { coreProviderView } from '../../src/pi-provider-bridge.ts'
@@ -75,10 +75,10 @@ describe('fixed alpha.4 public adapter and SDK contracts', () => {
       parameters: { type: 'object', properties: {} }, deferLoading: true }]
     for await (const _chunk of prepared.stream({
       provider, model: model.id, system: 'Initial prompt', reasoningEffort: ReasoningEffortId('high'),
-      messages: [createUserMessage('Original task'), {
-        role: 'developer', content: [{ type: 'text', text: 'Updated instruction' },
+      messages: [createUserMessage('Original task'), createDeveloperMessage({
+        source: { kind: 'user' }, content: [{ type: 'text', text: 'Updated instruction' },
           { type: 'tool-addition', toolName: 'late_tool' }],
-      }, createUserMessage('Continue')], tools,
+      }), createUserMessage('Continue')], tools,
     })) { /* consume native output */ }
     expect(simple).toHaveBeenCalledTimes(1)
     const [, context, options] = simple.mock.calls[0]!
@@ -96,9 +96,9 @@ describe('fixed alpha.4 public adapter and SDK contracts', () => {
     const simple = vi.fn(() => complete())
     const native = adapter(simple)
     const consume = async () => {
-      for await (const _chunk of native.stream({ provider, model: model.id, messages: [{
-        role: 'developer', content: [{ type: 'tool-addition', toolName: 'missing_tool' }],
-      }] })) { /* consume native output */ }
+      for await (const _chunk of native.stream({ provider, model: model.id, messages: [createDeveloperMessage({
+        source: { kind: 'user' }, content: [{ type: 'tool-addition', toolName: 'missing_tool' }],
+      })] })) { /* consume native output */ }
     }
     await expect(consume()).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
     expect(simple).not.toHaveBeenCalled()

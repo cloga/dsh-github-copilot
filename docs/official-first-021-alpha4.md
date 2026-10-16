@@ -33,6 +33,13 @@ tagged versions without changing transitive dependencies or disabling strict
 peer checks. No missing-mirror result authorizes rebuilding Core, weakening
 required gates, broadening engines, or using `allow-version`.
 
+The next candidate typecheck exposed the public storage-domain schema's exact
+Zod 4.4.3 type versus the plugin's newly resolved Zod 4.6.5 (incompatible
+`_zod.version.minor`). The candidate now pins its own Zod to the official
+storage-domain's exact 4.4.3 contract; no Core dependency is overridden, and
+schema/runtime regressions must still pass. This is API alignment, not a
+registry-failure substitution or a cast around the mismatch.
+
 ## Evidence method
 
 The rc.2 and alpha.4 complete Git trees both report `truncated: false`. File
