@@ -8,13 +8,16 @@ export const CANDIDATE_CORE_RELEASES = Object.freeze({
   '0.2.1-alpha.4': Object.freeze({
     commit: '86a402200d95fecef4529d969836f1fe13c6cb0d',
     piAi: '1.1.0',
+    cordis: '4.0.5-alpha.2',
+    loader: '1.0.6-alpha.2',
+    schemastery: '3.18.5-alpha.2',
   }),
 })
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
 const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
   'vitest.diagnostics-published.config.ts',
   'vitest.auto-review-published.config.ts',
-  'vitest.candidate-published.config.ts',
+  'vitest.candidate-published.config.ts', 'tsconfig.candidate-tests.json',
   'README.md', 'README.zh.md', 'AGENTS.md', 'CONTRIBUTING.md', 'SECURITY.md', 'LICENSE',
   'deployment-baseline.json', 'agent-contract.json']
 const excluded = new Set(['node_modules', 'lib', 'artifacts', 'coverage', 'tmp', 'dist'])
@@ -59,7 +62,7 @@ async function collectTree(root, path, paths) {
     }
   } else if (info.isFile() && extensions.has(extname(path).toLowerCase())) paths.push(relative(root, path))
 }
-function fixtureManifest(original, release, piAi) {
+function fixtureManifest(original, release, piAi, candidate) {
   if (original.name !== 'dsh-github-copilot' || original.dependencies?.['@earendil-works/pi-ai'] !== '0.87.1') {
     throw new Error('fixture requires this plugin and its exact own pi-ai 0.87.1 dependency')
   }
@@ -77,6 +80,14 @@ function fixtureManifest(original, release, piAi) {
     '@deepseek-ai/dsh-user-approval': release,
   }
   manifest.dependencies = { ...manifest.dependencies, '@earendil-works/pi-ai': piAi }
+  if (candidate) {
+    const target = CANDIDATE_CORE_RELEASES[release]
+    for (const section of ['devDependencies', 'peerDependencies']) {
+      manifest[section] = { ...manifest[section],
+        '@deepseek-ai/cordis': target.cordis, '@deepseek-ai/schemastery': target.schemastery }
+    }
+    manifest.devDependencies['@deepseek-ai/cordis-plugin-loader'] = target.loader
+  }
   // The fixture owns only top-level requirements, never Core's transitive SDK resolution.
   for (const key of ['overrides', 'resolutions', 'pnpm', 'bundledDependencies', 'bundleDependencies', 'workspaces']) delete manifest[key]
   return manifest
@@ -93,7 +104,7 @@ export async function preparePublishedCoreFixture({ root, target, release, candi
   const packagePath = join(source, 'package.json')
   if (!(await lstat(packagePath)).isFile() || !samePath(await realpath(packagePath), packagePath)) throw new Error('fixture refuses a linked package manifest')
   const original = JSON.parse(await readFile(packagePath, 'utf8'))
-  const manifest = fixtureManifest(original, release, piAi)
+  const manifest = fixtureManifest(original, release, piAi, candidate)
   const paths = []
   for (const tree of ['src', 'tests']) await collectTree(source, join(source, tree), paths)
   for (const name of rootFiles) {

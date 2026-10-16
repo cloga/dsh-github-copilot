@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.tests.json",
+  "include": ["src", "tests/fixtures/alpha4-contracts-core.fixture.ts", "vitest.candidate-published.config.ts"],
+  "exclude": []
+}

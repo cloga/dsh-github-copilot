@@ -24,10 +24,14 @@ Local authorized-registry reads returned `ERR_PNPM_PACKAGE_NOT_FOUND` for both
 `@deepseek-ai/dsh-agent@0.2.1-alpha.4` and
 `@deepseek-ai/dsh-llm-pi-ai@0.2.1-alpha.4`; the adapter version list ended at
 alpha.2. Direct official npm access failed TLS negotiation. These facts do not
-establish worldwide absence: the candidate Windows/Linux CI reads the official
-registry before attempting the unchanged-artifact fixture. An unavailable
-artifact is a qualification blocker, not permission to rebuild Core, weaken
-required gates, broaden engines, or use `allow-version`.
+establish worldwide absence. [The first candidate CI](https://github.com/cloga/dsh-github-copilot/actions/runs/38901591104)
+successfully read and downloaded official alpha.4 artifacts on both platforms.
+It exposed real strict peer failures: Cordis `~4.0.5-alpha.2`, Loader
+`~1.0.6-alpha.2` and schemastery `~3.18.5-alpha.2` cannot use the old exact
+development versions. The isolated candidate manifest now aligns those exact
+tagged versions without changing transitive dependencies or disabling strict
+peer checks. No missing-mirror result authorizes rebuilding Core, weakening
+required gates, broadening engines, or using `allow-version`.
 
 ## Evidence method
 

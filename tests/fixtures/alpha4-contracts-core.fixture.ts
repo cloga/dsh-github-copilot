@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { findPackageJSON } from 'node:module'
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai'
 import type { Model, TranscriptContext, SimpleStreamOptions } from '@earendil-works/pi-ai'
-import { createUserMessage, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { coreProviderView } from '../../src/pi-provider-bridge.ts'
@@ -67,14 +67,14 @@ function complete() {
 
 describe('fixed alpha.4 public adapter and SDK contracts', () => {
   it('preserves initial prompt, in-history system/tool updates and exact effort through the provider bridge', async () => {
-    const simple = vi.fn((_model: Model<'openai-responses'>, _context: TranscriptContext, _options?: SimpleStreamOptions) => complete())
+    const simple = vi.fn<SimpleNativeProvider['streamSimple']>((_model, _context, _options) => complete())
     const native = adapter(simple)
     const prepared = await native.prepareCall(provider, model.id)
     expect(prepared.model).toMatchObject({ systemPromptUpdate: 'in-history', toolUpdate: 'addition-only' })
     const tools = [{ name: 'late_tool', description: 'Synthetic deferred tool',
       parameters: { type: 'object', properties: {} }, deferLoading: true }]
     for await (const _chunk of prepared.stream({
-      provider, model: model.id, system: 'Initial prompt', reasoningEffort: 'high',
+      provider, model: model.id, system: 'Initial prompt', reasoningEffort: ReasoningEffortId('high'),
       messages: [createUserMessage('Original task'), {
         role: 'developer', content: [{ type: 'text', text: 'Updated instruction' },
           { type: 'tool-addition', toolName: 'late_tool' }],
@@ -107,7 +107,7 @@ describe('fixed alpha.4 public adapter and SDK contracts', () => {
   it('settles native semantic timeout without waiting for an uncooperative event iterator', async () => {
     const never = createAssistantMessageEventStream()
     let dispatched: SimpleStreamOptions | undefined
-    const simple = vi.fn((_model, _context, options) => { dispatched = options; return never })
+    const simple = vi.fn<SimpleNativeProvider['streamSimple']>((_model, _context, options) => { dispatched = options; return never })
     const native = adapter(simple, 100)
     let timer: ReturnType<typeof setTimeout> | undefined
     const consume = async () => {
