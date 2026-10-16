@@ -21,7 +21,7 @@ import ManualRecovery from '../../src/manual-compaction-recovery.ts'
 const provider = 'github-copilot-preview'
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.2.0-rc.2', '0.2.1-alpha.4']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 
 test.each([

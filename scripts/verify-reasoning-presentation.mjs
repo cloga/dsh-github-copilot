@@ -19,6 +19,7 @@ const supported = new Set([
   '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d',
   'ddefc45fbc7f8e46dd73185e68295696d1297887',
   '639ed015397290b3745d163aafe02ffee4aa3f84',
+  '86a402200d95fecef4529d969836f1fe13c6cb0d',
   '1517a4dbca0a2789ff1d41ba439600f8547d23fa',
 ])
 const gitOptions = { cwd: core, encoding: 'utf8', timeout: 15000 }
