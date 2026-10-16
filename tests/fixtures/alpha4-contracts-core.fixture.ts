@@ -94,7 +94,7 @@ describe('fixed alpha.5 public adapter and SDK contracts', () => {
       expect(repl).not.toContain('the body of an async TypeScript function')
       expect(repl).toContain('Only values emitted as program output enter the conversation.')
     } finally {
-      await ctx.dispose()
+      await ctx.fiber.dispose()
     }
   })
 

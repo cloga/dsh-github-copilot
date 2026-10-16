@@ -147,7 +147,7 @@ For a **standalone named profile**:
 dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.17/dsh-github-copilot-0.4.2-alpha.17.tgz
 ```
 
-The command above requires official DSH `0.2.1-alpha.5`. **Desktop rc.2 must not install alpha.16**; retain `dsh-github-copilot@0.4.2-alpha.15` there. Candidate Desktop package/signature and profile peer composition remain unverified. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) is not alpha.4 acceptance; a generic/global `dsh` shim is not equivalent. No install, restart, registry-policy bypass, peer patch or configuration deletion is authorized by this release.
+The command above requires official DSH `0.2.1-alpha.5`. **Desktop rc.2 must not install alpha.16 or alpha.17**; retain `dsh-github-copilot@0.4.2-alpha.15` there. Candidate Desktop package/signature and profile peer composition remain unverified. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) is not alpha.5 acceptance; a generic/global `dsh` shim is not equivalent. No install, restart, registry-policy bypass, peer patch or configuration deletion is authorized by this release.
 
 Desktop's native package manager and qualified bundled CLI are profile-specific.
 [Standalone offline maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
