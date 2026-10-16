@@ -165,6 +165,21 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   assert.throws(() => guard.resolveId('@deepseek-ai/dsh-unmapped', join(value.root, 'src/index.ts')), /PUBLIC_EXPORT_UNMAPPED/)
 }))
 
+test('maps dual Client runtime exports to the unchanged public Client source', async () => withFixture(async value => {
+  const dir = join(value.core, 'packages/api/gateway')
+  await mkdir(join(dir, 'src/client'), { recursive: true })
+  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-api-gateway', version: release, exports: {
+    '.': './lib/index.js',
+    './client': { types: './lib/types/client/index.d.ts', node: './lib/client.node.js', default: './lib/client.browser.js' },
+  } }))
+  await writeFile(join(dir, 'src/index.ts'), 'export const host = true\n')
+  await writeFile(join(dir, 'src/client/index.ts'), 'export const client = true\n')
+  value.tracked.push('packages/api/gateway/package.json', 'packages/api/gateway/src/index.ts', 'packages/api/gateway/src/client/index.ts')
+  const report = await prepareTaggedCoreFixture(value, value)
+  assert.ok(report.aliases.some(item => item.name === '@deepseek-ai/dsh-api-gateway/client'
+    && item.entry === join(dir, 'src/client/index.ts')))
+}))
+
 test('maps import-condition mjs vendor exports without aliasing the plugin vendor copy', async () => withFixture(async value => {
   const dir = join(value.core, 'vendor/schemastery')
   await mkdir(join(dir, 'src'), { recursive: true })

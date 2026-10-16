@@ -13,6 +13,7 @@ import { dualModelProjection, DUAL_MODEL_PROJECTION } from '../../src/dual-model
 import CopilotRoutedWeb from '../../src/routed-web.ts'
 import * as WebDelegate from '../../src/web-delegate.ts'
 import remote from '../../src/remote.ts'
+import { fixtureFetchHandler } from './gateway-peer.ts'
 
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
@@ -72,7 +73,7 @@ describe('exact official role and search contracts', () => {
       const connection = new HostConnectionService(ctx, [], {})
       new TypertGatewayService(ctx, { websocketHeartbeatIntervalMs: 30000 })
       const roles = await ctx.plugin(GitHubCopilotDualModel)
-      const handler = connection.createSharedFetchHandler('/api')
+      const handler = fixtureFetchHandler(ctx, connection)
       let sequence = 0
       async function call(method: string, args = {}) {
         const endpoint = `githubCopilotDualModel/${method}`

@@ -17,6 +17,7 @@ import type { CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { expect, it, vi } from 'vitest'
 import { DiagnosticsController } from '../../src/diagnostics-host.ts'
 import contribution from '../../src/diagnostics-remote.ts'
+import { fixtureFetchHandler } from './gateway-peer.ts'
 
 async function loadClientGateway(): Promise<{ apply(ctx: Context): void }> {
   if (process.env.DSH_CORE_EVIDENCE === 'tagged-source-runtime'
@@ -85,7 +86,7 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     })
     await HostConnection.apply(host, {})
     new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
-    const handler = host.connection.createSharedFetchHandler('/api')
+    const handler = fixtureFetchHandler(host, host.connection)
     let sequence = 0
     client.provide('typert', { remotes: { register: () => () => {} }, contexts: { getClient: () => undefined } })
     client.provide('connection', {

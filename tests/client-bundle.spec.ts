@@ -384,6 +384,7 @@ describe('tsdown client artifact', () => {
       contexts: { getClient: () => undefined },
     })
     ctx.provide('connection', {
+      interactions: 'answer',
       rpc: { call: rpcCall },
       registerGenerationSource: () => () => undefined,
       start: () => ({ stop() {} }),

@@ -23,6 +23,7 @@ import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import continuationRemote from '../../src/session-continuation-remote.ts'
 import { installSessionContinuation } from '../../src/session-continuation-host.ts'
 import { GitHubCopilotAuthorizationController } from '../../src/authorization-controller.ts'
+import { fixtureFetchHandler } from './gateway-peer.ts'
 
 it.each(['source', 'strict'] as const)('saves high-cost preferences through actual Client and %s Host gateways without discovery', async mode => {
   const host = new Context(), client = new Context()
@@ -46,7 +47,7 @@ it.each(['source', 'strict'] as const)('saves high-cost preferences through actu
     })
     const connection = new HostConnectionService(host, [], {})
     new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
-    const handler = connection.createSharedFetchHandler('/api')
+    const handler = fixtureFetchHandler(host, connection)
     let rpcId = 0
     client.provide('typert', { remotes: { register: () => () => {} }, contexts: { getClient: () => undefined } })
     client.provide('connection', { rpc: { call: async (_path: string, method: string, payload: unknown) => {
@@ -98,7 +99,7 @@ it.each(['source', 'strict'] as const)('binds persistent Session continuation th
     })
     const connection = new HostConnectionService(host, [], {})
     new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
-    const handler = connection.createSharedFetchHandler('/api')
+    const handler = fixtureFetchHandler(host, connection)
     let rpcId = 0
     client.provide('typert', { remotes: { register: () => () => {} }, contexts: { getClient: () => undefined } })
     client.provide('connection', { rpc: { call: async (_path: string, method: string, payload: unknown) => {
@@ -177,7 +178,7 @@ it.each(['source', 'strict'] as const)('binds Session account choices and histor
     host.provide('githubCopilotSessionAccounts', owner)
     const connection = new HostConnectionService(host, [], {})
     new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
-    const handler = connection.createSharedFetchHandler('/api')
+    const handler = fixtureFetchHandler(host, connection)
     let rpcId = 0
     client.provide('typert', { remotes: { register: () => () => {} }, contexts: { getClient: () => ({ identity: () => 'ambient-other' }) } })
     client.provide('connection', { rpc: { call: async (_path: string, method: string, payload: unknown) => {
@@ -241,7 +242,7 @@ it.each(['source', 'strict'] as const)('binds explicit replay recovery through n
     })
     const connection = new HostConnectionService(host, [], {})
     new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
-    const handler = connection.createSharedFetchHandler('/api')
+    const handler = fixtureFetchHandler(host, connection)
     let sequence = 0
     client.provide('typert', { remotes: { register: () => () => {} },
       contexts: { getClient: () => ({ identity: () => 'unrelated-ambient-session' }) } })
@@ -311,7 +312,7 @@ it.each(['source', 'strict'] as const)('reads retained selection through actual 
     })
     const connection = new HostConnectionService(host, [], {})
     const gateway = new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
-    const handler = connection.createSharedFetchHandler('/api')
+    const handler = fixtureFetchHandler(host, connection)
     let rpcId = 0
     const rpc = vi.fn(async (_path: string, method: string, payload: unknown) => {
       const response = await handler.fetch(new Request(`http://fixture.invalid/api/${method}`, {

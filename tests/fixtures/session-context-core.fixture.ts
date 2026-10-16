@@ -74,6 +74,7 @@ async function fixture({ mountController = true } = {}) {
   // are resolved. Every registration's disposer is tracked by this test's fiber.
   const registration = vi.fn(() => ctx.effect(() => () => {}, 'session-fixture registration'))
   provideDouble(ctx, 'typert', {
+    resources: { register: registration },
     lookups: { configure: registration, register: registration },
     contexts: { configureHost: registration, registerHost: registration },
   })

@@ -7,6 +7,7 @@ import type { CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { describe, expect, it, vi } from 'vitest'
 import AccountsController from '../../src/copilot-accounts-host.ts'
 import contribution from '../../src/copilot-accounts-remote.ts'
+import { fixtureFetchHandler } from './gateway-peer.ts'
 
 describe('account Remote public gateway binding', () => {
   it.each(['source', 'strict'] as const)('uses the actual Client and %s Host gateway without credential projection', async mode => {
@@ -36,7 +37,7 @@ describe('account Remote public gateway binding', () => {
       const connection = host.get('connection')
       if (!connection) throw new Error('Fixture Connection failed to register')
       const gateway = new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
-      const handler = connection.createSharedFetchHandler('/api')
+      const handler = fixtureFetchHandler(host, connection)
       let sequence = 0
       const rpc = vi.fn(async (_path: string, method: string, payload: unknown) => {
         const response = await handler.fetch(new Request(`http://fixture.invalid/api/${method}`, {

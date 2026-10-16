@@ -58,7 +58,7 @@ function runtimeExport(value) {
 async function sourceEntry(core, directory, output, tracked) {
   if (typeof output !== 'string' || !output.startsWith('./lib/') || !/\.(?:mjs|cjs|js)$/.test(output)) return undefined
   const stem = output.slice('./lib/'.length).replace(/\.(?:mjs|cjs|js)$/, '')
-  const sourceStem = stem.startsWith('types/') ? stem.slice('types/'.length) : stem
+  const sourceStem = stem.startsWith('types/') ? stem.slice('types/'.length) : stem.replace(/\.(?:browser|node)$/, '')
   const options = [
     join(directory, 'src', `${stem}.ts`),
     join(directory, 'src', `${stem}.tsx`),

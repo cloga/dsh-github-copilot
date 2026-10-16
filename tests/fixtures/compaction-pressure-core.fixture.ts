@@ -439,6 +439,7 @@ function installController(ctx: Context): void {
   const forbidden = vi.fn(async (): Promise<never> => { throw new Error('no native open') })
   const register = () => () => {}
   ctx.provide('typert', {
+    resources: { register },
     lookups: { configure: register, register },
     contexts: { configureHost: register, registerHost: register },
   })
@@ -836,6 +837,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     await ctx.plugin(TokenMeter)
     const register = () => () => {}
     ctx.provide('typert', {
+      resources: { register },
       lookups: { configure: register, register },
       contexts: { configureHost: register, registerHost: register },
     })
