@@ -56,7 +56,7 @@ class ReviewerFixtureLoader extends Loader {
 
 beforeAll(() => {
   expect(['tagged-source-runtime', 'published-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.0-rc.2')
+  expect(['0.2.0-rc.2', '0.2.1-alpha.4']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
@@ -168,6 +168,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   })
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(AgentRegistry)
+  ctx.provide('workingDirectory', { ensure: async () => process.cwd() })
   if (scope === 'bound-account') {
     ctx.provide('settings', {
       describe: () => [{ ns: 'github-copilot', revision: 1, value: {

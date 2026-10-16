@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
-import { HostConnectionService } from '@deepseek-ai/dsh-client-connection'
+import { HostConnectionService, Peer } from '@deepseek-ai/dsh-client-connection'
 import { TypertGatewayService } from '@deepseek-ai/dsh-api-gateway'
 import GitHubCopilotUsageController from '../../lib/types/copilot-usage-host.js'
 
@@ -24,12 +24,13 @@ test('quota Remote reaches the actual Host gateway without startup or signed-out
   await mounted
   assert.equal(reads, 0, 'Mounting must not resolve credentials or quota')
   const handler = connection.createSharedFetchHandler('/api')
+  const peer = new Peer(ctx, { principal: { kind: 'owner' } })
   for (const method of ['get', 'refresh']) {
     const endpoint = `githubCopilotUsage/${method}`
     const response = await handler.fetch(new Request(`http://fixture.invalid/api/${endpoint}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'client-request', rpcId: method, method: endpoint, payload: { args: {} } }),
-    }))
+    }), peer)
     assert.equal(response.status, 200)
     const envelope = await response.json()
     assert.equal(envelope.result.ok, true)
@@ -44,6 +45,6 @@ test('quota Remote reaches the actual Host gateway without startup or signed-out
   const missing = await handler.fetch(new Request('http://fixture.invalid/api/githubCopilotUsage/get', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ type: 'client-request', rpcId: 'disposed', method: 'githubCopilotUsage/get', payload: { args: {} } }),
-  }))
+  }), peer)
   assert.equal(missing.status, 404)
 })

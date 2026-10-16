@@ -1706,7 +1706,7 @@ describe('GitHub Copilot Models client', () => {
     expect(fallback).toHaveBeenCalledOnce()
   })
 
-  it('does not delay authorization while the optional reasoning presentation waits for Core services', async () => {
+  it('does not delay authorization while optional Auto projections wait for Core services', async () => {
     const { ctx, disposeRemote, disposeUi, disposePresentation } = clientContext(['settings.section'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))

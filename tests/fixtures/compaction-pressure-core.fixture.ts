@@ -48,7 +48,7 @@ const oldSentinel = 'OLD_HISTORY_SENTINEL'
 const currentSentinel = 'CURRENT_REQUEST_SENTINEL'
 const checkpoint = 'RECOVERY_CHECKPOINT'
 const contexts: Context[] = []
-const expectedSessionFormatVersion = process.env.DSH_PUBLISHED_CORE_RELEASE?.startsWith('0.2.0-') ? 4 : 3
+const expectedSessionFormatVersion = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '') ? 4 : 3
 type SummaryMode = 'stop' | 'max-tokens' | 'await-abort' | 'reject-overflow' | 'slow'
 
 vi.mock('@earendil-works/pi-ai/utils/estimate', async importOriginal => {
@@ -287,7 +287,7 @@ describe('native background compaction lifetime', () => {
 
 beforeAll(() => {
   expect(['tagged-source-runtime', 'installed-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(expectedSessionFormatVersion)
 })
 
@@ -439,6 +439,7 @@ function installController(ctx: Context): void {
   const forbidden = vi.fn(async (): Promise<never> => { throw new Error('no native open') })
   const register = () => () => {}
   ctx.provide('typert', {
+    resources: { register },
     lookups: { configure: register, register },
     contexts: { configureHost: register, registerHost: register },
   })
@@ -836,6 +837,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     await ctx.plugin(TokenMeter)
     const register = () => () => {}
     ctx.provide('typert', {
+      resources: { register },
       lookups: { configure: register, register },
       contexts: { configureHost: register, registerHost: register },
     })

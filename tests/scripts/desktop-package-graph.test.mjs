@@ -8,14 +8,23 @@ import {
 
 const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'))
 const contracts = await readDesktopSharedPackageContracts()
+const rc2 = contracts.find(contract => contract.runtimeVersion === '0.2.0-rc.2')
+assert.ok(rc2, 'retain the independently audited signed rc.2 graph')
+// Synthetic subject for historical validator regressions, not alpha.4 Desktop evidence.
+const historicalManifest = { ...manifest, engines: { ...manifest.engines, dsh: rc2.runtimeVersion },
+  peerDependencies: Object.fromEntries(Object.entries(manifest.peerDependencies).map(([name, range]) =>
+    [name, rc2.auditedPackages[name] ?? range])) }
 
-test('retains historical graphs and audits signed rc.2 Desktop peer ownership', () => {
+test('retains historical graphs without claiming an unverified alpha.4 Desktop graph', () => {
   const evidence = verifyDesktopPackageGraph(manifest, contracts)
   assert.deepEqual(evidence.map(item => item.packageCount), [241, 246, 287])
-  assert.deepEqual(evidence.map(item => item.compatibilityChecked), [false, false, true])
+  assert.deepEqual(evidence.map(item => item.compatibilityChecked), [false, false, false])
+  assert.deepEqual(verifyDesktopPackageGraph(historicalManifest, contracts).map(item => item.compatibilityChecked),
+    [false, false, true])
 })
 
 test('shared graph gate rejects bundled, optional, incompatible, or unaudited host ownership', () => {
+  const manifest = historicalManifest
   assert.doesNotThrow(() => verifyDesktopPackageGraph(manifest, [currentContract()]))
   assert.throws(() => verifyDesktopPackageGraph(manifest, [
     currentContract({ '@deepseek-ai/cordis': '4.0.2' }),
@@ -50,10 +59,8 @@ test('shared graph gate rejects bundled, optional, incompatible, or unaudited ho
 })
 
 function currentContract(overrides = {}) {
-  const current = contracts.find(contract => contract.runtimeVersion === manifest.engines.dsh)
-  assert.ok(current, 'the current runtime must have an audited package contract')
-  const contract = structuredClone(current)
-  contract.id = 'synthetic-current-desktop-contract'
+  const contract = structuredClone(rc2)
+  contract.id = 'synthetic-historical-desktop-contract'
   contract.auditedPackages = { ...contract.auditedPackages, ...overrides }
   return contract
 }

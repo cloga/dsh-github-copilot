@@ -19,6 +19,7 @@ test('admits the exact 0.2.0-rc.2 source pin while retaining prior tagged baseli
     '0.1.6-alpha.2': 'ddefc45fbc7f8e46dd73185e68295696d1297887',
     '0.2.0-rc.1': '4878cdabd87d4041bdaff61d04c966883b9fd07a',
     '0.2.0-rc.2': '639ed015397290b3745d163aafe02ffee4aa3f84',
+    '0.2.1-alpha.4': '86a402200d95fecef4529d969836f1fe13c6cb0d',
   })
 })
 
@@ -37,7 +38,9 @@ async function fixture(release = '0.1.3-alpha.1') {
   const target = join(base, 'scratch')
   await mkdir(join(root, 'tests'), { recursive: true })
   await mkdir(core)
-  await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'dsh-github-copilot', dependencies: { '@earendil-works/pi-ai': '0.87.1' } }))
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'dsh-github-copilot', dependencies: {
+    '@earendil-works/pi-ai': release === '0.2.1-alpha.4' ? '1.1.0' : '0.87.1',
+  } }))
   await writeFile(join(root, 'tests/preview-route.spec.ts'), 'export {}')
   await writeFile(join(root, 'tests/published-core.spec.ts'), 'export {}')
   await writeFile(join(root, 'tests/single-route.spec.ts'), 'export {}')
@@ -162,6 +165,21 @@ test('generated config selects actual tests and scopes vendor aliases to Core so
   assert.throws(() => guard.resolveId('@deepseek-ai/dsh-unmapped', join(value.root, 'src/index.ts')), /PUBLIC_EXPORT_UNMAPPED/)
 }))
 
+test('maps dual Client runtime exports to the unchanged public Client source', async () => withFixture(async value => {
+  const dir = join(value.core, 'packages/api/gateway')
+  await mkdir(join(dir, 'src/client'), { recursive: true })
+  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-api-gateway', version: release, exports: {
+    '.': './lib/index.js',
+    './client': { types: './lib/types/client/index.d.ts', node: './lib/client.node.js', default: './lib/client.browser.js' },
+  } }))
+  await writeFile(join(dir, 'src/index.ts'), 'export const host = true\n')
+  await writeFile(join(dir, 'src/client/index.ts'), 'export const client = true\n')
+  value.tracked.push('packages/api/gateway/package.json', 'packages/api/gateway/src/index.ts', 'packages/api/gateway/src/client/index.ts')
+  const report = await prepareTaggedCoreFixture(value, value)
+  assert.ok(report.aliases.some(item => item.name === '@deepseek-ai/dsh-api-gateway/client'
+    && item.entry === join(dir, 'src/client/index.ts')))
+}))
+
 test('maps import-condition mjs vendor exports without aliasing the plugin vendor copy', async () => withFixture(async value => {
   const dir = join(value.core, 'vendor/schemastery')
   await mkdir(join(dir, 'src'), { recursive: true })
@@ -178,8 +196,10 @@ test('maps import-condition mjs vendor exports without aliasing the plugin vendo
   assert.equal(resolver.resolveId('@deepseek-ai/schemastery', join(value.root, 'src/config.ts')), null)
 }))
 
-for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2']) {
+for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4']) {
   test(`selects the actual adapter, Session and Remote regression suite for ${release}`, async () => {
+    const modern = release.startsWith('0.2.0-') || release === '0.2.1-alpha.4'
+    const current = release === '0.2.0-rc.2' || release === '0.2.1-alpha.4'
     const value = await fixture(release)
     try {
       await mkdir(join(value.root, 'tests/fixtures'))
@@ -189,15 +209,15 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       if (release.startsWith('0.1.6-')) {
         await writeFile(join(value.root, 'tests/tool-schema-compat.spec.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/copilot-usage-selector-core.fixture.ts'), 'export {}')
-      } else if (release.startsWith('0.2.0-')) {
+      } else if (modern) {
         await writeFile(join(value.root, 'tests/tool-schema-compat.spec.ts'), 'export {}')
       }
-      if (release === '0.1.6-alpha.2' || release.startsWith('0.2.0-')) {
+      if (release === '0.1.6-alpha.2' || modern) {
         for (const name of ['fixtures/alpha2-contracts-core.fixture.ts', 'fixtures/compaction-pressure-core.fixture.ts', 'remote-codec.spec.ts', 'dual-model-projection.spec.ts']) {
           await writeFile(join(value.root, 'tests', name), 'export {}')
         }
       }
-      if (release === '0.2.0-rc.2') {
+      if (current) {
         await writeFile(join(value.root, 'tests/fixtures/scoped-compaction-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/model-exclusions-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/turn-usage-core.fixture.ts'), 'export {}')
@@ -211,11 +231,15 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         }
         await writeFile(join(value.root, 'tests/fixtures/auto-review-copilot-core.fixture.ts'), 'export {}')
       }
+      if (release === '0.2.1-alpha.4') {
+        await writeFile(join(value.root, 'tests/fixtures/alpha4-contracts-core.fixture.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/fixtures/copilot-usage-selector-core.fixture.ts'), 'export {}')
+      }
       const report = await prepareTaggedCoreFixture(value, value)
       const config = (await import(pathToFileURL(report.configPath).href)).default
       assert.equal(report.commit, TAGGED_CORE_RELEASES[release])
       assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
-      if (release.startsWith('0.1.6-') || release.startsWith('0.2.0-')) {
+      if (release.startsWith('0.1.6-') || modern) {
         const require = createRequire(join(value.core, 'packages/client/ui-renderer/package.json'))
         const names = ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-dom', 'react-dom/client',
           'use-sync-external-store/shim/with-selector']
@@ -231,13 +255,14 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
       assert.deepEqual(config.test.include, ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
         'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts',
         ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
-        ...release.startsWith('0.2.0-') ? ['tests/tool-schema-compat.spec.ts'] : [],
+        ...modern ? ['tests/tool-schema-compat.spec.ts'] : [],
         ...release === '0.1.6-alpha.2' ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
-        ...release.startsWith('0.2.0-') ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
-        ...release === '0.2.0-rc.2' ? ['tests/fixtures/scoped-compaction-core.fixture.ts', 'tests/fixtures/model-exclusions-core.fixture.ts', 'tests/fixtures/turn-usage-core.fixture.ts', 'tests/fixtures/copilot-accounts-persistence-core.fixture.ts', 'tests/fixtures/copilot-accounts-host-core.fixture.ts', 'tests/fixtures/copilot-accounts-gateway-core.fixture.ts', 'tests/fixtures/copilot-accounts-request-core.fixture.ts', 'tests/copilot-stream-liveness.spec.ts', 'tests/copilot-stream-adapter.spec.ts'] : [],
-        ...release === '0.2.0-rc.2' ? ['tests/fixtures/auto-review-copilot-core.fixture.ts'] : [],
-        ...release === '0.2.0-rc.2' ? ['tests/fixtures/diagnostics-storage-core.fixture.ts', 'tests/fixtures/diagnostics-gateway-core.fixture.ts'] : [],
-        'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts'])
+        ...modern ? ['tests/fixtures/alpha2-contracts-core.fixture.ts', 'tests/fixtures/compaction-pressure-core.fixture.ts', 'tests/remote-codec.spec.ts', 'tests/dual-model-projection.spec.ts'] : [],
+        ...current ? ['tests/fixtures/scoped-compaction-core.fixture.ts', 'tests/fixtures/model-exclusions-core.fixture.ts', 'tests/fixtures/turn-usage-core.fixture.ts', 'tests/fixtures/copilot-accounts-persistence-core.fixture.ts', 'tests/fixtures/copilot-accounts-host-core.fixture.ts', 'tests/fixtures/copilot-accounts-gateway-core.fixture.ts', 'tests/fixtures/copilot-accounts-request-core.fixture.ts', 'tests/copilot-stream-liveness.spec.ts', 'tests/copilot-stream-adapter.spec.ts'] : [],
+        ...current ? ['tests/fixtures/auto-review-copilot-core.fixture.ts'] : [],
+        ...current ? ['tests/fixtures/diagnostics-storage-core.fixture.ts', 'tests/fixtures/diagnostics-gateway-core.fixture.ts'] : [],
+        'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts',
+        ...release === '0.2.1-alpha.4' ? ['tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : []])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })
 }

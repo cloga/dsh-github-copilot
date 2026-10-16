@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Run by verify-tagged-core.mjs on unchanged 0.1.6-alpha.1/alpha.2 only.
+// Run by verify-tagged-core.mjs on the exact selected official source.
 // Public ui-renderer/client apply -> SlotRegistry.installScope -> SessionProvider
 // -> bindings.observableHook -> bindSnapshotSelector -> uSES-with-selector.
 // No copied hook, private import, or selector-ignoring useSession substitute.
@@ -53,11 +53,12 @@ describe('built usage Client under the pinned Core selector and Slot error bound
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     const ctx = new Context()
     const quota = vi.fn(async () => ({ ok: true, value: {
-      state: 'ready', billing: 'credits', budget: 'individual', used: 7, remaining: 13, limit: 20, observedAt: 1,
+      state: 'ready', accountId: 'canonical', billing: 'credits', budget: 'individual', used: 7, remaining: 13, limit: 20, observedAt: 1,
     } }))
     const refresh = vi.fn(async () => { throw new Error('No forced quota refresh expected') })
-    // Transport registration only; there are no auth/model/credential methods.
-    // The sole business Remote supplied by this fixture is synthetic quota data.
+    const accountView = { source: 'global', accountId: 'canonical', globalAccountId: 'canonical',
+      accounts: { state: 'ready', activeAccountId: 'canonical', revision: 1, writable: true, switchable: true,
+        accounts: [{ id: 'canonical', configured: true, identityState: 'unknown' }], notices: [] } }
     class RemoteRoot extends Service {
       constructor(context: Context) { super(context, 'remote') }
       async $mount() { return async () => {} }
@@ -71,6 +72,26 @@ describe('built usage Client under the pinned Core selector and Slot error bound
       get = quota
       refresh = refresh
     }
+    class AccountsRemote extends Service {
+      constructor(context: Context) { super(context, 'remote.githubCopilotAccounts') }
+      async get() { return { ok: true, value: accountView.accounts } }
+      refreshIdentity = this.get
+      ensureIdentity = this.get
+    }
+    class SessionAccountRemote extends Service {
+      constructor(context: Context) { super(context, 'remote.githubCopilotSessionAccount') }
+      async get() { return { ok: true, value: accountView } }
+      set = vi.fn(async () => { throw new Error('No account writes expected') })
+      refreshIdentity = this.get
+      ensureIdentity = this.get
+      usage = quota
+      refreshUsage = refresh
+    }
+    class ContinuationRemote extends Service {
+      constructor(context: Context) { super(context, 'remote.githubCopilotSessionContinuation') }
+      async get() { return { ok: true, value: { enabled: false, revision: 1 } } }
+      set = vi.fn(async () => { throw new Error('No continuation writes expected') })
+    }
     const session = source({ sessionId: 'usage-session', removed: false, openState: 'open' })
     const selection = (route: string) => ({ provider: route, model: 'synthetic-account-model' })
     const projection = source({ lastUsed: selection('other-provider'), next: selection(provider) })
@@ -80,7 +101,10 @@ describe('built usage Client under the pinned Core selector and Slot error bound
     let disposeClient: (() => Promise<void>) | undefined
     try {
       await ctx.plugin({ inject: UiRenderer.inject, apply: UiRenderer.apply })
-      await ctx.plugin({ apply(context) { new RemoteRoot(context); new AccountNamespace(context); new UsageRemote(context) } })
+      await ctx.plugin({ apply(context) {
+        new RemoteRoot(context); new AccountNamespace(context); new UsageRemote(context)
+        new AccountsRemote(context); new SessionAccountRemote(context); new ContinuationRemote(context)
+      } })
       const slots = ctx.get('slots')!
       const binding: ScopedStandardSourceBinding = {
         key: 'usage-session', ctx,

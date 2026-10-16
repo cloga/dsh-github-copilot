@@ -2879,7 +2879,7 @@ describe('plugin-owned account Copilot route', () => {
       content: [{ type: 'image', attachment }], source: { kind: 'user' },
     })
     const first = await call(harness.ctx, { messages: [original] })
-    if (!['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'].includes(coreRelease)) {
+    if (!['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4'].includes(coreRelease)) {
       expect(first.assembler.finish).toEqual({ kind: 'stop' })
       return
     }
@@ -2944,14 +2944,17 @@ describe('plugin-owned account Copilot route', () => {
     let wireSignal: AbortSignal | undefined
     stubFetch(vi.fn(async (_input: unknown, init?: RequestInit) => {
       wireSignal = init?.signal ?? undefined
+      let close: (() => void) | undefined
       return new Response(new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode([
             event('response.output_item.added', { output_index: 0, item: { id: 'synthetic-partial', type: 'message', role: 'assistant', content: [] } }),
             event('response.output_text.delta', { output_index: 0, delta: 'Partial text stays visible.' }),
           ].join('')))
-          wireSignal?.addEventListener('abort', () => controller.close(), { once: true })
+          close = () => controller.close()
+          wireSignal?.addEventListener('abort', close, { once: true })
         },
+        cancel() { if (close) wireSignal?.removeEventListener('abort', close) },
       }), { headers: { 'content-type': 'text/event-stream' } })
     }))
     const result = call(harness.ctx)

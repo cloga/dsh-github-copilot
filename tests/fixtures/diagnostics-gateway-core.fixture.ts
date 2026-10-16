@@ -17,9 +17,11 @@ import type { CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { expect, it, vi } from 'vitest'
 import { DiagnosticsController } from '../../src/diagnostics-host.ts'
 import contribution from '../../src/diagnostics-remote.ts'
+import { fixtureFetchHandler } from './gateway-peer.ts'
 
 async function loadClientGateway(): Promise<{ apply(ctx: Context): void }> {
-  if (process.env.DSH_CORE_EVIDENCE === 'tagged-source-runtime') {
+  if (process.env.DSH_CORE_EVIDENCE === 'tagged-source-runtime'
+    || process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.1-alpha.4') {
     return import('@deepseek-ai/dsh-api-gateway/client')
   }
   // Published Client entries register a factory, rather than exporting Node ESM.
@@ -84,7 +86,7 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     })
     await HostConnection.apply(host, {})
     new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
-    const handler = host.connection.createSharedFetchHandler('/api')
+    const handler = fixtureFetchHandler(host, host.connection)
     let sequence = 0
     client.provide('typert', { remotes: { register: () => () => {} }, contexts: { getClient: () => undefined } })
     client.provide('connection', {
@@ -106,7 +108,9 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     await host.plugin({ apply(ctx) { diagnostics = new DiagnosticsController(ctx) } })
     await vi.waitFor(() => expect(diagnostics.get().state).toBe('ready'))
     const remote = client.remote.githubCopilotDiagnostics
-    await expect(remote.get()).resolves.toMatchObject({ ok: true, value: {
+    const initial = await remote.get()
+    if (!initial.ok) throw initial.error
+    expect(initial).toMatchObject({ ok: true, value: {
       enabled: false, autoAllocationEnabled: false, requestEnabled: false, state: 'ready',
     } })
     await expect(remote.setRequestEnabled(true)).resolves.toMatchObject({ ok: true, value: {

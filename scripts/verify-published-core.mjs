@@ -3,18 +3,35 @@ import { createRequire, findPackageJSON } from 'node:module'
 import { dirname, isAbsolute, join, relative, resolve, sep, extname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.0-rc.2'])
+export const PUBLISHED_CORE_RELEASES = Object.freeze(['0.2.1-alpha.4'])
+export const CANDIDATE_CORE_RELEASES = Object.freeze({
+  '0.2.1-alpha.4': Object.freeze({
+    commit: '86a402200d95fecef4529d969836f1fe13c6cb0d',
+    piAi: '1.1.0',
+    cordis: '4.0.5-alpha.2',
+    loader: '1.0.6-alpha.2',
+    schemastery: '3.18.5-alpha.2',
+    zod: '4.4.3',
+  }),
+})
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
-const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
+const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts', 'cordis.patch.yml',
   'vitest.diagnostics-published.config.ts',
   'vitest.auto-review-published.config.ts',
+  'vitest.candidate-published.config.ts', 'tsconfig.candidate-tests.json',
   'README.md', 'README.zh.md', 'AGENTS.md', 'CONTRIBUTING.md', 'SECURITY.md', 'LICENSE',
   'deployment-baseline.json', 'agent-contract.json']
 const excluded = new Set(['node_modules', 'lib', 'artifacts', 'coverage', 'tmp', 'dist'])
 const extensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.json', '.md', '.yaml', '.yml', '.jsonl'])
 
-function assertRelease(release) {
+function ownPiVersion(release, candidate) {
+  if (candidate) {
+    const target = CANDIDATE_CORE_RELEASES[release]
+    if (target === undefined) throw new Error('unsupported candidate Core release')
+    return target.piAi
+  }
   if (!PUBLISHED_CORE_RELEASES.includes(release)) throw new Error('unsupported published Core release')
+  return CANDIDATE_CORE_RELEASES[release].piAi
 }
 function samePath(a, b) { return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b }
 function contains(root, path) {
@@ -46,9 +63,9 @@ async function collectTree(root, path, paths) {
     }
   } else if (info.isFile() && extensions.has(extname(path).toLowerCase())) paths.push(relative(root, path))
 }
-function fixtureManifest(original, release) {
-  if (original.name !== 'dsh-github-copilot' || original.dependencies?.['@earendil-works/pi-ai'] !== '0.87.1') {
-    throw new Error('fixture requires this plugin and its exact own pi-ai 0.87.1 dependency')
+function fixtureManifest(original, release, piAi, candidate) {
+  if (original.name !== 'dsh-github-copilot' || original.dependencies?.['@earendil-works/pi-ai'] !== '1.1.0') {
+    throw new Error('fixture requires this plugin and its exact own pi-ai 1.1.0 dependency')
   }
   const manifest = { ...original, private: true, scripts: {} }
   for (const section of sections) {
@@ -63,14 +80,24 @@ function fixtureManifest(original, release) {
     '@deepseek-ai/dsh-permission-presets': release,
     '@deepseek-ai/dsh-user-approval': release,
   }
+  manifest.dependencies = { ...manifest.dependencies, '@earendil-works/pi-ai': piAi }
+  if (CANDIDATE_CORE_RELEASES[release] !== undefined) {
+    const target = CANDIDATE_CORE_RELEASES[release]
+    for (const section of ['devDependencies', 'peerDependencies']) {
+      manifest[section] = { ...manifest[section],
+        '@deepseek-ai/cordis': target.cordis, '@deepseek-ai/schemastery': target.schemastery }
+    }
+    manifest.devDependencies['@deepseek-ai/cordis-plugin-loader'] = target.loader
+    manifest.dependencies.zod = target.zod
+  }
   // The fixture owns only top-level requirements, never Core's transitive SDK resolution.
   for (const key of ['overrides', 'resolutions', 'pnpm', 'bundledDependencies', 'bundleDependencies', 'workspaces']) delete manifest[key]
   return manifest
 }
 
 /** Prepare an independent plugin fixture; never install, execute or modify Core or the source checkout. */
-export async function preparePublishedCoreFixture({ root, target, release }) {
-  assertRelease(release)
+export async function preparePublishedCoreFixture({ root, target, release, candidate = false }) {
+  const piAi = ownPiVersion(release, candidate)
   const source = await physicalDirectory(root)
   const destination = resolve(target)
   if (contains(source, destination) || contains(destination, source)) throw new Error('fixture target must be separate from its source checkout')
@@ -79,7 +106,7 @@ export async function preparePublishedCoreFixture({ root, target, release }) {
   const packagePath = join(source, 'package.json')
   if (!(await lstat(packagePath)).isFile() || !samePath(await realpath(packagePath), packagePath)) throw new Error('fixture refuses a linked package manifest')
   const original = JSON.parse(await readFile(packagePath, 'utf8'))
-  const manifest = fixtureManifest(original, release)
+  const manifest = fixtureManifest(original, release, piAi, candidate)
   const paths = []
   for (const tree of ['src', 'tests']) await collectTree(source, join(source, tree), paths)
   for (const name of rootFiles) {
@@ -101,7 +128,9 @@ export async function preparePublishedCoreFixture({ root, target, release }) {
   }
   await physicalDirectory(destination)
   await writeFile(join(destination, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
-  const report = { schemaVersion: 1, kind: 'published-core-fixture', root: destination, release,
+  const report = { schemaVersion: 1, kind: 'published-core-fixture', root: destination, release, candidate,
+    commit: CANDIDATE_CORE_RELEASES[release].commit,
+    admission: PUBLISHED_CORE_RELEASES.includes(release) ? 'admitted' : 'not-admitted',
     files: paths.length + 1, ownPi: manifest.dependencies['@earendil-works/pi-ai'],
     coreDependencies: Object.fromEntries(sections.flatMap(section => Object.entries(manifest[section] ?? {})
       .filter(([name]) => name.startsWith('@deepseek-ai/dsh-')))),
@@ -128,12 +157,12 @@ async function publicPackage(root, anchor, name) {
 }
 
 /** Inspect installed public classes and resolution identity; no apply(), login or model request. */
-export async function inspectPublishedCoreFixture({ root, release }) {
-  assertRelease(release)
+export async function inspectPublishedCoreFixture({ root, release, candidate = false }) {
+  const piAi = ownPiVersion(release, candidate)
   const fixture = await physicalDirectory(root)
   const anchor = join(fixture, 'package.json')
   const manifest = JSON.parse(await readFile(anchor, 'utf8'))
-  if (manifest.name !== 'dsh-github-copilot' || manifest.dependencies?.['@earendil-works/pi-ai'] !== '0.87.1') {
+  if (manifest.name !== 'dsh-github-copilot' || manifest.dependencies?.['@earendil-works/pi-ai'] !== piAi) {
     throw new Error('not a prepared plugin fixture')
   }
   const names = [...new Set(sections.flatMap(section => Object.keys(manifest[section] ?? {})))]
@@ -166,8 +195,8 @@ export async function inspectPublishedCoreFixture({ root, release }) {
   }
   const ownPi = await publicPackage(fixture, anchor, '@earendil-works/pi-ai')
   const adapterPi = await publicPackage(fixture, adapter.entry, '@earendil-works/pi-ai')
-  if (ownPi.version !== '0.87.1') throw new Error('fixture changed the plugin own pi version')
-  return { schemaVersion: 1, kind: 'published-core-identity', release, root: fixture, packages, cordis,
+  if (ownPi.version !== piAi) throw new Error('fixture changed the plugin own pi version')
+  return { schemaVersion: 1, kind: 'published-core-identity', release, candidate, root: fixture, packages, cordis,
     ownPi, adapterPi, classIdentity: true, executed: { apply: false, modelRequests: false, compatibilityTests: false } }
 }
 
@@ -177,10 +206,12 @@ function argumentsOf(args) {
   const options = {}
   for (let index = 0; index < rest.length; index += 2) {
     const key = rest[index]
-    if (!['--root', '--target', '--release'].includes(key) || options[key.slice(2)] !== undefined || !rest[index + 1]) throw new Error('invalid fixture arguments')
+    if (!['--root', '--target', '--release', '--candidate'].includes(key) || options[key.slice(2)] !== undefined || !rest[index + 1]) throw new Error('invalid fixture arguments')
     options[key.slice(2)] = rest[index + 1]
   }
   if (!options.root || !options.release || mode === 'prepare' && !options.target || mode === 'inspect' && options.target) throw new Error('missing or unexpected fixture arguments')
+  if (options.candidate !== undefined && options.candidate !== 'true') throw new Error('candidate must be explicitly true')
+  options.candidate = options.candidate === 'true'
   return { mode, options }
 }
 if (process.argv[1] && samePath(resolve(process.argv[1]), fileURLToPath(import.meta.url))) {

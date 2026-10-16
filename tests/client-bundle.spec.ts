@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import * as Cordis from '@deepseek-ai/cordis'
 import * as React from 'react'
@@ -26,7 +27,11 @@ afterEach(() => {
 })
 
 describe('tsdown client artifact', () => {
-  function loadGatewayArtifact(): Record<string, unknown> {
+  async function loadGatewayArtifact(): Promise<Record<string, unknown>> {
+    const require = createRequire(import.meta.url)
+    if (require('@deepseek-ai/dsh-api-gateway/package.json').version === '0.2.1-alpha.4') {
+      return import('@deepseek-ai/dsh-api-gateway/client')
+    }
     const code = readFileSync(resolve('node_modules/@deepseek-ai/dsh-api-gateway/lib/client.js'), 'utf8')
     let handoff: Handoff | undefined
     ;(window as ModuleLoaderWindow).__ModuleLoader__ = {
@@ -356,7 +361,7 @@ describe('tsdown client artifact', () => {
   })
 
   it('mounts strict Host result codecs through the published rc.1 client carrier', async () => {
-    const gateway = loadGatewayArtifact()
+    const gateway = await loadGatewayArtifact()
     const client = loadArtifact()
     const contributions: TypertRemoteContribution[] = []
     const validView = {
@@ -379,6 +384,7 @@ describe('tsdown client artifact', () => {
       contexts: { getClient: () => undefined },
     })
     ctx.provide('connection', {
+      interactions: 'answer',
       rpc: { call: rpcCall },
       registerGenerationSource: () => () => undefined,
       start: () => ({ stop() {} }),

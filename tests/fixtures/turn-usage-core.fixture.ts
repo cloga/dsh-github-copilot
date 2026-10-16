@@ -12,7 +12,7 @@ import type { RetryId } from '@deepseek-ai/dsh-llm-retry/types'
 const usage = { inputTokens: 3, outputTokens: 113, totalTokens: 32601, cacheReadTokens: 30237, cacheWriteTokens: 2248 }
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.0-rc.2')
+  expect(['0.2.0-rc.2', '0.2.1-alpha.4']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 function reply(seq: number, step: number): SessionEvent<'assistant/message'> {
   return { type: 'assistant/message', seq: SessionSeq(seq), time: seq, surfaceOp: 'append', data: {

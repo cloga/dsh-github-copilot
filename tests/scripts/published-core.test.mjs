@@ -3,9 +3,9 @@ import { test } from 'node:test'
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { PUBLISHED_CORE_RELEASES, preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
+import { CANDIDATE_CORE_RELEASES, PUBLISHED_CORE_RELEASES, preparePublishedCoreFixture, inspectPublishedCoreFixture } from '../../scripts/verify-published-core.mjs'
 
-const release = '0.2.0-rc.2'
+const release = '0.2.1-alpha.4'
 async function sourceFixture() {
   // Windows runners may expose TEMP through an 8.3 alias or redirected parent.
   // Give the subject a real physical source; explicit link rejection tests below
@@ -16,8 +16,8 @@ async function sourceFixture() {
   await mkdir(join(root, 'tests'), { recursive: true })
   const manifest = { name: 'dsh-github-copilot', version: '0.3.1-alpha.2', type: 'module', private: true,
     scripts: { prepare: 'must-not-execute', preinstall: 'must-not-execute', test: 'must-not-execute' },
-    dependencies: { '@earendil-works/pi-ai': '0.87.1', '@deepseek-ai/dsh-authorization': '0.2.0-rc.2', zod: '^4.4.3' },
-    devDependencies: { '@deepseek-ai/dsh-llm': '0.2.0-rc.2', '@deepseek-ai/dsh-llm-pi-ai': '0.2.0-rc.2', '@deepseek-ai/cordis': '^4.0.2', vitest: '^3.2.0' },
+    dependencies: { '@earendil-works/pi-ai': '1.1.0', '@deepseek-ai/dsh-authorization': release, zod: '4.4.3' },
+    devDependencies: { '@deepseek-ai/dsh-llm': release, '@deepseek-ai/dsh-llm-pi-ai': release, '@deepseek-ai/cordis': '4.0.5-alpha.2', vitest: '^3.2.0' },
     peerDependencies: { '@deepseek-ai/dsh-llm': '0.2.0-rc.2', react: '^18.2.0' },
     optionalDependencies: { '@deepseek-ai/dsh-fs': '0.2.0-rc.2' },
     pnpm: { overrides: { '@earendil-works/pi-ai': 'must-not-inherit' } }, overrides: { anything: 'must-not-inherit' } }
@@ -50,7 +50,7 @@ test('prepares only plugin inputs and exact Core requirements without executing 
       assert.equal(output[section][name], name.startsWith('@deepseek-ai/dsh-') ? release : version)
     }
   }
-  assert.equal(output.dependencies['@earendil-works/pi-ai'], '0.87.1')
+  assert.equal(output.dependencies['@earendil-works/pi-ai'], '1.1.0')
   assert.deepEqual(output.scripts, {})
   assert.equal(output.pnpm, undefined)
   assert.equal(output.overrides, undefined)
@@ -76,8 +76,36 @@ test('refuses an unknown release before creating any target', async () => withSo
   assert.deepEqual(await readdir(base), ['source'])
 }))
 
+test('retains exact alpha.4 dependency qualification after production admission', async () => withSource(async ({ root, target }) => {
+  const release = '0.2.1-alpha.4'
+  assert.deepEqual(CANDIDATE_CORE_RELEASES, {
+    [release]: { commit: '86a402200d95fecef4529d969836f1fe13c6cb0d', piAi: '1.1.0',
+      cordis: '4.0.5-alpha.2', loader: '1.0.6-alpha.2', schemastery: '3.18.5-alpha.2', zod: '4.4.3' },
+  })
+  const original = await readFile(join(root, 'package.json'), 'utf8')
+  const report = await preparePublishedCoreFixture({ root, target, release, candidate: true })
+  const output = JSON.parse(await readFile(join(target, 'package.json'), 'utf8'))
+  assert.equal(output.dependencies['@earendil-works/pi-ai'], '1.1.0')
+  assert.equal(output.devDependencies['@deepseek-ai/dsh-llm-pi-ai'], release)
+  assert.equal(output.peerDependencies['@deepseek-ai/cordis'], '4.0.5-alpha.2')
+  assert.equal(output.devDependencies['@deepseek-ai/cordis-plugin-loader'], '1.0.6-alpha.2')
+  assert.equal(output.devDependencies['@deepseek-ai/schemastery'], '3.18.5-alpha.2')
+  assert.equal(output.dependencies.zod, '4.4.3')
+  assert.equal(report.admission, 'admitted')
+  assert.equal(report.commit, CANDIDATE_CORE_RELEASES[release].commit)
+  assert.equal(await readFile(join(root, 'package.json'), 'utf8'), original)
+  assert.deepEqual(PUBLISHED_CORE_RELEASES, ['0.2.1-alpha.4'])
+}))
+
+test('candidate mode refuses floating or unreviewed releases before target creation', async () => withSource(async ({ root, target, base }) => {
+  for (const release of ['latest', '0.2.1-alpha.2', '0.2.1-alpha.5', '0.2.0-rc.2']) {
+    await assert.rejects(preparePublishedCoreFixture({ root, target, release, candidate: true }), /unsupported candidate Core/)
+  }
+  assert.deepEqual(await readdir(base), ['source'])
+}))
+
 test('does not admit historical published Core versions for this release', async () => withSource(async ({ root, target, base }) => {
-  for (const oldRelease of ['0.1.2-rc.1', '0.1.3-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1']) {
+  for (const oldRelease of ['0.1.2-rc.1', '0.1.3-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2']) {
     await assert.rejects(preparePublishedCoreFixture({ root, target, release: oldRelease }), /unsupported published Core/)
   }
   assert.deepEqual(await readdir(base), ['source'])
@@ -131,7 +159,7 @@ async function installedFixture(root, targetRelease = release) {
   await mockPackage(root, '@deepseek-ai/dsh-llm', targetRelease, 'export class LlmAdapter {}; export default class LlmRuntime {}')
   await mockPackage(root, '@deepseek-ai/dsh-llm-pi-ai', targetRelease,
     'import {LlmAdapter} from "@deepseek-ai/dsh-llm"; export class PiAiAdapter extends LlmAdapter {prepareCall(){}}; export function Config(){}')
-  await mockPackage(root, '@earendil-works/pi-ai', '0.87.1')
+  await mockPackage(root, '@earendil-works/pi-ai', '1.1.0')
 }
 
 test('inspects real public class identity and paths without claiming route execution', async () => withSource(async ({ root, target }) => {
@@ -140,7 +168,7 @@ test('inspects real public class identity and paths without claiming route execu
   const report = await inspectPublishedCoreFixture({ root: target, release })
   assert.equal(report.classIdentity, true)
   assert.equal(report.release, release)
-  assert.equal(report.ownPi.version, '0.87.1')
+  assert.equal(report.ownPi.version, '1.1.0')
   assert.ok(report.packages.every(entry => entry.entry.startsWith(target)))
   assert.deepEqual(report.executed, { apply: false, modelRequests: false, compatibilityTests: false })
 }))
