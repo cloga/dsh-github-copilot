@@ -177,6 +177,7 @@ describe('Copilot reasoning presentation against real Core services', () => {
       node: { kind: 'assistant-step', location: { kind: 'unresolved' }, data: { status: 'settled', step: 1, finalNode: { seq: 2 }, blocks } },
       useTurnData: () => undefined, openFile: () => {}, fileMentions: () => [],
       useDisclosure: () => ({ expanded: false, setExpanded: () => {}, toggle: () => {} }),
+      useGroupAction: () => ({ current: null }),
       usePresentation: (select: (policy: { settledReasoningPreview: boolean }) => unknown) =>
         select({ settledReasoningPreview: true }),
       renderMessageImages: () => null, t: (key: string) => key === 'message.think' ? 'Think' : key,
@@ -190,6 +191,7 @@ describe('Copilot reasoning presentation against real Core services', () => {
     expect(after).toContain('The visible answer.')
     expect(props.node.data.blocks).toHaveLength(17)
     expect(projected.node.data.finalNode).toBe(props.node.data.finalNode)
+    expect(projected.useGroupAction).toBe(props.useGroupAction)
   })
 
   it('selects and restores the actual native Assistant renderer through the public registry', async () => {

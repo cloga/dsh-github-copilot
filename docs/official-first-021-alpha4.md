@@ -67,7 +67,10 @@ teardown, interactive Client events declare `interactions: answer`, and
 Session-controller fixtures register resources. The reviewer now requires a
 synthetic public working-directory service. The mounted Client fixture was
 updated for current account/Session/continuation namespaces; the real selector
-and renderer remain unchanged. No test principal, synthetic credential or quota
+and renderer remain unchanged. The additional production Chat gate exposed a
+new required `useGroupAction` renderer prop; its static-render fixture now
+supplies that ref hook and verifies the plugin preserves its identity.
+No test principal, synthetic credential or quota
 read contacts a live service.
 
 Local pre-admission rc.2 source/types/build/baseline and focused regression
