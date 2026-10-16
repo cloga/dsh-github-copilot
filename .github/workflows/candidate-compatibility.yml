@@ -59,6 +59,16 @@ jobs:
       - name: Inspect actual public identities and SDK resolution
         shell: bash
         run: node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-alpha4" --release 0.2.1-alpha.4 --candidate true
+      - name: Preserve exact dependency metadata for reviewed production alignment
+        if: matrix.kind == 'artifacts' && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v6
+        with:
+          name: alpha4-dependency-metadata
+          path: |
+            ${{ runner.temp }}/copilot-alpha4/package.json
+            ${{ runner.temp }}/copilot-alpha4/pnpm-lock.yaml
+          if-no-files-found: error
+          retention-days: 3
       - name: Typecheck and exercise candidate contracts
         shell: bash
         env:
@@ -75,7 +85,8 @@ jobs:
           node node_modules/vitest/vitest.mjs run || status=1
           node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts || status=1
           node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts || status=1
-          node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts || status=1
+          node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts --reporter=default --reporter=json --outputFile reviewer-results.json || status=1
+          node -e "const r=require('./reviewer-results.json'); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==28||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 28 native reviewer tests, none skipped')" || status=1
           exit "$status"
       - name: Install unchanged tagged public fixture closure
         if: ${{ !cancelled() && matrix.kind == 'tagged' }}
@@ -111,5 +122,7 @@ jobs:
         if: ${{ !cancelled() && matrix.kind == 'tagged' }}
         shell: bash
         run: |
-          node "$RUNNER_TEMP/copilot-alpha4/node_modules/vitest/vitest.mjs" run --config "$RUNNER_TEMP/copilot-alpha4-tagged/vitest.config.mts"
-          git -C dsh-upstream diff --exit-code
+          cd "$RUNNER_TEMP/copilot-alpha4"
+          node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-alpha4-tagged/vitest.config.mts" --reporter=default --reporter=json --outputFile "$RUNNER_TEMP/tagged-results.json"
+          node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==28||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 28 native reviewer tests, none skipped')" "$RUNNER_TEMP/tagged-results.json"
+          git -C "$GITHUB_WORKSPACE/dsh-upstream" diff --exit-code
