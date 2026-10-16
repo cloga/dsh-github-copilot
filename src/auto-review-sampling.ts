@@ -6,7 +6,7 @@ import { currentSearchInitiator } from './current-provider.ts'
 import type {} from './preview-route.ts'
 
 const REVIEWER = '@deepseek-ai/dsh-experimental-auto-review'
-const CORE_VERSION = '0.2.0-rc.2'
+const CORE_VERSIONS = new Set(['0.2.0-rc.2', '0.2.1-alpha.4'])
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object'
@@ -26,7 +26,7 @@ export async function isNativeReviewerContext(caller: Context): Promise<boolean>
   const packages = caller.get('pluginPackages')
   if (base === undefined || packages === undefined) return false
   const owner = packages.packageOf(REVIEWER, base)
-  if (owner?.name !== REVIEWER || owner.version !== CORE_VERSION) return false
+  if (owner?.name !== REVIEWER || owner.version === undefined || !CORE_VERSIONS.has(owner.version)) return false
   const importedOwner = packages.packageOf(REVIEWER, import.meta.url)
   if (importedOwner?.manifestPath !== owner.manifestPath) return false
   const module: unknown = await import(REVIEWER)

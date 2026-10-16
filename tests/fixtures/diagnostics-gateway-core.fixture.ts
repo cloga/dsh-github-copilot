@@ -107,7 +107,9 @@ it('binds diagnostics through actual strict Client and Host gateways with durabl
     await host.plugin({ apply(ctx) { diagnostics = new DiagnosticsController(ctx) } })
     await vi.waitFor(() => expect(diagnostics.get().state).toBe('ready'))
     const remote = client.remote.githubCopilotDiagnostics
-    await expect(remote.get()).resolves.toMatchObject({ ok: true, value: {
+    const initial = await remote.get()
+    if (!initial.ok) throw initial.error
+    expect(initial).toMatchObject({ ok: true, value: {
       enabled: false, autoAllocationEnabled: false, requestEnabled: false, state: 'ready',
     } })
     await expect(remote.setRequestEnabled(true)).resolves.toMatchObject({ ok: true, value: {

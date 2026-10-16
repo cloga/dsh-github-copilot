@@ -20,7 +20,7 @@ const model: Model<'openai-responses'> = {
 }
 
 beforeAll(() => {
-  expect(process.env.DSH_CORE_EVIDENCE).toBe('published-artifact-runtime')
+  expect(['published-artifact-runtime', 'tagged-source-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
   expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.1-alpha.4')
   for (const name of ['@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-llm-pi-ai']) {
     const path = findPackageJSON(name, import.meta.url)
@@ -32,7 +32,7 @@ beforeAll(() => {
 function adapter(simple: SimpleNativeProvider['streamSimple'], streamIdleTimeoutMs = 1000) {
   const native: SimpleNativeProvider = {
     id: provider, name: 'Synthetic candidate', getModels: () => [model],
-    auth: { apiKey: { name: 'Synthetic credential', resolve: async () => ({ apiKey: 'synthetic-key' }) } },
+    auth: { apiKey: { name: 'Synthetic credential', resolve: async () => ({ auth: { apiKey: 'synthetic-key' } }) } },
     streamSimple: simple,
   }
   const profile = {

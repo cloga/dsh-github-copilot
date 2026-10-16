@@ -15,7 +15,7 @@ export const CANDIDATE_CORE_RELEASES = Object.freeze({
   }),
 })
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
-const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
+const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts', 'cordis.patch.yml',
   'vitest.diagnostics-published.config.ts',
   'vitest.auto-review-published.config.ts',
   'vitest.candidate-published.config.ts', 'tsconfig.candidate-tests.json',

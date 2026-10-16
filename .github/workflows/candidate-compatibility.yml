@@ -7,6 +7,11 @@ on:
       - 'scripts/verify-published-core.mjs'
       - 'tests/fixtures/alpha4-contracts-core.fixture.ts'
       - 'docs/official-first-021-alpha4.md'
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 permissions:
@@ -14,16 +19,24 @@ permissions:
 
 jobs:
   candidate-artifacts:
-    name: Alpha.4 artifacts (${{ matrix.os }})
+    name: Alpha.4 ${{ matrix.kind }} (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        kind: [artifacts, tagged]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
         with:
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        if: matrix.kind == 'tagged'
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: 86a402200d95fecef4529d969836f1fe13c6cb0d
+          path: dsh-upstream
           persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
@@ -57,9 +70,46 @@ jobs:
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit || status=1
           node node_modules/typescript/bin/tsc -p tsconfig.tests.json || status=1
           node node_modules/typescript/bin/tsc -p tsconfig.candidate-tests.json || status=1
+          node node_modules/typescript/bin/tsc -p tsconfig.json || status=1
           node node_modules/tsdown/dist/run.mjs || status=1
           node node_modules/vitest/vitest.mjs run || status=1
           node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts || status=1
           node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts || status=1
           node node_modules/vitest/vitest.mjs run --config vitest.auto-review-published.config.ts || status=1
           exit "$status"
+      - name: Install unchanged tagged public fixture closure
+        if: ${{ !cancelled() && matrix.kind == 'tagged' }}
+        working-directory: dsh-upstream
+        run: >-
+          pnpm install --frozen-lockfile
+          --filter '@deepseek-ai/dsh-llm-pi-ai...'
+          --filter '@deepseek-ai/dsh-client-ui-chat...'
+          --filter '@deepseek-ai/dsh-api-session-controller...'
+          --filter '@deepseek-ai/dsh-agent-loop...'
+          --filter '@deepseek-ai/dsh-compaction-basic...'
+          --filter '@deepseek-ai/dsh-experimental-auto-review...'
+          --filter '@deepseek-ai/dsh-jobs-local...'
+          --filter '@deepseek-ai/dsh-commands...'
+          --filter '@deepseek-ai/dsh-agent-preset-registry...'
+          --filter '@deepseek-ai/cordis-plugin-group...'
+          --filter '@deepseek-ai/dsh-subagent...'
+          --filter '@deepseek-ai/dsh-compaction-image-offload...'
+          --filter '@deepseek-ai/dsh-tool-web...'
+          --filter '@deepseek-ai/dsh-web-search-deepseek...'
+          --filter '@deepseek-ai/dsh-credentials-local...'
+          --filter '@deepseek-ai/dsh-app-boot...'
+          --filter '@deepseek-ai/dsh-config-editor...'
+          --filter '@deepseek-ai/dsh-settings...'
+          --filter '@deepseek-ai/dsh-authorization...'
+          --filter '@deepseek-ai/dsh-storage-domain...'
+          --filter '@deepseek-ai/dsh-storage-json...'
+      - name: Prepare fixed tagged source without modifying Core
+        if: ${{ !cancelled() && matrix.kind == 'tagged' }}
+        shell: bash
+        run: node scripts/verify-tagged-core.mjs prepare --root "$RUNNER_TEMP/copilot-alpha4" --core dsh-upstream --target "$RUNNER_TEMP/copilot-alpha4-tagged" --release 0.2.1-alpha.4
+      - name: Exercise all native account, gateway, compaction, reviewer and mount regressions
+        if: ${{ !cancelled() && matrix.kind == 'tagged' }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/copilot-alpha4/node_modules/vitest/vitest.mjs" run --config "$RUNNER_TEMP/copilot-alpha4-tagged/vitest.config.mts"
+          git -C dsh-upstream diff --exit-code

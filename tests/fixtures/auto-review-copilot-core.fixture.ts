@@ -168,6 +168,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   })
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(AgentRegistry)
+  ctx.provide('workingDirectory', { ensure: async () => process.cwd() })
   if (scope === 'bound-account') {
     ctx.provide('settings', {
       describe: () => [{ ns: 'github-copilot', revision: 1, value: {
