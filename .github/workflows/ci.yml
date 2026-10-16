@@ -39,6 +39,34 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Report complete candidate publication window
+        shell: bash
+        env:
+          DSH_RELEASE: ${{ matrix.release }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises'
+          const lock = await readFile('pnpm-lock.yaml', 'utf8')
+          const names = [...lock.matchAll(/^  '(@deepseek-ai\/dsh-[^']+)@([^']+)':\r?$/gm)]
+            .filter(([, , version]) => version === process.env.DSH_RELEASE).map(([, name]) => name)
+          if (names.length === 0) throw new Error('Missing candidate lockfile packages')
+          const rows = []
+          for (let offset = 0; offset < names.length; offset += 6) {
+            rows.push(...await Promise.all(names.slice(offset, offset + 6).map(async name => {
+              const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`,
+                { signal: AbortSignal.timeout(15000) })
+              if (!response.ok) throw new Error(`Registry metadata unavailable: ${name} (${response.status})`)
+              const published = (await response.json()).time?.[process.env.DSH_RELEASE]
+              if (typeof published !== 'string' || !Number.isFinite(Date.parse(published))) {
+                throw new Error(`Missing candidate publication time: ${name}`)
+              }
+              return { name, published: new Date(published).toISOString() }
+            })))
+          }
+          rows.sort((a, b) => a.published.localeCompare(b.published) || a.name.localeCompare(b.name))
+          for (const row of rows) console.log(`${row.name}@${process.env.DSH_RELEASE}: ${row.published}`)
+          console.log(`Latest candidate publication (${rows.length} packages): ${rows.at(-1).published}`)
+          NODE
       - run: pnpm install --frozen-lockfile
       - name: Install Core pi-ai closure
         working-directory: dsh-upstream
