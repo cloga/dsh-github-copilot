@@ -23,7 +23,7 @@ import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import continuationRemote from '../../src/session-continuation-remote.ts'
 import { installSessionContinuation } from '../../src/session-continuation-host.ts'
 import { GitHubCopilotAuthorizationController } from '../../src/authorization-controller.ts'
-import { fixtureFetchHandler } from './gateway-peer.ts'
+import { fixtureFetchHandler, fixturePeer } from './gateway-peer.ts'
 
 it.each(['source', 'strict'] as const)('saves high-cost preferences through actual Client and %s Host gateways without discovery', async mode => {
   const host = new Context(), client = new Context()
@@ -311,7 +311,7 @@ it.each(['source', 'strict'] as const)('reads retained selection through actual 
       model: { services: [], events: [], objects: [] }, invocations: selectionRemote.descriptors,
     })
     const connection = new HostConnectionService(host, [], {})
-    new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
+    const gateway = new TypertGatewayService(host, { websocketHeartbeatIntervalMs: 30000 })
     const handler = fixtureFetchHandler(host, connection)
     let rpcId = 0
     const rpc = vi.fn(async (_path: string, method: string, payload: unknown) => {
@@ -336,8 +336,9 @@ it.each(['source', 'strict'] as const)('reads retained selection through actual 
     const legacy = await host.plugin({ apply(ctx) {
       ctx.provide('githubCopilotTurnSelection', { get: legacyRead })
     } })
-    await expect(client.remote.githubCopilotTurnSelection.get(master.id, 7)).resolves.toMatchObject({
-      ok: false, error: { code: mode === 'strict' ? 'gateway/binding-invalid' : 'gateway/invocation-unavailable' },
+    await expect(gateway.invoke({ namespace: 'githubCopilotTurnSelection', method: 'get',
+      args: { agentId: master.id, turn: 7 }, peer: fixturePeer(host) })).rejects.toMatchObject({
+      code: mode === 'strict' ? 'gateway/binding-invalid' : 'gateway/invocation-unavailable',
     })
     expect(legacyRead).not.toHaveBeenCalled()
     await legacy.dispose()
