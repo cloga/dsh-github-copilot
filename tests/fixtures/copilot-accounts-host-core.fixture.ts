@@ -86,7 +86,11 @@ describe('independent Copilot account ownership', () => {
     }
     try {
       await f.host.addForEnvironment('tenant.ghe.com'); await settle()
-      expect(await f.host.get()).toMatchObject({ state: 'ready', activeAccountId: 'canonical' })
+      const authorized = await f.host.get()
+      expect(authorized, JSON.stringify({
+        diagnostic: authorized.diagnostic,
+        urls,
+      })).toMatchObject({ state: 'ready', activeAccountId: 'canonical' })
       const added = [...f.records.keys()].find(value => value !== GITHUB_COPILOT_CREDENTIAL_KEY)!
       expect(f.records.get(added)?.payload).toMatchObject({ enterpriseUrl: 'tenant.ghe.com', refresh: 'synthetic-ghe-refresh' })
       expect(urls).toEqual([
