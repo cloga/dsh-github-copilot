@@ -11,10 +11,11 @@
 **历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；DSH alpha.5 待发布兼容线：`0.1.0-alpha.1.dsh.0.2.1.alpha.5`。** 每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-alpha.5` 规范化为 `dsh.0.2.1.alpha.5`，但兼容性仍须核对明确元数据，不能只猜版本名。重置的是编号，不是代码、历史或资格验证要求；既有版本和 tag 不变。候选 Desktop 制品／签名未核验，这不是 Desktop 升级建议。已发布、已安装、已加载仍是不同状态。
 
 按**精确 Core**选版本，不按全局 SemVer 最大值或 npm `latest`／`alpha`。
-只读命令 `node scripts/select-core-release.mjs 0.2.0-rc.2` 读取
-`deployment-baseline.json` 中的发布映射：rc.2 对应已发布 alpha.15，
-Core alpha.4 对应已发布 alpha.16，Core alpha.5 对应本次**待发布**候选。
-待发布／未知目标不会给出安装推荐。沿用的 npm `alpha` 渠道是全局指针，
+只读命令 `node scripts/select-core-release.mjs 0.2.0-rc.2` 先读取
+`deployment-baseline.json` 映射，再核验精确 GitHub Release、原始 tarball／校验和资产，
+以及 npm 版本中的 `engines.dsh`，全部匹配后才返回安装规格。rc.2 对应 alpha.15，
+Core alpha.4 对应 alpha.16，Core alpha.5 对应本次候选；任一渠道尚不可见时，
+会报告待发布或未完成，不给安装建议。未知目标明确失败。沿用的 npm `alpha` 渠道是全局指针，
 不感知兼容性；`latest` 仍指历史稳定版。不承诺原生自动更新会使用此映射，
 也不承诺维护旧 Core 分支。参见[版本选择](./docs/npm-distribution.md#exact-core-release-lines)。
 

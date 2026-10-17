@@ -11,10 +11,12 @@ GitHub Copilot account discovery, contextual Auto routing and hosted search for 
 **Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH alpha.5 line: `0.1.0-alpha.1.dsh.0.2.1.alpha.5`.** Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-alpha.5` to `dsh.0.2.1.alpha.5`, but compatibility is validated against explicit metadata, not guessed from the name. This resets numbering, not code, history or qualification requirements. Existing versions/tags remain unchanged. Candidate Desktop artifacts/signatures are unverified; this is not a Desktop-upgrade recommendation. Published, installed and loaded states remain separate.
 
 Select by **exact Core**, never global SemVer maximum or npm `latest`/`alpha`.
-The read-only `node scripts/select-core-release.mjs 0.2.0-rc.2` command reads
-`deployment-baseline.json`'s release mapping: rc.2 maps to published alpha.15,
-Core alpha.4 to published alpha.16, and Core alpha.5 to this **pending** candidate.
-Pending/unknown targets provide no install recommendation. The existing npm
+The read-only `node scripts/select-core-release.mjs 0.2.0-rc.2` command checks
+`deployment-baseline.json`'s mapping and verifies the exact public GitHub Release,
+tarball/checksum assets and npm version's `engines.dsh` before returning an
+install spec. Rc.2 maps to alpha.15, Core alpha.4 to alpha.16, and Core alpha.5
+to this candidate; until both channels are observable, it reports pending or
+incomplete without an install recommendation. Unknown targets fail explicitly. The existing npm
 `alpha` channel remains global and is not compatibility-aware; `latest` remains
 the historical stable pointer. No automatic updater integration or old-Core
 maintenance is promised. See [release selection](./docs/npm-distribution.md#exact-core-release-lines).

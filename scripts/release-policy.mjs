@@ -8,7 +8,7 @@ const PACKAGE_NAME = 'dsh-github-copilot'
 const importantPaths = new Set([
   'cordis.patch.yml', 'deployment-baseline.json',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
-  'scripts/check-search-composition.mjs',
+  'scripts/check-search-composition.mjs', 'scripts/release-policy.mjs', 'scripts/select-core-release.mjs',
   'tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
 ])
 const importantPrefixes = ['src/', 'lib/']
@@ -76,9 +76,10 @@ export function assertDshVersionIdentity(version, engineVersion, baselineVersion
   if (plugin.build.length > 0 || core.build.length > 0) {
     throw new Error('DSH version identity must not use build metadata')
   }
-  if (!['alpha', 'beta', 'rc'].includes(plugin.prerelease[0])
+  if (plugin.major !== 0n || plugin.minor !== 1n || plugin.patch !== 0n
+    || plugin.prerelease[0] !== 'alpha'
     || !/^[1-9]\d*$/.test(plugin.prerelease[1] ?? '')) {
-    throw new Error('plugin version must use a standard channel and positive iteration before its DSH suffix')
+    throw new Error('exact-Core plugin versions must use 0.1.0-alpha.<positive iteration> before the DSH suffix')
   }
   const marker = plugin.prerelease.lastIndexOf('dsh')
   if (marker !== 2) {
@@ -128,6 +129,50 @@ export function selectCoreRelease(baseline, core) {
       releaseUrl: `https://github.com/${REPOSITORY}/releases/tag/v${line.version}`,
       archiveUrl: exactInstallUrl(line.version),
     } : {}),
+  }
+}
+
+export async function verifyCoreReleaseAvailability(baseline, core, { fetchImpl = fetch } = {}) {
+  const line = selectCoreRelease(baseline, core)
+  const version = line.version
+  const releaseResponse = await fetchImpl(
+    `https://api.github.com/repos/${REPOSITORY}/releases/tags/v${version}`,
+    { headers: { accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15_000) },
+  )
+  if (releaseResponse.status === 404) {
+    if (line.status === 'published') throw new Error(`Mapped GitHub Release v${version} is not observable`)
+    return { ...line, status: 'pending' }
+  }
+  if (!releaseResponse.ok) throw new Error(`GitHub Release lookup failed (${releaseResponse.status})`)
+  let release
+  try { release = await releaseResponse.json() } catch { throw new Error('GitHub Release metadata is invalid') }
+  if (release?.tag_name !== `v${version}` || release.draft !== false
+    || release.prerelease !== isPrereleaseVersion(version)
+    || !Array.isArray(release.assets)
+    || !release.assets.some(asset => asset.name === `${PACKAGE_NAME}-${version}.tgz`)
+    || !release.assets.some(asset => asset.name === 'SHA256SUMS')) {
+    throw new Error(`GitHub Release v${version} does not match the mapped published prerelease assets`)
+  }
+  const npmResponse = await fetchImpl(
+    `https://registry.npmjs.org/${PACKAGE_NAME}/${encodeURIComponent(version)}`,
+    { signal: AbortSignal.timeout(15_000) },
+  )
+  if (npmResponse.status === 404) {
+    if (line.status === 'published') throw new Error(`Mapped npm version ${version} is not observable`)
+    return { ...line, status: 'incomplete' }
+  }
+  if (!npmResponse.ok) throw new Error(`npm version lookup failed (${npmResponse.status})`)
+  let npm
+  try { npm = await npmResponse.json() } catch { throw new Error('npm version metadata is invalid') }
+  if (npm?.name !== PACKAGE_NAME || npm.version !== version
+    || npm.engines?.dsh !== core) {
+    throw new Error(`npm ${PACKAGE_NAME}@${version} does not verify exact DSH Core ${core}`)
+  }
+  return {
+    ...line, status: 'published',
+    npmSpec: `${PACKAGE_NAME}@${version}`,
+    releaseUrl: `https://github.com/${REPOSITORY}/releases/tag/v${version}`,
+    archiveUrl: exactInstallUrl(version),
   }
 }
 

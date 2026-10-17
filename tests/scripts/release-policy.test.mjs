@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import {
   assessChange, assessPlan, assertDshVersionIdentity, assertReleaseMetadata, compareVersions, isImportantFile,
   isPrereleaseVersion, parseChangedFiles, parseVersion, runCli, assertReleaseLines, selectCoreRelease,
+  verifyCoreReleaseAvailability,
 } from '../../scripts/release-policy.mjs'
 
 const name = 'dsh-github-copilot'
@@ -44,12 +43,13 @@ test('important paths cover runtime, packaged scripts, package metadata and buil
   for (const path of [
     'src/index.ts', 'src/nested/file.ts', 'lib/index.js', 'scripts/check-search-composition.mjs',
     'cordis.patch.yml', 'deployment-baseline.json', 'package.json',
+    'scripts/release-policy.mjs', 'scripts/select-core-release.mjs',
     'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.tests.json',
     'tsdown.config.ts', 'vitest.config.ts', './src/new.ts',
   ]) assert.equal(isImportantFile(path), true, path)
   for (const path of [
     'README.md', 'README.zh.md', 'AGENTS.md', 'CONTRIBUTING.md', 'docs/runtime.md',
-    'agent-contract.json', 'scripts/release-policy.mjs', 'scripts/publish-npm.mjs',
+    'agent-contract.json', 'scripts/publish-npm.mjs',
     'tests/scripts/release-policy.test.mjs', '.github/ISSUE_TEMPLATE/bug.yml',
     '.github/workflows/ci.yml', '.github\\workflows\\release.yml',
     'package.json.md', 'src-notes.md', 'scripts.md',
@@ -113,13 +113,19 @@ test('prerelease DSH suffix exactly matches engines.dsh and the deployment basel
   }))
   assert.doesNotThrow(() => assertDshVersionIdentity(qualified, dshVersion, dshVersion))
   assert.throws(() => assertDshVersionIdentity(
-    '0.4.2-alpha.17.dsh.0.2.1.alpha.4', dshVersion, dshVersion,
+    '0.1.0-alpha.1.dsh.0.2.1.alpha.4', dshVersion, dshVersion,
   ), /does not match/)
+  assert.throws(() => assertDshVersionIdentity(
+    '0.1.1-alpha.2.dsh.0.2.1.alpha.5', dshVersion, dshVersion,
+  ), /0\.1\.0-alpha/)
+  assert.throws(() => assertDshVersionIdentity(
+    '0.1.0-beta.2.dsh.0.2.1.alpha.5', dshVersion, dshVersion,
+  ), /0\.1\.0-alpha/)
   assert.throws(() => assertDshVersionIdentity(qualified, '0.2.1-alpha.4', dshVersion), /does not match/)
-  const unqualifiedMetadata = metadata('0.4.2-alpha.17')
+  const unqualifiedMetadata = metadata('0.1.0-alpha.1')
   unqualifiedMetadata.baseline.supportedBaselines = { dsh: { release: dshVersion } }
   assert.throws(() => assertReleaseMetadata({
-    version: '0.4.2-alpha.17', dshVersion, ...unqualifiedMetadata,
+    version: '0.1.0-alpha.1', dshVersion, ...unqualifiedMetadata,
   }), /must include its exact DSH Core version/)
   const baseManifest = { name, version: '0.4.2-alpha.16', engines: { dsh: '0.2.1-alpha.4' } }
   const manifest = { ...baseManifest, version: qualified, engines: { dsh: dshVersion } }
@@ -183,7 +189,7 @@ test('read-only exact-Core selection distinguishes published anchors, pending an
   }), /differs from package/)
 })
 
-test('current repository metadata and shipped selector use exact-Core mapping, not global order', async () => {
+test('current repository metadata and selector mapping use exact Core, not global order', async () => {
   const read = async path => JSON.parse(await readFile(new URL(`../../${path}`, import.meta.url), 'utf8'))
   const manifest = await read('package.json')
   const baseline = await read('deployment-baseline.json')
@@ -195,13 +201,83 @@ test('current repository metadata and shipped selector use exact-Core mapping, n
     version: manifest.version, dshVersion: manifest.engines.dsh, peers: manifest.peerDependencies,
     baseline, readme, readmeZh,
   })
-  const script = new URL('../../scripts/select-core-release.mjs', import.meta.url)
   for (const core of ['0.2.0-rc.2', '0.2.1-alpha.4', manifest.engines.dsh]) {
-    const result = spawnSync(process.execPath, [fileURLToPath(script), core],
-      { encoding: 'utf8', shell: false })
-    assert.equal(result.status, 0, result.stderr)
-    assert.deepEqual(JSON.parse(result.stdout), selectCoreRelease(baseline, core))
+    assert.equal(selectCoreRelease(baseline, core).core, core)
   }
+})
+
+test('release selector requires exact public GitHub and npm evidence before recommending install', async () => {
+  const baseline = lineBaseline()
+  const requests = []
+  const response = (status, body) => ({ status, ok: status >= 200 && status < 300, json: async () => body })
+  const fetchImpl = (...args) => {
+    requests.push(args)
+    return requests.length === 1
+      ? response(200, {
+        tag_name: `v${lineVersion}`, draft: false, prerelease: true,
+        assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+      })
+      : response(200, { name, version: lineVersion, engines: { dsh: coreVersion } })
+  }
+  assert.deepEqual(await verifyCoreReleaseAvailability(baseline, coreVersion, { fetchImpl }), {
+    core: coreVersion, version: lineVersion, status: 'published',
+    npmSpec: `${name}@${lineVersion}`,
+    releaseUrl: `https://github.com/cloga/${name}/releases/tag/v${lineVersion}`,
+    archiveUrl: installUrl(lineVersion),
+  })
+  assert.match(requests[0][0], /api\.github\.com\/repos\/cloga\/dsh-github-copilot\/releases\/tags\/v0\.1\.0/)
+  assert.match(requests[1][0], /registry\.npmjs\.org\/dsh-github-copilot\/0\.1\.0/)
+  requests.length = 0
+  const pending = await verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => response(404, {}),
+  })
+  assert.deepEqual(pending, { core: coreVersion, version: lineVersion, status: 'pending' })
+  let call = 0
+  const incomplete = await verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => ++call === 1
+      ? response(200, {
+        tag_name: `v${lineVersion}`, draft: false, prerelease: true,
+        assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+      })
+      : response(404, {}),
+  })
+  assert.deepEqual(incomplete, { core: coreVersion, version: lineVersion, status: 'incomplete' })
+  await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => response(503, {}),
+  }), /GitHub Release lookup failed/)
+  await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => response(200, {
+      tag_name: `v${lineVersion}`, draft: true, prerelease: true,
+      assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+    }),
+  }), /does not match/)
+  for (const release of [
+    {
+      tag_name: `v${lineVersion}-wrong`, draft: false, prerelease: true,
+      assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+    },
+    {
+      tag_name: `v${lineVersion}`, draft: false, prerelease: true,
+      assets: [{ name: `${name}-${lineVersion}.tgz` }],
+    },
+  ]) {
+    await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+      fetchImpl: async () => response(200, release),
+    }), /does not match/)
+  }
+  call = 0
+  await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => ++call === 1
+      ? response(200, {
+        tag_name: `v${lineVersion}`, draft: false, prerelease: true,
+        assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+      })
+      : response(200, { name, version: lineVersion, engines: { dsh: '0.2.1-alpha.4' } }),
+  }), /does not verify exact DSH Core/)
+  baseline.releaseLines[2].status = 'published'
+  await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => response(404, {}),
+  }), /Mapped GitHub Release/)
 })
 
 test('plan releases a missing tag or exact annotated tag at HEAD with prerelease state', () => {
@@ -229,7 +305,7 @@ test('release infrastructure changes reconcile the existing tagged bytes without
   const files = [
     'agent-contract.json',
     'docs/npm-distribution.md',
-    'scripts/release-policy.mjs',
+    'scripts/publish-npm.mjs',
     'tests/scripts/release-policy.test.mjs',
     '.github/workflows/release.yml',
   ]
