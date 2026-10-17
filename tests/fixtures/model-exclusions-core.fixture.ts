@@ -21,7 +21,7 @@ import {
 const contexts: Context[] = []
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.2.0-rc.2', '0.2.1-alpha.4']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))

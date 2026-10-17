@@ -39,7 +39,7 @@ const createInput = { requestId, workspaceId: 'workspace-a', expectedRevision: 7
 /** Execute the unchanged installed Client carrier, not a mock gateway or plugin build. */
 async function gatewayArtifact() {
   const require = createRequire(import.meta.url)
-  if (require('@deepseek-ai/dsh-api-gateway/package.json').version === '0.2.1-alpha.4') {
+  if (['0.2.1-alpha.4', '0.2.1-alpha.5'].includes(require('@deepseek-ai/dsh-api-gateway/package.json').version)) {
     return import('@deepseek-ai/dsh-api-gateway/client')
   }
   const source = readFileSync(resolve('node_modules/@deepseek-ai/dsh-api-gateway/lib/client.js'), 'utf8')

@@ -5,9 +5,13 @@ import { createAssistantMessageEventStream } from '@earendil-works/pi-ai'
 import type { Model, SimpleStreamOptions } from '@earendil-works/pi-ai'
 import { createDeveloperMessage, createUserMessage, ReasoningEffortId, resolveRetryPolicy, type ToolSchema } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
+import { Context } from '@deepseek-ai/cordis'
+import { ToolRuntime, renderToolsSdk } from '@deepseek-ai/dsh-tools'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { coreProviderView } from '../../src/pi-provider-bridge.ts'
 import type { SimpleNativeProvider } from '../../src/pi-provider-bridge.ts'
+import { filterCopilotToolAssembly } from '../../src/tool-schema-compat.ts'
 
 const provider = 'candidate-fixture'
 const model: Model<'openai-responses'> = {
@@ -21,11 +25,11 @@ const model: Model<'openai-responses'> = {
 
 beforeAll(() => {
   expect(['published-artifact-runtime', 'tagged-source-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.1-alpha.4')
+  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.1-alpha.5')
   for (const name of ['@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-llm-pi-ai']) {
     const path = findPackageJSON(name, import.meta.url)
     if (path === undefined) throw new Error('CANDIDATE_PACKAGE_IDENTITY_UNAVAILABLE')
-    expect(JSON.parse(readFileSync(path, 'utf8')).version).toBe('0.2.1-alpha.4')
+    expect(JSON.parse(readFileSync(path, 'utf8')).version).toBe('0.2.1-alpha.5')
   }
 })
 
@@ -69,7 +73,31 @@ function user(text: string) {
   return createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] })
 }
 
-describe('fixed alpha.4 public adapter and SDK contracts', () => {
+describe('fixed alpha.5 public adapter and SDK contracts', () => {
+  it('keeps native code-first PTC schema and runtime-specific SDK instructions intact', async () => {
+    const ctx = new Context()
+    try {
+      new SystemPrompt(ctx, {})
+      const tools = new ToolRuntime(ctx, { mode: 'ptc' })
+      const schemas = tools.schemas()
+      const native = schemas.find(tool => tool.name === 'run_code')
+      expect(native).toBeDefined()
+      expect(Object.keys(native!.parameters.properties ?? {}).slice(0, 2)).toEqual(['code', 'description'])
+      expect(native!.parameters.required).toEqual(['code', 'description'])
+      const filtered = filterCopilotToolAssembly({ variables: { provider: 'github-copilot' }, tools: schemas })
+      expect(filtered.tools[0]!.description).toBe(schemas[0]!.description)
+      expect(filtered.tools[0]!.parameters.required).toEqual(['code', 'description'])
+      const functionBody = renderToolsSdk([], 'function-body')
+      const repl = renderToolsSdk([], 'repl')
+      expect(functionBody).toContain('the body of an async TypeScript function')
+      expect(functionBody).toContain('return')
+      expect(repl).not.toContain('the body of an async TypeScript function')
+      expect(repl).toContain('Only values emitted as program output enter the conversation.')
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('preserves initial prompt, in-history system/tool updates and exact effort through the provider bridge', async () => {
     const simple = vi.fn<SimpleNativeProvider['streamSimple']>((_model, _context, _options) => complete())
     const native = adapter(simple)

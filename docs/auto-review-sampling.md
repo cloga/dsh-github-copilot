@@ -1,7 +1,7 @@
 # Native Auto reviewer sampling compatibility
 
 The plugin automatically omits `temperature` only from the official DSH
-exact `0.2.0-rc.2` or `0.2.1-alpha.4` Auto reviewer root's account-proven managed `openai-responses`
+exact `0.2.0-rc.2`, `0.2.1-alpha.4` or `0.2.1-alpha.5` Auto reviewer root's account-proven managed `openai-responses`
 requests. No user opt-in is required. Concurrent ordinary Chat, even on the same
 Session/model, retains its requested sampling. No supplier capability is inferred
 from `supports.thinking`; the policy addresses the reported unsupported-temperature

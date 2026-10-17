@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFile, appendFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { compareVersions, parseVersion } from './release-policy.mjs'
+import { assertDshVersionIdentity, assertReleaseLines, compareVersions, parseVersion } from './release-policy.mjs'
 import { readTarball } from './verify-tarball.mjs'
 
 const NAME = 'dsh-github-copilot'
@@ -41,15 +41,32 @@ export function validatePublicPackage(pkg) {
 }
 
 /** Network and process operations are injected; no writes are retried after an uncertain result. */
-export async function publishNpm({ manifest, bytes, archive, readPackage, readVersion, publish }) {
+export async function publishNpm({ manifest, baseline, bytes, archive, readPackage, readVersion, readTaggedVersion, publish }) {
   validatePublicPackage(manifest)
   check(bytes instanceof Uint8Array && bytes.length > 0, 'Verified archive bytes are required')
   const expected = integrity(bytes)
   const version = manifest.version
   const tag = distributionTag(version)
+  const qualified = parseVersion(version).prerelease.includes('dsh')
+  let lines
+  if (qualified) {
+    assertDshVersionIdentity(version, manifest.engines?.dsh, baseline?.supportedBaselines?.dsh?.release)
+    lines = assertReleaseLines(baseline)
+    check(baseline.package?.version === version, 'Archive release mapping differs from manifest')
+  }
   const pkg = await readPackage()
   check(pkg?.name === NAME, 'npm package bootstrap is missing; package ownership and first publication require an authorized maintainer')
   const current = pkg['dist-tags']?.[tag]
+  let currentLine = lines?.find(line => line.version === current)
+  if (qualified && current !== undefined && currentLine === undefined) {
+    check(typeof readTaggedVersion === 'function', 'Unmapped npm tag requires exact published Core metadata')
+    const tagged = await readTaggedVersion(current)
+    check(tagged?.name === NAME && tagged.version === current && typeof tagged.engines?.dsh === 'string',
+      'Tagged npm version has no verified exact Core metadata')
+    assertDshVersionIdentity(current, tagged.engines.dsh, tagged.engines.dsh)
+    currentLine = { version: current, core: tagged.engines.dsh, status: 'published' }
+  }
+  const differentCore = currentLine !== undefined && currentLine.core !== manifest.engines?.dsh
   if (current !== undefined) {
     parseVersion(current)
     const currentTag = distributionTag(current)
@@ -61,18 +78,22 @@ export async function publishNpm({ manifest, bytes, archive, readPackage, readVe
     'npm version integrity differs or is not yet observable; no overwrite or automatic retry')
   if (existing !== null) {
     verify(existing)
-    check(current !== undefined && compareVersions(current, version) >= 0,
+    check(current !== undefined && (differentCore || compareVersions(current, version) >= 0),
       'npm version exists but dist-tag is stranded; maintainer must review before repairing the tag')
     return { state: 'published', version, tag, integrity: expected, reconciled: true }
   }
-  check(current === undefined || compareVersions(current, version) < 0,
+  check(current === undefined || compareVersions(current, version) < 0
+    || (differentCore && currentLine.status === 'published'),
     'Refusing to lower or overwrite a newer registry dist-tag')
   await publish(['publish', archive, '--tag', tag, '--access', 'public', '--registry', REGISTRY, '--ignore-scripts'])
   verify(await readVersion())
   const after = await readPackage()
   const afterTag = after?.['dist-tags']?.[tag]
   check(after?.name === NAME && typeof afterTag === 'string' && distributionTag(afterTag) === tag
-    && compareVersions(afterTag, version) >= 0, 'npm dist-tag was not verified after publication')
+    && (afterTag === version || (qualified
+      ? lines.some(line => line.version === afterTag && line.core === manifest.engines.dsh)
+        && compareVersions(afterTag, version) >= 0
+      : compareVersions(afterTag, version) >= 0)), 'npm dist-tag was not verified after publication')
   return { state: 'published', version, tag, integrity: expected, reconciled: false }
 }
 
@@ -130,15 +151,17 @@ async function main() {
   const bytes = await readFile(archive)
   const files = readTarball(bytes)
   const manifest = JSON.parse(files.get('package/package.json')?.toString('utf8') ?? 'null')
+  const baseline = JSON.parse(files.get('package/deployment-baseline.json')?.toString('utf8') ?? 'null')
   check(manifest?.version === version, 'Archive version differs from planned release')
   // GitHub verification immediately before this step establishes the exact tag/commit and asset digests.
   const sums = await readFile(resolve(root, 'artifacts', 'SHA256SUMS'), 'utf8')
   check(sums.trim() === `${createHash('sha256').update(bytes).digest('hex')}  ${NAME}-${version}.tgz`,
     'Archive SHA256SUMS differs')
   const result = await publishNpm({
-    manifest, bytes, archive,
+    manifest, baseline, bytes, archive,
     readPackage: () => npmPackageTags(),
     readVersion: () => npmJson(['view', `${NAME}@${version}`]),
+    readTaggedVersion: tagged => npmJson(['view', `${NAME}@${tagged}`]),
     publish: args => {
       const published = spawnSync('npm', args, { encoding: 'utf8', shell: false, timeout: 180_000,
         maxBuffer: 4 * 1024 * 1024, env: { ...process.env, NPM_CONFIG_FETCH_RETRIES: '0' } })

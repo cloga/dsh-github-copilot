@@ -10,7 +10,7 @@
 - [ ] `pnpm verify` (source/test types, Agent contract, tooling tests, clean build, import smoke)
 - [ ] `pnpm pack --pack-destination artifacts`
 - [ ] `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`
-- [ ] All Windows/Linux exact current DSH 0.2.1-alpha.4 tagged-source and published-artifact CI checks passed (earlier pins are historical evidence only)
+- [ ] All Windows/Linux exact current DSH 0.2.1-alpha.5 tagged-source and published-artifact CI checks passed (earlier pins are historical evidence only)
 
 ### Evidence limits
 

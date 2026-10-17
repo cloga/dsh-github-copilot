@@ -20,11 +20,11 @@ jobs:
           - windows-latest
         include:
           - os: ubuntu-latest
-            release: 0.2.1-alpha.4
-            commit: 86a402200d95fecef4529d969836f1fe13c6cb0d
+            release: 0.2.1-alpha.5
+            commit: 1517a4dbca0a2789ff1d41ba439600f8547d23fa
           - os: windows-latest
-            release: 0.2.1-alpha.4
-            commit: 86a402200d95fecef4529d969836f1fe13c6cb0d
+            release: 0.2.1-alpha.5
+            commit: 1517a4dbca0a2789ff1d41ba439600f8547d23fa
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -39,6 +39,36 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Verify exact-Core release selection and original-byte publication policy
+        run: node --test tests/scripts/release-policy.test.mjs tests/scripts/npm-distribution.test.mjs tests/scripts/tarball.test.mjs
+      - name: Report complete candidate publication window
+        shell: bash
+        env:
+          DSH_RELEASE: ${{ matrix.release }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises'
+          const lock = await readFile('pnpm-lock.yaml', 'utf8')
+          const names = [...lock.matchAll(/^  '(@deepseek-ai\/dsh-[^']+)@([^']+)':\r?$/gm)]
+            .filter(([, , version]) => version === process.env.DSH_RELEASE).map(([, name]) => name)
+          if (names.length === 0) throw new Error('Missing candidate lockfile packages')
+          const rows = []
+          for (let offset = 0; offset < names.length; offset += 6) {
+            rows.push(...await Promise.all(names.slice(offset, offset + 6).map(async name => {
+              const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`,
+                { signal: AbortSignal.timeout(15000) })
+              if (!response.ok) throw new Error(`Registry metadata unavailable: ${name} (${response.status})`)
+              const published = (await response.json()).time?.[process.env.DSH_RELEASE]
+              if (typeof published !== 'string' || !Number.isFinite(Date.parse(published))) {
+                throw new Error(`Missing candidate publication time: ${name}`)
+              }
+              return { name, published: new Date(published).toISOString() }
+            })))
+          }
+          rows.sort((a, b) => a.published.localeCompare(b.published) || a.name.localeCompare(b.name))
+          for (const row of rows) console.log(`${row.name}@${process.env.DSH_RELEASE}: ${row.published}`)
+          console.log(`Latest candidate publication (${rows.length} packages): ${rows.at(-1).published}`)
+          NODE
       - run: pnpm install --frozen-lockfile
       - name: Install Core pi-ai closure
         working-directory: dsh-upstream
@@ -81,7 +111,7 @@ jobs:
       - name: Install native diagnostic storage verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'
-      - name: Prepare exact DSH 0.2.1-alpha.4 tagged-source runtime verification
+      - name: Prepare exact DSH 0.2.1-alpha.5 tagged-source runtime verification
         shell: bash
         run: |
           node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.release }}"
@@ -121,7 +151,7 @@ jobs:
       - name: Prepare an isolated plugin fixture for published Core APIs
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-alpha.4
+          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-alpha.5
       - name: Install unchanged public dependency artifacts
         shell: bash
         run: |
@@ -130,17 +160,20 @@ jobs:
       - name: Verify actual dependency paths and class identities
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-alpha.4
+          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-alpha.5
       - name: Typecheck and exercise the published native adapter
         shell: bash
         env:
           DSH_CORE_EVIDENCE: published-artifact-runtime
-          DSH_PUBLISHED_CORE_RELEASE: 0.2.1-alpha.4
+          DSH_PUBLISHED_CORE_RELEASE: 0.2.1-alpha.5
         run: |
           cd "$RUNNER_TEMP/copilot-published-core"
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
           node node_modules/typescript/bin/tsc -p tsconfig.tests.json
           node node_modules/typescript/bin/tsc -p tsconfig.candidate-tests.json
+          node node_modules/typescript/bin/tsc -p tsconfig.json
+          pnpm exec tsdown
+          node node_modules/vitest/vitest.mjs run --config vitest.config.ts
           node node_modules/vitest/vitest.mjs run tests/copilot-stream-liveness.spec.ts tests/copilot-stream-adapter.spec.ts tests/config.spec.ts tests/preview-provider.spec.ts tests/pi-provider-bridge.spec.ts tests/preview-route.spec.ts tests/account-model-auth.spec.ts tests/published-core.spec.ts tests/single-route.spec.ts tests/search-routing.spec.ts tests/routed-web.spec.ts tests/deepseek-search-fallback.spec.ts tests/context-usage.spec.ts tests/context-evidence.spec.ts tests/context-evidence-runtime.spec.ts tests/context-evidence-ui.spec.ts tests/background-compaction.spec.ts tests/manual-compaction-recovery.spec.ts tests/fixtures/auto-review-copilot-core.fixture.ts
           node node_modules/vitest/vitest.mjs run --config vitest.diagnostics-published.config.ts
           node node_modules/vitest/vitest.mjs run --config vitest.candidate-published.config.ts

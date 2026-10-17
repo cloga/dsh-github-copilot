@@ -112,7 +112,7 @@ test('current screenshot provenance covers every packaged README capture', async
 test('README contracts stay bilingual, current and separate native summary routes', async () => {
   const texts = await Promise.all(['README.md', 'README.zh.md'].map(doc))
   for (const text of texts) {
-    for (const marker of ['0.2.1-alpha.4', '0.2', '1.5×', 'Switch account',
+    for (const marker of ['0.2.1-alpha.5', '0.2', '1.5×', 'Switch account',
       'High cost', 'autoSemanticAssessment: false', 'automaticRecovery: false',
       'auto: false', '--mode persisted-unit', '--mode reviewed-view', '--profile-name',
       './docs/dual-model.md', './docs/session-continuation.md',

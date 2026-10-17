@@ -8,7 +8,7 @@ const PACKAGE_NAME = 'dsh-github-copilot'
 const importantPaths = new Set([
   'cordis.patch.yml', 'deployment-baseline.json',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
-  'scripts/check-search-composition.mjs',
+  'scripts/check-search-composition.mjs', 'scripts/release-policy.mjs', 'scripts/select-core-release.mjs',
   'tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts',
 ])
 const importantPrefixes = ['src/', 'lib/']
@@ -64,6 +64,118 @@ export function isPrereleaseVersion(version) {
   return parseVersion(version).prerelease.length > 0
 }
 
+export function assertDshVersionIdentity(version, engineVersion, baselineVersion) {
+  if (typeof engineVersion !== 'string' || typeof baselineVersion !== 'string') {
+    throw new Error('DSH version identity requires engines.dsh and the deployment baseline release')
+  }
+  if (engineVersion !== baselineVersion) {
+    throw new Error(`engines.dsh ${engineVersion} does not match deployment baseline ${baselineVersion}`)
+  }
+  const plugin = parseVersion(version)
+  const core = parseVersion(engineVersion)
+  if (plugin.build.length > 0 || core.build.length > 0) {
+    throw new Error('DSH version identity must not use build metadata')
+  }
+  if (plugin.major !== 0n || plugin.minor !== 1n || plugin.patch !== 0n
+    || plugin.prerelease[0] !== 'alpha'
+    || !/^[1-9]\d*$/.test(plugin.prerelease[1] ?? '')) {
+    throw new Error('exact-Core plugin versions must use 0.1.0-alpha.<positive iteration> before the DSH suffix')
+  }
+  const marker = plugin.prerelease.lastIndexOf('dsh')
+  if (marker !== 2) {
+    throw new Error('plugin prerelease must include its exact DSH Core version as a .dsh.<version> suffix')
+  }
+  const expected = ['dsh', core.major.toString(), core.minor.toString(), core.patch.toString(), ...core.prerelease].join('.')
+  const actual = plugin.prerelease.slice(marker).join('.')
+  if (actual !== expected) {
+    throw new Error(`plugin prerelease DSH suffix ${actual} does not match ${engineVersion}; expected ${expected}`)
+  }
+}
+
+export function assertReleaseLines(baseline) {
+  const lines = baseline?.releaseLines
+  if (!Array.isArray(lines) || lines.length === 0) throw new Error('Exact-Core release mapping is missing')
+  const cores = new Set()
+  const versions = new Set()
+  for (const line of lines) {
+    if (!line || !['published', 'pending'].includes(line.status)) throw new Error('Invalid release mapping status')
+    parseVersion(line.core)
+    parseVersion(line.version)
+    if (cores.has(line.core) || versions.has(line.version)) throw new Error('Duplicate release mapping')
+    cores.add(line.core)
+    versions.add(line.version)
+    if (parseVersion(line.version).prerelease.includes('dsh')) {
+      assertDshVersionIdentity(line.version, line.core, line.core)
+    } else if (line.status !== 'published') {
+      throw new Error('Only historical published anchors may omit the DSH suffix')
+    }
+    if (!baseline.supportedBaselines?.dsh?.baselines?.some(entry => entry.release === line.core)) {
+      throw new Error(`Release mapping has no exact Core baseline: ${line.core}`)
+    }
+  }
+  const current = lines.find(line => line.core === baseline.supportedBaselines?.dsh?.release)
+  if (current?.version !== baseline.package?.version) throw new Error('Current release mapping differs from package version')
+  return lines
+}
+
+export function selectCoreRelease(baseline, core) {
+  parseVersion(core)
+  const line = assertReleaseLines(baseline).find(entry => entry.core === core)
+  if (!line) throw new Error(`No release mapping for exact DSH Core ${core}`)
+  return {
+    ...line,
+    ...(line.status === 'published' ? {
+      npmSpec: `${PACKAGE_NAME}@${line.version}`,
+      releaseUrl: `https://github.com/${REPOSITORY}/releases/tag/v${line.version}`,
+      archiveUrl: exactInstallUrl(line.version),
+    } : {}),
+  }
+}
+
+export async function verifyCoreReleaseAvailability(baseline, core, { fetchImpl = fetch } = {}) {
+  const line = selectCoreRelease(baseline, core)
+  const version = line.version
+  const releaseResponse = await fetchImpl(
+    `https://api.github.com/repos/${REPOSITORY}/releases/tags/v${version}`,
+    { headers: { accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15_000) },
+  )
+  if (releaseResponse.status === 404) {
+    if (line.status === 'published') throw new Error(`Mapped GitHub Release v${version} is not observable`)
+    return { ...line, status: 'pending' }
+  }
+  if (!releaseResponse.ok) throw new Error(`GitHub Release lookup failed (${releaseResponse.status})`)
+  let release
+  try { release = await releaseResponse.json() } catch { throw new Error('GitHub Release metadata is invalid') }
+  if (release?.tag_name !== `v${version}` || release.draft !== false
+    || release.prerelease !== isPrereleaseVersion(version)
+    || !Array.isArray(release.assets)
+    || !release.assets.some(asset => asset.name === `${PACKAGE_NAME}-${version}.tgz`)
+    || !release.assets.some(asset => asset.name === 'SHA256SUMS')) {
+    throw new Error(`GitHub Release v${version} does not match the mapped published prerelease assets`)
+  }
+  const npmResponse = await fetchImpl(
+    `https://registry.npmjs.org/${PACKAGE_NAME}/${encodeURIComponent(version)}`,
+    { signal: AbortSignal.timeout(15_000) },
+  )
+  if (npmResponse.status === 404) {
+    if (line.status === 'published') throw new Error(`Mapped npm version ${version} is not observable`)
+    return { ...line, status: 'incomplete' }
+  }
+  if (!npmResponse.ok) throw new Error(`npm version lookup failed (${npmResponse.status})`)
+  let npm
+  try { npm = await npmResponse.json() } catch { throw new Error('npm version metadata is invalid') }
+  if (npm?.name !== PACKAGE_NAME || npm.version !== version
+    || npm.engines?.dsh !== core) {
+    throw new Error(`npm ${PACKAGE_NAME}@${version} does not verify exact DSH Core ${core}`)
+  }
+  return {
+    ...line, status: 'published',
+    npmSpec: `${PACKAGE_NAME}@${version}`,
+    releaseUrl: `https://github.com/${REPOSITORY}/releases/tag/v${version}`,
+    archiveUrl: exactInstallUrl(version),
+  }
+}
+
 function exactInstallUrl(version) {
   return `https://github.com/${REPOSITORY}/releases/download/v${version}/${PACKAGE_NAME}-${version}.tgz`
 }
@@ -75,7 +187,7 @@ function assertReadmeMetadata(readme, label, version) {
   }
 }
 
-export function assertReleaseMetadata({ version, readme, readmeZh, baseline }) {
+export function assertReleaseMetadata({ version, readme, readmeZh, baseline, dshVersion, peers }) {
   parseVersion(version)
   assertReadmeMetadata(readme, 'README.md', version)
   assertReadmeMetadata(readmeZh, 'README.zh.md', version)
@@ -84,6 +196,15 @@ export function assertReleaseMetadata({ version, readme, readmeZh, baseline }) {
   }
   if (baseline.baseline?.source !== `https://github.com/${REPOSITORY}`) {
     throw new Error(`deployment-baseline.json baseline.source must be https://github.com/${REPOSITORY}`)
+  }
+  if (dshVersion !== undefined || baseline.supportedBaselines?.dsh?.release !== undefined) {
+    assertDshVersionIdentity(version, dshVersion, baseline.supportedBaselines?.dsh?.release)
+    assertReleaseLines(baseline)
+    for (const [name, range] of Object.entries(peers ?? {})) {
+      if (name.startsWith('@deepseek-ai/dsh-') && range !== dshVersion) {
+        throw new Error(`Core peer ${name} differs from exact engines.dsh ${dshVersion}`)
+      }
+    }
   }
 }
 
@@ -95,12 +216,30 @@ export function assessChange({ baseManifest, manifest, files, readme, readmeZh, 
   const comparison = compareVersions(version, baseManifest.version)
   if (!Array.isArray(files)) throw new Error('Changed files must be an array')
   const important = files.some(isImportantFile)
-  if (comparison < 0) throw new Error(`Version downgrade is forbidden: ${baseManifest.version} -> ${version}`)
-  if (important && comparison <= 0) {
+  const newCoreLine = typeof manifest.engines?.dsh === 'string'
+    && typeof baseManifest.engines?.dsh === 'string'
+    && manifest.engines.dsh !== baseManifest.engines.dsh
+  if (newCoreLine) {
+    assertDshVersionIdentity(version, manifest.engines.dsh, baseline?.supportedBaselines?.dsh?.release)
+    const parsed = parseVersion(version)
+    if (parsed.major !== 0n || parsed.minor !== 1n || parsed.patch !== 0n
+      || parsed.prerelease[0] !== 'alpha' || parsed.prerelease[1] !== '1') {
+      throw new Error('A new exact-Core line must start at 0.1.0-alpha.1.dsh.<exact Core>')
+    }
+    const lines = assertReleaseLines(baseline)
+    if (!lines.some(line => line.core === baseManifest.engines.dsh
+      && line.version === baseManifest.version && line.status === 'published')) {
+      throw new Error('New Core line must preserve the previous published exact-Core anchor')
+    }
+  }
+  if (!newCoreLine && comparison < 0) throw new Error(`Version downgrade is forbidden: ${baseManifest.version} -> ${version}`)
+  if (important && !newCoreLine && comparison <= 0) {
     throw new Error(`Important changes require a strictly newer SemVer than ${baseManifest.version}; update package.json, both READMEs, and deployment-baseline.json`)
   }
-  const bumped = comparison > 0
-  if (bumped) assertReleaseMetadata({ version, readme, readmeZh, baseline })
+  const bumped = newCoreLine || comparison > 0
+  if (bumped || parseVersion(version).prerelease.includes('dsh')) assertReleaseMetadata({
+    version, readme, readmeZh, baseline, dshVersion: manifest.engines?.dsh, peers: manifest.peerDependencies,
+  })
   return { important, bumped, version }
 }
 

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import {
-  assessChange, assessPlan, assertReleaseMetadata, compareVersions, isImportantFile,
-  isPrereleaseVersion, parseChangedFiles, parseVersion, runCli,
+  assessChange, assessPlan, assertDshVersionIdentity, assertReleaseMetadata, compareVersions, isImportantFile,
+  isPrereleaseVersion, parseChangedFiles, parseVersion, runCli, assertReleaseLines, selectCoreRelease,
+  verifyCoreReleaseAvailability,
 } from '../../scripts/release-policy.mjs'
 
 const name = 'dsh-github-copilot'
@@ -22,17 +24,32 @@ const change = (overrides = {}) => assessChange({
 })
 const tagInfo = (overrides = {}) => ({ type: 'tag', sha: previous, manifest, isAncestor: true, ...overrides })
 const plan = (overrides = {}) => assessPlan({ manifest, head, ...overrides })
+const coreVersion = '0.2.1-alpha.5'
+const lineVersion = '0.1.0-alpha.1.dsh.0.2.1.alpha.5'
+const lineBaseline = () => ({
+  ...metadata(lineVersion).baseline,
+  supportedBaselines: { dsh: {
+    release: coreVersion,
+    baselines: ['0.2.0-rc.2', '0.2.1-alpha.4', coreVersion].map(release => ({ release })),
+  } },
+  releaseLines: [
+    { core: '0.2.0-rc.2', version: '0.4.2-alpha.15', status: 'published' },
+    { core: '0.2.1-alpha.4', version: '0.4.2-alpha.16', status: 'published' },
+    { core: coreVersion, version: lineVersion, status: 'pending' },
+  ],
+})
 
 test('important paths cover runtime, packaged scripts, package metadata and build inputs', () => {
   for (const path of [
     'src/index.ts', 'src/nested/file.ts', 'lib/index.js', 'scripts/check-search-composition.mjs',
     'cordis.patch.yml', 'deployment-baseline.json', 'package.json',
+    'scripts/release-policy.mjs', 'scripts/select-core-release.mjs',
     'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.tests.json',
     'tsdown.config.ts', 'vitest.config.ts', './src/new.ts',
   ]) assert.equal(isImportantFile(path), true, path)
   for (const path of [
     'README.md', 'README.zh.md', 'AGENTS.md', 'CONTRIBUTING.md', 'docs/runtime.md',
-    'agent-contract.json', 'scripts/release-policy.mjs', 'scripts/publish-npm.mjs',
+    'agent-contract.json', 'scripts/publish-npm.mjs',
     'tests/scripts/release-policy.test.mjs', '.github/ISSUE_TEMPLATE/bug.yml',
     '.github/workflows/ci.yml', '.github\\workflows\\release.yml',
     'package.json.md', 'src-notes.md', 'scripts.md',
@@ -86,6 +103,183 @@ test('every version bump verifies both READMEs and deployment baseline metadata'
   assert.throws(() => change({ files: ['README.md'], manifest: { name, version: '0.4.0-alpha.5' } }), /README.md/)
 })
 
+test('prerelease DSH suffix exactly matches engines.dsh and the deployment baseline', () => {
+  const dshVersion = '0.2.1-alpha.5'
+  const qualified = lineVersion
+  const qualifiedMetadata = metadata(qualified)
+  qualifiedMetadata.baseline = lineBaseline()
+  assert.doesNotThrow(() => assertReleaseMetadata({
+    version: qualified, dshVersion, ...qualifiedMetadata,
+  }))
+  assert.doesNotThrow(() => assertDshVersionIdentity(qualified, dshVersion, dshVersion))
+  assert.throws(() => assertDshVersionIdentity(
+    '0.1.0-alpha.1.dsh.0.2.1.alpha.4', dshVersion, dshVersion,
+  ), /does not match/)
+  assert.throws(() => assertDshVersionIdentity(
+    '0.1.1-alpha.2.dsh.0.2.1.alpha.5', dshVersion, dshVersion,
+  ), /0\.1\.0-alpha/)
+  assert.throws(() => assertDshVersionIdentity(
+    '0.1.0-beta.2.dsh.0.2.1.alpha.5', dshVersion, dshVersion,
+  ), /0\.1\.0-alpha/)
+  assert.throws(() => assertDshVersionIdentity(qualified, '0.2.1-alpha.4', dshVersion), /does not match/)
+  const unqualifiedMetadata = metadata('0.1.0-alpha.1')
+  unqualifiedMetadata.baseline.supportedBaselines = { dsh: { release: dshVersion } }
+  assert.throws(() => assertReleaseMetadata({
+    version: '0.1.0-alpha.1', dshVersion, ...unqualifiedMetadata,
+  }), /must include its exact DSH Core version/)
+  const baseManifest = { name, version: '0.4.2-alpha.16', engines: { dsh: '0.2.1-alpha.4' } }
+  const manifest = { ...baseManifest, version: qualified, engines: { dsh: dshVersion } }
+  assert.deepEqual(assessChange({
+    baseManifest, manifest, files: ['package.json'],
+    readme: qualifiedMetadata.readme, readmeZh: qualifiedMetadata.readmeZh,
+    baseline: qualifiedMetadata.baseline,
+  }), { important: true, bumped: true, version: qualified })
+  assert.equal(compareVersions(qualified, baseManifest.version), -1)
+})
+
+test('exact-Core lines reset numbering only across verified metadata and retain historical anchors', () => {
+  const options = {
+    baseManifest: { name, version: '0.4.2-alpha.16', engines: { dsh: '0.2.1-alpha.4' } },
+    manifest: { name, version: lineVersion, engines: { dsh: coreVersion } },
+    files: ['package.json'], ...metadata(lineVersion), baseline: lineBaseline(),
+  }
+  assert.equal(assessChange(options).bumped, true)
+  assert.throws(() => assessChange({
+    ...options, manifest: { ...options.manifest, peerDependencies: { '@deepseek-ai/dsh-agent': '0.2.1-alpha.4' } },
+  }), /Core peer/)
+  assert.throws(() => assessChange({
+    ...options, baseManifest: { ...options.baseManifest, engines: { dsh: coreVersion } },
+  }), /downgrade/)
+  assert.throws(() => assessChange({
+    ...options, manifest: { ...options.manifest, version: lineVersion.replace('alpha.1.', 'alpha.2.') },
+  }), /must start at/)
+  const missingAnchor = lineBaseline()
+  missingAnchor.releaseLines = missingAnchor.releaseLines.filter(row => row.core !== '0.2.1-alpha.4')
+  assert.throws(() => assessChange({ ...options, baseline: missingAnchor }), /preserve the previous/)
+  const next = lineVersion.replace('alpha.1.', 'alpha.2.')
+  const nextBaseline = lineBaseline()
+  nextBaseline.package.version = next
+  nextBaseline.releaseLines[2].version = next
+  assert.equal(assessChange({
+    baseManifest: options.manifest, manifest: { ...options.manifest, version: next },
+    files: ['src/index.ts'], ...metadata(next), baseline: nextBaseline,
+  }).bumped, true)
+  const build = lineVersion.replace('.dsh.', '+dsh.')
+  assert.throws(() => assertDshVersionIdentity(build, coreVersion, coreVersion), /build metadata/)
+  assert.throws(() => assertDshVersionIdentity(lineVersion, `^${coreVersion}`, `^${coreVersion}`), /SemVer/)
+})
+
+test('read-only exact-Core selection distinguishes published anchors, pending and unknown targets', () => {
+  const baseline = lineBaseline()
+  const selected = selectCoreRelease(baseline, '0.2.0-rc.2')
+  assert.equal(selected.npmSpec, `${name}@0.4.2-alpha.15`)
+  assert.equal(selected.archiveUrl, installUrl('0.4.2-alpha.15'))
+  assert.equal(selectCoreRelease(baseline, '0.2.1-alpha.4').version, '0.4.2-alpha.16')
+  assert.deepEqual(selectCoreRelease(baseline, coreVersion), {
+    core: coreVersion, version: lineVersion, status: 'pending',
+  })
+  assert.throws(() => selectCoreRelease(baseline, '0.2.1-alpha.6'), /No release mapping/)
+  assert.throws(() => selectCoreRelease(baseline, 'latest'), /SemVer/)
+  assert.throws(() => assertReleaseLines({ ...baseline, releaseLines: [...baseline.releaseLines, baseline.releaseLines[0]] }), /Duplicate/)
+  assert.throws(() => assertReleaseLines({
+    ...baseline, releaseLines: baseline.releaseLines.map(row => ({ ...row, core: '1.0.0' })),
+  }), /no exact Core baseline/)
+  assert.throws(() => assertReleaseLines({
+    ...baseline, package: { ...baseline.package, version: '0.1.0-alpha.9' },
+  }), /differs from package/)
+})
+
+test('current repository metadata and selector mapping use exact Core, not global order', async () => {
+  const read = async path => JSON.parse(await readFile(new URL(`../../${path}`, import.meta.url), 'utf8'))
+  const manifest = await read('package.json')
+  const baseline = await read('deployment-baseline.json')
+  assert.ok(manifest.files.includes('scripts/select-core-release.mjs'))
+  assert.ok(manifest.files.includes('scripts/release-policy.mjs'))
+  const readme = await readFile(new URL('../../README.md', import.meta.url), 'utf8')
+  const readmeZh = await readFile(new URL('../../README.zh.md', import.meta.url), 'utf8')
+  assertReleaseMetadata({
+    version: manifest.version, dshVersion: manifest.engines.dsh, peers: manifest.peerDependencies,
+    baseline, readme, readmeZh,
+  })
+  for (const core of ['0.2.0-rc.2', '0.2.1-alpha.4', manifest.engines.dsh]) {
+    assert.equal(selectCoreRelease(baseline, core).core, core)
+  }
+})
+
+test('release selector requires exact public GitHub and npm evidence before recommending install', async () => {
+  const baseline = lineBaseline()
+  const requests = []
+  const response = (status, body) => ({ status, ok: status >= 200 && status < 300, json: async () => body })
+  const fetchImpl = (...args) => {
+    requests.push(args)
+    return requests.length === 1
+      ? response(200, {
+        tag_name: `v${lineVersion}`, draft: false, prerelease: true,
+        assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+      })
+      : response(200, { name, version: lineVersion, engines: { dsh: coreVersion } })
+  }
+  assert.deepEqual(await verifyCoreReleaseAvailability(baseline, coreVersion, { fetchImpl }), {
+    core: coreVersion, version: lineVersion, status: 'published',
+    npmSpec: `${name}@${lineVersion}`,
+    releaseUrl: `https://github.com/cloga/${name}/releases/tag/v${lineVersion}`,
+    archiveUrl: installUrl(lineVersion),
+  })
+  assert.match(requests[0][0], /api\.github\.com\/repos\/cloga\/dsh-github-copilot\/releases\/tags\/v0\.1\.0/)
+  assert.match(requests[1][0], /registry\.npmjs\.org\/dsh-github-copilot\/0\.1\.0/)
+  requests.length = 0
+  const pending = await verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => response(404, {}),
+  })
+  assert.deepEqual(pending, { core: coreVersion, version: lineVersion, status: 'pending' })
+  let call = 0
+  const incomplete = await verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => ++call === 1
+      ? response(200, {
+        tag_name: `v${lineVersion}`, draft: false, prerelease: true,
+        assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+      })
+      : response(404, {}),
+  })
+  assert.deepEqual(incomplete, { core: coreVersion, version: lineVersion, status: 'incomplete' })
+  await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => response(503, {}),
+  }), /GitHub Release lookup failed/)
+  await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => response(200, {
+      tag_name: `v${lineVersion}`, draft: true, prerelease: true,
+      assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+    }),
+  }), /does not match/)
+  for (const release of [
+    {
+      tag_name: `v${lineVersion}-wrong`, draft: false, prerelease: true,
+      assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+    },
+    {
+      tag_name: `v${lineVersion}`, draft: false, prerelease: true,
+      assets: [{ name: `${name}-${lineVersion}.tgz` }],
+    },
+  ]) {
+    await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+      fetchImpl: async () => response(200, release),
+    }), /does not match/)
+  }
+  call = 0
+  await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => ++call === 1
+      ? response(200, {
+        tag_name: `v${lineVersion}`, draft: false, prerelease: true,
+        assets: [{ name: `${name}-${lineVersion}.tgz` }, { name: 'SHA256SUMS' }],
+      })
+      : response(200, { name, version: lineVersion, engines: { dsh: '0.2.1-alpha.4' } }),
+  }), /does not verify exact DSH Core/)
+  baseline.releaseLines[2].status = 'published'
+  await assert.rejects(verifyCoreReleaseAvailability(baseline, coreVersion, {
+    fetchImpl: async () => response(404, {}),
+  }), /Mapped GitHub Release/)
+})
+
 test('plan releases a missing tag or exact annotated tag at HEAD with prerelease state', () => {
   const expected = { release: true, tag: `v${version}`, sha: head, prerelease: true }
   assert.deepEqual(plan(), expected)
@@ -111,7 +305,7 @@ test('release infrastructure changes reconcile the existing tagged bytes without
   const files = [
     'agent-contract.json',
     'docs/npm-distribution.md',
-    'scripts/release-policy.mjs',
+    'scripts/publish-npm.mjs',
     'tests/scripts/release-policy.test.mjs',
     '.github/workflows/release.yml',
   ]

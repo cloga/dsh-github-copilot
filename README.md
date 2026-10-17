@@ -8,21 +8,35 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared prerelease: `0.4.2-alpha.16`.** This prerelease targets exact official DSH `0.2.1-alpha.4`; older rc.2 hosts must retain alpha.15 or their existing compatible release. Candidate Desktop artifacts/signatures are not verified, so this is not a Desktop-upgrade recommendation. The stable version remains on npm's `latest` tag; prereleases use `alpha`. Published, installed and loaded states remain separate. `0.4.2-alpha.1` was not published and its immutable tag will not be reused.
+**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH alpha.5 line: `0.1.0-alpha.1.dsh.0.2.1.alpha.5`.** Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-alpha.5` to `dsh.0.2.1.alpha.5`, but compatibility is validated against explicit metadata, not guessed from the name. This resets numbering, not code, history or qualification requirements. Existing versions/tags remain unchanged. Candidate Desktop artifacts/signatures are unverified; this is not a Desktop-upgrade recommendation. Published, installed and loaded states remain separate.
+
+Select by **exact Core**, never global SemVer maximum or npm `latest`/`alpha`.
+The read-only `node scripts/select-core-release.mjs 0.2.0-rc.2` command checks
+`deployment-baseline.json`'s mapping and verifies the exact public GitHub Release,
+tarball/checksum assets and npm version's `engines.dsh` before returning an
+install spec. Rc.2 maps to alpha.15, Core alpha.4 to alpha.16, and Core alpha.5
+to this candidate; until both channels are observable, it reports pending or
+incomplete without an install recommendation. Unknown targets fail explicitly. The existing npm
+`alpha` channel remains global and is not compatibility-aware; `latest` remains
+the historical stable pointer. No automatic updater integration or old-Core
+maintenance is promised. See [release selection](./docs/npm-distribution.md#exact-core-release-lines).
 
 **Native refresh protection:** 0.4.1 introduced preservation of already-dispatched HTTP streams across proven plugin-owned refresh with unchanged account, endpoint and entitlements. Versions through 0.4.2-alpha.13 still missed this proof across real Cordis traced service faces; 0.4.2-alpha.14 fixes that identity mismatch. Subsequent requests use freshly validated auth and metadata. Unknown/external credential notifications, revocation, cancellation and provider rejections remain explicit—not a promise of invisible recovery or automatic retry. See [the refresh boundary](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385).
 
 **Compaction planning:** alpha.15 fixes byte counts being compared with token budgets in the separately selected recovery engine. Planning now uses the public native token meter, preserving complete tool relations and final native admission. Truly oversized balanced units still fail explicitly; this is not history repair or guaranteed recovery. See [compaction recovery](./docs/manual-compaction-recovery.md).
 
-**DSH alpha.4 adaptation:** exact public APIs use pi-ai `1.1.0`, the official
+**DSH alpha.5 adaptation:** exact public APIs use pi-ai `1.1.0`, the official
 Cordis/schemastery peers and storage-domain's Zod `4.4.3`. The
-[fixed-target official-first review](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha4.md)
+[fixed-target official-first review](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha5.md)
 records every retain/migrate/retire/defer decision. Alpha.4 natively hides blank
 Thinking disclosures; the redundant plugin renderer and provenance projection
 are retired without changing messages or replay. Exact native reviewer identity,
 dynamic system/tool conversion, replay, account/Remote/compaction and mounted
 selector regressions gate admission. No Core patch, version exemption, new
 wire/catalog, policy migration or durable decision recording is introduced.
+
+
+Alpha.5 qualification also preserves code-first PTC schemas and function-body/REPL instructions. The new inline model-label slot is an opportunity only: no label UI or historical model attribution is added. Alpha.4 hosts may retain alpha.16.
 
 ## What you can do
 
@@ -141,10 +155,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.16/dsh-github-copilot-0.4.2-alpha.16.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.1.alpha.5.tgz
 ```
 
-The command above requires official DSH `0.2.1-alpha.4`. **Desktop rc.2 must not install alpha.16**; retain `dsh-github-copilot@0.4.2-alpha.15` there. Candidate Desktop package/signature and profile peer composition remain unverified. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) is not alpha.4 acceptance; a generic/global `dsh` shim is not equivalent. No install, restart, registry-policy bypass, peer patch or configuration deletion is authorized by this release.
+The command above is a prepared-release example, usable only after publication, and requires official DSH `0.2.1-alpha.5`. **Desktop rc.2 must not install alpha.16 or `0.1.0-alpha.1.dsh.0.2.1.alpha.5`**; retain `dsh-github-copilot@0.4.2-alpha.15` there. Candidate Desktop package/signature and profile peer composition remain unverified. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) is not alpha.5 acceptance; a generic/global `dsh` shim is not equivalent. No install, restart, registry-policy bypass, peer patch or configuration deletion is authorized by this release.
 
 Desktop's native package manager and qualified bundled CLI are profile-specific.
 [Standalone offline maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
@@ -338,14 +352,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.16/dsh-github-copilot-0.4.2-alpha.16.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.16/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.1.alpha.5.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.1.alpha.5/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.16.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.1.alpha.5.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
