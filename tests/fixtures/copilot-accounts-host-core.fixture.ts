@@ -90,6 +90,15 @@ describe('independent Copilot account ownership', () => {
       expect(authorized, JSON.stringify({
         diagnostic: authorized.diagnostic,
         urls,
+        records: [...f.records].map(([recordKey, value]) => ({
+          key: recordKey === GITHUB_COPILOT_CREDENTIAL_KEY ? 'canonical' : 'account',
+          kind: value.kind,
+          enterpriseUrl: value.payload.enterpriseUrl,
+        })),
+        identityRequests: f.fetch.mock.calls.map(([url, init]) => ({
+          url: String(url),
+          redirect: init?.redirect,
+        })),
       })).toMatchObject({ state: 'ready', activeAccountId: 'canonical' })
       const added = [...f.records.keys()].find(value => value !== GITHUB_COPILOT_CREDENTIAL_KEY)!
       expect(f.records.get(added)?.payload).toMatchObject({ enterpriseUrl: 'tenant.ghe.com', refresh: 'synthetic-ghe-refresh' })
