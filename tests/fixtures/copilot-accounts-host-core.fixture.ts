@@ -60,6 +60,15 @@ describe('independent Copilot account ownership', () => {
   it('authorizes native GHE environments with host-scoped duplicates and immutable reauthorization hosts', async () => {
     const f = fixture()
     f.records.delete(key(A)); f.records.delete(key(B))
+    f.credentials.modifyRecord.mockImplementation(async (recordKey, mutate) => {
+      const next = await mutate(f.records.get(recordKey))
+      if (next !== undefined) {
+        f.records.set(recordKey, next as ReturnType<typeof grant>)
+        f.ctx.emit('credentials/record-updated',
+          credentialKey('github-copilot', recordKey.slice('github-copilot/'.length)))
+      }
+      return f.records.get(recordKey)
+    })
     f.fetch.mockImplementation(async (_url, init) => {
       expect(init?.redirect).toBe('error')
       return Response.json({ login: 'same-user', id: 1 })
@@ -87,19 +96,7 @@ describe('independent Copilot account ownership', () => {
     try {
       await f.host.addForEnvironment('tenant.ghe.com'); await settle()
       const authorized = await f.host.get()
-      expect(authorized, JSON.stringify({
-        diagnostic: authorized.diagnostic,
-        urls,
-        records: [...f.records].map(([recordKey, value]) => ({
-          key: recordKey === GITHUB_COPILOT_CREDENTIAL_KEY ? 'canonical' : 'account',
-          kind: value.kind,
-          enterpriseUrl: value.payload.enterpriseUrl,
-        })),
-        identityRequests: f.fetch.mock.calls.map(([url, init]) => ({
-          url: String(url),
-          redirect: init?.redirect,
-        })),
-      })).toMatchObject({ state: 'ready', activeAccountId: 'canonical' })
+      expect(authorized).toMatchObject({ state: 'ready', activeAccountId: 'canonical' })
       const added = [...f.records.keys()].find(value => value !== GITHUB_COPILOT_CREDENTIAL_KEY)!
       expect(f.records.get(added)?.payload).toMatchObject({ enterpriseUrl: 'tenant.ghe.com', refresh: 'synthetic-ghe-refresh' })
       expect(urls).toEqual([
