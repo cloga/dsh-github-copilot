@@ -137,7 +137,7 @@ describe('account discovery native OAuth binding', () => {
     const fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input)
       if (url === 'https://api.tenant.ghe.com/copilot_internal/v2/token') {
-        expect(new Headers(init?.headers).get('Authorization')).toBe('token synthetic-account-a')
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer synthetic-account-a')
         return Response.json({ token: 'synthetic-tenant-access', expires_at: Math.floor(Date.now() / 1000) + 7200 })
       }
       expect(url).toBe('https://copilot-api.tenant.ghe.com/models')

@@ -63,6 +63,7 @@ it('chooses a validated GHE environment without selecting an account or changing
   api.addForEnvironment = vi.fn(async () => ok(view()))
   await mount(api)
   await chooseEnterprise('https://TENANT.ghe.com/')
+  expect(button('Reauthorize').disabled).toBe(true)
   await click('Switch'); await click('Add GitHub account')
   expect(api.addForEnvironment).toHaveBeenCalledExactlyOnceWith('tenant.ghe.com')
   expect(api.add).not.toHaveBeenCalled()
@@ -83,16 +84,17 @@ it.each(['evil.example', 'https://tenant.ghe.com:443', 'https://tenant.ghe.com/p
     expect(api.add).not.toHaveBeenCalled()
   })
 
-it('reauthorizes a saved GHE account in the same slot with explicit host and revision', async () => {
+it('reauthorizes a saved GHE account independently of Add with explicit host and revision', async () => {
   const api = remote()
   api.reauthorizeForEnvironment = vi.fn(async () => ok(view()))
-  api.addForEnvironment = vi.fn(async () => ok(view()))
   await mount(api)
   await chooseEnterprise()
+  await click('Switch')
+  expect(button('Add GitHub account').disabled).toBe(true)
   await click('Reauthorize')
   expect(api.reauthorizeForEnvironment).toHaveBeenCalledExactlyOnceWith(view().accounts[1]!.id, 2, 'tenant.ghe.com')
   expect(api.reauthorize).not.toHaveBeenCalled()
-  expect(api.addForEnvironment).not.toHaveBeenCalled()
+  expect(api.add).not.toHaveBeenCalled()
 })
 
 it('shows the verified tenant in account labels and preserves it through Client field projection', async () => {
@@ -111,7 +113,7 @@ it('keeps GHE login disabled with an explicit diagnostic on older Host contracts
   const api = remote()
   await mount(api)
   await chooseEnterprise()
-  expect(text()).toContain('This deployment cannot start GHE.com authorization.')
+  expect(text()).toContain('This deployment does not support every GHE.com authorization action.')
   await click('Switch')
   expect(button('Add GitHub account').disabled).toBe(true)
   expect(api.add).not.toHaveBeenCalled()

@@ -128,7 +128,7 @@ const accountCopy = {
     tenant: 'Tenant hostname',
     environmentHelp: 'For Add or Reauthorize only. Use your data-residency tenant, such as company.ghe.com. GitHub Enterprise Server is not supported.',
     environmentInvalid: 'Enter a tenant hostname such as company.ghe.com, without a path, port or credentials.',
-    environmentUnavailable: 'This deployment cannot start GHE.com authorization. Update both Host and Client.',
+    environmentUnavailable: 'This deployment does not support every GHE.com authorization action. Update both Host and Client.',
     environmentUnsupported: 'This login environment is not supported. Use GitHub.com or a tenant.ghe.com hostname.',
   },
   zh: {
@@ -184,7 +184,7 @@ const accountCopy = {
     tenant: '租户主机名',
     environmentHelp: '仅用于添加或重新授权。请输入数据驻留租户，例如 company.ghe.com。不支持 GitHub Enterprise Server。',
     environmentInvalid: '请输入 company.ghe.com 形式的租户主机名，不含路径、端口或凭据。',
-    environmentUnavailable: '当前部署无法启动 GHE.com 授权，请同时更新 Host 和 Client。',
+    environmentUnavailable: '当前部署不支持部分 GHE.com 授权操作，请同时更新 Host 和 Client。',
     environmentUnsupported: '不支持此登录环境。请使用 GitHub.com 或 tenant.ghe.com 租户主机名。',
   },
 } as const
@@ -414,9 +414,12 @@ function CopilotAccountControls(props: AccountControlsProps & (
     ? copilotIdentityLabel(selected.identity) : text.savedAuthorization
   const savedAccounts = view?.accounts ?? []
   const pending = busy || props.authorizationBusy === true || view?.operation !== undefined
-  const environmentUnavailable = enterprise && (typeof props.remote?.addForEnvironment !== 'function'
-    || !props.addOnly && typeof managementRemote?.reauthorizeForEnvironment !== 'function')
-  const loginBlocked = environmentHost === undefined || environmentUnavailable
+  const addEnvironmentUnavailable = enterprise && typeof props.remote?.addForEnvironment !== 'function'
+  const reauthorizeEnvironmentUnavailable = enterprise && !props.addOnly
+    && typeof managementRemote?.reauthorizeForEnvironment !== 'function'
+  const environmentUnavailable = addEnvironmentUnavailable || reauthorizeEnvironmentUnavailable
+  const addBlocked = environmentHost === undefined || addEnvironmentUnavailable
+  const reauthorizeBlocked = environmentHost === undefined || reauthorizeEnvironmentUnavailable
   const authorizationOperation = view?.operation === 'authorizing' || view?.operation === 'verifying'
   const authorizationStatus = cancelRequested ? text.cancelling
     : view?.operation === 'authorizing'
@@ -452,7 +455,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
         : account.configured ? text.savedAuthorization : text.authorizationUnavailable)),
     account.id === 'canonical' || account.id === view?.activeAccountId ? null : control(text.reauthorize, () => {
       if (props.remote !== undefined && view?.revision !== undefined) startReauthorization(account.id, view.revision)
-    }, pending || loginBlocked || view?.writable !== true || view?.switchable !== true || view?.revision === undefined),
+    }, pending || reauthorizeBlocked || view?.writable !== true || view?.switchable !== true || view?.revision === undefined),
     account.id === 'canonical' || account.id === view?.activeAccountId ? null : control(text.remove, () => {
       if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: true })
     }, pending || view?.writable !== true || view?.revision === undefined))
@@ -514,11 +517,12 @@ function CopilotAccountControls(props: AccountControlsProps & (
           placeholder: 'company.ghe.com', style: { ...nativeInputStyle, width: '100%' },
           'aria-invalid': environmentHost === undefined, 'aria-describedby': `${environmentId}-help`,
           onChange: (event: import('react').ChangeEvent<HTMLInputElement>) => setTenant(event.target.value) }) : null,
-        h('p', { id: `${environmentId}-help`, style: muted }, environmentUnavailable ? text.environmentUnavailable
-          : enterprise && environmentHost === undefined ? text.environmentInvalid : text.environmentHelp)),
+        h('p', { id: `${environmentId}-help`, style: muted }, text.environmentHelp,
+          environmentUnavailable ? ` ${text.environmentUnavailable}`
+            : enterprise && environmentHost === undefined ? ` ${text.environmentInvalid}` : null)),
       props.addOnly && !authorizationOperation ? control(text.add, () => {
         if (props.remote !== undefined) startAdd()
-      }, pending || loginBlocked || view?.writable !== true || view?.switchable !== true) : null,
+      }, pending || addBlocked || view?.writable !== true || view?.switchable !== true) : null,
       props.addOnly && (failed || !pending && view?.switchable === false) ? control(text.retry, () => {
         if (props.remote !== undefined) void run(() => props.remote!.get())
       }, pending || props.remote === undefined) : null,
@@ -544,7 +548,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
         footer: authorizationOperation ? null : control(text.add, () => {
           setAccountsOpen(false)
           if (props.remote !== undefined) startAdd()
-        }, pending || loginBlocked || view?.writable !== true || view?.switchable !== true),
+        }, pending || addBlocked || view?.writable !== true || view?.switchable !== true),
       })),
       props.addOnly || confirmation === undefined ? null : h('div', { role: 'group',
         'aria-label': confirmation.remove ? text.confirmRemoveTitle : text.confirmSwitchTitle,
@@ -566,7 +570,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
         }, pending || props.remote === undefined),
         activeAccount === undefined || activeAccount.id === 'canonical' ? null : control(text.reauthorize, () => {
           if (props.remote !== undefined && view?.revision !== undefined) startReauthorization(activeAccount.id, view.revision)
-        }, pending || loginBlocked || view?.writable !== true || view?.switchable !== true || view?.revision === undefined)),
+        }, pending || reauthorizeBlocked || view?.writable !== true || view?.switchable !== true || view?.revision === undefined)),
       props.addOnly || savedAccounts.every(account => account.id === 'canonical' || account.id === view?.activeAccountId) ? null
         : h('details', null, h('summary', { style: { cursor: 'pointer' } }, text.savedAccounts),
           h('ul', { style: { listStyle: 'none', padding: 0, maxHeight: 240, overflowY: 'auto' } }, ...savedAccountItems)),
