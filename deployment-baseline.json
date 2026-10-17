@@ -8,12 +8,12 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.1.dsh.0.2.1.alpha.5"
+    "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
-    { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.1.dsh.0.2.1.alpha.5", "status": "pending" }
+    { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -413,6 +413,9 @@
       "activation": "managed-only-explicit-account-selector",
       "sourceMarkers": [
         {"file": "src/copilot-accounts-host.ts", "marker": "async ensureIdentityFor(accountId: string)"},
+        {"file": "src/copilot-login-environment.ts", "marker": "COPILOT_LOGIN_HOST_PATTERN"},
+        {"file": "src/copilot-accounts-host.ts", "marker": "event.verificationUri !== copilotVerificationUri(host)"},
+        {"file": "docs/copilot-accounts.md", "marker": "Native OAuth redirect control is unavailable"},
         {"file": "AGENTS.md", "marker": "Approved multi-account ownership extension (#297)"},
         {"file": "src/remote.ts", "marker": "...copilotAccountsRemote.descriptors"},
         {"file": "src/copilot-accounts-card.ts", "marker": "removeAccount(accountId: string, expectedRevision: number)"},
@@ -420,6 +423,9 @@
         {"file": "docs/copilot-accounts.md", "marker": "A mutable active-account lookup inside each store method is forbidden"}
       ],
       "tests": [
+        {"file": "tests/scripts/copilot-login-environment.test.mjs", "name": "compares numeric identities within their host without relabeling legacy GitHub.com evidence"},
+        {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "authorizes native GHE environments with host-scoped duplicates and immutable reauthorization hosts"},
+        {"file": "tests/copilot-accounts-card.spec.ts", "name": "chooses a validated GHE environment without selecting an account or changing GitHub.com login"},
         {"file": "tests/copilot-identity-refresh.spec.ts", "name": "renews expired identity once for account %s without changing metadata-only reads"},
         {"file": "tests/copilot-account-identity-cache.spec.ts", "name": "hydrates saved inactive names without activating them, then reuses them"},
         {"file": "tests/account-dropdown.spec.ts", "name": "backs translucent native menu tokens with opaque Canvas and uses a dark elevation shadow"},

@@ -8,7 +8,7 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-**历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；DSH alpha.5 待发布兼容线：`0.1.0-alpha.1.dsh.0.2.1.alpha.5`。** 每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-alpha.5` 规范化为 `dsh.0.2.1.alpha.5`，但兼容性仍须核对明确元数据，不能只猜版本名。重置的是编号，不是代码、历史或资格验证要求；既有版本和 tag 不变。候选 Desktop 制品／签名未核验，这不是 Desktop 升级建议。已发布、已安装、已加载仍是不同状态。
+**历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；DSH alpha.5 待发布迭代：`0.1.0-alpha.2.dsh.0.2.1.alpha.5`。** 每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-alpha.5` 规范化为 `dsh.0.2.1.alpha.5`，但兼容性仍须核对明确元数据，不能只猜版本名。重置的是编号，不是代码、历史或资格验证要求；既有版本和 tag 不变。候选 Desktop 制品／签名未核验，这不是 Desktop 升级建议。已发布、已安装、已加载仍是不同状态。
 
 按**精确 Core**选版本，不按全局 SemVer 最大值或 npm `latest`／`alpha`。
 只读命令 `node scripts/select-core-release.mjs 0.2.0-rc.2` 先读取
@@ -133,10 +133,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.1.alpha.5.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.alpha.5.tgz
 ```
 
-上面的命令是准备发布的示例，仅在发布后可用，并要求官方 DSH `0.2.1-alpha.5`。**Desktop rc.2 不得安装 alpha.16 或 `0.1.0-alpha.1.dsh.0.2.1.alpha.5`**，应保留 `dsh-github-copilot@0.4.2-alpha.15`。候选 Desktop 包／签名及 profile peer 组合仍未核验。[历史 rc.2 随附 CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)不代表 alpha.5 验收；全局／普通 `dsh` shim 不等价。此版本不授权安装、重启、绕过包源政策、修改 peer 或删除配置。
+上面的命令是准备发布的示例，仅在发布后可用，并要求官方 DSH `0.2.1-alpha.5`。**Desktop rc.2 不得安装 alpha.16 或 `0.1.0-alpha.2.dsh.0.2.1.alpha.5`**，应保留 `dsh-github-copilot@0.4.2-alpha.15`。候选 Desktop 包／签名及 profile peer 组合仍未核验。[历史 rc.2 随附 CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)不代表 alpha.5 验收；全局／普通 `dsh` shim 不等价。此版本不授权安装、重启、绕过包源政策、修改 peer 或删除配置。
 
 Desktop 原生包管理器和已核验的随附 CLI 都有 profile 边界。
 [独立 profile 离线维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
@@ -150,7 +150,9 @@ Desktop 原生包管理器和已核验的随附 CLI 都有 profile 边界。
 
 退出须显式操作，只删除活动账号的授权，保留其它授权与路由设置。升级保留已有原生 Copilot profile；在[显式单路由迁移](./docs/single-route-migration.md)前，仍可能存在两个分组。安装不迁移会话或默认模型。
 
-在 **Manage → 账号管理**内，**切换**下拉菜单列出已保存账号，底部为**添加 GitHub 账号**。添加不会替换全局默认。设备授权期间显示验证网址、一次性授权码、**复制授权码**和**取消添加账号**；随后单独验证身份和模型。确认切换只影响后续继承默认的新 turn，不改变运行中 turn 或 Session 已指定账号。**管理已保存授权**包含**重新授权**和**移除**；移除仅影响非默认的本地已保存授权，不改变运行中 turn 锁定的账号或 GitHub 端访问。**刷新账号信息**只更新身份，不操作授权。原生路由或不完整证据阻止切换；账号缺失／失效不会自动回退。新账号可能缺少已选模型，旧加密 replay 也可能绑定原账号；不自动替换模型或删除历史。参见[账号需求](./docs/copilot-accounts.md)。
+在 **Manage → 账号管理**内，添加或重新授权前先选择**登录环境**：**GitHub.com**，或 **GitHub Enterprise Cloud（GHE.com）**并填写数据驻留租户，例如 `company.ghe.com`。不接受任意域名、端口或 URL 路径。重新授权必须保留已保存主机；其他环境请添加新账号。已验证的租户主机名会显示在账号名旁。**不支持 GitHub Enterprise Server 和 Enterprise 额度查询。** 插件身份请求拒绝重定向；原生 pi-ai OAuth 没有重定向控制接口，因此不宣称 OAuth 拒绝重定向。参见[登录环境边界](./docs/copilot-accounts.md#github-login-environments-424)。
+
+**切换**下拉菜单列出已保存账号，底部为**添加 GitHub 账号**。添加不会替换全局默认。设备授权期间显示验证网址、一次性授权码、**复制授权码**和**取消添加账号**；随后单独验证身份和模型。确认切换只影响后续继承默认的新 turn，不改变运行中 turn 或 Session 已指定账号。**管理已保存授权**包含**重新授权**和**移除**；移除仅影响非默认的本地已保存授权，不改变运行中 turn 锁定的账号或 GitHub 端访问。**刷新账号信息**只更新身份，不操作授权。原生路由或不完整证据阻止切换；账号缺失／失效不会自动回退。新账号可能缺少已选模型，旧加密 replay 也可能绑定原账号；不自动替换模型或删除历史。参见[账号需求](./docs/copilot-accounts.md)。
 
 已完成的托管 turn 在原生 Usage 旁显示 **Account**，记录实际请求账号，不是计费归因或子 Agent 汇总。准入时冻结已验证名称；缺失时针对本轮固定账号执行现有的有界、非强制查询，不阻塞模型输出，只能在同一 turn 仍运行时补齐身份。没有原生流返回就没有账号执行证据。未查到的身份仍显示不可用；不会根据当前设置补写已完成历史。证据仅在 Host 生命周期内有界保留，重启及冷历史显示未知。Credits 对身份未知的原始／已保存授权显示可读标签，不显示不透明账号 ID。
 
@@ -327,14 +329,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.1.alpha.5.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.1.alpha.5/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.alpha.5.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.alpha.5/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.1.alpha.5.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.alpha.5.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

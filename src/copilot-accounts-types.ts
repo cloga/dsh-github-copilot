@@ -18,7 +18,7 @@ export const COPILOT_ACCOUNTS_DIAGNOSTICS = [
   'COPILOT_ACCOUNTS_DISPOSED',
 ] as const
 export type CopilotAccountsDiagnostic = typeof COPILOT_ACCOUNTS_DIAGNOSTICS[number]
-export interface CopilotAccountIdentity { readonly login: string; readonly userId: number }
+export interface CopilotAccountIdentity { readonly login: string; readonly userId: number; readonly host?: string }
 export interface CopilotAccountView {
   readonly id: string
   readonly identity?: CopilotAccountIdentity

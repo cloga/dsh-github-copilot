@@ -4,6 +4,7 @@ import type { TurnSelection } from './turn-selection.ts'
 import { selectionExplanation } from './auto-selection-explanation.ts'
 import type { TurnAccountView } from './session-accounts-remote.ts'
 import type { RecordedModel } from './turn-model-provenance.ts'
+import { copilotIdentityLabel } from './copilot-login-environment.ts'
 
 export interface TurnModelEvidence {
   readonly kind: 'recorded' | 'requested' | 'unknown'
@@ -13,7 +14,7 @@ export interface TurnModelEvidence {
 
 function turnAccountLabel(account: TurnAccountView, zh: boolean): string {
   if (account.state !== 'recorded' || account.identity === undefined) return zh ? '身份暂不可用' : 'identity unavailable'
-  return `@${account.identity.login}`
+  return copilotIdentityLabel(account.identity)
 }
 
 export function TurnSelectionCard({ selection, locale = 'en', incomplete = false, readState = 'ready', retry,

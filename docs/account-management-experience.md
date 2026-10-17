@@ -11,6 +11,18 @@ disabled and an account switch awaiting confirmation. All accounts, quota,
 authorization, messages and model availability in this mock are synthetic.
 It performs no network requests and persists no credentials or settings.
 
+## Login environment
+
+Models adds a native **Login environment** select before the existing account
+actions. GitHub.com remains the initial choice. GitHub Enterprise Cloud reveals
+a labeled tenant field with local validation and an explicit GHES limitation;
+invalid drafts disable only Add/Reauthorize, not saved-account switching.
+The draft never changes the default or an admitted turn. Reauthorization must
+match the saved host; use Add for another environment. Verified GHE logins retain
+their tenant label in both Models and Credits, including same-name accounts.
+The historical synthetic mock predates this addition and is not environment
+support evidence. See [the exact native boundary](./copilot-accounts.md#github-login-environments-424).
+
 ## Chat: quick selection, not a second settings page
 
 The Credits control opens a compact current-account summary and Switch button.

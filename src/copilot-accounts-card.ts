@@ -1,4 +1,4 @@
-import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
+import { createElement as h, useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
 import { CopilotAccountsViewSchema } from './copilot-accounts-remote.ts'
 import type { CopilotAccountsView } from './copilot-accounts-types.ts'
@@ -6,9 +6,11 @@ import { externalLinkTarget } from './external-link.ts'
 import { accountPresentationChanges } from './copilot-account-presentation.ts'
 import { copyAuthorizationCode } from './authorization-code-clipboard.ts'
 import { AccountDropdown } from './account-dropdown.ts'
-import { nativeCompactButtonStyle, nativeCaptionStyle, nativeHeadingStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
+import { nativeCompactButtonStyle, nativeCaptionStyle, nativeHeadingStyle, nativeSettingsStyle, nativeSettingsCss,
+  nativeInputStyle } from './native-settings-style.ts'
 import { createClientDiagnosticsScope } from './diagnostics-client.ts'
 import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
+import { copilotLoginHost, copilotIdentityLabel } from './copilot-login-environment.ts'
 
 type AccountResult = { ok: true; value: CopilotAccountsView } | { ok: false; error: unknown }
 export interface CopilotAccountsRemote {
@@ -16,13 +18,15 @@ export interface CopilotAccountsRemote {
   refreshIdentity(): Promise<AccountResult>
   ensureIdentity(): Promise<AccountResult>
   add(): Promise<AccountResult>
+  addForEnvironment?(host: string): Promise<AccountResult>
   cancel(): Promise<AccountResult>
   switchAccount(accountId: string, expectedRevision: number): Promise<AccountResult>
   reauthorize(accountId: string, expectedRevision: number): Promise<AccountResult>
+  reauthorizeForEnvironment?(accountId: string, expectedRevision: number, host: string): Promise<AccountResult>
   removeAccount(accountId: string, expectedRevision: number): Promise<AccountResult>
 }
 
-export type CopilotAccountAddRemote = Pick<CopilotAccountsRemote, 'get' | 'add' | 'cancel'>
+export type CopilotAccountAddRemote = Pick<CopilotAccountsRemote, 'get' | 'add' | 'addForEnvironment' | 'cancel'>
 
 export function CopilotAccountAdd(props: {
   remote?: CopilotAccountAddRemote
@@ -50,7 +54,7 @@ export function accountsViewFrom(value: unknown): CopilotAccountsView | undefine
     owned.accounts = source.accounts.map(item => {
       const account = fields(item, ['id', 'configured', 'identityState'])
       const identity = record(item).identity
-      if (identity !== undefined) account.identity = fields(identity, ['login', 'userId'])
+      if (identity !== undefined) account.identity = fields(identity, ['login', 'userId', 'host'])
       return account
     })
     owned.notices = source.notices.map(item => fields(item, ['message', 'url', 'code']))
@@ -62,7 +66,7 @@ export function accountsViewFrom(value: unknown): CopilotAccountsView | undefine
 export function accountIdentityLabel(view: CopilotAccountsView | undefined): string | undefined {
   const account = view?.accounts.find(item => item.id === view.activeAccountId)
   return account?.configured === true && account.identityState === 'ready' && account.identity !== undefined
-    ? `@${account.identity.login}` : undefined
+    ? copilotIdentityLabel(account.identity) : undefined
 }
 
 const secondary = 'var(--dsw-alias-label-secondary, GrayText)'
@@ -119,6 +123,13 @@ const accountCopy = {
     cancelAdd: 'Cancel adding account', cancelReauthorize: 'Cancel reauthorization',
     cancelling: 'Cancelling…', add: 'Add GitHub account',
     refresh: 'Refresh account information', refreshing: 'Checking…', retry: 'Retry',
+    environment: 'Login environment',
+    enterprise: 'GitHub Enterprise Cloud (GHE.com)',
+    tenant: 'Tenant hostname',
+    environmentHelp: 'For Add or Reauthorize only. Use your data-residency tenant, such as company.ghe.com. GitHub Enterprise Server is not supported.',
+    environmentInvalid: 'Enter a tenant hostname such as company.ghe.com, without a path, port or credentials.',
+    environmentUnavailable: 'This deployment cannot start GHE.com authorization. Update both Host and Client.',
+    environmentUnsupported: 'This login environment is not supported. Use GitHub.com or a tenant.ghe.com hostname.',
   },
   zh: {
     identityChecking: '正在检查 GitHub 身份…', identityUnavailable: 'GitHub 账号身份暂不可用',
@@ -168,6 +179,13 @@ const accountCopy = {
     cancelAdd: '取消添加账号', cancelReauthorize: '取消重新授权',
     cancelling: '正在取消…', add: '添加 GitHub 账号',
     refresh: '刷新账号信息', refreshing: '正在检查…', retry: '重试',
+    environment: '登录环境',
+    enterprise: 'GitHub Enterprise Cloud（GHE.com）',
+    tenant: '租户主机名',
+    environmentHelp: '仅用于添加或重新授权。请输入数据驻留租户，例如 company.ghe.com。不支持 GitHub Enterprise Server。',
+    environmentInvalid: '请输入 company.ghe.com 形式的租户主机名，不含路径、端口或凭据。',
+    environmentUnavailable: '当前部署无法启动 GHE.com 授权，请同时更新 Host 和 Client。',
+    environmentUnsupported: '不支持此登录环境。请使用 GitHub.com 或 tenant.ghe.com 租户主机名。',
   },
 } as const
 
@@ -179,6 +197,7 @@ function accountProblemMessage(code: CopilotAccountsView['diagnostic'],
     case 'COPILOT_ACCOUNTS_BUSY': return text.switchUnavailable
     case 'COPILOT_ACCOUNTS_AUTH_FAILED': return text.authorizationFailed
     case 'COPILOT_ACCOUNTS_AUTH_UNAVAILABLE': return text.authorizationUnavailableError
+    case 'COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED': return text.environmentUnsupported
     case 'COPILOT_ACCOUNTS_MODELS_FAILED': return text.modelsFailed
     case 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE':
     case 'COPILOT_ACCOUNTS_IDENTITY_INVALID':
@@ -223,6 +242,14 @@ function CopilotAccountControls(props: AccountControlsProps & (
   const [authorizationIntent, setAuthorizationIntent] = useState<'add' | 'reauthorize'>()
   const [confirmation, setConfirmation] = useState<{ id: string; revision: number; remove: boolean }>()
   const [accountsOpen, setAccountsOpen] = useState(false)
+  const [enterprise, setEnterprise] = useState(false)
+  const [tenant, setTenant] = useState('')
+  const environmentId = useId()
+  let environmentHost: string | undefined
+  try {
+    const host = copilotLoginHost(enterprise ? tenant : undefined)
+    if (!enterprise || host !== 'github.com') environmentHost = host
+  } catch { /* Invalid drafts remain local until a supported host is entered. */ }
   const lifetime = useRef({ active: false, generation: 0, busy: false, copyGeneration: 0 })
   const changedCallback = useRef(props.onChanged)
   changedCallback.current = props.onChanged
@@ -364,23 +391,32 @@ function CopilotAccountControls(props: AccountControlsProps & (
     void run(() => props.remote!.cancel(), true)
   }
   const startAdd = () => {
+    const host = environmentHost
+    if (host === undefined || enterprise && typeof props.remote?.addForEnvironment !== 'function') return
     setAuthorizationIntent('add')
     setCancelRequested(false)
-    void run(() => props.remote!.add(), true)
+    void run(() => enterprise ? props.remote!.addForEnvironment!(host) : props.remote!.add(), true)
   }
   const startReauthorization = (accountId: string, revision: number) => {
     if (managementRemote === undefined) return
+    const host = environmentHost
+    if (host === undefined || enterprise && typeof managementRemote.reauthorizeForEnvironment !== 'function') return
     setAuthorizationIntent('reauthorize')
     setCancelRequested(false)
-    void run(() => managementRemote.reauthorize(accountId, revision), true)
+    void run(() => managementRemote.reauthorizeForEnvironment
+      ? managementRemote.reauthorizeForEnvironment(accountId, revision, host)
+      : managementRemote.reauthorize(accountId, revision), true)
   }
   const identity = accountIdentityLabel(view)
   const activeAccount = view?.accounts.find(account => account.id === view.activeAccountId)
   const selected = confirmation === undefined ? undefined : view?.accounts.find(item => item.id === confirmation.id)
   const selectedLabel = selected?.identityState === 'ready' && selected.identity !== undefined
-    ? `@${selected.identity.login}` : text.savedAuthorization
+    ? copilotIdentityLabel(selected.identity) : text.savedAuthorization
   const savedAccounts = view?.accounts ?? []
   const pending = busy || props.authorizationBusy === true || view?.operation !== undefined
+  const environmentUnavailable = enterprise && (typeof props.remote?.addForEnvironment !== 'function'
+    || !props.addOnly && typeof managementRemote?.reauthorizeForEnvironment !== 'function')
+  const loginBlocked = environmentHost === undefined || environmentUnavailable
   const authorizationOperation = view?.operation === 'authorizing' || view?.operation === 'verifying'
   const authorizationStatus = cancelRequested ? text.cancelling
     : view?.operation === 'authorizing'
@@ -405,7 +441,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
       onClick, disabled }, label)
   const savedAccountItems = savedAccounts.map(account => {
     const accountName = account.identityState === 'ready' && account.identity !== undefined
-      ? `@${account.identity.login}` : text.savedAuthorization
+      ? copilotIdentityLabel(account.identity) : text.savedAuthorization
     return h('li', { key: account.id,
       style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
         paddingBlock: 10, borderBottom: border } },
@@ -416,7 +452,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
         : account.configured ? text.savedAuthorization : text.authorizationUnavailable)),
     account.id === 'canonical' || account.id === view?.activeAccountId ? null : control(text.reauthorize, () => {
       if (props.remote !== undefined && view?.revision !== undefined) startReauthorization(account.id, view.revision)
-    }, pending || view?.writable !== true || view?.switchable !== true || view?.revision === undefined),
+    }, pending || loginBlocked || view?.writable !== true || view?.switchable !== true || view?.revision === undefined),
     account.id === 'canonical' || account.id === view?.activeAccountId ? null : control(text.remove, () => {
       if (view?.revision !== undefined) setConfirmation({ id: account.id, revision: view.revision, remove: true })
     }, pending || view?.writable !== true || view?.revision === undefined))
@@ -464,9 +500,25 @@ function CopilotAccountControls(props: AccountControlsProps & (
       view?.diagnostic === undefined ? null : h('details', { 'data-copilot-account-diagnostic': '', style: nativeCaptionStyle },
         h('summary', { style: { cursor: 'pointer' } }, text.technicalDetails),
         h('code', { style: { overflowWrap: 'anywhere' } }, view.diagnostic)),
+      h('div', { 'data-copilot-login-environment': '', style: { display: 'grid', gap: 6 } },
+        h('label', { htmlFor: environmentId }, text.environment),
+        h('select', { id: environmentId, value: enterprise ? 'enterprise' : 'github.com',
+          disabled: pending, style: { ...nativeInputStyle, width: '100%' },
+          onChange: (event: import('react').ChangeEvent<HTMLSelectElement>) => setEnterprise(event.target.value === 'enterprise'),
+          'aria-describedby': `${environmentId}-help` },
+        h('option', { value: 'github.com' }, 'GitHub.com'),
+        h('option', { value: 'enterprise' }, text.enterprise)),
+        enterprise ? h('label', { htmlFor: `${environmentId}-tenant` }, text.tenant) : null,
+        enterprise ? h('input', { id: `${environmentId}-tenant`, type: 'text', value: tenant,
+          disabled: pending, autoCapitalize: 'none', autoComplete: 'off', spellCheck: false,
+          placeholder: 'company.ghe.com', style: { ...nativeInputStyle, width: '100%' },
+          'aria-invalid': environmentHost === undefined, 'aria-describedby': `${environmentId}-help`,
+          onChange: (event: import('react').ChangeEvent<HTMLInputElement>) => setTenant(event.target.value) }) : null,
+        h('p', { id: `${environmentId}-help`, style: muted }, environmentUnavailable ? text.environmentUnavailable
+          : enterprise && environmentHost === undefined ? text.environmentInvalid : text.environmentHelp)),
       props.addOnly && !authorizationOperation ? control(text.add, () => {
         if (props.remote !== undefined) startAdd()
-      }, pending || view?.writable !== true || view?.switchable !== true) : null,
+      }, pending || loginBlocked || view?.writable !== true || view?.switchable !== true) : null,
       props.addOnly && (failed || !pending && view?.switchable === false) ? control(text.retry, () => {
         if (props.remote !== undefined) void run(() => props.remote!.get())
       }, pending || props.remote === undefined) : null,
@@ -481,7 +533,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
         onOpenChange: (open: boolean) => { setAccountsOpen(open); setConfirmation(undefined) },
         options: savedAccounts.map(account => ({
           id: account.id, label: account.identityState === 'ready' && account.identity
-            ? `@${account.identity.login}` : `${text.savedAuthorization}${account.id === 'canonical' ? '' : ` ${savedAccounts.indexOf(account) + 1}`} · ${text.identityUnavailableLabel}`,
+            ? copilotIdentityLabel(account.identity) : `${text.savedAuthorization}${account.id === 'canonical' ? '' : ` ${savedAccounts.indexOf(account) + 1}`} · ${text.identityUnavailableLabel}`,
           selected: account.id === view?.activeAccountId, disabled: !account.configured,
         })),
         onSelect: (id: string) => {
@@ -492,7 +544,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
         footer: authorizationOperation ? null : control(text.add, () => {
           setAccountsOpen(false)
           if (props.remote !== undefined) startAdd()
-        }, pending || view?.writable !== true || view?.switchable !== true),
+        }, pending || loginBlocked || view?.writable !== true || view?.switchable !== true),
       })),
       props.addOnly || confirmation === undefined ? null : h('div', { role: 'group',
         'aria-label': confirmation.remove ? text.confirmRemoveTitle : text.confirmSwitchTitle,
@@ -514,7 +566,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
         }, pending || props.remote === undefined),
         activeAccount === undefined || activeAccount.id === 'canonical' ? null : control(text.reauthorize, () => {
           if (props.remote !== undefined && view?.revision !== undefined) startReauthorization(activeAccount.id, view.revision)
-        }, pending || view?.writable !== true || view?.switchable !== true || view?.revision === undefined)),
+        }, pending || loginBlocked || view?.writable !== true || view?.switchable !== true || view?.revision === undefined)),
       props.addOnly || savedAccounts.every(account => account.id === 'canonical' || account.id === view?.activeAccountId) ? null
         : h('details', null, h('summary', { style: { cursor: 'pointer' } }, text.savedAccounts),
           h('ul', { style: { listStyle: 'none', padding: 0, maxHeight: 240, overflowY: 'auto' } }, ...savedAccountItems)),

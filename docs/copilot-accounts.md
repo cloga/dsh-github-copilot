@@ -10,6 +10,52 @@ separate evidence.
 
 ## Requirements
 
+### GitHub login environments (#424)
+
+For DSH `0.2.1-alpha.5`, prepared plugin iteration
+`0.1.0-alpha.2.dsh.0.2.1.alpha.5` adds **Login environment** to the existing
+Models account controls (and the shared add-only surface). Choose **GitHub.com**
+or **GitHub Enterprise Cloud (GHE.com)** before Add/Reauthorize. Enter a
+single-label data-residency tenant such as `company.ghe.com`; an HTTPS origin
+with an optional trailing slash is also accepted and normalized locally.
+Ports, credentials, paths, queries, fragments, nested subdomains, IP addresses,
+Unicode host spellings and arbitrary domains are rejected before login.
+The environment choice is an unsaved login draft, not the global account selector.
+For reauthorization, choose the saved account's original host; changing hosts
+requires Add, never overwriting the existing record.
+
+The exact published pi-ai `1.1.0` flow owns the device code exchange,
+`https://api.<tenant>.ghe.com/copilot_internal/v2/token`, native model permissions
+and refresh. The plugin answers only its known Enterprise-domain prompt.
+Device verification must be exactly `https://<selected-host>/login/device`
+before a link is shown or token polling continues. Identity uses
+`https://api.<selected-host>/user` with `redirect: 'error'`, bounded response
+parsing and existing cancellation/credential fences. Numeric GitHub user IDs
+are unique only within a host. Reauthorization preserves both host and ID;
+duplicate checks compare both. Verified GHE names display their tenant in
+Models, Credits and bounded historical Account evidence. Legacy evidence with
+no host remains GitHub.com; no historical or credential migration is performed.
+
+Managed discovery and requests still resolve the captured account through native
+`Models.getAuth()` and the existing published adapter. Endpoint validation uses
+the native OAuth-derived endpoint, never a hand-built model transport or a
+model-name routing rule. Unsupported stored hosts are rejected before native
+refresh; changing account/host invalidates the existing proof as before.
+
+**Native OAuth redirect control is unavailable** in pi-ai `1.1.0`: its OAuth
+implementation uses global Fetch and exposes no request-Fetch/redirect option in
+the published login/refresh contracts. This plugin does not patch global Fetch,
+replace the flow, or claim OAuth redirect rejection. Its own identity request
+rejects redirects and network errors fail closed without account fallback or
+an added retry. Synthetic flow/endpoint tests are not live tenant acceptance.
+
+**GitHub Enterprise Server (GHES) is unsupported.** The pinned flow constructs
+`api.<domain>` token URLs and does not establish GHES REST/OAuth/Copilot parity;
+arbitrary server hosts retain `COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED`.
+Enterprise billing quota retains `COPILOT_USAGE_ENTERPRISE_UNSUPPORTED`; account
+login/model availability is not quota support. Publication, profile installation,
+loaded Host state and live enterprise permissions remain separate.
+
 ### Native OAuth refresh and dispatched requests (#385)
 
 In 0.4.0, every matching credential notification aborts managed wires, including

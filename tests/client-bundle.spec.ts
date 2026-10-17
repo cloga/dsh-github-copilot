@@ -411,7 +411,8 @@ describe('tsdown client artifact', () => {
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())
-      .toEqual(['add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])
+      .toEqual(['add', 'addForEnvironment', 'cancel', 'ensureIdentity', 'get', 'reauthorize',
+        'reauthorizeForEnvironment', 'refreshIdentity', 'removeAccount', 'switchAccount'])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionAccount').map(descriptor => descriptor.method).sort())
       .toEqual(['ensureIdentity', 'get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation').map(descriptor => descriptor.method).sort())
