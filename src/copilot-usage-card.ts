@@ -1,5 +1,6 @@
 import { createElement as h, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { AccountDropdown } from './account-dropdown.ts'
+import { copilotIdentityLabel } from './copilot-login-environment.ts'
 import { createClientDiagnosticsScope } from './diagnostics-client.ts'
 import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
 import type { ChangeEvent, CSSProperties, ReactElement } from 'react'
@@ -454,7 +455,7 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const accountOptions = open && choosingAccount && sessionAccount ? [
     ...sessionAccount.accounts.accounts.filter(account => account.configured).map(account => ({
       id: account.id,
-      label: account.identity ? `@${account.identity.login}` : account.id === 'canonical'
+      label: account.identity ? copilotIdentityLabel(account.identity) : account.id === 'canonical'
         ? `${t.originalAuthorization} · ${t.identityUnknown}`
         : `${t.savedAuthorization}${numberedUnknownAccounts.has(account.id) ? ` ${numberedUnknownAccounts.get(account.id)}` : ''} · ${t.identityUnknown}`,
       selected: sessionAccount.accountId === account.id,

@@ -137,6 +137,32 @@ test('manual replay recovery plan retains explicit consent and rejects weakened 
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test('login environment plan rejects weakened native OAuth and tenant boundaries', async () => {
+  const plan = await planTask('accounts')
+  assert.ok(plan.read.includes('src/copilot-login-environment.ts'))
+  assert.ok(plan.tests.includes('tests/scripts/copilot-login-environment.test.mjs'))
+  const root = await mkdtemp(join(tmpdir(), 'copilot-login-contract-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    for (const file of original.entrypoints) {
+      await mkdir(dirname(join(root, file)), { recursive: true })
+      await writeFile(join(root, file), '')
+    }
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    await writeFile(join(root, 'AGENTS.md'), await readFile(join(repositoryRoot, 'AGENTS.md')))
+    for (const mutate of [
+      contract => { delete contract.tasks.accounts.loginEnvironmentBoundary },
+      contract => { contract.tasks.accounts.loginEnvironmentBoundary = 'Accept arbitrary hosts with a second OAuth implementation' },
+      contract => { contract.tasks.accounts.tests = contract.tasks.accounts.tests.filter(file => file !== 'tests/scripts/copilot-login-environment.test.mjs') },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /login environments/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('large composition plan rejects weakened replay, transport and consent boundaries', async () => {
   const plan = await planTask('diagnostics')
   assert.ok(plan.read.includes('src/request-body-composition.ts'))

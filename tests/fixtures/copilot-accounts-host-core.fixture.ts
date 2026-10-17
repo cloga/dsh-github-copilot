@@ -14,8 +14,9 @@ import { GitHubCopilotAuthorizationController } from '../../src/authorization-co
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
 const key = (id: string) => `github-copilot/account-${id}`
-const grant = (id: string) => ({ kind: 'grant' as const, payload: {
+const grant = (id: string, enterpriseUrl?: string) => ({ kind: 'grant' as const, payload: {
   type: 'oauth', refresh: `synthetic-${id}`, access: `synthetic-access-${id}`, expires: Date.now() + 3_600_000,
+  ...enterpriseUrl === undefined ? {} : { enterpriseUrl },
 } })
 afterEach(() => vi.unstubAllGlobals())
 function fixture(activeAccountId: unknown = undefined) {
@@ -56,6 +57,105 @@ function fixture(activeAccountId: unknown = undefined) {
 }
 
 describe('independent Copilot account ownership', () => {
+  it('authorizes native GHE environments with host-scoped duplicates and immutable reauthorization hosts', async () => {
+    const f = fixture()
+    f.records.delete(key(A)); f.records.delete(key(B))
+    f.credentials.modifyRecord.mockImplementation(async (recordKey, mutate) => {
+      const next = await mutate(f.records.get(recordKey))
+      if (next !== undefined) {
+        f.records.set(recordKey, next as ReturnType<typeof grant>)
+        f.ctx.emit('credentials/record-updated',
+          credentialKey('github-copilot', recordKey.slice('github-copilot/'.length)))
+      }
+      return f.records.get(recordKey)
+    })
+    f.fetch.mockImplementation(async (_url, init) => {
+      expect(init?.redirect).toBe('error')
+      return Response.json({ login: 'same-user', id: 1 })
+    })
+    new AuthorizationService(f.ctx)
+    const urls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+      const url = String(input); urls.push(url)
+      if (url.endsWith('/login/device/code')) {
+        const host = new URL(url).hostname
+        return Response.json({ device_code: 'synthetic-device', user_code: 'TEST-CODE',
+          verification_uri: `https://${host}/login/device`, interval: 0.001, expires_in: 60 })
+      }
+      if (url.endsWith('/login/oauth/access_token')) return Response.json({ access_token: 'synthetic-ghe-refresh' })
+      if (url.endsWith('/copilot_internal/v2/token')) return Response.json({
+        token: 'synthetic-ghe-access', expires_at: Math.floor(Date.now() / 1000) + 7200,
+      })
+      if (url.endsWith('/models')) return Response.json({ data: [] })
+      throw new Error('Unexpected synthetic URL')
+    }))
+    const original = f.records.get(GITHUB_COPILOT_CREDENTIAL_KEY)
+    const settle = async () => {
+      await vi.waitFor(async () => expect((await f.host.get()).operation).toBeUndefined(), { timeout: 15_000 })
+    }
+    try {
+      await f.host.addForEnvironment('tenant.ghe.com'); await settle()
+      const authorized = await f.host.get()
+      expect(authorized).toMatchObject({ state: 'ready', activeAccountId: 'canonical' })
+      const added = [...f.records.keys()].find(value => value !== GITHUB_COPILOT_CREDENTIAL_KEY)!
+      expect(f.records.get(added)?.payload).toMatchObject({ enterpriseUrl: 'tenant.ghe.com', refresh: 'synthetic-ghe-refresh' })
+      expect(urls).toEqual([
+        'https://tenant.ghe.com/login/device/code', 'https://tenant.ghe.com/login/oauth/access_token',
+        'https://api.tenant.ghe.com/copilot_internal/v2/token', 'https://copilot-api.tenant.ghe.com/models',
+      ])
+      expect(f.fetch).toHaveBeenCalledWith('https://api.tenant.ghe.com/user', expect.anything())
+      const savedId = added.slice('github-copilot/account-'.length)
+      expect((await f.host.get()).accounts.find(row => row.id === savedId)?.identity?.host).toBe('tenant.ghe.com')
+      const before = f.records.get(added)
+      urls.length = 0
+      await f.host.reauthorizeForEnvironment(savedId, 1, 'other.ghe.com'); await settle()
+      expect(await f.host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_IDENTITY_CHANGED' })
+      expect(urls).toEqual([])
+      expect(f.records.get(added)).toBe(before)
+      await f.host.reauthorize(savedId, 1); await settle()
+      expect(await f.host.get()).toMatchObject({ state: 'ready' })
+      expect(urls[0]).toBe('https://tenant.ghe.com/login/device/code')
+      const size = f.records.size
+      await f.host.addForEnvironment('tenant.ghe.com'); await settle()
+      expect(await f.host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_DUPLICATE' })
+      expect(f.records.size).toBe(size)
+      await f.host.addForEnvironment('other.ghe.com'); await settle()
+      expect(await f.host.get()).toMatchObject({ state: 'ready' })
+      expect(f.records.size).toBe(size + 1)
+      expect(f.records.get(GITHUB_COPILOT_CREDENTIAL_KEY)).toBe(original)
+      expect(f.settings.mutate).not.toHaveBeenCalled()
+    } finally { f.host.dispose(); await f.ctx.fiber.dispose() }
+  }, 30_000)
+  it.each(['https://github.com/login/device', 'https://other.ghe.com/login/device',
+    'http://tenant.ghe.com/login/device', 'https://tenant.ghe.com/login/device?next=evil'])(
+    'rejects a native GHE verification URI outside the initiating host: %s', async verificationUri => {
+      const f = fixture()
+      f.records.delete(key(A)); f.records.delete(key(B))
+      new AuthorizationService(f.ctx)
+      const fetch = vi.fn(async () => Response.json({ device_code: 'synthetic-device', user_code: 'TEST-CODE',
+        verification_uri: verificationUri, interval: 0.001, expires_in: 60 }))
+      vi.stubGlobal('fetch', fetch)
+      try {
+        await f.host.addForEnvironment('tenant.ghe.com')
+        await vi.waitFor(async () => expect((await f.host.get()).operation).toBeUndefined(), { timeout: 15_000 })
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(f.credentials.modifyRecord).not.toHaveBeenCalled()
+        expect(await f.host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_AUTH_FAILED' })
+      } finally { f.host.dispose(); await f.ctx.fiber.dispose() }
+    })
+  it('rejects unsupported login hosts before identity or native OAuth work', async () => {
+    const f = fixture()
+    const native = new AuthorizationService(f.ctx)
+    const begin = vi.spyOn(native, 'begin')
+    try {
+      expect(await f.host.addForEnvironment('server.example.com')).toMatchObject({
+        diagnostic: 'COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED',
+      })
+      expect(f.fetch).not.toHaveBeenCalled()
+      expect(begin).not.toHaveBeenCalled()
+      expect(f.credentials.modifyRecord).not.toHaveBeenCalled()
+    } finally { f.host.dispose(); await f.ctx.fiber.dispose() }
+  })
   it('runs fresh switch identity and model preflight concurrently but commits only after both settle', async () => {
     const f = fixture(A)
     let identityDone!: () => void, modelsDone!: () => void

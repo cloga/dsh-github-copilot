@@ -15,6 +15,7 @@ import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-co
 import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID, GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
+import { copilotLoginHost } from './copilot-login-environment.ts'
 import { readCopilotCatalog } from './model-protocol.ts'
 import type { CopilotAccountBinding } from './copilot-accounts-types.ts'
 import type {} from './copilot-accounts-host.ts'
@@ -140,7 +141,9 @@ function toCredential(record: CredentialRecord | undefined): Credential | undefi
   if (typeof record.payload !== 'object' || record.payload === null) {
     throw new Error('github-copilot: stored llm-pi-ai GitHub Copilot grant is not an object')
   }
-  return normalizeGitHubCopilotOAuthCredential(record.payload)
+  const grant = normalizeGitHubCopilotOAuthCredential(record.payload)
+  copilotLoginHost(grant.enterpriseUrl)
+  return grant
 }
 
 function toRecord(credential: Credential): CredentialRecord {
@@ -151,7 +154,9 @@ function toRecord(credential: Credential): CredentialRecord {
       ...credential.env === undefined ? {} : { env: { ...credential.env } },
     }
   }
-  return { kind: 'grant', payload: normalizeGitHubCopilotOAuthCredential(credential) }
+  const grant = normalizeGitHubCopilotOAuthCredential(credential)
+  copilotLoginHost(grant.enterpriseUrl)
+  return { kind: 'grant', payload: grant }
 }
 
 /** Bind exactly one logical route to the canonical Host-owned credential record. */
@@ -312,12 +317,7 @@ function enterpriseDomainOf(record: CredentialRecord | undefined): string | unde
   if (record?.kind !== 'grant' || typeof record.payload !== 'object' || record.payload === null) return undefined
   const value = Reflect.get(record.payload, 'enterpriseUrl')
   if (typeof value !== 'string' || value.trim().length === 0) return undefined
-  try {
-    const url = value.includes('://') ? new URL(value) : new URL(`https://${value}`)
-    return url.hostname.toLowerCase()
-  } catch {
-    throw new Error('github-copilot: stored enterpriseUrl is invalid')
-  }
+  return copilotLoginHost(value)
 }
 
 /** Validate an OAuth-derived endpoint without disclosing its value or credential payload. */

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.2.dsh.0.2.1.alpha.5 (prepared)
+
+- Add a login-environment choice for independently authorized GitHub.com and GitHub Enterprise Cloud data-residency (`tenant.ghe.com`) Copilot accounts through pinned pi-ai 1.1.0 (#424). Validate the tenant before login; bind device links, identity, duplicate checks and reauthorization to its host.
+- Retain account-local native refresh, model discovery and the existing published adapter with OAuth-derived trusted endpoints. Show tenant hosts beside verified account names in Models, Credits and historical Account evidence. Preserve existing GitHub.com Remote methods and add strict environment-aware methods.
+- GitHub Enterprise Server and Enterprise quota remain unsupported. Plugin identity rejects redirects; native OAuth exposes no redirect-control seam, so OAuth redirect rejection is not claimed. No second OAuth/model wire, Core changes, live sign-in, settings migration, installation or restart.
+
 ## 0.1.0-alpha.1.dsh.0.2.1.alpha.5 (prepared)
 
 - Start an independent plugin sequence for each exact DSH Core at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. Validate the explicit mapping, suffix, engines and baseline together. Retain published alpha.15/alpha.16 anchors; no code/history reset, new npm channel or automatic updater integration.

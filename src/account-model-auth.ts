@@ -7,6 +7,7 @@ import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import { certifyCopilotNativeRefresh, trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import type { AccountModelAuth, AccountModelSourceDependencies } from './account-model-source.ts'
+import { copilotLoginHost } from './copilot-login-environment.ts'
 
 /** Native getAuth renews within five minutes; reserve another thirty seconds for metadata preparation. */
 export const ACCOUNT_MODEL_AUTH_MIN_VALIDITY_MS = 5 * 60_000 + 30_000
@@ -70,7 +71,9 @@ export function createAccountModelAuth(
     const stored = await credentials.read(GITHUB_COPILOT_PROVIDER_ID)
     active(signal)
     if (stored?.type !== 'oauth') throw new Error('COPILOT_ACCOUNT_OAUTH_REQUIRED')
-    return normalizeGitHubCopilotOAuthCredential(stored)
+    const grant = normalizeGitHubCopilotOAuthCredential(stored)
+    copilotLoginHost(grant.enterpriseUrl)
+    return grant
   }
   const matches = (grant: GitHubCopilotOAuthCredential, key: string): void => {
     if (copilotAccountKey(grant) !== key) throw new Error('COPILOT_ACCOUNT_CHANGED')

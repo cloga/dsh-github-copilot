@@ -117,11 +117,38 @@ describe('account discovery native OAuth binding', () => {
     await expect(access.resolveAuth(controller.signal)).rejects.toThrow('COPILOT_ACCOUNT_AUTH_ABORTED')
   })
   it('validates credential-specific Enterprise endpoints and rejects token-controlled foreign origins', async () => {
-    const enterprise = store(grant({ enterpriseUrl: 'example.enterprise' }))
+    const enterprise = store(grant({ enterpriseUrl: 'tenant.ghe.com' }))
     const auth = await createAccountModelAuth(enterprise.credentials).resolveAuth(signal())
-    expect(auth.baseURL).toBe('https://copilot-api.example.enterprise')
+    expect(auth.baseURL).toBe('https://copilot-api.tenant.ghe.com')
     const unsafe = store(grant({ access: 'tid=synthetic;proxy-ep=evil.example;' }))
     await expect(createAccountModelAuth(unsafe.credentials).resolveAuth(signal())).rejects.toThrow('COPILOT_ACCOUNT_AUTH_FAILED')
+  })
+  it.each(['server.example.com', 'https://tenant.ghe.com:443', 'https://user@tenant.ghe.com'])(
+    'rejects an unsupported stored host before native refresh: %s', async enterpriseUrl => {
+      const memory = store(grant({ enterpriseUrl, expires: 0 }))
+      const fetch = vi.fn(() => { throw new Error('No network for unsupported hosts') })
+      vi.stubGlobal('fetch', fetch)
+      await expect(createAccountModelAuth(memory.credentials).resolveAuth(signal())).rejects.toThrow('COPILOT_ACCOUNT_AUTH_FAILED')
+      expect(fetch).not.toHaveBeenCalled()
+      expect(memory.credentials.modify).not.toHaveBeenCalled()
+    })
+  it('keeps native GHE refresh, discovered models and endpoint bound to the tenant', async () => {
+    const memory = store(grant({ enterpriseUrl: 'tenant.ghe.com', expires: 0 }))
+    const fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+      if (url === 'https://api.tenant.ghe.com/copilot_internal/v2/token') {
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer synthetic-account-a')
+        return Response.json({ token: 'synthetic-tenant-access', expires_at: Math.floor(Date.now() / 1000) + 7200 })
+      }
+      expect(url).toBe('https://copilot-api.tenant.ghe.com/models')
+      return Response.json({ data: [{ id: 'future-tenant-model', model_picker_enabled: true }] })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const auth = await createAccountModelAuth(memory.credentials).resolveAuth(signal())
+    expect(auth).toMatchObject({ baseURL: 'https://copilot-api.tenant.ghe.com',
+      apiKey: 'synthetic-tenant-access', availableModelIds: ['future-tenant-model'] })
+    expect(memory.current()).toMatchObject({ enterpriseUrl: 'tenant.ghe.com' })
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
   it('sanitizes credential backend failures and keeps account identity independent of token rotation', async () => {
     const memory = store(); memory.credentials.read = async () => { throw new Error('private-backend-path-and-secret') }

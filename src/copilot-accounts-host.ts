@@ -23,6 +23,8 @@ import { COPILOT_ACCOUNT_ID_PATTERN, COPILOT_ACCOUNTS_MAX, GITHUB_ACCOUNT_LOGIN_
 import type { CopilotAccountBinding, CopilotAccountIdentity, CopilotAccountLease, CopilotAccountsDiagnostic,
   CopilotAccountsNotice, CopilotAccountsView, CopilotAccountView } from './copilot-accounts-types.ts'
 import type {} from './copilot-accounts-remote.ts'
+import { CopilotLoginEnvironmentError, copilotLoginHost, copilotIdentityEndpoint,
+  copilotVerificationUri, sameCopilotIdentity } from './copilot-login-environment.ts'
 
 const IDENTITY_TTL = 600_000
 const IDENTITY_FAILURE_COOLDOWN = 30_000
@@ -41,8 +43,13 @@ class AccountsFailure extends Error {
   constructor(readonly diagnostic: CopilotAccountsDiagnostic) { super(diagnostic) }
 }
 function fail(code: CopilotAccountsDiagnostic): never { throw new AccountsFailure(code) }
+function loginHost(value?: string): string {
+  try { return copilotLoginHost(value) }
+  catch { fail('COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED') }
+}
 function diagnostic(error: unknown, fallback: CopilotAccountsDiagnostic): CopilotAccountsDiagnostic {
-  return error instanceof AccountsFailure ? error.diagnostic : fallback
+  return error instanceof AccountsFailure ? error.diagnostic
+    : error instanceof CopilotLoginEnvironmentError ? 'COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED' : fallback
 }
 function id(value: unknown): string {
   if (typeof value !== 'string' || !COPILOT_ACCOUNT_ID_PATTERN.test(value)) fail('COPILOT_ACCOUNTS_SELECTOR_INVALID')
@@ -288,7 +295,7 @@ export class CopilotAccountsHost {
     const raw = await store.read(GITHUB_COPILOT_PROVIDER_ID)
     if (raw === undefined) fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
     const grant = normalizeGitHubCopilotOAuthCredential(raw)
-    if (grant.enterpriseUrl !== undefined) fail('COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED')
+    loginHost(grant.enterpriseUrl)
     const before = copilotAccountKey(grant)
     const identity = await this.fetchIdentity(grant, signal)
     const latest = await store.read(GITHUB_COPILOT_PROVIDER_ID)
@@ -296,7 +303,7 @@ export class CopilotAccountsHost {
     binding.assertCurrent()
     signal.throwIfAborted()
     const previous = this.identities.get(binding.accountId)
-    if (previous && previous.identity.userId !== identity.userId) fail('COPILOT_ACCOUNTS_IDENTITY_CHANGED')
+    if (previous && !sameCopilotIdentity(previous.identity, identity)) fail('COPILOT_ACCOUNTS_IDENTITY_CHANGED')
     if (!this.identities.has(binding.accountId) && this.identities.size >= COPILOT_ACCOUNTS_MAX) {
       this.identities.delete(this.identities.keys().next().value!)
     }
@@ -320,9 +327,9 @@ export class CopilotAccountsHost {
     }
   }
   private async fetchIdentityResponse(grant: GitHubCopilotOAuthCredential, signal: AbortSignal): Promise<CopilotAccountIdentity> {
-    if (grant.enterpriseUrl !== undefined) fail('COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED')
+    const host = loginHost(grant.enterpriseUrl)
     signal.throwIfAborted()
-    const response = await abortable((this.dependencies.fetch ?? globalThis.fetch)('https://api.github.com/user', {
+    const response = await abortable((this.dependencies.fetch ?? globalThis.fetch)(copilotIdentityEndpoint(host), {
       method: 'GET', redirect: 'error', cache: 'no-store', signal,
       headers: { Authorization: `token ${grant.refresh}`, Accept: 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
     }), signal)
@@ -359,7 +366,7 @@ export class CopilotAccountsHost {
     if (!object(value) || typeof value.login !== 'string' || value.login.length > 39
       || !GITHUB_ACCOUNT_LOGIN_PATTERN.test(value.login)
       || typeof value.id !== 'number' || !Number.isSafeInteger(value.id) || value.id <= 0) fail('COPILOT_ACCOUNTS_IDENTITY_INVALID')
-    return Object.freeze({ login: value.login, userId: value.id })
+    return Object.freeze({ login: value.login, userId: value.id, ...host === 'github.com' ? {} : { host } })
   }
   async refreshIdentity(): Promise<CopilotAccountsView> {
     try {
@@ -570,6 +577,9 @@ export class CopilotAccountsHost {
     }
   }
   async add(): Promise<CopilotAccountsView> { return this.authorize(randomUUID()) }
+  async addForEnvironment(host: string): Promise<CopilotAccountsView> {
+    return this.authorize(randomUUID(), undefined, host)
+  }
   async reauthorize(accountId: string, expectedRevision: number): Promise<CopilotAccountsView> {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
       this.lastFailure = 'COPILOT_ACCOUNTS_CONFLICT'
@@ -577,11 +587,19 @@ export class CopilotAccountsHost {
     }
     return this.authorize(accountId, expectedRevision)
   }
-  async authorize(accountId: string, expectedRevision?: number): Promise<CopilotAccountsView> {
+  async reauthorizeForEnvironment(accountId: string, expectedRevision: number, host: string): Promise<CopilotAccountsView> {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+      this.lastFailure = 'COPILOT_ACCOUNTS_CONFLICT'
+      return this.get()
+    }
+    return this.authorize(accountId, expectedRevision, host)
+  }
+  async authorize(accountId: string, expectedRevision?: number, environment?: string): Promise<CopilotAccountsView> {
     let removeFlow: (() => void) | undefined
     let fenced = false, rejectedBusy = false
     try {
       id(accountId)
+      const requestedHost = environment === undefined ? undefined : loginHost(environment)
       if (this.accountLeases.get(accountId)?.size) fail('COPILOT_ACCOUNTS_BUSY')
       if (accountId === 'canonical') fail('COPILOT_ACCOUNTS_AUTH_UNAVAILABLE')
       const assertRevision = () => {
@@ -609,6 +627,8 @@ export class CopilotAccountsHost {
       const existing = rows.find(row => row.id === accountId)
       const signal = AbortSignal.any([attemptSignal, AbortSignal.timeout(TIMEOUT)])
       const previous = existing?.configured ? await this.identity(binding, signal) : undefined
+      const host = requestedHost ?? previous?.host ?? 'github.com'
+      if (previous && (previous.host ?? 'github.com') !== host) fail('COPILOT_ACCOUNTS_IDENTITY_CHANGED')
       const previousKey = this.identities.get(accountId)?.key
       const otherIdentities: { accountId: string; identity: CopilotAccountIdentity; key: string | undefined }[] = []
       for (const row of rows) {
@@ -636,11 +656,13 @@ export class CopilotAccountsHost {
                 const next = await mutate(current)
                 session.signal.throwIfAborted()
                 if (next !== undefined) {
-                  const candidate = await this.fetchIdentity(normalizeGitHubCopilotOAuthCredential(next), session.signal)
-                  if (previous && previous.userId !== candidate.userId) fail('COPILOT_ACCOUNTS_IDENTITY_CHANGED')
+                  const grant = normalizeGitHubCopilotOAuthCredential(next)
+                  if (loginHost(grant.enterpriseUrl) !== host) fail('COPILOT_ACCOUNTS_IDENTITY_CHANGED')
+                  const candidate = await this.fetchIdentity(grant, session.signal)
+                  if (previous && !sameCopilotIdentity(previous, candidate)) fail('COPILOT_ACCOUNTS_IDENTITY_CHANGED')
                   for (const other of otherIdentities) {
                     await this.assertIdentityCurrent(this.capture(other.accountId), other.key)
-                    if (other.identity.userId === candidate.userId) fail('COPILOT_ACCOUNTS_DUPLICATE')
+                    if (sameCopilotIdentity(other.identity, candidate)) fail('COPILOT_ACCOUNTS_DUPLICATE')
                   }
                 }
                 session.signal.throwIfAborted()
@@ -659,13 +681,15 @@ export class CopilotAccountsHost {
             signal: session.signal,
             notify: event => {
               if (event.type === 'device_code') {
-                if (event.verificationUri !== 'https://github.com/login/device'
+                if (event.verificationUri !== copilotVerificationUri(host)
                   || !/^[A-Z0-9-]{1,32}$/u.test(event.userCode)) fail('COPILOT_ACCOUNTS_AUTH_FAILED')
                 session.notify({ message: 'Complete GitHub device authorization.', url: event.verificationUri, code: event.userCode })
               }
             },
             prompt: prompt => {
-              if (prompt.type === 'text' && /GitHub Enterprise URL\/domain/iu.test(prompt.message)) return Promise.resolve('')
+              if (prompt.type === 'text' && prompt.message === 'GitHub Enterprise URL/domain (blank for github.com)') {
+                return Promise.resolve(host === 'github.com' ? '' : host)
+              }
               return Promise.reject(new AccountsFailure('COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED'))
             },
           })
@@ -684,7 +708,7 @@ export class CopilotAccountsHost {
         const binding = this.capture(accountId)
         const signal = AbortSignal.any([attemptSignal, AbortSignal.timeout(60_000)])
         const identity = await this.identity(binding, signal)
-        if (previous && identity.userId !== previous.userId) fail('COPILOT_ACCOUNTS_IDENTITY_CHANGED')
+        if (previous && !sameCopilotIdentity(identity, previous)) fail('COPILOT_ACCOUNTS_IDENTITY_CHANGED')
         await this.validateModels(binding, signal)
       }).catch(error => { this.lastFailure = authorizationFailure ?? diagnostic(error, 'COPILOT_ACCOUNTS_AUTH_FAILED') })
         .finally(() => { cleanup(); this.operation = undefined; this.attemptKey = undefined; this.notices = []; this.authorizationAbort = undefined })
@@ -782,9 +806,15 @@ export default class GitHubCopilotAccountsController extends TypertRemoteService
   @Remote
   add(): Promise<CopilotAccountsView> { return this.host.add() }
   @Remote
+  addForEnvironment(host: string): Promise<CopilotAccountsView> { return this.host.addForEnvironment(host) }
+  @Remote
   cancel(): Promise<CopilotAccountsView> { return this.host.cancel() }
   @Remote
   reauthorize(accountId: string, expectedRevision: number): Promise<CopilotAccountsView> { return this.host.reauthorize(accountId, expectedRevision) }
+  @Remote
+  reauthorizeForEnvironment(accountId: string, expectedRevision: number, host: string): Promise<CopilotAccountsView> {
+    return this.host.reauthorizeForEnvironment(accountId, expectedRevision, host)
+  }
   @Remote
   switchAccount(accountId: string, expectedRevision: number): Promise<CopilotAccountsView> { return this.host.switchAccount(accountId, expectedRevision) }
   @Remote

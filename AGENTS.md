@@ -92,6 +92,14 @@ See `src/compaction-replay.ts` and `docs/manual-compaction-recovery.md` (#349).
 
 ## Approved multi-account ownership extension (#297)
 
+Login environments (#424) use only pinned native pi-ai OAuth for GitHub.com and
+validated single-label `tenant.ghe.com` Enterprise Cloud hosts. Preserve host
+binding through identity, duplicate checks, reauthorization and native refresh/
+discovery/request auth. Plugin identity rejects redirects; native OAuth redirect
+control is unavailable in pi-ai 1.1.0 and must not be claimed or emulated with a
+global Fetch patch/second flow. GHES and Enterprise quota remain unsupported.
+See `src/copilot-login-environment.ts` and `docs/copilot-accounts.md`.
+
 Identity presentation uses additive `ensureIdentity` Remotes, including explicit-Agent Session lookup. Keep `get` metadata-only; visible surfaces may ensure on their sixty-second cadence. Fresh ten-minute cache avoids requests, same-account consumers join a bounded flight, and failures cool down thirty seconds unless explicitly refreshed. Credential notifications revoke pending work even when token bytes are unchanged; no late cache publication. Quota may settle independently only with account-coherent metadata. Presentation cache never replaces fresh identity validation for switch, reauthorization or duplicate checks. Preserve strict sanitized diagnostics and Session/turn ownership (#309).
 
 Account display names survive freshness expiry in bounded Host memory, never credential invalidation or failed verification. Visible account lists may ensure missing configured names without activating accounts; no disk name cache, credential copying or identity-based authorization. Turn admission captures the first verified name for the frozen account. A missing name may be filled by one existing nonforcing account-bound lookup only during that exact active, uncancelled turn/signal; never after turn/end/disposal. Evidence still requires actual native delivery and never reconstructs completed history (#322).

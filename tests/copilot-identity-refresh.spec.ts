@@ -3,7 +3,7 @@ import { expect, it, vi } from 'vitest'
 import { CopilotAccountsHost } from '../src/copilot-accounts-host.ts'
 
 const A = '11111111-1111-4111-8111-111111111111'
-function fixture(accountId = 'canonical') {
+function fixture(accountId = 'canonical', enterpriseUrl?: string) {
   const ctx = new Context()
   let selected = 'canonical'
   const key = accountId === 'canonical' ? 'llm-pi-ai/github-copilot' : `github-copilot/account-${accountId}`
@@ -15,6 +15,7 @@ function fixture(accountId = 'canonical') {
     listRecords: async () => [{ key, kind: 'grant' }],
     readRecord: async () => ({ kind: 'grant', payload: {
       type: 'oauth', refresh: 'synthetic-refresh', access: 'synthetic-access', expires: 9999999999999,
+      ...enterpriseUrl === undefined ? {} : { enterpriseUrl },
     } }),
     modifyRecord: vi.fn(), deleteRecord: vi.fn(),
   })
@@ -22,6 +23,27 @@ function fixture(accountId = 'canonical') {
   const host = new CopilotAccountsHost(ctx, { fetch: fetcher, routeDiagnostic: () => undefined })
   return { ctx, host, fetcher, key, change() { selected = A; host.selectionChanged() } }
 }
+
+it('binds GHE identity to the validated tenant with redirects disabled', async () => {
+  const f = fixture(A, 'tenant.ghe.com')
+  try {
+    const view = await f.host.ensureIdentityFor(A)
+    expect(view.accounts.find(row => row.id === A)?.identity).toEqual({
+      login: 'synthetic-user', userId: 123, host: 'tenant.ghe.com',
+    })
+    expect(f.fetcher).toHaveBeenCalledWith('https://api.tenant.ghe.com/user',
+      expect.objectContaining({ redirect: 'error', headers: expect.objectContaining({ Authorization: 'token synthetic-refresh' }) }))
+  } finally { f.host.dispose(); await f.ctx.fiber.dispose() }
+})
+
+it.each(['server.example.com', 'https://tenant.ghe.com:443', 'https://user@tenant.ghe.com'])(
+  'rejects unsupported stored identity hosts before sending credentials: %s', async host => {
+    const f = fixture(A, host)
+    try {
+      expect(await f.host.ensureIdentityFor(A)).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED' })
+      expect(f.fetcher).not.toHaveBeenCalled()
+    } finally { f.host.dispose(); await f.ctx.fiber.dispose() }
+  })
 
 it.each(['canonical', A])('renews expired identity once for account %s without changing metadata-only reads', async accountId => {
   const f = fixture(accountId)

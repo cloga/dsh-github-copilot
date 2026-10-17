@@ -531,7 +531,8 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     expect(() => usageDescriptor.result.create().parse({ ...usage, credential: 'synthetic-forbidden' })).toThrow()
     const accountDescriptors = remote.descriptors.filter(item => item.namespace === 'githubCopilotAccounts')
     expect(accountDescriptors.map(item => item.method).sort()).toEqual([
-      'add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount',
+      'add', 'addForEnvironment', 'cancel', 'ensureIdentity', 'get', 'reauthorize',
+      'reauthorizeForEnvironment', 'refreshIdentity', 'removeAccount', 'switchAccount',
     ])
     for (const descriptor of accountDescriptors) {
       expect(descriptor.invocation).toEqual({ kind: 'direct' })
@@ -541,18 +542,28 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
         ...accounts.accounts[0], grant: 'synthetic-forbidden',
       }] })).toThrow()
       const method = ctx.remote.githubCopilotAccounts[descriptor.method]
-      const parameterized = ['switchAccount', 'removeAccount', 'reauthorize'].includes(descriptor.method)
+      const parameterized = ['switchAccount', 'removeAccount', 'reauthorize', 'reauthorizeForEnvironment'].includes(descriptor.method)
+      const environment = ['addForEnvironment', 'reauthorizeForEnvironment'].includes(descriptor.method)
       const accountId = '00000000-0000-4000-8000-000000000001'
       if (parameterized) {
-        expect(descriptor.parameters).toHaveLength(2)
+        expect(descriptor.parameters).toHaveLength(environment ? 3 : 2)
         expect(descriptor.parameters[0]?.codec.create().parse(accountId)).toBe(accountId)
         expect(() => descriptor.parameters[0]?.codec.create().parse('unrecognized-account')).toThrow()
         expect(descriptor.parameters[1]?.codec.create().parse(2)).toBe(2)
         expect(() => descriptor.parameters[1]?.codec.create().parse(-1)).toThrow()
-      } else expect(descriptor.parameters).toEqual([])
-      await expect(parameterized ? method(accountId, 2) : method()).resolves.toEqual({ ok: true, value: accounts })
+      } else expect(descriptor.parameters).toHaveLength(environment ? 1 : 0)
+      if (environment) {
+        const hostCodec = descriptor.parameters.at(-1)!.codec.create()
+        expect(hostCodec.parse('tenant.ghe.com')).toBe('tenant.ghe.com')
+        expect(() => hostCodec.parse('evil.example')).toThrow()
+      }
+      const result = descriptor.method === 'addForEnvironment' ? method('tenant.ghe.com')
+        : descriptor.method === 'reauthorizeForEnvironment' ? method(accountId, 2, 'tenant.ghe.com')
+          : parameterized ? method(accountId, 2) : method()
+      await expect(result).resolves.toEqual({ ok: true, value: accounts })
       expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilotAccounts/${descriptor.method}`,
-        { args: parameterized ? { accountId, expectedRevision: 2 } : {} }, expect.any(AbortSignal))
+        { args: { ...parameterized ? { accountId, expectedRevision: 2 } : {}, ...environment ? { host: 'tenant.ghe.com' } : {} } },
+        expect.any(AbortSignal))
     }
     await expect(ctx.remote.githubCopilotDualModel.view()).resolves.toEqual({ ok: true, value: roleView })
     await expect(ctx.remote.githubCopilotDualModel.save({ configuration: roleView.configuration, expectedRevision: 2 }))

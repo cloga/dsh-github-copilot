@@ -81,6 +81,14 @@ describe('account Remote public gateway binding', () => {
         || key === 'llm-pi-ai/github-copilot')).toBe(true)
       await expect(client.remote.githubCopilotAccounts.reauthorize('11111111-1111-4111-8111-111111111111', 3))
         .resolves.toMatchObject({ ok: true, value: { diagnostic: 'COPILOT_ACCOUNTS_CONFLICT' } })
+      await expect(client.remote.githubCopilotAccounts.reauthorizeForEnvironment(
+        '11111111-1111-4111-8111-111111111111', 3, 'tenant.ghe.com'))
+        .resolves.toMatchObject({ ok: true, value: { diagnostic: 'COPILOT_ACCOUNTS_CONFLICT' } })
+      await expect(client.remote.githubCopilotAccounts.addForEnvironment('tenant.ghe.com'))
+        .resolves.toMatchObject({ ok: true, value: { diagnostic: 'COPILOT_ACCOUNTS_AUTH_UNAVAILABLE' } })
+      await expect(client.remote.githubCopilotAccounts.addForEnvironment('server.example.com')).resolves.toMatchObject(
+        mode === 'strict' ? { ok: false, error: { code: 'gateway/input-invalid' } }
+          : { ok: true, value: { diagnostic: 'COPILOT_ACCOUNTS_ENTERPRISE_UNSUPPORTED' } })
       await expect(client.remote.githubCopilotAccounts.removeAccount('arbitrary/key', 4)).resolves.toMatchObject(
         mode === 'strict' ? { ok: false, error: { code: 'gateway/input-invalid' } }
           : { ok: true, value: { diagnostic: 'COPILOT_ACCOUNTS_SELECTOR_INVALID' } })

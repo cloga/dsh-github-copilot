@@ -45,6 +45,80 @@ const text = () => document.body.textContent ?? ''
 const button = (label: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent === label)!
 const click = async (label: string) => { await act(async () => { button(label).click() }) }
 
+async function chooseEnterprise(host = 'tenant.ghe.com') {
+  const select = document.querySelector<HTMLSelectElement>('[data-copilot-login-environment] select')!
+  await act(async () => {
+    select.value = 'enterprise'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  const input = document.querySelector<HTMLInputElement>('[data-copilot-login-environment] input')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, host)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+it('chooses a validated GHE environment without selecting an account or changing GitHub.com login', async () => {
+  const api = remote()
+  api.addForEnvironment = vi.fn(async () => ok(view()))
+  await mount(api)
+  await chooseEnterprise('https://TENANT.ghe.com/')
+  expect(button('Reauthorize').disabled).toBe(true)
+  await click('Switch'); await click('Add GitHub account')
+  expect(api.addForEnvironment).toHaveBeenCalledExactlyOnceWith('tenant.ghe.com')
+  expect(api.add).not.toHaveBeenCalled()
+  expect(api.switchAccount).not.toHaveBeenCalled()
+  expect(text()).toContain('GitHub Enterprise Server is not supported.')
+})
+
+it.each(['evil.example', 'https://tenant.ghe.com:443', 'https://tenant.ghe.com/path'])(
+  'keeps invalid environment drafts local: %s', async host => {
+    const api = remote()
+    api.addForEnvironment = vi.fn(async () => ok(view()))
+    await mount(api)
+    await chooseEnterprise(host)
+    expect(document.querySelector('input')?.getAttribute('aria-invalid')).toBe('true')
+    await click('Switch')
+    expect(button('Add GitHub account').disabled).toBe(true)
+    expect(api.addForEnvironment).not.toHaveBeenCalled()
+    expect(api.add).not.toHaveBeenCalled()
+  })
+
+it('reauthorizes a saved GHE account independently of Add with explicit host and revision', async () => {
+  const api = remote()
+  api.reauthorizeForEnvironment = vi.fn(async () => ok(view()))
+  await mount(api)
+  await chooseEnterprise()
+  await click('Switch')
+  expect(button('Add GitHub account').disabled).toBe(true)
+  await click('Reauthorize')
+  expect(api.reauthorizeForEnvironment).toHaveBeenCalledExactlyOnceWith(view().accounts[1]!.id, 2, 'tenant.ghe.com')
+  expect(api.reauthorize).not.toHaveBeenCalled()
+  expect(api.add).not.toHaveBeenCalled()
+})
+
+it('shows the verified tenant in account labels and preserves it through Client field projection', async () => {
+  const value = view()
+  const tenantView = { ...value, accounts: value.accounts.map(account => ({
+    ...account, identity: { login: 'same-user', userId: 1, ...account.id === 'canonical' ? {} : { host: 'tenant.ghe.com' } },
+  })) }
+  expect(accountsViewFrom(tenantView)).toEqual(tenantView)
+  await mount(remote(tenantView))
+  await click('Switch')
+  expect(button('@same-user · tenant.ghe.com')).toBeDefined()
+  expect(button('@same-user')).toBeDefined()
+})
+
+it('keeps GHE login disabled with an explicit diagnostic on older Host contracts', async () => {
+  const api = remote()
+  await mount(api)
+  await chooseEnterprise()
+  expect(text()).toContain('This deployment does not support every GHE.com authorization action.')
+  await click('Switch')
+  expect(button('Add GitHub account').disabled).toBe(true)
+  expect(api.add).not.toHaveBeenCalled()
+})
+
 it('renders metadata and permits a confirmed switch while unrelated identity names remain pending', async () => {
   const api = remote()
   let finish!: (value: { ok: true; value: CopilotAccountsView }) => void

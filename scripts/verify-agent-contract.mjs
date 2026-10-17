@@ -59,6 +59,13 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.accounts?.risk?.includes('No durable account events')
     && agentGuide.includes('Approved multi-account ownership extension (#297)'),
   'account ownership must preserve native authorization, shared storage, Session turn freezing and bounded historical evidence')
+  require(contract.tasks.accounts?.read?.includes('src/copilot-login-environment.ts')
+    && contract.tasks.accounts?.tests?.includes('tests/scripts/copilot-login-environment.test.mjs')
+    && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('tenant.ghe.com')
+    && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('Native OAuth redirect control is unavailable')
+    && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('GHES and Enterprise quota remain unsupported')
+    && agentGuide.includes('Login environments (#424)'),
+  'login environments must preserve native OAuth, strict tenant hosts and explicit unsupported boundaries')
   require(contract.tasks.autointent?.read?.includes('src/auto-model-intent.ts')
     && contract.tasks.autointent?.tests?.includes('tests/fixtures/session-context-core.fixture.ts')
     && contract.tasks.autointent?.risk?.includes('No Core projection replacement'),
