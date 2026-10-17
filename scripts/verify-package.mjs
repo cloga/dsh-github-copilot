@@ -104,13 +104,13 @@ const sessionAccountDescriptors = remote.descriptors.filter(descriptor => descri
 const continuationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation')
 const diagnosticsDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 50 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 52 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
   || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'refresh'])
   || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get', 'requestedModels', 'allocationSummary'])
   || JSON.stringify(replayDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorize', 'get', 'setEnabled'])
-  || JSON.stringify(accountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['add', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'refreshIdentity', 'removeAccount', 'switchAccount'])
+  || JSON.stringify(accountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['add', 'addForEnvironment', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'reauthorizeForEnvironment', 'refreshIdentity', 'removeAccount', 'switchAccount'])
   || JSON.stringify(sessionAccountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['ensureIdentity', 'get', 'refreshIdentity', 'refreshUsage', 'set', 'turn', 'usage'])
   || JSON.stringify(continuationDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorizeNext', 'defaults', 'get', 'set', 'setDefault'])
   || JSON.stringify(diagnosticsDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['clear', 'get', 'recordClient', 'setAutoAllocationEnabled', 'setEnabled', 'setRequestEnabled'])) {
@@ -182,10 +182,13 @@ for (const descriptor of sessionAccountDescriptors) {
   }
 }
 for (const descriptor of accountDescriptors) {
-  const mutation = ['reauthorize', 'removeAccount', 'switchAccount'].includes(descriptor.method)
+  const mutation = ['reauthorize', 'removeAccount', 'switchAccount', 'reauthorizeForEnvironment'].includes(descriptor.method)
+  const hostParameter = descriptor.method === 'addForEnvironment' || descriptor.method === 'reauthorizeForEnvironment'
+  const parameterCount = descriptor.method === 'reauthorizeForEnvironment' ? 3
+    : descriptor.method === 'addForEnvironment' ? 1 : mutation ? 2 : 0
   if (descriptor.id !== `dsh-github-copilot:githubCopilotAccounts.${descriptor.method}`
     || descriptor.service !== 'githubCopilotAccounts' || descriptor.invocation.kind !== 'direct'
-    || descriptor.scope !== undefined || descriptor.parameters.length !== (mutation ? 2 : 0)
+    || descriptor.scope !== undefined || descriptor.parameters.length !== parameterCount
     || descriptor.result.mode !== 'strict'
     || descriptor.result.typeSymbol !== 'dsh-github-copilot#CopilotAccountsView') throw new Error('account Remote identity or codec differs')
   const view = { state: 'ready', activeAccountId: 'canonical', writable: false, switchable: false, accounts: [], notices: [] }
@@ -199,6 +202,15 @@ for (const descriptor of accountDescriptors) {
       || expectedRevision.wire !== 'expectedRevision' || expectedRevision.source !== 'json'
       || expectedRevision.codec.mode !== 'strict' || expectedRevision.codec.schema.parse(0) !== 0
       || expectedRevision.codec.schema.safeParse(-1).success) throw new Error('account Remote must retain strict selector CAS parameters')
+  }
+  if (hostParameter) {
+    const host = descriptor.parameters[descriptor.parameters.length - 1]
+    if (host.wire !== 'host' || host.source !== 'json' || host.codec.mode !== 'strict'
+      || host.codec.typeSymbol !== 'dsh-github-copilot#CopilotLoginHost'
+      || host.codec.schema.parse('tenant.ghe.com') !== 'tenant.ghe.com'
+      || host.codec.schema.safeParse('server.example.com').success) {
+      throw new Error('account environment Remote must validate strict supported login hosts')
+    }
   }
 }
 for (const descriptor of replayDescriptors) {
