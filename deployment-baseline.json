@@ -8,12 +8,12 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5"
+    "version": "0.1.0-alpha.3.dsh.0.2.1.alpha.5"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
-    { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "pending" }
+    { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.3.dsh.0.2.1.alpha.5", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",

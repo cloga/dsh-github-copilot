@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.3.dsh.0.2.1.alpha.5 (prepared)
+
+- Explain projected-image admission failures through the standard native error path with bounded model, projected/allowed MIME, projected role/position and current build details (#426). Retain the existing fail-closed gate, explicit account restrictions and native projection ownership.
+- Explain why historical images can block text-only continuations and offer explicit future-turn recovery choices. No automatic model switch, retry, image conversion/removal, history mutation or new diagnostic collector.
+- Auto still checks general vision capability before candidate-specific projection is available. This change does not establish the original incident's model, image format, trigger block or loaded version, and does not claim live recovery. PR-only preparation does not authorize merge, publication, installation or restart.
+
 ## 0.1.0-alpha.2.dsh.0.2.1.alpha.5 (prepared)
 
 - Add a login-environment choice for independently authorized GitHub.com and GitHub Enterprise Cloud data-residency (`tenant.ghe.com`) Copilot accounts through pinned pi-ai 1.1.0 (#424). Validate the tenant before login; bind device links, identity, duplicate checks and reauthorization to its host.

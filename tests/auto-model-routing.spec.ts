@@ -1,6 +1,7 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, vi } from 'vitest'
 import type { AccountModelCategory, AccountModelDescriptor } from '../src/account-model-catalog.ts'
+import { imageInputFailure } from '../src/image-input-admission.ts'
 import {
   AutoModelRoutingError, autoModelInputModalities, classifyAutoModelTurn, estimateTurnInputTokens,
   selectAutoModel as selectWithMeasurement,
@@ -137,6 +138,30 @@ describe('Auto model routing policy', () => {
     ]
     expect(classifyAutoModelTurn(history)).toMatchObject({ requiresImage: false, taskClass: 'fast' })
     expect(selectAutoModel([fast], history).model).toBe(fast)
+  })
+
+  it.each(['user', 'tool'])('retains the final projected-MIME gate after Auto selects for historical %s images', role => {
+    const vision = model('fixture-jpeg-only', { contextWindow: 128_000, maxTokens: 16_000, image: true })
+    const restricted = { ...vision, evidence: { ...vision.evidence, visionMediaTypes: ['image/jpeg'] } }
+    const history = [
+      { role, content: [{ type: 'image', attachment: { mediaType: 'image/webp' } }] },
+      message('Continue.'),
+    ]
+    const before = structuredClone(history)
+    for (const preference of ['efficiency', 'balance', 'intelligence'] as const) {
+      const decision = selectAutoModel([fast, restricted], history, preference)
+      expect(decision.model).toBe(restricted)
+      // Projection is supplied only at dispatch; durable WebP alone cannot decide fit.
+      expect(imageInputFailure(decision.model, [
+        { role: role === 'tool' ? 'toolResult' : role, content: [{ type: 'image', mimeType: 'image/png' }] },
+        { role: 'user', content: [{ type: 'text', text: 'Continue.' }] },
+      ])).toMatchObject({ code: 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED',
+        diagnostic: { model: restricted.id, projectedMime: 'image/png', allowedMimeTypes: ['image/jpeg'] } })
+      expect(imageInputFailure(decision.model, [
+        { role: role === 'tool' ? 'toolResult' : role, content: [{ type: 'image', mimeType: 'image/jpeg' }] },
+      ])).toBeUndefined()
+    }
+    expect(history).toEqual(before)
   })
 
   it('uses the task/category policy with one hard-eligible pool for all preferences', () => {
