@@ -24,6 +24,13 @@ The npm entry additionally checks the archive's exact rc.2 adapter and pi-ai
 `0.87.1` baseline. Other maintenance branches, tags, PR events and forks are
 not publication contexts. This does not modify the separate alpha.5 main line.
 
+The isolated published-artifact fixture retains exact DSH rc.2 and plugin SDK
+pins but permits Cordis loader patches in the official `~1.0.5` peer range.
+Hard-pinning `1.0.5` conflicts with the now-published Cordis `4.0.5` family
+requiring loader `~1.0.6`. The fixture still installs unchanged public artifacts
+with strict peer validation; it does not override transitive dependencies,
+change the plugin lockfile or qualify a different Core release.
+
 ## Trusted publishing
 
 [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) requires npm
