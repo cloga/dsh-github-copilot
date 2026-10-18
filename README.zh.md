@@ -244,6 +244,8 @@ Copilot 搜索要求当前账号／协议证据及能力 proof。固定／fallba
 
 HTTP/SSE liveness 默认区分 5 分钟字节 idle 和有界的 10 分钟助手输出静默，排除消费者工作；WebSocket／显式 `auto`仍仅使用原生路径。这不修复供应方 HTTP 408。图片按原生实际投影 MIME 证据准入；插件不负责转换，也不按文件名猜格式支持。[图片兼容](./docs/image-input-compatibility.md)。
 
+图片准入错误会解释为何纯文本续聊也可能被历史图片阻断。原生错误包含有界的所选模型、投影／允许 MIME、投影角色／位置及当前插件构建版本，不含图片内容、URL 或路径。Auto 只检查通用图片能力，不能预先保证候选模型接受最终投影格式；最终门禁仍保守拒绝不兼容请求。可为后续轮次明确选择兼容模型，或另开不含旧图的纯文本 Session；不会自动换模型、移除图片或重试。这些诊断不能追溯补齐旧故障的证据。
+
 原生 rc.2 Auto 授权审查以 `temperature: 0` 请求模型。插件现在**仅对身份已验证的官方 Auto reviewer 根上下文、账号发现的托管 OpenAI Responses 请求自动省略此参数**，无需开启开关。同一 Session／模型的并发普通 Chat 仍保留 temperature。身份由公开 Loader 回调与同 profile 包归属共同验证；未知身份、别名、子上下文、其它协议／供应方以及 Core 所有的 canonical Copilot 保持原生行为，未验证的 reviewer 范围只报告有界诊断。不会从 `supports.thinking` 推断兼容性。冻结输入、账号／取消约束、严格 verdict 和失败关闭的工具拒绝保持不变；没有重试、权限变更或设置迁移。独立的旧兼容覆盖项 `github-copilot.responsesOmitTemperature` 仍默认 `false`；显式 `true` 才影响**所有**托管 Responses 请求，不限于 review。参见[公开范围与验证限制](./docs/auto-review-sampling.md)。
 
 ## 设置与排障

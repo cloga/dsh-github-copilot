@@ -24,6 +24,7 @@ import { createGitHubCopilotTokenResolver } from '../src/copilot-auth.ts'
 import { DiagnosticsController } from '../src/diagnostics-host.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
 import type { CopilotAccountBinding } from '../src/copilot-accounts-types.ts'
+import packageMetadata from '#package.json' with { type: 'json' }
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
@@ -2797,15 +2798,30 @@ describe('plugin-owned account Copilot route', () => {
         imageHostPath: () => undefined,
       } as unknown as Context['attachments'])
     } })
-    const result = await call(harness.ctx, { model: item.id, messages: [createUserMessage({
+    const messages = [createUserMessage({
       content: [{ type: 'image', attachment }], source: { kind: 'user' },
-    })] })
+    }), createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } })]
+    const before = structuredClone(messages)
+    const result = await call(harness.ctx, { model: item.id, messages })
     if (supported) expect(result.assembler.finish).toEqual({ kind: 'stop' })
-    else expect(result.assembler.finish).toEqual({
-      kind: 'error',
-      failure: { message: 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED', code: 'INVALID_REQUEST' },
-    })
+    else {
+      expect(result.assembler.finish).toEqual({
+        kind: 'error',
+        failure: { message: expect.stringContaining('COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED: Request blocked before selected-model dispatch'),
+          code: 'INVALID_REQUEST' },
+      })
+      if (result.assembler.finish.kind !== 'error') throw new Error('expected native admission error')
+      const message = result.assembler.finish.failure.message
+      expect(message).toContain('"model":"fixture-image-model"')
+      expect(message).toContain('"projectedMime":"image/png"')
+      expect(message).toContain('"allowedMimeTypes":["image/jpeg"]')
+      expect(message).toContain(`"pluginVersion":"${packageMetadata.version}"`)
+      expect(message).toContain('"role":"user"')
+      expect(message).not.toMatch(/synthetic-projected|image\/webp|iVBORw0KGgo/)
+      expect(harness.modify).not.toHaveBeenCalled()
+    }
     expect(wires).toBe(supported ? 1 : 0)
+    expect(messages).toEqual(before)
     expect(attachment.mediaType).toBe('image/webp')
   })
 
