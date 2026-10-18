@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.2-alpha.17 (prepared, rc.2 maintenance)
+## 0.4.2-alpha.17 (prepared)
 
 - Backport #426's bounded projected-image admission diagnostics to official DSH
   `0.2.0-rc.2`, retaining pi-ai `0.87.1` and the unchanged Core dependency graph.
