@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - main
+      - maintenance/dsh-0.2.0-rc.2
 
 permissions:
   contents: read
@@ -175,7 +176,7 @@ jobs:
 
   release:
     needs: [release-ready]
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-ready.result == 'success' }}
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/maintenance/dsh-0.2.0-rc.2') && needs.release-ready.result == 'success' }}
     permissions:
       contents: write
       id-token: write

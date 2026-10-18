@@ -51,6 +51,7 @@ test('prepares only plugin inputs and exact Core requirements without executing 
     }
   }
   assert.equal(output.dependencies['@earendil-works/pi-ai'], '0.87.1')
+  assert.equal(output.devDependencies['@deepseek-ai/cordis-plugin-loader'], '~1.0.5')
   assert.deepEqual(output.scripts, {})
   assert.equal(output.pnpm, undefined)
   assert.equal(output.overrides, undefined)

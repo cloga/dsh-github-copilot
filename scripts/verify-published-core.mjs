@@ -58,7 +58,7 @@ function fixtureManifest(original, release) {
   }
   manifest.devDependencies = {
     ...manifest.devDependencies,
-    '@deepseek-ai/cordis-plugin-loader': '1.0.5',
+    '@deepseek-ai/cordis-plugin-loader': '~1.0.5',
     '@deepseek-ai/dsh-experimental-auto-review': release,
     '@deepseek-ai/dsh-permission-presets': release,
     '@deepseek-ai/dsh-user-approval': release,

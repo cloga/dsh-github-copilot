@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.2-alpha.17 (prepared, rc.2 maintenance)
+
+- Backport #426's bounded projected-image admission diagnostics to official DSH
+  `0.2.0-rc.2`, retaining pi-ai `0.87.1` and the unchanged Core dependency graph.
+- Explain historical-image failures on text-only continuations through the
+  existing native `INVALID_REQUEST` finish, with safe model/MIME/position/build
+  evidence. Preserve fail-closed admission, history and no automatic switch or
+  retry. Auto's general vision eligibility does not guarantee projected MIME fit.
+- Prepared for a separately authorized local Desktop installation; this entry
+  does not claim publication, a Core upgrade, loaded-runtime activation or live
+  model recovery.
+- Enable exact rc.2 maintenance push delivery through the unchanged full
+  compatibility matrix and original-archive GitHub/npm OIDC pipeline; arbitrary
+  maintenance refs and non-rc.2 archives remain rejected.
+
 ## 0.4.2-alpha.15 (prepared)
 
 - Plan selected compaction recovery in public native token-meter units rather than comparing UTF-8 bytes directly with token budgets (#418). This prevents false indivisible rejection of long balanced tool spans that fit the planning budget.
