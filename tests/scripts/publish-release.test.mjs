@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import test from 'node:test'
 import { loadReleaseInputs, publishRelease } from '../../scripts/publish-release.mjs'
@@ -527,6 +528,27 @@ test('CLI release notes read only the declared fixed file and exact version sect
   }
   const { options } = localOptions({ read: async () => JSON.stringify({ name, version, releaseNotes: '../private' }) })
   await assert.rejects(loadReleaseInputs(options), /tracked CHANGELOG/)
+})
+
+test('checked-in package and changelog pass the real release-notes preflight', async () => {
+  const packageText = await readFile(new URL('../../package.json', import.meta.url), 'utf8')
+  const changelog = await readFile(new URL('../../CHANGELOG.md', import.meta.url), 'utf8')
+  const manifest = JSON.parse(packageText)
+  const archive = `${name}-${manifest.version}.tgz`
+  const { options } = localOptions({
+    expectedVersion: manifest.version,
+    read: async path => {
+      if (basename(path) === 'package.json') return packageText
+      if (basename(path) === 'CHANGELOG.md') return changelog
+      if (basename(path) === archive) return tarball
+      assert.equal(basename(path), 'SHA256SUMS')
+      return Buffer.from(`${hash(tarball)}  ${archive}\n`)
+    },
+  })
+  const result = await loadReleaseInputs(options)
+  assert.equal(result.version, manifest.version)
+  assert.ok(result.notes.length > 0)
+  assert.ok(!result.notes.includes('\n## '))
 })
 
 test('CLI preflight accepts the exact planned tagged SHA over the caller main SHA', async () => {
