@@ -40,6 +40,20 @@ export function validatePublicPackage(pkg) {
   }
 }
 
+export function validatePublicationContext(env, manifest) {
+  check(env.GITHUB_ACTIONS === 'true' && env.GITHUB_REPOSITORY === REPOSITORY
+    && env.GITHUB_EVENT_NAME === 'push', 'Automatic npm publishing requires canonical push CI')
+  const maintenance = env.GITHUB_REF === 'refs/heads/maintenance/dsh-0.2.0-rc.2'
+  check(env.GITHUB_REF === 'refs/heads/main' || maintenance,
+    'Automatic npm publishing requires main or the exact rc.2 maintenance branch')
+  if (maintenance) {
+    check(manifest?.engines?.dsh === '0.2.0-rc.2'
+      && manifest.peerDependencies?.['@deepseek-ai/dsh-llm-pi-ai'] === '0.2.0-rc.2'
+      && manifest.dependencies?.['@earendil-works/pi-ai'] === '0.87.1',
+    'Maintenance publication must preserve the exact rc.2 adapter and SDK baseline')
+  }
+}
+
 /** Network and process operations are injected; no writes are retried after an uncertain result. */
 export async function publishNpm({ manifest, bytes, archive, readPackage, readVersion, publish }) {
   validatePublicPackage(manifest)
@@ -120,8 +134,6 @@ async function main() {
   check(process.argv.length === 3, 'Usage: node scripts/publish-npm.mjs <version>')
   const version = process.argv[2]
   distributionTag(version)
-  check(process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_REPOSITORY === REPOSITORY
-    && process.env.GITHUB_REF === 'refs/heads/main', 'Automatic npm publishing requires the canonical main CI context')
   check(process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN,
     'Missing npm OIDC capability; configure the caller and child id-token permissions')
   check(!process.env.NODE_AUTH_TOKEN && !process.env.NPM_TOKEN, 'Automatic npm publishing must use OIDC, not persistent npm tokens')
@@ -131,6 +143,7 @@ async function main() {
   const files = readTarball(bytes)
   const manifest = JSON.parse(files.get('package/package.json')?.toString('utf8') ?? 'null')
   check(manifest?.version === version, 'Archive version differs from planned release')
+  validatePublicationContext(process.env, manifest)
   // GitHub verification immediately before this step establishes the exact tag/commit and asset digests.
   const sums = await readFile(resolve(root, 'artifacts', 'SHA256SUMS'), 'utf8')
   check(sums.trim() === `${createHash('sha256').update(bytes).digest('hex')}  ${NAME}-${version}.tgz`,

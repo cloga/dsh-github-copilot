@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { distributionTag, npmJson, npmPackageTags, publishNpm, validatePublicPackage } from '../../scripts/publish-npm.mjs'
+import { distributionTag, npmJson, npmPackageTags, publishNpm, validatePublicPackage, validatePublicationContext } from '../../scripts/publish-npm.mjs'
 import { recoverArtifact } from '../../scripts/prepare-release-artifact.mjs'
 
 const version = '0.4.0-alpha.18'
@@ -33,6 +33,27 @@ function registry({ existing = null, tag = '0.4.0-alpha.9', missing = false, fai
   }
 }
 const options = api => ({ manifest: manifest(), bytes, archive: 'artifacts/test.tgz', ...api })
+
+test('publication admits only canonical push CI and the exact rc2 maintenance baseline', () => {
+  const env = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: `cloga/${name}`,
+    GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main' }
+  const rc2 = { ...manifest(), engines: { dsh: '0.2.0-rc.2' },
+    peerDependencies: { '@deepseek-ai/dsh-llm-pi-ai': '0.2.0-rc.2' },
+    dependencies: { '@earendil-works/pi-ai': '0.87.1' } }
+  validatePublicationContext(env, manifest())
+  const maintenance = { ...env, GITHUB_REF: 'refs/heads/maintenance/dsh-0.2.0-rc.2' }
+  validatePublicationContext(maintenance, rc2)
+  for (const changed of [
+    { GITHUB_ACTIONS: 'false' }, { GITHUB_REPOSITORY: 'untrusted/fork' },
+    { GITHUB_EVENT_NAME: 'pull_request' }, { GITHUB_REF: 'refs/tags/v0.4.2-alpha.17' },
+    { GITHUB_REF: 'refs/heads/maintenance/dsh-0.2.1-alpha.5' },
+    { GITHUB_REF: 'refs/heads/maintenance/dsh-0.2.0-rc.2-unreviewed' },
+  ]) assert.throws(() => validatePublicationContext({ ...env, ...changed }, rc2))
+  for (const changed of [
+    { engines: { dsh: '0.2.1-alpha.5' } }, { peerDependencies: {} },
+    { dependencies: { '@earendil-works/pi-ai': '0.88.0' } },
+  ]) assert.throws(() => validatePublicationContext(maintenance, { ...rc2, ...changed }))
+})
 
 test('public manifest validation rejects wrong identity, lifecycle hooks and accidental latest', () => {
   validatePublicPackage(manifest())
@@ -203,4 +224,12 @@ test('normal release requires npm and OIDC without a silent opt-out', async () =
   assert.match(release, /publisher_version=.*release-tools\/package\.json/)
   assert.match(release, /cmp -- "artifacts\/dsh-github-copilot-\$version\.tgz" "release-tools\/artifacts\/dsh-github-copilot-\$version\.tgz"/)
   assert.match(release, /node "release-tools\/scripts\/publish-npm\.mjs" "\$version"/)
+  for (const workflow of [ci, release]) {
+    assert.match(workflow, /github\.ref == 'refs\/heads\/maintenance\/dsh-0\.2\.0-rc\.2'/)
+    assert.doesNotMatch(workflow, /startsWith\(github\.ref|continue-on-error/)
+  }
+  assert.match(ci, /branches:\s+- main\s+- maintenance\/dsh-0\.2\.0-rc\.2/)
+  assert.match(ci, /needs: \[release-ready\]/)
+  assert.match(ci, /needs\.release-ready\.result == 'success'/)
+  assert.match(release, /ref: 639ed015397290b3745d163aafe02ffee4aa3f84/)
 })

@@ -16,6 +16,14 @@ Versions align package, deployment baseline, both README URLs and annotated tag.
 Channel is `alpha`, `beta`, `rc` or stable `latest`; never silently rename a
 package, move/reuse tags, repack immutable assets or publish placeholders.
 
+The rc.2 maintenance checkout also admits push CI on the exact
+`maintenance/dsh-0.2.0-rc.2` branch. It retains the complete Windows/Linux
+tagged-source and published-artifact rc.2 matrix, release-ready gate, original
+archive recovery, shared release concurrency and OIDC-only dual publication.
+The npm entry additionally checks the archive's exact rc.2 adapter and pi-ai
+`0.87.1` baseline. Other maintenance branches, tags, PR events and forks are
+not publication contexts. This does not modify the separate alpha.5 main line.
+
 ## Trusted publishing
 
 [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) requires npm

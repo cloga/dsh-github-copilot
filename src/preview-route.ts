@@ -498,7 +498,7 @@ class PreviewAdapter extends PiAiAdapter {
         if (signal.aborted) throw abortFailure(signal)
         const imageFailure = imageInputFailure(lease.descriptor, context.messages)
         if (imageFailure !== undefined) {
-          requestFailure = new LlmError(imageFailure, 'INVALID_REQUEST')
+          requestFailure = new LlmError(imageFailure.message, 'INVALID_REQUEST')
           throw requestFailure
         }
         const calculated = calculateRequestBudget(lease.descriptor, nativeOptions?.maxTokens, policy)

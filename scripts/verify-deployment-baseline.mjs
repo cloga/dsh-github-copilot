@@ -622,7 +622,7 @@ for (const command of [
 for (const marker of [
   'workflow_call:',
   'group: dsh-github-copilot-release',
-  "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+  "github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/maintenance/dsh-0.2.0-rc.2')",
   'fetch-depth: 0',
   'scripts/release-policy.mjs --plan',
   '639ed015397290b3745d163aafe02ffee4aa3f84',

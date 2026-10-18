@@ -1,6 +1,6 @@
 name: Release
 
-# Only the fully gated main CI caller may publish. A tag created with
+# Only fully gated main or exact rc.2 maintenance CI may publish. A tag created with
 # GITHUB_TOKEN does not start another workflow, so this workflow creates and
 # publishes the exact release itself.
 on:
@@ -10,14 +10,14 @@ permissions:
   contents: read
 
 concurrency:
-  # Serialize all repository releases. Two main runs may carry the same prepared
+  # Serialize all repository releases. Two branch runs may carry the same prepared
   # version, so SHA-scoped concurrency would still race on one tag and draft.
   group: dsh-github-copilot-release
   cancel-in-progress: false
 
 jobs:
   plan:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'cloga/dsh-github-copilot' }}
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/maintenance/dsh-0.2.0-rc.2') && github.repository == 'cloga/dsh-github-copilot' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
