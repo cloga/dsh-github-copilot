@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH alpha.5 iteration: `0.1.0-alpha.2.dsh.0.2.1.alpha.5`.** Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-alpha.5` to `dsh.0.2.1.alpha.5`, but compatibility is validated against explicit metadata, not guessed from the name. This resets numbering, not code, history or qualification requirements. Existing versions/tags remain unchanged. Candidate Desktop artifacts/signatures are unverified; this is not a Desktop-upgrade recommendation. Published, installed and loaded states remain separate.
+**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH alpha.5 iteration: `0.1.0-alpha.3.dsh.0.2.1.alpha.5`.** Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-alpha.5` to `dsh.0.2.1.alpha.5`, but compatibility is validated against explicit metadata, not guessed from the name. This resets numbering, not code, history or qualification requirements. Existing versions/tags remain unchanged. Candidate Desktop artifacts/signatures are unverified; this is not a Desktop-upgrade recommendation. Published, installed and loaded states remain separate.
 
 Select by **exact Core**, never global SemVer maximum or npm `latest`/`alpha`.
 The read-only `node scripts/select-core-release.mjs 0.2.0-rc.2` command checks
@@ -155,10 +155,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.alpha.5.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.alpha.5.tgz
 ```
 
-The command above is a prepared-release example, usable only after publication, and requires official DSH `0.2.1-alpha.5`. **Desktop rc.2 must not install alpha.16 or `0.1.0-alpha.2.dsh.0.2.1.alpha.5`**; retain `dsh-github-copilot@0.4.2-alpha.15` there. Candidate Desktop package/signature and profile peer composition remain unverified. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) is not alpha.5 acceptance; a generic/global `dsh` shim is not equivalent. No install, restart, registry-policy bypass, peer patch or configuration deletion is authorized by this release.
+The command above is a prepared-release example, usable only after publication, and requires official DSH `0.2.1-alpha.5`. **Desktop rc.2 must not install alpha.16 or `0.1.0-alpha.3.dsh.0.2.1.alpha.5`**; retain `dsh-github-copilot@0.4.2-alpha.15` there. Candidate Desktop package/signature and profile peer composition remain unverified. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) is not alpha.5 acceptance; a generic/global `dsh` shim is not equivalent. No install, restart, registry-policy bypass, peer patch or configuration deletion is authorized by this release.
 
 Desktop's native package manager and qualified bundled CLI are profile-specific.
 [Standalone offline maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
@@ -356,14 +356,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.alpha.5.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.alpha.5/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.alpha.5.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.alpha.5/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.alpha.5.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.alpha.5.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
