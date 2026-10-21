@@ -140,7 +140,7 @@ describe('Auto model routing policy', () => {
     expect(selectAutoModel([fast], history).model).toBe(fast)
   })
 
-  it.each(['user', 'tool'])('retains the final projected-MIME gate after Auto selects for historical %s images', role => {
+  it.each(['user', 'tool'])('delegates format mismatch after Auto selects for historical %s images', role => {
     const vision = model('fixture-jpeg-only', { contextWindow: 128_000, maxTokens: 16_000, image: true })
     const restricted = { ...vision, evidence: { ...vision.evidence, visionMediaTypes: ['image/jpeg'] } }
     const history = [
@@ -152,11 +152,12 @@ describe('Auto model routing policy', () => {
       const decision = selectAutoModel([fast, restricted], history, preference)
       expect(decision.model).toBe(restricted)
       // Projection is supplied only at dispatch; durable WebP alone cannot decide fit.
+      const diagnostics: string[] = []
       expect(imageInputFailure(decision.model, [
         { role: role === 'tool' ? 'toolResult' : role, content: [{ type: 'image', mimeType: 'image/png' }] },
         { role: 'user', content: [{ type: 'text', text: 'Continue.' }] },
-      ])).toMatchObject({ code: 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED',
-        diagnostic: { model: restricted.id, projectedMime: 'image/png', allowedMimeTypes: ['image/jpeg'] } })
+      ], code => diagnostics.push(code))).toBeUndefined()
+      expect(diagnostics).toEqual(['COPILOT_IMAGE_MEDIA_TYPE_UNADVERTISED'])
       expect(imageInputFailure(decision.model, [
         { role: role === 'tool' ? 'toolResult' : role, content: [{ type: 'image', mimeType: 'image/jpeg' }] },
       ])).toBeUndefined()

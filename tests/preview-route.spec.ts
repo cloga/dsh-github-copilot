@@ -10,7 +10,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
-import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { BlockAssembler, createToolResultMessage, createUserMessage, LlmError, ReasoningEffortId, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { GenerateOptions, Message, PreparedAdapterCall, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
@@ -24,7 +24,6 @@ import { createGitHubCopilotTokenResolver } from '../src/copilot-auth.ts'
 import { DiagnosticsController } from '../src/diagnostics-host.ts'
 import type { AccountModelSnapshot, AccountModelSource } from '../src/account-model-source.ts'
 import type { CopilotAccountBinding } from '../src/copilot-accounts-types.ts'
-import packageMetadata from '#package.json' with { type: 'json' }
 import {
   GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID as EFFICIENCY,
@@ -2772,57 +2771,65 @@ describe('plugin-owned account Copilot route', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it.each([true, false])('admits projected MIME rather than durable MIME before wire: %s', async supported => {
+  it.each(['user', 'tool'].flatMap(role =>
+    ['advertised', 'unadvertised', 'native-error', 'invalid-mime'].map(mode => ({ role, mode }))))(
+    'delegates projected image formats with independent structural validation: $role / $mode', async ({ role, mode }) => {
     const item = catalogItem('fixture-image-model', '/responses', { capabilities: {
       supports: { streaming: true, tool_calls: true, vision: true },
       limits: { max_context_window_tokens: 128000, max_output_tokens: 8000,
-        vision: { supported_media_types: [supported ? 'image/png' : 'image/jpeg'] } },
+        vision: { supported_media_types: mode === 'advertised' ? ['image/webp'] : ['image/jpeg', 'image/png'] } },
     } })
     let wires = 0
     stubFetch(async input => {
       if (String(input).endsWith('/models')) return catalogResponse([item])
       wires++
+      if (mode === 'native-error') return new Response(JSON.stringify({
+        error: { message: 'Synthetic native format rejection', type: 'invalid_request_error' },
+      }), { status: 400, headers: { 'content-type': 'application/json' } })
       return response()
     }, true)
     const harness = await runtime(grant({ availableModelIds: [] }))
+    const warning = vi.spyOn(harness.ctx.logger, 'warn')
     const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
     type ImageRef = Extract<Message['content'][number], { type: 'image' }>['attachment']
     const attachment: ImageRef = { attachmentId: 'synthetic-projected-image' as ImageRef['attachmentId'],
-      mediaType: 'image/webp', bytes: 100, width: 1, height: 1 }
+      mediaType: 'image/png', bytes: 100, width: 1, height: 1 }
     await harness.ctx.plugin({ apply(owner: Context) {
       owner.provide('attachments', {
         imageLimits: { maxImageBytes: 1_000_000, maxImagesPerMessage: 4, maxMessageImageBytes: 4_000_000,
           maxImagePixels: 1_000_000, maxImageDimension: 4096, mediaTypes: ['image/png', 'image/webp'] },
         readImageRequest: async () => ({ variantId: 'synthetic-projected-version', attachment,
-          data, mediaType: 'image/png', bytes: data.length, width: 1, height: 1, depth: 'uchar', space: 'srgb', hasAlpha: true }),
+          data, mediaType: mode === 'invalid-mime' ? 'application/pdf' : 'image/webp',
+          bytes: data.length, width: 1, height: 1, depth: 'uchar', space: 'srgb', hasAlpha: true }),
         imageHostPath: () => undefined,
       } as unknown as Context['attachments'])
     } })
-    const messages = [createUserMessage({
-      content: [{ type: 'image', attachment }], source: { kind: 'user' },
-    }), createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } })]
+    const content = [{ type: 'image', attachment }] as const
+    const messages = [role === 'tool'
+      ? createToolResultMessage({ callId: ToolCallId('synthetic-image-tool'), content, isError: false })
+      : createUserMessage({ content, source: { kind: 'user' } }),
+    createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } })]
     const before = structuredClone(messages)
     const result = await call(harness.ctx, { model: item.id, messages })
-    if (supported) expect(result.assembler.finish).toEqual({ kind: 'stop' })
+    if (mode === 'invalid-mime') expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'INVALID_REQUEST',
+        message: expect.stringContaining('COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE') },
+    })
+    else if (mode !== 'native-error') expect(result.assembler.finish).toEqual({ kind: 'stop' })
     else {
-      expect(result.assembler.finish).toEqual({
-        kind: 'error',
-        failure: { message: expect.stringContaining('COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED: Request blocked before selected-model dispatch'),
-          code: 'INVALID_REQUEST' },
+      expect(result.assembler.finish).toMatchObject({
+        kind: 'error', failure: { message: expect.stringContaining('Synthetic native format rejection') },
       })
       if (result.assembler.finish.kind !== 'error') throw new Error('expected native admission error')
-      const message = result.assembler.finish.failure.message
-      expect(message).toContain('"model":"fixture-image-model"')
-      expect(message).toContain('"projectedMime":"image/png"')
-      expect(message).toContain('"allowedMimeTypes":["image/jpeg"]')
-      expect(message).toContain(`"pluginVersion":"${packageMetadata.version}"`)
-      expect(message).toContain('"role":"user"')
-      expect(message).not.toMatch(/synthetic-projected|image\/webp|iVBORw0KGgo/)
+      expect(result.assembler.finish.failure.message).not.toContain('COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED')
       expect(harness.modify).not.toHaveBeenCalled()
     }
-    expect(wires).toBe(supported ? 1 : 0)
+    expect(wires).toBe(mode === 'invalid-mime' ? 0 : 1)
+    expect(warning.mock.calls.filter(([code]) => code === 'COPILOT_IMAGE_MEDIA_TYPE_UNADVERTISED'))
+      .toHaveLength(mode === 'unadvertised' || mode === 'native-error' ? 1 : 0)
+    warning.mockRestore()
     expect(messages).toEqual(before)
-    expect(attachment.mediaType).toBe('image/webp')
+    expect(attachment.mediaType).toBe('image/png')
   })
 
   it.each([true, false])('uses native attachment projection and execution-world mapping when available: %s', async mapped => {

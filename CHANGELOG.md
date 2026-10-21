@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.4.2-alpha.17 (prepared)
+## 0.4.2-alpha.18.dsh.0.2.0.rc.2 (prepared)
+
+- Stop rejecting a valid native-projected image format solely because it is absent
+  from the supplier-advertised list. Log one fixed Host diagnostic per projected
+  request and let native transport/server adjudication proceed; retain invalid
+  MIME, non-vision, account, cancellation and capacity guards.
+- No format-support claim, format-aware Auto, conversion, extra retry/switch or
+  history/Usage mutation. This is a prepared legacy rc.2 maintenance increment
+  with an exact-Core suffix, not a change to newer Core-specific release sequences.
+- Not published, merged or installed under this PR-only request.
+
+## 0.4.2-alpha.17
 
 - Backport #426's bounded projected-image admission diagnostics to official DSH
   `0.2.0-rc.2`, retaining pi-ai `0.87.1` and the unchanged Core dependency graph.

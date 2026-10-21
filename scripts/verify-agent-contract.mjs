@@ -48,6 +48,11 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(Array.isArray(contract.entrypoints) && contract.entrypoints.includes('AGENTS.md'), 'authoritative entrypoint is missing')
   for (const path of contract.entrypoints) await file(path)
   require(contract.tasks && Object.keys(contract.tasks).length > 0, 'task directory is missing')
+  require(contract.tasks.models?.imageAdmissionBoundary?.includes('nonblocking')
+    && contract.tasks.models.imageAdmissionBoundary.includes('at most once per projected request')
+    && contract.tasks.models.imageAdmissionBoundary.includes('missing/invalid MIME rejection')
+    && contract.tasks.models.imageAdmissionBoundary.includes('no conversion'),
+  'image format declaration mitigation boundary is missing')
   require(contract.tasks.accounts?.read?.includes('docs/copilot-accounts.md')
     && contract.tasks.accounts?.tests?.includes('tests/copilot-accounts-card.spec.ts')
     && contract.tasks.accounts?.risk?.includes('never grant copies')

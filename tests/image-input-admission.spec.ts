@@ -14,10 +14,12 @@ const model: AccountModelDescriptor = {
 }
 
 describe('projected image admission', () => {
-  it.each(['user', 'toolResult'])('checks actual %s image MIME before dispatch', role => {
+  it.each(['user', 'toolResult'])('delegates unadvertised %s image MIME with a fixed diagnostic', role => {
     const messages = [{ role, content: [{ type: 'image', mimeType: 'image/webp', data: 'synthetic' }] }]
     const before = structuredClone(messages)
-    expect(imageInputFailure(model, messages)?.code).toBe('COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED')
+    const codes: string[] = []
+    expect(imageInputFailure(model, messages, code => codes.push(code))).toBeUndefined()
+    expect(codes).toEqual(['COPILOT_IMAGE_MEDIA_TYPE_UNADVERTISED'])
     expect(messages).toEqual(before)
   })
 

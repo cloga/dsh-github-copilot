@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared maintenance prerelease: `0.4.2-alpha.17`.** This rc.2 diagnostic backport is not yet published; its versioned Release commands below apply only after publication. `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
+**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared maintenance prerelease: `0.4.2-alpha.18.dsh.0.2.0.rc.2`.** This rc.2 image-format mitigation is not yet published; its versioned Release commands below apply only after publication. This legacy maintenance increment preserves increasing SemVer and identifies its exact Core; it does not change newer Core-specific release sequences. `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
 
 **Native refresh protection:** 0.4.1 introduced preservation of already-dispatched HTTP streams across proven plugin-owned refresh with unchanged account, endpoint and entitlements. Versions through 0.4.2-alpha.13 still missed this proof across real Cordis traced service faces; 0.4.2-alpha.14 fixes that identity mismatch. Subsequent requests use freshly validated auth and metadata. Unknown/external credential notifications, revocation, cancellation and provider rejections remain explicit—not a promise of invisible recovery or automatic retry. See [the refresh boundary](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385).
 
@@ -131,10 +131,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.17/dsh-github-copilot-0.4.2-alpha.17.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.18.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.18.dsh.0.2.0.rc.2.tgz
 ```
 
-For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.17` after publication; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.18.dsh.0.2.0.rc.2` after publication; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -239,7 +239,7 @@ The same failure can include request-scoped native local body-write/header miles
 
 HTTP/SSE liveness separates five-minute byte idle from bounded ten-minute assistant-output silence by default. Consumer work is excluded; WebSocket/explicit `auto` stays native-only. This does not cure supplier HTTP 408s. Images are admitted against actual native-projected MIME evidence; the plugin does not own conversion or infer format support from filenames. [Image compatibility](./docs/image-input-compatibility.md).
 
-Image admission errors explain historical-image failures even on text-only continuations. The native error includes bounded selected-model, projected/allowed MIME, projected role/position and current plugin-build details, without image content, URLs or paths. Auto checks general vision capability, not candidate-specific projected formats; the final gate remains fail-closed. Explicitly choose a compatible model for a subsequent turn or start a separate text-only Session; nothing is automatically switched, removed or retried. These diagnostics cannot reconstruct an earlier incident.
+Image admission still rejects non-vision models and missing/invalid projected image MIME. A valid image MIME outside the supplier's advertised list no longer blocks the request: declarations alone do not prove endpoint rejection. The Host logs only `COPILOT_IMAGE_MEDIA_TYPE_UNADVERTISED`, at most once per projected request, then delegates to the native request and server without adding retries, conversion or model switching. Auto still checks general vision capability, not candidate-specific formats. This mitigation does not establish WebP support for any model; native failures and all account, cancellation and capacity guards remain unchanged.
 
 Native rc.2 Auto authorization review requests `temperature: 0`. The plugin now automatically omits it **only for the authenticated official Auto reviewer root on account-discovered managed OpenAI Responses**; no switch is needed. Concurrent ordinary Chat, even on the same Session/model, retains its temperature. Public Loader callback identity and same-profile package ownership authenticate the caller; unknown identity, aliases, descendants, other protocols/providers and canonical Core-owned Copilot remain native, with bounded diagnostics for unqualified reviewer scope. No capability is inferred from `supports.thinking`. Frozen inputs, native account/cancellation guards, strict verdicts and fail-closed tool denial remain intact; no retries, permission changes or settings migration occur. The independent legacy `github-copilot.responsesOmitTemperature` override remains default `false`; explicit `true` still omits temperature from **all** managed Responses requests, not just review. See [public scope and qualification limits](./docs/auto-review-sampling.md).
 
@@ -326,14 +326,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.17/dsh-github-copilot-0.4.2-alpha.17.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.17/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.18.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.18.dsh.0.2.0.rc.2.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.18.dsh.0.2.0.rc.2/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.17.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.18.dsh.0.2.0.rc.2.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

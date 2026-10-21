@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.2-alpha.17"
+    "version": "0.4.2-alpha.18.dsh.0.2.0.rc.2"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -653,6 +653,20 @@
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "defaults automatic oversized recovery on without a manual command, enabled=%s"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "escalates only a typed summary capacity failure once: %s"},
         {"file": "tests/preview-route.spec.ts", "name": "binds explicit summary capacity proof to its Agent rather than the current default"}
+      ]
+    },
+    {
+      "id": "image-format-declaration-mitigation",
+      "required": true,
+      "activation": "native-projected-image-inspection",
+      "sourceMarkers": [
+        {"file": "src/image-input-admission.ts", "marker": "COPILOT_IMAGE_MEDIA_TYPE_UNADVERTISED"},
+        {"file": "src/image-input-admission.ts", "marker": "COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE"},
+        {"file": "src/preview-route.ts", "marker": "owner.imageDiagnostic"}
+      ],
+      "tests": [
+        {"file": "tests/preview-route.spec.ts", "name": "delegates projected image formats with independent structural validation: $role / $mode"},
+        {"file": "tests/auto-model-routing.spec.ts", "name": "delegates format mismatch after Auto selects for historical %s images"}
       ]
     },
     {
