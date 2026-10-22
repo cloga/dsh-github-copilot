@@ -2,7 +2,9 @@ import type { AccountModelDescriptor } from './account-model-catalog.ts'
 import packageMetadata from '#package.json' with { type: 'json' }
 
 export type ImageInputFailureCode = 'COPILOT_IMAGE_INPUT_UNSUPPORTED'
-  | 'COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE' | 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED'
+  | 'COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE'
+
+export type ImageInputDiagnosticCode = 'COPILOT_IMAGE_MEDIA_TYPE_UNADVERTISED'
 
 export interface ImageInputFailure {
   readonly code: ImageInputFailureCode
@@ -31,7 +33,9 @@ function diagnosticMime(value: unknown): string {
 export function imageInputFailure(
   model: AccountModelDescriptor,
   messages: readonly unknown[],
+  observe?: (code: ImageInputDiagnosticCode) => void,
 ): ImageInputFailure | undefined {
+  let mismatchReported = false
   for (const [messageIndex, message] of messages.entries()) {
     if (typeof message !== 'object' || message === null || !('content' in message)
       || !Array.isArray(message.content)) continue
@@ -44,9 +48,13 @@ export function imageInputFailure(
       if (!model.input.includes('image')) code = 'COPILOT_IMAGE_INPUT_UNSUPPORTED'
       else if (typeof mimeType !== 'string' || !imageMime.test(mimeType)) {
         code = 'COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE'
-      } else if (allowed !== undefined && !allowed.includes(mimeType.toLowerCase())) {
-        code = 'COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED'
-      } else continue
+      } else {
+        if (!mismatchReported && allowed !== undefined && !allowed.includes(mimeType.toLowerCase())) {
+          mismatchReported = true
+          observe?.('COPILOT_IMAGE_MEDIA_TYPE_UNADVERTISED')
+        }
+        continue
+      }
       const role = 'role' in message && typeof message.role === 'string'
         && ['user', 'assistant', 'system', 'tool', 'toolResult'].includes(message.role) ? message.role : 'unknown'
       const diagnostic: ImageInputFailure['diagnostic'] = {
@@ -59,9 +67,7 @@ export function imageInputFailure(
       }
       const explanation = code === 'COPILOT_IMAGE_INPUT_UNSUPPORTED'
         ? 'The selected model does not admit image input.'
-        : code === 'COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE'
-          ? 'The native projected image MIME is missing or invalid; format compatibility cannot be verified.'
-          : 'The native projected image MIME is outside the selected model\'s explicit account-advertised formats.'
+        : 'The native projected image MIME is missing or invalid; format compatibility cannot be verified.'
       return { code, diagnostic, message: `${code}: Request blocked before selected-model dispatch. ${explanation} `
         + 'History images also count, even on a text-only continuation. '
         + 'Auto checks general image capability, not candidate-specific projected formats. '

@@ -40,7 +40,7 @@ import { TaskAssessmentRevokedError } from './auto-task-assessment.ts'
 import { ResponsesRetryReplay } from './responses-replay-compat.ts'
 import { excludedModelSet, ModelExclusionTurns } from './model-exclusions.ts'
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
-import { imageInputFailure } from './image-input-admission.ts'
+import { imageInputFailure, type ImageInputDiagnosticCode } from './image-input-admission.ts'
 import { activeCopilotBinding } from './copilot-accounts-host.ts'
 import type { CopilotAccountBinding, CopilotAccountLease } from './copilot-accounts-types.ts'
 import { COPILOT_ACCOUNTS_MAX } from './copilot-accounts-types.ts'
@@ -362,6 +362,7 @@ class PreviewAdapter extends PiAiAdapter {
     private readonly replayRecovery?: ReturnType<typeof installReplayRecovery>,
     private readonly requestCheckpoint?: () => void,
     private readonly captureRequest: (signal?: AbortSignal) => void = () => undefined,
+    private readonly imageDiagnostic?: (code: ImageInputDiagnosticCode) => void,
   ) { super(optionsFor()) }
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     owned(provider)
@@ -496,7 +497,7 @@ class PreviewAdapter extends PiAiAdapter {
       const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
         owner.requestCheckpoint?.()
         if (signal.aborted) throw abortFailure(signal)
-        const imageFailure = imageInputFailure(lease.descriptor, context.messages)
+        const imageFailure = imageInputFailure(lease.descriptor, context.messages, owner.imageDiagnostic)
         if (imageFailure !== undefined) {
           requestFailure = new LlmError(imageFailure.message, 'INVALID_REQUEST')
           throw requestFailure
@@ -875,7 +876,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
       const revision = lifetime.revision
       const classifierOptionsFor: typeof optionsFor = (lease, hooks) => optionsFor(lease, hooks, true)
       const adapter = new PreviewAdapter(lifetime, classifierOptionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings,
-        true, undefined, checkpoint)
+        true, undefined, checkpoint, undefined, code => ctx.logger.warn(code))
       try {
         const prepared = await adapter.prepareCall(GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model.id, signal)
         checkpoint?.()
@@ -898,7 +899,8 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     },
   }
   const adapter = new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings,
-    false, replayRecovery, undefined, signal => ctx.get('githubCopilotSessionAccounts')?.recordRequest(signal))
+    false, replayRecovery, undefined, signal => ctx.get('githubCopilotSessionAccounts')?.recordRequest(signal),
+    code => ctx.logger.warn(code))
   const pressureCallbacks = { resolve(request: GenerateOptions) {
     const snapshot = source.readSnapshot()
     if (snapshot === undefined || proofFor(snapshot) === undefined) return undefined

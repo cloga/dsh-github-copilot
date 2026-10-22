@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.2-alpha.18.dsh.0.2.0.rc.2 (prepared)
+
+- Stop rejecting a valid native-projected image format solely because it is absent
+  from the supplier-advertised list. Log one fixed Host diagnostic per projected
+  request and let native transport/server adjudication proceed; retain invalid
+  MIME, non-vision, account, cancellation and capacity guards.
+- No format-support claim, format-aware Auto, conversion, extra retry/switch or
+  history/Usage mutation. This is a prepared legacy rc.2 maintenance increment
+  with an exact-Core suffix, not a change to newer Core-specific release sequences.
+- This entry does not imply local profile installation or loaded-runtime activation.
+
 ## 0.4.2-alpha.17 (prepared)
 
 - Backport #426's bounded projected-image admission diagnostics to official DSH
