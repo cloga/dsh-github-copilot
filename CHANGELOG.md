@@ -9,9 +9,9 @@
 - No format-support claim, format-aware Auto, conversion, extra retry/switch or
   history/Usage mutation. This is a prepared legacy rc.2 maintenance increment
   with an exact-Core suffix, not a change to newer Core-specific release sequences.
-- Not published, merged or installed under this PR-only request.
+- This entry does not imply local profile installation or loaded-runtime activation.
 
-## 0.4.2-alpha.17
+## 0.4.2-alpha.17 (prepared)
 
 - Backport #426's bounded projected-image admission diagnostics to official DSH
   `0.2.0-rc.2`, retaining pi-ai `0.87.1` and the unchanged Core dependency graph.
