@@ -19,6 +19,21 @@ const decision = {
 }
 const rows = events => [header, ...events]
 const compress = records => zstdCompressSync(Buffer.from(`${records.map(row => JSON.stringify(row)).join('\n')}\n`))
+const firstFrameContentSize = input => {
+  const descriptor = input[4]
+  const contentSizeFlag = descriptor >>> 6
+  const singleSegment = (descriptor & 0x20) !== 0
+  const contentSizeBytes = contentSizeFlag === 0
+    ? singleSegment ? 1 : 0
+    : contentSizeFlag === 1 ? 2 : contentSizeFlag === 2 ? 4 : 8
+  const dictionaryIdBytes = [0, 1, 2, 4][descriptor & 0x03]
+  const offset = 5 + (singleSegment ? 0 : 1) + dictionaryIdBytes
+  if (contentSizeBytes === 0) return null
+  const size = contentSizeBytes === 8
+    ? input.readBigUInt64LE(offset)
+    : BigInt(input.readUIntLE(offset, contentSizeBytes))
+  return Number(contentSizeFlag === 1 ? size + 256n : size)
+}
 const frames = bytes => {
   const decoded = []
   let offset = 0
@@ -34,8 +49,8 @@ const decode = bytes => Buffer.concat(frames(bytes)).toString('utf8').trimEnd().
 test('keeps exactly one header line in the first zstd frame for Desktop discovery and opens', () => {
   const input = Buffer.concat([compress([header]), compress([decision])])
   const result = repairAutoModelHistory(input)
-  assert.equal(frames(result.output)[0].toString(), `${JSON.stringify(header)}\n`)
-  assert.equal(frames(result.output).length, 2)
+  assert.equal(firstFrameContentSize(result.output), Buffer.byteLength(`${JSON.stringify(header)}\n`))
+  assert.deepEqual(decode(result.output), rows([{ ...decision, ignorable: true }]))
   assert.equal(result.report.reframedHeader, false)
 })
 
@@ -45,7 +60,7 @@ test('recovers previously marked single-frame copies without changing any logica
   const result = repairAutoModelHistory(input)
   assert.deepEqual(result.report.changedSeqs, [])
   assert.equal(result.report.reframedHeader, true)
-  assert.equal(frames(result.output)[0].toString(), `${JSON.stringify(header)}\n`)
+  assert.equal(firstFrameContentSize(result.output), Buffer.byteLength(`${JSON.stringify(header)}\n`))
   assert.deepEqual(decode(result.output), records)
   assert.deepEqual(repairAutoModelHistory(result.output).output, result.output)
   assert.equal(repairAutoModelHistory(result.output).report.reframedHeader, false)

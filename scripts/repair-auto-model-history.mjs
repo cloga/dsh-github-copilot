@@ -44,8 +44,29 @@ function restore(rows) {
   return reader.finish()
 }
 
+function firstFrameContentSize(input) {
+  if (input.length < 5 || input.subarray(0, 4).toString('hex') !== '28b52ffd') return null
+  const descriptor = input[4]
+  if ((descriptor & 0x18) !== 0) return null
+  const singleSegment = (descriptor & 0x20) !== 0
+  const contentSizeFlag = descriptor >>> 6
+  const contentSizeBytes = contentSizeFlag === 0
+    ? singleSegment ? 1 : 0
+    : contentSizeFlag === 1 ? 2 : contentSizeFlag === 2 ? 4 : 8
+  if (contentSizeBytes === 0) return null
+  const dictionaryIdBytes = [0, 1, 2, 4][descriptor & 0x03]
+  const contentSizeOffset = 5 + (singleSegment ? 0 : 1) + dictionaryIdBytes
+  if (contentSizeOffset + contentSizeBytes > input.length) return null
+  const size = contentSizeBytes === 8
+    ? input.readBigUInt64LE(contentSizeOffset)
+    : BigInt(input.readUIntLE(contentSizeOffset, contentSizeBytes))
+  const adjustedSize = contentSizeFlag === 1 ? size + 256n : size
+  return adjustedSize <= BigInt(maxBytes) ? Number(adjustedSize) : null
+}
+
 function decompress(input) {
   const chunks = []
+  const firstFrameSize = firstFrameContentSize(input)
   let offset = 0
   let total = 0
   while (offset < input.length) {
@@ -63,9 +84,13 @@ function decompress(input) {
     total += buffer.length
     offset += engine.bytesWritten
   }
+  const decoded = Buffer.concat(chunks, total)
+  const headerLineEnd = decoded.indexOf(10) + 1
   return {
-    decoded: Buffer.concat(chunks, total),
-    independentHeader: chunks.length > 0 && chunks[0].indexOf(10) === chunks[0].length - 1,
+    decoded,
+    // Node 24.22 may return all concatenated frames at once; the first frame's
+    // declared size still identifies whether it contains only the header line.
+    independentHeader: firstFrameSize !== null && firstFrameSize === headerLineEnd,
   }
 }
 
