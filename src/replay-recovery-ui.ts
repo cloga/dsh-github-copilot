@@ -6,7 +6,7 @@ import { ReplayRecoveryViewSchema, REPLAY_FAILURE_PROJECTION, ReplayFailureEvide
 import type { ReplayRecoveryDuration, ReplayRecoveryView } from './replay-recovery-types.ts'
 import { SessionContinuationCard } from './session-continuation-ui.ts'
 import type { SessionContinuationRemote } from './session-continuation-ui.ts'
-import { composerNoticeStyle, composerNoticeSurfaceStyle,
+import { composerNoticeStyle, composerNoticeSurfaceStyle, composerNoticeFrameStyle,
   composerNoticeParagraphStyle, composerNoticeButtonStyle } from './composer-notice-style.ts'
 
 export interface ReplayRecoveryRemote {
@@ -77,12 +77,14 @@ export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = '
   const noticeKey = failureKey ?? evidence?.revision
   if (!error && !evidence && !hadEvidence && !failureKey) return null
   if (!error && noticeKey && dismissed === noticeKey) {
-    return h('button', { type: 'button', style: { ...button, ...composerNoticeStyle,
+    return h('div', { 'data-copilot-composer-frame': '', style: composerNoticeFrameStyle },
+      h('button', { type: 'button', style: { ...button, ...composerNoticeStyle,
       width: 'auto', alignSelf: 'center', color: button.color },
       disabled, onClick: () => setDismissed(undefined) },
-      zh ? '回放恢复 · 查看' : 'Replay recovery · Review')
+      zh ? '回放恢复 · 查看' : 'Replay recovery · Review'))
   }
-  return h('section', { 'aria-label': zh ? '回放恢复' : 'Replay recovery',
+  return h('div', { 'data-copilot-composer-frame': '', style: composerNoticeFrameStyle },
+    h('section', { 'aria-label': zh ? '回放恢复' : 'Replay recovery',
     'data-copilot-composer-notice': 'replay', 'aria-busy': busy, style: composerNoticeSurfaceStyle },
   h('strong', { role: 'status', style: { color: 'var(--dsw-alias-label-primary, CanvasText)', fontWeight: 600 } }, evidence || failureKey ? zh ? '旧推理回放被拒绝' : 'Old reasoning replay was rejected'
       : zh ? '回放恢复' : 'Replay recovery'),
@@ -106,7 +108,7 @@ export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = '
       ? `${evidence.model}：${evidence.itemCount} 条已识别的旧加密推理项；不是已证明无效的项数。`
       : `${evidence.model}: ${evidence.itemCount} identified old encrypted reasoning items; not a count of proven invalid items.`) : null,
     h('button', { type: 'button', style: { ...button, marginBlock: 8 }, disabled, onClick: () => void perform() },
-      busy ? zh ? '正在读取…' : 'Reading…' : zh ? '重新读取状态' : 'Read status again')))
+      busy ? zh ? '正在读取…' : 'Reading…' : zh ? '重新读取状态' : 'Read status again'))))
 }
 
 interface Slots {

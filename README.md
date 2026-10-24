@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH rc.3 adaptation: `0.1.0-alpha.1.dsh.0.2.1.rc.3`.** DSH `0.2.1-rc.3` is a prerelease. This plugin line is a compatibility candidate, not a production Core upgrade recommendation; Desktop artifacts/signatures are unverified. Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-rc.3` to `dsh.0.2.1.rc.3`, but compatibility is validated against explicit metadata, not guessed from the name. Existing published versions/tags remain unchanged. Published, installed and loaded states remain separate.
+**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH rc.3 update: `0.1.0-alpha.2.dsh.0.2.1.rc.3`.** DSH `0.2.1-rc.3` is a prerelease. This plugin line is a compatibility candidate, not a production Core upgrade recommendation; Desktop artifacts/signatures are unverified. Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-rc.3` to `dsh.0.2.1.rc.3`, but compatibility is validated against explicit metadata, not guessed from the name. Existing published versions/tags remain unchanged. Published, installed and loaded states remain separate.
 
 Select by **exact Core**, never global SemVer maximum or npm `latest`/`alpha`.
 The read-only `node scripts/select-core-release.mjs 0.2.0-rc.2` command checks
@@ -160,7 +160,7 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.1.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.rc.3.tgz
 ```
 
 The command above is a prepared-release example, usable only after publication and required CI qualification; it requires official DSH prerelease `0.2.1-rc.3`. **Do not install this candidate into production Desktop profiles.** Desktop artifacts/signatures and profile peer composition remain unverified; retain the existing compatible plugin on rc.2. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) does not qualify rc.3, and a generic/global `dsh` shim is not equivalent. No installation or restart is authorized.
@@ -184,6 +184,8 @@ The **Switch** dropdown lists saved accounts and **Add GitHub account** at the b
 Completed managed turns show **Account** beside native Usage. It records the request account, not billing or subagent totals. A verified name is frozen at admission; if missing, an existing bounded non-forcing lookup for that exact account runs without delaying model delivery and can fill identity only while the same turn remains active. No account evidence exists before native delivery. Missing identity remains unavailable; completed history is never backfilled from current settings. Evidence is bounded to the Host lifetime; restart, cold history or missing delivery displays unknown. Credits labels an unidentified original or saved authorization without displaying opaque account IDs.
 
 Saved account names can load without activating the account. Names are cached for the Host lifetime, invalidated by credential changes or failed verification, and never prove authorization or model access. A global switch requires fresh identity/model validation and confirmed settings persistence. If switching is blocked, let authorization or pinned work settle and use **Refresh account information**; unknown route/activity evidence remains a blocker. The dropdown, not a button beside each saved account, is the selection control.
+
+Account-management metadata and identity reads have a fifteen-second Client deadline instead of indefinite Checking. An initial read failure offers metadata-only **Retry**; late results are ignored. This does not cancel Host work, retry automatically or unlock an unresolved account mutation.
 
 **Desktop lifecycle:** the current rc.3 public-Loader fixture preserves active Web consumers on a single-step add, but staged add and remove/re-add can leave the global `web` service unavailable and dependent account integration inactive. No feature-equivalent plugin-only recovery API is currently available; [issue #371](https://github.com/cloga/dsh-github-copilot/issues/371) remains open. An in-place upgrade without native HMR is explicitly `restart-required`; honor that manager result. The synthetic fixture does not justify repeated toggles or a restart when the manager has not requested one. See the [rc.3 lifecycle evidence](./docs/web-lifecycle-rc2.md).
 
@@ -266,7 +268,7 @@ Compaction feedback separates **compaction completed** and **subsequent request 
 
 Running visible-history compaction notices stay visible. Confirmed success disappears eight seconds after first observation; settled failures, cancellation, unavailable status and enable prompts stay until **Close** (or the existing **Cancel**). Closing only hides this Session/operation/status notice, never changes consent, history or native proof, and never sends or retries. A bounded Client registration retains expiry/dismissal across incidental remounts and Session switches, not across teardown or eviction.
 
-For exact verified `408 / user_request_timeout`, diagnostics describe bounded request composition and observable timing, not a proven payload limit or root cause. Image counts include native Responses tool outputs; older stored diagnostics may have counted those images as residual history. Bytes are not tokens; timing is not upload duration. Small, image-free requests can also time out. Follow [request-budget and timeout guidance](./docs/copilot-compaction.md); do not automatically trim history, disable proof, switch models or add retries.
+For exact verified `408 / user_request_timeout`, diagnostics describe bounded request composition and observable timing, not a proven payload limit or root cause. They include the validated model/protocol, UTC response-header observation time and strictly recognized supplier request IDs when available, without other headers or new stored diagnostics. IDs are correlation only, not receipt/execution proof. Image counts include native Responses tool outputs; older stored diagnostics may have counted those images as residual history. Only positive recognized image bytes suggest explicit image offload; zero/unknown image evidence does not. Bytes are not tokens; timing is not upload duration. Small, image-free requests can also time out. Follow [request-budget and timeout guidance](./docs/copilot-compaction.md); do not automatically trim history, disable proof, switch models or add retries.
 
 The experimental `github-copilot.responsesRequestCompression` option is **off by default**. When explicitly enabled, it losslessly gzips only eligible managed HTTP Responses requests through the existing native Fetch seam. It starts at 256 KiB, skips compression work above 32 MiB and requires at least 5% and 4 KiB savings; every skip sends the original request. This changes prepared HTTP body bytes, not context/token admission. Custom Fetch, explicit `auto`/WebSocket and other protocols remain native, and a gzip rejection is never automatically resent uncompressed. On a verified 408, diagnostics distinguish original JSON composition from the prepared gzip body size; neither proves delivery or cures every timeout. Installation does not enable the option.
 
@@ -321,6 +323,8 @@ The name “New Session” describes default inheritance, not a one-message feat
 
 Context evidence and Replay recovery use compact, centered notices bounded by the native composer width. Model/item counts and status refresh live in collapsed technical details; loss consent remains explicit. Context sampling warns only for a concrete incident, can be dismissed for that Session/incident, and never asserts the native meter's current value; native statistics stay unchanged. Switching accounts does not make old encrypted reasoning portable. The concise scope error points to explicit recovery or a new conversation; bounded, sanitized dispatch counts stay in Host diagnostics, not the main error. **Authorized** means permission is ready, not that a message was sent or recovery succeeded.
 
+Notice frames also follow native horizontal clearance on narrow and embedded layouts; nested details do not apply the width limit twice. Recovery uses one primary **Enable** action and a quiet **Cancel**, without changing consent or initiating a retry.
+
 For a failed scheduled/background task, open its original Session to review **Replay recovery**. The latest recorded exact scope rejection keeps this entry available after temporary request diagnostics expire, Host restart or a picker change. Unavailable item/account diagnostics stay unknown; copied fork history does not create an entry. Enablement still requires the loss-disclosed Session policy choice and never resends the task. Check its possible side effects before choosing native Retry; a later native turn clears the old failure notice.
 
 ## Ownership and further reading
@@ -362,14 +366,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.1.rc.3.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.1.rc.3/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.rc.3.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

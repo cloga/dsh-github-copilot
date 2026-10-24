@@ -147,6 +147,9 @@ it('uses native auxiliary typography for the entire notice and inherited control
     expect(notice.style.width).toBe('100%')
     expect(notice.style.maxWidth).toBe('var(--dsh-composer-card-max-width, 100%)')
     expect(notice.style.marginInline).toBe('auto')
+    expect(notice.parentElement?.getAttribute('data-copilot-composer-frame')).toBe('')
+    expect(notice.parentElement?.style.paddingInline).toBe('var(--dsh-composer-side-clearance, 0px)')
+    expect(notice.parentElement?.style.boxSizing).toBe('border-box')
     const details = notice.querySelector('details')!
     expect(details.open).toBe(false)
     expect(details.textContent).toContain('synthetic-model')
@@ -163,6 +166,10 @@ it('uses native auxiliary typography for the entire notice and inherited control
       expect(button.style.fontFamily).toBe('inherit')
     }
     expect(f.remote.authorize).not.toHaveBeenCalled()
+    const enable = Array.from(notice.querySelectorAll('button')).find(node => node.textContent === 'Enable visible-history continuation')!
+    const cancel = Array.from(notice.querySelectorAll('button')).find(node => node.textContent === 'Cancel')!
+    expect(enable.style.fontWeight).toBe('600')
+    expect(cancel.style.border).toBe('0px')
   } finally { await f.close() }
 })
 it('enables only persistent Session continuation after loss disclosure, without legacy authorization or sending', async () => {
