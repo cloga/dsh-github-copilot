@@ -22,6 +22,8 @@ import type { AccountModelDescriptor } from '../../src/account-model-catalog.ts'
 import { COPILOT_CONTEXT_EVIDENCE, ContextEvidenceSchema, installContextEvidence } from '../../src/context-evidence.ts'
 import { currentChatRoute, currentSearchInitiator, currentSearchSelection } from '../../src/current-provider.ts'
 import { migrationStatus, type MigrationSelection } from '../../src/migration-status.ts'
+import { installReplayFailureEvidence } from '../../src/replay-failure-evidence.ts'
+import { REPLAY_FAILURE_PROJECTION, ReplayFailureEvidenceSchema } from '../../src/replay-recovery-types.ts'
 
 type RequestHeader = NonNullable<ReturnType<Session['requestHeader']>>
 type RequestConfig = RequestHeader['config']
@@ -260,6 +262,30 @@ describe('tagged Core public Session context (actual controller projection)', ()
       .toEqual({ provider: otherB.provider, model: otherB.model })
     await fiber.dispose()
     expect(f.projections.snapshot(agent.session).values).not.toHaveProperty(COPILOT_CONTEXT_EVIDENCE)
+    expect(f.projections.stateOf(agent.session, 'modelSelection')).toBeDefined()
+    expect(f.forbidden).not.toHaveBeenCalled()
+  })
+
+  it('cold-folds an unattended terminal replay failure through the native registry without request fingerprints', async () => {
+    const f = await fixture()
+    const agent = await f.add('scheduled-replay-failure')
+    agent.session.append('turn/start', { turn: 1 })
+    agent.session.append('turn/end', { turn: 1, reason: { kind: 'error', error: {
+      code: 'INVALID_REQUEST', message: 'COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH: synthetic scope rejection',
+    } } })
+    const seq = agent.session.seq
+    const events = agent.session.snapshotEvents()
+    const fiber = f.ctx.plugin({ apply: ctx => { ctx.effect(() => installReplayFailureEvidence(ctx)) } })
+    await fiber
+    const read = () => ReplayFailureEvidenceSchema.parse(
+      f.projections.snapshot(agent.session, [REPLAY_FAILURE_PROJECTION]).values[REPLAY_FAILURE_PROJECTION])
+    expect(read().failureSeq).not.toBeNull()
+    expect(agent.session.seq).toBe(seq)
+    expect(agent.session.snapshotEvents()).toBe(events)
+    agent.session.append('turn/start', { turn: 2 })
+    expect(read().failureSeq).toBeNull()
+    await fiber.dispose()
+    expect(f.projections.snapshot(agent.session).values).not.toHaveProperty(REPLAY_FAILURE_PROJECTION)
     expect(f.projections.stateOf(agent.session, 'modelSelection')).toBeDefined()
     expect(f.forbidden).not.toHaveBeenCalled()
   })

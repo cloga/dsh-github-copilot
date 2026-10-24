@@ -982,6 +982,7 @@
         {"file": "src/replay-recovery-remote.ts", "marker": "githubCopilotReplayRecovery.setEnabled"},
         {"file": "src/replay-recovery-remote.ts", "marker": "githubCopilotReplayRecovery.authorize"},
         {"file": "src/replay-recovery-ui.ts", "marker": "recovery: true"},
+        {"file": "src/replay-failure-evidence.ts", "marker": "export const replayFailureDefinition"},
         {"file": "src/session-continuation-ui.ts", "marker": "Enable visible-history continuation"}
       ],
       "tests": [
@@ -991,6 +992,10 @@
         {"file": "tests/replay-recovery.spec.ts", "name": "admits only the next matching native turn, including its steps and retries"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "enables only persistent Session continuation after loss disclosure, without legacy authorization or sending"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "is absent normally, reads on settled turns without polling and resets dismissal only for new evidence"},
+        {"file": "tests/replay-recovery-ui.spec.ts", "name": "offers explicit recovery for a cold-open scheduled failure without temporary fingerprints or a current managed selection"},
+        {"file": "tests/replay-failure-evidence.spec.ts", "name": "cold-folds only the latest exact terminal replay failure without retaining raw errors or request evidence"},
+        {"file": "tests/replay-failure-evidence.spec.ts", "name": "does not offer recovery for a copied fork or child failure and admits only the new owner tail"},
+        {"file": "tests/fixtures/session-context-core.fixture.ts", "name": "cold-folds an unattended terminal replay failure through the native registry without request fingerprints"},
         {"file": "tests/preview-route.spec.ts", "name": "offers exact failed replay only to its initiating session and recovers after explicit confirmation"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds explicit replay recovery through native Client and %s Host gateways"}
       ]
