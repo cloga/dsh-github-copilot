@@ -1,6 +1,6 @@
 # DSH 0.2.1-rc.3 Web lifecycle characterization
 
-This updates the earlier rc.2 characterization to the repository's current supported Core, DSH `0.2.1-rc.3`. It exercises the exact published Loader/Web packages and plugin bundle through public APIs. The synthetic fixture makes no network calls and removes its temporary files and Loader fibers. It does not exercise the native Desktop package manager or claim the observed account-status incident was caused by any one internal transition. Earlier rc.2 findings are historical; the rc.3 test results below are authoritative for the current plugin line.
+This keeps the existing rc.2 documentation path for link stability, but updates its contents to the repository's current supported Core, DSH `0.2.1-rc.3`. It exercises the exact published Loader/Web packages and plugin bundle through public APIs. The synthetic fixture makes no network calls and removes its temporary files and Loader fibers. It does not exercise the native Desktop package manager or claim the observed account-status incident was caused by any one internal transition. Earlier rc.2 findings are historical; the rc.3 test results below are authoritative for the current plugin line.
 
 ## Reproduce
 
