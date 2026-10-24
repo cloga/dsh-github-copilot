@@ -75,7 +75,7 @@ if (baseline.release === '0.2.1-rc.3') {
   ])
   await assertMarkers('vendor/cosmokit/src/volatile.ts', [
     'export interface Volatile<T>',
-    'get(): T',
+    'get(): VolatileSnapshot<T>',
   ])
 }
 if (baseline.providerHeaders === 'fetch-validated-discovery') {
