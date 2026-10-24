@@ -4,6 +4,7 @@ import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
+import { zstdFrameRanges } from './zstd-frames.mjs'
 
 const eventType = 'github-copilot/auto-model-decision'
 const maxBytes = 128 * 1024 * 1024
@@ -46,22 +47,19 @@ function restore(rows) {
 
 function decompress(input) {
   const chunks = []
-  let offset = 0
   let total = 0
-  while (offset < input.length) {
-    if (total >= maxBytes || input.subarray(offset, offset + 4).toString('hex') !== '28b52ffd') {
+  for (const { start, end } of zstdFrameRanges(input)) {
+    if (total >= maxBytes) {
       throw new Error('AUTO_HISTORY_INVALID_ZSTD_FRAME')
     }
-    // Node decodes one frame per call; DSH appends multiple independent frames.
-    const { buffer, engine } = zstdDecompressSync(input.subarray(offset), {
+    const { buffer, engine } = zstdDecompressSync(input.subarray(start, end), {
       info: true, maxOutputLength: maxBytes - total,
     })
-    if (engine.bytesWritten <= 0 || engine.bytesWritten > input.length - offset) {
+    if (engine.bytesWritten !== end - start) {
       throw new Error('AUTO_HISTORY_INVALID_ZSTD_LENGTH')
     }
     chunks.push(buffer)
     total += buffer.length
-    offset += engine.bytesWritten
   }
   return {
     decoded: Buffer.concat(chunks, total),

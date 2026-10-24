@@ -6,6 +6,7 @@ import test from 'node:test'
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { repairAutoModelHistory, runCli } from '../../scripts/repair-auto-model-history.mjs'
+import { zstdFrameRanges } from '../../scripts/zstd-frames.mjs'
 
 const header = sessionFormatCatalog.encodeCurrentHeader({
   version: 4, id: 'fixture-auto-history', createdAt: 1, isSeeded: false, delegationDepth: 0,
@@ -20,14 +21,7 @@ const decision = {
 const rows = events => [header, ...events]
 const compress = records => zstdCompressSync(Buffer.from(`${records.map(row => JSON.stringify(row)).join('\n')}\n`))
 const frames = bytes => {
-  const decoded = []
-  let offset = 0
-  while (offset < bytes.length) {
-    const { buffer, engine } = zstdDecompressSync(bytes.subarray(offset), { info: true })
-    decoded.push(buffer)
-    offset += engine.bytesWritten
-  }
-  return decoded
+  return [...zstdFrameRanges(bytes)].map(({ start, end }) => zstdDecompressSync(bytes.subarray(start, end)))
 }
 const decode = bytes => Buffer.concat(frames(bytes)).toString('utf8').trimEnd().split('\n').map(line => JSON.parse(line))
 

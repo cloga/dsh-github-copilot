@@ -157,16 +157,21 @@ node scripts\repair-auto-model-history.mjs 'C:\absolute\path\session.v4.jsonl.zs
 node scripts\repair-auto-model-history.mjs 'C:\absolute\path\session.v4.jsonl.zstd' --write-copy 'C:\private\new-recovery-directory'
 ```
 
-The utility validates the entire v4 log with the official rc.2 catalog, marks
+The utility validates the entire v4 log with the pinned official catalog, marks
 only recognized decision envelopes `ignorable: true`, and preserves all other
 logical fields. Unknown events, malformed relationships, torn tails and inputs
-over 128 MiB fail closed. Copy mode refuses existing destinations and creates a
+over 128 MiB fail closed. Physical scanning also rejects more than 65,536 frames.
+Copy mode refuses existing destinations and creates a
 byte-exact original, validated copy and SHA-256 receipt; keep both logs private.
 
 The corrected writer preserves a separate first zstd header frame for Desktop
 discovery. The original utility combined header/events and could make a copy
 disappear despite logical validation. `reframedHeader: true` reports physical
 repair; zero changed event sequences alone is not readability proof.
+Frame boundaries are parsed before calling Node's public decompressor because
+current Node 24 can consume concatenated frames in a single call. Header-frame
+independence, native checksum validation and exact logical readback remain required;
+this is not permission to accept a combined header/event frame as already repaired.
 
 **Applying a copy requires separate approval and stopped writers.** Recheck the
 live source against `originalSha256`; regenerate if changed. Replace only that
