@@ -185,7 +185,7 @@ Completed managed turns show **Account** beside native Usage. It records the req
 
 Saved account names can load without activating the account. Names are cached for the Host lifetime, invalidated by credential changes or failed verification, and never prove authorization or model access. A global switch requires fresh identity/model validation and confirmed settings persistence. If switching is blocked, let authorization or pinned work settle and use **Refresh account information**; unknown route/activity evidence remains a blocker. The dropdown, not a button beside each saved account, is the selection control.
 
-**Desktop lifecycle:** disable/remove/upgrade can require a full cold restart for Web service recomposition. If the plugin is Off and the native manager reports only `pending (waiting for service: web)`, do not repeatedly toggle or reinstall. Obtain restart approval and follow [rc.2 lifecycle guidance](./docs/web-lifecycle-rc2.md).
+**Desktop lifecycle:** the current rc.3 public-Loader fixture preserves active Web consumers on a single-step add, but staged add and remove/re-add can leave the global `web` service unavailable and dependent account integration inactive. No feature-equivalent plugin-only recovery API is currently available; [issue #371](https://github.com/cloga/dsh-github-copilot/issues/371) remains open. An in-place upgrade without native HMR is explicitly `restart-required`; honor that manager result. The synthetic fixture does not justify repeated toggles or a restart when the manager has not requested one. See the [rc.3 lifecycle evidence](./docs/web-lifecycle-rc2.md).
 
 ## Auto and model preferences
 
