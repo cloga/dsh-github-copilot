@@ -690,7 +690,7 @@ const orderedReleaseSteps = [
   'fetch-depth: 0',
   'path: release-tools',
   '- run: pnpm install --frozen-lockfile',
-  '- name: Install 0.2.0 Core pi-ai closure',
+  '- name: Install rc.3 Core pi-ai closure',
   '- run: pnpm verify:upstream -- dsh-upstream',
   '- run: pnpm verify:controlled-core -- dsh-upstream',
   '- name: Verify plugin package',
