@@ -3,7 +3,7 @@ import * as Connection from '@deepseek-ai/dsh-client-connection'
 
 /** Bind the candidate's public owner Peer; historical carriers predate Peers. */
 export function fixturePeer(ctx: Context) {
-  return ['0.2.1-alpha.4', '0.2.1-alpha.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')
+  return ['0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')
     ? new Connection.Peer(ctx, { principal: { kind: 'owner' } }) : undefined
 }
 

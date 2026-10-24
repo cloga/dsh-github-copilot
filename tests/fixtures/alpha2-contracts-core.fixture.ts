@@ -15,9 +15,11 @@ import * as WebDelegate from '../../src/web-delegate.ts'
 import remote from '../../src/remote.ts'
 import { fixtureFetchHandler } from './gateway-peer.ts'
 
+const volatile = (value: string | undefined) => Object.freeze({ get: () => value })
+
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
-  expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 const header = { id: SessionId('native-child'), version: SESSION_FORMAT_VERSION, createdAt: 1, isSeeded: false,
   parentSession: SessionId('native-parent'), origin: 'subagent' }
@@ -109,9 +111,15 @@ describe('exact official role and search contracts', () => {
     const ctx = new Context()
     try {
       const isolated = ctx.isolate('web', Symbol('original-web'))
-      await isolated.plugin(WebRuntime, { searchProvider: 'fixture-provider' })
+      await isolated.plugin(WebRuntime, {
+        searchProvider: volatile('fixture-provider'),
+        fetchProvider: volatile(undefined),
+      })
       await isolated.plugin(WebDelegate)
-      await ctx.plugin(CopilotRoutedWeb)
+      await ctx.plugin(CopilotRoutedWeb, {
+        searchProvider: volatile(undefined),
+        fetchProvider: volatile(undefined),
+      })
       const provider = await ctx.plugin({ inject: ['web'], apply(owner) {
         owner.web.registerSearchProvider({ id: 'fixture-provider', available: () => true,
           search: async () => ({ sources: [{ url: 'https://example.com' }], truncated: false }) })

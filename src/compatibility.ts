@@ -8,10 +8,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 
 export const DSH_COMPATIBILITY = {
-  release: '0.2.1-alpha.5',
-  developmentRelease: '0.2.1-alpha.5',
-  peerRange: '0.2.1-alpha.5',
-  supportedReleases: ['0.2.1-alpha.5'],
+  release: '0.2.1-rc.3',
+  developmentRelease: '0.2.1-rc.3',
+  peerRange: '0.2.1-rc.3',
+  supportedReleases: ['0.2.1-rc.3'],
   requiredApis: [
     'agentDefaultModel.currentSelection',
     'authorization.describe',
@@ -24,6 +24,8 @@ export const DSH_COMPATIBILITY = {
     'credentials.deleteRecord',
     'settings.describe',
     'settings.mutate',
+    'web.searchProvider.get',
+    'web.fetchProvider.get',
     'web.registerSearchProvider',
     'systemPrompt.section',
     'context.on',
@@ -60,7 +62,10 @@ export function assertDshCompatibility(ctx: Context): void {
   const settings = ctx.get('settings')
   if (!method(settings, 'describe')) incompatible('settings.describe')
   if (!method(settings, 'mutate')) incompatible('settings.mutate')
-  if (!method(ctx.get('web'), 'registerSearchProvider')) incompatible('web.registerSearchProvider')
+  const web = ctx.get('web')
+  if (!method(web, 'registerSearchProvider')) incompatible('web.registerSearchProvider')
+  if (!method(web?.searchProvider, 'get')) incompatible('web.searchProvider.get')
+  if (!method(web?.fetchProvider, 'get')) incompatible('web.fetchProvider.get')
   if (!method((ctx as unknown as Record<string, unknown>)['systemPrompt'], 'section')) incompatible('systemPrompt.section')
   if (typeof (ctx as unknown as Record<string, unknown>)['on'] !== 'function') incompatible('context.on')
   if (typeof (ctx as unknown as Record<string, unknown>)['effect'] !== 'function') incompatible('context.effect')

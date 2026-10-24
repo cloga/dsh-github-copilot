@@ -7,11 +7,18 @@ import { SearchProviderCatalogSchema } from '../src/search-routing-remote.ts'
 
 const contexts: Context[] = []
 afterEach(async () => { for (const ctx of contexts.splice(0)) await ctx.fiber.dispose() })
+const volatile = (value: string | undefined) => Object.freeze({ get: () => value })
 async function fixture() {
   const ctx = new Context(); contexts.push(ctx)
-  const original = new WebRuntime(ctx.isolate('web'))
+  const original = new WebRuntime(ctx.isolate('web'), {
+    searchProvider: volatile(undefined),
+    fetchProvider: volatile(undefined),
+  })
   ctx.provide('githubCopilotOriginalWeb', original)
-  const routed = ctx.plugin(CopilotRoutedWeb); await routed
+  const routed = ctx.plugin(CopilotRoutedWeb, {
+    searchProvider: volatile(undefined),
+    fetchProvider: volatile(undefined),
+  }); await routed
   const controller = new SearchRoutingController(ctx)
   return { ctx, original, routed, controller }
 }

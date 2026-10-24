@@ -17,7 +17,9 @@ async function sourceFixture() {
   const manifest = { name: 'dsh-github-copilot', version: '0.3.1-alpha.2', type: 'module', private: true,
     scripts: { prepare: 'must-not-execute', preinstall: 'must-not-execute', test: 'must-not-execute' },
     dependencies: { '@earendil-works/pi-ai': '1.1.0', '@deepseek-ai/dsh-authorization': release, zod: '4.4.3' },
-    devDependencies: { '@deepseek-ai/dsh-llm': release, '@deepseek-ai/dsh-llm-pi-ai': release, '@deepseek-ai/cordis': '4.0.5-alpha.2', vitest: '^3.2.0' },
+    devDependencies: { '@deepseek-ai/dsh-llm': release, '@deepseek-ai/dsh-llm-pi-ai': release,
+      '@deepseek-ai/cordis': '4.0.5-alpha.2', '@deepseek-ai/cordis-plugin-loader': '1.0.6-alpha.2',
+      '@deepseek-ai/schemastery': '3.18.5-alpha.2', vitest: '^3.2.0' },
     peerDependencies: { '@deepseek-ai/dsh-llm': '0.2.0-rc.2', react: '^18.2.0' },
     optionalDependencies: { '@deepseek-ai/dsh-fs': '0.2.0-rc.2' },
     pnpm: { overrides: { '@earendil-works/pi-ai': 'must-not-inherit' } }, overrides: { anything: 'must-not-inherit' } }
@@ -61,8 +63,8 @@ test('prepares only plugin inputs and exact Core requirements without executing 
   assert.deepEqual(report.executed, { install: false, build: false, tests: false })
 }))
 
-test('admits and inspects only the exact current official published release', async () => withSource(async ({ root, target }) => {
-  assert.deepEqual(PUBLISHED_CORE_RELEASES, [release])
+test('admits and inspects only exact official published releases', async () => withSource(async ({ root, target }) => {
+  assert.deepEqual(PUBLISHED_CORE_RELEASES, ['0.2.1-alpha.5'])
   const report = await preparePublishedCoreFixture({ root, target, release })
   assert.equal(report.release, release)
   await installedFixture(target, release)
@@ -78,9 +80,9 @@ test('refuses an unknown release before creating any target', async () => withSo
 
 test('retains exact alpha.5 dependency qualification after production admission', async () => withSource(async ({ root, target }) => {
   const release = '0.2.1-alpha.5'
-  assert.deepEqual(CANDIDATE_CORE_RELEASES, {
-    [release]: { commit: '1517a4dbca0a2789ff1d41ba439600f8547d23fa', piAi: '1.1.0',
-      cordis: '4.0.5-alpha.2', loader: '1.0.6-alpha.2', schemastery: '3.18.5-alpha.2', zod: '4.4.3' },
+  assert.deepEqual(CANDIDATE_CORE_RELEASES[release], {
+    commit: '1517a4dbca0a2789ff1d41ba439600f8547d23fa', piAi: '1.1.0',
+    cordis: '4.0.5-alpha.2', loader: '1.0.6-alpha.2', schemastery: '3.18.5-alpha.2', zod: '4.4.3',
   })
   const original = await readFile(join(root, 'package.json'), 'utf8')
   const report = await preparePublishedCoreFixture({ root, target, release, candidate: true })
@@ -97,7 +99,30 @@ test('retains exact alpha.5 dependency qualification after production admission'
   assert.deepEqual(PUBLISHED_CORE_RELEASES, ['0.2.1-alpha.5'])
 }))
 
+test('pins rc.3 source and framework artifacts without widening other compatibility targets', async () => withSource(async ({ root, target }) => {
+  const rc3 = '0.2.1-rc.3'
+  assert.deepEqual(CANDIDATE_CORE_RELEASES[rc3], {
+    commit: '1f81c047fc48fa190a683e469daa699857e9afe8', piAi: '1.1.0',
+    cordis: '4.0.5', loader: '1.0.6', schemastery: '3.18.5', zod: '4.4.3',
+  })
+  const report = await preparePublishedCoreFixture({ root, target, release: rc3, candidate: true })
+  const output = JSON.parse(await readFile(join(target, 'package.json'), 'utf8'))
+  assert.equal(report.admission, 'not-admitted')
+  assert.equal(report.candidate, true)
+  assert.equal(output.engines?.dsh, undefined)
+  assert.equal(output.peerDependencies['@deepseek-ai/dsh-llm'], rc3)
+  assert.equal(output.peerDependencies['@deepseek-ai/cordis'], '4.0.5')
+  assert.equal(output.devDependencies['@deepseek-ai/cordis-plugin-loader'], '1.0.6')
+  assert.equal(output.devDependencies['@deepseek-ai/schemastery'], '3.18.5')
+  await installedFixture(target, rc3)
+  const inspected = await inspectPublishedCoreFixture({ root: target, release: rc3, candidate: true })
+  assert.equal(inspected.release, rc3)
+  assert.equal(inspected.candidate, true)
+  assert.equal(inspected.classIdentity, true)
+}))
+
 test('candidate mode refuses floating or unreviewed releases before target creation', async () => withSource(async ({ root, target, base }) => {
+  await assert.rejects(preparePublishedCoreFixture({ root, target, release: '0.2.1-rc.3' }), /unsupported published Core/)
   for (const release of ['latest', '0.2.1-alpha.2', '0.2.1-alpha.4', '0.2.1-alpha.6', '0.2.0-rc.2']) {
     await assert.rejects(preparePublishedCoreFixture({ root, target, release, candidate: true }), /unsupported candidate Core/)
   }
@@ -155,7 +180,10 @@ async function installedFixture(root, targetRelease = release) {
   const names = new Set(['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
     .flatMap(section => Object.keys(pkg[section] ?? {}).filter(name => name.startsWith('@deepseek-ai/dsh-'))))
   for (const name of names) await mockPackage(root, name, targetRelease)
-  await mockPackage(root, '@deepseek-ai/cordis', '4.0.2', 'export class Context {}')
+  const target = CANDIDATE_CORE_RELEASES[targetRelease]
+  await mockPackage(root, '@deepseek-ai/cordis', target.cordis, 'export class Context {}')
+  await mockPackage(root, '@deepseek-ai/cordis-plugin-loader', target.loader)
+  await mockPackage(root, '@deepseek-ai/schemastery', target.schemastery)
   await mockPackage(root, '@deepseek-ai/dsh-llm', targetRelease, 'export class LlmAdapter {}; export default class LlmRuntime {}')
   await mockPackage(root, '@deepseek-ai/dsh-llm-pi-ai', targetRelease,
     'import {LlmAdapter} from "@deepseek-ai/dsh-llm"; export class PiAiAdapter extends LlmAdapter {prepareCall(){}}; export function Config(){}')
@@ -176,7 +204,7 @@ test('inspects real public class identity and paths without claiming route execu
 test('rejects another Cordis copy even when its version matches', async () => withSource(async ({ root, target }) => {
   await preparePublishedCoreFixture({ root, target, release })
   await installedFixture(target)
-  await mockPackage(join(target, 'node_modules/@deepseek-ai/dsh-llm-pi-ai'), '@deepseek-ai/cordis', '4.0.2', 'export class Context {}')
+  await mockPackage(join(target, 'node_modules/@deepseek-ai/dsh-llm-pi-ai'), '@deepseek-ai/cordis', CANDIDATE_CORE_RELEASES[release].cordis, 'export class Context {}')
   await assert.rejects(inspectPublishedCoreFixture({ root: target, release }), /multiple Cordis/)
 }))
 

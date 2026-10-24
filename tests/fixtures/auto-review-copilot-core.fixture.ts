@@ -1,5 +1,5 @@
 /**
- * Native rc.2 Auto reviewer through the managed Copilot route.
+ * Native DSH Auto reviewer through the managed Copilot route.
  * Synthetic metadata, credential, verdicts and wire only; no live inference.
  */
 import '@earendil-works/pi-ai/api/openai-responses'
@@ -56,7 +56,7 @@ class ReviewerFixtureLoader extends Loader {
 
 beforeAll(() => {
   expect(['tagged-source-runtime', 'published-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(['0.2.0-rc.2', '0.2.1-alpha.5']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.2.0-rc.2', '0.2.1-alpha.5', '0.2.1-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))

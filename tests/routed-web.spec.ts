@@ -19,6 +19,11 @@ import { currentSearchInitiator, currentSearchSelection } from '../src/current-p
 const cleanup: Array<() => Promise<void> | void> = []
 afterEach(async () => { for (const dispose of cleanup.splice(0).reverse()) await dispose() })
 const answer: WebSearchResult = { content: 'upstream answer', sources: [{ url: 'https://example.com/1' }, { url: 'https://example.com/2' }, { url: 'https://example.com/3' }], truncated: false }
+const volatile = (value: string | undefined) => Object.freeze({ get: () => value })
+const webConfig = (searchProvider: string | undefined, fetchProvider: string | undefined) => ({
+  searchProvider: volatile(searchProvider),
+  fetchProvider: volatile(fetchProvider),
+})
 
 function owner(provider: string, id: string): Agent {
   // Minimal Session projection; this suite executes real tool/web/scope services, not the Agent loop.
@@ -40,13 +45,13 @@ async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?
   cleanup.push(toolFiber.dispose)
   await toolFiber
   const isolated = ctx.isolate('web', Symbol('original-web'))
-  const originalFiber = isolated.plugin(WebRuntime, { searchProvider: 'configured-provider', fetchProvider: 'configured-fetch' })
+  const originalFiber = isolated.plugin(WebRuntime, webConfig('configured-provider', 'configured-fetch'))
   cleanup.push(originalFiber.dispose)
   await originalFiber
   const delegateFiber = isolated.plugin(WebDelegate)
   cleanup.push(delegateFiber.dispose)
   await delegateFiber
-  const routedFiber = ctx.plugin(CopilotRoutedWeb)
+  const routedFiber = ctx.plugin(CopilotRoutedWeb, webConfig(undefined, undefined))
   cleanup.push(routedFiber.dispose)
   await routedFiber
   const search = vi.fn(async () => answer)

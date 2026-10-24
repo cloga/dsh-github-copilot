@@ -17,11 +17,12 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
   '0.2.0-rc.2': '639ed015397290b3745d163aafe02ffee4aa3f84',
   '0.2.1-alpha.4': '86a402200d95fecef4529d969836f1fe13c6cb0d',
   '0.2.1-alpha.5': '1517a4dbca0a2789ff1d41ba439600f8547d23fa',
+  '0.2.1-rc.3': '1f81c047fc48fa190a683e469daa699857e9afe8',
 })
 const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
   'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts']
 function runtimeTests(release) {
-  if (release === '0.2.1-alpha.5') return [...runtimeTests('0.2.0-rc.2'),
+  if (release === '0.2.1-alpha.5' || release === '0.2.1-rc.3') return [...runtimeTests('0.2.0-rc.2'),
     'tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts']
   return ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'].includes(release)
     ? [...tests, ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
@@ -120,7 +121,8 @@ export async function taggedCoreAliases(core, trackedPaths, release) {
 }
 /** Keep the renderer, its external CJS selector shim and ReactDOM on one installed React. */
 export function taggedRendererRuntimeAliases(packages, release) {
-  if (!release.startsWith('0.1.6-') && !release.startsWith('0.2.0-') && release !== '0.2.1-alpha.5') return []
+  if (!release.startsWith('0.1.6-') && !release.startsWith('0.2.0-')
+    && release !== '0.2.1-alpha.5' && release !== '0.2.1-rc.3') return []
   const renderer = packages.find(item => item.name === '@deepseek-ai/dsh-client-ui-renderer')
   if (renderer === undefined) throw new Error('tagged selector fixture lacks the public renderer package')
   const require = createRequire(renderer.manifestPath)
@@ -155,7 +157,7 @@ export async function prepareTaggedCoreFixture({ root, core, target, release }, 
   await physicalDirectory(dirname(scratch))
   if (await exists(scratch)) throw new Error('tagged fixture target already exists')
   const plugin = JSON.parse(await readFile(join(pluginRoot, 'package.json'), 'utf8'))
-  const piAi = release === '0.2.1-alpha.5' ? '1.1.0' : '0.87.1'
+  const piAi = release === '0.2.1-alpha.5' || release === '0.2.1-rc.3' ? '1.1.0' : '0.87.1'
   if (plugin.name !== 'dsh-github-copilot' || plugin.dependencies?.['@earendil-works/pi-ai'] !== piAi) throw new Error(`tagged fixture requires the plugin own pi-ai ${piAi}`)
   const commit = git(coreRoot, ['rev-parse', '--verify', 'HEAD']).trim()
   if (commit !== expected) throw new Error('tagged Core commit does not match the exact release pin')
