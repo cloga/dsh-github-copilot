@@ -379,7 +379,8 @@ export function createAccountProvider(
         retry?.observe(originalBody, response.status)
         if (response.status === 408 && (guard.onRequestBodyTimeout !== undefined || requestDiagnostic !== undefined)) {
           const diagnostic = await requestBodyTimeoutDiagnostic(response, originalBody, lease.signal,
-            { protocol: entry.api, responseHeadersMs, ...composition === undefined ? {} : { composition },
+            { protocol: entry.api, model: entry.id, observedAt: Date.now(), responseHeadersMs,
+              ...composition === undefined ? {} : { composition },
               ...upload === undefined ? {} : { upload: upload.snapshot() },
               ...compression === undefined ? {} : { compression } })
           if (!lease.signal.aborted && !options.signal?.aborted) guard.onRequestBodyTimeout?.(diagnostic)

@@ -13,6 +13,20 @@ import { diagnosticsReason, diagnosticsOutcome } from './diagnostics-types.ts'
 import { copilotLoginHost, copilotIdentityLabel } from './copilot-login-environment.ts'
 
 type AccountResult = { ok: true; value: CopilotAccountsView } | { ok: false; error: unknown }
+
+// Presentation deadline only: never release a mutation fence or cancel Host work.
+async function readAccountResult(operation: () => Promise<AccountResult>, signal: AbortSignal): Promise<AccountResult> {
+  if (signal.aborted) throw new Error('COPILOT_ACCOUNTS_READ_DISPOSED')
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let abort = () => {}
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('COPILOT_ACCOUNTS_READ_TIMEOUT')), 15_000)
+    abort = () => reject(new Error('COPILOT_ACCOUNTS_READ_DISPOSED'))
+    signal.addEventListener('abort', abort, { once: true })
+  })
+  try { return await Promise.race([operation(), deadline]) }
+  finally { clearTimeout(timer); signal.removeEventListener('abort', abort) }
+}
 export interface CopilotAccountsRemote {
   get(): Promise<AccountResult>
   refreshIdentity(): Promise<AccountResult>
@@ -250,7 +264,9 @@ function CopilotAccountControls(props: AccountControlsProps & (
     const host = copilotLoginHost(enterprise ? tenant : undefined)
     if (!enterprise || host !== 'github.com') environmentHost = host
   } catch { /* Invalid drafts remain local until a supported host is entered. */ }
-  const lifetime = useRef({ active: false, generation: 0, busy: false, copyGeneration: 0 })
+  const lifetime = useRef({ active: false, generation: 0, busy: false, copyGeneration: 0, reads: new AbortController() })
+  const read = useCallback((operation: () => Promise<AccountResult>) =>
+    readAccountResult(operation, lifetime.current.reads.signal), [])
   const changedCallback = useRef(props.onChanged)
   changedCallback.current = props.onChanged
   const identityRead = useRef<Promise<void>>()
@@ -313,7 +329,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
       const observed = diagnostics.current.begin('identity-read')
       try {
         if (!current()) { observed?.finish('interrupted', 'unknown'); return }
-        const result = await managementRemote.ensureIdentity()
+        const result = await read(() => managementRemote.ensureIdentity())
         observed?.stage('response-received')
         if (!current()) { observed?.finish('interrupted', 'unknown'); return }
         const next = result.ok ? accountsViewFrom(result.value) : undefined
@@ -327,10 +343,11 @@ function CopilotAccountControls(props: AccountControlsProps & (
       if (identityRead.current === reading) { identityRead.current = undefined; setIdentityChecking(false) }
     })
     identityRead.current = reading
-  }, [managementRemote])
+  }, [managementRemote, read])
   useEffect(() => {
     const owner = lifetime.current
     owner.active = true
+    owner.reads = new AbortController()
     setView(undefined); setConfirmation(undefined); setBusy(false); setFailed(false)
     setCopyState('idle'); setCancelRequested(false); setAuthorizationIntent(undefined)
     identityRead.current = undefined
@@ -338,18 +355,21 @@ function CopilotAccountControls(props: AccountControlsProps & (
     if (props.remote !== undefined && !props.authorizationBusy) {
       const remote = props.remote
       const generation = owner.generation + 1
-      void run(() => remote.get()).then(next => {
+      void run(() => read(() => remote.get())).then(next => {
         if (owner.active && owner.generation === generation && next !== undefined && next.operation === undefined) hydrateIdentity()
       })
     }
-    return () => { owner.active = false; owner.generation++; owner.busy = false; identityRead.current = undefined }
-  }, [props.remote, managementRemote, run, hydrateIdentity, props.authorizationBusy, props.configured])
+    return () => {
+      owner.active = false; owner.generation++; owner.busy = false; identityRead.current = undefined
+      owner.reads.abort()
+    }
+  }, [props.remote, managementRemote, run, read, hydrateIdentity, props.authorizationBusy, props.configured])
   useEffect(() => {
     if (refreshed.current === props.refreshKey || managementRemote === undefined || busy || props.authorizationBusy) return
     refreshed.current = props.refreshKey
     setConfirmation(undefined)
-    void run(() => managementRemote.get())
-  }, [props.refreshKey, managementRemote, busy, props.authorizationBusy, run])
+    void run(() => read(() => managementRemote.get()))
+  }, [props.refreshKey, managementRemote, busy, props.authorizationBusy, run, read])
   useEffect(() => {
     if (managementRemote === undefined || props.authorizationBusy || view?.operation !== undefined) return
     const ensure = () => {
@@ -361,9 +381,9 @@ function CopilotAccountControls(props: AccountControlsProps & (
   }, [managementRemote, props.authorizationBusy, view?.operation, hydrateIdentity])
   useEffect(() => {
     if ((view?.operation !== 'authorizing' && view?.operation !== 'verifying') || props.remote === undefined) return
-    const timer = window.setTimeout(() => { void run(() => props.remote!.get(), true, false) }, 1500)
+    const timer = window.setTimeout(() => { void run(() => read(() => props.remote!.get()), true, false) }, 1500)
     return () => window.clearTimeout(timer)
-  }, [view, props.remote, run])
+  }, [view, props.remote, run, read])
   const activeNotice = view?.operation === 'authorizing' && !cancelRequested ? view.notices.at(-1) : undefined
   const noticeCode = activeNotice?.code
   useEffect(() => {
@@ -523,8 +543,8 @@ function CopilotAccountControls(props: AccountControlsProps & (
       props.addOnly && !authorizationOperation ? control(text.add, () => {
         if (props.remote !== undefined) startAdd()
       }, pending || addBlocked || view?.writable !== true || view?.switchable !== true) : null,
-      props.addOnly && (failed || !pending && view?.switchable === false) ? control(text.retry, () => {
-        if (props.remote !== undefined) void run(() => props.remote!.get())
+      (failed && view === undefined || props.addOnly && !pending && view?.switchable === false) ? control(text.retry, () => {
+        if (props.remote !== undefined) void run(() => read(() => props.remote!.get()))
       }, pending || props.remote === undefined) : null,
       props.addOnly ? null : h('div', { 'data-copilot-current-account-row': true,
         style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingBlock: 8, borderBottom: border } },
@@ -566,7 +586,7 @@ function CopilotAccountControls(props: AccountControlsProps & (
           control(text.cancel, () => setConfirmation(undefined), pending))),
       props.addOnly ? null : h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
         control(busy ? text.refreshing : text.refresh, () => {
-          if (managementRemote !== undefined) void run(() => managementRemote.refreshIdentity())
+          if (managementRemote !== undefined) void run(() => read(() => managementRemote.refreshIdentity()))
         }, pending || props.remote === undefined),
         activeAccount === undefined || activeAccount.id === 'canonical' ? null : control(text.reauthorize, () => {
           if (props.remote !== undefined && view?.revision !== undefined) startReauthorization(activeAccount.id, view.revision)
