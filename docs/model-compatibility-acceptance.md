@@ -150,6 +150,20 @@ session disposal or Host restart revokes evidence; an old error on disk cannot
 create a candidate. Re-read status after these changes. Disabling affects
 future requests and does not undo answers already generated.
 
+Scheduled/background failures may settle while the Client is closed. Opening
+the task's original Session now exposes **Replay recovery** for its latest
+recorded exact scope rejection even after request fingerprints expire, the Host
+restarts, or the picker changes. A strict plugin-owned public projection refolds
+only native terminal failure classification and sequence; it stores no errors,
+payloads, account origin or new history events. Copied fork/child prefixes do not
+authorize this notice, and a later native turn clears it. Missing request-specific
+diagnostics remain unknown, never reconstructed invalid-item counts or legacy
+fingerprint consent. The entry offers the existing persistent Session policy,
+with the same loss disclosure, explicit Enable/Cancel and confirmed Settings CAS.
+It does not enable the policy, send a message or retry a scheduled task by itself.
+After consent, inspect the failed task's possible side effects before choosing
+native Retry or a new conversation. The supplier's scope check remains intact.
+
 Admission requires the initiating native Agent request signal and exact
 session; unbound requests, compaction, titles, classifier requests, other
 models and other sessions cannot borrow consent. Active-turn writes are

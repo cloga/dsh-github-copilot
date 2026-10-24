@@ -25,11 +25,12 @@ const model: Model<'openai-responses'> = {
 
 beforeAll(() => {
   expect(['published-artifact-runtime', 'tagged-source-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.1-alpha.5')
+  expect(['0.2.1-alpha.5', '0.2.1-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  const release = process.env.DSH_PUBLISHED_CORE_RELEASE
   for (const name of ['@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-llm-pi-ai']) {
     const path = findPackageJSON(name, import.meta.url)
     if (path === undefined) throw new Error('CANDIDATE_PACKAGE_IDENTITY_UNAVAILABLE')
-    expect(JSON.parse(readFileSync(path, 'utf8')).version).toBe('0.2.1-alpha.5')
+    expect(JSON.parse(readFileSync(path, 'utf8')).version).toBe(release)
   }
 })
 
@@ -73,7 +74,7 @@ function user(text: string) {
   return createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] })
 }
 
-describe('fixed alpha.5 public adapter and SDK contracts', () => {
+describe('fixed DSH public adapter and SDK contracts', () => {
   it('keeps native code-first PTC schema and runtime-specific SDK instructions intact', async () => {
     const ctx = new Context()
     try {

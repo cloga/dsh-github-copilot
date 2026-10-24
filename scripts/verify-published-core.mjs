@@ -13,6 +13,14 @@ export const CANDIDATE_CORE_RELEASES = Object.freeze({
     schemastery: '3.18.5-alpha.2',
     zod: '4.4.3',
   }),
+  '0.2.1-rc.3': Object.freeze({
+    commit: '1f81c047fc48fa190a683e469daa699857e9afe8',
+    piAi: '1.1.0',
+    cordis: '4.0.5',
+    loader: '1.0.6',
+    schemastery: '3.18.5',
+    zod: '4.4.3',
+  }),
 })
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
 const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts', 'cordis.patch.yml',
@@ -180,6 +188,12 @@ export async function inspectPublishedCoreFixture({ root, release, candidate = f
   const llm = packages.find(entry => entry.name === '@deepseek-ai/dsh-llm')
   if (!adapter || !llm) throw new Error('fixture requires the public adapter and LlmRuntime')
   const cordis = await publicPackage(fixture, anchor, '@deepseek-ai/cordis')
+  const loader = await publicPackage(fixture, anchor, '@deepseek-ai/cordis-plugin-loader')
+  const schemastery = await publicPackage(fixture, anchor, '@deepseek-ai/schemastery')
+  const target = CANDIDATE_CORE_RELEASES[release]
+  if (cordis.version !== target.cordis || loader.version !== target.loader || schemastery.version !== target.schemastery) {
+    throw new Error('fixture framework artifact version differs')
+  }
   const adapterCordis = await publicPackage(fixture, adapter.entry, '@deepseek-ai/cordis')
   const llmCordis = await publicPackage(fixture, llm.entry, '@deepseek-ai/cordis')
   const adapterLlm = await publicPackage(fixture, adapter.entry, '@deepseek-ai/dsh-llm')
@@ -196,7 +210,7 @@ export async function inspectPublishedCoreFixture({ root, release, candidate = f
   const ownPi = await publicPackage(fixture, anchor, '@earendil-works/pi-ai')
   const adapterPi = await publicPackage(fixture, adapter.entry, '@earendil-works/pi-ai')
   if (ownPi.version !== piAi) throw new Error('fixture changed the plugin own pi version')
-  return { schemaVersion: 1, kind: 'published-core-identity', release, candidate, root: fixture, packages, cordis,
+  return { schemaVersion: 1, kind: 'published-core-identity', release, candidate, root: fixture, packages, cordis, loader, schemastery,
     ownPi, adapterPi, classIdentity: true, executed: { apply: false, modelRequests: false, compatibilityTests: false } }
 }
 

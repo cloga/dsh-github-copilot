@@ -29,7 +29,7 @@ afterEach(() => {
 describe('tsdown client artifact', () => {
   async function loadGatewayArtifact(): Promise<Record<string, unknown>> {
     const require = createRequire(import.meta.url)
-    if (['0.2.1-alpha.4', '0.2.1-alpha.5'].includes(require('@deepseek-ai/dsh-api-gateway/package.json').version)) {
+    if (['0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3'].includes(require('@deepseek-ai/dsh-api-gateway/package.json').version)) {
       return import('@deepseek-ai/dsh-api-gateway/client')
     }
     const code = readFileSync(resolve('node_modules/@deepseek-ai/dsh-api-gateway/lib/client.js'), 'utf8')

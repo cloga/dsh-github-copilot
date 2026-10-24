@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - main
+      - cloga-assess-dsh-core-upgrade
 
 permissions:
   contents: read
@@ -20,11 +21,11 @@ jobs:
           - windows-latest
         include:
           - os: ubuntu-latest
-            release: 0.2.1-alpha.5
-            commit: 1517a4dbca0a2789ff1d41ba439600f8547d23fa
+            release: 0.2.1-rc.3
+            commit: 1f81c047fc48fa190a683e469daa699857e9afe8
           - os: windows-latest
-            release: 0.2.1-alpha.5
-            commit: 1517a4dbca0a2789ff1d41ba439600f8547d23fa
+            release: 0.2.1-rc.3
+            commit: 1f81c047fc48fa190a683e469daa699857e9afe8
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -111,7 +112,7 @@ jobs:
       - name: Install native diagnostic storage verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'
-      - name: Prepare exact DSH 0.2.1-alpha.5 tagged-source runtime verification
+      - name: Prepare exact DSH 0.2.1-rc.3 tagged-source runtime verification
         shell: bash
         run: |
           node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.release }}"
@@ -151,7 +152,7 @@ jobs:
       - name: Prepare an isolated plugin fixture for published Core APIs
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-alpha.5
+          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-rc.3 --candidate true
       - name: Install unchanged public dependency artifacts
         shell: bash
         run: |
@@ -160,12 +161,12 @@ jobs:
       - name: Verify actual dependency paths and class identities
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-alpha.5
+          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-rc.3 --candidate true
       - name: Typecheck and exercise the published native adapter
         shell: bash
         env:
           DSH_CORE_EVIDENCE: published-artifact-runtime
-          DSH_PUBLISHED_CORE_RELEASE: 0.2.1-alpha.5
+          DSH_PUBLISHED_CORE_RELEASE: 0.2.1-rc.3
         run: |
           cd "$RUNNER_TEMP/copilot-published-core"
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
