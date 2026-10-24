@@ -1396,7 +1396,7 @@
       "tests": [
         {"file": "tests/compatibility.spec.ts", "name": "admits only the exact current official release"},
         {"file": "tests/compatibility.spec.ts", "name": "declares the current and retained exact contract targets without claiming live Desktop validation"},
-        {"file": "tests/compatibility.spec.ts", "name": "accepts the supported DSH service contract"},
+        {"file": "tests/compatibility.spec.ts", "name": "accepts the public service contract without reading private WebRuntime config"},
         {"file": "tests/compatibility.spec.ts", "name": "fails before startup when a required API is absent"}
       ]
     },
