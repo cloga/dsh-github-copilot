@@ -19,6 +19,7 @@ export async function describeRepository(root = repositoryRoot) {
     package: { name: pkg.name, version: pkg.version, node: pkg.engines.node, packageManager: pkg.packageManager },
     entrypoints: contract.entrypoints,
     boundaries: contract.boundaries,
+    acceptance: contract.acceptance,
     tasks: contract.tasks,
     scripts: pkg.scripts,
     admittedReleases: baseline.supportedBaselines.dsh.admittedReleases,
@@ -59,6 +60,7 @@ export async function planTask(task, root = repositoryRoot) {
     ...area,
     cwd: 'repository root',
     commands: commands.map(argv => ({ argv, executed: false })),
+    acceptance: description.acceptance,
     delivery: 'Issue -> feature branch -> focused tests -> complete gate -> reviewed merge without a separate approval prompt; important updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Ask before profile installation or interrupting restart; report any publication blocker.',
     boundaries: description.boundaries,
   }
@@ -105,6 +107,10 @@ export async function main(args = process.argv.slice(2)) {
   const json = args.includes('--json')
   const rest = args.filter(arg => arg !== '--json')
   const [command, value, extra] = rest
+  if (command === 'accept') {
+    const { acceptanceMain } = await import('./acceptance.mjs')
+    return acceptanceMain(rest.slice(1))
+  }
   try {
     let result
     if (extra !== undefined) throw new Error('Too many arguments.')
@@ -112,7 +118,7 @@ export async function main(args = process.argv.slice(2)) {
     else if (command === 'doctor' && value === undefined) result = await doctor()
     else if (command === 'plan' && value !== undefined) result = await planTask(value)
     else if (command === 'attribution' && value !== undefined) result = { schemaVersion: 1, trailer: attribution(value) }
-    else throw new Error('Usage: node scripts/agent.mjs describe|doctor|plan <task>|attribution "Actual Tool" [--json]')
+    else throw new Error('Usage: node scripts/agent.mjs describe|doctor|plan <task>|attribution "Actual Tool"|accept --contract FILE --report FILE [--json]')
     if (json || command !== 'attribution') console.log(JSON.stringify(result, null, 2))
     else console.log(result.trailer)
     return result.ok === false ? 1 : 0

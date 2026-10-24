@@ -15,6 +15,10 @@ test('describes actual package metadata without claiming a release exists', asyn
   assert.equal(result.release.publicationVerified, false)
   assert.equal(result.release.npm.spec, `${pkg.name}@${pkg.version}`)
   assert.equal(result.release.npm.publicationVerified, false)
+  assert.equal(result.acceptance.mode, 'evidence-consistency-only')
+  assert.equal(result.acceptance.executed, false)
+  assert.equal(result.acceptance.executionVerified, false)
+  assert.equal(result.acceptance.independenceVerified, false)
   assert.deepEqual(result.admittedReleases, ['0.2.1-rc.3'])
   assert.deepEqual(result.baselines.map(baseline => baseline.release), [
     '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3',
@@ -29,6 +33,7 @@ test('plans only known task IDs with unexecuted argument arrays', async () => {
   }
   await assert.rejects(planTask('__proto__'), /Unknown task/)
   assert.ok((await planTask('tooling')).commands.some(command => command.argv[1] === 'test:scripts'))
+  assert.deepEqual((await planTask('tooling')).acceptance, (await describeRepository()).acceptance)
 })
 
 test('context diagnostics preserve shared usage and include native whole-turn evidence', async () => {

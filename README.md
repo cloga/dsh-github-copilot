@@ -359,6 +359,14 @@ pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz
 
 Agents start with `node scripts/agent.mjs describe --json`, `doctor --json` and `plan <task> --json`; plans are unexecuted arguments, not action approval. Follow [AGENTS.md](./AGENTS.md) for the full change/release policy. Important updates require protected merge and verified dual-channel publication; documentation-only work does not release by default. Profile installation, sign-out and session-interrupting restart need separate authorization.
 
+The source-checkout [task acceptance pilot](https://github.com/cloga/dsh-github-copilot/blob/main/docs/agent-acceptance.md) adds
+`node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE`.
+It checks requirement coverage, the clean current commit, exact contract bytes
+and local evidence hashes; failed, blocked and not-run outcomes remain distinct.
+It does not attest execution, independent review, live behavior or delivery
+permission. Keep evidence outside Git; no agents, uploads or profile changes are
+started. Existing CI and release gates remain authoritative.
+
 Commit attribution uses `Assisted-by` with the actual tool, never the model provider or an unverified collaborator identity.
 
 ## Release and checksum verification
