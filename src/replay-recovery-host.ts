@@ -3,6 +3,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { ReplayRecoveryStore } from './replay-recovery.ts'
+import { installReplayRecoveryEvidence } from './replay-recovery-evidence.ts'
 import type { ReplayRecoveryDuration, ReplayRecoveryView } from './replay-recovery-types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -34,6 +35,7 @@ export function installReplayRecovery(ctx: Context, proof: (agent?: Agent, reque
   prepare(request: GenerateOptions): { transform(payload: unknown): unknown; rejected(body: string | undefined): void } | undefined
   dispose(): void
 } {
+  installReplayRecoveryEvidence(ctx)
   const store = new ReplayRecoveryStore()
   const requests = new WeakMap<AbortSignal, { session: Agent['session']; turn: number }>()
   const currentRequests = new WeakMap<object, AbortSignal>()

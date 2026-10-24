@@ -77,7 +77,7 @@ function fixture(value: unknown = available) {
   const node = document.createElement('div'); document.body.append(node)
   const root = createRoot(node)
   const render = (props: { running?: boolean; refreshKey?: string; sessionId?: string;
-    continuation?: typeof continuation } = {}) =>
+    continuation?: typeof continuation; failureKey?: string } = {}) =>
     act(async () => root.render(createElement(ReplayRecoveryCard, { key: props.sessionId ?? 'viewed',
       remote, continuation, sessionId: 'viewed', ...props })))
   const click = async (text: string) => {
@@ -87,6 +87,71 @@ function fixture(value: unknown = available) {
   }
   return { remote, continuation, node, render, click, close: () => act(async () => root.unmount()) }
 }
+it('keeps explicit recovery reachable after reopening a failed scheduled Session without Host fingerprints', async () => {
+  let surface!: (props: Record<string, unknown>) => ReactElement | null
+  const f = fixture({ state: 'unavailable' })
+  const slots = {
+    spec: () => ({ kind: 'list', scope: 'session' }),
+    inject: (_name: string, activate: () => () => void) => activate(),
+    register: (_options: unknown, component: typeof surface) => { surface = component; return vi.fn() },
+  }
+  const ctx = { get: (name: string) => name === 'slots' ? slots : undefined, logger: { warn: vi.fn() },
+    remote: { githubCopilotReplayRecovery: f.remote, githubCopilotSessionContinuation: f.continuation } }
+  const cleanup = registerReplayRecoveryUi(ctx as unknown as Context)
+  const node = document.createElement('div'); document.body.append(node)
+  const shown = createRoot(node)
+  let failureSeq: number | null = 12
+  let running = true
+  let selected: unknown = { next: null }
+  const runtime = {
+    sessionId: 'scheduled-session',
+    useSession: (selector: (snapshot: unknown) => unknown) => selector({
+      sessionId: 'scheduled-session', removed: false, openState: 'open', running, lastAgentError: null,
+    }),
+    useProjection: (key: string) => key === 'modelSelection' ? selected
+      : { inherited: 0, turn: null, managed: false, failureSeq },
+  }
+  try {
+    await act(async () => shown.render(surface(runtime)))
+    expect(Array.from(node.querySelectorAll('button')).every(button => button.disabled)).toBe(true)
+    expect(f.remote.get).not.toHaveBeenCalled()
+    expect(f.continuation.set).not.toHaveBeenCalled()
+    running = false
+    await act(async () => shown.render(surface(runtime)))
+    expect(f.continuation.get).toHaveBeenCalledWith('scheduled-session')
+    expect(node.textContent).toContain('Old reasoning replay was rejected')
+    expect(node.textContent).toContain('omitting old encrypted reasoning and embedded summaries')
+    expect(node.textContent).toContain('implicit details may be lost')
+    expect(node.textContent).toContain('open the original Session')
+    expect(node.textContent).not.toContain('identified old encrypted reasoning items')
+    expect(f.continuation.set).not.toHaveBeenCalled()
+    const enable = Array.from(node.querySelectorAll('button'))
+      .find(button => button.textContent === 'Enable visible-history continuation')!
+    expect(enable.disabled).toBe(false)
+    selected = { next: { provider: 'other', model: 'other' } }
+    await act(async () => shown.render(surface(runtime)))
+    expect(node.contains(enable)).toBe(true)
+    await act(async () => enable.click())
+    expect(f.continuation.set).toHaveBeenCalledExactlyOnceWith('scheduled-session', 1, true)
+    expect(f.remote.authorize).not.toHaveBeenCalled()
+    expect(f.remote.setEnabled).not.toHaveBeenCalled()
+    failureSeq = null
+    await act(async () => shown.render(surface(runtime)))
+    expect(node.textContent).toBe('')
+  } finally { await act(async () => shown.unmount()); cleanup(); await f.close(); node.remove() }
+})
+it('retains the loss-disclosed policy action when historical failure exists but fingerprint status cannot be read', async () => {
+  const f = fixture()
+  f.remote.get.mockRejectedValue(new Error('synthetic unavailable metadata'))
+  try {
+    await f.render({ failureKey: 'turn-end:12' })
+    expect(f.node.querySelector('[role=alert]')).not.toBeNull()
+    expect(f.node.textContent).toContain('Enable visible-history continuation')
+    await f.click('Cancel')
+    expect(f.continuation.set).not.toHaveBeenCalled()
+    expect(f.node.textContent).toBe('Replay recovery · Review')
+  } finally { await f.close() }
+})
 it('uses native auxiliary typography for the entire notice and inherited controls in an independent dock row', async () => {
   const f = fixture()
   try {
