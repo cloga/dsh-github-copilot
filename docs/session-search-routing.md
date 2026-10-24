@@ -106,7 +106,7 @@ Desktop supports its qualified bundled CLI, not any generic shim.
 [Installation guidance](./npm-distribution.md#desktop-bundled-cli-on-official-rc2).
 Web service disable/remove/upgrade may require a cold restart; do not use
 remove/re-add as a hot-upgrade workaround.
-[Lifecycle characterization](./web-lifecycle-rc2.md).
+[Lifecycle characterization](./web-lifecycle-rc3.md).
 
 ## Verification and limits
 
