@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createElement as h, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
 import { ReplayRecoveryViewSchema } from './replay-recovery-types.ts'
+import { REPLAY_RECOVERY_EVIDENCE, ReplayRecoveryEvidenceSchema } from './replay-recovery-evidence.ts'
 import type { ReplayRecoveryDuration, ReplayRecoveryView } from './replay-recovery-types.ts'
 import { SessionContinuationCard } from './session-continuation-ui.ts'
 import type { SessionContinuationRemote } from './session-continuation-ui.ts'
@@ -17,8 +18,9 @@ const noop = () => {}
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
-export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = 'en', running = false, refreshKey = '' }: {
+export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = 'en', running = false, refreshKey = '', failureKey }: {
   sessionId: string; remote: ReplayRecoveryRemote; locale?: string; running?: boolean; refreshKey?: string
+  failureKey?: string
   continuation?: SessionContinuationRemote
 }): ReactElement | null {
   const zh = locale.startsWith('zh')
@@ -72,8 +74,9 @@ export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = '
   const button = composerNoticeButtonStyle
   const disabled = busy || running
   const evidence = view && view.state !== 'unavailable' ? view : undefined
-  if (!error && !evidence && !hadEvidence) return null
-  if (!error && evidence && dismissed === evidence.revision) {
+  const noticeKey = failureKey ?? evidence?.revision
+  if (!error && !noticeKey && !hadEvidence) return null
+  if (noticeKey && dismissed === noticeKey) {
     return h('button', { type: 'button', style: { ...button, ...composerNoticeStyle,
       width: 'auto', alignSelf: 'center', color: button.color },
       disabled, onClick: () => setDismissed(undefined) },
@@ -81,17 +84,23 @@ export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = '
   }
   return h('section', { 'aria-label': zh ? '回放恢复' : 'Replay recovery',
     'data-copilot-composer-notice': 'replay', 'aria-busy': busy, style: composerNoticeSurfaceStyle },
-  h('strong', { role: 'status', style: { color: 'var(--dsw-alias-label-primary, CanvasText)', fontWeight: 600 } }, evidence ? zh ? '旧推理回放被拒绝' : 'Old reasoning replay was rejected'
+  h('strong', { role: 'status', style: { color: 'var(--dsw-alias-label-primary, CanvasText)', fontWeight: 600 } }, noticeKey ? zh ? '旧推理回放被拒绝' : 'Old reasoning replay was rejected'
       : zh ? '回放恢复' : 'Replay recovery'),
   error ? h('p', { role: 'alert', style: composerNoticeParagraphStyle }, zh
     ? '无法读取或更改恢复状态。请等当前轮结束后重新读取；旧确认可能已过期。'
     : 'Recovery could not be read or changed. Wait for the active turn to end and read again; the prior confirmation may have expired.') : null,
-  view?.state === 'unavailable' ? h('p', { style: composerNoticeParagraphStyle }, zh
+  view?.state === 'unavailable' ? h('p', { style: composerNoticeParagraphStyle }, failureKey ? zh
+    ? '原会话记录了回放拒绝；当前请求指纹不可用。这里只提供本 Session 的显式降级策略，不恢复旧请求授权。'
+    : 'The original Session recorded a replay rejection; current request fingerprints are unavailable. Only the explicit Session continuation policy is offered, not authorization for the old request.'
+    : zh
     ? '失败证据已失效，没有当前可用的失败诊断。此状态不改变本 Session 的降级续聊策略。'
     : 'Failure evidence expired; no current failure diagnostics are available. This does not change the Session continuation policy.') : null,
-  evidence ? h('div', null,
-    h(SessionContinuationCard, { key: evidence.revision, sessionId, remote: continuation, locale,
-      running: running || busy, recovery: true, onCancel: () => setDismissed(evidence.revision) }),
+  noticeKey ? h('div', null,
+    h('p', { style: composerNoticeParagraphStyle }, zh
+      ? '定时任务失败后，请打开原 Session，在此选择恢复策略。开启不会重新运行任务；重试前请先核对是否已有部分结果，避免重复执行。'
+      : 'After a scheduled task fails, open the original Session to choose recovery here. Enabling does not rerun the task; check for partial results before retrying to avoid duplicate actions.'),
+    h(SessionContinuationCard, { key: noticeKey, sessionId, remote: continuation, locale,
+      running, recovery: true, onCancel: () => setDismissed(noticeKey) }),
   ) : null,
   running ? h('p', { role: 'status', style: composerNoticeParagraphStyle }, zh ? '当前轮进行中，结束后自动更新。' : 'Turn in progress; status updates when it ends.') : null,
   h('details', { style: { marginTop: 8 } },
@@ -129,14 +138,18 @@ function Surface({ runtime, remote, continuation, locale }: { runtime: Runtime; 
   const valid = runtime.useSession(value => record(value) && value.sessionId === runtime.sessionId
     && value.removed === false && value.openState === 'open')
   const selected = runtime.useProjection('modelSelection')
+  const historical = ReplayRecoveryEvidenceSchema.safeParse(runtime.useProjection(REPLAY_RECOVERY_EVIDENCE))
+  const failureKey = historical.success && historical.data.failureSeq !== null
+    ? `turn-end:${historical.data.failureSeq}` : undefined
   const running = runtime.useSession(value => !record(value) || value.running !== false)
   const lastError = runtime.useSession(value => record(value) && typeof value.lastAgentError === 'string' ? value.lastAgentError : '')
   const language = useSyncExternalStore(listener => locale?.subscribe(listener) ?? noop,
     () => locale?.getLocale().active ?? 'en', () => 'en')
-  if (!valid || !record(selected) || !record(selected.next) || selected.next.provider !== 'github-copilot-preview') return null
+  if (!valid || !failureKey && (!record(selected) || !record(selected.next) || selected.next.provider !== 'github-copilot-preview')) return null
   return h('div', null,
-    h(ReplayRecoveryCard, { key: JSON.stringify([runtime.sessionId, selected.next.model]),
-      sessionId: runtime.sessionId, remote, continuation, locale: language, running, refreshKey: lastError }))
+    h(ReplayRecoveryCard, { key: runtime.sessionId,
+      sessionId: runtime.sessionId, remote, continuation, locale: language, running,
+      refreshKey: JSON.stringify([lastError, failureKey]), failureKey }))
 }
 export function registerReplayRecoveryUi(ctx: Context): () => void {
   const candidate: unknown = ctx.get('slots')

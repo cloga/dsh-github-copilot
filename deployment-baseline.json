@@ -8,7 +8,7 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.4.2-alpha.18.dsh.0.2.0.rc.2"
+    "version": "0.4.2-alpha.19.dsh.0.2.0.rc.2"
   },
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -901,6 +901,7 @@
         {"file": "src/replay-recovery.ts", "marker": "class ReplayRecoveryStore"},
         {"file": "src/replay-recovery-host.ts", "marker": "extends TypertRemoteService"},
         {"file": "src/replay-recovery-host.ts", "marker": "COPILOT_REPLAY_RECOVERY_TURN_ACTIVE"},
+        {"file": "src/replay-recovery-evidence.ts", "marker": "githubCopilotReplayRecoveryEvidence"},
         {"file": "src/replay-recovery-remote.ts", "marker": "githubCopilotReplayRecovery.setEnabled"},
         {"file": "src/replay-recovery-remote.ts", "marker": "githubCopilotReplayRecovery.authorize"},
         {"file": "src/replay-recovery-ui.ts", "marker": "recovery: true"},
@@ -913,6 +914,8 @@
         {"file": "tests/replay-recovery.spec.ts", "name": "admits only the next matching native turn, including its steps and retries"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "enables only persistent Session continuation after loss disclosure, without legacy authorization or sending"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "is absent normally, reads on settled turns without polling and resets dismissal only for new evidence"},
+        {"file": "tests/replay-recovery-ui.spec.ts", "name": "keeps explicit recovery reachable after reopening a failed scheduled Session without Host fingerprints"},
+        {"file": "tests/replay-recovery-evidence.spec.ts", "name": "cold-folds the native rc.2 saved failure and removes only its public projection registration"},
         {"file": "tests/preview-route.spec.ts", "name": "offers exact failed replay only to its initiating session and recovers after explicit confirmation"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds explicit replay recovery through native Client and %s Host gateways"}
       ]

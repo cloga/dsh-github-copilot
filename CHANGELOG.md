@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.2-alpha.19.dsh.0.2.0.rc.2 (prepared)
+
+- Restore the explicit visible-history recovery entry when opening an original
+  scheduled Session after its managed replay-scope failure, including cold
+  Host startup, expired temporary fingerprints and a changed picker (#433).
+- Refold only fixed terminal failure evidence through official rc.2's public
+  Session projection; ignore inherited failures and clear on a later turn.
+  Preserve explicit loss disclosure and persistent policy CAS, independent of
+  temporary diagnostic reads. Never reconstruct account origin or request
+  fingerprints, rewrite history, automatically enable loss or rerun a task.
+- Keep the exact official DSH `0.2.0-rc.2` dependency graph and pi-ai `0.87.1`.
+  Publication does not install the plugin or restart a local Desktop.
+
 ## 0.4.2-alpha.18.dsh.0.2.0.rc.2 (prepared)
 
 - Stop rejecting a valid native-projected image format solely because it is absent
