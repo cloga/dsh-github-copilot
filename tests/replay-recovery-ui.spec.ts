@@ -58,6 +58,56 @@ it('keeps replay recovery separate from independently registered compaction feed
     expect(continuation.set).not.toHaveBeenCalled()
   } finally { await act(async () => root.unmount()); cleanup(); node.remove() }
 })
+it('offers explicit recovery for a cold-open scheduled failure without temporary fingerprints or a current managed selection', async () => {
+  let surface!: (props: Record<string, unknown>) => ReactElement | null
+  const slots = {
+    spec: () => ({ kind: 'list', scope: 'session' }),
+    inject: (_name: string, activate: () => () => void) => activate(),
+    register: (_options: unknown, component: typeof surface) => { surface = component; return vi.fn() },
+  }
+  const continuation = {
+    get: vi.fn(async () => ({ ok: true, value: { enabled: false, source: 'session', revision: 7, nextTurnAuthorized: false } })),
+    set: vi.fn(async () => ({ ok: true, value: { enabled: true, source: 'session', revision: 8, nextTurnAuthorized: false } })),
+  }
+  const recovery = { get: vi.fn(async () => ({ ok: true, value: { state: 'unavailable' } })),
+    setEnabled: vi.fn(), authorize: vi.fn() }
+  const ctx = { get: (name: string) => name === 'slots' ? slots : undefined, logger: { warn: vi.fn() },
+    remote: { githubCopilotReplayRecovery: recovery, githubCopilotSessionContinuation: continuation } }
+  const cleanup = registerReplayRecoveryUi(ctx as unknown as Context)
+  const node = document.createElement('div'); document.body.append(node)
+  const root = createRoot(node)
+  let failureSeq: number | null = 42
+  let running = false
+  const runtime = {
+    sessionId: 'scheduled',
+    useSession: (selector: (snapshot: unknown) => unknown) => selector({
+      sessionId: 'scheduled', removed: false, openState: 'open', running, lastAgentError: null,
+    }),
+    useProjection: (key: string) => key === 'githubCopilotReplayFailure'
+      ? { inherited: 0, failureSeq } : { next: { provider: 'other', model: 'changed-after-failure' } },
+  }
+  try {
+    await act(async () => root.render(surface(runtime)))
+    expect(node.textContent).toContain('Old reasoning replay was rejected')
+    expect(node.textContent).toContain('implicit details may be lost')
+    expect(node.textContent).toContain('request-specific diagnostics are unavailable')
+    expect(node.textContent).not.toContain('identified old encrypted reasoning items')
+    expect(continuation.get).toHaveBeenCalledExactlyOnceWith('scheduled')
+    expect(continuation.set).not.toHaveBeenCalled()
+    const button = Array.from(node.querySelectorAll('button')).find(value => value.textContent === 'Enable visible-history continuation')!
+    await act(async () => button.click())
+    expect(continuation.set).toHaveBeenCalledExactlyOnceWith('scheduled', 7, true)
+    expect(node.textContent).toContain('Continuation is already on')
+    expect(recovery.authorize).not.toHaveBeenCalled()
+    expect(recovery.setEnabled).not.toHaveBeenCalled()
+    running = true
+    await act(async () => root.render(surface(runtime)))
+    expect(Array.from(node.querySelectorAll('button')).every(button => button.disabled)).toBe(true)
+    running = false; failureSeq = null
+    await act(async () => root.render(surface(runtime)))
+    expect(node.textContent).toBe('')
+  } finally { await act(async () => root.unmount()); cleanup(); node.remove() }
+})
 function fixture(value: unknown = available) {
   let policy = { enabled: false, source: 'session', revision: 1, nextTurnAuthorized: false }
   const continuation = {
