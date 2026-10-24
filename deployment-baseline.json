@@ -290,6 +290,7 @@
           "source": "https://github.com/deepseek-ai/deepseek-harness",
           "desktopRelease": "not-verified",
           "webRuntimeConfig": "volatile-provider-getters-required-config",
+          "desktopPackageSet": "not-materialized",
           "webSearchRouter": "synthetic-fixed-readonly-volatile",
           "reviewerIdentity": "exact-package-version-and-published-callback-identity",
           "modelsUi": "provider-card",
