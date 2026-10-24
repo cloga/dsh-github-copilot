@@ -94,7 +94,18 @@ HTTP `408 / user_request_timeout` is separate from input-budget overflow. For th
 
 `github-copilot.responsesRequestCompression` is a separate, experimental, default-off upload mitigation. Explicit opt-in gzips only account-proven official Copilot HTTPS `/responses` POSTs with a string JSON body, at the existing plugin-owned Fetch seam after native serialization, replay normalization and context admission. Custom Fetch, other APIs, explicit `auto` and WebSocket remain unchanged. It starts at 256 KiB, skips compression work above 32 MiB, and requires at least 5% and 4 KiB savings; every ineligible, oversized or uneconomic body remains the original native request. The asynchronous work is cancellation/account/deadline fenced before dispatch. No route pinning, hidden trimming, token/admission changes, identity resend after 415, retry or model switch is added.
 
-For a verified 408 after a compressed request, the diagnostic labels the original JSON composition bytes separately from the prepared gzip HTTP-body bytes (excluding transport framing). The compressed size is not confirmed delivered bytes, a token count, a provider size limit or proof of a network cause. A skipped compression may include one fixed reason; request bodies and headers are not retained. Synthetic controls support an opt-in mitigation only, not a universal provider capability or guaranteed 408 cure. Keep it off where endpoint support is unknown; disabling it affects later dispatches and installation never enables it.
+For a verified 408 after a compressed request, the diagnostic labels the original JSON composition bytes separately from the prepared gzip HTTP-body bytes (excluding transport framing). The compressed size is not confirmed delivered bytes, a token count, a provider size limit or proof of a network cause. A skipped compression may include one fixed reason; request bodies and request headers are not retained. Synthetic controls support an opt-in mitigation only, not a universal provider capability or guaranteed 408 cure. Keep it off where endpoint support is unknown; disabling it affects later dispatches and installation never enables it.
+
+The verified failure also includes the validated selected model, protocol and
+UTC response-header observation time, captured before diagnostic analysis.
+Only strictly formatted `x-github-request-id` (colon-separated hexadecimal)
+and `x-request-id` (UUID-shaped) response values may appear, at most 128
+characters each; malformed or missing values remain unavailable, not truncated.
+They correlate a failure but do not prove request receipt or execution.
+No other headers, response text or credentials are added, and these fields do
+not enable or extend stored request diagnostics. Image-offload guidance appears
+only when recognized image bytes are present; zero or unavailable image
+composition never becomes a recommendation to lower the image budget.
 
 For [#263](https://github.com/cloga/dsh-github-copilot/issues/263), the same public final-body fetch hook additionally captures a monotonic fetch-invocation-to-response-header duration, before clone observation. This is round-trip latency, not measured upload progress, throughput or time spent reading the body. Only a verified exact error triggers numeric composition analysis; successful requests are not analyzed or retained.
 

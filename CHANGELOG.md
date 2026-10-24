@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.2.dsh.0.2.1.rc.3 (prepared)
+
+- Bound account-management metadata and identity reads to fifteen seconds, provide metadata-only Retry after initial failure, and discard late results (#346). Account mutations retain their original locks and settlement; no Host cancellation or automatic retry.
+- Align recovery and context notices with native composer side clearance on narrow and embedded layouts, avoid double-constraining nested disclosures, and distinguish primary Enable from quiet Cancel (#317). Explicit loss consent and native history/compaction ownership remain unchanged.
+- Add validated model/protocol, UTC header-observation time and strictly formatted supplier request IDs to verified 408 diagnostics (#276). Recommend image-offload changes only when recognized image bytes are present. No transport, retry, timeout, account or stored-diagnostic changes; production timeout cause/frequency remains unproven.
+- Retain exact DSH 0.2.1-rc.3 admission and the documented native hot-readd limitation. No Core changes, profile installation, sign-in, paid model probes or restart.
+
 ## 0.1.0-alpha.1.dsh.0.2.1.rc.3 (prepared)
 
 - Target exact official DSH 0.2.1-rc.3 at `1f81c047fc48fa190a683e469daa699857e9afe8` (#432, #435). Align engines, public peers, exact reviewer ownership and Windows/Linux tagged-source and published-artifact qualification without Core changes.

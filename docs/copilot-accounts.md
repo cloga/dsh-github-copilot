@@ -425,6 +425,15 @@ diagnostics do not establish the cause of earlier screenshots or prove live
 supplier health. Account switching, duplicate checks and reauthorization still
 require fresh authenticated identity validation, not the presentation cache.
 
+The Models account-management and add-account controls bound each Client metadata
+or identity read to fifteen seconds. A stalled read becomes an explicit read
+failure, not an indefinitely pending Checking state; initial metadata failure
+offers a metadata-only Retry. Late results cannot overwrite a later read, and
+unmount removes the presentation deadline. This does not cancel Host work,
+retry automatically or prove the cause of a previous transport failure.
+Add, cancel, switch, reauthorize and remove mutations retain their existing
+settlement and mutation fences; a read deadline never unlocks a pending mutation.
+
 ## Acceptance gates
 
 - Native public authorization and credentials services: independent writes,

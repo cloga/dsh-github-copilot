@@ -605,6 +605,7 @@ describe('managed upload-timeout observation', () => {
       }, baseURL)
       let clock = 100
       const timer = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+      const wallClock = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
       const observer = vi.spyOn(timeoutDiagnostics, 'requestBodyTimeoutDiagnostic')
       const image = api === 'anthropic-messages'
         ? { type: 'image', source: { type: 'base64', data: 'AAAA', media_type: 'image/png' } }
@@ -632,7 +633,10 @@ describe('managed upload-timeout observation', () => {
         })
         for await (const _event of stream) { /* Native error remains SDK-owned. */ }
         expect((await stream.result()).stopReason).toBe('error')
-        expect(observer.mock.lastCall?.[3]).toEqual({ protocol: api, responseHeadersMs: 75, upload: { state: 'unavailable' } })
+        expect(observer.mock.lastCall?.[3]).toEqual({ protocol: api, model: item.id, observedAt: 1_700_000_000_000,
+          responseHeadersMs: 75, upload: { state: 'unavailable' } })
+        expect(diagnostic.mock.lastCall?.[0]).toContain(`model ${item.id}; protocol ${api}`)
+        expect(diagnostic.mock.lastCall?.[0]).toContain('2023-11-14T22:13:20.000Z')
         expect(diagnostic.mock.lastCall?.[0]).toContain('75 ms (round trip, not upload duration)')
         expect(diagnostic.mock.lastCall?.[0]).toContain(`image blocks ${Buffer.byteLength(JSON.stringify(image))}`)
         expect(diagnostic.mock.lastCall?.[0]).toContain(`opaque replay ${api === 'openai-completions' ? 0 : Buffer.byteLength(JSON.stringify('PRIVATE_OPAQUE'))}`)
@@ -640,7 +644,7 @@ describe('managed upload-timeout observation', () => {
         expect(observer.mock.lastCall?.[1]).toBe(finalBody)
         expect(response.bodyUsed).toBe(true)
         expect(fetch).toHaveBeenCalledTimes(1)
-      } finally { timer.mockRestore(); observer.mockRestore() }
+      } finally { timer.mockRestore(); wallClock.mockRestore(); observer.mockRestore() }
     })
   it.each(['openai-responses', 'openai-completions', 'anthropic-messages'] as const)(
     'observes verified %s timeout without changing bytes, Response, native retries or credential ownership', async api => {

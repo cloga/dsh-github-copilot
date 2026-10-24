@@ -6,6 +6,52 @@ const error = { code: 'user_request_timeout',
   message: 'Timed out reading request body. Try again, or use a smaller request size.' }
 
 describe('verified request-body timeout diagnostics', () => {
+  it('correlates only a verified failure with bounded dispatch facts and allowlisted supplier IDs', async () => {
+    const response = new Response(JSON.stringify(error), { status: 408, headers: {
+      'x-github-request-id': 'ABCD:1234:56789:ABCDEF:01234567',
+      'x-request-id': '00000000-0000-4000-8000-000000000001',
+      'authorization': 'SECRET_HEADER',
+      'x-debug-id': 'SECRET_DEBUG',
+    } })
+    const text = await requestBodyTimeoutDiagnostic(response, '{"input":[]}', undefined, {
+      protocol: 'openai-responses', model: 'synthetic-model', observedAt: 1_700_000_000_000, responseHeadersMs: 60_000,
+    })
+    expect(text).toContain('model synthetic-model')
+    expect(text).toContain('protocol openai-responses')
+    expect(text).toContain('2023-11-14T22:13:20.000Z')
+    expect(text).toContain('x-github-request-id=ABCD:1234:56789:ABCDEF:01234567')
+    expect(text).toContain('x-request-id=00000000-0000-4000-8000-000000000001')
+    expect(text).not.toContain('SECRET')
+    expect(await response.json()).toEqual(error)
+  })
+  it.each(['SECRET_HEADER', 'https://private.example/value', 'a'.repeat(129), '00000000-0000-4000-8000-000000000001,secret'])(
+    'omits unverified supplier ID formats without truncating them into valid values: %s', async value => {
+      const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error),
+        { status: 408, headers: { 'x-request-id': value, 'x-github-request-id': value } }), '{"input":[]}', undefined, {
+        protocol: 'openai-responses', model: 'private/model?secret', observedAt: Number.NaN, responseHeadersMs: 1,
+      })
+      expect(text).toContain('model unavailable')
+      expect(text).toContain('observation time unavailable')
+      expect(text).toContain('Supplier request IDs unavailable')
+      expect(text).not.toContain(value)
+      expect(text).not.toContain('private/model')
+    })
+  it('does not recommend changing image budgets for a measured zero-image request', async () => {
+    const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408 }),
+      '{"input":[{"role":"user","content":[{"type":"input_text","text":"synthetic"}]}]}', undefined,
+      { protocol: 'openai-responses', responseHeadersMs: 1 })
+    expect(text).toContain('No recognized image blocks were measured')
+    expect(text).not.toContain('choose an explicit attachment/image-offload')
+    expect(text).toContain('native compaction for compressible history')
+  })
+  it('offers image offload only when recognized image spans are present', async () => {
+    const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408 }),
+      '{"input":[{"type":"function_call_output","output":[{"type":"input_image","image_url":"private"}]}]}',
+      undefined, { protocol: 'openai-responses', responseHeadersMs: 1 })
+    expect(text).toContain('explicit attachment/image-offload budget')
+    expect(text).not.toContain('No recognized image blocks')
+    expect(text).not.toContain('private')
+  })
   it('measures a verified 20.4 MiB failure while preserving the original native response and timing', async () => {
     const body = JSON.stringify({ input: [{ role: 'user', content: 'PRIVATE'.repeat(3559000) }] })
     const response = new Response(JSON.stringify(error), { status: 408 })

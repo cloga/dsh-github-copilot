@@ -1,5 +1,10 @@
 import type { CSSProperties } from 'react'
 
+export const composerNoticeFrameStyle: CSSProperties = {
+  display: 'flex', flexDirection: 'column', alignItems: 'center',
+  width: '100%', minWidth: 0, boxSizing: 'border-box',
+  paddingInline: 'var(--dsh-composer-side-clearance, 0px)',
+}
 export const composerNoticeStyle: CSSProperties = {
   width: '100%', minWidth: 0, maxWidth: 'var(--dsh-composer-card-max-width, 100%)',
   marginInline: 'auto', boxSizing: 'border-box',
@@ -26,4 +31,8 @@ export const composerNoticeButtonStyle: CSSProperties = {
   color: 'var(--dsw-alias-label-primary, CanvasText)', maxWidth: '100%',
   background: 'transparent', border: '1px solid var(--dsw-alias-border-main, GrayText)',
   borderRadius: 6, padding: '6px 10px', cursor: 'pointer',
+}
+export const composerNoticePrimaryButtonStyle: CSSProperties = {
+  ...composerNoticeButtonStyle, fontWeight: 600,
+  color: 'var(--dsw-alias-state-business-primary, Highlight)', borderColor: 'currentColor',
 }
