@@ -74,7 +74,7 @@ export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = '
   const button = composerNoticeButtonStyle
   const disabled = busy || running
   const evidence = view && view.state !== 'unavailable' ? view : undefined
-  const noticeKey = evidence?.revision ?? failureKey
+  const noticeKey = failureKey ?? evidence?.revision
   if (!error && !evidence && !hadEvidence && !failureKey) return null
   if (!error && noticeKey && dismissed === noticeKey) {
     return h('button', { type: 'button', style: { ...button, ...composerNoticeStyle,
@@ -97,7 +97,7 @@ export function ReplayRecoveryCard({ sessionId, remote, continuation, locale = '
     : 'Failure evidence expired; no current failure diagnostics are available. This does not change the Session continuation policy.') : null,
   noticeKey ? h('div', null,
     h(SessionContinuationCard, { key: noticeKey, sessionId, remote: continuation, locale,
-      running: running || busy, recovery: true, onCancel: () => setDismissed(noticeKey) }),
+      running, recovery: true, onCancel: () => setDismissed(noticeKey) }),
   ) : null,
   running ? h('p', { role: 'status', style: composerNoticeParagraphStyle }, zh ? '当前轮进行中，结束后自动更新。' : 'Turn in progress; status updates when it ends.') : null,
   h('details', { style: { marginTop: 8 } },
