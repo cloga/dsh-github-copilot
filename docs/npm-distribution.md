@@ -116,6 +116,17 @@ cross-channel pointers and newer versions still fail closed. One channel
 succeeding is partial delivery.
 [Read-only reconciliation](./npm-publication-readback.md).
 
+An unmapped, already-published alpha pointer may retain historical numeric
+numbering such as `0.4.2-alpha.19.dsh.0.2.0.rc.2`. Its exact registry package
+name/version and `engines.dsh` must verify the complete DSH suffix, without
+requiring old bytes to adopt the new target's `0.1.0` numbering. Missing or
+mismatched metadata still fails closed; new target validation and same-Core
+monotonicity are unchanged. For publisher-only recovery changes after an
+immutable release, the existing release plan selects the original annotated
+tag's source SHA. The normal workflow recovers its original archive and uses
+the separately checked-out current publisher only after byte comparison; it
+never binds the immutable tag to the publisher revision or repacks the release.
+
 ## Installation preflight still applies
 
 Desktop's native package manager accepts an exact verified npm spec, not a URL
