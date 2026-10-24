@@ -21,6 +21,7 @@ test('admits the exact 0.2.0-rc.2 source pin while retaining prior tagged baseli
     '0.2.0-rc.2': '639ed015397290b3745d163aafe02ffee4aa3f84',
     '0.2.1-alpha.4': '86a402200d95fecef4529d969836f1fe13c6cb0d',
   '0.2.1-alpha.5': '1517a4dbca0a2789ff1d41ba439600f8547d23fa',
+  '0.2.1-rc.3': '1f81c047fc48fa190a683e469daa699857e9afe8',
   })
 })
 
@@ -40,7 +41,7 @@ async function fixture(release = '0.1.3-alpha.1') {
   await mkdir(join(root, 'tests'), { recursive: true })
   await mkdir(core)
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'dsh-github-copilot', dependencies: {
-    '@earendil-works/pi-ai': release === '0.2.1-alpha.5' ? '1.1.0' : '0.87.1',
+    '@earendil-works/pi-ai': release === '0.2.1-alpha.5' || release === '0.2.1-rc.3' ? '1.1.0' : '0.87.1',
   } }))
   await writeFile(join(root, 'tests/preview-route.spec.ts'), 'export {}')
   await writeFile(join(root, 'tests/published-core.spec.ts'), 'export {}')
@@ -197,10 +198,10 @@ test('maps import-condition mjs vendor exports without aliasing the plugin vendo
   assert.equal(resolver.resolveId('@deepseek-ai/schemastery', join(value.root, 'src/config.ts')), null)
 }))
 
-for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.5']) {
+for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.5', '0.2.1-rc.3']) {
   test(`selects the actual adapter, Session and Remote regression suite for ${release}`, async () => {
-    const modern = release.startsWith('0.2.0-') || release === '0.2.1-alpha.5'
-    const current = release === '0.2.0-rc.2' || release === '0.2.1-alpha.5'
+    const modern = release.startsWith('0.2.0-') || release === '0.2.1-alpha.5' || release === '0.2.1-rc.3'
+    const current = release === '0.2.0-rc.2' || release === '0.2.1-alpha.5' || release === '0.2.1-rc.3'
     const value = await fixture(release)
     try {
       await mkdir(join(value.root, 'tests/fixtures'))
@@ -232,7 +233,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         }
         await writeFile(join(value.root, 'tests/fixtures/auto-review-copilot-core.fixture.ts'), 'export {}')
       }
-      if (release === '0.2.1-alpha.5') {
+      if (release === '0.2.1-alpha.5' || release === '0.2.1-rc.3') {
         await writeFile(join(value.root, 'tests/fixtures/alpha4-contracts-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/copilot-usage-selector-core.fixture.ts'), 'export {}')
       }
@@ -263,7 +264,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         ...current ? ['tests/fixtures/auto-review-copilot-core.fixture.ts'] : [],
         ...current ? ['tests/fixtures/diagnostics-storage-core.fixture.ts', 'tests/fixtures/diagnostics-gateway-core.fixture.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts',
-        ...release === '0.2.1-alpha.5' ? ['tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : []])
+        ...release === '0.2.1-alpha.5' || release === '0.2.1-rc.3' ? ['tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : []])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })
 }

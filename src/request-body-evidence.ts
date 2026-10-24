@@ -28,6 +28,9 @@ export type RequestBodyEvidence = {
 
 export interface RequestBodyDispatchEvidence {
   readonly protocol: RequestBodyProtocol
+  readonly model?: string
+  /** Wall-clock response-header observation, captured before diagnostic analysis. */
+  readonly observedAt?: number
   readonly composition?: Promise<RequestBodyEvidence>
   /** Fetch invocation to response headers, not upload duration or clone-observation time. */
   readonly responseHeadersMs: number

@@ -4,12 +4,23 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
 import { Context } from '@deepseek-ai/cordis'
 import { boot, loadOverlayPatches, reconcileProfilePatches } from '@deepseek-ai/dsh-app-boot'
 import { WebRuntime } from '@deepseek-ai/dsh-web'
 
 const packageRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const bundlePath = join(packageRoot, 'cordis.patch.yml')
+const require = createRequire(import.meta.url)
+const supportedCore = require('../../package.json').engines.dsh
+
+test('lifecycle evidence uses the exact currently supported official packages', () => {
+  assert.equal(supportedCore, '0.2.1-rc.3')
+  for (const name of ['@deepseek-ai/dsh-app-boot', '@deepseek-ai/dsh-web']) {
+    assert.equal(require(`${name}/package.json`).version, supportedCore)
+  }
+  assert.equal(require('@deepseek-ai/cordis-plugin-loader/package.json').version, '1.0.6')
+})
 
 function snapshot(ctx, label, officialWeb) {
   return Promise.resolve(officialWeb.search({ query: 'fixture provider readiness' })).then(
@@ -35,6 +46,9 @@ async function assertGlobalSearchWorks(ctx) {
   assert.equal(ctx.get('web') !== undefined, true, 'public global ctx.web must be available')
   assert.equal(ctx.get('fixtureConsumerReady'), true, 'independent global consumer must be active')
   assert.equal((await ctx.web.search({ query: 'fixture query' })).answer, 'fixture-search')
+  assert.equal((await ctx.web.fetch({ url: 'https://example.invalid/fixture' })).content, 'fixture-fetch')
+  assert.equal((await ctx.get('fixtureConsumer').search()).answer, 'fixture-search')
+  assert.equal((await ctx.get('fixtureConsumer').fetch()).content, 'fixture-fetch')
 }
 
 async function reconcileKnownState(ctx, patches, label, expectedPending) {
@@ -77,7 +91,13 @@ async function createFixture({ providerInitiallyActive = false, initialPatches =
   const config = join(directory, 'cordis.json')
   await writeFile(consumer, [
     'export const inject = ["web"]',
-    'export function apply(ctx) { ctx.provide("fixtureConsumerReady", true) }',
+    'export function apply(ctx) {',
+    '  ctx.provide("fixtureConsumerReady", true)',
+    '  ctx.provide("fixtureConsumer", {',
+    '    search: () => ctx.web.search({ query: "consumer query" }),',
+    '    fetch: () => ctx.web.fetch({ url: "https://example.invalid/fixture" }),',
+    '  })',
+    '}',
     '',
   ].join('\n'))
   const consumerHref = pathToFileURL(consumer).href
@@ -95,12 +115,21 @@ async function createFixture({ providerInitiallyActive = false, initialPatches =
   const officialWeb = ctx.get('githubCopilotOriginalWeb') ?? ctx.get('web')
   assert.ok(officialWeb, 'stock public WebRuntime must be available before the bundle transition')
   let disposeProvider = () => {}
+  let disposeFetchProvider = () => {}
   const registerProvider = web => {
     disposeProvider()
+    disposeFetchProvider()
     disposeProvider = web.registerSearchProvider({
       id: 'fixture-search',
       available: () => true,
       search: async () => ({ answer: 'fixture-search', sources: [], truncated: false }),
+    })
+    disposeFetchProvider = web.registerFetchProvider({
+      id: 'fixture-fetch',
+      available: () => true,
+      fetch: async request => ({
+        url: request.url, status: 200, content: 'fixture-fetch', truncated: false,
+      }),
     })
   }
   if (providerInitiallyActive) registerProvider(officialWeb)
@@ -109,11 +138,23 @@ async function createFixture({ providerInitiallyActive = false, initialPatches =
     dispose: async () => {
       try {
         disposeProvider()
+        disposeFetchProvider()
         await ctx.fiber.dispose()
       } finally { await rm(directory, { recursive: true, force: true }) }
     },
   }
 }
+
+test('single-step bundle add preserves active search and fetch consumers', async () => {
+  const fixture = await createFixture({ providerInitiallyActive: true })
+  try {
+    await assertGlobalSearchWorks(fixture.ctx)
+    await reconcileKnownState(fixture.ctx, await reviewedCandidate(), 'single-step-add', [])
+    await assertGlobalSearchWorks(fixture.ctx)
+  } finally {
+    await fixture.dispose()
+  }
+})
 
 async function reviewedCandidate() {
   return loadOverlayPatches('test', bundlePath).flatMap(patch => {
@@ -217,26 +258,24 @@ test('known-bug characterization: remove and re-add strands an active cold-loade
       'the re-add starts from the explicitly recorded stranded state; consumer recovery is the expected outcome, not a precondition',
     )
     await reconcileKnownState(ctx, candidate, 'bundle-readded', ['fixture-consumer'])
-    const afterReadd = await snapshot(ctx, 'after-readd', officialWeb)
-    timeline.push(afterReadd)
-    await reconcileKnownState(ctx, candidate, 'bundle-readded-retry', ['fixture-consumer'])
-    const afterRetry = await snapshot(ctx, 'after-readd-retry', officialWeb)
-    timeline.push(afterRetry)
-    for (const state of [afterReadd, afterRetry]) {
-      assert.deepEqual(
-        { globalWebAvailable: state.globalWebAvailable, providerSearchWorks: state.providerSearchWorks, consumerActive: state.consumerActive },
-        { globalWebAvailable: false, providerSearchWorks: true, consumerActive: false },
-      )
-    }
-    assert.equal(ctx.get('web'), undefined)
-    assert.equal(timeline.at(-1).label, 'after-readd-retry')
+    const beforeNotify = await snapshot(ctx, 'after-readd-before-public-notify', officialWeb)
+    timeline.push(beforeNotify)
+    const refreshed = ctx.reflect.notify(['web'])
+    await Promise.all(refreshed.map(fiber => fiber.await()))
+    const afterNotify = await snapshot(ctx, 'after-readd-after-public-notify', officialWeb)
+    timeline.push(afterNotify)
+    assert.deepEqual(
+      { globalWebAvailable: afterNotify.globalWebAvailable, providerSearchWorks: afterNotify.providerSearchWorks, consumerActive: afterNotify.consumerActive },
+      { globalWebAvailable: false, providerSearchWorks: true, consumerActive: false },
+      'public Cordis dependency notification does not recreate the missing global Web service',
+    )
   } finally {
     await fixture.dispose()
   }
   assert.equal(ctx.get('web'), undefined, 'Loader teardown leaves no global service')
 })
 
-test('public rc.2 provider registration cannot transparently override configured dispatch', async () => {
+test('public current provider registration cannot transparently override configured dispatch', async () => {
   async function selection(config) {
     const ctx = new Context()
     const fibers = []

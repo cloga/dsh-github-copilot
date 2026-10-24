@@ -8,14 +8,14 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH alpha.5 iteration: `0.1.0-alpha.3.dsh.0.2.1.alpha.5`.** Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-alpha.5` to `dsh.0.2.1.alpha.5`, but compatibility is validated against explicit metadata, not guessed from the name. This resets numbering, not code, history or qualification requirements. Existing versions/tags remain unchanged. Candidate Desktop artifacts/signatures are unverified; this is not a Desktop-upgrade recommendation. Published, installed and loaded states remain separate.
+**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH rc.3 update: `0.1.0-alpha.3.dsh.0.2.1.rc.3`.** DSH `0.2.1-rc.3` is a prerelease. This plugin line is a compatibility candidate, not a production Core upgrade recommendation; Desktop artifacts/signatures are unverified. Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-rc.3` to `dsh.0.2.1.rc.3`, but compatibility is validated against explicit metadata, not guessed from the name. Existing published versions/tags remain unchanged. Published, installed and loaded states remain separate.
 
 Select by **exact Core**, never global SemVer maximum or npm `latest`/`alpha`.
 The read-only `node scripts/select-core-release.mjs 0.2.0-rc.2` command checks
 `deployment-baseline.json`'s mapping and verifies the exact public GitHub Release,
 tarball/checksum assets and npm version's `engines.dsh` before returning an
-install spec. Rc.2 maps to alpha.15, Core alpha.4 to alpha.16, and Core alpha.5
-to this candidate; until both channels are observable, it reports pending or
+install spec. Rc.2 maps to alpha.15, Core alpha.4 to alpha.16, alpha.5 remains
+its historical line, and rc.3 maps to this pending candidate; until both channels are observable, it reports pending or
 incomplete without an install recommendation. Unknown targets fail explicitly. The existing npm
 `alpha` channel remains global and is not compatibility-aware; `latest` remains
 the historical stable pointer. No automatic updater integration or old-Core
@@ -25,7 +25,7 @@ maintenance is promised. See [release selection](./docs/npm-distribution.md#exac
 
 **Compaction planning:** alpha.15 fixes byte counts being compared with token budgets in the separately selected recovery engine. Planning now uses the public native token meter, preserving complete tool relations and final native admission. Truly oversized balanced units still fail explicitly; this is not history repair or guaranteed recovery. See [compaction recovery](./docs/manual-compaction-recovery.md).
 
-**DSH alpha.5 adaptation:** exact public APIs use pi-ai `1.1.0`, the official
+**Historical DSH alpha.5 adaptation:** exact public APIs used pi-ai `1.1.0`, the official
 Cordis/schemastery peers and storage-domain's Zod `4.4.3`. The
 [fixed-target official-first review](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha5.md)
 records every retain/migrate/retire/defer decision. Alpha.4 natively hides blank
@@ -36,6 +36,11 @@ selector regressions gate admission. No Core patch, version exemption, new
 wire/catalog, policy migration or durable decision recording is introduced.
 
 
+The rc.3 candidate additionally adapts the public `WebRuntime` Volatile provider
+getters and requires exact reviewer package/version/callback identity. Its
+tagged-source and published-artifact gates passed on Windows/Linux in
+[CI 40098031196](https://github.com/cloga/dsh-github-copilot/actions/runs/40098031196),
+including full verification and package checks; no rc.3 Desktop runtime is claimed.
 Alpha.5 qualification also preserves code-first PTC schemas and function-body/REPL instructions. The new inline model-label slot is an opportunity only: no label UI or historical model attribution is added. Alpha.4 hosts may retain alpha.16.
 
 ## What you can do
@@ -155,10 +160,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.alpha.5.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
 ```
 
-The command above is a prepared-release example, usable only after publication, and requires official DSH `0.2.1-alpha.5`. **Desktop rc.2 must not install alpha.16 or `0.1.0-alpha.3.dsh.0.2.1.alpha.5`**; retain `dsh-github-copilot@0.4.2-alpha.15` there. Candidate Desktop package/signature and profile peer composition remain unverified. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) is not alpha.5 acceptance; a generic/global `dsh` shim is not equivalent. No install, restart, registry-policy bypass, peer patch or configuration deletion is authorized by this release.
+The command above is a prepared-release example, usable only after publication and required CI qualification; it requires official DSH prerelease `0.2.1-rc.3`. **Do not install this candidate into production Desktop profiles.** Desktop artifacts/signatures and profile peer composition remain unverified; retain the existing compatible plugin on rc.2. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) does not qualify rc.3, and a generic/global `dsh` shim is not equivalent. No installation or restart is authorized.
 
 Desktop's native package manager and qualified bundled CLI are profile-specific.
 [Standalone offline maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
@@ -180,7 +185,9 @@ Completed managed turns show **Account** beside native Usage. It records the req
 
 Saved account names can load without activating the account. Names are cached for the Host lifetime, invalidated by credential changes or failed verification, and never prove authorization or model access. A global switch requires fresh identity/model validation and confirmed settings persistence. If switching is blocked, let authorization or pinned work settle and use **Refresh account information**; unknown route/activity evidence remains a blocker. The dropdown, not a button beside each saved account, is the selection control.
 
-**Desktop lifecycle:** disable/remove/upgrade can require a full cold restart for Web service recomposition. If the plugin is Off and the native manager reports only `pending (waiting for service: web)`, do not repeatedly toggle or reinstall. Obtain restart approval and follow [rc.2 lifecycle guidance](./docs/web-lifecycle-rc2.md).
+Account-management metadata and identity reads have a fifteen-second Client deadline instead of indefinite Checking. An initial read failure offers metadata-only **Retry**; late results are ignored. This does not cancel Host work, retry automatically or unlock an unresolved account mutation.
+
+**Desktop lifecycle:** the current rc.3 public-Loader fixture preserves active Web consumers on a single-step add, but staged add and remove/re-add can leave the global `web` service unavailable and dependent account integration inactive. No feature-equivalent plugin-only recovery API is currently available; [issue #371](https://github.com/cloga/dsh-github-copilot/issues/371) remains open. An in-place upgrade without native HMR is explicitly `restart-required`; honor that manager result. The synthetic fixture does not justify repeated toggles or a restart when the manager has not requested one. See the [rc.3 lifecycle evidence](./docs/web-lifecycle-rc2.md).
 
 ## Auto and model preferences
 
@@ -261,7 +268,7 @@ Compaction feedback separates **compaction completed** and **subsequent request 
 
 Running visible-history compaction notices stay visible. Confirmed success disappears eight seconds after first observation; settled failures, cancellation, unavailable status and enable prompts stay until **Close** (or the existing **Cancel**). Closing only hides this Session/operation/status notice, never changes consent, history or native proof, and never sends or retries. A bounded Client registration retains expiry/dismissal across incidental remounts and Session switches, not across teardown or eviction.
 
-For exact verified `408 / user_request_timeout`, diagnostics describe bounded request composition and observable timing, not a proven payload limit or root cause. Image counts include native Responses tool outputs; older stored diagnostics may have counted those images as residual history. Bytes are not tokens; timing is not upload duration. Small, image-free requests can also time out. Follow [request-budget and timeout guidance](./docs/copilot-compaction.md); do not automatically trim history, disable proof, switch models or add retries.
+For exact verified `408 / user_request_timeout`, diagnostics describe bounded request composition and observable timing, not a proven payload limit or root cause. They include the validated model/protocol, UTC response-header observation time and strictly recognized supplier request IDs when available, without other headers or new stored diagnostics. IDs are correlation only, not receipt/execution proof. Image counts include native Responses tool outputs; older stored diagnostics may have counted those images as residual history. Only positive recognized image bytes suggest explicit image offload; zero/unknown image evidence does not. Bytes are not tokens; timing is not upload duration. Small, image-free requests can also time out. Follow [request-budget and timeout guidance](./docs/copilot-compaction.md); do not automatically trim history, disable proof, switch models or add retries.
 
 The experimental `github-copilot.responsesRequestCompression` option is **off by default**. When explicitly enabled, it losslessly gzips only eligible managed HTTP Responses requests through the existing native Fetch seam. It starts at 256 KiB, skips compression work above 32 MiB and requires at least 5% and 4 KiB savings; every skip sends the original request. This changes prepared HTTP body bytes, not context/token admission. Custom Fetch, explicit `auto`/WebSocket and other protocols remain native, and a gzip rejection is never automatically resent uncompressed. On a verified 408, diagnostics distinguish original JSON composition from the prepared gzip body size; neither proves delivery or cures every timeout. Installation does not enable the option.
 
@@ -318,6 +325,10 @@ The name “New Session” describes default inheritance, not a one-message feat
 
 Context evidence and Replay recovery use compact, centered notices bounded by the native composer width. Model/item counts and status refresh live in collapsed technical details; loss consent remains explicit. Context sampling warns only for a concrete incident, can be dismissed for that Session/incident, and never asserts the native meter's current value; native statistics stay unchanged. Switching accounts does not make old encrypted reasoning portable. The concise scope error points to explicit recovery or a new conversation; bounded, sanitized dispatch counts stay in Host diagnostics, not the main error. **Authorized** means permission is ready, not that a message was sent or recovery succeeded.
 
+Notice frames also follow native horizontal clearance on narrow and embedded layouts; nested details do not apply the width limit twice. Recovery uses one primary **Enable** action and a quiet **Cancel**, without changing consent or initiating a retry.
+
+For a failed scheduled/background task, open its original Session to review **Replay recovery**. The latest recorded exact scope rejection keeps this entry available after temporary request diagnostics expire, Host restart or a picker change. Unavailable item/account diagnostics stay unknown; copied fork history does not create an entry. Enablement still requires the loss-disclosed Session policy choice and never resends the task. Check its possible side effects before choosing native Retry; a later native turn clears the old failure notice.
+
 ## Ownership and further reading
 
 DSH Core owns Sessions, tools, sandboxing, attachments, native accounting and other providers. `llm-pi-ai` owns OAuth, token exchange/refresh and normal model transport. This plugin composes the published adapter with authenticated account metadata; new supported account model IDs need no name-based routing patch. Credentials stay Host-only: `llm-pi-ai/github-copilot` is the canonical compatibility record; additional accounts are independently authorized plugin-owned records in the same DSH credentials service, never copied grants.
@@ -327,7 +338,8 @@ Public APIs cannot replace Core Edit/Delete, restructure its flat picker or make
 | Guide | Scope |
 |---|---|
 | [Compatibility acceptance](./docs/model-compatibility-acceptance.md) | Metadata, reasoning, replay and public-interface limits |
-| [Current official-first review](./docs/official-first-020-rc2.md) | Exact rc.2 seams and retained gaps |
+| [Current compatibility review](./docs/official-first-021-rc3.md) | Exact rc.3 WebRuntime contract, reviewer identity and source/artifact qualification |
+| [Historical rc.2 official-first review](./docs/official-first-020-rc2.md) | Earlier rc.2 seams and retained gaps |
 | [Migration](./docs/single-route-migration.md) | Fresh read-only readiness and explicit config-only maintenance |
 | [Distribution](./docs/npm-distribution.md) | Same-byte GitHub/npm publication and qualified installation |
 | [Agent guide](./AGENTS.md), [contributing](./CONTRIBUTING.md) | Owners, task plans, gates and delivery policy |
@@ -345,9 +357,17 @@ pnpm pack --pack-destination artifacts
 pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz
 ```
 
-`pnpm verify` covers contracts, types, baseline, build, tests and built entry smoke. Required CI targets unchanged official rc.2 source and published artifacts on Windows/Linux. Passing synthetic tests does not prove live account/model/search behavior.
+`pnpm verify` covers contracts, types, baseline, build, tests and built entry smoke. Required CI passed against unchanged official rc.3 source and published artifacts on Windows/Linux; see the [qualification evidence](./docs/official-first-021-rc3.md). This unpublished candidate is not installed or Desktop-qualified. Passing synthetic tests does not prove live account/model/search behavior.
 
 Agents start with `node scripts/agent.mjs describe --json`, `doctor --json` and `plan <task> --json`; plans are unexecuted arguments, not action approval. Follow [AGENTS.md](./AGENTS.md) for the full change/release policy. Important updates require protected merge and verified dual-channel publication; documentation-only work does not release by default. Profile installation, sign-out and session-interrupting restart need separate authorization.
+
+The source-checkout [task acceptance pilot](https://github.com/cloga/dsh-github-copilot/blob/main/docs/agent-acceptance.md) adds
+`node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE`.
+It checks requirement coverage, the clean current commit, exact contract bytes
+and local evidence hashes; failed, blocked and not-run outcomes remain distinct.
+It does not attest execution, independent review, live behavior or delivery
+permission. Keep evidence outside Git; no agents, uploads or profile changes are
+started. Existing CI and release gates remain authoritative.
 
 Commit attribution uses `Assisted-by` with the actual tool, never the model provider or an unverified collaborator identity.
 
@@ -356,14 +376,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.alpha.5.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.alpha.5/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.alpha.5.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

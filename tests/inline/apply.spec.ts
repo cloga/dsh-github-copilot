@@ -46,6 +46,7 @@ interface FakeRuntime {
   triggerSettingsChange(ns: string): void
 }
 
+
 const config: InlineConfig = {
   enabled: true,
   providers: [],
@@ -1896,11 +1897,14 @@ describe('registered cross-provider routing integration', () => {
     const agentFiber = root.plugin(AgentRegistry)
     await agentFiber
     const isolated = root.isolate('web', Symbol('original-cross-provider-web'))
-    const original = isolated.plugin(WebRuntime, { searchProvider: 'not-selected' })
+    const original = isolated.plugin(WebRuntime, {
+      searchProvider: 'not-selected',
+    })
     await original
     const delegate = isolated.plugin(WebDelegate)
     await delegate
-    const facade = root.plugin(CopilotRoutedWeb)
+    const facade = root.plugin(CopilotRoutedWeb, {
+    })
     await facade
     const runtime = buildRuntime({}, undefined, {
       [WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE]: { searchProvider: 'auto', defaultSearchProvider: 'final-search' },

@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import { WebError, WebRuntime } from '@deepseek-ai/dsh-web'
 import type { WebRuntimeConfig, WebSearchRequest, WebSearchResult, WebSearchProvider, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'
 import type {} from './web-delegate.ts'
@@ -45,6 +45,10 @@ export interface GitHubCopilotSearchRouter {
   ): Promise<WebSearchResult>
 }
 
+function fixedProvider(value: string | undefined): Volatile<string | undefined> {
+  return Object.freeze({ get: () => value })
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     githubCopilotSearchRouter: GitHubCopilotSearchRouter
@@ -65,12 +69,15 @@ export default class CopilotRoutedWeb extends WebRuntime {
   private readonly pending = new Set<Promise<WebSearchResult>>()
   private readonly mirroredSearchProviders = new Map<string, SearchRegistration>()
 
-  constructor(ctx: Context, config: WebRuntimeConfig = {}) {
+  constructor(ctx: Context, config: WebRuntimeConfig) {
     super(ctx, config)
     // Registration IDs only. Availability depends on the initiating search and
     // must not hide providers merely because Settings has no Chat initiator.
     ctx.provide('githubCopilotSearchCatalog', { list: () => [...this.mirroredSearchProviders.keys()] })
-    this.bounded = new WebRuntime(ctx.isolate('web'), { searchProvider: 'copilot-session-search' })
+    this.bounded = new WebRuntime(ctx.isolate('web'), {
+      searchProvider: fixedProvider('copilot-session-search'),
+      fetchProvider: fixedProvider(undefined),
+    })
     this.bounded.registerSearchProvider({
       id: 'copilot-session-search',
       available: () => !this.lifetime.signal.aborted,

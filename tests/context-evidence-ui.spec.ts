@@ -120,6 +120,9 @@ describe('additive historical context notice', () => {
     try {
       await view.render()
       expect(view.container.querySelectorAll('[data-copilot-composer-notice]')).toHaveLength(1)
+      expect(view.container.querySelectorAll('[data-copilot-composer-frame]')).toHaveLength(1)
+      expect(view.container.querySelector('details')!.style.maxWidth).toBe('none')
+      expect(view.container.querySelector('details')!.style.marginInline).toBe('0')
       expect(view.container.querySelector('summary')?.textContent).toContain('Compaction completed')
       expect(view.container.textContent).toContain('Hidden reasoning context was omitted')
       expect(f.continuation.get).toHaveBeenCalledTimes(1)
@@ -147,6 +150,9 @@ describe('additive historical context notice', () => {
     expect(notice.style.lineHeight).toBe(summary.style.lineHeight)
     expect(notice.style.width).toBe('100%')
     expect(notice.style.minWidth).toBe('0')
+    const frame = view.container.querySelector<HTMLElement>('[data-copilot-composer-frame]')!
+    expect(frame.style.paddingInline).toBe('var(--dsh-composer-side-clearance, 0px)')
+    expect(frame.style.boxSizing).toBe('border-box')
     for (const paragraph of Array.from(view.container.querySelectorAll('p'))) {
       expect(paragraph.style.marginBlock).toBe('8px')
       expect(paragraph.style.maxWidth).toBe('38rem')

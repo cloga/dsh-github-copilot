@@ -4,6 +4,13 @@ import { fileURLToPath } from 'node:url'
 import { repositoryRoot } from './agent.mjs'
 import { validateIterationReview } from './iteration-review.mjs'
 
+export function verifyCurrentCoreTemplate(template, release) {
+  const targets = [...template.matchAll(/All Windows\/Linux exact current DSH (\S+) tagged-source/g)]
+  if (targets.length !== 1 || targets[0][1] !== release) {
+    throw new Error('Agent contract: current-Core PR template must match package engines.dsh exactly once')
+  }
+}
+
 export async function verifyAgentContract(root = repositoryRoot) {
   const contract = JSON.parse(await readFile(resolve(root, 'agent-contract.json'), 'utf8'))
   const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
@@ -130,6 +137,22 @@ export async function verifyAgentContract(root = repositoryRoot) {
   validateIterationReview(JSON.parse(await readFile(resolve(root, review.report), 'utf8')))
   await file(review.policy)
   const template = await readFile(resolve(root, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
+  verifyCurrentCoreTemplate(template, pkg.engines.dsh)
+  const acceptance = contract.acceptance
+  require(acceptance?.mode === 'evidence-consistency-only'
+    && acceptance.policy === 'docs/agent-acceptance.md'
+    && acceptance.implementation === 'scripts/acceptance.mjs'
+    && acceptance.executed === false
+    && JSON.stringify(acceptance.command) === JSON.stringify(['node', 'scripts/agent.mjs', 'accept',
+      '--contract', 'CONTRACT_FILE', '--report', 'REPORT_FILE'])
+    && acceptance.cleanHeadRequired === true && acceptance.executionVerified === false
+    && acceptance.independenceVerified === false && acceptance.automaticUpload === false,
+  'acceptance evidence must retain clean-HEAD integrity and explicit unverified execution/independence')
+  await file(acceptance.policy)
+  await file(acceptance.implementation)
+  require(contract.tasks.tooling.read.includes(acceptance.policy)
+    && contract.tasks.tooling.read.includes(acceptance.implementation)
+    && template.includes('### Acceptance evidence'), 'acceptance evidence entrypoints are missing')
   require(template.includes('### Iteration evidence'), 'PR iteration evidence is missing')
   for (const script of ['verify:agent', 'typecheck:tests', 'test:scripts']) {
     require(pkg.scripts.verify.includes(`pnpm ${script}`), `${script} is absent from the full gate`)

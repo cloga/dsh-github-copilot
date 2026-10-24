@@ -8,13 +8,13 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-**历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；DSH alpha.5 待发布迭代：`0.1.0-alpha.3.dsh.0.2.1.alpha.5`。** 每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-alpha.5` 规范化为 `dsh.0.2.1.alpha.5`，但兼容性仍须核对明确元数据，不能只猜版本名。重置的是编号，不是代码、历史或资格验证要求；既有版本和 tag 不变。候选 Desktop 制品／签名未核验，这不是 Desktop 升级建议。已发布、已安装、已加载仍是不同状态。
+**历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；DSH rc.3 更新候选：`0.1.0-alpha.3.dsh.0.2.1.rc.3`。** DSH `0.2.1-rc.3` 是预发布版本。本插件线是兼容性候选，不是生产 Core 升级建议；Desktop 制品／签名尚未核验。每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-rc.3` 规范化为 `dsh.0.2.1.rc.3`，但兼容性仍须核对明确元数据，不能只猜版本名。既有已发布版本和 tag 不变。已发布、已安装、已加载仍是不同状态。
 
 按**精确 Core**选版本，不按全局 SemVer 最大值或 npm `latest`／`alpha`。
 只读命令 `node scripts/select-core-release.mjs 0.2.0-rc.2` 先读取
 `deployment-baseline.json` 映射，再核验精确 GitHub Release、原始 tarball／校验和资产，
 以及 npm 版本中的 `engines.dsh`，全部匹配后才返回安装规格。rc.2 对应 alpha.15，
-Core alpha.4 对应 alpha.16，Core alpha.5 对应本次候选；任一渠道尚不可见时，
+Core alpha.4 对应 alpha.16，alpha.5 保留其历史线，rc.3 对应当前待验证候选；任一渠道尚不可见时，
 会报告待发布或未完成，不给安装建议。未知目标明确失败。沿用的 npm `alpha` 渠道是全局指针，
 不感知兼容性；`latest` 仍指历史稳定版。不承诺原生自动更新会使用此映射，
 也不承诺维护旧 Core 分支。参见[版本选择](./docs/npm-distribution.md#exact-core-release-lines)。
@@ -23,7 +23,7 @@ Core alpha.4 对应 alpha.16，Core alpha.5 对应本次候选；任一渠道尚
 
 **压缩规划：**alpha.15 修复独立选择的恢复引擎将字节数与 token 预算直接比较的问题，改用公开的原生 token meter，保留完整工具关系和最终原生准入。真正超大的配对历史单元仍明确失败；这不是历史修复，也不保证恢复成功。参见[压缩恢复](./docs/manual-compaction-recovery.md)。
 
-**DSH alpha.5 适配：**公开 API 对齐 pi-ai `1.1.0`、官方 Cordis／schemastery peer，
+**历史 DSH alpha.5 适配：**公开 API 对齐 pi-ai `1.1.0`、官方 Cordis／schemastery peer，
 以及 storage-domain 的 Zod `4.4.3`。
 [固定目标的 official-first 调研](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha5.md)
 逐项记录保留／迁移／退役／延期决定。alpha.4 原生隐藏空白 Thinking 折叠行，
@@ -31,6 +31,8 @@ Core alpha.4 对应 alpha.16，Core alpha.5 对应本次候选；任一渠道尚
 精确原生 reviewer 身份、动态 system／tool 转换、
 replay、账号／Remote／压缩与真实 selector 挂载回归共同约束准入。
 不修改 Core，不豁免版本，不新增 wire／目录、迁移策略或持久决策记录。
+
+rc.3 候选还适配公开 `WebRuntime` Volatile provider getter，并要求精确 reviewer 包版本及回调身份。[CI 40098031196](https://github.com/cloga/dsh-github-copilot/actions/runs/40098031196) 已在 Windows/Linux 通过 tagged-source、published-artifact、完整验证和打包门禁；当前不声称 rc.3 Desktop runtime 已验证。
 
 alpha.5 资格验证同时保留代码优先的 PTC 参数顺序和函数体/REPL 指引。新增内联模型标签插槽仅作为后续机会记录：本次不新增标签 UI，也不据此推断历史模型执行。alpha.4 主机可保留 alpha.16。
 
@@ -133,10 +135,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.alpha.5.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
 ```
 
-上面的命令是准备发布的示例，仅在发布后可用，并要求官方 DSH `0.2.1-alpha.5`。**Desktop rc.2 不得安装 alpha.16 或 `0.1.0-alpha.3.dsh.0.2.1.alpha.5`**，应保留 `dsh-github-copilot@0.4.2-alpha.15`。候选 Desktop 包／签名及 profile peer 组合仍未核验。[历史 rc.2 随附 CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)不代表 alpha.5 验收；全局／普通 `dsh` shim 不等价。此版本不授权安装、重启、绕过包源政策、修改 peer 或删除配置。
+上面的命令是准备发布的示例，仅在发布且所需 CI 通过后可用；目标是官方 DSH 预发布版 `0.2.1-rc.3`。**不要把此候选安装到生产 Desktop profile。** Desktop 制品／签名及 profile peer 组合仍未核验；rc.2 应保留现有兼容插件。[历史 rc.2 随附 CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)不代表 rc.3 验收；全局／普通 `dsh` shim 不等价。本次不授权安装或重启。
 
 Desktop 原生包管理器和已核验的随附 CLI 都有 profile 边界。
 [独立 profile 离线维护](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
@@ -158,7 +160,9 @@ Desktop 原生包管理器和已核验的随附 CLI 都有 profile 边界。
 
 读取已保存账号名称不必激活账号。名称在 Host 生命周期内缓存，凭据变更或验证失败会失效，也不证明授权或模型可用。全局切换需要新鲜身份／模型验证及设置持久化确认。切换被阻止时，等待授权或锁定工作结束，再**刷新账号信息**；未知路由／活动证据仍是阻塞。选择入口是下拉菜单，不是每个已保存账号旁的按钮。
 
-**Desktop 生命周期：**停用、移除、升级后的 Web 服务重组可能需要完整冷重启。若插件已 Off，而原生 manager 仅提示 `pending (waiting for service: web)`，不要反复切换或重装。先取得重启许可，遵循[rc.2 生命周期说明](./docs/web-lifecycle-rc2.md)。
+账号管理的元数据和身份读取使用 15 秒 Client 展示期限，避免无限 Checking。首次读取失败提供只读元数据**重试**；迟到结果不会覆盖新状态。不取消 Host 工作、不自动重试，也不会解锁尚未完成的账号修改操作。
+
+**Desktop 生命周期：**当前 rc.3 公共 Loader 测试中，单步添加可保留正在使用的 Web 消费者；但分阶段添加或移除后重新添加，可能导致全局 `web` 服务不可用及依赖它的账号集成无法启动。目前没有功能等价的插件侧恢复 API；[#371](https://github.com/cloga/dsh-github-copilot/issues/371) 仍保持开放。没有原生 HMR 时，原生管理器会明确返回 `restart-required`；应遵循该结果。合成测试本身不构成反复切换或重启的依据。参见 [rc.3 生命周期证据](./docs/web-lifecycle-rc2.md)。
 
 ## Auto 与模型偏好
 
@@ -236,7 +240,7 @@ Copilot 搜索要求当前账号／协议证据及能力 proof。固定／fallba
 
 可见历史压缩进行中时提示持续可见。确认成功后从首次观察起八秒自动消失；失败、取消、状态不可用和开启提示保留至手动**关闭**（或原有**取消**）。关闭仅隐藏当前 Session／操作／状态的提示，不改变授权、历史或原生证据，不发送或重试。Client 注册范围内的有界状态使临时重挂载和会话切换不会重置期限；注册销毁或记录淘汰后不保留。
 
-严格核验的 `408 / user_request_timeout`诊断给出有界请求构成和可观察耗时，不证明供应方 payload 上限或根因。图片统计包括原生 Responses 工具输出中的图片；旧的已存诊断可能把这些图片算作剩余历史。字节不是 tokens，耗时不是上传时长；小型无图请求也可能超时。参见[预算与超时指导](./docs/copilot-compaction.md)，不要自动裁剪历史、禁用 proof、切换模型或增加重试。
+严格核验的 `408 / user_request_timeout`诊断给出有界请求构成和可观察耗时，不证明供应方 payload 上限或根因。还包含经过校验的模型／协议、收到响应头时的 UTC 时间及格式严格受限的供应方请求 ID；不添加其他头信息或新的持久诊断。ID 仅用于关联，不证明接收或执行。图片统计包括原生 Responses 工具输出中的图片；旧的已存诊断可能把这些图片算作剩余历史。只有明确测得图片字节时才提示显式图片 offload；图片为零或未知时不建议缩减图片预算。字节不是 tokens，耗时不是上传时长；小型无图请求也可能超时。参见[预算与超时指导](./docs/copilot-compaction.md)，不要自动裁剪历史、禁用 proof、切换模型或增加重试。
 
 实验性配置 `github-copilot.responsesRequestCompression` **默认关闭**。显式开启后，仅通过现有原生 Fetch 接口对符合条件的托管 HTTP Responses 请求进行无损 gzip 编码。请求至少 256 KiB；超过 32 MiB 的压缩工作会跳过，且必须同时节省至少 5% 和 4 KiB；任何跳过都会发送原始请求。这只改变准备发送的 HTTP body 字节，不改变 context/token 准入。自定义 Fetch、显式 `auto`／WebSocket 和其他协议维持原生行为；gzip 被拒绝后绝不会自动改成未压缩请求重发。严格核验的 408 诊断会区分原始 JSON 组成字节与准备发送的 gzip body 大小；两者均不证明请求已送达，也不保证消除超时。安装不会启用此选项。
 
@@ -293,6 +297,10 @@ Credits 账号面板显示当前账号和 **切换**，下拉菜单只列已有�
 
 上下文证据与回放恢复以紧凑、居中提示显示在输入框上方，宽度遵循原生输入框。模型、项数和状态刷新收进默认折叠的技术详情；有损恢复仍需明确确认。上下文采样只在明确事件时告警，可按 Session／事件关闭，且不会断言原生仪表当前值；原生统计不变。切换账号不会让旧加密推理自动变得可跨账号使用。简短 scope 错误指向显式恢复或新会话；有界、脱敏的请求结构计数留在 Host 诊断中，不挤占主错误。**已授权**只表示授权已准备好，不表示消息已发送或恢复已成功。
 
+窄屏和嵌入式布局也遵循原生输入框的横向留白，嵌套详情不会重复限宽。恢复操作突出一个**开启**主按钮，**取消**保持弱化；不改变损失确认或自动发起重试。
+
+定时／后台任务失败后，打开任务原来的 Session 查看**回放恢复**。最近一次已记录的精确 scope 拒绝，在临时请求诊断过期、Host 重启或更换模型选择后仍保留入口。不可用的项数／账号诊断保持未知；复制的 fork 历史不会创建入口。开启仍须用户确认有损 Session 策略，不会重发任务。自行选择原生重试前，请先检查失败任务可能已产生的副作用；后续原生轮次开始时清除旧失败提示。
+
 ## 所有权与深入阅读
 
 DSH Core 所有会话、工具、sandbox、附件、原生计量和其它 provider；`llm-pi-ai`所有 OAuth、token 交换／刷新和普通模型传输。插件以认证后的账号元数据组合公开适配器，受支持的新模型 ID 无需名称路由补丁。凭据仅在 Host：`llm-pi-ai/github-copilot` 是 canonical 兼容记录；额外账号在同一 DSH 凭据服务的插件所有记录中独立授权，不复制 grant。
@@ -302,7 +310,8 @@ DSH Core 所有会话、工具、sandbox、附件、原生计量和其它 provid
 | 指南 | 范围 |
 |---|---|
 | [兼容验收](./docs/model-compatibility-acceptance.md) | 元数据、reasoning、replay 及公开接口限制 |
-| [当前 official-first](./docs/official-first-020-rc2.md) | 准确 rc.2 seam 与保留差距 |
+| [当前兼容性评估](./docs/official-first-021-rc3.md) | 精确 rc.3 WebRuntime 契约、reviewer 身份和源码／制品资格证据 |
+| [历史 rc.2 official-first](./docs/official-first-020-rc2.md) | 旧 rc.2 seam 与保留差距 |
 | [迁移](./docs/single-route-migration.md) | 新鲜只读就绪证据及显式 config-only 维护 |
 | [分发](./docs/npm-distribution.md) | 同字节 GitHub/npm 发布和合格安装入口 |
 | [Agent 指南](./AGENTS.md)、[贡献](./CONTRIBUTING.md) | owner、任务计划、gate 与交付政策 |
@@ -320,9 +329,15 @@ pnpm pack --pack-destination artifacts
 pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz
 ```
 
-`pnpm verify`覆盖合同、类型、baseline、build、测试和构建入口 smoke。必需 CI 在 Windows/Linux 使用未修改的官方 rc.2 源码与发布制品。模拟测试通过不证明真实账号／模型／搜索可用。
+`pnpm verify`覆盖合同、类型、baseline、build、测试和构建入口 smoke。必需 CI 已在 Windows/Linux 使用未修改的官方 rc.3 源码与发布制品通过，见[资格证据](./docs/official-first-021-rc3.md)。此候选尚未发布、安装或通过 Desktop 验收。模拟测试通过不证明真实账号／模型／搜索可用。
 
 Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <task> --json`开始；计划仅返回未执行 argv，不授权副作用。完整变更／发布政策见[AGENTS.md](./AGENTS.md)。重要更新必须经受保护合并与双渠道发布；纯文档默认不发包。Profile 安装、退出和中断会话的重启另需许可。
+
+源码工作区的[任务验收试点](https://github.com/cloga/dsh-github-copilot/blob/main/docs/agent-acceptance.md)提供
+`node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE`。
+它检查需求覆盖、当前干净提交、契约原始字节和本地证据哈希，并区分失败、受阻和未执行。
+这不是测试执行、独立评审、真实运行或交付授权的证明。证据保留在 Git 之外；
+该命令不会启动 agent、上传数据或修改 profile，现有 CI 和发布门禁仍是交付依据。
 
 提交以 `Assisted-by` 标明实际使用的工具，不用模型供应商或未经核实的协作者身份。
 
@@ -331,14 +346,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.alpha.5/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.alpha.5.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.alpha.5/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.alpha.5.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

@@ -2895,7 +2895,7 @@ describe('plugin-owned account Copilot route', () => {
       content: [{ type: 'image', attachment }], source: { kind: 'user' },
     })
     const first = await call(harness.ctx, { messages: [original] })
-    if (!['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5'].includes(coreRelease)) {
+    if (!['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3'].includes(coreRelease)) {
       expect(first.assembler.finish).toEqual({ kind: 'stop' })
       return
     }

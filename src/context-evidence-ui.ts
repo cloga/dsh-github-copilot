@@ -6,7 +6,7 @@ import { autoModelPreference } from './copilot-identity.ts'
 import { COPILOT_CONTEXT_EVIDENCE, ContextEvidenceSchema } from './context-evidence.ts'
 import type { ContextEvidence } from './context-evidence.ts'
 import {
-  composerNoticeStyle, composerNoticeParagraphStyle, composerNoticeQuietButtonStyle,
+  composerNoticeStyle, composerNoticeParagraphStyle, composerNoticeQuietButtonStyle, composerNoticeFrameStyle,
 } from './composer-notice-style.ts'
 import { CompactionContinuationNotice, CompactionNoticePresentation } from './compaction-continuation-ui.ts'
 import { COMPACTION_CONTINUATION, CompactionContinuationLifecycleSchema } from './session-continuation-types.ts'
@@ -156,7 +156,10 @@ export function ContextEvidenceNotice({ evidence, locale = 'en', applicable = tr
     type: 'button', style: composerNoticeQuietButtonStyle,
     'aria-label': text.dismissLabel, onClick: () => presentation.dismiss(sessionId, incident),
   }, text.dismiss) : null
-  const disclosure = h('details', { 'data-copilot-composer-notice': controls === undefined ? 'context' : undefined, style: composerNoticeStyle },
+  const actions = controls === undefined ? dismiss : controls
+  const nested = actions !== null && actions !== undefined
+  const disclosure = h('details', { 'data-copilot-composer-notice': nested ? undefined : 'context',
+    style: nested ? { ...composerNoticeStyle, maxWidth: 'none', marginInline: 0 } : composerNoticeStyle },
     h('summary', { style: {
       cursor: 'pointer', fontFamily: 'var(--dsw-font-family, inherit)',
       fontSize: 'var(--dsh-content-font-size-secondary, 13px)', fontWeight: 400,
@@ -178,9 +181,9 @@ export function ContextEvidenceNotice({ evidence, locale = 'en', applicable = tr
       `${text.sample}: ${new Intl.NumberFormat(locale.startsWith('zh') ? 'zh-CN' : 'en-US').format(sample.tokens)} tokens`) : null,
     incidentVisible ? h('p', { style: composerNoticeParagraphStyle },
       sample && sample.tokens > 0 ? text.historical : text.revoked) : null)
-  const actions = controls === undefined ? dismiss : controls
-  return actions === null || actions === undefined ? disclosure : h('section', {
+  const notice = !nested ? disclosure : h('section', {
     'data-copilot-composer-notice': 'context', style: composerNoticeStyle }, disclosure, actions, controls === undefined ? null : dismiss)
+  return h('div', { 'data-copilot-composer-frame': '', style: composerNoticeFrameStyle }, notice)
 }
 
 function Surface({ runtime, locale, diagnostic, continuation, presentation, incidentPresentation }: {

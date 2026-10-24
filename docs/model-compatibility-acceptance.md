@@ -22,7 +22,7 @@ Follow the [plugin-only boundary](../AGENTS.md#plugin-only-implementation-bounda
 - Cover missing/conflicting endpoints, missing/invalid limits, duplicate conflicting IDs, explicit denial, stale account snapshots, unsupported reasoning labels, unknown fields and hostile extra getters.
 - Exercise real published adapter/SDK code against local synthetic HTTP for all supported protocols, including tools, public summaries, two-turn opaque replay, images and interruption/retry paths. Synthetic results are not claims of live account availability.
 - The exact pinned rc.2 source trace must retain the reviewer's frozen `temperature: 0` request with no `purpose`/`sessionId`. Run that unchanged native reviewer through the managed route and real pi-ai serializer: default-off preserves temperature for thinking `true`, `false`, or absent; explicit opt-in omits it for each value without mutating caller input. Cover allow, deny, malformed verdict, HTTP error and cancellation with one wire attempt; only allow may execute the synthetic tool. Qualify the fixture against tagged source and exact published artifacts. Synthetic metadata proves no supplier temperature semantics.
-- Verify managed request-body timeout guidance only for the observed HTTP `408`, exact `user_request_timeout` code and request-body message. Bound clone reads to 8 KiB/250 ms, retain the original native response, and expose only fixed guidance plus final string-body UTF-8 bytes. Preserve failure code, retry metadata, cancellation, unchanged retry payloads and independent dispatches. Do not reclassify 408 as overflow, invent a safe byte threshold, change client timeouts, refresh OAuth, compact automatically or promise elimination of upstream failures.
+- Verify managed request-body timeout guidance only for the observed HTTP `408`, exact `user_request_timeout` code and request-body message. Bound clone reads to 8 KiB/250 ms and retain the original native response. Expose bounded composition/timing, a validated selected model/protocol, UTC header-observation time and only strictly formatted `x-github-request-id` / `x-request-id` response correlation IDs; other headers and malformed values must not leak. Zero or unavailable image evidence must not recommend a smaller image budget. Preserve failure code, retry metadata, cancellation, unchanged retry payloads and independent dispatches. Do not reclassify 408 as overflow, invent a safe byte threshold, change client timeouts, refresh OAuth, compact automatically or promise elimination of upstream failures.
 - Verify byte-aware managed HTTP/SSE liveness through unchanged published and tagged adapters: heartbeat bytes may cross the original semantic deadline before actual output, but endless heartbeat-only output must hit the bounded native deadline. Real header/body stalls retain the original interval and a dispatch-local TIMEOUT; consumer think time, caller/credential cancellation, exact bytes, parser ownership and one native wire attempt remain unchanged. Explicit WebSocket/auto and opt-out retain native-only behavior. Preserve the 20 MiB native image budget by default; explicit smaller budgets must use native offload and retain mapped read-only paths/history, never hidden trimming or a claimed supplier threshold. These synthetic cases do not attest production heartbeat activity or cure HTTP 408.
 - Run source/test typechecks, complete repository tests, built Host/Client/Remote smoke, archive verification, and relevant unchanged-Core compatibility fixtures. Do not suppress type or test failures to bridge incompatible SDK versions.
 
@@ -149,6 +149,20 @@ Token/account/metadata proof discontinuity, expiry,
 session disposal or Host restart revokes evidence; an old error on disk cannot
 create a candidate. Re-read status after these changes. Disabling affects
 future requests and does not undo answers already generated.
+
+Scheduled/background failures may settle while the Client is closed. Opening
+the task's original Session now exposes **Replay recovery** for its latest
+recorded exact scope rejection even after request fingerprints expire, the Host
+restarts, or the picker changes. A strict plugin-owned public projection refolds
+only native terminal failure classification and sequence; it stores no errors,
+payloads, account origin or new history events. Copied fork/child prefixes do not
+authorize this notice, and a later native turn clears it. Missing request-specific
+diagnostics remain unknown, never reconstructed invalid-item counts or legacy
+fingerprint consent. The entry offers the existing persistent Session policy,
+with the same loss disclosure, explicit Enable/Cancel and confirmed Settings CAS.
+It does not enable the policy, send a message or retry a scheduled task by itself.
+After consent, inspect the failed task's possible side effects before choosing
+native Retry or a new conversation. The supplier's scope check remains intact.
 
 Admission requires the initiating native Agent request signal and exact
 session; unbound requests, compaction, titles, classifier requests, other

@@ -1,6 +1,6 @@
 # Image input compatibility
 
-Current source target: official DSH `0.2.1-alpha.5`. Plugin-only. Historical
+Current source target: official DSH `0.2.1-rc.3`. Plugin-only. Historical
 rc.2 delivery evidence below does not qualify the current source or a loaded
 Desktop.
 

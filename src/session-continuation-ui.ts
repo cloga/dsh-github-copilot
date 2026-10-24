@@ -2,7 +2,8 @@ import { createElement as h, Fragment, useCallback, useEffect, useRef, useState 
 import type { CSSProperties, ReactElement } from 'react'
 import { ContinuationDefaultViewSchema, SessionContinuationViewSchema } from './session-continuation-types.ts'
 import type { SessionContinuationView } from './session-continuation-types.ts'
-import { composerNoticeParagraphStyle, composerNoticeButtonStyle } from './composer-notice-style.ts'
+import { composerNoticeParagraphStyle, composerNoticeButtonStyle,
+  composerNoticePrimaryButtonStyle, composerNoticeQuietButtonStyle } from './composer-notice-style.ts'
 import { nativeCompactButtonStyle, nativeCaptionStyle, nativeSettingsStyle, nativeSettingsCss } from './native-settings-style.ts'
 
 export interface SessionContinuationRemote {
@@ -75,10 +76,10 @@ export function SessionContinuationCard({ sessionId, remote, locale = 'en', runn
       h('p', { style: body }, zh
         ? '开启后在本 Session 持续生效，跨账号和重启保留，直到关闭。开启即同意上述损失；之后请另行使用原生重试。'
         : 'Enabling applies to this Session across accounts and restarts until disabled. This consents to the loss above; use native Retry separately afterwards.'),
-      h('button', { type: 'button', style: button, disabled: busy || running, onClick: () => void save(true) },
+      h('button', { type: 'button', style: composerNoticePrimaryButtonStyle, disabled: busy || running, onClick: () => void save(true) },
         zh ? '开启降级续聊' : 'Enable visible-history continuation')) : null,
     unavailable,
-    h('button', { type: 'button', style: button, disabled: busy || running, onClick: onCancel }, zh ? '取消' : 'Cancel'))
+    h('button', { type: 'button', style: composerNoticeQuietButtonStyle, disabled: busy || running, onClick: onCancel }, zh ? '取消' : 'Cancel'))
   return h('details', { open: expanded || undefined, 'data-copilot-continuation-settings': '',
     'data-copilot-native-ui': true, style: nativeSettingsStyle },
     h('style', null, nativeSettingsCss),

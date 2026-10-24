@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import test from 'node:test'
 import { loadReleaseInputs, publishRelease } from '../../scripts/publish-release.mjs'
@@ -527,6 +528,24 @@ test('CLI release notes read only the declared fixed file and exact version sect
   }
   const { options } = localOptions({ read: async () => JSON.stringify({ name, version, releaseNotes: '../private' }) })
   await assert.rejects(loadReleaseInputs(options), /tracked CHANGELOG/)
+})
+
+test('tracked release metadata passes the source-bound notes preflight before publication', async () => {
+  const manifest = await readFile(new URL('../../package.json', import.meta.url), 'utf8')
+  const currentVersion = JSON.parse(manifest).version
+  const { options } = localOptions({ expectedVersion: currentVersion })
+  const currentTarName = `dsh-github-copilot-${currentVersion}.tgz`
+  options.read = async path => {
+    const filename = basename(path)
+    if (filename === 'package.json') return manifest
+    if (filename === 'CHANGELOG.md') return readFile(new URL('../../CHANGELOG.md', import.meta.url), 'utf8')
+    if (filename === currentTarName) return Buffer.from(tarball)
+    assert.equal(filename, 'SHA256SUMS')
+    return Buffer.from(`${hash(tarball)}  ${currentTarName}\n`)
+  }
+  const result = await loadReleaseInputs(options)
+  assert.equal(result.version, currentVersion)
+  assert.ok(result.notes?.length > 0)
 })
 
 test('CLI preflight accepts the exact planned tagged SHA over the caller main SHA', async () => {

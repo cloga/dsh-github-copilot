@@ -1,10 +1,26 @@
 # Changelog
 
-## 0.1.0-alpha.3.dsh.0.2.1.alpha.5 (prepared)
+## 0.1.0-alpha.3.dsh.0.2.1.rc.3 (prepared)
 
 - Explain projected-image admission failures through the standard native error path with bounded model, projected/allowed MIME, projected role/position and current build details (#426). Retain the existing fail-closed gate, explicit account restrictions and native projection ownership.
 - Explain why historical images can block text-only continuations and offer explicit future-turn recovery choices. No automatic model switch, retry, image conversion/removal, history mutation or new diagnostic collector.
 - Auto still checks general vision capability before candidate-specific projection is available. This change does not establish the original incident's model, image format, trigger block or loaded version, and does not claim live recovery. PR-only preparation does not authorize merge, publication, installation or restart.
+
+## 0.1.0-alpha.2.dsh.0.2.1.rc.3 (prepared)
+
+- Bound account-management metadata and identity reads to fifteen seconds, provide metadata-only Retry after initial failure, and discard late results (#346). Account mutations retain their original locks and settlement; no Host cancellation or automatic retry.
+- Align recovery and context notices with native composer side clearance on narrow and embedded layouts, avoid double-constraining nested disclosures, and distinguish primary Enable from quiet Cancel (#317). Explicit loss consent and native history/compaction ownership remain unchanged.
+- Add validated model/protocol, UTC header-observation time and strictly formatted supplier request IDs to verified 408 diagnostics (#276). Recommend image-offload changes only when recognized image bytes are present. No transport, retry, timeout, account or stored-diagnostic changes; production timeout cause/frequency remains unproven.
+- Retain exact DSH 0.2.1-rc.3 admission and the documented native hot-readd limitation. No Core changes, profile installation, sign-in, paid model probes or restart.
+
+## 0.1.0-alpha.1.dsh.0.2.1.rc.3 (prepared)
+
+- Target exact official DSH 0.2.1-rc.3 at `1f81c047fc48fa190a683e469daa699857e9afe8` (#432, #435). Align engines, public peers, exact reviewer ownership and Windows/Linux tagged-source and published-artifact qualification without Core changes.
+- Adapt the plugin-owned search runtime to the public rc.3 `WebRuntime` Volatile-provider contract. Preserve native provider, account, transport, retry and configuration ownership.
+- Retain cold-open scheduled replay-scope failure evidence for the explicit continuation policy control (#433). Missing ephemeral fingerprints remain unknown; no automatic enable, retry, account fallback or stored-history mutation.
+- Parse concatenated Zstandard frames independently in the offline history maintenance tool, retaining bounded structural checks, source hashes and detached-copy-only output. No live history repair is performed.
+- Restore this exact source-bound release-notes section and test the tracked package/changelog preflight before publication (#436). Immutable tags/releases, OIDC publication and identical GitHub/npm archive verification remain unchanged.
+- DSH rc.3 is a prerelease, not a production upgrade recommendation. Desktop artifacts/signatures, live activation, OAuth and model/search calls remain unverified; publication does not authorize profile installation, migration or restart. Rc.2 hosts must retain their existing compatible plugin.
 
 ## 0.1.0-alpha.2.dsh.0.2.1.alpha.5 (prepared)
 

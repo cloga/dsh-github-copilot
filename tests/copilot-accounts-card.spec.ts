@@ -45,6 +45,61 @@ const text = () => document.body.textContent ?? ''
 const button = (label: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent === label)!
 const click = async (label: string) => { await act(async () => { button(label).click() }) }
 
+it('settles a stalled metadata read and ignores its late response after an explicit retry', async () => {
+  vi.useFakeTimers()
+  const api = remote()
+  let finish!: (value: ReturnType<typeof ok>) => void
+  vi.mocked(api.get).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+  await mount(api)
+  await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+  expect(text()).toContain('Could not read account information. Retry before changing accounts.')
+  expect(button('Retry').disabled).toBe(false)
+  expect(api.get).toHaveBeenCalledOnce()
+  await click('Retry')
+  expect(text()).toContain('@demo-a')
+  await act(async () => { finish(ok(view({ activeAccountId: view().accounts[1]!.id }))) })
+  expect(document.querySelector('[data-copilot-current-account]')?.textContent).toBe('@demo-a')
+})
+
+it.each(['ensureIdentity', 'refreshIdentity'] as const)('bounds a stalled %s without retrying or leaving Checking', async method => {
+  vi.useFakeTimers()
+  const api = remote()
+  vi.mocked(api[method]).mockReturnValue(new Promise(() => {}))
+  await mount(api)
+  if (method === 'refreshIdentity') await click('Refresh account information')
+  await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+  expect(text()).not.toContain('Checking')
+  expect(api[method]).toHaveBeenCalledOnce()
+  expect(api.switchAccount).not.toHaveBeenCalled()
+  expect(api.removeAccount).not.toHaveBeenCalled()
+  expect(button('Refresh account information').disabled).toBe(false)
+})
+
+it('does not turn an unresolved account mutation into a timed-out read or unlock a second mutation', async () => {
+  vi.useFakeTimers()
+  const api = remote()
+  vi.mocked(api.switchAccount).mockReturnValue(new Promise(() => {}))
+  await mount(api)
+  await click('Switch'); await click('@demo-b'); await click('Confirm switch')
+  await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+  expect(button('Switch').disabled).toBe(true)
+  expect(api.switchAccount).toHaveBeenCalledOnce()
+  expect(text()).not.toContain('Retry before changing accounts.')
+})
+
+it('clears read deadlines on disposal and ignores a late identity result', async () => {
+  vi.useFakeTimers()
+  const api = remote()
+  let finish!: (value: ReturnType<typeof ok>) => void
+  vi.mocked(api.ensureIdentity).mockReturnValue(new Promise(resolve => { finish = resolve }))
+  await mount(api)
+  await act(async () => { cleanups.splice(0).forEach(dispose => dispose()) })
+  expect(vi.getTimerCount()).toBe(0)
+  await act(async () => { finish(ok(view())) })
+  expect(text()).toBe('')
+  expect(api.ensureIdentity).toHaveBeenCalledOnce()
+})
+
 async function chooseEnterprise(host = 'tenant.ghe.com') {
   const select = document.querySelector<HTMLSelectElement>('[data-copilot-login-environment] select')!
   await act(async () => {

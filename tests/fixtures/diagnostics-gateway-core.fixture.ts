@@ -21,7 +21,7 @@ import { fixtureFetchHandler } from './gateway-peer.ts'
 
 async function loadClientGateway(): Promise<{ apply(ctx: Context): void }> {
   if (process.env.DSH_CORE_EVIDENCE === 'tagged-source-runtime'
-    || ['0.2.1-alpha.4', '0.2.1-alpha.5'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
+    || ['0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '')) {
     return import('@deepseek-ai/dsh-api-gateway/client')
   }
   // Published Client entries register a factory, rather than exporting Node ESM.

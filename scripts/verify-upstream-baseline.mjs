@@ -66,6 +66,18 @@ if (baseline.release === '0.2.1-alpha.5') {
     "if (block.text.trim() === '') break",
   ])
 }
+if (baseline.release === '0.2.1-rc.3') {
+  await assertMarkers('packages/web/web/src/index.ts', [
+    'searchProvider: Volatile<string | undefined>',
+    'fetchProvider: Volatile<string | undefined>',
+    'this.config.searchProvider.get()',
+    'this.config.fetchProvider.get()',
+  ])
+  await assertMarkers('vendor/cosmokit/src/volatile.ts', [
+    'export interface Volatile<T>',
+    'get(): VolatileSnapshot<T>',
+  ])
+}
 if (baseline.providerHeaders === 'fetch-validated-discovery') {
   await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', [
     'assertValidHeaders',
@@ -86,7 +98,7 @@ if (baseline.perModelApi === 'model-entry') {
 }
 if (baseline.fileContentHelper === 'contentHasFile') {
   const contentMarkers = ['export function contentHasFile', "block.type === 'file'"]
-  if (!baseline.release.startsWith('0.2.0-') && baseline.release !== '0.2.1-alpha.5') {
+  if (!baseline.release.startsWith('0.2.0-') && baseline.release !== '0.2.1-alpha.5' && baseline.release !== '0.2.1-rc.3') {
     contentMarkers.push("block.type === 'tool-result' && contentHasFile(block.content)")
   }
   await assertMarkers('packages/llm/llm/src/content.ts', contentMarkers)
@@ -133,7 +145,7 @@ await assertMarkers('packages/bundle/base/cordis.patch.yml', [
   'llm-pi-ai',
 ])
 
-if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.5'].includes(baseline.release)) {
+if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.5', '0.2.1-rc.3'].includes(baseline.release)) {
   for (const path of ['package.json', 'packages/core/session/package.json', 'packages/llm/llm-pi-ai/package.json']) {
     const metadata = JSON.parse(await readFile(resolve(upstream, path), 'utf8'))
     if (metadata.version !== baseline.release) throw new Error(`DSH target package version differs in ${path}`)
@@ -229,7 +241,7 @@ if (baseline.release === '0.1.6-alpha.1') {
   ])
 }
 
-if (baseline.release === '0.1.6-alpha.2' || baseline.release.startsWith('0.2.0-') || baseline.release === '0.2.1-alpha.5') {
+if (baseline.release === '0.1.6-alpha.2' || baseline.release.startsWith('0.2.0-') || baseline.release === '0.2.1-alpha.5' || baseline.release === '0.2.1-rc.3') {
   await assertMarkers('packages/typert/protocol/src/types.ts', ['readonly create: () => TypertSchema'])
   await assertMarkers('packages/typert/registry/src/service.ts', ["typeof codec.create !== 'function'", 'strict codec has no create() factory'])
   await assertMarkers('packages/subagent/subagent/src/descriptor.ts', ['SUBAGENT_DESCRIPTOR_VERSION = 3', 'readonly label: string', 'if (version !== SUBAGENT_DESCRIPTOR_VERSION) return undefined'])

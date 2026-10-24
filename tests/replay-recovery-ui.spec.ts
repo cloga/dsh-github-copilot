@@ -58,6 +58,56 @@ it('keeps replay recovery separate from independently registered compaction feed
     expect(continuation.set).not.toHaveBeenCalled()
   } finally { await act(async () => root.unmount()); cleanup(); node.remove() }
 })
+it('offers explicit recovery for a cold-open scheduled failure without temporary fingerprints or a current managed selection', async () => {
+  let surface!: (props: Record<string, unknown>) => ReactElement | null
+  const slots = {
+    spec: () => ({ kind: 'list', scope: 'session' }),
+    inject: (_name: string, activate: () => () => void) => activate(),
+    register: (_options: unknown, component: typeof surface) => { surface = component; return vi.fn() },
+  }
+  const continuation = {
+    get: vi.fn(async () => ({ ok: true, value: { enabled: false, source: 'session', revision: 7, nextTurnAuthorized: false } })),
+    set: vi.fn(async () => ({ ok: true, value: { enabled: true, source: 'session', revision: 8, nextTurnAuthorized: false } })),
+  }
+  const recovery = { get: vi.fn(async () => ({ ok: true, value: { state: 'unavailable' } })),
+    setEnabled: vi.fn(), authorize: vi.fn() }
+  const ctx = { get: (name: string) => name === 'slots' ? slots : undefined, logger: { warn: vi.fn() },
+    remote: { githubCopilotReplayRecovery: recovery, githubCopilotSessionContinuation: continuation } }
+  const cleanup = registerReplayRecoveryUi(ctx as unknown as Context)
+  const node = document.createElement('div'); document.body.append(node)
+  const root = createRoot(node)
+  let failureSeq: number | null = 42
+  let running = false
+  const runtime = {
+    sessionId: 'scheduled',
+    useSession: (selector: (snapshot: unknown) => unknown) => selector({
+      sessionId: 'scheduled', removed: false, openState: 'open', running, lastAgentError: null,
+    }),
+    useProjection: (key: string) => key === 'githubCopilotReplayFailure'
+      ? { inherited: 0, failureSeq } : { next: { provider: 'other', model: 'changed-after-failure' } },
+  }
+  try {
+    await act(async () => root.render(surface(runtime)))
+    expect(node.textContent).toContain('Old reasoning replay was rejected')
+    expect(node.textContent).toContain('implicit details may be lost')
+    expect(node.textContent).toContain('request-specific diagnostics are unavailable')
+    expect(node.textContent).not.toContain('identified old encrypted reasoning items')
+    expect(continuation.get).toHaveBeenCalledExactlyOnceWith('scheduled')
+    expect(continuation.set).not.toHaveBeenCalled()
+    const button = Array.from(node.querySelectorAll('button')).find(value => value.textContent === 'Enable visible-history continuation')!
+    await act(async () => button.click())
+    expect(continuation.set).toHaveBeenCalledExactlyOnceWith('scheduled', 7, true)
+    expect(node.textContent).toContain('Continuation is already on')
+    expect(recovery.authorize).not.toHaveBeenCalled()
+    expect(recovery.setEnabled).not.toHaveBeenCalled()
+    running = true
+    await act(async () => root.render(surface(runtime)))
+    expect(Array.from(node.querySelectorAll('button')).every(button => button.disabled)).toBe(true)
+    running = false; failureSeq = null
+    await act(async () => root.render(surface(runtime)))
+    expect(node.textContent).toBe('')
+  } finally { await act(async () => root.unmount()); cleanup(); node.remove() }
+})
 function fixture(value: unknown = available) {
   let policy = { enabled: false, source: 'session', revision: 1, nextTurnAuthorized: false }
   const continuation = {
@@ -97,6 +147,9 @@ it('uses native auxiliary typography for the entire notice and inherited control
     expect(notice.style.width).toBe('100%')
     expect(notice.style.maxWidth).toBe('var(--dsh-composer-card-max-width, 100%)')
     expect(notice.style.marginInline).toBe('auto')
+    expect(notice.parentElement?.getAttribute('data-copilot-composer-frame')).toBe('')
+    expect(notice.parentElement?.style.paddingInline).toBe('var(--dsh-composer-side-clearance, 0px)')
+    expect(notice.parentElement?.style.boxSizing).toBe('border-box')
     const details = notice.querySelector('details')!
     expect(details.open).toBe(false)
     expect(details.textContent).toContain('synthetic-model')
@@ -113,6 +166,10 @@ it('uses native auxiliary typography for the entire notice and inherited control
       expect(button.style.fontFamily).toBe('inherit')
     }
     expect(f.remote.authorize).not.toHaveBeenCalled()
+    const enable = Array.from(notice.querySelectorAll('button')).find(node => node.textContent === 'Enable visible-history continuation')!
+    const cancel = Array.from(notice.querySelectorAll('button')).find(node => node.textContent === 'Cancel')!
+    expect(enable.style.fontWeight).toBe('600')
+    expect(cancel.style.border).toBe('0px')
   } finally { await f.close() }
 })
 it('enables only persistent Session continuation after loss disclosure, without legacy authorization or sending', async () => {
