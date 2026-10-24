@@ -63,7 +63,14 @@ export async function publishNpm({ manifest, baseline, bytes, archive, readPacka
     const tagged = await readTaggedVersion(current)
     check(tagged?.name === NAME && tagged.version === current && typeof tagged.engines?.dsh === 'string',
       'Tagged npm version has no verified exact Core metadata')
-    assertDshVersionIdentity(current, tagged.engines.dsh, tagged.engines.dsh)
+    // Published pointers may predate the new target's numeric version scheme.
+    const previous = parseVersion(current)
+    const core = parseVersion(tagged.engines.dsh)
+    const suffix = ['dsh', core.major.toString(), core.minor.toString(), core.patch.toString(), ...core.prerelease].join('.')
+    check(previous.build.length === 0 && core.build.length === 0
+      && previous.prerelease[0] === 'alpha' && /^[1-9]\d*$/.test(previous.prerelease[1] ?? '')
+      && previous.prerelease.slice(2).join('.') === suffix,
+    'Tagged npm version suffix differs from its verified exact Core metadata')
     currentLine = { version: current, core: tagged.engines.dsh, status: 'published' }
   }
   const differentCore = currentLine !== undefined && currentLine.core !== manifest.engines?.dsh

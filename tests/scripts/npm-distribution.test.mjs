@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { distributionTag, npmJson, npmPackageTags, publishNpm, validatePublicPackage } from '../../scripts/publish-npm.mjs'
 import { recoverArtifact } from '../../scripts/prepare-release-artifact.mjs'
+import { assessPlan } from '../../scripts/release-policy.mjs'
 
 const version = '0.4.0-alpha.18'
 const name = 'dsh-github-copilot'
@@ -209,6 +210,63 @@ test('independent Core line publishes original bytes across a known historical g
   await assert.rejects(publishNpm({ ...api, readTaggedVersion: async () => null }), /no verified exact Core/)
   await assert.rejects(publishNpm({ ...api, baseline: undefined }), /requires engines.dsh/)
   assert.equal(calls.length, 1)
+})
+
+test('historical suffixed channel pointers use published Core metadata, not new target numbering', async () => {
+  const baseline = JSON.parse(await readFile(new URL('../../deployment-baseline.json', import.meta.url), 'utf8'))
+  const targetVersion = baseline.package.version
+  const core = baseline.supportedBaselines.dsh.release
+  const candidate = { ...manifest(), version: targetVersion, engines: { dsh: core } }
+  const historicalVersion = '0.4.2-alpha.19.dsh.0.2.0.rc.2'
+  let tag = historicalVersion
+  let existing = null
+  const calls = []
+  const api = {
+    manifest: candidate, baseline, bytes, archive: 'artifacts/original.tgz',
+    readPackage: async () => ({ name, 'dist-tags': { alpha: tag } }),
+    readVersion: async () => existing,
+    readTaggedVersion: async current => ({ name, version: current, engines: { dsh: '0.2.0-rc.2' } }),
+    publish: async args => {
+      calls.push(args)
+      existing = { name, version: targetVersion, dist: { integrity: sri } }
+      tag = targetVersion
+    },
+  }
+  assert.equal((await publishNpm(api)).reconciled, false)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][1], 'artifacts/original.tgz')
+  assert.equal((await publishNpm(api)).reconciled, true)
+  assert.equal(calls.length, 1)
+
+  existing = null
+  tag = historicalVersion
+  for (const metadata of [
+    null, { name, version: historicalVersion },
+    { name: 'unexpected', version: historicalVersion, engines: { dsh: '0.2.0-rc.2' } },
+    { name, version: targetVersion, engines: { dsh: '0.2.0-rc.2' } },
+    { name, version: historicalVersion, engines: { dsh: core } },
+    { name, version: historicalVersion, engines: { dsh: '0.2.0-rc.2+build' } },
+  ]) {
+    await assert.rejects(publishNpm({ ...api, readTaggedVersion: async () => metadata }))
+    assert.equal(calls.length, 1)
+  }
+  tag = `0.4.2-alpha.19.dsh.${core.replace('-', '.')}`
+  await assert.rejects(publishNpm({
+    ...api, readTaggedVersion: async current => ({ name, version: current, engines: { dsh: core } }),
+  }), /Refusing to lower/)
+  assert.equal(calls.length, 1)
+})
+
+test('publisher-only recovery plans retain the immutable tagged source instead of the tool revision', () => {
+  const originalSha = '2'.repeat(40)
+  const result = assessPlan({
+    manifest: manifest(), head: sha,
+    tagInfo: { type: 'tag', sha: originalSha, manifest: manifest(), isAncestor: true },
+    files: ['scripts/publish-npm.mjs', 'tests/scripts/npm-distribution.test.mjs', 'docs/npm-distribution.md'],
+    githubRef: 'refs/heads/main',
+  })
+  assert.equal(result.sha, originalSha)
+  assert.equal(result.release, true)
 })
 
 test('artifact recovery uses remote original bytes and rejects commit, digest and state drift', async () => {
