@@ -33,7 +33,3 @@ jobs:
           name: rc3-exact-lock
           path: pnpm-lock.yaml
           if-no-files-found: error
-
-  qualify:
-    needs: lock
-    uses: ./.github/workflows/ci.yml
