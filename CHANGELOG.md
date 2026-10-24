@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-alpha.1.dsh.0.2.1.rc.3 (prepared)
+
+- Target exact official DSH 0.2.1-rc.3 at `1f81c047fc48fa190a683e469daa699857e9afe8` (#432, #435). Align engines, public peers, exact reviewer ownership and Windows/Linux tagged-source and published-artifact qualification without Core changes.
+- Adapt the plugin-owned search runtime to the public rc.3 `WebRuntime` Volatile-provider contract. Preserve native provider, account, transport, retry and configuration ownership.
+- Retain cold-open scheduled replay-scope failure evidence for the explicit continuation policy control (#433). Missing ephemeral fingerprints remain unknown; no automatic enable, retry, account fallback or stored-history mutation.
+- Parse concatenated Zstandard frames independently in the offline history maintenance tool, retaining bounded structural checks, source hashes and detached-copy-only output. No live history repair is performed.
+- Restore this exact source-bound release-notes section and test the tracked package/changelog preflight before publication (#436). Immutable tags/releases, OIDC publication and identical GitHub/npm archive verification remain unchanged.
+- DSH rc.3 is a prerelease, not a production upgrade recommendation. Desktop artifacts/signatures, live activation, OAuth and model/search calls remain unverified; publication does not authorize profile installation, migration or restart. Rc.2 hosts must retain their existing compatible plugin.
+
 ## 0.1.0-alpha.2.dsh.0.2.1.alpha.5 (prepared)
 
 - Add a login-environment choice for independently authorized GitHub.com and GitHub Enterprise Cloud data-residency (`tenant.ghe.com`) Copilot accounts through pinned pi-ai 1.1.0 (#424). Validate the tenant before login; bind device links, identity, duplicate checks and reauthorization to its host.
