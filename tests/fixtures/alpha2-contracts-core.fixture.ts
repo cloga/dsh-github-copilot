@@ -15,7 +15,6 @@ import * as WebDelegate from '../../src/web-delegate.ts'
 import remote from '../../src/remote.ts'
 import { fixtureFetchHandler } from './gateway-peer.ts'
 
-const volatile = (value: string | undefined) => Object.freeze({ get: () => value })
 
 beforeAll(() => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
@@ -112,13 +111,10 @@ describe('exact official role and search contracts', () => {
     try {
       const isolated = ctx.isolate('web', Symbol('original-web'))
       await isolated.plugin(WebRuntime, {
-        searchProvider: volatile('fixture-provider'),
-        fetchProvider: volatile(undefined),
+        searchProvider: 'fixture-provider',
       })
       await isolated.plugin(WebDelegate)
       await ctx.plugin(CopilotRoutedWeb, {
-        searchProvider: volatile(undefined),
-        fetchProvider: volatile(undefined),
       })
       const provider = await ctx.plugin({ inject: ['web'], apply(owner) {
         owner.web.registerSearchProvider({ id: 'fixture-provider', available: () => true,

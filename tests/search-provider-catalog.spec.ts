@@ -16,8 +16,6 @@ async function fixture() {
   })
   ctx.provide('githubCopilotOriginalWeb', original)
   const routed = ctx.plugin(CopilotRoutedWeb, {
-    searchProvider: volatile(undefined),
-    fetchProvider: volatile(undefined),
   }); await routed
   const controller = new SearchRoutingController(ctx)
   return { ctx, original, routed, controller }

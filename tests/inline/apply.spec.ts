@@ -46,7 +46,6 @@ interface FakeRuntime {
   triggerSettingsChange(ns: string): void
 }
 
-const volatile = (value: string | undefined) => Object.freeze({ get: () => value })
 
 const config: InlineConfig = {
   enabled: true,
@@ -1899,15 +1898,12 @@ describe('registered cross-provider routing integration', () => {
     await agentFiber
     const isolated = root.isolate('web', Symbol('original-cross-provider-web'))
     const original = isolated.plugin(WebRuntime, {
-      searchProvider: volatile('not-selected'),
-      fetchProvider: volatile(undefined),
+      searchProvider: 'not-selected',
     })
     await original
     const delegate = isolated.plugin(WebDelegate)
     await delegate
     const facade = root.plugin(CopilotRoutedWeb, {
-      searchProvider: volatile(undefined),
-      fetchProvider: volatile(undefined),
     })
     await facade
     const runtime = buildRuntime({}, undefined, {

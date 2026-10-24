@@ -73,7 +73,7 @@ if (baseline.release === '0.2.1-rc.3') {
     'this.config.searchProvider.get()',
     'this.config.fetchProvider.get()',
   ])
-  await assertMarkers('packages/core/web/src/index.ts', [
+  await assertMarkers('vendor/cosmokit/src/volatile.ts', [
     'export interface Volatile<T>',
     'get(): T',
   ])

@@ -19,10 +19,9 @@ import { currentSearchInitiator, currentSearchSelection } from '../src/current-p
 const cleanup: Array<() => Promise<void> | void> = []
 afterEach(async () => { for (const dispose of cleanup.splice(0).reverse()) await dispose() })
 const answer: WebSearchResult = { content: 'upstream answer', sources: [{ url: 'https://example.com/1' }, { url: 'https://example.com/2' }, { url: 'https://example.com/3' }], truncated: false }
-const volatile = (value: string | undefined) => Object.freeze({ get: () => value })
 const webConfig = (searchProvider: string | undefined, fetchProvider: string | undefined) => ({
-  searchProvider: volatile(searchProvider),
-  fetchProvider: volatile(fetchProvider),
+  searchProvider,
+  fetchProvider,
 })
 
 function owner(provider: string, id: string): Agent {
