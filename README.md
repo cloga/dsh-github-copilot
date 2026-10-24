@@ -38,8 +38,9 @@ wire/catalog, policy migration or durable decision recording is introduced.
 
 The rc.3 candidate additionally adapts the public `WebRuntime` Volatile provider
 getters and requires exact reviewer package/version/callback identity. Its
-tagged-source and published-artifact gates are required CI checks and remain
-unqualified until those checks pass; no rc.3 Desktop runtime is claimed.
+tagged-source and published-artifact gates passed on Windows/Linux in
+[CI 40098031196](https://github.com/cloga/dsh-github-copilot/actions/runs/40098031196),
+including full verification and package checks; no rc.3 Desktop runtime is claimed.
 Alpha.5 qualification also preserves code-first PTC schemas and function-body/REPL instructions. The new inline model-label slot is an opportunity only: no label UI or historical model attribution is added. Alpha.4 hosts may retain alpha.16.
 
 ## What you can do
@@ -331,7 +332,7 @@ Public APIs cannot replace Core Edit/Delete, restructure its flat picker or make
 | Guide | Scope |
 |---|---|
 | [Compatibility acceptance](./docs/model-compatibility-acceptance.md) | Metadata, reasoning, replay and public-interface limits |
-| [Current compatibility review](./docs/official-first-021-rc3.md) | Exact rc.3 WebRuntime contract, reviewer identity and pending qualification |
+| [Current compatibility review](./docs/official-first-021-rc3.md) | Exact rc.3 WebRuntime contract, reviewer identity and source/artifact qualification |
 | [Historical rc.2 official-first review](./docs/official-first-020-rc2.md) | Earlier rc.2 seams and retained gaps |
 | [Migration](./docs/single-route-migration.md) | Fresh read-only readiness and explicit config-only maintenance |
 | [Distribution](./docs/npm-distribution.md) | Same-byte GitHub/npm publication and qualified installation |
@@ -350,7 +351,7 @@ pnpm pack --pack-destination artifacts
 pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz
 ```
 
-`pnpm verify` covers contracts, types, baseline, build, tests and built entry smoke. Required CI targets unchanged official rc.3 source and published artifacts on Windows/Linux; this candidate remains unqualified until that CI passes. Passing synthetic tests does not prove live account/model/search behavior.
+`pnpm verify` covers contracts, types, baseline, build, tests and built entry smoke. Required CI passed against unchanged official rc.3 source and published artifacts on Windows/Linux; see the [qualification evidence](./docs/official-first-021-rc3.md). This unpublished candidate is not installed or Desktop-qualified. Passing synthetic tests does not prove live account/model/search behavior.
 
 Agents start with `node scripts/agent.mjs describe --json`, `doctor --json` and `plan <task> --json`; plans are unexecuted arguments, not action approval. Follow [AGENTS.md](./AGENTS.md) for the full change/release policy. Important updates require protected merge and verified dual-channel publication; documentation-only work does not release by default. Profile installation, sign-out and session-interrupting restart need separate authorization.
 

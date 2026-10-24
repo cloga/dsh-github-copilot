@@ -32,7 +32,7 @@ Core alpha.4 对应 alpha.16，alpha.5 保留其历史线，rc.3 对应当前待
 replay、账号／Remote／压缩与真实 selector 挂载回归共同约束准入。
 不修改 Core，不豁免版本，不新增 wire／目录、迁移策略或持久决策记录。
 
-rc.3 候选还适配公开 `WebRuntime` Volatile provider getter，并要求精确 reviewer 包版本及回调身份。tagged-source 与 published-artifact 门禁必须由 CI 通过后才算资格完成；当前不声称 rc.3 Desktop runtime 已验证。
+rc.3 候选还适配公开 `WebRuntime` Volatile provider getter，并要求精确 reviewer 包版本及回调身份。[CI 40098031196](https://github.com/cloga/dsh-github-copilot/actions/runs/40098031196) 已在 Windows/Linux 通过 tagged-source、published-artifact、完整验证和打包门禁；当前不声称 rc.3 Desktop runtime 已验证。
 
 alpha.5 资格验证同时保留代码优先的 PTC 参数顺序和函数体/REPL 指引。新增内联模型标签插槽仅作为后续机会记录：本次不新增标签 UI，也不据此推断历史模型执行。alpha.4 主机可保留 alpha.16。
 
@@ -304,7 +304,7 @@ DSH Core 所有会话、工具、sandbox、附件、原生计量和其它 provid
 | 指南 | 范围 |
 |---|---|
 | [兼容验收](./docs/model-compatibility-acceptance.md) | 元数据、reasoning、replay 及公开接口限制 |
-| [当前兼容性评估](./docs/official-first-021-rc3.md) | 精确 rc.3 WebRuntime 契约、reviewer 身份和待完成资格验证 |
+| [当前兼容性评估](./docs/official-first-021-rc3.md) | 精确 rc.3 WebRuntime 契约、reviewer 身份和源码／制品资格证据 |
 | [历史 rc.2 official-first](./docs/official-first-020-rc2.md) | 旧 rc.2 seam 与保留差距 |
 | [迁移](./docs/single-route-migration.md) | 新鲜只读就绪证据及显式 config-only 维护 |
 | [分发](./docs/npm-distribution.md) | 同字节 GitHub/npm 发布和合格安装入口 |
@@ -323,7 +323,7 @@ pnpm pack --pack-destination artifacts
 pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz
 ```
 
-`pnpm verify`覆盖合同、类型、baseline、build、测试和构建入口 smoke。必需 CI 在 Windows/Linux 使用未修改的官方 rc.2 源码与发布制品。模拟测试通过不证明真实账号／模型／搜索可用。
+`pnpm verify`覆盖合同、类型、baseline、build、测试和构建入口 smoke。必需 CI 已在 Windows/Linux 使用未修改的官方 rc.3 源码与发布制品通过，见[资格证据](./docs/official-first-021-rc3.md)。此候选尚未发布、安装或通过 Desktop 验收。模拟测试通过不证明真实账号／模型／搜索可用。
 
 Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <task> --json`开始；计划仅返回未执行 argv，不授权副作用。完整变更／发布政策见[AGENTS.md](./AGENTS.md)。重要更新必须经受保护合并与双渠道发布；纯文档默认不发包。Profile 安装、退出和中断会话的重启另需许可。
 

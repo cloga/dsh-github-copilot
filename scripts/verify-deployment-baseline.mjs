@@ -535,8 +535,8 @@ assert(rc3Core?.tag === currentDsh.tag && rc3Core.commit === currentDsh.commit
   && rc3Core.desktopPackageSet === 'not-materialized'
   && rc3Core.webRuntimeConfig === 'volatile-provider-getters-required-config'
   && rc3Core.reviewerIdentity === 'exact-package-version-and-published-callback-identity'
-  && rc3Core.evidenceScope === 'exact-tag-source-fixture-required-ci-not-yet-run'
-  && rc3Core.standaloneNpmArtifacts === 'exact-rc3-artifact-fixture-required-ci-not-yet-run',
+  && rc3Core.evidenceScope === 'unchanged-tagged-source-target'
+  && rc3Core.standaloneNpmArtifacts === 'tested',
   'rc.3 must document its exact source target and pending runtime/artifact qualification')
 for (const path of rc3Core.runtimeTests) await access(resolve(root, path))
 for (const path of ['tests/routed-web.spec.ts', 'tests/fixtures/auto-review-copilot-core.fixture.ts',

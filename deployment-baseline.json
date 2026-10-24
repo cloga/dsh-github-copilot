@@ -306,9 +306,9 @@
           "roleChildHistory": "unknown-legacy-history-fail-closed",
           "runtimeDependencies": "public-resolution-and-unload",
           "clientSessionContext": "multiple-session-owner-isolation",
-          "evidenceScope": "exact-tag-source-fixture-required-ci-not-yet-run",
-          "standaloneNpmArtifacts": "exact-rc3-artifact-fixture-required-ci-not-yet-run",
-          "managedProviderValidation": "synthetic-tagged-source-and-published-artifact-fixture-required",
+          "evidenceScope": "unchanged-tagged-source-target",
+          "standaloneNpmArtifacts": "tested",
+          "managedProviderValidation": "synthetic-tagged-source-and-published-artifact-runtime",
           "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts"]
         }
       ],

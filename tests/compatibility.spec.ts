@@ -58,8 +58,8 @@ describe('assertDshCompatibility', () => {
       roleChildHistory: 'unknown-legacy-history-fail-closed',
       runtimeDependencies: 'public-resolution-and-unload',
       clientSessionContext: 'multiple-session-owner-isolation',
-      evidenceScope: 'exact-tag-source-fixture-required-ci-not-yet-run',
-      standaloneNpmArtifacts: 'exact-rc3-artifact-fixture-required-ci-not-yet-run',
+      evidenceScope: 'unchanged-tagged-source-target',
+      standaloneNpmArtifacts: 'tested',
       desktopRelease: 'not-verified', desktopPackageSet: 'not-materialized',
     })
     expect(current.baselines.at(-1).runtimeTests).toEqual(expect.arrayContaining([
