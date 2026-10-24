@@ -8,7 +8,7 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-**稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；待发布维护预览版：`0.4.2-alpha.18.dsh.0.2.0.rc.2`。** 此 rc.2 图片格式缓解尚未发布，下方版本化 Release 命令仅在发布后适用。这是旧维护线的递增版本，以后缀标明精确 Core，不改变较新 Core 的独立版本序列。`0.4.2-alpha.1` 的发布预检失败，因此未发布；其不可变 tag 不会复用。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。稳定版也发布到 npm 的 `latest` dist-tag；预发布版本仍使用各自渠道 tag。稳定渠道不扩大已验证的宿主基线，也不证明实时账号、模型、搜索或 Desktop 健康状态。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
+**稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；待发布维护预览版：`0.4.2-alpha.19.dsh.0.2.0.rc.2`。** 此 rc.2 冷开回放恢复修复尚未发布，下方版本化 Release 命令仅在发布后适用。这是旧维护线的递增版本，以后缀标明精确 Core，不改变较新 Core 的独立版本序列。`0.4.2-alpha.1` 的发布预检失败，因此未发布；其不可变 tag 不会复用。支持宿主：官方 DSH / Windows Desktop `0.2.0-rc.2`。稳定版也发布到 npm 的 `latest` dist-tag；预发布版本仍使用各自渠道 tag。稳定渠道不扩大已验证的宿主基线，也不证明实时账号、模型、搜索或 Desktop 健康状态。较早 DSH pin 仅是历史证据，不是当前安装目标。已发布、已安装到 profile、已被运行中的 Host 加载，是三个不同状态。
 
 **原生刷新保护：**0.4.1 引入了窄范围保护：仅在插件拥有的原生刷新被精确验证，且账号、端点与权限连续时，保留已发出的 HTTP 流。但截至 0.4.2-alpha.13，真实 Cordis 服务代理身份不一致仍会导致保护证据匹配失败；0.4.2-alpha.14 修复此问题。后续请求重新验证认证与模型元数据。未知／外部凭据通知、撤销、取消与供应商拒绝仍明确报错，不承诺所有刷新无感，也不自动重试。参见[刷新边界](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385)。
 
@@ -113,10 +113,10 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.18.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.18.dsh.0.2.0.rc.2.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.19.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.19.dsh.0.2.0.rc.2.tgz
 ```
 
-**Desktop** 原生包管理器接受精确 npm spec，例如发布后的 `dsh-github-copilot@0.4.2-alpha.18.dsh.0.2.0.rc.2`；稳定版发布到 npm `latest` dist-tag，预发布版使用对应渠道 tag。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
+**Desktop** 原生包管理器接受精确 npm spec，例如发布后的 `dsh-github-copilot@0.4.2-alpha.19.dsh.0.2.0.rc.2`；稳定版发布到 npm `latest` dist-tag，预发布版使用对应渠道 tag。官方 rc.2 **Desktop 随附的专属 CLI**也支持管理保留 profile；全局／普通 `dsh` shim 不等价。使用前核验实际安装入口，参见[Desktop CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及独立的[具名 profile 离线流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)。两种路径都不授权绕过包源政策、修改 peer 或删除配置。
 
 经批准 reload/restart 后：
 
@@ -265,6 +265,8 @@ Credits 账号面板显示当前账号和 **切换**，下拉菜单只列已有�
 
 “New Session”说的是默认继承对象，并非只处理第一条消息：启用的 Session policy 会在每个后续托管 Copilot turn 准入时冻结，并同样控制该 Session 的托管原生压缩摘要。为已有且符合条件的 Session 开启时，选择托管 Copilot 模型，点击输入框的 **Credits/usage** 控件，展开 **Visible-history continuation**，再于 **Session policy** 选择 **On**。此控件只出现在仍打开且使用托管账号发现路由的 Session；canonical/native 路由不显示。选择前可见有损说明。开启即明确同意省略旧加密推理及内嵌摘要，同账号也适用；隐藏细节可能丢失，可见消息、工具关系和原历史保留。该策略跨账号切换与重启持久保留，直到更改；从下一 turn 生效，已准入 turn 保持原先冻结的策略。关闭时切换到不同账号会提供持续开启、保持关闭或取消，没有仅下一轮模式。`/copilot-compact visible-history` 是通过已选恢复引擎执行的另一种一次性操作，不等同于持久 Session 设置。两者都不会自动发送／重试，也不解决额度或上下文超限；精确回放失败仍使用同一个持久策略，用户另行点击原生重试。当前 Core 没有公开 Models 直达 API，Chat 不展示不可用的管理入口。
 
+定时／后台任务以精确的托管 replay-scope 错误结束后，请打开**原 Session**：即使 Host 已重启、临时请求指纹过期或 picker 改变，仍可看到回放恢复入口。严格公开 Session projection 只保留固定失败分类及有界 turn／序号／路由证据，不恢复账号来源或旧请求授权。忽略复制／fork 的失败，下一原生 turn 开始时清除历史提示。显式开启仍先说明隐藏推理损失，只保存既有持久 Session 策略，不重新执行任务；另行重试前请核对部分结果和副作用，避免重复执行。
+
 上下文证据与回放恢复以紧凑、居中提示显示在输入框上方，宽度遵循原生输入框。模型、项数和状态刷新收进默认折叠的技术详情；有损恢复仍需明确确认。上下文采样只在明确事件时告警，可按 Session／事件关闭，且不会断言原生仪表当前值；原生统计不变。切换账号不会让旧加密推理自动变得可跨账号使用。简短 scope 错误指向显式恢复或新会话；有界、脱敏的请求结构计数留在 Host 诊断中，不挤占主错误。**已授权**只表示授权已准备好，不表示消息已发送或恢复已成功。
 
 ## 所有权与深入阅读
@@ -305,14 +307,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.18.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.18.dsh.0.2.0.rc.2.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.18.dsh.0.2.0.rc.2/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.19.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.19.dsh.0.2.0.rc.2.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.19.dsh.0.2.0.rc.2/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.18.dsh.0.2.0.rc.2.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.19.dsh.0.2.0.rc.2.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 

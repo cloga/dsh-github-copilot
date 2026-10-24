@@ -271,7 +271,12 @@ test('CLI unknown input returns one JSON error with exit 2', () => {
 test('agent contract references actual files and verification gates', async () => {
   const result = await verifyAgentContract()
   assert.equal(result.ok, true)
-  assert.equal(result.taskCount, 17)
+  assert.equal(result.taskCount, 18)
+  const replay = await planTask('replayrecovery')
+  assert.ok(replay.read.includes('src/replay-recovery-evidence.ts'))
+  assert.ok(replay.tests.includes('tests/replay-recovery-evidence.spec.ts'))
+  assert.ok(replay.risk.includes('Never reconstruct account origin'))
+  assert.ok(replay.risk.includes('never send/retry'))
   const dropdown = await planTask('dropdown')
   assert.ok(dropdown.read.includes('src/account-dropdown.ts'))
   assert.ok(dropdown.tests.includes('tests/account-dropdown.spec.ts'))

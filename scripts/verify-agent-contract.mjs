@@ -76,6 +76,12 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.context?.tests?.includes('tests/fixtures/turn-usage-core.fixture.ts')
     && contract.tasks.context?.risk?.includes('Never filter or delay shared native usage'),
   'context diagnostics must preserve shared native usage and exact-source accounting evidence')
+  require(contract.tasks.replayrecovery?.read?.includes('src/replay-recovery-evidence.ts')
+    && contract.tasks.replayrecovery?.tests?.includes('tests/replay-recovery-evidence.spec.ts')
+    && contract.tasks.replayrecovery?.risk?.includes('Ignore inherited history')
+    && contract.tasks.replayrecovery?.risk?.includes('Never reconstruct account origin')
+    && contract.tasks.replayrecovery?.risk?.includes('never send/retry'),
+  'cold-open replay recovery must remain a content-free notice with explicit scoped consent and no task retry')
   require(Object.values(contract.tasks).some(task => task.read?.includes('src/request-upload-evidence.ts')
     && task.tests?.includes('tests/request-upload-evidence.spec.ts')
     && task.requestBodyEvidenceBoundary?.includes('supplier receipt')

@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared maintenance prerelease: `0.4.2-alpha.18.dsh.0.2.0.rc.2`.** This rc.2 image-format mitigation is not yet published; its versioned Release commands below apply only after publication. This legacy maintenance increment preserves increasing SemVer and identifies its exact Core; it does not change newer Core-specific release sequences. `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
+**Stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared maintenance prerelease: `0.4.2-alpha.19.dsh.0.2.0.rc.2`.** This rc.2 cold-open replay-recovery fix is not yet published; its versioned Release commands below apply only after publication. This legacy maintenance increment preserves increasing SemVer and identifies its exact Core; it does not change newer Core-specific release sequences. `0.4.2-alpha.1` was not published: its release preflight failed, and its immutable tag will not be reused. Supported host: official DSH / Windows Desktop `0.2.0-rc.2`. The stable version is also published on npm's `latest` dist-tag; prereleases remain on their channel tags. Stability-channel promotion does not expand the qualified host baseline or prove live account, model, search or Desktop health. Earlier DSH pins are historical evidence, not supported installation targets. Published, installed in a profile and loaded by a running Host are separate states.
 
 **Native refresh protection:** 0.4.1 introduced preservation of already-dispatched HTTP streams across proven plugin-owned refresh with unchanged account, endpoint and entitlements. Versions through 0.4.2-alpha.13 still missed this proof across real Cordis traced service faces; 0.4.2-alpha.14 fixes that identity mismatch. Subsequent requests use freshly validated auth and metadata. Unknown/external credential notifications, revocation, cancellation and provider rejections remain explicit—not a promise of invisible recovery or automatic retry. See [the refresh boundary](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385).
 
@@ -131,10 +131,10 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.18.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.18.dsh.0.2.0.rc.2.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.19.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.19.dsh.0.2.0.rc.2.tgz
 ```
 
-For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.18.dsh.0.2.0.rc.2` after publication; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
+For **Desktop**, its native package manager accepts an exact npm spec, for example `dsh-github-copilot@0.4.2-alpha.19.dsh.0.2.0.rc.2` after publication; stable versions publish on npm's `latest` dist-tag and prereleases on their channel tags. The official rc.2 **Desktop-bundled CLI** also supports reserved-profile plugin management; a global/generic `dsh` shim is not equivalent. Qualify the installed entry before use. See [Desktop CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) and the distinct [standalone offline procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles). Neither path authorizes registry-policy bypass, peer patches or configuration deletion.
 
 After an approved reload/restart:
 
@@ -286,6 +286,8 @@ The Credits account panel shows the current account and **Switch account**. Its 
 
 The name “New Session” describes default inheritance, not a one-message feature: an enabled Session policy is frozen at admission for each subsequent managed Copilot turn and also governs that Session's managed native compaction summaries. For an existing eligible Session, select the managed Copilot model, open the composer **Credits/usage** pill, expand **Visible-history continuation**, then choose **On** in **Session policy**. This control appears only for an open Session using the managed account-discovered route; it is not shown for the canonical/native route. The loss disclosure is shown before the choice. Enabling is explicit consent to omit prior encrypted reasoning and embedded summaries, even on the same account; hidden details may be lost, while visible messages, tool relations and source history remain. The policy persists across account switches and restarts until changed. It takes effect on the next turn; an already admitted turn keeps its captured policy. With continuation off, switching to a different account offers persistent enable, keep off or cancel—there is no next-turn-only choice. `/copilot-compact visible-history` is a separate one-time operation through the selected recovery engine, not the persistent Session setting. Neither path auto-sends/retries or cures quota/context limits; exact replay failures use the same persistent Session policy and require a separate native retry. The pinned Core lacks a public Models deep link, so Chat omits the nonfunctional management entry.
 
+If a scheduled/background task ends with the exact managed replay-scope error, open its **original Session**: Replay recovery remains available after Host restart, temporary fingerprint expiry or a changed picker. A strict public Session projection retains only fixed failure classification and bounded turn/sequence/route evidence, not account origin or old request authorization. Copied/forked failures are ignored; a later native turn clears the historical notice. Explicit enable still discloses hidden-reasoning loss and saves only the existing persistent Session policy. It does not rerun the task: check partial results and side effects before choosing a separate retry to avoid duplicate actions.
+
 Context evidence and Replay recovery use compact, centered notices bounded by the native composer width. Model/item counts and status refresh live in collapsed technical details; loss consent remains explicit. Context sampling warns only for a concrete incident, can be dismissed for that Session/incident, and never asserts the native meter's current value; native statistics stay unchanged. Switching accounts does not make old encrypted reasoning portable. The concise scope error points to explicit recovery or a new conversation; bounded, sanitized dispatch counts stay in Host diagnostics, not the main error. **Authorized** means permission is ready, not that a message was sent or recovery succeeded.
 
 ## Ownership and further reading
@@ -326,14 +328,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.18.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.18.dsh.0.2.0.rc.2.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.18.dsh.0.2.0.rc.2/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.19.dsh.0.2.0.rc.2/dsh-github-copilot-0.4.2-alpha.19.dsh.0.2.0.rc.2.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.4.2-alpha.19.dsh.0.2.0.rc.2/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.18.dsh.0.2.0.rc.2.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.4.2-alpha.19.dsh.0.2.0.rc.2.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
