@@ -19,11 +19,7 @@ function context(overrides: Record<string, unknown> = {}): Context {
       deleteRecord: async () => undefined,
     },
     settings: { get: () => undefined, describe: () => [], mutate: async () => undefined },
-    web: {
-      searchProvider: { get: () => undefined },
-      fetchProvider: { get: () => undefined },
-      registerSearchProvider: () => undefined,
-    },
+    web: { registerSearchProvider: () => undefined },
     ...overrides,
   }
   return {
@@ -86,7 +82,7 @@ describe('assertDshCompatibility', () => {
     expect(pkg.engines.dsh).toBe(DSH_COMPATIBILITY.peerRange)
   })
 
-  it('accepts the supported DSH service contract', () => {
+  it('accepts the public service contract without reading private WebRuntime config', () => {
     expect(() => assertDshCompatibility(context())).not.toThrow()
   })
 
@@ -99,15 +95,5 @@ describe('assertDshCompatibility', () => {
       .toThrow('settings.describe')
     expect(() => assertDshCompatibility(context({ web: {} })))
       .toThrow('web.registerSearchProvider')
-    expect(() => assertDshCompatibility(context({ web: {
-      searchProvider: 'legacy-string',
-      fetchProvider: { get: () => undefined },
-      registerSearchProvider: () => undefined,
-    } }))).toThrow('web.searchProvider.get')
-    expect(() => assertDshCompatibility(context({ web: {
-      searchProvider: { get: () => undefined },
-      fetchProvider: 'legacy-string',
-      registerSearchProvider: () => undefined,
-    } }))).toThrow('web.fetchProvider.get')
   })
 })

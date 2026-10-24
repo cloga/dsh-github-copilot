@@ -24,8 +24,6 @@ export const DSH_COMPATIBILITY = {
     'credentials.deleteRecord',
     'settings.describe',
     'settings.mutate',
-    'web.searchProvider.get',
-    'web.fetchProvider.get',
     'web.registerSearchProvider',
     'systemPrompt.section',
     'context.on',
@@ -64,8 +62,6 @@ export function assertDshCompatibility(ctx: Context): void {
   if (!method(settings, 'mutate')) incompatible('settings.mutate')
   const web = ctx.get('web')
   if (!method(web, 'registerSearchProvider')) incompatible('web.registerSearchProvider')
-  if (!method(web?.searchProvider, 'get')) incompatible('web.searchProvider.get')
-  if (!method(web?.fetchProvider, 'get')) incompatible('web.fetchProvider.get')
   if (!method((ctx as unknown as Record<string, unknown>)['systemPrompt'], 'section')) incompatible('systemPrompt.section')
   if (typeof (ctx as unknown as Record<string, unknown>)['on'] !== 'function') incompatible('context.on')
   if (typeof (ctx as unknown as Record<string, unknown>)['effect'] !== 'function') incompatible('context.effect')
