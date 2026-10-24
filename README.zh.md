@@ -327,6 +327,12 @@ pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz
 
 Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <task> --json`开始；计划仅返回未执行 argv，不授权副作用。完整变更／发布政策见[AGENTS.md](./AGENTS.md)。重要更新必须经受保护合并与双渠道发布；纯文档默认不发包。Profile 安装、退出和中断会话的重启另需许可。
 
+源码工作区的[任务验收试点](https://github.com/cloga/dsh-github-copilot/blob/main/docs/agent-acceptance.md)提供
+`node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE`。
+它检查需求覆盖、当前干净提交、契约原始字节和本地证据哈希，并区分失败、受阻和未执行。
+这不是测试执行、独立评审、真实运行或交付授权的证明。证据保留在 Git 之外；
+该命令不会启动 agent、上传数据或修改 profile，现有 CI 和发布门禁仍是交付依据。
+
 提交以 `Assisted-by` 标明实际使用的工具，不用模型供应商或未经核实的协作者身份。
 
 ## Release 与 checksum

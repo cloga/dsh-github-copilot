@@ -10,7 +10,16 @@
 - [ ] `pnpm verify` (source/test types, Agent contract, tooling tests, clean build, import smoke)
 - [ ] `pnpm pack --pack-destination artifacts`
 - [ ] `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz`
-- [ ] All Windows/Linux exact current DSH 0.2.1-alpha.5 tagged-source and published-artifact CI checks passed (earlier pins are historical evidence only)
+- [ ] All Windows/Linux exact current DSH 0.2.1-rc.3 tagged-source and published-artifact CI checks passed (earlier pins are historical evidence only)
+
+### Acceptance evidence
+
+<!-- For acceptance pilots, identify the requirement IDs, exact source commit, contract SHA-256 and reviewed evidence references.
+Run node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE on the clean candidate checkout.
+Keep local evidence outside Git; share only explicitly reviewed, sanitized artifacts. Do not upload live diagnostics.
+The checker verifies document consistency and local artifact bytes, NOT execution, reviewer independence, environment truth or delivery authorization.
+Missing/failed/blocked/not-run requirements are not a pass. Later commits require new evidence.
+Other changes: N/A with the actual Expected vs Actual results above. See docs/agent-acceptance.md. -->
 
 ### Evidence limits
 

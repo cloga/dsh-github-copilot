@@ -33,6 +33,20 @@ Core inspection is read-only. Isolated tests may use unchanged pinned Core artif
 
 Generated `lib/` output, archives, `.env`, tokens, local credentials, machine state and production screenshots with real authorization codes must not be committed. Use synthetic fixtures for screenshots and report staged UI honestly.
 
+## Task acceptance pilot
+
+Define requirement IDs, expected behavior, verification methods and non-goals
+before implementation. On the clean committed candidate, use
+`node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE`.
+The [acceptance evidence guide](https://github.com/cloga/dsh-github-copilot/blob/main/docs/agent-acceptance.md) defines the bounded
+contract and report formats. Keep evidence outside Git, record exact commit and
+contract/artifact hashes, and distinguish failed, blocked and not-run outcomes.
+This verifies consistency only, not test execution, independent review or live
+behavior; it never replaces required reviews or CI. Review artifacts before any
+explicit sharing and do not upload raw live diagnostics. Subsequent commits need
+fresh evidence. The current-Core PR-template target is mechanically checked
+against package metadata without altering historical evidence.
+
 ## Release changes
 
 GitHub Releases and npm are the default distribution channels for every new version, superseding the Release-only decision in #43 at the user's request. The public package uses the exact same verified tarball in both channels. No automatic npm opt-out is allowed. See [npm distribution](./docs/npm-distribution.md) for initial maintainer bootstrap, OIDC, retry recovery and organizational access requirements.

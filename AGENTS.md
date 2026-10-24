@@ -310,6 +310,16 @@ Desktop plugin upgrades do not necessarily reconcile profile-local copies of Hos
 
 ## Mechanical verification
 
+For the opt-in task acceptance pilot, define observable requirements before
+implementation and validate the clean candidate with
+`node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE`.
+See [acceptance evidence](https://github.com/cloga/dsh-github-copilot/blob/main/docs/agent-acceptance.md): exact commit/contract and
+local file integrity are checked, not execution, environment truth, reviewer
+independence or delivery permission. Keep reports outside Git and never upload
+live diagnostics automatically. Failed, blocked and not-run requirements cannot
+pass; new commits require new evidence. Existing review/CI/release gates remain
+authoritative. This tooling does not activate agents or access live profiles.
+
 Run from the repository root:
 
 ```sh
