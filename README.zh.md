@@ -132,6 +132,12 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 
 启动 patch 用重复的 `--patch /absolute/file` 提供。必须得到 `supported: true`；安装器不会自动执行此预检。不支持的／自定义 Web 组合及 `NONEMPTY_DISPOSABLE_PROFILE_ROOT` 均须停止。先保全非空 root，并核对公开组合能否完整重建，再另行批准规范化；不能默认清空。检查实际共享 peer 解析，避免旧 profile-local 包遮蔽官方 Desktop peer。
 
+请安装下方的精确版本、checksum 已核验的发布归档；不要把 checkout
+目录当作发布包。`pnpm add <directory>` 会创建 `link:` 开发依赖，不会替该
+目录安装生产依赖。开发时应先安装 checkout 的依赖再建立链接，并确保链接目标持续可用。
+包管理器显示 **Installed** 只表示 profile 记录已接受，不代表运行依赖已解析或插件已成功加载；
+还应单独核对目标 DSH/profile 的启动结果。
+
 **独立具名 profile**：
 
 ```sh

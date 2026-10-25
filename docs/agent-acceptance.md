@@ -34,12 +34,13 @@ The plugin-only and approval boundaries in [AGENTS.md](../AGENTS.md) still apply
    A later source commit requires a new report and appropriate revalidation.
 
 `agent.mjs describe` and `plan <task>` expose this policy and the unexecuted
-command with input placeholders. The checker reads files and fixed Git commands
-only; it never executes report-supplied commands or follows URLs.
+command with input placeholders. Schema 1 reads files and fixed Git commands only. Schema 2 additionally invokes
+the existing bounded GitHub CI reader. Neither executes report-supplied commands,
+follows report URLs, or operates a Desktop application.
 
 ## Contract format
 
-Version 1 accepts exactly these fields. This example is illustrative, not
+Version 1 accepts exactly these fields for non-live checks. This example is illustrative, not
 completed acceptance or evidence that the behavior has been exercised:
 
 ```json
@@ -65,11 +66,279 @@ uniquely identified requirements and 1-16 non-goals. IDs are lowercase
 alphanumeric/hyphen identifiers beginning with a letter, at most 64 characters.
 Text is nonempty and at most 2,000 characters. Methods are `static`, `unit`,
 `integration`, `browser`, `review` or `manual`; a method is a declared evidence
-category, never an instruction to execute code.
+category, never an instruction to execute code. `browser` and `manual` requirements
+now require schema 2; schema 1 returns `ACCEPTANCE_LIVE_CONTRACT_REQUIRED`.
+
+## Required live Desktop acceptance (schema 2)
+
+This focused #451 extension also contributes to agentic engineering improvement;
+it does not depend on #442's evaluator platform or multi-agent loop. A task that
+explicitly requests post-upgrade UI acceptance must use schema 2, not avoid the
+requirement by labeling it `unit`. Local npm restrictions still prohibit local
+dependency recovery; they do not excuse skipping safe checks on an already-running
+Desktop. Real UI actions use the existing computer-use tools and their permissions,
+not this repository checker.
+
+Use the same `agent.mjs accept` command and base contract/report fields, with
+`schemaVersion: 2` in both documents. Add this contract field (illustrative):
+
+```json
+{
+  "liveUi": {
+    "expectedPluginVersion": "0.1.0-alpha.1",
+    "panel": "models-manage",
+    "checks": [
+      { "id": "manage-reopen", "action": "reopen-manage", "outcome": "ready" },
+      { "id": "refresh-settles", "action": "refresh-models", "outcome": "ready" }
+    ]
+  }
+}
+```
+
+Every live check ID must exist in `requirements`; every `browser`/`manual`
+requirement must occur in `liveUi.checks`. Define the required scenarios before
+capture: success in a signed-in case cannot substitute for a missing no-account
+or failure scenario. Report actions must match each required action; observing
+a panel cannot satisfy a required refresh or reopen. There are 1-16 unique live checks. Expected outcomes are
+`ready` or `actionable-failure` (the latter is for an explicitly required error
+presentation scenario, never a generic failure waiver). Panels are only
+`models-manage`, `plugin-details` or `about`.
+
+The report adds exactly `liveUi` with:
+
+| Field | Strict shape / allowed values |
+|---|---|
+| `appState` | `running`, `not-running`, `unknown` |
+| `desktop` | `{version, source, observedAtMs}`; source `about` or `unknown` |
+| `installed` | Same shape; source `disk-manifest` or `unknown` |
+| `loaded` | Same shape; source `public-runtime-status`, `runtime-ui` or `unknown` |
+| `upgradeSource` | `{kind, version, url, sha256, releaseSha256, fallbackReason, observedAtMs}` as below |
+| `navigation` | 0-2 unique-method `{method, outcome, atMs, observedAtMs, observationSource}` rows |
+| `handoff` | `{state, panel}`; state `none`, `requested`, `user-absent`; panel equals contract |
+| `permission` | `{state, action}`; state `safe-read-only`, `approval-required`, `user-absent` |
+| `steps` | 0-32 unique-check `{checkId, action, observation, startedAtMs, finishedAtMs, observedAtMs, observationSource}` rows |
+| `lifecycle` | Current discovery, permitted launch, welcome, rediscovery and final observation chain below |
+
+### Current app lifecycle, not historical readiness
+
+Schema 2 also requires exactly this content-free lifecycle shape. This is an
+illustrative shape, **not a completed report or proof that these tools ran**:
+
+```json
+{
+  "discovery": { "state": "running", "atMs": 1000, "source": "list-apps" },
+  "launch": { "state": "not-needed", "atMs": null },
+  "welcome": { "state": "not-seen", "atMs": null },
+  "rediscovery": { "atMs": 1001, "source": "list-apps", "window": "same" },
+  "final": {
+    "atMs": 2000, "source": "list-apps-and-get-window-state",
+    "appState": "running", "surface": "target-panel"
+  },
+  "interaction": "clear"
+}
+```
+
+Discover the app **now** using `list_apps`, never infer it is running from old
+conversation evidence. Discovery `state` is `running`, `not-running` or `unknown`.
+When actually not running, explicit authorization for the exact launch target
+permits one controlled `start_app`, recorded as `authorized-start-app` with a
+time after discovery. Otherwise use `not-authorized` and stop. `not-needed` and
+`not-authorized` use null launch times. A launch when discovery already reports
+running is invalid: do not create duplicate processes or use shell launch/focus
+workarounds. The reported authorization is not an approval grant.
+
+Welcome `state` is `not-seen` (null time), `safe-skip-observed`, `safe-skip-used`,
+`auth-required` or `unknown` (positive observed time after discovery/launch).
+Do not automatically label welcome as authentication failure. Inspect official
+safe skip controls when present; DSH can expose **Add API Key -> Set up later**
+without entering/submitting/storing any key or signing in. This is observation
+guidance, not permission to click through real authentication, unsafe warnings,
+or legal agreements. An actual credential requirement with no permitted safe
+skip remains `LIVE_UI_AUTH_REQUIRED`; a skip not yet used/unknown welcome state
+is `LIVE_UI_WELCOME_UNRESOLVED`, with next action to inspect the official skip.
+
+After navigation or welcome dismissal, rediscover the app/window with `list_apps`
+and read a fresh tree. A welcome window may disappear and be replaced by the
+main window; do not retry the old window just because an action returned done
+or its immediate diff was empty. `rediscovery.window` is only `same`,
+`replacement` or `unobserved`, never a real window identifier/title/path.
+Its positive time must be after discovery/launch/welcome; missing observation
+uses null and cannot pass. Navigating and checking the target panel follows this
+rediscovery. `start_app` success is not main-window readiness.
+
+Before delivering, freshly perform app discovery **and** a UI observation.
+`final` records its positive UTC epoch-millisecond time, app state and surface
+(`target-panel`, `workspace`, `welcome`, `unobserved`). Only running and the
+target-panel/workspace can pass, after rediscovery, navigation and all required
+checks. This final observation must be no older than 120 seconds at checker
+completion, no later than its clock, and within 120 seconds of the last check.
+The checker re-evaluates this after its bounded CI reads. This is a bounded
+report-consistency freshness rule, not proof of clock accuracy or a promise the
+application remains running afterwards. Recheck if waiting/CI made it stale.
+
+`interaction` is `clear` or `interrupted`. Interruption remains
+`LIVE_UI_INPUT_INTERRUPTED`; reread the app UI before the same tool/action retry
+under its existing consent and limits. Unapproved launch, missing rediscovery,
+and stale/stopped/welcome-only final state return distinct blocked codes, not
+product failure or success. Existing two navigation-method limits, one panel
+handoff, permission rules, installed/loaded/CI separation and GitHub-first
+source constraints remain unchanged. This checker still only validates supplied
+rows; it cannot know whether a real host executed any of these steps.
+
+### Required completeness versus risk-accepted issue disposition
+
+Controlled automatic regressions can deterministically exercise timeouts,
+never-resolving promises, late responses and simulated disconnects. That is
+distinct from reproducing the same faults in a production Desktop. Do not alter
+system networking/proxies, credentials/accounts or trigger paid calls merely to
+complete fault coverage. When only destructive or unavailable live injection
+remains, record why rather than indefinitely holding a fixed issue open.
+
+After a specific defect is fixed, relevant controlled regressions and exact-head
+CI pass, published/installed/loaded-version prerequisites are satisfied and
+required normal live checks no longer reproduce it, the user may accept residual
+production uncertainty. Communicate "fixed / not reproduced after repair;
+unmeasured faults remain; reopen on recurrence", not proven original root cause,
+complete production coverage or arbitrary assumption of success.
+
+Schema 2 reports may add an optional `disposition` object, separate from checks:
+
+```json
+{
+  "decision": "accept-residual-risk",
+  "userAuthorized": true,
+  "defect": "specific-fix",
+  "controlledRegression": "passed",
+  "criticalBlocker": false,
+  "productionFaults": [
+    { "scenario": "timeout", "status": "not-tested", "reason": "no-safe-control" }
+  ]
+}
+```
+
+Only these fields are accepted. Decision is `keep-open` or `accept-residual-risk`;
+defect is `specific-fix` or `unconfirmed`; regression is `passed`, `failed` or
+`not-run`. Boolean authorization/blocker fields are self-reported, not permission.
+The 1-4 unique production scenarios are `disconnect`, `never-resolves`, `timeout`,
+`late-response`; status is `passed`, `failed`, `not-tested`. Untested reasons are
+`no-safe-control` or `destructive-only`; observed pass/fail uses `observed`.
+No raw errors, identities, network configuration or product content is accepted.
+
+Only all required checks/live/version/source/real CI gates plus a specific fix,
+passed controlled regressions, reported explicit authorization, no critical
+blocker and no known production failure can yield
+`close-with-residual-risk-and-reopen-on-recurrence`. Coverage remains `incomplete`
+when a production fault is untested. Missing mandatory requirements never become
+passed; known failure or critical blocker also prevents final `ok/closeEligible`.
+Other dispositions recommend `keep-open`. Outputs always retain
+`requiredChecksWaived: false`, `rootCauseVerified: false`,
+`authorizationVerified: false`, `automaticClosure: false`. This is a bounded
+decision-consistency aid, not an authenticated risk signoff, automatic issue
+operation or relaxation of required CI/review/approval rules.
+
+Versions are exact SemVer-like version strings, not paths, account names or raw
+status output. Unknown version/source uses `version: null, source: "unknown",
+observedAtMs: null`; known versions need a positive integer UTC epoch-millisecond
+observation time. Desktop About establishes only the Desktop version. A disk
+manifest establishes installation, **not loaded runtime**. A matching public
+loaded-plugin version is mandatory for version-specific completion; otherwise
+observations may be qualified, but final `ok`/`closeEligible` remain false.
+Known different loaded versions return `LIVE_UI_VERSION_PREREQUISITE_UNMET`
+with `request-exact-upgrade-permission`, not automation failure. A matching
+download/checksum does not prove installation or loading. If the exact required
+install/restart needs specific consent, an unavailable user leaves it blocked;
+a broad request to continue acceptance never fabricates that consent.
+
+### Formal upgrade source selection
+
+Prefer the published **exact-version GitHub Release asset canonical URL**:
+`https://github.com/<policy.repository>/releases/download/v<VERSION>/dsh-github-copilot-<VERSION>.tgz`.
+The repository comes from `agent-execution-policy.json`; both version positions
+must equal `expectedPluginVersion`. Do not use local source directories, links,
+worktrees or locally built archives as formal upgrade acceptance sources.
+
+`upgradeSource.kind` is `github-release-url` (preferred),
+`verified-github-cache` (fallback only), `local-build`, `source-directory`,
+`link-worktree` or `unknown`. A tgz downloaded from the canonical Release URL and
+checked against the published SHA-256 is a **GitHub download cache**, not a local
+build. Keep those labels distinct even though both reside on disk.
+
+For either eligible source, record the exact version, canonical originating URL,
+archive `sha256`, published `releaseSha256` and positive integer `observedAtMs`.
+Both lowercase SHA-256 values must be present and equal. Preferred URL use
+requires `fallbackReason: "none"`. Cache use requires the fixed reason
+`native-url-unavailable` or `native-url-rejected`; convenience or a local build
+is not a fallback reason. Reuse existing Release/SHA256SUMS evidence for these
+facts. Never substitute a source path, mutable branch URL, npm alias, token,
+signed redirect URL, account name or raw download error. Unknown values may be
+null and local/unknown source kinds can be recorded, but cannot pass final
+acceptance. Malformed/foreign URLs are invalid; disallowed/incomplete source
+evidence yields `LIVE_UI_UPGRADE_SOURCE_REJECTED`.
+
+This is executable **source-selection report consistency**, not an installer
+or new provenance attestation. The checker does not download assets, read local
+installation paths, authenticate a reported hash, prove Release existence, or
+operate native UI. Results retain `upgradeSourceKind` and
+`provenanceVerified: false`; an invented matching hash cannot be detected by
+this checker. Actual Release/readback, archive integrity, install permission,
+installed-on-disk and loaded-runtime evidence remain distinct. Do not reinstall,
+restart or bypass warnings just to populate the report.
+
+### Navigation and outcomes
+
+Navigation methods are `accessible-control`, `supported-shortcut` or
+`user-opened-panel`; outcomes are `opened`, `unchanged`, `no-candidate`. Do not
+retry a method just because its action returned done with no immediate tree diff.
+First obtain a fresh `get_window_state` observation. Both navigation and step
+rows require `observationSource: "get-window-state"` and an observation time
+strictly after the action. Observations must settle within 120,000ms and be in
+recorded order; no looping or repeated check/method IDs. An opened navigation
+ends navigation attempts. A second method is one supported safe alternate, not
+a shell/window-manager workaround.
+
+Step actions are `observe-panel`, `reopen-manage`, `refresh-models`; observations
+are `ready`, `actionable-failure`, `error`, `timeout`, `unchanged`. For example,
+record the bounded refresh interval and fresh settled ready observation; do not
+interpret a transient Checking state or an action receipt as success/failure.
+Actions remain subject to the real task and tool permissions. Reported permission
+does not grant any. `permission.action` is `none`, `restart`, `install`,
+`account-switch`, `oauth` or `paid-call`; any non-`none` or non-safe state blocks
+this safe-check flow. App not running requires a blocked result unless the
+separate explicit launch authorization and controlled lifecycle above apply.
+
+If both distinct navigation attempts fail after fresh observations, return
+`LIVE_UI_AUTOMATION_BLOCKED`, not product failure. The deterministic `nextAction`
+requests the specified panel once; after `handoff.state: requested/user-absent`,
+it waits for the user instead of asking repeatedly. Never infer consent/panel
+opening from autopilot, user absence, or an automatically unanswered `ask_user`.
+After the user really opens the panel, inspect it afresh and record
+`user-opened-panel`; retain prior failure context locally, without resetting the
+existing task/operation failure ledger. The report is not a persistent UI
+executor or an interception mechanism: hiding attempts in a fabricated report
+cannot be detected.
+
+Schema 2 check `notes` are fixed codes only: `observed`, `not-run`, `blocked`,
+`failed`; all `evidence` arrays must be empty. The structured live rows replace
+arbitrary files/free text. Unknown fields/values are rejected; no identities,
+credentials, raw errors, conversation content, screenshots or ad-hoc logs belong
+in this report. Keep reports local; the tool never uploads them.
+
+Schema 2 always invokes the existing `ci-evidence` operation under task
+`String(issue)`, exact clean current commit and its existing persistent budget.
+It never trusts a report's CI boolean/JSON or resets failures. Non-green/pending
+CI, missing live checks, errors/timeouts, blocked permission, unconfirmed loaded
+version, or incomplete handoff makes `state: "blocked", ok: false,
+closeEligible: false`. A complete consistent report plus real exact-head CI can
+return `state: "reported-complete", ok: true, closeEligible: true`, but this is
+**report eligibility for human review**, not proof of UI execution or permission
+to close an issue. `executionVerified/environmentVerified/deliveryAuthorized`
+remain false; `liveUi.source` is always `report-consistency-only`. `ciVerified`
+alone is real Actions-result evidence. No trusted Desktop execution source is
+invented here.
 
 ## Report format
 
-The report has exactly `schemaVersion`, `commit`, `contractSha256`, `producer`,
+The schema 1 report has exactly `schemaVersion`, `commit`, `contractSha256`, `producer`,
 `environment` and `checks`. Version is 1. `commit` is the full 40-character
 lowercase Git SHA-1 of the candidate; SHA-256 Git repositories are not supported
 by this version. `contractSha256` is the lowercase SHA-256 of the exact contract

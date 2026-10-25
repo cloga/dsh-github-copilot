@@ -49,9 +49,11 @@ test('observed and insufficient evidence need ordered windows and positive sampl
 })
 test('Auto plans begin with an unexecuted previous-review prerequisite', async () => {
   const plan = await planTask('autorouting')
-  assert.deepEqual(plan.commands[0], { argv: [
+  assert.deepEqual(plan.preflightChecks[0], { argv: [
     'node', 'scripts/iteration-review.mjs', '--report', 'docs/auto-iteration-review.json',
-  ], executed: false })
+  ], executed: false, requiredBeforeImplementation: true })
+  assert.ok(plan.commands.every(command => command.argv[1] === 'scripts/agent.mjs'
+    && command.argv[2] === 'guard' && command.executed === false))
 })
 test('contract rejects disabled prerequisites, missing follow-up or automatic uploads', async () => {
   const root = await mkdtemp(join(tmpdir(), 'iteration-contract-'))
