@@ -28,15 +28,26 @@ the authenticated `gh` CLI. It requires the explicit head to equal the current
 clean checkout HEAD, the origin to identify this repository, the active
 `.github/workflows/ci.yml` workflow, a completed successful run for that exact
 head, and successful results for both Windows/Linux `verify` and
-`Published adapter` matrix jobs plus `release-ready`. The normal `release` job
+`Published adapter` matrix jobs plus `release-ready`. Distinct runs are ordered
+by workflow run number, then run ID; attempt numbers order only attempts of
+the same run. An older successful rerun cannot mask a newer failed or pending
+run. Missing or invalid run ordering metadata is rejected. The normal `release` job
 may be absent or skipped; it is not a required verification job. Failed,
 cancelled, in-progress, stale, missing, mismatched, or skipped required results
 are rejected. No report JSON, local `passed` label, session status, or inferred
 workflow name is accepted as a substitute.
 
-Each allowed operation has two failed attempts per task/operation in the
-worktree's Git metadata. Counts survive ordinary continuation and successful
-calls; there is no reset option. Once exhausted, the entry point returns
+Each allowed operation has two execution failures per task/operation in the
+worktree's Git metadata. Failed local checks and unavailable/malformed GitHub
+reads consume this budget. Successfully read but unacceptable CI evidence does
+not: missing or running results return `state: "blocked"` with
+`evidenceState: "not-ready"`; failed, cancelled, stale or mismatched evidence
+returns `evidenceState: "rejected"`. Neither state passes verification, but later
+explicit reads can accept newly completed evidence without a pending-state
+lockout. There is no automatic polling or retry.
+
+Execution-failure counts survive ordinary continuation, pending results and
+successful calls; there is no reset option. Once exhausted, the entry point returns
 `GUARD_FAILURE_BUDGET_EXHAUSTED` without executing the operation. State is local
 to that Git worktree and capped at 128 task/operation records; it is not a
 defense against deliberate deletion or tampering with Git metadata. Each

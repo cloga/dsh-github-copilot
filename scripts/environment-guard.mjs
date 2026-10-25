@@ -30,6 +30,12 @@ class GuardError extends Error {
   }
 }
 
+class CiEvidenceError extends GuardError {
+  constructor(code, details = {}, evidenceState = 'rejected') {
+    super(code, { ...details, evidenceState })
+  }
+}
+
 function validPolicy(policy) {
   return isRecord(policy) && policy.schemaVersion === 1
     && policy.repository === 'cloga/dsh-github-copilot' && policy.ownerTask === 'tooling'
@@ -135,52 +141,60 @@ function failedConclusion(conclusion, prefix) {
 }
 
 function requireSuccessfulJob(job, name) {
-  if (!job) throw new GuardError('CI_REQUIRED_JOB_MISSING', { job: name })
-  if (job.status !== 'completed') throw new GuardError('CI_REQUIRED_JOB_IN_PROGRESS', { job: name })
+  if (!job) throw new CiEvidenceError('CI_REQUIRED_JOB_MISSING', { job: name }, 'not-ready')
+  if (job.status !== 'completed') {
+    throw new CiEvidenceError('CI_REQUIRED_JOB_IN_PROGRESS', { job: name }, 'not-ready')
+  }
   if (job.conclusion !== 'success') {
-    throw new GuardError(failedConclusion(job.conclusion, 'CI_REQUIRED_JOB'), { job: name })
+    throw new CiEvidenceError(failedConclusion(job.conclusion, 'CI_REQUIRED_JOB'), { job: name })
   }
 }
 
 function findUniqueJob(jobs, name) {
   const matches = jobs.filter(job => job.name === name)
-  if (matches.length > 1) throw new GuardError('CI_REQUIRED_JOB_DUPLICATE', { job: name })
+  if (matches.length > 1) throw new CiEvidenceError('CI_REQUIRED_JOB_DUPLICATE', { job: name })
   return matches[0]
 }
 
 function compareRuns(a, b) {
-  return (Number(b.run_attempt) || 0) - (Number(a.run_attempt) || 0)
-    || (Number(b.run_number) || 0) - (Number(a.run_number) || 0)
-    || String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? ''))
+  if (a.id === b.id) return b.run_attempt - a.run_attempt
+  return b.run_number - a.run_number || b.id - a.id
 }
 
 function verifyCi({ root, head, policy, execute }) {
-  if (!commitId(head)) throw new GuardError('CI_HEAD_INVALID')
+  if (!commitId(head)) throw new CiEvidenceError('CI_HEAD_INVALID')
   const actualHead = executeGit(root, ['rev-parse', '--verify', 'HEAD'], execute)
-  if (actualHead !== head) throw new GuardError('CI_HEAD_MISMATCH')
+  if (actualHead !== head) throw new CiEvidenceError('CI_HEAD_MISMATCH')
   if (executeGit(root, ['status', '--porcelain=v1', '--untracked-files=all'], execute) !== '') {
-    throw new GuardError('CI_WORKTREE_DIRTY')
+    throw new CiEvidenceError('CI_WORKTREE_DIRTY')
   }
   const repository = githubRepository(executeGit(root, ['config', '--get', 'remote.origin.url'], execute))
-  if (repository !== policy.repository) throw new GuardError('CI_REPOSITORY_MISMATCH')
+  if (repository !== policy.repository) throw new CiEvidenceError('CI_REPOSITORY_MISMATCH')
 
   const limits = { calls: 0, ...policy.operations['ci-evidence'] }
   const workflow = ghJson(`/repos/${repository}/actions/workflows/ci.yml`, execute, limits)
   if (!isRecord(workflow) || String(workflow.path ?? '').replaceAll('\\', '/') !== '.github/workflows/ci.yml'
     || workflow.name !== 'CI' || !Number.isSafeInteger(workflow.id) || workflow.state !== 'active') {
-    throw new GuardError('CI_WORKFLOW_MISMATCH')
+    throw new CiEvidenceError('CI_WORKFLOW_MISMATCH')
   }
   const runsResponse = ghJson(`/repos/${repository}/actions/runs?head_sha=${head}&per_page=100`, execute, limits)
   if (!isRecord(runsResponse) || !Array.isArray(runsResponse.workflow_runs)) {
     throw new GuardError('CI_GITHUB_RESPONSE_INVALID')
   }
   const exactHead = runsResponse.workflow_runs.filter(run => isRecord(run) && run.head_sha === head)
-  const runs = exactHead.filter(run => String(run.workflow_id) === String(workflow.id)).sort(compareRuns)
-  if (runs.length === 0) throw new GuardError(exactHead.length ? 'CI_WORKFLOW_MISMATCH' : 'CI_RUN_MISSING')
+  const runs = exactHead.filter(run => String(run.workflow_id) === String(workflow.id))
+  if (runs.length === 0) {
+    throw new CiEvidenceError(exactHead.length ? 'CI_WORKFLOW_MISMATCH' : 'CI_RUN_MISSING',
+      {}, exactHead.length ? 'rejected' : 'not-ready')
+  }
+  if (runs.some(run => !['id', 'run_number', 'run_attempt'].every(
+    key => Number.isSafeInteger(run[key]) && run[key] > 0))) {
+    throw new GuardError('CI_GITHUB_RESPONSE_INVALID')
+  }
+  runs.sort(compareRuns)
   const run = runs[0]
-  if (run.status !== 'completed') throw new GuardError('CI_RUN_IN_PROGRESS')
-  if (run.conclusion !== 'success') throw new GuardError(failedConclusion(run.conclusion, 'CI_RUN'))
-  if (!Number.isSafeInteger(run.id)) throw new GuardError('CI_GITHUB_RESPONSE_INVALID')
+  if (run.status !== 'completed') throw new CiEvidenceError('CI_RUN_IN_PROGRESS', {}, 'not-ready')
+  if (run.conclusion !== 'success') throw new CiEvidenceError(failedConclusion(run.conclusion, 'CI_RUN'))
 
   const jobsResponse = ghJson(
     `/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`, execute, limits)
@@ -194,8 +208,9 @@ function verifyCi({ root, head, policy, execute }) {
   const release = findUniqueJob(jobs, 'release')
   if (release && (release.status !== 'completed'
     || !policy.operations['ci-evidence'].optionalJobs[0].allowedConclusions.includes(release.conclusion))) {
-    throw new GuardError(release.status !== 'completed'
-      ? 'CI_RELEASE_JOB_IN_PROGRESS' : failedConclusion(release.conclusion, 'CI_RELEASE_JOB'))
+    throw new CiEvidenceError(release.status !== 'completed'
+      ? 'CI_RELEASE_JOB_IN_PROGRESS' : failedConclusion(release.conclusion, 'CI_RELEASE_JOB'),
+    {}, release.status !== 'completed' ? 'not-ready' : 'rejected')
   }
   return {
     repository,
@@ -287,6 +302,12 @@ export async function runGuardedOperation({
         evidence,
       })
     } catch (error) {
+      if (error instanceof CiEvidenceError) {
+        return output('blocked', task, environment, operation, error.code, true, {
+          failedAttempts: failures, maxFailures: spec.maxFailures,
+          remainingFailures: spec.maxFailures - failures, ...error.details,
+        })
+      }
       const next = failures + 1
       state.failures[key] = next
       await writeBudget(path, state)

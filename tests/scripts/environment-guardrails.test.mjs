@@ -237,3 +237,115 @@ test('CI query failures consume a persistent budget and stop before a third quer
   assert.equal(third.executed, false)
   assert.equal(ghCalls, 2)
 }))
+
+for (const [status, conclusion, code] of [
+  ['completed', 'failure', 'CI_RUN_FAILED'],
+  ['in_progress', null, 'CI_RUN_IN_PROGRESS'],
+]) {
+  test(`an older successful rerun cannot mask a newer ${status} run`, () => checkout(async ({ root, head }) => {
+    const payload = ciPayload({ run: { head_sha: head, run_attempt: 2 } })
+    payload.runs.workflow_runs.push({
+      ...payload.runs.workflow_runs[0],
+      id: 101, run_number: 13, run_attempt: 1, status, conclusion,
+    })
+    const calls = []
+    const result = await runGuardedOperation({
+      root, task: '451', environment: 'github-actions-evidence', operation: 'ci-evidence',
+      head, execute: ciExecutor(payload, calls),
+    })
+    assert.equal(result.state, 'blocked')
+    assert.equal(result.code, code)
+    assert.equal(calls.length, 2)
+  }))
+}
+
+for (const [label, prepare, code] of [
+  ['missing run', payload => { payload.runs.workflow_runs = [] }, 'CI_RUN_MISSING'],
+  ['queued run', payload => {
+    payload.runs.workflow_runs[0].status = 'queued'
+    payload.runs.workflow_runs[0].conclusion = null
+  }, 'CI_RUN_IN_PROGRESS'],
+  ['running required job', payload => {
+    payload.jobs.jobs[0].status = 'in_progress'
+    payload.jobs.jobs[0].conclusion = null
+  }, 'CI_REQUIRED_JOB_IN_PROGRESS'],
+]) {
+  test(`${label} does not consume failure budget or prevent later successful evidence`, () => checkout(async ({ root, head }) => {
+    const payload = ciPayload({ run: { head_sha: head } })
+    const original = structuredClone(payload)
+    prepare(payload)
+    const invoke = () => runGuardedOperation({
+      root, task: '451', environment: 'github-actions-evidence', operation: 'ci-evidence',
+      head, execute: ciExecutor(payload),
+    })
+    for (let count = 0; count < 3; count++) {
+      const pending = await invoke()
+      assert.equal(pending.state, 'blocked')
+      assert.equal(pending.code, code)
+      assert.equal(pending.evidenceState, 'not-ready')
+      assert.equal(pending.failedAttempts, 0)
+      assert.equal(pending.remainingFailures, 2)
+    }
+    Object.assign(payload, original)
+    const completed = await invoke()
+    assert.equal(completed.state, 'passed')
+    assert.equal(completed.failedAttempts, 0)
+  }))
+}
+
+test('rejected CI conclusions stay blocked without consuming execution failure budget', () => checkout(async ({ root, head }) => {
+  const payload = ciPayload({ run: { head_sha: head, conclusion: 'failure' } })
+  const invoke = () => runGuardedOperation({
+    root, task: '451', environment: 'github-actions-evidence', operation: 'ci-evidence',
+    head, execute: ciExecutor(payload),
+  })
+  for (let count = 0; count < 3; count++) {
+    const result = await invoke()
+    assert.equal(result.code, 'CI_RUN_FAILED')
+    assert.equal(result.evidenceState, 'rejected')
+    assert.equal(result.ok, false)
+    assert.equal(result.failedAttempts, 0)
+  }
+  payload.runs.workflow_runs[0].conclusion = 'success'
+  assert.equal((await invoke()).state, 'passed')
+}))
+
+test('attempt ordering applies only within the same CI run', () => checkout(async ({ root, head }) => {
+  const payload = ciPayload({ run: { head_sha: head, run_attempt: 1 } })
+  payload.runs.workflow_runs.push({
+    ...payload.runs.workflow_runs[0], run_attempt: 2, conclusion: 'failure',
+  })
+  const result = await runGuardedOperation({
+    root, task: '451', environment: 'github-actions-evidence', operation: 'ci-evidence',
+    head, execute: ciExecutor(payload),
+  })
+  assert.equal(result.code, 'CI_RUN_FAILED')
+  assert.equal(result.ok, false)
+}))
+
+test('pending and successful evidence reads do not reset an earlier API failure', () => checkout(async ({ root, head }) => {
+  const payload = ciPayload({ run: { head_sha: head } })
+  let unavailable = true
+  const nativeExecute = ciExecutor(payload)
+  const execute = (command, args, options) => command === 'gh' && unavailable
+    ? { status: 1, stdout: '', stderr: '' } : nativeExecute(command, args, options)
+  const invoke = () => runGuardedOperation({
+    root, task: '451', environment: 'github-actions-evidence', operation: 'ci-evidence',
+    head, execute,
+  })
+  assert.equal((await invoke()).failedAttempts, 1)
+  unavailable = false
+  payload.runs.workflow_runs[0].status = 'in_progress'
+  const pending = await invoke()
+  assert.equal(pending.evidenceState, 'not-ready')
+  assert.equal(pending.failedAttempts, 1)
+  payload.runs.workflow_runs[0].status = 'completed'
+  const passed = await invoke()
+  assert.equal(passed.ok, true)
+  assert.equal(passed.failedAttempts, 1)
+  unavailable = true
+  assert.equal((await invoke()).failedAttempts, 2)
+  const blocked = await invoke()
+  assert.equal(blocked.code, 'GUARD_FAILURE_BUDGET_EXHAUSTED')
+  assert.equal(blocked.executed, false)
+}))
