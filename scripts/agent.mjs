@@ -56,6 +56,11 @@ export async function planTask(task, root = repositoryRoot) {
     task,
     ...area,
     cwd: 'repository root',
+    preflightChecks: area.iterationReview ? [{
+      argv: ['node', 'scripts/iteration-review.mjs', '--report', area.iterationReview.report],
+      executed: false,
+      requiredBeforeImplementation: area.iterationReview.requiredBeforeImplementation,
+    }] : [],
     commands: commands.map(argv => ({ argv, executed: false })),
     acceptance: description.acceptance,
     executionPolicy: description.executionPolicy,

@@ -49,6 +49,18 @@ test('context diagnostics preserve shared usage and include native whole-turn ev
   await verifyAgentContract()
 })
 
+test('guarded plans retain required read-only iteration review preflight', async () => {
+  const plan = await planTask('autorouting')
+  assert.deepEqual(plan.preflightChecks, [{
+    argv: ['node', 'scripts/iteration-review.mjs', '--report', 'docs/auto-iteration-review.json'],
+    executed: false,
+    requiredBeforeImplementation: true,
+  }])
+  assert.ok(plan.commands.every(command => command.argv[1] === 'scripts/agent.mjs'
+    && command.argv[2] === 'guard' && command.executed === false))
+  assert.deepEqual((await planTask('tooling')).preflightChecks, [])
+})
+
 test('multi-account plan retains explicit direct-grant ownership and UI boundaries', async () => {
   const plan = await planTask('accounts')
   assert.ok(plan.tests.includes('tests/copilot-accounts-card.spec.ts'))
