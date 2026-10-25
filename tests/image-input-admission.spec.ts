@@ -17,7 +17,7 @@ describe('projected image admission', () => {
   it.each(['user', 'toolResult'])('checks actual %s image MIME before dispatch', role => {
     const messages = [{ role, content: [{ type: 'image', mimeType: 'image/webp', data: 'synthetic' }] }]
     const before = structuredClone(messages)
-    expect(imageInputFailure(model, messages)).toBe('COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED')
+    expect(imageInputFailure(model, messages)?.code).toBe('COPILOT_IMAGE_MEDIA_TYPE_UNSUPPORTED')
     expect(messages).toEqual(before)
   })
 
@@ -37,14 +37,15 @@ describe('projected image admission', () => {
   it('rejects missing or malformed native MIME without leaking image data', () => {
     for (const mimeType of [undefined, '', 'application/pdf', 'image/png;bad', 1]) {
       expect(imageInputFailure(model, [{ content: [{ type: 'image', mimeType, data: 'private' }] }]))
-        .toBe('COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE')
+        .toMatchObject({ code: 'COPILOT_IMAGE_MEDIA_TYPE_UNAVAILABLE',
+          diagnostic: { projectedMime: 'unavailable', role: 'unknown' } })
     }
   })
 
   it('requires vision for actual images and ignores text, files and tool arguments', () => {
     const textOnly = { ...model, input: ['text'] as const }
     expect(imageInputFailure(textOnly, [{ content: [{ type: 'image', mimeType: 'image/png' }] }]))
-      .toBe('COPILOT_IMAGE_INPUT_UNSUPPORTED')
+      .toMatchObject({ code: 'COPILOT_IMAGE_INPUT_UNSUPPORTED' })
     expect(imageInputFailure(textOnly, [{ content: [
       { type: 'text', text: 'image.webp' }, { type: 'file' },
       { type: 'toolCall', arguments: { type: 'image' } },

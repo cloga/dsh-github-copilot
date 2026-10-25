@@ -8,7 +8,7 @@
 
 GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
 
-**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH rc.3 update: `0.1.0-alpha.2.dsh.0.2.1.rc.3`.** DSH `0.2.1-rc.3` is a prerelease. This plugin line is a compatibility candidate, not a production Core upgrade recommendation; Desktop artifacts/signatures are unverified. Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-rc.3` to `dsh.0.2.1.rc.3`, but compatibility is validated against explicit metadata, not guessed from the name. Existing published versions/tags remain unchanged. Published, installed and loaded states remain separate.
+**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); pending DSH rc.3 update: `0.1.0-alpha.3.dsh.0.2.1.rc.3`.** DSH `0.2.1-rc.3` is a prerelease. This plugin line is a compatibility candidate, not a production Core upgrade recommendation; Desktop artifacts/signatures are unverified. Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-rc.3` to `dsh.0.2.1.rc.3`, but compatibility is validated against explicit metadata, not guessed from the name. Existing published versions/tags remain unchanged. Published, installed and loaded states remain separate.
 
 Select by **exact Core**, never global SemVer maximum or npm `latest`/`alpha`.
 The read-only `node scripts/select-core-release.mjs 0.2.0-rc.2` command checks
@@ -160,7 +160,7 @@ Supply any launcher patches with repeated `--patch /absolute/file`. Require `sup
 For a **standalone named profile**:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
 ```
 
 The command above is a prepared-release example, usable only after publication and required CI qualification; it requires official DSH prerelease `0.2.1-rc.3`. **Do not install this candidate into production Desktop profiles.** Desktop artifacts/signatures and profile peer composition remain unverified; retain the existing compatible plugin on rc.2. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) does not qualify rc.3, and a generic/global `dsh` shim is not equivalent. No installation or restart is authorized.
@@ -276,6 +276,8 @@ The same failure can include request-scoped native local body-write/header miles
 
 HTTP/SSE liveness separates five-minute byte idle from bounded ten-minute assistant-output silence by default. Consumer work is excluded; WebSocket/explicit `auto` stays native-only. This does not cure supplier HTTP 408s. Images are admitted against actual native-projected MIME evidence; the plugin does not own conversion or infer format support from filenames. [Image compatibility](./docs/image-input-compatibility.md).
 
+Image admission errors explain historical-image failures even on text-only continuations. The native error includes bounded selected-model, projected/allowed MIME, projected role/position and current plugin-build details, without image content, URLs or paths. Auto checks general vision capability, not candidate-specific projected formats; the final gate remains fail-closed. Explicitly choose a compatible model for a subsequent turn or start a separate text-only Session; nothing is automatically switched, removed or retried. These diagnostics cannot reconstruct an earlier incident.
+
 Native rc.2 Auto authorization review requests `temperature: 0`. The plugin now automatically omits it **only for the authenticated official Auto reviewer root on account-discovered managed OpenAI Responses**; no switch is needed. Concurrent ordinary Chat, even on the same Session/model, retains its temperature. Public Loader callback identity and same-profile package ownership authenticate the caller; unknown identity, aliases, descendants, other protocols/providers and canonical Core-owned Copilot remain native, with bounded diagnostics for unqualified reviewer scope. No capability is inferred from `supports.thinking`. Frozen inputs, native account/cancellation guards, strict verdicts and fail-closed tool denial remain intact; no retries, permission changes or settings migration occur. The independent legacy `github-copilot.responsesOmitTemperature` override remains default `false`; explicit `true` still omits temperature from **all** managed Responses requests, not just review. See [public scope and qualification limits](./docs/auto-review-sampling.md).
 
 ## Settings and troubleshooting
@@ -374,14 +376,14 @@ Commit attribution uses `Assisted-by` with the actual tool, never the model prov
 GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.rc.3.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.1.rc.3/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
