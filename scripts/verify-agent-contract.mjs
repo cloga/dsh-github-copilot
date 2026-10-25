@@ -131,7 +131,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     require(Array.isArray(task.read) && task.read.length > 0 && Array.isArray(task.tests), `${name} needs read/tests lists`)
     for (const path of [...task.read, ...task.tests]) await file(path)
   }
-  for (const script of ['agent:describe', 'agent:doctor', 'agent:plan', 'verify:agent', 'test:scripts', 'typecheck:tests', 'verify:tarball', 'verify:install-smoke']) {
+  for (const script of ['agent:describe', 'agent:doctor', 'agent:plan', 'verify:agent', 'test:scripts', 'typecheck:tests', 'verify:tarball']) {
     require(typeof pkg.scripts[script] === 'string', `missing package script ${script}`)
   }
   validateIterationReview(JSON.parse(await readFile(resolve(root, review.report), 'utf8')))

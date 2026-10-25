@@ -82,7 +82,7 @@ test('CI installs the verified archive through the isolated pinned-host smoke', 
   const workflow = await readFile(join(root, '.github/workflows/ci.yml'), 'utf8')
   const smoke = await readFile(join(root, 'scripts/verify-install-smoke.mjs'), 'utf8')
   const archiveVerification = workflow.indexOf('pnpm verify:tarball --')
-  const installSmoke = workflow.indexOf('pnpm verify:install-smoke -- --archive')
+  const installSmoke = workflow.indexOf('pnpm exec node scripts/verify-install-smoke.mjs --archive')
   assert.ok(archiveVerification >= 0 && installSmoke > archiveVerification)
   assert.ok(workflow.includes('--host-modules node_modules'))
   assert.ok(workflow.includes('Install verified archive and load it through the pinned Core host'))
