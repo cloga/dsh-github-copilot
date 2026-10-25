@@ -24,6 +24,7 @@ test('describes actual package metadata without claiming a release exists', asyn
     browserManualRequireLiveContract: true, automaticClosure: false,
     upgradeSource: 'exact-github-release-url-or-verified-cache',
     appLifecycle: 'fresh-discovery-consented-launch-safe-skip-rediscovery-final',
+    disposition: 'separate-explicit-residual-risk-no-required-waiver',
     maxNavigationMethods: 2, maxObservationMs: 120000,
   })
   assert.deepEqual(result.admittedReleases, ['0.2.1-rc.3'])

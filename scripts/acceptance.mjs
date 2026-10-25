@@ -43,7 +43,7 @@ function validateDocuments(contract, report) {
     required.add(row.id)
   }
   keys(report, ['schemaVersion', 'commit', 'contractSha256', 'producer', 'environment', 'checks',
-    ...liveRequired ? ['liveUi'] : []])
+    ...liveRequired ? ['liveUi', ...Object.hasOwn(report, 'disposition') ? ['disposition'] : []] : []])
   require(report.schemaVersion === contract.schemaVersion && typeof report.commit === 'string' && /^[a-f0-9]{40}$/.test(report.commit)
     && hash(report.contractSha256) && ['implementation', 'independent-review', 'human', 'ci'].includes(report.producer))
   keys(report.environment, ['node', 'platform', 'core'])
@@ -78,6 +78,33 @@ const panels = ['models-manage', 'plugin-details', 'about']
 const version = value => value === null || (typeof value === 'string'
   && /^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(value) && value.length <= 100)
 const timestamp = value => Number.isSafeInteger(value) && value > 0
+
+export function validateDisposition(value, requiredComplete) {
+  keys(value, ['decision', 'userAuthorized', 'defect', 'controlledRegression',
+    'criticalBlocker', 'productionFaults'])
+  require(['keep-open', 'accept-residual-risk'].includes(value.decision)
+    && typeof value.userAuthorized === 'boolean' && ['specific-fix', 'unconfirmed'].includes(value.defect)
+    && ['passed', 'failed', 'not-run'].includes(value.controlledRegression)
+    && typeof value.criticalBlocker === 'boolean')
+  list(value.productionFaults, 1, 4)
+  const seen = new Set()
+  for (const row of value.productionFaults) {
+    keys(row, ['scenario', 'status', 'reason'])
+    require(['disconnect', 'never-resolves', 'timeout', 'late-response'].includes(row.scenario)
+      && !seen.has(row.scenario) && ['passed', 'failed', 'not-tested'].includes(row.status)
+      && ['observed', 'no-safe-control', 'destructive-only'].includes(row.reason)
+      && (row.status === 'not-tested') === (row.reason !== 'observed'))
+    seen.add(row.scenario)
+  }
+  const eligible = requiredComplete && value.decision === 'accept-residual-risk'
+    && value.userAuthorized && value.defect === 'specific-fix' && value.controlledRegression === 'passed'
+    && !value.criticalBlocker && value.productionFaults.every(row => row.status !== 'failed')
+  return { recommendation: eligible ? 'close-with-residual-risk-and-reopen-on-recurrence' : 'keep-open',
+    productionFaultCoverage: value.productionFaults.some(row => row.status === 'not-tested')
+      ? 'incomplete' : 'reported-tested',
+    requiredChecksWaived: false, rootCauseVerified: false, automaticClosure: false,
+    authorizationVerified: false }
+}
 
 function validateAppLifecycle(value, now) {
   keys(value, ['discovery', 'launch', 'welcome', 'rediscovery', 'final', 'interaction'])
@@ -341,6 +368,7 @@ export async function verifyAcceptance({ root = process.cwd(), contractPath, rep
   const contract = json(contractBytes)
   const report = json(reportBytes)
   const artifacts = validateDocuments(contract, report)
+  if (Object.hasOwn(report, 'disposition')) validateDisposition(report.disposition, false)
   let liveUi = contract.schemaVersion === 2 ? validateLiveUi(contract.liveUi, report.liveUi) : null
   if (liveUi) require(contract.liveUi.checks.every(row => contract.requirements.some(required => required.id === row.id)))
   if (liveUi) require(contract.requirements.filter(row => ['browser', 'manual'].includes(row.method))
@@ -372,14 +400,19 @@ export async function verifyAcceptance({ root = process.cwd(), contractPath, rep
     liveUi = validateLiveUi(contract.liveUi, report.liveUi)
   }
   const ok = counts.passed === contract.requirements.length && (!liveUi || (liveUi.ok && ci.ok))
+    && (!report.disposition || (!report.disposition.criticalBlocker
+      && report.disposition.productionFaults.every(row => row.status !== 'failed')))
+  const disposition = report.disposition ? validateDisposition(report.disposition, ok) : null
   return {
     schemaVersion: 1, kind: 'acceptance-evidence-consistency',
     ok,
     issue: contract.issue, commit, contractSha256: report.contractSha256, counts,
     evidenceIntegrityVerified: true, executionVerified: false, independenceVerified: false,
     environmentVerified: false, deliveryAuthorized: false,
-    ...liveUi ? { state: ok ? 'reported-complete' : 'blocked', closeEligible: ok,
+    ...liveUi ? { state: ok ? 'reported-complete' : 'blocked',
+      closeEligible: ok && (!disposition || disposition.recommendation !== 'keep-open'),
       liveUi, ci, ciVerified: ci.ok } : {},
+    ...disposition ? { disposition } : {},
   }
 }
 

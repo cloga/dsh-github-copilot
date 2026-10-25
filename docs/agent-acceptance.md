@@ -185,6 +185,57 @@ handoff, permission rules, installed/loaded/CI separation and GitHub-first
 source constraints remain unchanged. This checker still only validates supplied
 rows; it cannot know whether a real host executed any of these steps.
 
+### Required completeness versus risk-accepted issue disposition
+
+Controlled automatic regressions can deterministically exercise timeouts,
+never-resolving promises, late responses and simulated disconnects. That is
+distinct from reproducing the same faults in a production Desktop. Do not alter
+system networking/proxies, credentials/accounts or trigger paid calls merely to
+complete fault coverage. When only destructive or unavailable live injection
+remains, record why rather than indefinitely holding a fixed issue open.
+
+After a specific defect is fixed, relevant controlled regressions and exact-head
+CI pass, published/installed/loaded-version prerequisites are satisfied and
+required normal live checks no longer reproduce it, the user may accept residual
+production uncertainty. Communicate "fixed / not reproduced after repair;
+unmeasured faults remain; reopen on recurrence", not proven original root cause,
+complete production coverage or arbitrary assumption of success.
+
+Schema 2 reports may add an optional `disposition` object, separate from checks:
+
+```json
+{
+  "decision": "accept-residual-risk",
+  "userAuthorized": true,
+  "defect": "specific-fix",
+  "controlledRegression": "passed",
+  "criticalBlocker": false,
+  "productionFaults": [
+    { "scenario": "timeout", "status": "not-tested", "reason": "no-safe-control" }
+  ]
+}
+```
+
+Only these fields are accepted. Decision is `keep-open` or `accept-residual-risk`;
+defect is `specific-fix` or `unconfirmed`; regression is `passed`, `failed` or
+`not-run`. Boolean authorization/blocker fields are self-reported, not permission.
+The 1-4 unique production scenarios are `disconnect`, `never-resolves`, `timeout`,
+`late-response`; status is `passed`, `failed`, `not-tested`. Untested reasons are
+`no-safe-control` or `destructive-only`; observed pass/fail uses `observed`.
+No raw errors, identities, network configuration or product content is accepted.
+
+Only all required checks/live/version/source/real CI gates plus a specific fix,
+passed controlled regressions, reported explicit authorization, no critical
+blocker and no known production failure can yield
+`close-with-residual-risk-and-reopen-on-recurrence`. Coverage remains `incomplete`
+when a production fault is untested. Missing mandatory requirements never become
+passed; known failure or critical blocker also prevents final `ok/closeEligible`.
+Other dispositions recommend `keep-open`. Outputs always retain
+`requiredChecksWaived: false`, `rootCauseVerified: false`,
+`authorizationVerified: false`, `automaticClosure: false`. This is a bounded
+decision-consistency aid, not an authenticated risk signoff, automatic issue
+operation or relaxation of required CI/review/approval rules.
+
 Versions are exact SemVer-like version strings, not paths, account names or raw
 status output. Unknown version/source uses `version: null, source: "unknown",
 observedAtMs: null`; known versions need a positive integer UTC epoch-millisecond

@@ -105,3 +105,12 @@ Final handoff requires a fresh timestamped current running app and target-panel
 or workspace observation, not the launch receipt or old success. The validator
 checks this bounded lifecycle report, not actual host execution; it never stores
 real app paths, window IDs, workspace titles, credentials or conversation content.
+
+Mandatory acceptance completeness is separate from issue disposition. Untested
+production fault injection may remain explicit residual risk after a specific
+fix, passing controlled regressions/CI, satisfied release/install/load premises
+and nonreproducing required live checks. With explicit user risk acceptance,
+recommend closure with residuals listed and reopen-on-recurrence; never rewrite
+untested results, claim a proven root cause or auto-close issues. Known failures,
+critical gaps and mandatory unmet checks cannot use this exception. Optional
+schema 2 disposition records enforce that distinction without an extra platform.

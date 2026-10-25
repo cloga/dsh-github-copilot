@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, link } from 'node:fs/
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
-import { validateLiveUi, verifyAcceptance } from '../../scripts/acceptance.mjs'
+import { validateDisposition, validateLiveUi, verifyAcceptance } from '../../scripts/acceptance.mjs'
 import { repositoryRoot } from '../../scripts/agent.mjs'
 import { verifyCurrentCoreTemplate } from '../../scripts/verify-agent-contract.mjs'
 
@@ -16,6 +16,45 @@ const git = (root, ...args) => {
   assert.equal(result.status, 0, result.stderr)
   return result.stdout.trim()
 }
+
+const riskDisposition = () => ({
+  decision: 'accept-residual-risk', userAuthorized: true, defect: 'specific-fix',
+  controlledRegression: 'passed', criticalBlocker: false,
+  productionFaults: [{ scenario: 'timeout', status: 'not-tested', reason: 'no-safe-control' }],
+})
+
+test('residual production fault uncertainty permits a reviewed closure recommendation, never rewrites coverage', () => {
+  const result = validateDisposition(riskDisposition(), true)
+  assert.equal(result.recommendation, 'close-with-residual-risk-and-reopen-on-recurrence')
+  assert.equal(result.productionFaultCoverage, 'incomplete')
+  assert.equal(result.requiredChecksWaived, false)
+  assert.equal(result.rootCauseVerified, false)
+  assert.equal(result.automaticClosure, false)
+  assert.equal(result.authorizationVerified, false)
+})
+
+for (const [name, mutate] of [
+  ['no authorization', r => { r.userAuthorized = false }],
+  ['unconfirmed fix', r => { r.defect = 'unconfirmed' }],
+  ['controlled regression failed', r => { r.controlledRegression = 'failed' }],
+  ['controlled regression unrun', r => { r.controlledRegression = 'not-run' }],
+  ['critical requirement missing', r => { r.criticalBlocker = true }],
+  ['known reproduction', r => { r.productionFaults[0] = { scenario: 'timeout', status: 'failed', reason: 'observed' } }],
+  ['explicit keep open', r => { r.decision = 'keep-open' }],
+]) {
+  test(`risk disposition does not excuse ${name}`, () => {
+    const value = riskDisposition()
+    mutate(value)
+    assert.equal(validateDisposition(value, true).recommendation, 'keep-open')
+  })
+}
+
+test('risk disposition never waives mandatory acceptance or accepts raw fault evidence', () => {
+  assert.equal(validateDisposition(riskDisposition(), false).recommendation, 'keep-open')
+  const value = riskDisposition()
+  value.productionFaults[0].details = 'PRIVATE_SENTINEL'
+  assert.throws(() => validateDisposition(value, true), /ACCEPTANCE_INVALID/)
+})
 
 const liveContract = () => ({
   expectedPluginVersion: '0.1.0-alpha.1', panel: 'models-manage',
@@ -296,6 +335,16 @@ test('live contract composes real CI reader and persistent budget, never a suppl
   assert.equal(complete.ciVerified, true)
   assert.equal(complete.executionVerified, false)
   assert.equal(calls, 3)
+  f.report.disposition = riskDisposition()
+  await f.save()
+  const residual = await verify()
+  assert.equal(residual.ok, true)
+  assert.equal(residual.disposition.productionFaultCoverage, 'incomplete')
+  assert.equal(residual.disposition.recommendation, 'close-with-residual-risk-and-reopen-on-recurrence')
+  f.report.disposition.productionFaults[0] = { scenario: 'timeout', status: 'failed', reason: 'observed' }
+  await f.save()
+  assert.equal((await verify()).closeEligible, false)
+  delete f.report.disposition
   f.report.checks[0].status = 'not-run'
   await f.save()
   assert.equal((await verify()).closeEligible, false)

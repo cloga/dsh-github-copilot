@@ -355,8 +355,21 @@ Record exact source URL/version, archive and Release SHA-256, numeric observatio
 time and fixed fallback reason separately. Matching hashes do not grant install
 or restart permission or prove the resulting runtime loaded. The consistency
 checker never downloads/installs or independently authenticates this provenance.
-Missing/not-run/blocked/error/timeout evidence cannot close the task; even a
+Missing/not-run/blocked/error/timeout mandatory evidence cannot pass acceptance; even a
 consistent complete report is not trusted proof of execution or automatic closure.
+Keep required-check completeness separate from issue disposition. Controlled
+regressions can exercise timers, never-resolving requests, late results and
+simulated disconnects; production Desktop fault injection is different. Do not
+disconnect networking, alter proxies/accounts or trigger paid requests to fill
+coverage without specific permission. After a specific defect is fixed, relevant
+controlled regressions/exact CI pass, release/install/load premises are met and
+normal live checks do not reproduce it, explicit user risk acceptance may close
+with "fixed/not reproduced; untested faults listed; reopen on recurrence".
+Do not claim the original root cause or production fault coverage was proven.
+Lack of safe/non-destructive production injection alone is not an indefinite
+closure blocker. Known failures/reproduction, critical safety gaps and mandatory
+requirements remain blockers; residual-risk disposition cannot relabel them
+passed or authorize automatic issue closure.
 
 For the opt-in task acceptance pilot, define observable requirements before
 implementation and validate the clean candidate with
