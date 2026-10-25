@@ -244,7 +244,7 @@ async function mount(owner, plugin, config, entry) {
 const mainFiber = await mount(context, main, {}, '.')
 const webContext = new Context()
 const isolatedWeb = webContext.isolate('web', Symbol('install-smoke'))
-const webConfig = () => ({ searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } })
+const webConfig = () => ({ searchProvider: undefined, fetchProvider: undefined })
 const originalWebFiber = await mount(isolatedWeb, WebRuntime, webConfig(), 'native WebRuntime')
 const delegateFiber = await mount(isolatedWeb, webDelegate, undefined, './web-delegate')
 assert.ok(isolatedWeb.get('githubCopilotOriginalWeb') !== undefined, 'Web delegate must publish the native service')
