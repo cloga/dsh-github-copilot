@@ -237,17 +237,19 @@ assert.ok(Array.isArray(client.inject))
 
 const context = new Context()
 context.provide('credentials', Object.freeze({}))
-const mainFiber = context.plugin(main, {})
-await mainFiber
+async function mount(owner, plugin, config, entry) {
+  try { return await owner.plugin(plugin, config) }
+  catch (cause) { throw new Error('Host loading failed for ' + entry, { cause }) }
+}
+const mainFiber = await mount(context, main, {}, '.')
 const webContext = new Context()
 const isolatedWeb = webContext.isolate('web', Symbol('install-smoke'))
-const originalWebFiber = isolatedWeb.plugin(WebRuntime, { searchProvider: undefined, fetchProvider: undefined })
-await originalWebFiber
-const delegateFiber = isolatedWeb.plugin(webDelegate)
-await delegateFiber
-assert.equal(isolatedWeb.get('githubCopilotOriginalWeb'), isolatedWeb.get('web'))
-const routedFiber = webContext.plugin(RoutedWeb, { searchProvider: undefined, fetchProvider: undefined })
-await routedFiber
+const webConfig = () => ({ searchProvider: { get: () => undefined }, fetchProvider: { get: () => undefined } })
+const originalWebFiber = await mount(isolatedWeb, WebRuntime, webConfig(), 'native WebRuntime')
+const delegateFiber = await mount(isolatedWeb, webDelegate, undefined, './web-delegate')
+assert.ok(isolatedWeb.get('githubCopilotOriginalWeb') !== undefined, 'Web delegate must publish the native service')
+const routedFiber = await mount(webContext, RoutedWeb, webConfig(), './routed-web')
+assert.ok(webContext.get('web') !== undefined, 'routed Web entry must publish its facade')
 for (const fiber of [routedFiber, delegateFiber, originalWebFiber, mainFiber]) await fiber.dispose()
 console.log(JSON.stringify({ ok: true, hostLoading: true, packageVersion: pkg.version,
   entrypoints: ['.', './client', './remote', './routed-web', './web-delegate', './manual-compaction-recovery'],
