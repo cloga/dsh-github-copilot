@@ -132,6 +132,12 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           pnpm verify:tarball -- "artifacts/dsh-github-copilot-$version.tgz"
 
+      - name: Install verified archive and load it through the pinned Core host
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          pnpm exec node scripts/verify-install-smoke.mjs --archive "artifacts/dsh-github-copilot-$version.tgz" --host-modules node_modules
+
   published-adapter:
     name: Published adapter (${{ matrix.os }})
     strategy:
