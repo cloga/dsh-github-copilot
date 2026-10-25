@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "entrypoints": ["AGENTS.md", "CONTRIBUTING.md", "README.md", "README.zh.md", "SECURITY.md", "deployment-baseline.json"],
+  "entrypoints": ["AGENTS.md", "CONTRIBUTING.md", "README.md", "README.zh.md", "SECURITY.md", "deployment-baseline.json", "agent-execution-policy.json", "docs/environment-evidence-guardrails.md"],
   "acceptance": {
     "mode": "evidence-consistency-only",
     "policy": "docs/agent-acceptance.md",
@@ -10,7 +10,19 @@
     "cleanHeadRequired": true,
     "executionVerified": false,
     "independenceVerified": false,
-    "automaticUpload": false
+    "automaticUpload": false,
+    "liveUi": {
+      "schemaVersion": 2,
+      "ci": "guarded-exact-head",
+      "source": "report-consistency-only",
+      "browserManualRequireLiveContract": true,
+      "upgradeSource": "exact-github-release-url-or-verified-cache",
+      "appLifecycle": "fresh-discovery-consented-launch-safe-skip-rediscovery-final",
+      "disposition": "separate-explicit-residual-risk-no-required-waiver",
+      "automaticClosure": false,
+      "maxNavigationMethods": 2,
+      "maxObservationMs": 120000
+    }
   },
   "boundaries": {
     "credentialOwner": "DSH credentials and pi-ai OAuth; canonical compatibility record is preserved. Approved #297 plugin account records are directly authorized, never copied; immutable request binding and managed-only CAS switching. Only an exact single committed plugin-owned native refresh with unchanged account, entitlement and endpoint may retain already-dispatched HTTP streams; all reusable proof is invalidated. Unknown/external/Core-only notifications still revoke. Never request, log or export grants.",
@@ -164,10 +176,10 @@
       "risk": "Compatibility remains plugin-only: inspect Core APIs read-only and test unchanged pinned source/published artifacts; never modify, patch or publish Core. The current exact prerelease target and development dependencies are official dsh-v0.2.1-rc.3 at 1f81c047fc48fa190a683e469daa699857e9afe8; retain all thirteen earlier exact baselines. Rc.3 changes public WebRuntime provider configuration to required Volatile<string | undefined> getters; plugin routing supplies read-only plugin-owned Volatile references. Reviewer qualification requires the exact rc.3 package version and imported apply callback identity. Tagged-source and isolated published-npm-artifact fixtures are required CI gates and remain unverified until they pass. Candidate Desktop artifacts/signatures remain unverified; historical signed rc.2 evidence is shared peer ownership only. No plugin activation, profile upgrade, live authorization, endpoint or model-call proof may be claimed. Follow docs/official-first-021-alpha5.md for complete/partial/unverified support, retain/migrate/defer decisions, gaps and retirement triggers; unverified parity is not absence. Use exact plugin pi-ai 1.1.0 and official framework/schema peers, preserve public stream identity, native transcript normalization and system/tool prefixes without trimming history. Native gateway fixtures require an explicit public owner Peer and interactive Client carrier; no synthetic principal is live authorization. Managed Auto-review sampling must not use prompt/error/model detection, mutate frozen requests, intercept canonical routes, add retries or weaken native authorization. Public bundlePatchPaths must preserve ordered patches and reject unsafe composition. Strict Remote create factories retain the legacy schema bridge, never src-json. Native role descriptors remain v3 with cache stateVersion 2 refolding, not conversion; unknown/v1/v2 histories fail closed unchanged. Keep dsh-authorization and schemastery as shared peers, not private runtime dependencies; React remains a Client ModuleLoader external outside the Node peer graph. Audit a materialized hash-verified Desktop package graph before Desktop acceptance; source metadata cannot substitute. Do not delete/replace profile-local shadowing peers as compatibility work. Retain serialized agent/created, projected Session history and MCP/PTC/Workflow/Sandbox/Shell/image-offload/Team ownership. Preserve modelErrors, Anthropic system-before-probe, native final token admission, compaction transactions, Usage, diagnostics/gzip consent and byte/semantic liveness. Experimental plugin records are deferred, never emitted or adopted implicitly. Source/synthetic evidence is not live endpoint, publication or loaded-runtime proof. Existing public Host, Client and Remote seams remain the boundary."
     },
     "tooling": {
-      "purpose": "Agent contract, preflight, acceptance evidence consistency, verification, packaging and attribution",
-      "read": ["agent-contract.json", "scripts/agent.mjs", "scripts/acceptance.mjs", "docs/agent-acceptance.md", "tests/scripts/acceptance.test.mjs", "scripts/verify-agent-contract.mjs", "scripts/verify-package.mjs", ".github/workflows/ci.yml"],
-      "tests": [],
-      "risk": "Machine reports must distinguish not checked from failed and never claim live runtime or release success."
+      "purpose": "Agent contract, deterministic environment choice, bounded guarded operations, authoritative CI evidence, acceptance consistency, verification, packaging and attribution",
+      "read": ["agent-contract.json", "agent-execution-policy.json", "scripts/agent.mjs", "scripts/environment-guard.mjs", "scripts/acceptance.mjs", "docs/agent-acceptance.md", "docs/environment-evidence-guardrails.md", "tests/scripts/agent.test.mjs", "tests/scripts/acceptance.test.mjs", "tests/scripts/environment-guardrails.test.mjs", "scripts/verify-agent-contract.mjs", "scripts/verify-package.mjs", ".github/workflows/ci.yml"],
+      "tests": ["tests/scripts/environment-guardrails.test.mjs"],
+      "risk": "The entry point cannot prevent direct shell bypass; only routed operations are enforced. Local dependency-network work is rejected before execution and never auto-retried or redirected. Budgets persist per task/operation in the Git worktree metadata and do not reset on success or continuation. CI evidence must come from authenticated gh Actions API results for the configured repository, exact clean HEAD, exact CI workflow, and every required verification job; skipped release is optional, not a substitute for required work. Local reports, self-declared JSON, idle sessions, and CI-green do not prove business/field acceptance or roadmap completion."
     },
     "release": {
       "purpose": "Version alignment and default immutable GitHub plus npm dual distribution",
