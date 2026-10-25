@@ -142,18 +142,25 @@ async function ready(remote = remotes()) {
 }
 
 describe('independent Web search Settings card', () => {
-  it('keeps rc.2 disable, removal, and upgrade restart guidance visible before mutation', async () => {
+  it('keeps version-neutral lifecycle guidance visible without claiming a detected restart requirement', async () => {
     const card = await ready()
     const tree = card.render()
     const notice = descendants(tree).find(node => node.props['data-dsh-web-search-lifecycle-notice'] === true)
     expect(notice?.props.role).toBe('note')
-    expect(text(notice)).toContain('After disabling, removing, or upgrading this plugin')
+    expect(text(notice)).toContain('Desktop plugin lifecycle / Desktop 插件生命周期')
+    expect(text(notice)).toContain('If the plugin manager reports restart-required')
+    expect(text(notice)).toContain('fully exit and restart Desktop')
     expect(text(notice)).toContain('only pending entries waiting for a service')
     expect(text(notice)).toContain('this plugin is Off')
-    expect(text(notice)).toContain('restart instead of toggling it repeatedly')
-    expect(text(notice)).toContain('停用、移除或升级本插件后')
+    expect(text(notice)).toContain('do not toggle it repeatedly')
+    expect(text(notice)).toContain('This note does not detect your Desktop version or a restart requirement')
+    expect(text(notice)).toContain('若插件管理器提示 restart-required')
+    expect(text(notice)).toContain('请完全退出并重新启动 Desktop')
     expect(text(notice)).toContain('等待某项服务的 pending 条目')
     expect(text(notice)).toContain('本插件已为 Off')
+    expect(text(notice)).toContain('本提示不检测 Desktop 版本或是否需要重启')
+    expect(text(notice)).not.toMatch(/0\.2\.[01]-rc\.[23]/)
+    expect(text(notice)).not.toContain('After disabling, removing, or upgrading this plugin')
     expect(text(notice)).not.toContain('service: web')
     expect(descendants(tree).some(node => node.props['data-dsh-web-search-restart-banner'])).toBe(false)
   })

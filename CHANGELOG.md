@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.5.dsh.0.2.1.rc.3 (prepared)
+
+- Replace the stale rc.2 Desktop lifecycle heading with version-neutral guidance. Recommend a full exit and restart only when the native plugin manager reports `restart-required`; do not repeatedly toggle an Off plugin when the manager reports only pending service dependencies.
+- Keep historical rc.2 Desktop observations distinct from current rc.3 synthetic Loader evidence, and synchronize the English/Chinese README and user-visible copy regressions (#453).
+- Prepare same-Core alpha.5 metadata only. The rc.3 release mapping remains pending; no tag, GitHub Release, npm publication, profile installation or Desktop restart is included.
+
 ## 0.1.0-alpha.4.dsh.0.2.1.rc.3 (prepared)
 
 - Carry forward bounded Responses replay refusal diagnostics from retired draft #218 under #446: fixed reasons, zero-based input positions, allowlisted type/status and field-presence booleans through the existing native `INVALID_REQUEST` surface. No IDs, summaries, tool data, unknown values or encrypted bytes enter diagnostics.

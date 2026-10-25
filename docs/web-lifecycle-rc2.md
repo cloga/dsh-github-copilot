@@ -2,6 +2,14 @@
 
 This keeps the existing rc.2 documentation path for link stability, but updates its contents to the repository's current supported Core, DSH `0.2.1-rc.3`. It exercises the exact published Loader/Web packages and plugin bundle through public APIs. The synthetic fixture makes no network calls and removes its temporary files and Loader fibers. It does not exercise the native Desktop package manager or claim the observed account-status incident was caused by any one internal transition. Earlier rc.2 findings are historical; the rc.3 test results below are authoritative for the current plugin line.
 
+## Desktop guidance
+
+The Web search card uses the version-neutral heading **Desktop plugin lifecycle**. This is general guidance: it does not detect the installed Desktop version or whether a restart is required.
+
+If the native plugin manager explicitly reports `restart-required` after a plugin change, fully exit Desktop (including its tray/background process) and launch it again. This is not a blanket instruction to restart after every disable, removal or upgrade, and it does not promise that a restart fixes every activation error.
+
+If the plugin is already **Off** and the manager shows only pending entries waiting for a service, do not repeatedly toggle it as a recovery attempt. The rc.2 disable observation below is historical context, not a diagnosis of the current host; the rc.3 synthetic transitions are separately scoped evidence. Other activation errors and mixed diagnostics require their own investigation.
+
 ## Reproduce
 
 From the repository root, after the normal build:
