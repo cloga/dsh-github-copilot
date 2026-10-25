@@ -94,3 +94,14 @@ only a separately labeled cache fallback with matching recorded archive/Release
 SHA-256 and a fixed native-URL failure reason. Local builds/source directories/
 links/worktrees are not eligible. This validates reported selection, not remote
 asset existence, authenticated provenance, installation permission or loading.
+
+Current-app evidence must begin with fresh discovery, not a historical "opened"
+claim. Explicitly authorized startup uses controlled `start_app` once, followed
+by real rediscovery/observation; no shell/window-manager workaround. Welcome UI
+requires inspection for an official safe skip before concluding authentication
+is required. A skip may replace the welcome window with a new main window:
+rediscover and observe it instead of repeating actions on the old window.
+Final handoff requires a fresh timestamped current running app and target-panel
+or workspace observation, not the launch receipt or old success. The validator
+checks this bounded lifecycle report, not actual host execution; it never stores
+real app paths, window IDs, workspace titles, credentials or conversation content.

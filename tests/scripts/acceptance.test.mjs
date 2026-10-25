@@ -21,22 +21,33 @@ const liveContract = () => ({
   expectedPluginVersion: '0.1.0-alpha.1', panel: 'models-manage',
   checks: [{ id: 'acceptance-binding', action: 'reopen-manage', outcome: 'ready' }],
 })
+const timeBase = Date.now() - 10000
+const t = offset => timeBase + offset
 const liveReport = () => ({
   appState: 'running',
-  desktop: { version: '0.2.1-rc.3', source: 'about', observedAtMs: 1000 },
-  installed: { version: '0.1.0-alpha.1', source: 'disk-manifest', observedAtMs: 1000 },
-  loaded: { version: '0.1.0-alpha.1', source: 'public-runtime-status', observedAtMs: 1000 },
+  lifecycle: {
+    discovery: { state: 'running', atMs: t(500), source: 'list-apps' },
+    launch: { state: 'not-needed', atMs: null },
+    welcome: { state: 'not-seen', atMs: null },
+    rediscovery: { atMs: t(900), source: 'list-apps', window: 'same' },
+    final: { atMs: t(1200), source: 'list-apps-and-get-window-state',
+      appState: 'running', surface: 'target-panel' },
+    interaction: 'clear',
+  },
+  desktop: { version: '0.2.1-rc.3', source: 'about', observedAtMs: t(1000) },
+  installed: { version: '0.1.0-alpha.1', source: 'disk-manifest', observedAtMs: t(1000) },
+  loaded: { version: '0.1.0-alpha.1', source: 'public-runtime-status', observedAtMs: t(1000) },
   upgradeSource: {
     kind: 'github-release-url', version: '0.1.0-alpha.1',
     url: 'https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1/dsh-github-copilot-0.1.0-alpha.1.tgz',
-    sha256: 'a'.repeat(64), releaseSha256: 'a'.repeat(64), fallbackReason: 'none', observedAtMs: 1000,
+    sha256: 'a'.repeat(64), releaseSha256: 'a'.repeat(64), fallbackReason: 'none', observedAtMs: t(1000),
   },
-  navigation: [{ method: 'accessible-control', outcome: 'opened', atMs: 1001,
-    observedAtMs: 1002, observationSource: 'get-window-state' }],
+  navigation: [{ method: 'accessible-control', outcome: 'opened', atMs: t(1001),
+    observedAtMs: t(1002), observationSource: 'get-window-state' }],
   handoff: { state: 'none', panel: 'models-manage' },
   permission: { state: 'safe-read-only', action: 'none' },
   steps: [{ checkId: 'acceptance-binding', action: 'reopen-manage', observation: 'ready',
-    startedAtMs: 1003, finishedAtMs: 1100, observedAtMs: 1101, observationSource: 'get-window-state' }],
+    startedAtMs: t(1003), finishedAtMs: t(1100), observedAtMs: t(1101), observationSource: 'get-window-state' }],
 })
 
 for (const [name, mutate, code] of [
@@ -46,10 +57,10 @@ for (const [name, mutate, code] of [
     'LIVE_UI_LOADED_VERSION_UNCONFIRMED'],
   ['wrong loaded version', r => { r.loaded.version = '0.1.0-alpha.2' }, 'LIVE_UI_VERSION_PREREQUISITE_UNMET'],
   ['automation failure', r => {
-    r.navigation = [{ method: 'accessible-control', outcome: 'unchanged', atMs: 1001,
-      observedAtMs: 1002, observationSource: 'get-window-state' },
-    { method: 'supported-shortcut', outcome: 'no-candidate', atMs: 1003,
-      observedAtMs: 1004, observationSource: 'get-window-state' }]
+    r.navigation = [{ method: 'accessible-control', outcome: 'unchanged', atMs: t(1001),
+      observedAtMs: t(1002), observationSource: 'get-window-state' },
+    { method: 'supported-shortcut', outcome: 'no-candidate', atMs: t(1003),
+      observedAtMs: t(1004), observationSource: 'get-window-state' }]
     r.steps = []; r.handoff.state = 'requested'
   }, 'LIVE_UI_AUTOMATION_BLOCKED'],
   ['missing check', r => { r.steps = [] }, 'LIVE_UI_INCOMPLETE'],
@@ -59,6 +70,27 @@ for (const [name, mutate, code] of [
   ['no change', r => { r.steps[0].observation = 'unchanged' }, 'LIVE_UI_OBSERVATION_FAILED'],
   ['user absent', r => { r.permission.state = 'user-absent' }, 'LIVE_UI_PERMISSION_BLOCKED'],
   ['handoff not opened', r => { r.handoff.state = 'requested' }, 'LIVE_UI_HANDOFF_PENDING'],
+  ['historical discovery without startup approval', r => {
+    r.lifecycle.discovery.state = 'not-running'
+  }, 'LIVE_UI_LAUNCH_BLOCKED'],
+  ['welcome requiring real authentication', r => {
+    r.lifecycle.welcome = { state: 'auth-required', atMs: t(600) }
+  }, 'LIVE_UI_AUTH_REQUIRED'],
+  ['safe welcome skip not yet used', r => {
+    r.lifecycle.welcome = { state: 'safe-skip-observed', atMs: t(600) }
+  }, 'LIVE_UI_WELCOME_UNRESOLVED'],
+  ['launch receipt without new window discovery', r => {
+    r.lifecycle.rediscovery = { atMs: null, source: 'list-apps', window: 'unobserved' }
+  }, 'LIVE_UI_WINDOW_UNCONFIRMED'],
+  ['welcome instead of current main interface', r => {
+    r.lifecycle.final.surface = 'welcome'
+  }, 'LIVE_UI_CURRENT_APP_UNCONFIRMED'],
+  ['current app stopped after past success', r => {
+    r.lifecycle.final.appState = 'not-running'
+  }, 'LIVE_UI_CURRENT_APP_UNCONFIRMED'],
+  ['missing final observation', r => { r.lifecycle.final.atMs = null }, 'LIVE_UI_CURRENT_APP_UNCONFIRMED'],
+  ['final observation predates action', r => { r.lifecycle.final.atMs = t(1000) }, 'LIVE_UI_CURRENT_APP_UNCONFIRMED'],
+  ['input interruption', r => { r.lifecycle.interaction = 'interrupted' }, 'LIVE_UI_INPUT_INTERRUPTED'],
   ...['local-build', 'source-directory', 'link-worktree', 'unknown'].map(kind => [
     `upgrade from ${kind}`, r => { r.upgradeSource.kind = kind }, 'LIVE_UI_UPGRADE_SOURCE_REJECTED',
   ]),
@@ -106,6 +138,11 @@ for (const [name, mutate] of [
   ['local source path', r => { r.upgradeSource.url = 'C:\\local\\build.tgz' }],
   ['wrong release version URL', r => { r.upgradeSource.url = r.upgradeSource.url.replaceAll('alpha.1', 'alpha.2') }],
   ['noncanonical release URL', r => { r.upgradeSource.url = 'https://example.invalid/package.tgz' }],
+  ['shell launch source', r => { r.lifecycle.launch.state = 'shell-start' }],
+  ['raw workspace title', r => { r.lifecycle.final.title = 'PRIVATE_SENTINEL' }],
+  ['launch again when app already running', r => {
+    r.lifecycle.launch = { state: 'authorized-start-app', atMs: t(550) }
+  }],
 ]) {
   test(`live consistency rejects ${name} with a fixed diagnostic`, () => {
     const report = liveReport()
@@ -136,7 +173,7 @@ test('navigation escalation asks for the specified panel once without inferring 
   report.navigation[0].outcome = 'unchanged'
   assert.equal(validateLiveUi(liveContract(), report).nextAction, 'try-one-supported-alternate')
   report.navigation.push({ method: 'supported-shortcut', outcome: 'no-candidate',
-    atMs: 1003, observedAtMs: 1004, observationSource: 'get-window-state' })
+    atMs: t(1003), observedAtMs: t(1004), observationSource: 'get-window-state' })
   assert.equal(validateLiveUi(liveContract(), report).nextAction, 'request-specified-panel-once')
   report.handoff.state = 'user-absent'
   assert.equal(validateLiveUi(liveContract(), report).nextAction, 'wait-for-user-panel')
@@ -146,6 +183,23 @@ test('navigation escalation asks for the specified panel once without inferring 
   const qualified = validateLiveUi(liveContract(), unknown)
   assert.equal(qualified.qualifiedObservation, true)
   assert.equal(qualified.ok, false)
+})
+
+test('consented controlled launch and safe welcome skip require rediscovered main window and fresh final state', () => {
+  const report = liveReport()
+  report.lifecycle.discovery.state = 'not-running'
+  report.lifecycle.launch = { state: 'authorized-start-app', atMs: t(550) }
+  report.lifecycle.welcome = { state: 'safe-skip-used', atMs: t(600) }
+  report.lifecycle.rediscovery.window = 'replacement'
+  report.lifecycle.final.surface = 'workspace'
+  const result = validateLiveUi(liveContract(), report, t(1300))
+  assert.equal(result.ok, true)
+  assert.equal(result.currentAppObservedAtMs, t(1200))
+  assert.equal(result.executionVerified, false)
+  assert.equal(validateLiveUi(liveContract(), report, t(121201)).code, 'LIVE_UI_CURRENT_APP_UNCONFIRMED')
+  assert.equal(validateLiveUi(liveContract(), report, t(1199)).code, 'LIVE_UI_CURRENT_APP_UNCONFIRMED')
+  report.lifecycle.launch.state = 'not-authorized'; report.lifecycle.launch.atMs = null
+  assert.equal(validateLiveUi(liveContract(), report).code, 'LIVE_UI_LAUNCH_BLOCKED')
 })
 
 async function fixture(run) {

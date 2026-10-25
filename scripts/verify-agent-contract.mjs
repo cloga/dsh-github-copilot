@@ -152,6 +152,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     schemaVersion: 2, ci: 'guarded-exact-head', source: 'report-consistency-only',
     browserManualRequireLiveContract: true,
     upgradeSource: 'exact-github-release-url-or-verified-cache',
+    appLifecycle: 'fresh-discovery-consented-launch-safe-skip-rediscovery-final',
     automaticClosure: false,
     maxNavigationMethods: 2, maxObservationMs: 120000,
   }), 'live UI acceptance must retain bounded navigation, exact-head CI and unverified report semantics')

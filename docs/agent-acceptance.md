@@ -117,6 +117,73 @@ The report adds exactly `liveUi` with:
 | `handoff` | `{state, panel}`; state `none`, `requested`, `user-absent`; panel equals contract |
 | `permission` | `{state, action}`; state `safe-read-only`, `approval-required`, `user-absent` |
 | `steps` | 0-32 unique-check `{checkId, action, observation, startedAtMs, finishedAtMs, observedAtMs, observationSource}` rows |
+| `lifecycle` | Current discovery, permitted launch, welcome, rediscovery and final observation chain below |
+
+### Current app lifecycle, not historical readiness
+
+Schema 2 also requires exactly this content-free lifecycle shape. This is an
+illustrative shape, **not a completed report or proof that these tools ran**:
+
+```json
+{
+  "discovery": { "state": "running", "atMs": 1000, "source": "list-apps" },
+  "launch": { "state": "not-needed", "atMs": null },
+  "welcome": { "state": "not-seen", "atMs": null },
+  "rediscovery": { "atMs": 1001, "source": "list-apps", "window": "same" },
+  "final": {
+    "atMs": 2000, "source": "list-apps-and-get-window-state",
+    "appState": "running", "surface": "target-panel"
+  },
+  "interaction": "clear"
+}
+```
+
+Discover the app **now** using `list_apps`, never infer it is running from old
+conversation evidence. Discovery `state` is `running`, `not-running` or `unknown`.
+When actually not running, explicit authorization for the exact launch target
+permits one controlled `start_app`, recorded as `authorized-start-app` with a
+time after discovery. Otherwise use `not-authorized` and stop. `not-needed` and
+`not-authorized` use null launch times. A launch when discovery already reports
+running is invalid: do not create duplicate processes or use shell launch/focus
+workarounds. The reported authorization is not an approval grant.
+
+Welcome `state` is `not-seen` (null time), `safe-skip-observed`, `safe-skip-used`,
+`auth-required` or `unknown` (positive observed time after discovery/launch).
+Do not automatically label welcome as authentication failure. Inspect official
+safe skip controls when present; DSH can expose **Add API Key -> Set up later**
+without entering/submitting/storing any key or signing in. This is observation
+guidance, not permission to click through real authentication, unsafe warnings,
+or legal agreements. An actual credential requirement with no permitted safe
+skip remains `LIVE_UI_AUTH_REQUIRED`; a skip not yet used/unknown welcome state
+is `LIVE_UI_WELCOME_UNRESOLVED`, with next action to inspect the official skip.
+
+After navigation or welcome dismissal, rediscover the app/window with `list_apps`
+and read a fresh tree. A welcome window may disappear and be replaced by the
+main window; do not retry the old window just because an action returned done
+or its immediate diff was empty. `rediscovery.window` is only `same`,
+`replacement` or `unobserved`, never a real window identifier/title/path.
+Its positive time must be after discovery/launch/welcome; missing observation
+uses null and cannot pass. Navigating and checking the target panel follows this
+rediscovery. `start_app` success is not main-window readiness.
+
+Before delivering, freshly perform app discovery **and** a UI observation.
+`final` records its positive UTC epoch-millisecond time, app state and surface
+(`target-panel`, `workspace`, `welcome`, `unobserved`). Only running and the
+target-panel/workspace can pass, after rediscovery, navigation and all required
+checks. This final observation must be no older than 120 seconds at checker
+completion, no later than its clock, and within 120 seconds of the last check.
+The checker re-evaluates this after its bounded CI reads. This is a bounded
+report-consistency freshness rule, not proof of clock accuracy or a promise the
+application remains running afterwards. Recheck if waiting/CI made it stale.
+
+`interaction` is `clear` or `interrupted`. Interruption remains
+`LIVE_UI_INPUT_INTERRUPTED`; reread the app UI before the same tool/action retry
+under its existing consent and limits. Unapproved launch, missing rediscovery,
+and stale/stopped/welcome-only final state return distinct blocked codes, not
+product failure or success. Existing two navigation-method limits, one panel
+handoff, permission rules, installed/loaded/CI separation and GitHub-first
+source constraints remain unchanged. This checker still only validates supplied
+rows; it cannot know whether a real host executed any of these steps.
 
 Versions are exact SemVer-like version strings, not paths, account names or raw
 status output. Unknown version/source uses `version: null, source: "unknown",
@@ -185,7 +252,8 @@ interpret a transient Checking state or an action receipt as success/failure.
 Actions remain subject to the real task and tool permissions. Reported permission
 does not grant any. `permission.action` is `none`, `restart`, `install`,
 `account-switch`, `oauth` or `paid-call`; any non-`none` or non-safe state blocks
-this safe-check flow. App not running requires a blocked result, not auto-launch.
+this safe-check flow. App not running requires a blocked result unless the
+separate explicit launch authorization and controlled lifecycle above apply.
 
 If both distinct navigation attempts fail after fresh observations, return
 `LIVE_UI_AUTOMATION_BLOCKED`, not product failure. The deterministic `nextAction`

@@ -79,7 +79,48 @@ const version = value => value === null || (typeof value === 'string'
   && /^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(value) && value.length <= 100)
 const timestamp = value => Number.isSafeInteger(value) && value > 0
 
-export function validateLiveUi(contract, report) {
+function validateAppLifecycle(value, now) {
+  keys(value, ['discovery', 'launch', 'welcome', 'rediscovery', 'final', 'interaction'])
+  keys(value.discovery, ['state', 'atMs', 'source'])
+  require(['running', 'not-running', 'unknown'].includes(value.discovery.state)
+    && timestamp(value.discovery.atMs) && value.discovery.source === 'list-apps')
+  keys(value.launch, ['state', 'atMs'])
+  require(['not-needed', 'authorized-start-app', 'not-authorized'].includes(value.launch.state)
+    && (value.launch.state === 'authorized-start-app'
+      ? timestamp(value.launch.atMs) && value.launch.atMs > value.discovery.atMs
+        && value.discovery.state === 'not-running'
+      : value.launch.atMs === null))
+  keys(value.welcome, ['state', 'atMs'])
+  require(['not-seen', 'safe-skip-observed', 'safe-skip-used', 'auth-required', 'unknown'].includes(value.welcome.state)
+    && (value.welcome.state === 'not-seen' ? value.welcome.atMs === null : timestamp(value.welcome.atMs)
+      && value.welcome.atMs >= (value.launch.atMs ?? value.discovery.atMs)))
+  keys(value.rediscovery, ['atMs', 'source', 'window'])
+  require(['same', 'replacement', 'unobserved'].includes(value.rediscovery.window)
+    && value.rediscovery.source === 'list-apps'
+    && (value.rediscovery.atMs === null || timestamp(value.rediscovery.atMs)
+      && value.rediscovery.atMs > (value.welcome.atMs ?? value.launch.atMs ?? value.discovery.atMs)))
+  keys(value.final, ['atMs', 'source', 'appState', 'surface'])
+  require((value.final.atMs === null || timestamp(value.final.atMs))
+    && value.final.source === 'list-apps-and-get-window-state'
+    && ['running', 'not-running', 'unknown'].includes(value.final.appState)
+    && ['target-panel', 'workspace', 'welcome', 'unobserved'].includes(value.final.surface)
+    && ['clear', 'interrupted'].includes(value.interaction))
+  if (value.interaction === 'interrupted') return 'LIVE_UI_INPUT_INTERRUPTED'
+  if (value.discovery.state !== 'running' && value.launch.state !== 'authorized-start-app') {
+    return 'LIVE_UI_LAUNCH_BLOCKED'
+  }
+  if (value.welcome.state === 'auth-required') return 'LIVE_UI_AUTH_REQUIRED'
+  if (['safe-skip-observed', 'unknown'].includes(value.welcome.state)) return 'LIVE_UI_WELCOME_UNRESOLVED'
+  if (value.rediscovery.atMs === null || value.rediscovery.window === 'unobserved') return 'LIVE_UI_WINDOW_UNCONFIRMED'
+  if (value.final.atMs === null || value.final.atMs <= value.rediscovery.atMs
+    || value.final.atMs > now || now - value.final.atMs > 120000
+    || value.final.appState !== 'running' || !['target-panel', 'workspace'].includes(value.final.surface)) {
+    return 'LIVE_UI_CURRENT_APP_UNCONFIRMED'
+  }
+  return null
+}
+
+export function validateLiveUi(contract, report, now = Date.now()) {
   keys(contract, ['expectedPluginVersion', 'panel', 'checks'])
   require(version(contract.expectedPluginVersion) && contract.expectedPluginVersion !== null
     && panels.includes(contract.panel))
@@ -92,7 +133,8 @@ export function validateLiveUi(contract, report) {
     required.set(row.id, row)
   }
   keys(report, ['appState', 'desktop', 'installed', 'loaded', 'upgradeSource',
-    'navigation', 'handoff', 'permission', 'steps'])
+    'navigation', 'handoff', 'permission', 'steps', 'lifecycle'])
+  const lifecycleCode = validateAppLifecycle(report.lifecycle, now)
   require(['running', 'not-running', 'unknown'].includes(report.appState))
   for (const [field, sources] of [
     ['desktop', ['about', 'unknown']],
@@ -154,7 +196,15 @@ export function validateLiveUi(contract, report) {
   const qualifiedObservation = opened && report.steps.length > 0
   const result = code => ({ code, ok: code === 'LIVE_UI_REPORTED_COMPLETE', qualifiedObservation,
     upgradeSourceKind: source.kind, provenanceVerified: false,
-    nextAction: code === 'LIVE_UI_AUTOMATION_BLOCKED'
+    currentAppObservedAtMs: report.lifecycle.final.atMs,
+    nextAction: ({
+      LIVE_UI_LAUNCH_BLOCKED: 'stop-for-explicit-launch-permission',
+      LIVE_UI_AUTH_REQUIRED: 'stop-at-authentication-boundary',
+      LIVE_UI_WELCOME_UNRESOLVED: 'inspect-official-safe-skip',
+      LIVE_UI_WINDOW_UNCONFIRMED: 'rediscover-app-window',
+      LIVE_UI_CURRENT_APP_UNCONFIRMED: 'fresh-discovery-and-observation',
+      LIVE_UI_INPUT_INTERRUPTED: 'reread-ui-before-same-action-retry',
+    })[code] ?? (code === 'LIVE_UI_AUTOMATION_BLOCKED'
       ? report.handoff.state === 'none' ? 'request-specified-panel-once' : 'wait-for-user-panel'
       : code === 'LIVE_UI_NOT_RUN'
         ? report.navigation.length === 0 ? 'inspect-running-app' : 'try-one-supported-alternate'
@@ -164,11 +214,18 @@ export function validateLiveUi(contract, report) {
               : code === 'LIVE_UI_LOADED_VERSION_UNCONFIRMED' ? 'read-public-loaded-version'
                 : code === 'LIVE_UI_VERSION_PREREQUISITE_UNMET' ? 'request-exact-upgrade-permission'
                   : code === 'LIVE_UI_UPGRADE_SOURCE_REJECTED' ? 'select-exact-github-release-url'
-                : code === 'LIVE_UI_INCOMPLETE' ? 'perform-remaining-authorized-checks' : 'report-result',
+                : code === 'LIVE_UI_INCOMPLETE' ? 'perform-remaining-authorized-checks' : 'report-result'),
     versionFixReportedConsistent: code === 'LIVE_UI_REPORTED_COMPLETE', executionVerified: false,
     environmentVerified: false, source: 'report-consistency-only' })
   if (report.permission.state !== 'safe-read-only' || report.permission.action !== 'none') {
     return result('LIVE_UI_PERMISSION_BLOCKED')
+  }
+  if (lifecycleCode) return result(lifecycleCode)
+  if (report.navigation.some(row => row.atMs < report.lifecycle.rediscovery.atMs)
+    || report.lifecycle.final.atMs < lastEnd
+    || (lastEnd > 0 && report.lifecycle.final.atMs - lastEnd > 120000)
+    || report.navigation.some(row => row.observedAtMs > report.lifecycle.final.atMs)) {
+    return result('LIVE_UI_CURRENT_APP_UNCONFIRMED')
   }
   if (report.appState !== 'running') return result('LIVE_UI_APP_UNAVAILABLE')
   if (!opened) return result(report.navigation.length === 2
@@ -284,7 +341,7 @@ export async function verifyAcceptance({ root = process.cwd(), contractPath, rep
   const contract = json(contractBytes)
   const report = json(reportBytes)
   const artifacts = validateDocuments(contract, report)
-  const liveUi = contract.schemaVersion === 2 ? validateLiveUi(contract.liveUi, report.liveUi) : null
+  let liveUi = contract.schemaVersion === 2 ? validateLiveUi(contract.liveUi, report.liveUi) : null
   if (liveUi) require(contract.liveUi.checks.every(row => contract.requirements.some(required => required.id === row.id)))
   if (liveUi) require(contract.requirements.filter(row => ['browser', 'manual'].includes(row.method))
     .every(row => contract.liveUi.checks.some(live => live.id === row.id)))
@@ -312,6 +369,7 @@ export async function verifyAcceptance({ root = process.cwd(), contractPath, rep
     require(cleanHead(root) === commit, 'ACCEPTANCE_STALE_COMMIT')
     require(digest(await readBounded(resolve(contractPath), 65536)) === digest(contractBytes)
       && digest(await readBounded(resolve(reportPath), 65536)) === digest(reportBytes), 'ACCEPTANCE_FILE_CHANGED')
+    liveUi = validateLiveUi(contract.liveUi, report.liveUi)
   }
   const ok = counts.passed === contract.requirements.length && (!liveUi || (liveUi.ok && ci.ok))
   return {

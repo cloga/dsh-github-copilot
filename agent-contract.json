@@ -17,6 +17,7 @@
       "source": "report-consistency-only",
       "browserManualRequireLiveContract": true,
       "upgradeSource": "exact-github-release-url-or-verified-cache",
+      "appLifecycle": "fresh-discovery-consented-launch-safe-skip-rediscovery-final",
       "automaticClosure": false,
       "maxNavigationMethods": 2,
       "maxObservationMs": 120000

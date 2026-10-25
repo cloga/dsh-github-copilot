@@ -323,6 +323,20 @@ and installed-on-disk evidence cannot replace live behavior or the public loaded
 plugin version. Attempt safe authorized checks on an already-running Desktop;
 unreliable local npm is not a reason to skip them. Use existing computer-use
 tools, never shell activation or a repository script as an App controller.
+Begin with current app discovery, not a historical "already open" claim. If not
+running, start only with explicit launch authorization via controlled `start_app`
+using the exact approved target; then verify discovery and fresh UI, not merely
+the launch receipt. Do not start an already-running app again. A welcome screen
+is not automatically an auth blocker: inspect an official safe skip first. DSH's
+Add API Key -> Set up later path does not submit/store a key or authenticate;
+use it only when actually exposed, within tool permission rules. Never infer
+Copilot account invalidity from welcome UI or bypass real authentication/warnings.
+Welcome dismissal may replace the window: rediscover app/window and read its fresh
+tree before acting, rather than retrying a stale window on an empty immediate diff.
+Honor user-input interruption: reread UI before retrying the same permitted action.
+Before handoff, freshly discover the current app and inspect the target panel or
+workspace, reporting the observation time only; past success does not establish
+current running state or guarantee the app remains running later.
 An action receipt or empty immediate diff is not a navigation failure: obtain
 a fresh post-action `get_window_state` observation first. Keep one attempt per
 supported navigation method, at most two different methods, then report precise
