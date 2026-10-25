@@ -97,7 +97,9 @@ async function writeTree(files, destination) {
 function pnpmCommand() {
   const cli = process.env.npm_execpath
   if (typeof cli !== 'string' || cli.length === 0) {
-    throw new Error('Run through the repository-pinned pnpm command so npm_execpath is available')
+    return process.platform === 'win32'
+      ? { command: process.env.ComSpec ?? 'cmd.exe', args: ['/d', '/s', '/c', 'pnpm'] }
+      : { command: 'pnpm', args: [] }
   }
   if (process.platform === 'win32' && /\.exe$/iu.test(cli)) return { command: cli, args: [] }
   return { command: process.execPath, args: [cli] }
@@ -288,6 +290,15 @@ async function expectLinkedDependencyFailure({ directory, name, dependencies, so
 }
 
 export async function verifyInstalledPlugin({ archive, hostModules }) {
+  const manager = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).packageManager
+  const pnpm = pnpmCommand()
+  const managerVersion = spawnSync(pnpm.command, [...pnpm.args, '--version'], {
+    cwd: root, encoding: 'utf8', timeout: 30_000,
+  })
+  if (managerVersion.error) throw managerVersion.error
+  if (managerVersion.status !== 0 || `pnpm@${managerVersion.stdout.trim()}` !== manager) {
+    throw new Error(`Install smoke requires the repository-pinned package manager ${manager}`)
+  }
   const archivePath = resolve(archive)
   const hostRoot = await realpath(resolve(hostModules))
   const tarball = await verifyTarball(archivePath, root)
