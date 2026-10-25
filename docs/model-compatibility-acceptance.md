@@ -78,6 +78,22 @@ empty summary/content, no encrypted content and no unknown fields. Durable
 history, public summaries, opaque bytes, nested IDs, phase and `call_id` pairing
 stay unchanged.
 
+The locked SDK/Core synthetic regressions require a summary-only reasoning
+item from an SSE response to be rejected on the following turn before a second
+Responses request is dispatched, while the prior assistant history remains
+byte-for-byte unchanged. The accepted replay control requires opaque encrypted
+bytes and paired `call_id` values to survive normalization unchanged. These
+fixtures must pass against the current lockfile before acceptance; their presence
+alone does not prove execution or live provider acceptance.
+
+When this plugin rejects a replay shape locally, the existing native
+`INVALID_REQUEST` message may include a bounded structure diagnosis: a fixed
+reason code, zero-based input position, allowlisted item type/status and
+booleans indicating whether selected fields exist. It never includes field
+values, IDs, summaries, arguments, results, unknown discriminators or opaque
+bytes. This identifies the structural refusal, not a specific supplier-rejected
+item, and does not alter the history or authorize another replay shape.
+
 The source-checkout follow-up for #279 adds bounded structure evidence to an
 exact verified scope rejection: total items, direct ID fields, reference items,
 encrypted reasoning items, unrecognized items, `previous_response_id`/`store`

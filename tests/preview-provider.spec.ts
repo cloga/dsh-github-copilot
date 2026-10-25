@@ -885,11 +885,16 @@ describe('managed Responses replay compatibility', () => {
   it('normalizes only wire item IDs after native serialization while preserving durable replay and tool pairing', async () => {
     const context = replayContext()
     const original = JSON.stringify(context)
-    const result = await invoke(context)
+    let serialized: Record<string, unknown> | undefined
+    const result = await invoke(context, { onPayload(payload) {
+      serialized = structuredClone(payload as Record<string, unknown>)
+      return undefined
+    } })
     expect(result.result.stopReason).toBe('stop')
     expect(result.fetch).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(context)).toBe(original)
     const input = result.body!.input as Record<string, unknown>[]
+    const serializedInput = serialized!.input as Record<string, unknown>[]
     expect(input.some(item => Object.hasOwn(item, 'id'))).toBe(false)
     expect(input.find(item => item.type === 'reasoning')).toEqual({ type: 'reasoning',
       summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'opaque-old-reasoning' })
@@ -897,6 +902,7 @@ describe('managed Responses replay compatibility', () => {
     const call = input.find(item => item.type === 'function_call')!
     const output = input.find(item => item.type === 'function_call_output')!
     expect(call.call_id).toBe(output.call_id)
+    expect(call.call_id).toBe(serializedInput.find(item => item.type === 'function_call')!.call_id)
     expect(JSON.parse(String(call.arguments))).toEqual({ id: 'keep-business-id' })
     expect(result.body!.store).toBe(false)
     expect(result.replayFailure).not.toHaveBeenCalled()

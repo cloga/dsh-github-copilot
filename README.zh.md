@@ -8,7 +8,7 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-**历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；DSH rc.3 更新候选：`0.1.0-alpha.3.dsh.0.2.1.rc.3`。** DSH `0.2.1-rc.3` 是预发布版本。本插件线是兼容性候选，不是生产 Core 升级建议；Desktop 制品／签名尚未核验。每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-rc.3` 规范化为 `dsh.0.2.1.rc.3`，但兼容性仍须核对明确元数据，不能只猜版本名。既有已发布版本和 tag 不变。已发布、已安装、已加载仍是不同状态。
+**历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；DSH rc.3 更新候选：`0.1.0-alpha.4.dsh.0.2.1.rc.3`。** DSH `0.2.1-rc.3` 是预发布版本。本插件线是兼容性候选，不是生产 Core 升级建议；Desktop 制品／签名尚未核验。每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-rc.3` 规范化为 `dsh.0.2.1.rc.3`，但兼容性仍须核对明确元数据，不能只猜版本名。既有已发布版本和 tag 不变。已发布、已安装、已加载仍是不同状态。
 
 按**精确 Core**选版本，不按全局 SemVer 最大值或 npm `latest`／`alpha`。
 只读命令 `node scripts/select-core-release.mjs 0.2.0-rc.2` 先读取
@@ -22,6 +22,8 @@ Core alpha.4 对应 alpha.16，alpha.5 保留其历史线，rc.3 对应当前待
 **原生刷新保护：**0.4.1 引入了窄范围保护：仅在插件拥有的原生刷新被精确验证，且账号、端点与权限连续时，保留已发出的 HTTP 流。但截至 0.4.2-alpha.13，真实 Cordis 服务代理身份不一致仍会导致保护证据匹配失败；0.4.2-alpha.14 修复此问题。后续请求重新验证认证与模型元数据。未知／外部凭据通知、撤销、取消与供应商拒绝仍明确报错，不承诺所有刷新无感，也不自动重试。参见[刷新边界](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385)。
 
 **压缩规划：**alpha.15 修复独立选择的恢复引擎将字节数与 token 预算直接比较的问题，改用公开的原生 token meter，保留完整工具关系和最终原生准入。真正超大的配对历史单元仍明确失败；这不是历史修复，也不保证恢复成功。参见[压缩恢复](./docs/manual-compaction-recovery.md)。
+
+**Responses replay 拒绝诊断：**本地拒绝不完整、仅引用、只有摘要的 reasoning 条目或 previous-response 引用时，原生 `INVALID_REQUEST` 会附带有界结构原因：固定原因码、适用时从零开始的输入位置、白名单 type/status，以及字段存在性布尔值。被拒绝的请求不会发出，历史保持不变；诊断不会包含 ID、摘要、工具数据、未知字段或加密 bytes。有效加密 replay bytes 和 `call_id` 配对保持原样。此诊断不会恢复或改写旧历史。
 
 **历史 DSH alpha.5 适配：**公开 API 对齐 pi-ai `1.1.0`、官方 Cordis／schemastery peer，
 以及 storage-domain 的 Zod `4.4.3`。
@@ -141,7 +143,7 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.1.rc.3.tgz
 ```
 
 上面的命令是准备发布的示例，仅在发布且所需 CI 通过后可用；目标是官方 DSH 预发布版 `0.2.1-rc.3`。**不要把此候选安装到生产 Desktop profile。** Desktop 制品／签名及 profile peer 组合仍未核验；rc.2 应保留现有兼容插件。[历史 rc.2 随附 CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)不代表 rc.3 验收；全局／普通 `dsh` shim 不等价。本次不授权安装或重启。
@@ -352,14 +354,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.1.rc.3.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.1.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
