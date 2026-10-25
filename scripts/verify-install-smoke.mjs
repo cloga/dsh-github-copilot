@@ -164,8 +164,9 @@ import RoutedWeb from 'dsh-github-copilot/routed-web'
 import recovery from 'dsh-github-copilot/manual-compaction-recovery'
 import remote from 'dsh-github-copilot/remote'
 const require = createRequire(import.meta.url)
-const pkgPath = findPackageJSON('dsh-github-copilot', import.meta.url)
-assert.ok(pkgPath, 'installed package manifest must resolve')
+const resolvedPackage = findPackageJSON('dsh-github-copilot', import.meta.url)
+assert.ok(resolvedPackage, 'installed package manifest must resolve')
+const pkgPath = await realpath(resolvedPackage)
 const pkg = JSON.parse(await readFile(pkgPath, 'utf8'))
 const installRoot = dirname(pkgPath)
 const allowedRoot = process.env.INSTALL_FIXTURE_ROOT
@@ -207,11 +208,13 @@ for (const name of Object.keys(pkg.dependencies)) {
   await import(packageEntry(manifestPath, installed))
 }
 for (const [name, expected] of Object.entries(JSON.parse(process.env.EXPECTED_HOST_PEERS))) {
-  const manifestPath = findPackageJSON(name, pathToFileURL(pkgPath).href)
   if (!expected.available) {
-    assert.equal(manifestPath, undefined, 'missing optional peer must remain host-optional: ' + name)
+    assert.throws(() => findPackageJSON(name, pathToFileURL(pkgPath).href),
+      error => error?.code === 'ERR_MODULE_NOT_FOUND' && error.message.includes(name),
+      'missing optional peer must remain host-optional: ' + name)
     continue
   }
+  const manifestPath = findPackageJSON(name, pathToFileURL(pkgPath).href)
   assert.ok(manifestPath, 'required host peer must actually resolve: ' + name)
   const actual = JSON.parse(await readFile(manifestPath, 'utf8'))
   assert.equal(actual.version, expected.version, 'host peer must resolve to the supplied Core package: ' + name)
