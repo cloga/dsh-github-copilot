@@ -127,6 +127,7 @@
     "preflight:search": "node scripts/check-search-composition.mjs",
     "verify:agent": "node scripts/verify-agent-contract.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs",
+    "verify:install-smoke": "node scripts/verify-install-smoke.mjs",
     "verify:baseline": "node scripts/verify-deployment-baseline.mjs",
     "verify:package": "node scripts/verify-package.mjs",
     "verify:controlled-core": "node scripts/verify-controlled-core.mjs",

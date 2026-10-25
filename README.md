@@ -157,6 +157,15 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 
 Supply any launcher patches with repeated `--patch /absolute/file`. Require `supported: true`: the install command does not automatically run this preflight. Unsupported/custom Web composition and `NONEMPTY_DISPOSABLE_PROFILE_ROOT` are stop conditions. Preserve a nonempty root and review whether public composition reconstructs it before any separately approved normalization; never assume it can be cleared. Check effective shared-peer resolution so stale profile-local packages do not shadow Desktop's official peers.
 
+Install the exact, checksum-verified release archive shown below; do not use a
+checkout directory as a release package. `pnpm add <directory>` creates a
+`link:` development dependency and does not install that directory's production
+dependencies. For development, install the checkout's dependencies before
+linking it and keep the checkout available at the linked path. A package manager
+showing **Installed** confirms its profile record, not that runtime dependencies
+resolved or that the plugin loaded; verify the exact DSH/profile startup result
+separately.
+
 For a **standalone named profile**:
 
 ```sh
