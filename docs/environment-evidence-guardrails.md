@@ -69,3 +69,21 @@ The full dependency install, build, type, unit/integration and package gates
 remain the existing GitHub CI workflow. On a local checkout, run only the
 guarded dependency-free script tests; do not repeatedly attempt local dependency
 recovery when the configured network cannot reach npm.
+
+## Autonomous field acceptance is a separate required evidence track
+
+For explicitly requested post-upgrade Desktop acceptance, use schema 2 of
+[the existing acceptance contract](./agent-acceptance.md#required-live-desktop-acceptance-schema-2).
+It composes this exact-head CI reader (same issue/operation budget, no reset)
+with bounded content-free live evidence. CI success alone, installed-but-not-loaded,
+not-run UI, automation-blocked, errors/timeouts and unapproved actions cannot
+produce final acceptance or closure eligibility. A complete report is still
+only a consistency judgment, not trusted proof that a UI tool ran.
+
+Safe checks on an already-running application remain required despite local npm
+restrictions. An action returning done or no immediate tree diff needs a fresh
+post-action observation before any failure conclusion. Use at most two distinct
+supported navigation methods, then request the specified panel once; do not
+equate user absence with permission or with a panel actually opened. Repository
+scripts never control Desktop, activate windows via shell, install/restart, or
+authorize account/OAuth/paid operations. See AGENTS.md for the controlled workflow.

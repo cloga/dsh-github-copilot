@@ -148,6 +148,11 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && acceptance.cleanHeadRequired === true && acceptance.executionVerified === false
     && acceptance.independenceVerified === false && acceptance.automaticUpload === false,
   'acceptance evidence must retain clean-HEAD integrity and explicit unverified execution/independence')
+  require(JSON.stringify(acceptance.liveUi) === JSON.stringify({
+    schemaVersion: 2, ci: 'guarded-exact-head', source: 'report-consistency-only',
+    browserManualRequireLiveContract: true, automaticClosure: false,
+    maxNavigationMethods: 2, maxObservationMs: 120000,
+  }), 'live UI acceptance must retain bounded navigation, exact-head CI and unverified report semantics')
   await file(acceptance.policy)
   await file(acceptance.implementation)
   const executionPolicy = JSON.parse(await readFile(resolve(root, 'agent-execution-policy.json'), 'utf8'))

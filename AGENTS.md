@@ -317,6 +317,25 @@ Desktop plugin upgrades do not necessarily reconcile profile-local copies of Hos
 
 ## Mechanical verification
 
+When a task explicitly requires post-upgrade Desktop/UI acceptance, use acceptance
+contract/report schema 2 described in `docs/agent-acceptance.md`. Exact-head CI
+and installed-on-disk evidence cannot replace live behavior or the public loaded
+plugin version. Attempt safe authorized checks on an already-running Desktop;
+unreliable local npm is not a reason to skip them. Use existing computer-use
+tools, never shell activation or a repository script as an App controller.
+An action receipt or empty immediate diff is not a navigation failure: obtain
+a fresh post-action `get_window_state` observation first. Keep one attempt per
+supported navigation method, at most two different methods, then report precise
+`automation-blocked` and request the named panel once. User absence or an
+unanswered request never grants permission or proves the panel opened.
+App unavailable, restart/install, account/OAuth/paid actions outside explicit
+permission stay blocked. Do not repeat exhausted methods on ordinary continuation.
+Record only fixed action/outcome codes, numeric times and version/source facts;
+never upload identities, credentials or conversation content. Unknown loaded
+version permits qualified observations only, not a version-specific fix claim.
+Missing/not-run/blocked/error/timeout evidence cannot close the task; even a
+consistent complete report is not trusted proof of execution or automatic closure.
+
 For the opt-in task acceptance pilot, define observable requirements before
 implementation and validate the clean candidate with
 `node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE`.

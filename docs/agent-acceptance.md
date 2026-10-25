@@ -34,12 +34,13 @@ The plugin-only and approval boundaries in [AGENTS.md](../AGENTS.md) still apply
    A later source commit requires a new report and appropriate revalidation.
 
 `agent.mjs describe` and `plan <task>` expose this policy and the unexecuted
-command with input placeholders. The checker reads files and fixed Git commands
-only; it never executes report-supplied commands or follows URLs.
+command with input placeholders. Schema 1 reads files and fixed Git commands only. Schema 2 additionally invokes
+the existing bounded GitHub CI reader. Neither executes report-supplied commands,
+follows report URLs, or operates a Desktop application.
 
 ## Contract format
 
-Version 1 accepts exactly these fields. This example is illustrative, not
+Version 1 accepts exactly these fields for non-live checks. This example is illustrative, not
 completed acceptance or evidence that the behavior has been exercised:
 
 ```json
@@ -65,11 +66,121 @@ uniquely identified requirements and 1-16 non-goals. IDs are lowercase
 alphanumeric/hyphen identifiers beginning with a letter, at most 64 characters.
 Text is nonempty and at most 2,000 characters. Methods are `static`, `unit`,
 `integration`, `browser`, `review` or `manual`; a method is a declared evidence
-category, never an instruction to execute code.
+category, never an instruction to execute code. `browser` and `manual` requirements
+now require schema 2; schema 1 returns `ACCEPTANCE_LIVE_CONTRACT_REQUIRED`.
+
+## Required live Desktop acceptance (schema 2)
+
+This focused #451 extension also contributes to agentic engineering improvement;
+it does not depend on #442's evaluator platform or multi-agent loop. A task that
+explicitly requests post-upgrade UI acceptance must use schema 2, not avoid the
+requirement by labeling it `unit`. Local npm restrictions still prohibit local
+dependency recovery; they do not excuse skipping safe checks on an already-running
+Desktop. Real UI actions use the existing computer-use tools and their permissions,
+not this repository checker.
+
+Use the same `agent.mjs accept` command and base contract/report fields, with
+`schemaVersion: 2` in both documents. Add this contract field (illustrative):
+
+```json
+{
+  "liveUi": {
+    "expectedPluginVersion": "0.1.0-alpha.1",
+    "panel": "models-manage",
+    "checks": [
+      { "id": "manage-reopen", "outcome": "ready" },
+      { "id": "refresh-settles", "outcome": "ready" }
+    ]
+  }
+}
+```
+
+Every live check ID must exist in `requirements`; every `browser`/`manual`
+requirement must occur in `liveUi.checks`. Define the required scenarios before
+capture: success in a signed-in case cannot substitute for a missing no-account
+or failure scenario. There are 1-16 unique live checks. Expected outcomes are
+`ready` or `actionable-failure` (the latter is for an explicitly required error
+presentation scenario, never a generic failure waiver). Panels are only
+`models-manage`, `plugin-details` or `about`.
+
+The report adds exactly `liveUi` with:
+
+| Field | Strict shape / allowed values |
+|---|---|
+| `appState` | `running`, `not-running`, `unknown` |
+| `desktop` | `{version, source, observedAtMs}`; source `about` or `unknown` |
+| `installed` | Same shape; source `disk-manifest` or `unknown` |
+| `loaded` | Same shape; source `public-runtime-status`, `runtime-ui` or `unknown` |
+| `navigation` | 0-2 unique-method `{method, outcome, atMs, observedAtMs, observationSource}` rows |
+| `handoff` | `{state, panel}`; state `none`, `requested`, `user-absent`; panel equals contract |
+| `permission` | `{state, action}`; state `safe-read-only`, `approval-required`, `user-absent` |
+| `steps` | 0-32 unique-check `{checkId, action, observation, startedAtMs, finishedAtMs, observedAtMs, observationSource}` rows |
+
+Versions are exact SemVer-like version strings, not paths, account names or raw
+status output. Unknown version/source uses `version: null, source: "unknown",
+observedAtMs: null`; known versions need a positive integer UTC epoch-millisecond
+observation time. Desktop About establishes only the Desktop version. A disk
+manifest establishes installation, **not loaded runtime**. A matching public
+loaded-plugin version is mandatory for version-specific completion; otherwise
+observations may be qualified, but final `ok`/`closeEligible` remain false.
+Known different loaded versions return `LIVE_UI_VERSION_PREREQUISITE_UNMET`
+with `request-exact-upgrade-permission`, not automation failure. A matching
+download/checksum does not prove installation or loading. If the exact required
+install/restart needs specific consent, an unavailable user leaves it blocked;
+a broad request to continue acceptance never fabricates that consent.
+
+Navigation methods are `accessible-control`, `supported-shortcut` or
+`user-opened-panel`; outcomes are `opened`, `unchanged`, `no-candidate`. Do not
+retry a method just because its action returned done with no immediate tree diff.
+First obtain a fresh `get_window_state` observation. Both navigation and step
+rows require `observationSource: "get-window-state"` and an observation time
+strictly after the action. Observations must settle within 120,000ms and be in
+recorded order; no looping or repeated check/method IDs. An opened navigation
+ends navigation attempts. A second method is one supported safe alternate, not
+a shell/window-manager workaround.
+
+Step actions are `observe-panel`, `reopen-manage`, `refresh-models`; observations
+are `ready`, `actionable-failure`, `error`, `timeout`, `unchanged`. For example,
+record the bounded refresh interval and fresh settled ready observation; do not
+interpret a transient Checking state or an action receipt as success/failure.
+Actions remain subject to the real task and tool permissions. Reported permission
+does not grant any. `permission.action` is `none`, `restart`, `install`,
+`account-switch`, `oauth` or `paid-call`; any non-`none` or non-safe state blocks
+this safe-check flow. App not running requires a blocked result, not auto-launch.
+
+If both distinct navigation attempts fail after fresh observations, return
+`LIVE_UI_AUTOMATION_BLOCKED`, not product failure. The deterministic `nextAction`
+requests the specified panel once; after `handoff.state: requested/user-absent`,
+it waits for the user instead of asking repeatedly. Never infer consent/panel
+opening from autopilot, user absence, or an automatically unanswered `ask_user`.
+After the user really opens the panel, inspect it afresh and record
+`user-opened-panel`; retain prior failure context locally, without resetting the
+existing task/operation failure ledger. The report is not a persistent UI
+executor or an interception mechanism: hiding attempts in a fabricated report
+cannot be detected.
+
+Schema 2 check `notes` are fixed codes only: `observed`, `not-run`, `blocked`,
+`failed`; all `evidence` arrays must be empty. The structured live rows replace
+arbitrary files/free text. Unknown fields/values are rejected; no identities,
+credentials, raw errors, conversation content, screenshots or ad-hoc logs belong
+in this report. Keep reports local; the tool never uploads them.
+
+Schema 2 always invokes the existing `ci-evidence` operation under task
+`String(issue)`, exact clean current commit and its existing persistent budget.
+It never trusts a report's CI boolean/JSON or resets failures. Non-green/pending
+CI, missing live checks, errors/timeouts, blocked permission, unconfirmed loaded
+version, or incomplete handoff makes `state: "blocked", ok: false,
+closeEligible: false`. A complete consistent report plus real exact-head CI can
+return `state: "reported-complete", ok: true, closeEligible: true`, but this is
+**report eligibility for human review**, not proof of UI execution or permission
+to close an issue. `executionVerified/environmentVerified/deliveryAuthorized`
+remain false; `liveUi.source` is always `report-consistency-only`. `ciVerified`
+alone is real Actions-result evidence. No trusted Desktop execution source is
+invented here.
 
 ## Report format
 
-The report has exactly `schemaVersion`, `commit`, `contractSha256`, `producer`,
+The schema 1 report has exactly `schemaVersion`, `commit`, `contractSha256`, `producer`,
 `environment` and `checks`. Version is 1. `commit` is the full 40-character
 lowercase Git SHA-1 of the candidate; SHA-256 Git repositories are not supported
 by this version. `contractSha256` is the lowercase SHA-256 of the exact contract

@@ -19,6 +19,11 @@ test('describes actual package metadata without claiming a release exists', asyn
   assert.equal(result.acceptance.executed, false)
   assert.equal(result.acceptance.executionVerified, false)
   assert.equal(result.acceptance.independenceVerified, false)
+  assert.deepEqual(result.acceptance.liveUi, {
+    schemaVersion: 2, ci: 'guarded-exact-head', source: 'report-consistency-only',
+    browserManualRequireLiveContract: true, automaticClosure: false,
+    maxNavigationMethods: 2, maxObservationMs: 120000,
+  })
   assert.deepEqual(result.admittedReleases, ['0.2.1-rc.3'])
   assert.deepEqual(result.baselines.map(baseline => baseline.release), [
     '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3',

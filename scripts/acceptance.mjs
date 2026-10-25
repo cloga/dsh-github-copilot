@@ -26,8 +26,10 @@ function safePath(value) {
 }
 
 function validateDocuments(contract, report) {
-  keys(contract, ['schemaVersion', 'issue', 'task', 'objective', 'nonGoals', 'requirements'])
-  require(contract.schemaVersion === 1 && Number.isSafeInteger(contract.issue) && contract.issue > 0
+  const liveRequired = contract.schemaVersion === 2
+  keys(contract, ['schemaVersion', 'issue', 'task', 'objective', 'nonGoals', 'requirements',
+    ...liveRequired ? ['liveUi'] : []])
+  require([1, 2].includes(contract.schemaVersion) && Number.isSafeInteger(contract.issue) && contract.issue > 0
     && id(contract.task) && text(contract.objective))
   list(contract.nonGoals, 1, 16)
   require(contract.nonGoals.every(text))
@@ -36,10 +38,12 @@ function validateDocuments(contract, report) {
   for (const row of contract.requirements) {
     keys(row, ['id', 'expected', 'method'])
     require(id(row.id) && !required.has(row.id) && text(row.expected) && methods.includes(row.method))
+    require(liveRequired || !['browser', 'manual'].includes(row.method), 'ACCEPTANCE_LIVE_CONTRACT_REQUIRED')
     required.add(row.id)
   }
-  keys(report, ['schemaVersion', 'commit', 'contractSha256', 'producer', 'environment', 'checks'])
-  require(report.schemaVersion === 1 && typeof report.commit === 'string' && /^[a-f0-9]{40}$/.test(report.commit)
+  keys(report, ['schemaVersion', 'commit', 'contractSha256', 'producer', 'environment', 'checks',
+    ...liveRequired ? ['liveUi'] : []])
+  require(report.schemaVersion === contract.schemaVersion && typeof report.commit === 'string' && /^[a-f0-9]{40}$/.test(report.commit)
     && hash(report.contractSha256) && ['implementation', 'independent-review', 'human', 'ci'].includes(report.producer))
   keys(report.environment, ['node', 'platform', 'core'])
   require(typeof report.environment.node === 'string' && /^\d+\.\d+\.\d+$/.test(report.environment.node)
@@ -52,8 +56,10 @@ function validateDocuments(contract, report) {
   for (const check of report.checks) {
     keys(check, ['id', 'status', 'notes', 'evidence'])
     require(required.has(check.id) && !seen.has(check.id) && statuses.includes(check.status) && text(check.notes))
+    if (liveRequired) require(['observed', 'not-run', 'blocked', 'failed'].includes(check.notes)
+      && check.evidence.length === 0)
     seen.add(check.id)
-    list(check.evidence, check.status === 'passed' ? 1 : 0, 8)
+    list(check.evidence, check.status === 'passed' && !liveRequired ? 1 : 0, 8)
     const paths = new Set()
     for (const evidence of check.evidence) {
       keys(evidence, ['path', 'sha256'])
@@ -65,6 +71,102 @@ function validateDocuments(contract, report) {
   }
   require(artifacts.size <= 64)
   return artifacts
+}
+
+const panels = ['models-manage', 'plugin-details', 'about']
+const version = value => value === null || (typeof value === 'string'
+  && /^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(value) && value.length <= 100)
+const timestamp = value => Number.isSafeInteger(value) && value > 0
+
+export function validateLiveUi(contract, report) {
+  keys(contract, ['expectedPluginVersion', 'panel', 'checks'])
+  require(version(contract.expectedPluginVersion) && contract.expectedPluginVersion !== null
+    && panels.includes(contract.panel))
+  list(contract.checks, 1, 16)
+  const required = new Map()
+  for (const row of contract.checks) {
+    keys(row, ['id', 'outcome'])
+    require(id(row.id) && !required.has(row.id) && ['ready', 'actionable-failure'].includes(row.outcome))
+    required.set(row.id, row.outcome)
+  }
+  keys(report, ['appState', 'desktop', 'installed', 'loaded', 'navigation', 'handoff', 'permission', 'steps'])
+  require(['running', 'not-running', 'unknown'].includes(report.appState))
+  for (const [field, sources] of [
+    ['desktop', ['about', 'unknown']],
+    ['installed', ['disk-manifest', 'unknown']],
+    ['loaded', ['public-runtime-status', 'runtime-ui', 'unknown']],
+  ]) {
+    keys(report[field], ['version', 'source', 'observedAtMs'])
+    require(version(report[field].version) && sources.includes(report[field].source)
+      && (report[field].source === 'unknown') === (report[field].version === null)
+      && (report[field].version === null ? report[field].observedAtMs === null : timestamp(report[field].observedAtMs)))
+  }
+  keys(report.permission, ['state', 'action'])
+  require(['safe-read-only', 'approval-required', 'user-absent'].includes(report.permission.state)
+    && ['none', 'restart', 'install', 'account-switch', 'oauth', 'paid-call'].includes(report.permission.action))
+  keys(report.handoff, ['state', 'panel'])
+  require(['none', 'requested', 'user-absent'].includes(report.handoff.state)
+    && report.handoff.panel === contract.panel)
+  list(report.navigation, 0, 2)
+  const methods = new Set()
+  for (const attempt of report.navigation) {
+    keys(attempt, ['method', 'outcome', 'atMs', 'observedAtMs', 'observationSource'])
+    require(['accessible-control', 'supported-shortcut', 'user-opened-panel'].includes(attempt.method)
+      && !methods.has(attempt.method) && ['opened', 'unchanged', 'no-candidate'].includes(attempt.outcome)
+      && timestamp(attempt.atMs) && timestamp(attempt.observedAtMs)
+      && attempt.observedAtMs > attempt.atMs && attempt.observedAtMs - attempt.atMs <= 120000
+      && attempt.observationSource === 'get-window-state')
+    require(!report.navigation.slice(0, methods.size).some(row => row.outcome === 'opened'))
+    require(report.navigation.slice(0, methods.size).every(row => row.observedAtMs <= attempt.atMs))
+    methods.add(attempt.method)
+  }
+  list(report.steps, 0, 32)
+  const observed = new Map()
+  let lastEnd = 0
+  for (const step of report.steps) {
+    keys(step, ['checkId', 'action', 'observation', 'startedAtMs', 'finishedAtMs',
+      'observedAtMs', 'observationSource'])
+    require(required.has(step.checkId) && !observed.has(step.checkId)
+      && ['observe-panel', 'reopen-manage', 'refresh-models'].includes(step.action)
+      && ['ready', 'actionable-failure', 'error', 'timeout', 'unchanged'].includes(step.observation)
+      && timestamp(step.startedAtMs) && timestamp(step.finishedAtMs)
+      && step.startedAtMs >= lastEnd && step.finishedAtMs >= step.startedAtMs
+      && timestamp(step.observedAtMs) && step.observedAtMs > step.finishedAtMs
+      && step.observedAtMs - step.startedAtMs <= 120000
+      && step.observationSource === 'get-window-state')
+    lastEnd = step.observedAtMs
+    observed.set(step.checkId, step.observation)
+  }
+  const opened = report.navigation.at(-1)?.outcome === 'opened'
+  require(!opened || report.steps.every(step => step.startedAtMs >= report.navigation.at(-1).observedAtMs))
+  const qualifiedObservation = opened && report.steps.length > 0
+  const result = code => ({ code, ok: code === 'LIVE_UI_REPORTED_COMPLETE', qualifiedObservation,
+    nextAction: code === 'LIVE_UI_AUTOMATION_BLOCKED'
+      ? report.handoff.state === 'none' ? 'request-specified-panel-once' : 'wait-for-user-panel'
+      : code === 'LIVE_UI_NOT_RUN'
+        ? report.navigation.length === 0 ? 'inspect-running-app' : 'try-one-supported-alternate'
+        : code === 'LIVE_UI_PERMISSION_BLOCKED' ? 'stop-for-explicit-permission'
+          : code === 'LIVE_UI_APP_UNAVAILABLE' ? 'report-app-unavailable'
+            : code === 'LIVE_UI_HANDOFF_PENDING' ? 'wait-for-user-panel'
+              : code === 'LIVE_UI_LOADED_VERSION_UNCONFIRMED' ? 'read-public-loaded-version'
+                : code === 'LIVE_UI_VERSION_PREREQUISITE_UNMET' ? 'request-exact-upgrade-permission'
+                : code === 'LIVE_UI_INCOMPLETE' ? 'perform-remaining-authorized-checks' : 'report-result',
+    versionFixReportedConsistent: code === 'LIVE_UI_REPORTED_COMPLETE', executionVerified: false,
+    environmentVerified: false, source: 'report-consistency-only' })
+  if (report.permission.state !== 'safe-read-only' || report.permission.action !== 'none') {
+    return result('LIVE_UI_PERMISSION_BLOCKED')
+  }
+  if (report.appState !== 'running') return result('LIVE_UI_APP_UNAVAILABLE')
+  if (!opened) return result(report.navigation.length === 2
+    ? 'LIVE_UI_AUTOMATION_BLOCKED' : 'LIVE_UI_NOT_RUN')
+  if (report.handoff.state !== 'none') return result('LIVE_UI_HANDOFF_PENDING')
+  if ([...observed.values()].some(value => ['error', 'timeout', 'unchanged'].includes(value))) {
+    return result('LIVE_UI_OBSERVATION_FAILED')
+  }
+  if ([...required].some(([key, outcome]) => observed.get(key) !== outcome)) return result('LIVE_UI_INCOMPLETE')
+  if (report.loaded.version === null) return result('LIVE_UI_LOADED_VERSION_UNCONFIRMED')
+  if (report.loaded.version !== contract.expectedPluginVersion) return result('LIVE_UI_VERSION_PREREQUISITE_UNMET')
+  return result('LIVE_UI_REPORTED_COMPLETE')
 }
 
 async function readBounded(path, limit) {
@@ -154,13 +256,17 @@ async function artifactPath(root, path) {
   }
 }
 
-export async function verifyAcceptance({ root = process.cwd(), contractPath, reportPath }) {
+export async function verifyAcceptance({ root = process.cwd(), contractPath, reportPath, execute }) {
   const commit = cleanHead(root)
   const contractBytes = await readBounded(resolve(contractPath), 65536)
   const reportBytes = await readBounded(resolve(reportPath), 65536)
   const contract = json(contractBytes)
   const report = json(reportBytes)
   const artifacts = validateDocuments(contract, report)
+  const liveUi = contract.schemaVersion === 2 ? validateLiveUi(contract.liveUi, report.liveUi) : null
+  if (liveUi) require(contract.liveUi.checks.every(row => contract.requirements.some(required => required.id === row.id)))
+  if (liveUi) require(contract.requirements.filter(row => ['browser', 'manual'].includes(row.method))
+    .every(row => contract.liveUi.checks.some(live => live.id === row.id)))
   require(report.commit === commit, 'ACCEPTANCE_STALE_COMMIT')
   require(report.contractSha256 === digest(contractBytes), 'ACCEPTANCE_STALE_CONTRACT')
   const evidenceRoot = await realpath(dirname(resolve(reportPath)))
@@ -177,12 +283,24 @@ export async function verifyAcceptance({ root = process.cwd(), contractPath, rep
     && digest(await readBounded(resolve(reportPath), 65536)) === digest(reportBytes), 'ACCEPTANCE_FILE_CHANGED')
   require(cleanHead(root) === commit, 'ACCEPTANCE_STALE_COMMIT')
   const counts = Object.fromEntries(statuses.map(status => [status, report.checks.filter(check => check.status === status).length]))
+  let ci = null
+  if (liveUi) {
+    const { runGuardedOperation } = await import('./environment-guard.mjs')
+    ci = await runGuardedOperation({ task: String(contract.issue), environment: 'github-actions-evidence',
+      operation: 'ci-evidence', head: commit, root, execute })
+    require(cleanHead(root) === commit, 'ACCEPTANCE_STALE_COMMIT')
+    require(digest(await readBounded(resolve(contractPath), 65536)) === digest(contractBytes)
+      && digest(await readBounded(resolve(reportPath), 65536)) === digest(reportBytes), 'ACCEPTANCE_FILE_CHANGED')
+  }
+  const ok = counts.passed === contract.requirements.length && (!liveUi || (liveUi.ok && ci.ok))
   return {
     schemaVersion: 1, kind: 'acceptance-evidence-consistency',
-    ok: counts.passed === contract.requirements.length,
+    ok,
     issue: contract.issue, commit, contractSha256: report.contractSha256, counts,
     evidenceIntegrityVerified: true, executionVerified: false, independenceVerified: false,
     environmentVerified: false, deliveryAuthorized: false,
+    ...liveUi ? { state: ok ? 'reported-complete' : 'blocked', closeEligible: ok,
+      liveUi, ci, ciVerified: ci.ok } : {},
   }
 }
 

@@ -10,7 +10,16 @@
     "cleanHeadRequired": true,
     "executionVerified": false,
     "independenceVerified": false,
-    "automaticUpload": false
+    "automaticUpload": false,
+    "liveUi": {
+      "schemaVersion": 2,
+      "ci": "guarded-exact-head",
+      "source": "report-consistency-only",
+      "browserManualRequireLiveContract": true,
+      "automaticClosure": false,
+      "maxNavigationMethods": 2,
+      "maxObservationMs": 120000
+    }
   },
   "boundaries": {
     "credentialOwner": "DSH credentials and pi-ai OAuth; canonical compatibility record is preserved. Approved #297 plugin account records are directly authorized, never copied; immutable request binding and managed-only CAS switching. Only an exact single committed plugin-owned native refresh with unchanged account, entitlement and endpoint may retain already-dispatched HTTP streams; all reusable proof is invalidated. Unknown/external/Core-only notifications still revoke. Never request, log or export grants.",
