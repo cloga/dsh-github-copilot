@@ -19,7 +19,7 @@ const git = (root, ...args) => {
 
 const liveContract = () => ({
   expectedPluginVersion: '0.1.0-alpha.1', panel: 'models-manage',
-  checks: [{ id: 'acceptance-binding', outcome: 'ready' }],
+  checks: [{ id: 'acceptance-binding', action: 'reopen-manage', outcome: 'ready' }],
 })
 const liveReport = () => ({
   appState: 'running',
@@ -48,6 +48,7 @@ for (const [name, mutate, code] of [
     r.steps = []; r.handoff.state = 'requested'
   }, 'LIVE_UI_AUTOMATION_BLOCKED'],
   ['missing check', r => { r.steps = [] }, 'LIVE_UI_INCOMPLETE'],
+  ['wrong action for required check', r => { r.steps[0].action = 'observe-panel' }, 'LIVE_UI_INCOMPLETE'],
   ['error', r => { r.steps[0].observation = 'error' }, 'LIVE_UI_OBSERVATION_FAILED'],
   ['timeout', r => { r.steps[0].observation = 'timeout' }, 'LIVE_UI_OBSERVATION_FAILED'],
   ['no change', r => { r.steps[0].observation = 'unchanged' }, 'LIVE_UI_OBSERVATION_FAILED'],

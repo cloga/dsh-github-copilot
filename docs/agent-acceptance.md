@@ -88,8 +88,8 @@ Use the same `agent.mjs accept` command and base contract/report fields, with
     "expectedPluginVersion": "0.1.0-alpha.1",
     "panel": "models-manage",
     "checks": [
-      { "id": "manage-reopen", "outcome": "ready" },
-      { "id": "refresh-settles", "outcome": "ready" }
+      { "id": "manage-reopen", "action": "reopen-manage", "outcome": "ready" },
+      { "id": "refresh-settles", "action": "refresh-models", "outcome": "ready" }
     ]
   }
 }
@@ -98,7 +98,8 @@ Use the same `agent.mjs accept` command and base contract/report fields, with
 Every live check ID must exist in `requirements`; every `browser`/`manual`
 requirement must occur in `liveUi.checks`. Define the required scenarios before
 capture: success in a signed-in case cannot substitute for a missing no-account
-or failure scenario. There are 1-16 unique live checks. Expected outcomes are
+or failure scenario. Report actions must match each required action; observing
+a panel cannot satisfy a required refresh or reopen. There are 1-16 unique live checks. Expected outcomes are
 `ready` or `actionable-failure` (the latter is for an explicitly required error
 presentation scenario, never a generic failure waiver). Panels are only
 `models-manage`, `plugin-details` or `about`.

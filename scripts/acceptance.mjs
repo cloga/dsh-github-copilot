@@ -85,9 +85,10 @@ export function validateLiveUi(contract, report) {
   list(contract.checks, 1, 16)
   const required = new Map()
   for (const row of contract.checks) {
-    keys(row, ['id', 'outcome'])
-    require(id(row.id) && !required.has(row.id) && ['ready', 'actionable-failure'].includes(row.outcome))
-    required.set(row.id, row.outcome)
+    keys(row, ['id', 'action', 'outcome'])
+    require(id(row.id) && !required.has(row.id) && ['ready', 'actionable-failure'].includes(row.outcome)
+      && ['observe-panel', 'reopen-manage', 'refresh-models'].includes(row.action))
+    required.set(row.id, row)
   }
   keys(report, ['appState', 'desktop', 'installed', 'loaded', 'navigation', 'handoff', 'permission', 'steps'])
   require(['running', 'not-running', 'unknown'].includes(report.appState))
@@ -135,7 +136,7 @@ export function validateLiveUi(contract, report) {
       && step.observedAtMs - step.startedAtMs <= 120000
       && step.observationSource === 'get-window-state')
     lastEnd = step.observedAtMs
-    observed.set(step.checkId, step.observation)
+    observed.set(step.checkId, step)
   }
   const opened = report.navigation.at(-1)?.outcome === 'opened'
   require(!opened || report.steps.every(step => step.startedAtMs >= report.navigation.at(-1).observedAtMs))
@@ -160,10 +161,11 @@ export function validateLiveUi(contract, report) {
   if (!opened) return result(report.navigation.length === 2
     ? 'LIVE_UI_AUTOMATION_BLOCKED' : 'LIVE_UI_NOT_RUN')
   if (report.handoff.state !== 'none') return result('LIVE_UI_HANDOFF_PENDING')
-  if ([...observed.values()].some(value => ['error', 'timeout', 'unchanged'].includes(value))) {
+  if ([...observed.values()].some(value => ['error', 'timeout', 'unchanged'].includes(value.observation))) {
     return result('LIVE_UI_OBSERVATION_FAILED')
   }
-  if ([...required].some(([key, outcome]) => observed.get(key) !== outcome)) return result('LIVE_UI_INCOMPLETE')
+  if ([...required].some(([key, expected]) => observed.get(key)?.observation !== expected.outcome
+    || observed.get(key)?.action !== expected.action)) return result('LIVE_UI_INCOMPLETE')
   if (report.loaded.version === null) return result('LIVE_UI_LOADED_VERSION_UNCONFIRMED')
   if (report.loaded.version !== contract.expectedPluginVersion) return result('LIVE_UI_VERSION_PREREQUISITE_UNMET')
   return result('LIVE_UI_REPORTED_COMPLETE')
