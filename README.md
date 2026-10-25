@@ -25,6 +25,8 @@ maintenance is promised. See [release selection](./docs/npm-distribution.md#exac
 
 **Compaction planning:** alpha.15 fixes byte counts being compared with token budgets in the separately selected recovery engine. Planning now uses the public native token meter, preserving complete tool relations and final native admission. Truly oversized balanced units still fail explicitly; this is not history repair or guaranteed recovery. See [compaction recovery](./docs/manual-compaction-recovery.md).
 
+**Responses replay refusal:** a locally rejected incomplete, reference-only, summary-only reasoning item, or previous-response reference now adds a bounded structural reason to the native `INVALID_REQUEST`: fixed reason code, zero-based input index when applicable, allowlisted type/status, and field-presence booleans only. The rejected request is not dispatched and history remains unchanged; IDs, summaries, tool data, unknown fields, and encrypted bytes are never included in diagnostics. Valid encrypted replay bytes and `call_id` pairing remain intact. This diagnosis does not recover or rewrite old history.
+
 **Historical DSH alpha.5 adaptation:** exact public APIs used pi-ai `1.1.0`, the official
 Cordis/schemastery peers and storage-domain's Zod `4.4.3`. The
 [fixed-target official-first review](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha5.md)

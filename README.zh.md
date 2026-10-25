@@ -23,6 +23,8 @@ Core alpha.4 对应 alpha.16，alpha.5 保留其历史线，rc.3 对应当前待
 
 **压缩规划：**alpha.15 修复独立选择的恢复引擎将字节数与 token 预算直接比较的问题，改用公开的原生 token meter，保留完整工具关系和最终原生准入。真正超大的配对历史单元仍明确失败；这不是历史修复，也不保证恢复成功。参见[压缩恢复](./docs/manual-compaction-recovery.md)。
 
+**Responses replay 拒绝诊断：**本地拒绝不完整、仅引用、只有摘要的 reasoning 条目或 previous-response 引用时，原生 `INVALID_REQUEST` 会附带有界结构原因：固定原因码、适用时从零开始的输入位置、白名单 type/status，以及字段存在性布尔值。被拒绝的请求不会发出，历史保持不变；诊断不会包含 ID、摘要、工具数据、未知字段或加密 bytes。有效加密 replay bytes 和 `call_id` 配对保持原样。此诊断不会恢复或改写旧历史。
+
 **历史 DSH alpha.5 适配：**公开 API 对齐 pi-ai `1.1.0`、官方 Cordis／schemastery peer，
 以及 storage-domain 的 Zod `4.4.3`。
 [固定目标的 official-first 调研](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha5.md)

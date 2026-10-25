@@ -96,8 +96,9 @@ async function runtime(initial: RecordValue | undefined = grant(), config: Previ
   }
 }
 function event(type: string, data: Record<string, unknown>) { return `data: ${JSON.stringify({ type, ...data })}\n\n` }
-function response(tool = false, phase?: 'commentary' | 'final_answer', text = 'hello') {
-  const reasoning = { type: 'reasoning', id: 'rs_synthetic', summary: [{ type: 'summary_text', text: 'Public summary.' }], encrypted_content: 'synthetic-opaque-replay' }
+function response(tool = false, phase?: 'commentary' | 'final_answer', text = 'hello', encryptedReasoning = true) {
+  const reasoning = { type: 'reasoning', id: 'rs_synthetic', summary: [{ type: 'summary_text', text: 'Public summary.' }],
+    ...encryptedReasoning ? { encrypted_content: 'synthetic-opaque-replay' } : {} }
   const output = tool ? { type: 'function_call', id: 'fc_synthetic', call_id: 'call_synthetic', name: 'echo', arguments: '{"value":"hi"}' }
     : { type: 'message', id: 'msg_synthetic', role: 'assistant', content: [{ type: 'output_text', text }],
       ...phase === undefined ? {} : { phase } }
@@ -1712,6 +1713,32 @@ describe('plugin-owned account Copilot route', () => {
     }
     expect(JSON.stringify(first.message)).toBe(durableReplay)
     expect(second.message.content.every(block => block.type !== 'text' || !block.text.includes('synthetic-opaque-replay'))).toBe(true)
+  })
+
+  it('surfaces safe replay structure as native INVALID_REQUEST without dispatching or changing history', async () => {
+    const bodies: Record<string, unknown>[] = []
+    stubFetch(async (input, init) => {
+      if (!String(input).endsWith('/responses')) return catalogResponse()
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      return bodies.length === 1 ? response(false, undefined, 'hello', false) : response()
+    })
+    const harness = await runtime()
+    const first = await call(harness.ctx)
+    expect(first.assembler.finish).toEqual({ kind: 'stop' })
+    const historyBefore = JSON.stringify(first.message)
+    const second = await call(harness.ctx, { messages: [first.message,
+      createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } }),
+    ] })
+    expect(second.assembler.finish).toMatchObject({ kind: 'error', failure: {
+      code: 'INVALID_REQUEST',
+      message: expect.stringContaining('REASONING_WITHOUT_ENCRYPTED_CONTENT'),
+    } })
+    const finish = second.assembler.finish
+    const failure = finish.kind === 'error' ? finish.failure : undefined
+    expect(failure?.message).toMatch(/inputIndex=\d+/)
+    expect(failure?.message).not.toMatch(/rs_synthetic|Public summary|synthetic-opaque-replay/)
+    expect(bodies).toHaveLength(1)
+    expect(JSON.stringify(first.message)).toBe(historyBefore)
   })
 
   it.each(['commentary', 'final_answer'] as const)('preserves native assistant %s phase on second-turn replay without connection-scoped IDs', async phase => {
