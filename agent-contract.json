@@ -16,6 +16,7 @@
       "ci": "guarded-exact-head",
       "source": "report-consistency-only",
       "browserManualRequireLiveContract": true,
+      "upgradeSource": "exact-github-release-url-or-verified-cache",
       "automaticClosure": false,
       "maxNavigationMethods": 2,
       "maxObservationMs": 120000

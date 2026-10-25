@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { constants } from 'node:fs'
 import { lstat, open, realpath } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
+import executionPolicy from '../agent-execution-policy.json' with { type: 'json' }
 
 const statuses = ['passed', 'failed', 'blocked', 'not-run']
 const methods = ['static', 'unit', 'integration', 'browser', 'review', 'manual']
@@ -90,7 +91,8 @@ export function validateLiveUi(contract, report) {
       && ['observe-panel', 'reopen-manage', 'refresh-models'].includes(row.action))
     required.set(row.id, row)
   }
-  keys(report, ['appState', 'desktop', 'installed', 'loaded', 'navigation', 'handoff', 'permission', 'steps'])
+  keys(report, ['appState', 'desktop', 'installed', 'loaded', 'upgradeSource',
+    'navigation', 'handoff', 'permission', 'steps'])
   require(['running', 'not-running', 'unknown'].includes(report.appState))
   for (const [field, sources] of [
     ['desktop', ['about', 'unknown']],
@@ -102,6 +104,15 @@ export function validateLiveUi(contract, report) {
       && (report[field].source === 'unknown') === (report[field].version === null)
       && (report[field].version === null ? report[field].observedAtMs === null : timestamp(report[field].observedAtMs)))
   }
+  const source = report.upgradeSource
+  keys(source, ['kind', 'version', 'url', 'sha256', 'releaseSha256', 'fallbackReason', 'observedAtMs'])
+  require(['github-release-url', 'verified-github-cache', 'local-build', 'source-directory',
+    'link-worktree', 'unknown'].includes(source.kind) && version(source.version)
+    && (source.url === null || source.url === `https://github.com/${executionPolicy.repository}/releases/download/v${source.version}/dsh-github-copilot-${source.version}.tgz`)
+    && (source.sha256 === null || hash(source.sha256))
+    && (source.releaseSha256 === null || hash(source.releaseSha256))
+    && ['none', 'native-url-unavailable', 'native-url-rejected'].includes(source.fallbackReason)
+    && (source.observedAtMs === null || timestamp(source.observedAtMs)))
   keys(report.permission, ['state', 'action'])
   require(['safe-read-only', 'approval-required', 'user-absent'].includes(report.permission.state)
     && ['none', 'restart', 'install', 'account-switch', 'oauth', 'paid-call'].includes(report.permission.action))
@@ -142,6 +153,7 @@ export function validateLiveUi(contract, report) {
   require(!opened || report.steps.every(step => step.startedAtMs >= report.navigation.at(-1).observedAtMs))
   const qualifiedObservation = opened && report.steps.length > 0
   const result = code => ({ code, ok: code === 'LIVE_UI_REPORTED_COMPLETE', qualifiedObservation,
+    upgradeSourceKind: source.kind, provenanceVerified: false,
     nextAction: code === 'LIVE_UI_AUTOMATION_BLOCKED'
       ? report.handoff.state === 'none' ? 'request-specified-panel-once' : 'wait-for-user-panel'
       : code === 'LIVE_UI_NOT_RUN'
@@ -151,6 +163,7 @@ export function validateLiveUi(contract, report) {
             : code === 'LIVE_UI_HANDOFF_PENDING' ? 'wait-for-user-panel'
               : code === 'LIVE_UI_LOADED_VERSION_UNCONFIRMED' ? 'read-public-loaded-version'
                 : code === 'LIVE_UI_VERSION_PREREQUISITE_UNMET' ? 'request-exact-upgrade-permission'
+                  : code === 'LIVE_UI_UPGRADE_SOURCE_REJECTED' ? 'select-exact-github-release-url'
                 : code === 'LIVE_UI_INCOMPLETE' ? 'perform-remaining-authorized-checks' : 'report-result',
     versionFixReportedConsistent: code === 'LIVE_UI_REPORTED_COMPLETE', executionVerified: false,
     environmentVerified: false, source: 'report-consistency-only' })
@@ -168,6 +181,12 @@ export function validateLiveUi(contract, report) {
     || observed.get(key)?.action !== expected.action)) return result('LIVE_UI_INCOMPLETE')
   if (report.loaded.version === null) return result('LIVE_UI_LOADED_VERSION_UNCONFIRMED')
   if (report.loaded.version !== contract.expectedPluginVersion) return result('LIVE_UI_VERSION_PREREQUISITE_UNMET')
+  if (!['github-release-url', 'verified-github-cache'].includes(source.kind)
+    || source.version !== contract.expectedPluginVersion || source.url === null
+    || source.sha256 === null || source.sha256 !== source.releaseSha256 || source.observedAtMs === null
+    || (source.kind === 'github-release-url' ? source.fallbackReason !== 'none' : source.fallbackReason === 'none')) {
+    return result('LIVE_UI_UPGRADE_SOURCE_REJECTED')
+  }
   return result('LIVE_UI_REPORTED_COMPLETE')
 }
 

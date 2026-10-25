@@ -87,3 +87,10 @@ supported navigation methods, then request the specified panel once; do not
 equate user absence with permission or with a panel actually opened. Repository
 scripts never control Desktop, activate windows via shell, install/restart, or
 authorize account/OAuth/paid operations. See AGENTS.md for the controlled workflow.
+
+Formal upgrade evidence also enforces GitHub-first source selection: the exact
+published Release asset URL is preferred; a verified GitHub-downloaded tgz is
+only a separately labeled cache fallback with matching recorded archive/Release
+SHA-256 and a fixed native-URL failure reason. Local builds/source directories/
+links/worktrees are not eligible. This validates reported selection, not remote
+asset existence, authenticated provenance, installation permission or loading.

@@ -112,6 +112,7 @@ The report adds exactly `liveUi` with:
 | `desktop` | `{version, source, observedAtMs}`; source `about` or `unknown` |
 | `installed` | Same shape; source `disk-manifest` or `unknown` |
 | `loaded` | Same shape; source `public-runtime-status`, `runtime-ui` or `unknown` |
+| `upgradeSource` | `{kind, version, url, sha256, releaseSha256, fallbackReason, observedAtMs}` as below |
 | `navigation` | 0-2 unique-method `{method, outcome, atMs, observedAtMs, observationSource}` rows |
 | `handoff` | `{state, panel}`; state `none`, `requested`, `user-absent`; panel equals contract |
 | `permission` | `{state, action}`; state `safe-read-only`, `approval-required`, `user-absent` |
@@ -129,6 +130,43 @@ with `request-exact-upgrade-permission`, not automation failure. A matching
 download/checksum does not prove installation or loading. If the exact required
 install/restart needs specific consent, an unavailable user leaves it blocked;
 a broad request to continue acceptance never fabricates that consent.
+
+### Formal upgrade source selection
+
+Prefer the published **exact-version GitHub Release asset canonical URL**:
+`https://github.com/<policy.repository>/releases/download/v<VERSION>/dsh-github-copilot-<VERSION>.tgz`.
+The repository comes from `agent-execution-policy.json`; both version positions
+must equal `expectedPluginVersion`. Do not use local source directories, links,
+worktrees or locally built archives as formal upgrade acceptance sources.
+
+`upgradeSource.kind` is `github-release-url` (preferred),
+`verified-github-cache` (fallback only), `local-build`, `source-directory`,
+`link-worktree` or `unknown`. A tgz downloaded from the canonical Release URL and
+checked against the published SHA-256 is a **GitHub download cache**, not a local
+build. Keep those labels distinct even though both reside on disk.
+
+For either eligible source, record the exact version, canonical originating URL,
+archive `sha256`, published `releaseSha256` and positive integer `observedAtMs`.
+Both lowercase SHA-256 values must be present and equal. Preferred URL use
+requires `fallbackReason: "none"`. Cache use requires the fixed reason
+`native-url-unavailable` or `native-url-rejected`; convenience or a local build
+is not a fallback reason. Reuse existing Release/SHA256SUMS evidence for these
+facts. Never substitute a source path, mutable branch URL, npm alias, token,
+signed redirect URL, account name or raw download error. Unknown values may be
+null and local/unknown source kinds can be recorded, but cannot pass final
+acceptance. Malformed/foreign URLs are invalid; disallowed/incomplete source
+evidence yields `LIVE_UI_UPGRADE_SOURCE_REJECTED`.
+
+This is executable **source-selection report consistency**, not an installer
+or new provenance attestation. The checker does not download assets, read local
+installation paths, authenticate a reported hash, prove Release existence, or
+operate native UI. Results retain `upgradeSourceKind` and
+`provenanceVerified: false`; an invented matching hash cannot be detected by
+this checker. Actual Release/readback, archive integrity, install permission,
+installed-on-disk and loaded-runtime evidence remain distinct. Do not reinstall,
+restart or bypass warnings just to populate the report.
+
+### Navigation and outcomes
 
 Navigation methods are `accessible-control`, `supported-shortcut` or
 `user-opened-panel`; outcomes are `opened`, `unchanged`, `no-candidate`. Do not

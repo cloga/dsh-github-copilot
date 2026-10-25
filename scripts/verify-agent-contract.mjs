@@ -150,7 +150,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
   'acceptance evidence must retain clean-HEAD integrity and explicit unverified execution/independence')
   require(JSON.stringify(acceptance.liveUi) === JSON.stringify({
     schemaVersion: 2, ci: 'guarded-exact-head', source: 'report-consistency-only',
-    browserManualRequireLiveContract: true, automaticClosure: false,
+    browserManualRequireLiveContract: true,
+    upgradeSource: 'exact-github-release-url-or-verified-cache',
+    automaticClosure: false,
     maxNavigationMethods: 2, maxObservationMs: 120000,
   }), 'live UI acceptance must retain bounded navigation, exact-head CI and unverified report semantics')
   await file(acceptance.policy)

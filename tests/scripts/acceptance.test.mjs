@@ -26,6 +26,11 @@ const liveReport = () => ({
   desktop: { version: '0.2.1-rc.3', source: 'about', observedAtMs: 1000 },
   installed: { version: '0.1.0-alpha.1', source: 'disk-manifest', observedAtMs: 1000 },
   loaded: { version: '0.1.0-alpha.1', source: 'public-runtime-status', observedAtMs: 1000 },
+  upgradeSource: {
+    kind: 'github-release-url', version: '0.1.0-alpha.1',
+    url: 'https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1/dsh-github-copilot-0.1.0-alpha.1.tgz',
+    sha256: 'a'.repeat(64), releaseSha256: 'a'.repeat(64), fallbackReason: 'none', observedAtMs: 1000,
+  },
   navigation: [{ method: 'accessible-control', outcome: 'opened', atMs: 1001,
     observedAtMs: 1002, observationSource: 'get-window-state' }],
   handoff: { state: 'none', panel: 'models-manage' },
@@ -54,6 +59,22 @@ for (const [name, mutate, code] of [
   ['no change', r => { r.steps[0].observation = 'unchanged' }, 'LIVE_UI_OBSERVATION_FAILED'],
   ['user absent', r => { r.permission.state = 'user-absent' }, 'LIVE_UI_PERMISSION_BLOCKED'],
   ['handoff not opened', r => { r.handoff.state = 'requested' }, 'LIVE_UI_HANDOFF_PENDING'],
+  ...['local-build', 'source-directory', 'link-worktree', 'unknown'].map(kind => [
+    `upgrade from ${kind}`, r => { r.upgradeSource.kind = kind }, 'LIVE_UI_UPGRADE_SOURCE_REJECTED',
+  ]),
+  ['unexplained local cache', r => { r.upgradeSource.kind = 'verified-github-cache' }, 'LIVE_UI_UPGRADE_SOURCE_REJECTED'],
+  ['cache hash mismatch', r => {
+    r.upgradeSource.kind = 'verified-github-cache'; r.upgradeSource.fallbackReason = 'native-url-rejected'
+    r.upgradeSource.sha256 = 'b'.repeat(64)
+  }, 'LIVE_UI_UPGRADE_SOURCE_REJECTED'],
+  ['missing release digest', r => { r.upgradeSource.releaseSha256 = null }, 'LIVE_UI_UPGRADE_SOURCE_REJECTED'],
+  ['cache without archive hash', r => {
+    r.upgradeSource.kind = 'verified-github-cache'; r.upgradeSource.fallbackReason = 'native-url-unavailable'
+    r.upgradeSource.sha256 = null
+  }, 'LIVE_UI_UPGRADE_SOURCE_REJECTED'],
+  ['preferred URL mislabeled as fallback', r => {
+    r.upgradeSource.fallbackReason = 'native-url-rejected'
+  }, 'LIVE_UI_UPGRADE_SOURCE_REJECTED'],
   ...['restart', 'install', 'account-switch', 'oauth', 'paid-call'].map(action => [
     `permission for ${action}`, r => { r.permission = { state: 'approval-required', action } },
     'LIVE_UI_PERMISSION_BLOCKED',
@@ -82,6 +103,9 @@ for (const [name, mutate] of [
   ['action receipt instead of fresh UI observation', r => { r.steps[0].observationSource = 'action-done' }],
   ['immediate diff instead of fresh navigation observation', r => { r.navigation[0].observationSource = 'action-diff' }],
   ['stale post-action observation', r => { r.steps[0].observedAtMs = r.steps[0].finishedAtMs }],
+  ['local source path', r => { r.upgradeSource.url = 'C:\\local\\build.tgz' }],
+  ['wrong release version URL', r => { r.upgradeSource.url = r.upgradeSource.url.replaceAll('alpha.1', 'alpha.2') }],
+  ['noncanonical release URL', r => { r.upgradeSource.url = 'https://example.invalid/package.tgz' }],
 ]) {
   test(`live consistency rejects ${name} with a fixed diagnostic`, () => {
     const report = liveReport()
@@ -98,6 +122,12 @@ test('complete bounded live evidence remains a consistency judgment, not executi
   const contract = liveContract(), report = liveReport()
   contract.checks[0].outcome = report.steps[0].observation = 'actionable-failure'
   assert.equal(validateLiveUi(contract, report).ok, true)
+  report.upgradeSource.kind = 'verified-github-cache'
+  report.upgradeSource.fallbackReason = 'native-url-unavailable'
+  const cached = validateLiveUi(contract, report)
+  assert.equal(cached.ok, true)
+  assert.equal(cached.upgradeSourceKind, 'verified-github-cache')
+  assert.equal(cached.provenanceVerified, false)
 })
 
 test('navigation escalation asks for the specified panel once without inferring user response', () => {

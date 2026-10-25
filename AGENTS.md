@@ -333,6 +333,14 @@ permission stay blocked. Do not repeat exhausted methods on ordinary continuatio
 Record only fixed action/outcome codes, numeric times and version/source facts;
 never upload identities, credentials or conversation content. Unknown loaded
 version permits qualified observations only, not a version-specific fix claim.
+For formal upgrade acceptance, prefer the published exact-version GitHub Release
+asset canonical URL, never a local source directory, build, link or worktree.
+A downloaded official tgz is a verified GitHub cache, not a local build; use it
+only as a documented fallback when native URL delivery is unavailable/rejected.
+Record exact source URL/version, archive and Release SHA-256, numeric observation
+time and fixed fallback reason separately. Matching hashes do not grant install
+or restart permission or prove the resulting runtime loaded. The consistency
+checker never downloads/installs or independently authenticates this provenance.
 Missing/not-run/blocked/error/timeout evidence cannot close the task; even a
 consistent complete report is not trusted proof of execution or automatic closure.
 

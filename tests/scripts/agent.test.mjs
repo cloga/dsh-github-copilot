@@ -22,6 +22,7 @@ test('describes actual package metadata without claiming a release exists', asyn
   assert.deepEqual(result.acceptance.liveUi, {
     schemaVersion: 2, ci: 'guarded-exact-head', source: 'report-consistency-only',
     browserManualRequireLiveContract: true, automaticClosure: false,
+    upgradeSource: 'exact-github-release-url-or-verified-cache',
     maxNavigationMethods: 2, maxObservationMs: 120000,
   })
   assert.deepEqual(result.admittedReleases, ['0.2.1-rc.3'])
