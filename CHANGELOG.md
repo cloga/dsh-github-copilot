@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.4.dsh.0.2.1.rc.3 (prepared)
+
+- Carry forward bounded Responses replay refusal diagnostics from retired draft #218 under #446: fixed reasons, zero-based input positions, allowlisted type/status and field-presence booleans through the existing native `INVALID_REQUEST` surface. No IDs, summaries, tool data, unknown values or encrypted bytes enter diagnostics.
+- Exercise current pinned pi-ai 1.1.0 synthetic two-turn summary-only rejection and terminal encryption backfill, preserving original history, exact opaque bytes and `call_id` pairing. Retain existing replay acceptance, account isolation, consent and cancellation ownership; no new retry, history deletion or model switch.
+- Prepare the next same-Core candidate metadata for required PR validation only. No tag, merge, publication, profile installation, restart or live model call is authorized.
+
 ## 0.1.0-alpha.3.dsh.0.2.1.rc.3 (prepared)
 
 - Explain projected-image admission failures through the standard native error path with bounded model, projected/allowed MIME, projected role/position and current build details (#426). Retain the existing fail-closed gate, explicit account restrictions and native projection ownership.
