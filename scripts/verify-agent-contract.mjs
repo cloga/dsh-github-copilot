@@ -150,6 +150,41 @@ export async function verifyAgentContract(root = repositoryRoot) {
   'acceptance evidence must retain clean-HEAD integrity and explicit unverified execution/independence')
   await file(acceptance.policy)
   await file(acceptance.implementation)
+  const executionPolicy = JSON.parse(await readFile(resolve(root, 'agent-execution-policy.json'), 'utf8'))
+  require(executionPolicy.schemaVersion === 1 && executionPolicy.repository === 'cloga/dsh-github-copilot'
+    && executionPolicy.ownerTask === 'tooling' && executionPolicy.maxTaskScopes === 128
+    && JSON.stringify(executionPolicy.environments?.['local-auxiliary']?.operations) === JSON.stringify(['scripts-test'])
+    && JSON.stringify(executionPolicy.environments?.['github-actions-evidence']?.operations) === JSON.stringify(['ci-evidence'])
+    && executionPolicy.operations?.['dependency-install']?.kind === 'network'
+    && executionPolicy.operations['dependency-install'].maxFailures === 0
+    && executionPolicy.operations?.['scripts-test']?.environment === 'local-auxiliary'
+    && executionPolicy.operations['scripts-test'].maxFailures === 2
+    && JSON.stringify(executionPolicy.operations['scripts-test'].argv) === JSON.stringify([
+      'node', '--test', 'tests/scripts/agent.test.mjs', 'tests/scripts/acceptance.test.mjs',
+      'tests/scripts/environment-guardrails.test.mjs',
+    ])
+    && executionPolicy.operations?.['ci-evidence']?.environment === 'github-actions-evidence'
+    && executionPolicy.operations['ci-evidence'].maxFailures === 2
+    && executionPolicy.operations['ci-evidence'].maxApiCalls === 3
+    && executionPolicy.operations['ci-evidence'].requestTimeoutMs === 15000
+    && executionPolicy.operations['ci-evidence'].workflowPath === '.github/workflows/ci.yml'
+    && JSON.stringify(executionPolicy.operations['ci-evidence'].requiredJobs) === JSON.stringify([
+      'verify (ubuntu-latest)', 'verify (windows-latest)',
+      'Published adapter (ubuntu-latest)', 'Published adapter (windows-latest)', 'release-ready',
+    ])
+    && JSON.stringify(executionPolicy.operations['ci-evidence'].optionalJobs) === JSON.stringify([
+      { name: 'release', allowedConclusions: ['success', 'skipped'] },
+    ]), 'environment policy must retain explicit environments, refusal, bounded budgets and exact CI jobs')
+  await file('agent-execution-policy.json')
+  await file('docs/environment-evidence-guardrails.md')
+  require(contract.tasks.tooling.read.includes('agent-execution-policy.json')
+    && contract.tasks.tooling.read.includes('scripts/environment-guard.mjs')
+    && contract.tasks.tooling.read.includes('docs/environment-evidence-guardrails.md')
+    && contract.tasks.tooling.tests.includes('tests/scripts/environment-guardrails.test.mjs')
+    && contract.tasks.tooling.risk.includes('cannot prevent direct shell bypass')
+    && agentGuide.includes('cannot prevent direct shell bypass')
+    && agentGuide.includes('Do not retry local dependency restoration'),
+  'environment and CI guardrails must remain documented, bounded and registered')
   require(contract.tasks.tooling.read.includes(acceptance.policy)
     && contract.tasks.tooling.read.includes(acceptance.implementation)
     && template.includes('### Acceptance evidence'), 'acceptance evidence entrypoints are missing')
@@ -165,7 +200,12 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }
   const ciWorkflow = await readFile(resolve(root, '.github/workflows/ci.yml'), 'utf8')
   const releaseWorkflow = await readFile(resolve(root, '.github/workflows/release.yml'), 'utf8')
-  require(ciWorkflow.includes('release-ready:') && ciWorkflow.includes('uses: ./.github/workflows/release.yml'), 'main CI must gate and call reusable release delivery')
+  require(ciWorkflow.includes('verify:') && ciWorkflow.includes('runs-on: ${{ matrix.os }}')
+    && ciWorkflow.includes('os: [ubuntu-latest, windows-latest]')
+    && ciWorkflow.includes('name: Published adapter (${{ matrix.os }})')
+    && ciWorkflow.includes('release-ready:')
+    && ciWorkflow.includes('uses: ./.github/workflows/release.yml'),
+  'CI evidence job names must match the required Windows/Linux matrix and published-adapter checks')
   require(releaseWorkflow.includes('workflow_call:') && releaseWorkflow.includes('scripts/release-policy.mjs --plan')
     && releaseWorkflow.includes('scripts/publish-release.mjs'), 'release workflow must plan and publish the exact main commit')
   require(releaseWorkflow.includes('scripts/publish-npm.mjs') && releaseWorkflow.includes('scripts/prepare-release-artifact.mjs')

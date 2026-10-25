@@ -22,7 +22,7 @@ This repository follows a **plugin-only** policy: implement fixes in `dsh-github
 2. Read this file, then `node scripts/agent.mjs describe --json`. `agent-contract.json` maps each task to its owning files, focused tests, risks and approval boundaries; package scripts and release URLs are derived from current metadata.
 3. Run `node scripts/agent.mjs doctor --json` before install. It is a dependency-free, read-only repository preflight: exit 0 means preflight passed, 1 means prerequisites missing, 2 means invalid arguments/metadata. Build presence is not build freshness, and no live DSH or credential readiness is claimed.
 4. Choose a task with `node scripts/agent.mjs plan models --json` (or authorization/search/client/compatibility/tooling/release). Output is an unexecuted argv plan, never implicit permission to run destructive operations.
-5. Use Node 24 LTS for development and the exact pnpm version in `package.json`; the runtime dependency floor is Node 22.19.0. Run frozen install in this checkout. Dependencies/build output are not carried into worktrees.
+5. Use Node 24 LTS for development and the exact pnpm version in `package.json`; the runtime dependency floor is Node 22.19.0. Select the execution environment and task explicitly with `node scripts/agent.mjs guard`. Local auxiliary checks are limited to the guarded dependency-free script tests; dependency installation and full verification belong to GitHub Actions. Do not retry local dependency restoration, change registries, or treat local reports/idle sessions as CI evidence. The guard applies only to operations routed through it; it cannot prevent direct shell bypass.
 6. Create/reuse a tracking issue and feature branch, implement a regression first, run the full gate, inspect the diff, and open a PR. For requested delivery, merge after required review/CI and branch protection without a separate approval prompt, unless the user limits scope. Important updates continue through the release-delivery rule below. Live-profile install and worktree checkout still require explicit user approval.
 
 Use native DSH tools for goals, background jobs and scoped subagents. Use local Git and the GitHub REST API for delivery; no external orchestration daemon, roster or `vcs_*` tool is required. Do not assume a model provider's identity is the assisting agent.
@@ -327,10 +327,20 @@ live diagnostics automatically. Failed, blocked and not-run requirements cannot
 pass; new commits require new evidence. Existing review/CI/release gates remain
 authoritative. This tooling does not activate agents or access live profiles.
 
-Run from the repository root:
+Choose a bounded local auxiliary check or authoritative remote evidence explicitly
+with `node scripts/agent.mjs guard --task TASK_ID --environment local-auxiliary
+--operation scripts-test` or `--environment github-actions-evidence
+--operation ci-evidence --head FULL_COMMIT_SHA`. The dependency-free scripts
+tests are the only guarded local verification here. Do not run dependency
+installation/recovery locally; full install, build, types, integration and
+package verification use the existing GitHub Actions workflow. See
+[environment and CI evidence guardrails](./docs/environment-evidence-guardrails.md).
+The guard covers only operations invoked through this entry point and is not a
+shell sandbox.
+
+The full gate and package commands, run by the existing CI workflow, are:
 
 ```sh
-pnpm install --frozen-lockfile
 pnpm verify
 pnpm pack --pack-destination artifacts
 ```
@@ -339,7 +349,7 @@ Then run `pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.
 
 `pnpm verify` checks the Agent contract, source and local test types, baseline markers, a clean build, Vitest tests, Node tooling tests, and real built Host import/Client-loader/Remote smoke. `tests/fixtures` are intentionally excluded from local test typecheck because they import source from a separate pinned Core checkout. The checked-in code must pass; never suppress compiler errors or weaken a test to get a green report.
 
-If the exact frozen install is blocked solely by an enterprise registry or network policy while the repository's GitHub Actions can obtain the unchanged pinned packages from an authorized official registry, record the attempted command and exact environmental failure as **local validation blocked**, not passed. A PR may proceed with that limitation disclosed; the complete required GitHub CI matrix, including its install, tests, build and package checks, is then the authoritative gate before merge. Never weaken or skip CI, substitute dependencies, bypass organizational restrictions, claim unrun local gates succeeded, or tag/release a revision whose required CI is not green. If CI has the same failure, resolve it through approved infrastructure rather than bypassing it.
+If a historical/approved local installation attempt is blocked solely by an enterprise registry or network policy while GitHub Actions can obtain unchanged pinned packages from an authorized official registry, record it as **local validation blocked**, not passed. Do not repeat dependency recovery, switch sources, or expand permissions. A PR may proceed with that limitation disclosed; the complete required GitHub CI matrix, including install, tests, build and package checks, is authoritative before merge. Never weaken or skip CI, substitute dependencies, bypass organizational restrictions, claim unrun local gates succeeded, or tag/release a revision whose required CI is not green. If CI has the same failure, resolve it through approved infrastructure rather than bypassing it.
 
 The release CI matrix targets only exact official `0.2.1-rc.3` on Windows and Linux; earlier pins are not support gates. It runs the unchanged tagged-source runtime fixture, optional native Chat fixture, exact published-artifact adapter fixture and all 28 native reviewer regressions without skips. This is a required gate, not evidence that an unexecuted qualification passed. `verify:upstream` is static seam-marker evidence. `verify:controlled-core` exclusively installs a temporary config fixture, refuses an existing target, and removes only its own file; it is not full plugin activation. Published-artifact synthetic adapter fixtures do not prove live provider transport. The release job must wait for the complete reusable CI matrix on the tagged revision, then verify its own packed bytes before publishing.
 
