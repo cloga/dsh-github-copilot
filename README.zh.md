@@ -8,7 +8,7 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
-**历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；DSH rc.3 更新候选：`0.1.0-alpha.3.dsh.0.2.1.rc.3`。** DSH `0.2.1-rc.3` 是预发布版本。本插件线是兼容性候选，不是生产 Core 升级建议；Desktop 制品／签名尚未核验。每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-rc.3` 规范化为 `dsh.0.2.1.rc.3`，但兼容性仍须核对明确元数据，不能只猜版本名。既有已发布版本和 tag 不变。已发布、已安装、已加载仍是不同状态。
+**历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；已准备但未发布的 DSH rc.3 元数据候选：`0.1.0-alpha.4.dsh.0.2.1.rc.3`。** 本 PR 仅准备版本元数据；alpha.4 的 GitHub Release 和 npm 包尚未发布。两种发布渠道核验完成前，请勿使用 alpha.4 安装命令。DSH `0.2.1-rc.3` 是预发布版本。本插件线是兼容性候选，不是生产 Core 升级建议；Desktop 制品／签名尚未核验。每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-rc.3` 规范化为 `dsh.0.2.1.rc.3`，但兼容性仍须核对明确元数据，不能只猜版本名。既有已发布版本和 tag 不变。已发布、已安装、已加载仍是不同状态。
 
 按**精确 Core**选版本，不按全局 SemVer 最大值或 npm `latest`／`alpha`。
 只读命令 `node scripts/select-core-release.mjs 0.2.0-rc.2` 先读取
@@ -141,7 +141,7 @@ node package/scripts/check-search-composition.mjs --profile-dir /absolute/profil
 **独立具名 profile**：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.1.rc.3.tgz
 ```
 
 上面的命令是准备发布的示例，仅在发布且所需 CI 通过后可用；目标是官方 DSH 预发布版 `0.2.1-rc.3`。**不要把此候选安装到生产 Desktop profile。** Desktop 制品／签名及 profile peer 组合仍未核验；rc.2 应保留现有兼容插件。[历史 rc.2 随附 CLI 核验](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)不代表 rc.3 验收；全局／普通 `dsh` shim 不等价。本次不授权安装或重启。
@@ -352,14 +352,14 @@ Agent 从 `node scripts/agent.mjs describe --json`、`doctor --json`及`plan <ta
 GitHub Releases 和 npm 分发同一原始已校验 tarball。固定版本并核验 Release SHA-256 或 npm `dist.integrity`；不重打包不可变 Release、不移动／复用 tag。
 
 ```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.1.rc.3/SHA256SUMS
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.1.rc.3.tgz
+curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.1.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 ```powershell
 $expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -cne $expected) { throw 'Release checksum mismatch' }
 ```
 
