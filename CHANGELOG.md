@@ -1,10 +1,16 @@
 # Changelog
 
-## 0.1.0-alpha.4.dsh.0.2.1.rc.3 (prepared)
+## 0.1.0-alpha.5.dsh.0.2.1.rc.3 (prepared)
 
 - Replace the stale rc.2 Desktop lifecycle heading with version-neutral guidance. Recommend a full exit and restart only when the native plugin manager reports `restart-required`; do not repeatedly toggle an Off plugin when the manager reports only pending service dependencies.
 - Keep historical rc.2 Desktop observations distinct from current rc.3 synthetic Loader evidence, and synchronize the English/Chinese README and user-visible copy regressions (#453).
-- Prepare same-Core alpha.4 metadata only. The rc.3 release mapping remains pending; no tag, GitHub Release, npm publication, profile installation or Desktop restart is included.
+- Prepare same-Core alpha.5 metadata only. The rc.3 release mapping remains pending; no tag, GitHub Release, npm publication, profile installation or Desktop restart is included.
+
+## 0.1.0-alpha.4.dsh.0.2.1.rc.3 (prepared)
+
+- Carry forward bounded Responses replay refusal diagnostics from retired draft #218 under #446: fixed reasons, zero-based input positions, allowlisted type/status and field-presence booleans through the existing native `INVALID_REQUEST` surface. No IDs, summaries, tool data, unknown values or encrypted bytes enter diagnostics.
+- Exercise current pinned pi-ai 1.1.0 synthetic two-turn summary-only rejection and terminal encryption backfill, preserving original history, exact opaque bytes and `call_id` pairing. Retain existing replay acceptance, account isolation, consent and cancellation ownership; no new retry, history deletion or model switch.
+- Prepare the next same-Core candidate metadata for required PR validation only. No tag, merge, publication, profile installation, restart or live model call is authorized.
 
 ## 0.1.0-alpha.3.dsh.0.2.1.rc.3 (prepared)
 
