@@ -162,7 +162,7 @@ Desktop 原生包管理器和已核验的随附 CLI 都有 profile 边界。
 
 账号管理的元数据和身份读取使用 15 秒 Client 展示期限，避免无限 Checking。首次读取失败提供只读元数据**重试**；迟到结果不会覆盖新状态。不取消 Host 工作、不自动重试，也不会解锁尚未完成的账号修改操作。
 
-**Desktop 生命周期：**当前 rc.3 公共 Loader 测试中，单步添加可保留正在使用的 Web 消费者；但分阶段添加或移除后重新添加，可能导致全局 `web` 服务不可用及依赖它的账号集成无法启动。目前没有功能等价的插件侧恢复 API；[#371](https://github.com/cloga/dsh-github-copilot/issues/371) 仍保持开放。没有原生 HMR 时，原生管理器会明确返回 `restart-required`；应遵循该结果。合成测试本身不构成反复切换或重启的依据。参见 [rc.3 生命周期证据](./docs/web-lifecycle-rc2.md)。
+**Desktop 生命周期：**当前 rc.3 公共 Loader 测试中，单步添加可保留正在使用的 Web 消费者；但分阶段添加或移除后重新添加，可能导致全局 `web` 服务不可用及依赖它的账号集成无法启动。目前没有功能等价的插件侧恢复 API；[#371](https://github.com/cloga/dsh-github-copilot/issues/371) 仍保持开放。没有原生 HMR 时，原生管理器会明确返回 `restart-required`；应遵循该结果。合成测试本身不构成反复切换或重启的依据。卡片中的 **Desktop 插件生命周期**仅为通用指导，不检测当前 Desktop 版本或是否需要重启。参见 [Desktop 指导与按版本区分的生命周期证据](./docs/web-lifecycle-rc2.md#desktop-guidance)；保留 rc.2 文件名是为了链接稳定，不代表当前宿主版本。
 
 ## Auto 与模型偏好
 
