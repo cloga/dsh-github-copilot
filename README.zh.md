@@ -8,6 +8,8 @@
 
 为 DSH 提供 GitHub Copilot 账号模型发现、上下文 Auto 选模和 hosted search。插件复用 DSH 公开的原生适配器，保留 profile 全局默认账号，并支持 Session 后续 turn 指定独立账号；不修改 Core，也不维护第二套模型目录。
 
+**HydraFusion 集成状态：**插件详情页新增 HydraFusion 与 HydraFusion Max 的只读 Research Preview 说明。本构建中两者均不可选择或执行。新增的有界映射器可识别 Copilot SDK 会话模型列表元数据中的合格描述符，但不会读取账号数据、显示选项、选择 tier 或证明运行时可用性。独立选择器和经过验证的原生执行桥接尚未实现；这不代表端到端 Fusion 已可用。说明卡不会发起账号／网络请求，也不改变 Auto、登录、历史或 Usage。预览条款仅作说明，不构成执行授权。剩余工作继续由 [#441](https://github.com/cloga/dsh-github-copilot/issues/441) 跟踪。
+
 **历史稳定版：[`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1)；DSH rc.3 更新候选：`0.1.0-alpha.4.dsh.0.2.1.rc.3`。** DSH `0.2.1-rc.3` 是预发布版本。本插件线是兼容性候选，不是生产 Core 升级建议；Desktop 制品／签名尚未核验。每个精确 DSH Core 版本都从独立插件序列 `0.1.0-alpha.1.dsh.<Core>` 开始；同一 Core 内修复递增 `alpha.N`。后缀将 Core `0.2.1-rc.3` 规范化为 `dsh.0.2.1.rc.3`，但兼容性仍须核对明确元数据，不能只猜版本名。既有已发布版本和 tag 不变。已发布、已安装、已加载仍是不同状态。
 
 按**精确 Core**选版本，不按全局 SemVer 最大值或 npm `latest`／`alpha`。

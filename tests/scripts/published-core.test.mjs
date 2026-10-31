@@ -92,6 +92,7 @@ test('retains exact alpha.5 dependency qualification after production admission'
   assert.equal(output.peerDependencies['@deepseek-ai/cordis'], '4.0.5-alpha.2')
   assert.equal(output.devDependencies['@deepseek-ai/cordis-plugin-loader'], '1.0.6-alpha.2')
   assert.equal(output.devDependencies['@deepseek-ai/schemastery'], '3.18.5-alpha.2')
+  assert.equal(output.devDependencies['@deepseek-ai/dsh-agent-loop'], undefined)
   assert.equal(output.dependencies.zod, '4.4.3')
   assert.equal(report.admission, 'admitted')
   assert.equal(report.commit, CANDIDATE_CORE_RELEASES[release].commit)
@@ -101,6 +102,8 @@ test('retains exact alpha.5 dependency qualification after production admission'
 
 test('pins rc.3 source and framework artifacts without widening other compatibility targets', async () => withSource(async ({ root, target }) => {
   const rc3 = '0.2.1-rc.3'
+  const hydrafusionConfig = '{"include":["tests/fixtures/hydrafusion-tool-entry-core.fixture.ts"]}\n'
+  await writeFile(join(root, 'tsconfig.hydrafusion-tests.json'), hydrafusionConfig)
   assert.deepEqual(CANDIDATE_CORE_RELEASES[rc3], {
     commit: '1f81c047fc48fa190a683e469daa699857e9afe8', piAi: '1.1.0',
     cordis: '4.0.5', loader: '1.0.6', schemastery: '3.18.5', zod: '4.4.3',
@@ -114,12 +117,33 @@ test('pins rc.3 source and framework artifacts without widening other compatibil
   assert.equal(output.peerDependencies['@deepseek-ai/cordis'], '4.0.5')
   assert.equal(output.devDependencies['@deepseek-ai/cordis-plugin-loader'], '1.0.6')
   assert.equal(output.devDependencies['@deepseek-ai/schemastery'], '3.18.5')
+  assert.equal(output.devDependencies['@deepseek-ai/dsh-agent-loop'], rc3)
+  assert.equal(await readFile(join(target, 'tsconfig.hydrafusion-tests.json'), 'utf8'), hydrafusionConfig)
   await installedFixture(target, rc3)
   const inspected = await inspectPublishedCoreFixture({ root: target, release: rc3, candidate: true })
   assert.equal(inspected.release, rc3)
   assert.equal(inspected.candidate, true)
   assert.equal(inspected.classIdentity, true)
 }))
+
+test('isolates the rc.3 tool-entry typecheck from historical candidate fixtures', async () => {
+  const candidate = JSON.parse(await readFile(new URL('../../tsconfig.candidate-tests.json', import.meta.url), 'utf8'))
+  const hydrafusion = JSON.parse(await readFile(new URL('../../tsconfig.hydrafusion-tests.json', import.meta.url), 'utf8'))
+  const fixture = 'tests/fixtures/hydrafusion-tool-entry-core.fixture.ts'
+  assert.equal(candidate.include.includes(fixture), false)
+  assert.equal(hydrafusion.extends, './tsconfig.tests.json')
+  assert.deepEqual(hydrafusion.include, [fixture])
+  assert.deepEqual(hydrafusion.exclude, [])
+})
+
+test('typechecks the isolated tool-entry fixture in the rc.3 published job', async () => {
+  const ci = await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  const publishedJob = ci.split('  published-adapter:')[1]?.split('  release-ready:')[0]
+  assert.ok(publishedJob)
+  assert.match(publishedJob, /--release 0\.2\.1-rc\.3/)
+  assert.match(publishedJob, /DSH_PUBLISHED_CORE_RELEASE: 0\.2\.1-rc\.3/)
+  assert.match(publishedJob, /node node_modules\/typescript\/bin\/tsc -p tsconfig\.hydrafusion-tests\.json/)
+})
 
 test('candidate mode refuses floating or unreviewed releases before target creation', async () => withSource(async ({ root, target, base }) => {
   await assert.rejects(preparePublishedCoreFixture({ root, target, release: '0.2.1-rc.3' }), /unsupported published Core/)

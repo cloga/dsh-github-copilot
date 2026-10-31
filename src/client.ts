@@ -19,6 +19,7 @@ import { installDiagnosticsClient } from './diagnostics-client.ts'
 import { installAutoModelPresentation, installAutoModelProjections } from './auto-model-presentation.ts'
 import { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
 import { ParentModelFollowCard } from './parent-model-follow-card.ts'
+import { HydraFusionPreviewCard } from './hydrafusion-preview-card.ts'
 export { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { ParentModelFollowCard } from './parent-model-follow-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
@@ -1026,6 +1027,7 @@ export function CopilotPluginSettingsPage(props: {
   return createElement('div', null,
     createElement(ParentModelFollowCard, { settings: props.settings, onSaved: setRevision }),
     createElement(WebSearchRoutingCard, { ...props, settingsRevision: revision }),
+    createElement(HydraFusionPreviewCard),
     props.diagnosticsControl ?? createElement(DiagnosticsCard, { remote: props.diagnostics }))
 }
 function DiagnosticsConnectionCard({ ctx }: { ctx: ClientContext }): ReactElement {

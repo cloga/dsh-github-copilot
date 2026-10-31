@@ -26,7 +26,7 @@ const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'pe
 const rootFiles = ['tsconfig.json', 'tsconfig.tests.json', 'tsdown.config.ts', 'vitest.config.ts', 'cordis.patch.yml',
   'vitest.diagnostics-published.config.ts',
   'vitest.auto-review-published.config.ts',
-  'vitest.candidate-published.config.ts', 'tsconfig.candidate-tests.json',
+  'vitest.candidate-published.config.ts', 'tsconfig.candidate-tests.json', 'tsconfig.hydrafusion-tests.json',
   'README.md', 'README.zh.md', 'AGENTS.md', 'CONTRIBUTING.md', 'SECURITY.md', 'LICENSE',
   'deployment-baseline.json', 'agent-contract.json']
 const excluded = new Set(['node_modules', 'lib', 'artifacts', 'coverage', 'tmp', 'dist'])
@@ -89,6 +89,7 @@ function fixtureManifest(original, release, piAi, candidate) {
     '@deepseek-ai/dsh-user-approval': release,
   }
   manifest.dependencies = { ...manifest.dependencies, '@earendil-works/pi-ai': piAi }
+  if (release === '0.2.1-rc.3') manifest.devDependencies['@deepseek-ai/dsh-agent-loop'] = release
   if (CANDIDATE_CORE_RELEASES[release] !== undefined) {
     const target = CANDIDATE_CORE_RELEASES[release]
     for (const section of ['devDependencies', 'peerDependencies']) {

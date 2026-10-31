@@ -6,6 +6,29 @@ import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { attribution, describeRepository, doctor, planTask, repositoryRoot } from '../../scripts/agent.mjs'
 import { verifyAgentContract } from '../../scripts/verify-agent-contract.mjs'
+import { HydraFusionEvidenceCollector } from '../../src/hydrafusion-evidence.ts'
+import { mapHydraFusionDescriptors } from '../../src/hydrafusion-descriptors.ts'
+
+const fusionSelectionId = 'synthetic-selection-id'
+const fusionStarted = {
+  type: 'session.fusion_route_started', ephemeral: true,
+  data: { attemptId: 'attempt-1', syntheticModel: fusionSelectionId, turnKind: 'user' },
+}
+const fusionResolved = {
+  type: 'session.fusion_resolved',
+  data: { fusionId: 'fusion-1', syntheticModel: fusionSelectionId, pattern: 'single' },
+}
+const fusionCompleted = (overrides = {}) => ({
+  type: 'session.fusion_completed',
+  data: {
+    fusionId: 'fusion-1', syntheticModel: fusionSelectionId, commitId: 'commit-1',
+    finalSourceModel: 'model-from-runtime', finalSourcePhaseId: 'phase-1',
+    degradedReason: null, awaitingBackgroundWork: false, inputTokens: 10,
+    outputTokens: 5, cachedTokens: 0, requestCount: 1, phaseCount: 1, totalNanoAiu: 50,
+    ...overrides,
+  },
+})
+const sessionIdle = (data = {}) => ({ type: 'session.idle', ephemeral: true, data })
 
 test('describes actual package metadata without claiming a release exists', async () => {
   const result = await describeRepository()
@@ -47,6 +70,171 @@ test('plans only known task IDs with unexecuted argument arrays', async () => {
   ])
   assert.ok(!(await planTask('tooling')).commands.some(command => command.argv.includes('pnpm')))
   assert.deepEqual((await planTask('tooling')).acceptance, (await describeRepository()).acceptance)
+})
+
+test('Client planning keeps Fusion preview informational until runtime ownership is qualified', async () => {
+  const plan = await planTask('client')
+  assert.ok(plan.read.includes('src/hydrafusion-preview-card.ts'))
+  assert.ok(plan.read.includes('src/hydrafusion-descriptors.ts'))
+  assert.ok(plan.read.includes('src/hydrafusion-evidence.ts'))
+  assert.ok(plan.read.includes('docs/hydrafusion-integration-readiness.md'))
+  assert.ok(plan.tests.includes('tests/scripts/agent.test.mjs'))
+  assert.ok(plan.tests.includes('tests/hydrafusion-preview-card.spec.ts'))
+  assert.ok(plan.tests.includes('tests/hydrafusion-descriptors.spec.ts'))
+  assert.match(plan.hydrafusionPreviewBoundary, /read-only/)
+  assert.match(plan.hydrafusionPreviewBoundary, /exact account\/runtime descriptors/)
+  assert.match(plan.hydrafusionPreviewBoundary, /No model registration/)
+  assert.match(plan.hydrafusionDescriptorBoundary, /explicit enabled true/)
+  assert.match(plan.hydrafusionDescriptorBoundary, /Preserve ordinary DSH Auto/)
+  assert.match(plan.hydrafusionEvidenceBoundary, /root session\.idle/)
+  assert.match(plan.hydrafusionEvidenceBoundary, /No SDK runtime/)
+  const card = await readFile(join(repositoryRoot, 'src/hydrafusion-preview-card.ts'), 'utf8')
+  assert.match(card, /Not available in this plugin build\./)
+  assert.doesNotMatch(card, /from ['"](?!react|\.\/native-settings-style\.ts)/)
+  assert.doesNotMatch(card, /\b(fetch|useEffect|setInterval|setTimeout|onClick|onChange)\b/)
+  assert.doesNotMatch(card, /createElement\('(button|input|select|option|progress)'/)
+  const client = await readFile(join(repositoryRoot, 'src/client.ts'), 'utf8')
+  const page = client.slice(client.indexOf('export function CopilotPluginSettingsPage'), client.indexOf('function DiagnosticsConnectionCard'))
+  assert.match(page, /createElement\(HydraFusionPreviewCard\)/)
+})
+
+test('Fusion evidence is selection-bound and excludes intermediate content', () => {
+  const collector = new HydraFusionEvidenceCollector(fusionSelectionId)
+  collector.observe(fusionStarted)
+  collector.observe(fusionResolved)
+  collector.observe({
+    type: 'assistant.fusion_phase_started',
+    data: { fusionId: 'fusion-1', phaseId: 'phase-1', phaseKind: 'primary', model: 'model-from-runtime', role: 'solver' },
+  })
+
+  test('maps only explicit visible Fusion tiers from session model-list metadata', () => {
+    const result = mapHydraFusionDescriptors({ auto: { tiers: [
+      { id: 'opaque-standard', type: 'fusion', displayName: 'HydraFusion', description: 'Preview', fusionTier: 'standard', status: { enabled: true, pickerVisible: true } },
+      { id: 'opaque-max', type: 'fusion', displayName: 'HydraFusion Max', status: { enabled: true } },
+      { id: 'disabled', type: 'fusion', displayName: 'Disabled', status: { enabled: false } },
+      { id: 'hidden', type: 'fusion', displayName: 'Hidden', status: { enabled: true, pickerVisible: false } },
+      { id: 'unknown-enabled', type: 'fusion', displayName: 'Unknown', status: {} },
+      { id: 'ordinary-auto', type: 'auto', displayName: 'Auto', status: { enabled: true } },
+    ] } })
+
+    assert.deepEqual(result, {
+      status: 'ready',
+      descriptors: [
+        { id: 'opaque-standard', displayName: 'HydraFusion', description: 'Preview', fusionTier: 'standard' },
+        { id: 'opaque-max', displayName: 'HydraFusion Max' },
+      ],
+      truncated: false,
+    })
+
+    assert.deepEqual(mapHydraFusionDescriptors({ auto: { tiers: [
+      { id: 'duplicate', type: 'fusion', displayName: 'First', status: { enabled: true } },
+      { id: 'duplicate', type: 'fusion', displayName: 'Second', status: { enabled: true } },
+    ] } }), { status: 'unavailable', descriptors: [], truncated: false })
+    assert.deepEqual(mapHydraFusionDescriptors({ models: [] }), {
+      status: 'unavailable', descriptors: [], truncated: false,
+    })
+  })
+  collector.observe({
+    type: 'assistant.fusion_phase_completed',
+    data: {
+      fusionId: 'fusion-1', phaseId: 'phase-1', phaseKind: 'primary',
+      model: 'model-from-runtime', role: 'solver', status: 'succeeded',
+      durationMs: 125, content: 'intermediate private draft',
+    },
+  })
+  const completed = collector.observe(fusionCompleted())
+  assert.equal(completed.lifecycle, 'running')
+  assert.equal(completed.outcome, undefined)
+  assert.equal(completed.phases[0].status, 'succeeded')
+  assert.equal(JSON.stringify(completed).includes('intermediate private draft'), false)
+
+  const settled = collector.observe(sessionIdle())
+  assert.equal(settled.lifecycle, 'idle')
+  assert.equal(settled.outcome, 'completed')
+  assert.deepEqual(settled.usage, {
+    inputTokens: 10, outputTokens: 5, cachedTokens: 0,
+    requestCount: 1, phaseCount: 1, totalNanoAiu: 50,
+  })
+})
+
+test('Fusion stop acknowledgement is not cancellation until root session idle confirms abort', () => {
+  const collector = new HydraFusionEvidenceCollector(fusionSelectionId)
+  collector.observe(fusionStarted)
+  assert.equal(collector.requestStop().lifecycle, 'stopping')
+  assert.equal(collector.snapshot().outcome, undefined)
+  collector.observe({ type: 'session.autopilot_stopped', data: {} })
+  collector.observe({ type: 'assistant.idle', ephemeral: true, data: { aborted: true } })
+  assert.equal(collector.snapshot().outcome, undefined)
+  assert.equal(collector.snapshot().lifecycle, 'stopping')
+  const settled = collector.observe(sessionIdle({ aborted: true }))
+  assert.equal(settled.lifecycle, 'idle')
+  assert.equal(settled.outcome, 'cancelled')
+})
+
+test('Fusion fallback is reported only after correlated committed completion and idle', () => {
+  const collector = new HydraFusionEvidenceCollector(fusionSelectionId)
+  collector.observe(fusionStarted)
+  collector.observe(fusionResolved)
+  collector.observe({
+    type: 'session.fusion_route_failed',
+    data: { attemptId: 'attempt-1', syntheticModel: fusionSelectionId, fallbackModel: 'fallback-from-runtime', reason: 'policy' },
+  })
+  assert.equal(collector.snapshot().outcome, undefined)
+  collector.observe(fusionCompleted())
+  assert.equal(collector.snapshot().outcome, undefined)
+  assert.equal(collector.observe(sessionIdle()).outcome, 'completed-with-fallback')
+})
+
+test('Fusion evidence rejects mismatched selections and incomplete usage without inventing totals', () => {
+  const collector = new HydraFusionEvidenceCollector(fusionSelectionId)
+  collector.observe({ ...fusionStarted, data: { ...fusionStarted.data, syntheticModel: 'different-selection' } })
+  collector.observe({ ...fusionResolved, data: { ...fusionResolved.data, syntheticModel: 'different-selection' } })
+  collector.observe(fusionCompleted())
+  assert.equal(collector.snapshot().lifecycle, 'unavailable')
+  assert.equal(collector.snapshot().usage, undefined)
+
+  const active = new HydraFusionEvidenceCollector(fusionSelectionId)
+  active.observe(fusionStarted)
+  active.observe(fusionResolved)
+  active.observe(fusionCompleted({ outputTokens: undefined }))
+  const settled = active.observe(sessionIdle())
+  assert.equal(settled.outcome, 'completed')
+  assert.equal(settled.usage, undefined)
+})
+
+test('Fusion evidence waits for all background work and ignores subagent terminal signals', () => {
+  const background = new HydraFusionEvidenceCollector(fusionSelectionId)
+  background.observe(fusionStarted)
+  background.observe(fusionResolved)
+  background.observe(fusionCompleted({ awaitingBackgroundWork: true }))
+  const pending = background.observe(sessionIdle())
+  assert.equal(pending.lifecycle, 'stopping')
+  assert.equal(pending.outcome, undefined)
+
+  const active = new HydraFusionEvidenceCollector(fusionSelectionId)
+  active.observe(fusionStarted)
+  assert.equal(active.observe({ type: 'session.idle', agentId: 'child-1', ephemeral: true, data: {} }).lifecycle, 'routing')
+  assert.equal(active.observe({ type: 'session.error', agentId: 'child-1', data: {} }).lifecycle, 'routing')
+  const failed = active.observe({ type: 'session.error', data: { message: 'private failure detail' } })
+  assert.equal(failed.lifecycle, 'stopping')
+  assert.equal(failed.outcome, undefined)
+  const settled = active.observe(sessionIdle())
+  assert.equal(settled.outcome, 'failed')
+  assert.equal(JSON.stringify(settled).includes('private failure detail'), false)
+})
+
+test('Fusion phase projection is bounded and reports truncation', () => {
+  const collector = new HydraFusionEvidenceCollector(fusionSelectionId)
+  collector.observe(fusionStarted)
+  collector.observe(fusionResolved)
+  for (let index = 0; index < 33; index++) {
+    collector.observe({
+      type: 'assistant.fusion_phase_started',
+      data: { fusionId: 'fusion-1', phaseId: `phase-${index}`, phaseKind: 'primary', model: 'model', role: 'solver' },
+    })
+  }
+  assert.equal(collector.snapshot().phases.length, 32)
+  assert.equal(collector.snapshot().phasesTruncated, true)
 })
 
 test('context diagnostics preserve shared usage and include native whole-turn evidence', async () => {

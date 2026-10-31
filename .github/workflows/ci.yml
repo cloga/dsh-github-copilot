@@ -178,6 +178,7 @@ jobs:
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
           node node_modules/typescript/bin/tsc -p tsconfig.tests.json
           node node_modules/typescript/bin/tsc -p tsconfig.candidate-tests.json
+          node node_modules/typescript/bin/tsc -p tsconfig.hydrafusion-tests.json
           node node_modules/typescript/bin/tsc -p tsconfig.json
           pnpm exec tsdown
           node node_modules/vitest/vitest.mjs run --config vitest.config.ts

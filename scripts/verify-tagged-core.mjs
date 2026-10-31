@@ -22,6 +22,8 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
 const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
   'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts']
 function runtimeTests(release) {
+  if (release === '0.2.1-rc.3') return [...runtimeTests('0.2.1-alpha.5'),
+    'tests/fixtures/hydrafusion-tool-entry-core.fixture.ts']
   if (release === '0.2.1-alpha.5' || release === '0.2.1-rc.3') return [...runtimeTests('0.2.0-rc.2'),
     'tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts']
   return ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'].includes(release)

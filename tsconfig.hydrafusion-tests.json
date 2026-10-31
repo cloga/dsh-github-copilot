@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.tests.json",
+  "include": ["tests/fixtures/hydrafusion-tool-entry-core.fixture.ts"],
+  "exclude": []
+}
