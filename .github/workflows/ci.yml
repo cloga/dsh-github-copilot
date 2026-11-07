@@ -164,6 +164,37 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/copilot-published-core"
           pnpm install --ignore-scripts --strict-peer-dependencies --registry=https://registry.npmjs.org
+      - name: Verify the published Copilot SDK package and tier contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/copilot-sdk-441"
+          mkdir "$sdk"
+          mkdir "$sdk/home" "$sdk/cache"
+          cp tests/fixtures/copilot-sdk/package.json "$sdk/package.json"
+          cp tests/fixtures/copilot-sdk/package-check.mjs "$sdk/package-check.mjs"
+          cp tests/fixtures/copilot-sdk/tier-contract.ts "$sdk/tier-contract.ts"
+          cp src/hydrafusion-descriptors.ts "$sdk/hydrafusion-descriptors.ts"
+          isolated() {
+            env -i PATH="$PATH" HOME="$sdk/home" USERPROFILE="$sdk/home" \
+              APPDATA="$sdk/home" LOCALAPPDATA="$sdk/home" XDG_CONFIG_HOME="$sdk/home" \
+              SystemRoot="${SystemRoot:-${SYSTEMROOT:-}}" WINDIR="${WINDIR:-}" \
+              COMSPEC="${COMSPEC:-}" PATHEXT="${PATHEXT:-}" TMP="$sdk/home" TEMP="$sdk/home" \
+              NPM_CONFIG_USERCONFIG="$sdk/home/.npmrc" NPM_CONFIG_GLOBALCONFIG="$sdk/home/global.npmrc" \
+              NPM_CONFIG_CACHE="$sdk/cache" GIT_CONFIG_GLOBAL="$sdk/home/gitconfig" GIT_CONFIG_NOSYSTEM=1 \
+              CI=true "$@"
+          }
+          (
+            cd "$sdk"
+            isolated npm install --ignore-scripts --no-audit --no-fund \
+              --fetch-retries=0 --fetch-timeout=60000 --registry=https://registry.npmjs.org/
+            isolated node package-check.mjs
+            isolated node "$RUNNER_TEMP/copilot-published-core/node_modules/typescript/bin/tsc" \
+              --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext \
+              --allowImportingTsExtensions --types node --typeRoots "$RUNNER_TEMP/copilot-published-core/node_modules/@types" \
+              tier-contract.ts
+            isolated node tier-contract.ts
+          )
       - name: Verify actual dependency paths and class identities
         shell: bash
         run: |
