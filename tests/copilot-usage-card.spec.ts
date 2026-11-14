@@ -824,6 +824,22 @@ describe('Copilot account usage chip', () => {
     expect(document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('42.25')
   })
 
+  it.each(['synchronous', 'rejected'])('keeps quota visible when the native identity Remote fails %s', async mode => {
+    const api = remote(view({ accountId: 'canonical' }))
+    const identity = vi.fn(() => {
+      if (mode === 'synchronous') throw new Error('PRIVATE_IDENTITY_ERROR')
+      return Promise.reject(new Error('PRIVATE_IDENTITY_ERROR'))
+    })
+    await mount({ remote: { ...api, ensureIdentity: identity, refreshIdentity: identity }, contextKey: 'native' })
+    expect(trigger().textContent).toContain('42.25 used')
+    await click(trigger())
+    expect(text()).toContain('GitHub account identity unavailable')
+    expect(text()).not.toContain('PRIVATE_IDENTITY_ERROR')
+    await click(button('Refresh'))
+    expect(trigger().textContent).toContain('42.25 used')
+    expect(identity).toHaveBeenCalledTimes(2)
+  })
+
   it.each([undefined, 0, 1, 1_799_999_999_999, 1_800_000_000_000])(
     'hides missing, epoch or elapsed reset %s while preserving amounts and freshness', async resetAt => {
       await mount({ remote: remote(view({ resetAt })), contextKey: 'unknown-reset' })

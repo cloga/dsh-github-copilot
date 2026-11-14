@@ -182,9 +182,10 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     setBusy(true)
     setFailed(false)
     try {
-      const nativeIdentityOperation = props.accountsRemote === undefined
-        ? (force ? props.remote.refreshIdentity?.() : props.remote.ensureIdentity?.())?.catch(() => undefined)
-        : undefined
+      const nativeIdentityOperation = props.accountsRemote === undefined ? (async () => {
+        try { return await (force ? props.remote!.refreshIdentity?.() : props.remote!.ensureIdentity?.()) }
+        catch { return undefined }
+      })() : undefined
       const identityOperation = props.accountsRemote === undefined ? undefined : (async () => {
         const observed = diagnostics.current.begin('identity-read')
         try {
