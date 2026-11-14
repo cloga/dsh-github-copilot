@@ -6,6 +6,7 @@ import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import { LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
@@ -96,8 +97,11 @@ it('routes concurrently authorized native children to their selected Copilot mod
       modifyRecord: async () => { throw new Error('valid synthetic credential must not refresh') },
     })
     const settings = { 'github-copilot': { activeAccountId: 'canonical' }, 'llm-pi-ai': { providers: {} } }
+    let accountSettingsRevision = 0
     ctx.provide('settings', {
-      describe: () => Object.entries(settings).map(([ns, value]) => ({ ns, revision: 0, value, user: value })),
+      describe: () => Object.entries(settings).map(([ns, value]) => ({
+        ns, revision: ns === 'github-copilot' ? accountSettingsRevision : 0, value, user: value,
+      })),
       mutate: async () => { throw new Error('unexpected fixture settings mutation') },
     })
     ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: PARENT, model: PARENT }) })
@@ -186,7 +190,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
       expect(accounts.turns.current(child.session)).toMatchObject({ accountId: 'canonical', source: 'global' })
     }
     settings['github-copilot'].activeAccountId = SECOND
-    ctx.emit('settings/document-updated', 'github-copilot' as never)
+    ctx.emit('settings/document-updated', 'github-copilot' as SettingsNamespace, ++accountSettingsRevision)
     expect(signals.every(signal => signal && !signal.aborted)).toBe(true)
     const third = await call('third', MODELS[0]!, 'high')
     expect(third.isError).toBe(false)
