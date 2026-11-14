@@ -1443,7 +1443,8 @@ describe('GitHub Copilot Models client', () => {
       inject: ReturnType<typeof vi.fn>
     }
     const inject = vi.fn((services: string[], callback: (value: unknown) => unknown) => {
-      if (services.includes('remote.githubCopilotUsage') || services.includes('remote.githubCopilotDiagnostics')) {
+      if (services.includes('remote.githubCopilotUsage') || services.includes('remote.githubCopilotDiagnostics')
+        || services.includes('uiConversation') || services.includes('remote.githubCopilotTurnSelection')) {
         return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
       }
       const cleanup = callback(ctx)
@@ -1700,11 +1701,11 @@ describe('GitHub Copilot Models client', () => {
     expect(fallback).toHaveBeenCalledOnce()
   })
 
-  it('does not register plugin-owned Auto UI or projections', async () => {
+  it('mounts account and usage evidence without restoring plugin-owned Auto UI', async () => {
     const { ctx, disposeRemote, disposeUi } = clientContext(['settings.section'])
     const dispose = await apply(ctx as never)
-    expect(ctx.inject).not.toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))
-    expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['uiConversation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], expect.any(Function))
     expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotDualModel', 'slots'], expect.any(Function))
     await dispose()
     expect(disposeUi).toHaveBeenCalledOnce()

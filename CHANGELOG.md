@@ -4,6 +4,7 @@
 
 - Begin narrowing the product to account-authorized Copilot models through DSH's published native adapter. Plugin-owned Auto and parent-follow routing and hosted-search composition are retired in the candidate; preserve account quota and review other enhancements before removing only demonstrably unnecessary functionality.
 - Hide inactive Auto and parent-follow settings and remove the obsolete Auto high-cost marking control without changing saved preferences; retain legacy settings and Remote for compatibility.
+- Preserve historical account, model and incomplete-Usage evidence separately from retired Auto selection UI; never reconstruct account history or replace native Usage.
 - Label retired Auto and parent-follow documentation as historical and omit the obsolete Auto UI mockup from the package.
 - Require account-metadata-driven native subagent model selection and actual child invocation, including supported Thinking and concurrent/account-bound request checks; synthetic exact-source fixtures passed on Windows and Linux, but do not establish live supplier or Desktop behavior.
 - Target DSH ownership of parent/child relationships, inheritance and scheduling; legacy dedicated-role orchestration still requires safe retirement.

@@ -162,7 +162,7 @@ function findTail(snapshot: unknown, messageId: unknown, diagnostic: (code: stri
   return undefined
 }
 
-function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote; accountRemote?: AccountRemote; locale?: LocaleReader; diagnostic: (code: string) => void }): React.ReactElement | null {
+function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote; accountRemote?: AccountRemote; locale?: LocaleReader; diagnostic: (code: string) => void; accountUsageOnly?: boolean }): React.ReactElement | null {
   const [live, setLive] = React.useState<TurnSelection>({ mode: 'unknown' })
   const [readState, setReadState] = React.useState<'loading' | 'ready' | 'failed'>('loading')
   const [readAttempt, setReadAttempt] = React.useState(0)
@@ -174,10 +174,11 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   const [account, setAccount] = React.useState<TurnAccountView>()
   const [accountFailed, setAccountFailed] = React.useState(false)
   const [accountAttempt, setAccountAttempt] = React.useState(0)
-  const readAllocation = React.useMemo(() => sessionId === undefined || props.remote?.allocationSummary === undefined
-    ? undefined : () => props.remote!.allocationSummary!(sessionId), [sessionId, props.remote])
+  const readAllocation = React.useMemo(() => props.accountUsageOnly || sessionId === undefined || props.remote?.allocationSummary === undefined
+    ? undefined : () => props.remote!.allocationSummary!(sessionId), [props.accountUsageOnly, sessionId, props.remote])
   React.useEffect(() => {
     setLive({ mode: 'unknown' })
+    if (props.accountUsageOnly) { setReadState('ready'); return }
     if (turn === undefined || sessionId === undefined || props.remote === undefined) {
       setReadState('failed')
       return
@@ -191,12 +192,12 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
       else { setReadState('failed'); props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED') }
     }, () => { if (active) { setReadState('failed'); props.diagnostic('COPILOT_TURN_SELECTION_READ_FAILED') } })
     return () => { active = false }
-  }, [props.remote, sessionId, turn, props.diagnostic, readAttempt])
+  }, [props.accountUsageOnly, props.remote, sessionId, turn, props.diagnostic, readAttempt])
   const language = React.useSyncExternalStore(
     props.locale ? listener => props.locale!.subscribe(listener) : () => noop,
     () => props.locale?.getLocale().active ?? 'en', () => 'en',
   )
-  const source = sourceOf(props, AUTO_MODEL_ATTRIBUTION_KEY, props.diagnostic)
+  const source = props.accountUsageOnly ? missingSource : sourceOf(props, AUTO_MODEL_ATTRIBUTION_KEY, props.diagnostic)
   const value = React.useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot)
   const provenanceSource = sourceOf(props, TURN_MODEL_PROVENANCE_KEY, props.diagnostic, 'COPILOT_TURN_MODEL_PROVENANCE_READ_FAILED')
   const provenance = React.useSyncExternalStore(provenanceSource.subscribe, provenanceSource.getSnapshot, provenanceSource.getSnapshot)
@@ -244,7 +245,7 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
   if (!completed) return null
   if (evidence === undefined) props.diagnostic('COPILOT_TURN_SELECTION_PROVENANCE_UNAVAILABLE')
   const routes: readonly unknown[] = recorded.length ? recorded : requested?.incomplete === false ? requested.routes : []
-  const copilot = routes.some(route => record(route)
+  const copilot = account?.state === 'recorded' || routes.some(route => record(route)
     && (route.provider === GITHUB_COPILOT_PREVIEW_PROVIDER_ID || route.provider === GITHUB_COPILOT_PROVIDER_ID)
     && typeof route.model === 'string' && route.model.trim() !== '')
   const usageDiagnostic = turn === undefined ? undefined : turnUsageDiagnostic(turn, native, usageEvidence, copilot)
@@ -263,7 +264,7 @@ function Attribution(props: Record<string, unknown> & { remote?: SelectionRemote
       ? { kind: 'requested', routes: requested.routes, incomplete: true }
       : { kind: 'unknown', routes: [], incomplete: true }
   return React.createElement(React.Fragment, null,
-    React.createElement(TurnSelectionCard, { selection, locale: language, incomplete: nativeCompleteModels ? false : evidence?.incomplete ?? true,
+    React.createElement(TurnSelectionCard, { selection, locale: language, accountOnly: props.accountUsageOnly, incomplete: nativeCompleteModels ? false : evidence?.incomplete ?? true,
       readState: selection.mode === 'unknown' ? readState : 'ready',
       models, modelsFailed: modelsFailed || provenanceSource.failed === true,
       retryModels: props.remote?.requestedModels === undefined && provenanceSource.failed !== true ? undefined : () => setModelsAttempt(value => value + 1),
@@ -287,6 +288,7 @@ interface ConversationEvents {
 export function installAutoModelProjections(capabilities: {
   readonly uiConversation: unknown
   readonly diagnostic: (code: string) => void
+  readonly accountUsageOnly?: boolean
 }): Dispose {
   if (!record(capabilities.uiConversation) || !record(capabilities.uiConversation.events)
     || typeof capabilities.uiConversation.events.register !== 'function') {
@@ -298,7 +300,7 @@ export function installAutoModelProjections(capabilities: {
   let removeProvenance: Dispose = noop
   let removeUsage: Dispose = noop
   try {
-    removeDefinition = events.register(autoModelAttributionDefinition)
+    if (!capabilities.accountUsageOnly) removeDefinition = events.register(autoModelAttributionDefinition)
     removeProvenance = events.register(turnModelProvenanceDefinition)
   } catch {
     removeProvenance()
@@ -320,6 +322,7 @@ export function installAutoModelPresentation(capabilities: {
   readonly diagnostic: (code: string) => void
   readonly remote?: unknown
   readonly locale?: unknown
+  readonly accountUsageOnly?: boolean
 }): Dispose {
   const diagnosed = new Set<string>()
   const diagnostic = (code: string) => {
@@ -356,10 +359,10 @@ export function installAutoModelPresentation(capabilities: {
     const tail = useChat(snapshot => findTail(snapshot, props.messageId, diagnostic))
     const turn = record(tail) && record(tail.location) ? tail.location.turn : undefined
     if (!record(turn) || !sequence(turn.turn)) return null
-    return React.createElement(Attribution, { ...props, key: `${props.sessionId}:${turn.turn}`, turn, tail, remote, accountRemote, locale, diagnostic })
+    return React.createElement(Attribution, { ...props, key: `${props.sessionId}:${turn.turn}`, turn, tail, remote, accountRemote, locale, diagnostic, accountUsageOnly: capabilities.accountUsageOnly })
   }
   const removeProjections = capabilities.uiConversation === undefined ? noop
-    : installAutoModelProjections({ uiConversation: capabilities.uiConversation, diagnostic })
+    : installAutoModelProjections({ uiConversation: capabilities.uiConversation, diagnostic, accountUsageOnly: capabilities.accountUsageOnly })
   let removeInjection: Dispose = noop
   try {
     removeInjection = slots.inject(SLOT, () => {
@@ -367,13 +370,21 @@ export function installAutoModelPresentation(capabilities: {
         diagnostic('COPILOT_AUTO_ACTIONS_SLOT_UNAVAILABLE')
         return noop
       }
-      return slots.register({ name: SLOT, id: 'github-copilot-auto-model', order: 20 }, Entry)
+      return slots.register({ name: SLOT, id: capabilities.accountUsageOnly ? 'github-copilot-account-usage' : 'github-copilot-auto-model', order: 20 }, Entry)
     })
   } catch {
     removeInjection()
     removeProjections()
     diagnostic('COPILOT_AUTO_PRESENTATION_FAILED')
     return noop
+  }
+
+  export function installAccountUsagePresentation(capabilities: Omit<Parameters<typeof installAutoModelPresentation>[0], 'accountUsageOnly'>): Dispose {
+    return installAutoModelPresentation({ ...capabilities, accountUsageOnly: true })
+  }
+
+  export function installAccountUsageProjections(capabilities: Omit<Parameters<typeof installAutoModelProjections>[0], 'accountUsageOnly'>): Dispose {
+    return installAutoModelProjections({ ...capabilities, accountUsageOnly: true })
   }
   return () => {
     removeInjection()

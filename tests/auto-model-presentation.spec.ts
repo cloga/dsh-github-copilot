@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  AUTO_MODEL_ATTRIBUTION_KEY, autoModelAttributionDefinition, installAutoModelPresentation,
+  AUTO_MODEL_ATTRIBUTION_KEY, autoModelAttributionDefinition, installAutoModelPresentation, installAccountUsagePresentation,
 } from '../src/auto-model-presentation.ts'
 import { turnModelProvenanceDefinition } from '../src/turn-model-provenance.ts'
 import { turnUsageEvidenceDefinition } from '../src/turn-usage-evidence.ts'
@@ -23,6 +23,28 @@ function decision(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Auto model presentation', () => {
+  it('mounts account and usage evidence without Auto attribution', () => {
+    const remove = vi.fn(), diagnostic = vi.fn()
+    const events = { register: vi.fn(() => remove) }
+    const register = vi.fn(() => remove)
+    const dispose = installAccountUsagePresentation({
+      diagnostic, uiConversation: { events },
+      remote: { githubCopilotTurnSelection: { get: vi.fn() } },
+      slots: { spec: () => ({ kind: 'list', scope: 'session' }),
+        inject: (_: string, setup: () => () => void) => setup(), register },
+    })
+    expect(events.register).toHaveBeenCalledTimes(2)
+    expect(events.register).toHaveBeenCalledWith(turnModelProvenanceDefinition)
+    expect(events.register).toHaveBeenCalledWith(turnUsageEvidenceDefinition)
+    expect(events.register).not.toHaveBeenCalledWith(autoModelAttributionDefinition)
+    expect(register).toHaveBeenCalledWith(
+      { name: 'conversation.chat.assistant-actions', id: 'github-copilot-account-usage', order: 20 },
+      expect.any(Function),
+    )
+    expect(diagnostic).not.toHaveBeenCalled()
+    dispose()
+    expect(remove).toHaveBeenCalledTimes(3)
+  })
   it('omits attribution when a compatible history contains no optional decision', () => {
     expect(autoModelAttributionDefinition.buildLocationData({ matches: [] }, 'turn', null)).toBeNull()
     expect(autoModelAttributionDefinition.match({

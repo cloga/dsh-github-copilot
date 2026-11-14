@@ -16,6 +16,7 @@ import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './rem
 import { DiagnosticsCard } from './diagnostics-card.ts'
 import type { DiagnosticsRemote } from './diagnostics-card.ts'
 import { installDiagnosticsClient } from './diagnostics-client.ts'
+import { installAccountUsagePresentation, installAccountUsageProjections } from './auto-model-presentation.ts'
 export { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
 import { registerCopilotUsageUi } from './copilot-usage-ui.ts'
@@ -1155,7 +1156,19 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const usageUi = ctx.inject(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], registerCopilotUsageUi)
   const contextUi = ctx.inject(['remote.githubCopilotSessionContinuation', 'slots'], registerContextEvidenceUi)
   const recoveryUi = ctx.inject(['remote.githubCopilotReplayRecovery', 'remote.githubCopilotSessionContinuation', 'slots'], registerReplayRecoveryUi)
+  const accountUsageUi = ctx.inject(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], scope => installAccountUsagePresentation({
+    slots: scope.slots,
+    remote: scope.remote,
+    locale: scope.get('locale'),
+    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
+  }))
+  const accountUsageProjections = ctx.inject(['uiConversation', 'slots'], scope => installAccountUsageProjections({
+    uiConversation: scope.get('uiConversation'),
+    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
+  }))
   return async () => {
+    await accountUsageProjections.dispose()
+    await accountUsageUi.dispose()
     await diagnosticsUi.dispose()
     await recoveryUi.dispose()
     await contextUi.dispose()
