@@ -40,6 +40,51 @@ describe('native web ownership', () => {
       .toEqual(['github-copilot'])
   })
 
+  it('preserves implicit native search selection before, during and after plugin activation', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    const mutate = vi.fn(async () => { throw new Error('unexpected fixture settings mutation') })
+    await ctx.plugin({ apply(owner) {
+      new AgentRegistry(owner)
+      owner.plugin(SystemPrompt, {})
+      owner.provide('credentials', {
+        describeRecord: async () => ({ configured: false, writable: true }),
+        readRecord: async () => undefined,
+        listRecords: async () => [],
+        modifyRecord: async () => { throw new Error('unexpected fixture credential mutation') },
+        deleteRecord: async () => { throw new Error('unexpected fixture credential deletion') },
+      })
+      owner.provide('settings', {
+        get: (namespace: string) => namespace === 'github-copilot' ? {} : undefined,
+        describe: () => [{ ns: 'github-copilot', revision: 1, value: {} }],
+        mutate,
+      })
+      owner.provide('agentDefaultModel', {
+        currentSelection: () => ({ provider: 'github-copilot', model: 'native-model' }),
+      })
+    } })
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(AuthorizationService)
+    await ctx.plugin(WebRuntime, { searchProvider: undefined, fetchProvider: undefined })
+    const result = { content: 'native answer', sources: [], truncated: false }
+    const search = vi.fn(async () => result)
+    await ctx.plugin({ inject: ['web'], apply(owner) {
+      owner.web.registerSearchProvider({ id: 'native', available: () => true, search })
+    } })
+    const request = { query: 'current information' }
+    await expect(ctx.web.search(request)).resolves.toEqual(result)
+
+    const plugin = ctx.plugin(Copilot, config)
+    await plugin
+    await vi.waitFor(() => expect(ctx.get('githubCopilotAuthorization')).toBeDefined())
+    await expect(ctx.web.search(request)).resolves.toEqual(result)
+    await plugin.dispose()
+    await expect(ctx.web.search(request)).resolves.toEqual(result)
+
+    expect(search).toHaveBeenCalledTimes(3)
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
   it('keeps native web tool execution for a Copilot Agent before and after plugin disposal', async () => {
     const ctx = new Context()
     contexts.push(ctx)
