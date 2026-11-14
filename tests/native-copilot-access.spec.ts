@@ -110,6 +110,19 @@ describe('native Copilot protocol qualification', () => {
     expect(reasons).toContain('COPILOT_NATIVE_CATALOG_UNAVAILABLE')
   })
 
+  it.each(['condition', 'competing-pattern'] as const)(
+    'rejects an ambiguous native catalog export (%s)', async kind => {
+      const fixture = await independentCatalogFixture()
+      if (kind === 'condition') {
+        Object.assign(fixture.nativePi.manifest.exports['./providers/*'], { node: './other/*.js' })
+      } else {
+        Object.assign(fixture.nativePi.manifest.exports, { './providers/a*': { import: './other/*.js' } })
+      }
+      const reasons: string[] = []
+      expect(await captureNativeCopilot(fixture.ctx, code => reasons.push(code))).toBeUndefined()
+      expect(reasons).toContain('COPILOT_NATIVE_CATALOG_UNAVAILABLE')
+    })
+
   it('rejects incomplete native protocol metadata without borrowing the plugin catalog', async () => {
     const fixture = await independentCatalogFixture()
     await writeFile(fixture.catalogPath, `export function getBuiltinModels() { return [{ id: ${JSON.stringify(fixture.model.id)} }] }`)

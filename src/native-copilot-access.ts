@@ -53,9 +53,18 @@ function nativeCatalogUrl(manifestPath: string, exports: unknown): string | unde
   if (!record(exports)) return undefined
   const exact = exports['./providers/all']
   const wildcard = exact === undefined
+  if (wildcard && Object.keys(exports).some(key => {
+    if (key === './providers/*') return false
+    const parts = key.split('*')
+    if (parts.length !== 2) return false
+    const [prefix = '', suffix = ''] = parts
+    return './providers/all'.startsWith(prefix) && './providers/all'.endsWith(suffix)
+      && prefix.length + suffix.length <= './providers/all'.length
+  })) return undefined
   const descriptor = wildcard ? exports['./providers/*'] : exact
   const target = typeof descriptor === 'string' ? descriptor
-    : record(descriptor) && typeof descriptor.import === 'string' ? descriptor.import : undefined
+    : record(descriptor) && Object.keys(descriptor).every(key => key === 'types' || key === 'import')
+      && typeof descriptor.import === 'string' ? descriptor.import : undefined
   if (!target || !/^\.\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._*-]+\.m?js$/u.test(target)
     || target.split('/').slice(1).some(part => part === '.' || part === '..')) return undefined
   const stars = [...target].filter(character => character === '*').length
