@@ -75,7 +75,15 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 无需手工定义 Copilot 模型、粘贴 token、使用外部网关或安装
 `copilot2api`。账号登录成功不代表所有模型及其能力都可用。
 插件自动发现的账号模型及能力适用于 `github-copilot-preview` 路线；DSH 原生
-`github-copilot` 路线使用自己的内置或用户配置目录，两条路线不共享模型发现结果。
+`github-copilot` 路线使用自己的内置或用户配置目录，两条路线不会自动共享模型发现结果。
+
+如需将当前 canonical 账号的已启用模型复制到已配置的原生 provider，请选择
+**Manage → Model preferences → Preview enabled models**，检查新增、更新、移除、
+跳过项和每次请求的输出默认值，然后选择 **Apply sync**。此显式单次快照只通过
+Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。原生 profile
+无法表达的协议、更窄的服务端输入上限、账号专属图像 MIME 限制或推理元数据会被跳过，
+不会猜测。Core 会将配置的 `maxTokens` 同时作为模型的单次请求输出默认值。同步不修改
+凭据、选择或历史，也不会自动跟随后续账号变化。
 
 添加 DSH 原生 GitHub Copilot provider 时，可使用独立的插件账号面板登录。
 没有指定密钥时，原生路线使用已保存的 canonical OAuth 凭据，而不是另行选择的

@@ -90,7 +90,19 @@ No manually defined Copilot model, pasted token, external gateway, or
 successful sign-in does not guarantee every model or capability is available.
 The plugin's account-discovered models and capabilities apply to the
 `github-copilot-preview` route. DSH's native `github-copilot` route uses its
-own bundled or configured catalog; the two routes do not share model discovery.
+own bundled or configured catalog; the two routes do not automatically share
+model discovery.
+
+To copy enabled models from the current canonical account into an existing
+native provider, use **Manage → Model preferences → Preview enabled models**,
+review the additions, updates, removals, skipped models and per-request output
+defaults, then choose **Apply sync**. This one-time snapshot replaces only
+`llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
+Protocols, narrower server input caps, account-specific image MIME restrictions
+and reasoning metadata that the native profile cannot express are skipped
+rather than guessed. Core uses each configured `maxTokens` as that model's
+per-request output default. The sync does not change credentials, select a
+model, alter history, or automatically follow later account changes.
 
 When adding DSH's native GitHub Copilot provider, use the separate plugin account
 panel to sign in. With no named key, the native route uses a stored canonical
