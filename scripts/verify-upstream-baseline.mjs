@@ -121,11 +121,10 @@ if (baseline.strictModeCompat === 'route-switch') {
     'gate?.[field] !== \'offer\'',
   ])
 }
-await assertMarkers('packages/core/agent/src/model-selection.ts', [
-  'const assembled = await next()',
-  'provider: selected.provider',
-  'model: selected.model',
-])
+await assertMarkers('packages/core/agent/src/model-selection.ts',
+  baseline.release === '0.2.2-rc.3'
+    ? ["'agent/pre-step'", 'const decision = await next()', 'modelSwitchNotice(previous, modelSelection)']
+    : ['const assembled = await next()', 'provider: selected.provider', 'model: selected.model'])
 await assertMarkers('packages/llm/llm-pi-ai/src/login.ts', [
   'registerPiAiFlows',
   'recordKeyFor(providerId)',
@@ -160,12 +159,24 @@ if (['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.
   const sessionFormatVersion = baseline.sessionFormatVersion ?? 3
   await assertMarkers('packages/core/session/src/types.ts', [`SESSION_FORMAT_VERSION = ${sessionFormatVersion}`])
   await assertMarkers('packages/core/agent/src/index.ts', ['currentInitiator(): Agent | undefined'])
-  await assertMarkers('packages/session/session-projection/src/index.ts', ['stateOf<K extends keyof SessionProjectionStateMap>'])
-  await assertMarkers('packages/api/session-controller/src/model-selection-projection.ts', [
-    'pending: modelSelectionSchema.nullable()',
-    "event.type === 'model/selection'",
-    "event.type !== 'request/header'",
-  ])
+  if (baseline.release === '0.2.2-rc.3') {
+    await assertMarkers('packages/session/session-projection/src/index.ts', [
+      'stateOf(session: Session, key: string): unknown',
+      'readerFor(session: Session): () => S',
+    ])
+    await assertMarkers('packages/core/agent/src/model-selection.ts', [
+      'pending: selectionSchema',
+      "event.type === 'model/selection'",
+      "event.type !== 'request/header'",
+    ])
+  } else {
+    await assertMarkers('packages/session/session-projection/src/index.ts', ['stateOf<K extends keyof SessionProjectionStateMap>'])
+    await assertMarkers('packages/api/session-controller/src/model-selection-projection.ts', [
+      'pending: modelSelectionSchema.nullable()',
+      "event.type === 'model/selection'",
+      "event.type !== 'request/header'",
+    ])
+  }
 }
 
 if (['0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2'].includes(baseline.release)) {

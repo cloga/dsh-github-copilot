@@ -44,6 +44,7 @@ function adapter(simple: SimpleNativeProvider['streamSimple'], streamIdleTimeout
   const profile = {
     provider, displayName: 'Synthetic candidate', piProvider: coreProviderView(native),
     streamIdleTimeoutMs, maxRequestImageBytes: 20971520,
+    maxRequestImages: 50, imageOffloadCountQuantum: 10,
     requestImagePixelBudget: 4194304, requestImageMaxBytes: 1048576,
     retryPolicy: resolveRetryPolicy(undefined, 'fixture'),
     configuredMaxTokens: new Map<string, number>(), modelErrors: new Map<string, string>(),
