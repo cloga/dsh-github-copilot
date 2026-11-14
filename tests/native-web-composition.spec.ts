@@ -76,7 +76,11 @@ describe('native web ownership', () => {
       session: { id: 'copilot-agent', requestHeader: () => ({ config: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }) },
     } as unknown as Agent
     const scope = createScope(ctx, agent)
-    applyWebSearchTool(scope.ctx, 2, 2, 800, 60_000, false)
+    await ctx.plugin({ inject: ['tools', 'web', 'systemPrompt'], apply(owner) {
+      const toolScope = createScope(owner, agent)
+      applyWebSearchTool(toolScope.ctx, 2, 2, 800, 60_000, false)
+      return () => toolScope.dispose()
+    } })
     const plugin = ctx.plugin(Copilot, config)
     await plugin
     await vi.waitFor(() => expect(ctx.get('githubCopilotAuthorization')).toBeDefined())
@@ -104,11 +108,15 @@ describe('native web ownership', () => {
     }, next])).rejects.toThrow('COPILOT_PRE_STEP_MODEL_SELECTION_INVALID')
     expect(next).toHaveBeenCalledTimes(2)
     const run = (callId: string) => ctx.agents.withInitiator(agent, async () => {
-      const batch = await ctx.tools.execute({ agent, signal: new AbortController().signal,
-        calls: [{ type: 'tool-call', id: ToolCallId(callId), name: 'web_search',
-          arguments: JSON.stringify({ queries: ['current information'] }) }] })
-      if (batch.results.length !== 1) throw new Error('expected one native web result')
-      return batch.results[0]!.result
+      const requestSignal = new AbortController().signal
+      const toolSet = await ctx.tools.resolve({ agent, signal: requestSignal, modelSelection: agent.session.requestHeader()!.config })
+      try {
+        const batch = await ctx.tools.execute({ agent, signal: requestSignal, toolSet,
+          calls: [{ type: 'tool-call', id: ToolCallId(callId), name: 'web_search',
+            arguments: JSON.stringify({ queries: ['current information'] }) }] })
+        if (batch.results.length !== 1) throw new Error('expected one native web result')
+        return batch.results[0]!.result
+      } finally { toolSet.dispose() }
     })
     expect(await run('before-dispose')).toMatchObject({ isError: false })
     await plugin.dispose()

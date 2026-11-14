@@ -63,11 +63,16 @@ describe('native web bundle with the public Loader', () => {
     }, pathToFileURL(join(packageRoot, 'package.json')).href)
     owned.push(async () => { await ctx.fiber.dispose() })
     const run = (agent: Agent, queries: string[]) => ctx.get('agents')!.withInitiator(agent, async () => {
-      const batch = await ctx.get('tools')!.execute({ agent, signal: new AbortController().signal,
-        calls: [{ type: 'tool-call', id: `loader-${agent.id}` as ToolCallId,
-          name: 'web_search', arguments: JSON.stringify({ queries }) }] })
-      if (batch.results.length !== 1) throw new Error('expected one tool result')
-      return batch.results[0]!.result
+      const tools = ctx.get('tools')!
+      const signal = new AbortController().signal
+      const toolSet = await tools.resolve({ agent, signal, modelSelection: agent.session.requestHeader()!.config })
+      try {
+        const batch = await tools.execute({ agent, signal, toolSet,
+          calls: [{ type: 'tool-call', id: `loader-${agent.id}` as ToolCallId,
+            name: 'web_search', arguments: JSON.stringify({ queries }) }] })
+        if (batch.results.length !== 1) throw new Error('expected one tool result')
+        return batch.results[0]!.result
+      } finally { toolSet.dispose() }
     })
     expect((await run(owner, ['copilot query'])).isError).toBe(false)
     expect((await run(nativeOwner, ['native query'])).isError).toBe(false)

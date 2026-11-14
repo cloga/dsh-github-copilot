@@ -143,6 +143,16 @@ describe('tsdown client artifact', () => {
     }
     let current: Instance
     let memoIndex = 0, effectIndex = 0
+    const useEffect = (setup: React.EffectCallback, deps?: React.DependencyList) => {
+      const instance = current, index = effectIndex++, previous = instance.effects[index]
+      if (!previous || !deps || !previous.deps || deps.some((value, at) => !Object.is(value, previous.deps?.[at]))) {
+        instance.pending.push(() => {
+          previous?.cleanup?.()
+          const cleanup = setup()
+          instance.effects[index] = { deps, cleanup: typeof cleanup === 'function' ? cleanup : undefined }
+        })
+      }
+    }
     const hooks = {
       ...React,
       useState(initial?: unknown) {
@@ -162,16 +172,8 @@ describe('tsdown client artifact', () => {
         return hooks.useMemo(() => callback, deps)
       },
       useSyncExternalStore<T>(_subscribe: unknown, snapshot: () => T): T { return snapshot() },
-      useLayoutEffect(setup: React.EffectCallback, deps?: React.DependencyList) {
-        const instance = current, index = effectIndex++, previous = instance.effects[index]
-        if (!previous || !deps || !previous.deps || deps.some((value, at) => !Object.is(value, previous.deps?.[at]))) {
-          instance.pending.push(() => {
-            previous?.cleanup?.()
-            const cleanup = setup()
-            instance.effects[index] = { deps, cleanup: typeof cleanup === 'function' ? cleanup : undefined }
-          })
-        }
-      },
+      useEffect,
+      useLayoutEffect: useEffect,
     }
     const client = loadArtifact(hooks as typeof React)
     type Render = (props: Record<string, unknown>) => React.ReactElement
@@ -255,8 +257,9 @@ describe('tsdown client artifact', () => {
       else { footer.render(footerElement); provider.render(providerElement) }
       const tree = provider.render(providerElement)
       expect(tree?.props['data-dsh-github-copilot-account-surface']).toBe('provider')
-      expect(tree?.props.children.type).toBe(fixture.client.exports.GitHubCopilotCompactAccount)
-      expect(tree?.props.children.props.embedded).toBe(true)
+      const connection = fixture.instance().render(tree!.props.children)
+      expect(connection?.type).toBe(fixture.client.exports.GitHubCopilotCompactAccount)
+      expect(connection?.props.embedded).toBe(true)
       expect(footer.render(footerElement)).toBeNull()
       expect(fixture.remote.status).toHaveBeenCalledOnce()
       expect(fixture.remote.start).not.toHaveBeenCalled()

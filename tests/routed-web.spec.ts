@@ -122,10 +122,14 @@ async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?
   const run = (agent: Agent, args: unknown, signal = new AbortController().signal) => agents.withInitiator(agent, async () => {
     const argumentsJson = JSON.stringify(args)
     if (argumentsJson === undefined) throw new Error('fixture arguments must be JSON')
-    const batch = await tools.execute({ agent, signal,
-      calls: [{ type: 'tool-call', id: ToolCallId(`call-${++call}`), name: 'web_search', arguments: argumentsJson }] })
-    if (batch.results.length !== 1) throw new Error('expected one native web result')
-    return batch.results[0]!.result
+    const modelSelection = agent.session.requestHeader()!.config
+    const toolSet = await tools.resolve({ agent, signal, modelSelection })
+    try {
+      const batch = await tools.execute({ agent, signal, toolSet,
+        calls: [{ type: 'tool-call', id: ToolCallId(`call-${++call}`), name: 'web_search', arguments: argumentsJson }] })
+      if (batch.results.length !== 1) throw new Error('expected one native web result')
+      return batch.results[0]!.result
+    } finally { toolSet.dispose() }
   })
   return { ctx, tools, agents, a, b, d, run, copilot, deepseek, search, alternateSearch, fetch, providerFiber, routedFiber, router, original: isolated.get('web')! }
 }

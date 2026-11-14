@@ -115,17 +115,15 @@ function expectOnlyRetainedUi(f: Fixture, footer: boolean) {
   const accountId = footer ? 'github-copilot-preview' : 'github-copilot'
   expect([...f.registrations.keys()].sort()).toEqual([
     `${providerSlot}:llm-pi-ai`, `${settingsSlot}:${accountId}`,
-    `${settingsSlot}:github-copilot-search-routing`, `${usageSlot}:github-copilot-usage`,
+    `${settingsSlot}:github-copilot-options`, `${usageSlot}:github-copilot-usage`,
     `${noticeSlot}:github-copilot-context-evidence`,
   ].sort())
   // Adjacent positive assertions rule out an unactivated Client or empty registry.
   const account = f.registrations.get(`${settingsSlot}:${accountId}`)!.render({})!
   expect(account.type).toBe(client.GitHubCopilotAccountSurface)
-  const search = f.registrations.get(`${settingsSlot}:github-copilot-search-routing`)!.render({})!
-  expect(search.type).toBe('div')
-  const [routing, diagnostics] = search.props.children as ReactElement[]
-  expect(routing?.type).toBe(client.WebSearchRoutingCard)
-  expect(diagnostics?.type).toBeTypeOf('function')
+  const options = f.registrations.get(`${settingsSlot}:github-copilot-options`)!.render({})!
+  expect(options.type).toBe(client.CopilotPluginSettingsPage)
+  expect(options.props.diagnosticsControl.type).toBeTypeOf('function')
   const provider = f.registrations.get(`${providerSlot}:llm-pi-ai`)!.render({
     provider: { provider: 'github-copilot', settingsNs: 'llm-pi-ai' }, configured: true,
   })!
