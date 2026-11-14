@@ -322,12 +322,16 @@ describe('optional dedicated planner/executor Host', () => {
     f.ctx.emit(scopeTarget(parent as unknown as CoreAgent, parent), 'agent/disposed', { agent: parent as unknown as CoreAgent })
     await Promise.resolve(); await Promise.resolve()
     await expect(f.systemPrompt.assemble({ scope: parent })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_UNSUPPORTED' } })
-    f.ctx.emit('session/event', parent.session, { type: 'turn/start', seq: 2, time: 1, data: { turn: 1 } })
-    const result = await f.systemPrompt.assemble({ scope: parent })
-    expect(result.variables).toMatchObject({ provider: PROVIDER, model: 'plan-A' })
-    expect(result.sections.find(section => section.name === 'github-copilot:dual-model-role')?.text).toContain('independently review')
-    expect(result.tools.map(tool => tool.name)).toContain(DUAL_MODEL_EXECUTE_TOOL)
-    expect(result.tools.map(tool => tool.name)).not.toContain('write')
+    f.ctx.emit('session/event', parent.session, parent.session.append('turn/start', { turn: 1 }))
+    const toolSet = await f.tools.resolve({ agent: parent as unknown as CoreAgent,
+      modelSelection: { provider: PROVIDER, model: 'plan-A' }, signal: new AbortController().signal })
+    try {
+      const result = await f.systemPrompt.assemble({ scope: parent, toolSet })
+      expect(result.variables).toMatchObject({ provider: PROVIDER, model: 'plan-A' })
+      expect(result.sections.find(section => section.name === 'github-copilot:dual-model-role')?.text).toContain('independently review')
+      expect(result.tools.map(tool => tool.name)).toContain(DUAL_MODEL_EXECUTE_TOOL)
+      expect(result.tools.map(tool => tool.name)).not.toContain('write')
+    } finally { toolSet.dispose() }
     expect((await f.execute(parent, 'read')).isError).toBe(false)
   })
   it('recovers the same durable operation after service restart and a settings change', async () => {

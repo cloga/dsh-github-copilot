@@ -100,8 +100,9 @@ describe('Copilot tool-schema compatibility', () => {
     expect(result.description).toBe(tool.description)
     expect(Object.keys(result.parameters.properties!)).toEqual(['code', 'description', 'timeoutMs'])
     expect(result.parameters.required).toEqual(['code', 'description'])
-    expect(result.parameters.properties!.code).toBe(parameters.properties.code)
-    expect(result.parameters.properties!.timeoutMs).toBe(parameters.properties.timeoutMs)
+    expect(result.parameters.properties).toEqual({
+      code: parameters.properties.code, description: parameters.properties.description, timeoutMs: parameters.properties.timeoutMs,
+    })
     expect(tool.parameters).toBe(parameters)
     expect(parameters.properties).toHaveProperty('sandbox_permissions')
     expect(filterCopilotToolRequest({ ...input, provider: 'deepseek' }).tools![0]).toBe(tool)

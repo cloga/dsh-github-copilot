@@ -912,7 +912,7 @@ describe('plugin-owned account Copilot route', () => {
       { childSessionId: 'child', parentSessionId: 'parent' },
     ] }
     const saved = structuredClone(settings)
-    const harness = await runtime(grant(), { accountModelSettings: () => settings })
+    const harness = await runtime(grant(), { accountModelSettings: () => ({ ...settings, accountModelTtlMs: 86_400_000 }) })
     const agent = { ctx: harness.ctx, session: {
       id: 'child', header: { id: 'child', origin: 'subagent', parentSession: 'parent' },
       requestHeader: () => undefined,
@@ -2805,6 +2805,30 @@ describe('plugin-owned account Copilot route', () => {
     const retried = await call(harness.ctx, { messages: projected })
     expect(retried.assembler.finish).toEqual({ kind: 'stop' })
     expect(fetch).toHaveBeenCalledOnce()
+  })
+
+  it('uses the native image-count offload quantum for managed requests', async () => {
+    const harness = await runtime(grant())
+    const data = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/+8AAAAASUVORK5CYII=', 'base64')
+    type ImageRef = Extract<Message['content'][number], { type: 'image' }>['attachment']
+    const attachment: ImageRef = { attachmentId: 'synthetic-count' as ImageRef['attachmentId'], mediaType: 'image/png', bytes: data.length, width: 1, height: 1 }
+    await harness.ctx.plugin({ apply(owner: Context) {
+      owner.provide('attachments', {
+        imageLimits: { maxImageBytes: 1_000_000, maxImagesPerMessage: 4, maxMessageImageBytes: 4_000_000, maxImagePixels: 1_000_000, maxImageDimension: 4096, mediaTypes: ['image/png'] },
+        readImageRequest: async () => ({ variantId: 'synthetic-count-version', attachment, data,
+          mediaType: 'image/png', bytes: data.length, width: 1, height: 1, depth: 'uchar', space: 'srgb', hasAlpha: true }),
+      } as unknown as Context['attachments'])
+    } })
+    const fetch = vi.fn(async () => response())
+    stubFetch(fetch)
+    const messages = Array.from({ length: 51 }, () => createUserMessage({
+      content: [{ type: 'image', attachment }], source: { kind: 'user' },
+    }))
+    const result = await call(harness.ctx, { messages })
+    expect(result.assembler.finish).toMatchObject({
+      kind: 'error', failure: { code: 'IMAGE_OFFLOAD_REQUIRED', offloadImages: 10 },
+    })
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('cancels an in-flight SDK request on disposal without deleting the shared grant', async () => {
