@@ -57,6 +57,15 @@
     },
     "diagnostics": "Repository checks only; no live profile, credential, network or model calls",
     "approvalRequired": ["install into a user profile", "sign-out", "worktree checkout"],
+    "workspaceIsolation": {
+      "default": "app-managed-worktree-when-authorized",
+      "nonWorktree": "inspect-and-preserve-shared-workspace",
+      "temporaryArtifacts": "session-owned-outside-checkout",
+      "existingFiles": "preserve-never-hide-or-delete-for-gates",
+      "delivery": "review-explicit-commit-and-respect-tool-policy",
+      "escalation": "once-for-genuine-blocker-or-risk",
+      "enforcement": "advisory-not-a-sandbox"
+    },
     "releaseDelivery": {
       "mode": "important-update-follow-through",
       "importantChanges": ["user-visible-feature", "behavior-fix", "compatibility-fix", "security-fix", "stability-fix"],
