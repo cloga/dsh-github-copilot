@@ -9,7 +9,7 @@ import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
-import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
+import type { SubagentRunEndInfo, SubagentRunInfo } from '@deepseek-ai/dsh-subagent'
 import * as Spawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import SubagentModelSelectionConfig from '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
@@ -49,9 +49,12 @@ it('selects and concurrently dispatches native Copilot subagents using the canon
   const directory = await mkdtemp(join(tmpdir(), 'copilot-native-subagent-'))
   const ctx = new Context()
   const release = Promise.withResolvers<void>()
+  const releaseCancellationPair = Promise.withResolvers<void>()
   const requests: Array<{ model: string; authorization: string | null; effort: unknown }> = []
   const signals: Array<AbortSignal | null | undefined> = []
+  const started: SubagentRunInfo[] = []
   const completed: SubagentRunEndInfo[] = []
+  ctx.on('subagent/start', info => { started.push(info) })
   ctx.on('subagent/end', info => { completed.push(info) })
   vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
     if (!String(input).endsWith('/responses')) throw new Error('unexpected fixture request')
@@ -59,7 +62,15 @@ it('selects and concurrently dispatches native Copilot subagents using the canon
     requests.push({ model: body.model, authorization: new Headers(init?.headers).get('authorization'),
       effort: body.reasoning?.effort })
     signals.push(init?.signal)
-    await release.promise
+    const gate = requests.length <= 2 ? release.promise : releaseCancellationPair.promise
+    const signal = init?.signal
+    if (!signal) throw new Error('fixture request has no cancellation signal')
+    const aborted = Promise.withResolvers<never>()
+    const onAbort = () => aborted.reject(new DOMException('Synthetic cancellation', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    if (signal.aborted) onAbort()
+    try { await Promise.race([gate, aborted.promise]) }
+    finally { signal.removeEventListener('abort', onAbort) }
     return response(body.model)
   })
   try {
@@ -148,8 +159,32 @@ it('selects and concurrently dispatches native Copilot subagents using the canon
       expect(info.lastAssistantMessage?.some(block =>
         block.type === 'text' && block.text === `finished ${model.id}`)).toBe(true)
     }
+
+    expect((await call('native-child-cancelled', 'low')).results[0]!.result.isError).toBe(false)
+    await vi.waitFor(() => expect(requests).toHaveLength(3), { timeout: 15_000 })
+    const cancelledId = started.at(-1)!.id
+    const cancelledChild = ctx.agents.list().find(agent => agent.session.id === cancelledId)
+    expect(cancelledChild).toBeDefined()
+    expect((await call('native-child-survivor', 'high')).results[0]!.result.isError).toBe(false)
+    await vi.waitFor(() => expect(requests).toHaveLength(4), { timeout: 15_000 })
+    const survivorId = started.at(-1)!.id
+    expect(survivorId).not.toBe(cancelledId)
+    expect(signals[2]).not.toBe(signals[3])
+    cancelledChild!.cancel({ kind: 'user' })
+    await vi.waitFor(() => expect(signals[2]?.aborted).toBe(true))
+    expect(signals[3]?.aborted).toBe(false)
+    releaseCancellationPair.resolve()
+    do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
+    expect(completed.find(info => info.id === cancelledId)?.stopReason).toBe('aborted')
+    expect(completed.find(info => info.id === survivorId)).toMatchObject({
+      stopReason: 'completed',
+      lastAssistantMessage: expect.arrayContaining([expect.objectContaining({ type: 'text', text: `finished ${model.id}` })]),
+    })
+    expect(requests).toHaveLength(4)
+    expect(requests.slice(2).every(request => request.authorization === 'Bearer synthetic-access')).toBe(true)
   } finally {
     release.resolve()
+    releaseCancellationPair.resolve()
     try { await ctx.fiber.dispose() }
     finally {
       try { await rm(directory, { recursive: true, force: true }) }
