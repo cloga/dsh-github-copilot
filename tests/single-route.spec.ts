@@ -113,7 +113,7 @@ describe('single managed Copilot route with native OAuth', () => {
     ])
     const view = await h.ctx.get('githubCopilotAuthorization')!.ensureModels()
     expect(view.accountModels).toMatchObject({ state: 'ready', models: [{ id: 'future-account-model', api: 'openai-responses' }] })
-    expect(h.ctx.llm.listProviders().map(provider => ({ id: provider.id, name: provider.name }))).toEqual([{ id: MANAGED, name: 'GitHub Copilot' }])
+    expect(h.ctx.llm.listProviders().map(provider => ({ id: provider.id, name: provider.name }))).toEqual([{ id: MANAGED, name: 'GitHub Copilot (multi-account)' }])
     expect((await h.ctx.llm.listModels(MANAGED)).map(model => model.id))
       .toEqual(['future-account-model'])
     const model = await h.ctx.llm.resolveModelInfo(MANAGED, 'future-account-model')

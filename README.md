@@ -94,9 +94,12 @@ own bundled or configured catalog; the two routes do not share model discovery.
 
 When adding DSH's native GitHub Copilot provider, use the separate plugin account
 panel to sign in. With no named key, the native route uses a stored canonical
-OAuth grant, not an independently selected additional account. While the
-managed route remains registered, saving the native provider can block
-additional-account requests and switching. The native picker is not guaranteed
+OAuth grant, not an independently selected additional account. Native and
+managed routes can coexist: use **Manage → Account management → Switch**, then
+choose a model under **GitHub Copilot (multi-account)** in the native picker.
+Switching changes only the managed default; managed **Credits** can select an
+account for that Session's subsequent turns. Native login, selected models and
+running turns are not redirected. The native picker is not guaranteed
 to filter its bundled catalog by account entitlement.
 Starting the plugin or completing sign-in does not automatically repair the
 native provider's settings.
@@ -119,6 +122,22 @@ cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
 Native context-incident diagnostics remain available without the optional
 managed continuation service; they do not replace DSH's context meter.
+
+### Removing the enhancement
+
+Unloading the plugin removes its own routes, UI and listeners, not native
+Copilot credentials, configuration, model selections or history. Independently
+configured native **GitHub Copilot** remains usable with its original account.
+Removing the plugin is not signing out; explicit sign-out or removal of the
+original authorization is a different action and can affect native login.
+
+Plugin-dependent selections do not become native automatically. Before removal,
+explicitly select native models for Sessions/defaults using
+`github-copilot-preview`. If Web is set to `github-copilot-hosted`, select another
+available backend in native Web settings first. Removing the plugin does not
+rewrite Web settings: a retained missing backend produces
+`WEB_PROVIDER_CONFIGURED_MISSING`, not an automatic fallback. Additional-account
+switching and plugin-specific search require the plugin.
 
 Desktop's native package manager and its bundled CLI have different contracts
 from a standalone profile. Review the [Desktop CLI evidence](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)
