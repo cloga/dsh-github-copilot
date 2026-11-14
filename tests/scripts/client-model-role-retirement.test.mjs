@@ -13,14 +13,14 @@ test('Client entry no longer imports, exports or injects the retired role UI', (
   assert.doesNotMatch(client, /github-copilot-dual-model|Model roles|模型分工/)
 })
 
-test('Client retains neighboring account, search and usage contributions', () => {
-  assert.match(client, /ctx\.inject\(\['remote\.githubCopilot', 'remote\.githubCopilotAccounts', 'remote\.githubCopilotSessionContinuation', 'slots'\], registerUi\)/)
-  assert.match(client, /ctx\.inject\(\['remote\.settings', 'remote\.githubCopilotSearchRouting', 'slots'\], registerSearchUi\)/)
+test('Client retains account, settings and usage contributions without search routing', () => {
+  assert.match(client, /ctx\.inject\(\['remote\.githubCopilot', 'remote\.githubCopilotAccounts', 'slots'\], registerUi\)/)
+  assert.match(client, /ctx\.inject\(\['slots'\], registerPluginSettingsUi\)/)
+  assert.doesNotMatch(client, /ctx\.inject\(\[[^\]]*remote\.githubCopilotSearchRouting/)
   assert.match(client, /ctx\.inject\(\['remote\.githubCopilotUsage', 'remote\.githubCopilotAccounts', 'remote\.githubCopilotSessionAccount', 'remote\.githubCopilotSessionContinuation', 'slots'\], registerCopilotUsageUi\)/)
   for (const slot of ['settings.models.provider-card', 'settings.models.footer', 'settings.section', 'plugins.bundle.config']) {
     assert.ok(client.includes(`name: '${slot}'`), `Missing retained slot: ${slot}`)
   }
-  assert.match(client, /export \{ HostedSearchSettingsCard, WebSearchRoutingCard \}/)
   assert.match(client, /export \{ CopilotUsageCard \}/)
 })
 

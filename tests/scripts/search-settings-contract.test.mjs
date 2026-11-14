@@ -11,7 +11,7 @@ import { SettingsForms } from '@deepseek-ai/dsh-settings'
 import { boot, initProfile, readProfilePatches } from '@deepseek-ai/dsh-app-boot'
 import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 import { TypertRegistry } from '@deepseek-ai/dsh-typert-registry'
-import { Config } from '../../lib/types/config.js'
+import { Config, readInlineConfig } from '../../lib/types/config.js'
 import copilotRemote from '../../lib/remote.js'
 
 const ROUTING = 'github-copilot-search-routing'
@@ -33,6 +33,7 @@ test('published SettingsForms exposes descriptor/mutation APIs without installSe
 async function fixture(t) {
   const home = await realpath(await mkdtemp(join(tmpdir(), 'copilot-settings-')))
   const contexts = []
+  let liveConfig
   t.after(async () => {
     try { for (const ctx of contexts.reverse()) await ctx.fiber.dispose() }
     finally { await rm(home, { recursive: true, force: true }) }
@@ -60,7 +61,7 @@ async function fixture(t) {
       ctx.provide('profileContext', profile)
       ctx.provide('appReady', { onReady: listener => { listener(); return () => {} } })
       Object.assign(ctx.loader.builtins, {
-        editor: ConfigEditor, settings: SettingsForms, copilot: { Config, apply() {} },
+        editor: ConfigEditor, settings: SettingsForms, copilot: { Config, apply(_ctx, config) { liveConfig = config } },
       })
     })
     contexts.push(ctx)
@@ -70,7 +71,7 @@ async function fixture(t) {
   const settings = ctx.settings
   const view = ns => settings.describe({ redactSecrets: true }).find(entry => entry.ns === ns)
   const fiber = [...ctx.loader.entries()].find(entry => entry.options.id === COPILOT).fiber
-  return { ctx, settings, view, fiber, start, profile }
+  return { ctx, settings, view, fiber, start, profile, getConfig: () => liveConfig }
 }
 
 // Execute the unchanged generated Client bundle in an isolated ModuleLoader stub
@@ -142,14 +143,14 @@ test('real pinned Client namespace lookups require stable capture across render 
 })
 
 test('search routing saves both leaves in github-copilot namespace using nested paths', async t => {
-  const { settings, view, fiber } = await fixture(t)
+  const { settings, view, fiber, getConfig } = await fixture(t)
   assert.ok(view(COPILOT), 'native SettingsForms must discover the plugin Config without register()')
   const revision = view(COPILOT).revision
   await settings.mutate(COPILOT, ops, revision)
   assert.equal(view(COPILOT).revision, revision + 1)
   assert.equal(view(COPILOT).value.searchRouting.searchProvider, 'auto')
   assert.equal(view(COPILOT).value.searchRouting.defaultSearchProvider, 'github-copilot-hosted')
-  assert.equal(fiber.config.searchRouting.get().defaultSearchProvider, 'github-copilot-hosted')
+  assert.equal(readInlineConfig(getConfig()).searchRouting.defaultSearchProvider, 'github-copilot-hosted')
   assert.equal(fiber.config.probe, false)
 })
 
@@ -235,7 +236,7 @@ test('native routing edits preserve ordinary config, reject invalid paths and pe
 })
 
 test('native hidden model exclusions are live, revision checked and persistent without replacing the plugin fiber', async t => {
-  const { ctx, settings, view, fiber, start } = await fixture(t)
+  const { ctx, settings, view, fiber, start, getConfig } = await fixture(t)
   const initial = view(COPILOT)
   assert.deepEqual(initial.value.excludedModelIds, [])
   const serialized = initial.schema
@@ -245,7 +246,7 @@ test('native hidden model exclusions are live, revision checked and persistent w
   ], initial.revision)
   assert.deepEqual(view(COPILOT).value.excludedModelIds, ['synthetic-model', 'absent-model'])
   assert.equal([...ctx.loader.entries()].find(entry => entry.options.id === COPILOT).fiber, fiber)
-  assert.deepEqual(fiber.config.excludedModelIds.get(), ['synthetic-model', 'absent-model'])
+  assert.deepEqual(readInlineConfig(getConfig()).excludedModelIds, ['synthetic-model', 'absent-model'])
   await assert.rejects(settings.mutate(COPILOT, [
     { op: 'set', path: ['excludedModelIds'], value: [] },
   ], initial.revision), { code: 'SETTINGS_CONFLICT' })

@@ -31,7 +31,7 @@ test('search catalog Remote reaches actual facade registrations and unloads clea
     if (status !== 200) return undefined
     const envelope = await response.json()
     assert.equal(envelope.type, 'server-response'); assert.equal(envelope.rpcId, rpcId)
-    assert.equal(envelope.result.ok, true)
+    assert.equal(envelope.result.ok, true, JSON.stringify(envelope.result))
     return envelope.result.value
   }
   assert.deepEqual(await call(), { supported: false, providers: [] })
