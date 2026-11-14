@@ -38,7 +38,7 @@ function response(model: string) {
   ].join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
 
-it('selects and concurrently dispatches native Copilot subagents using the canonical OAuth grant', async () => {
+it.each(['absent', 'enabled', 'disposed'] as const)('selects and concurrently dispatches native Copilot subagents with the plugin %s', async state => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
   const model = githubCopilotProvider().getModels().find(entry => entry.api === 'openai-responses'
@@ -103,11 +103,17 @@ it('selects and concurrently dispatches native Copilot subagents using the canon
     await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     ctx.provide('tokenMeter', { estimateMessage: () => 1, measure: () => ({ totalTokens: 1 }) })
     await ctx.plugin(LlmPiAi, { providers: { [provider]: {} } })
-    await ctx.plugin(GitHubCopilotPlugin, {
-      enabled: true, providers: [], includeSources: true, stripServerTools: true,
-      idleTimeoutMs: 300_000, probe: false, probeTimeoutMs: 30_000,
-    })
-    await vi.waitFor(() => expect(ctx.get('githubCopilotUsage')).toBeDefined())
+    if (state !== 'absent') {
+      const plugin = await ctx.plugin(GitHubCopilotPlugin, {
+        enabled: true, providers: [], includeSources: true, stripServerTools: true,
+        idleTimeoutMs: 300_000, probe: false, probeTimeoutMs: 30_000,
+      })
+      await vi.waitFor(() => expect(ctx.get('githubCopilotUsage')).toBeDefined())
+      if (state === 'disposed') {
+        await plugin.dispose()
+        await vi.waitFor(() => expect(ctx.get('githubCopilotUsage')).toBeUndefined())
+      }
+    }
     ctx.llm.registerAdapter([parentProvider], new class extends LlmAdapter {
       async *stream(_options: GenerateOptions): AsyncGenerator<StreamChunk> {
         yield { type: 'block-start', index: 0, blockType: 'text' }
