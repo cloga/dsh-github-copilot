@@ -2,9 +2,15 @@
 
 ## 0.1.0-alpha.4.dsh.0.2.2.rc.3 (prepared)
 
-- Remove obsolete hosted-search and Auto descriptions from current account and diagnostics views. Historical Auto data remains available and is identified before JSON sharing, including its possible model IDs (#467).
+- Remove the hosted-search aside from the managed account-model summary and hide retired Auto descriptions when no historical diagnostic data exists. Historical Auto data remains available and is identified before JSON sharing, including its possible model IDs (#467).
 - Preserve existing settings, diagnostic evidence, quota and compatibility; no live profile, history or account is changed.
 - Target DSH 0.2.2-rc.3; publication and live Desktop activation remain separate from this source change.
+
+## 0.1.0-alpha.3.dsh.0.2.2.rc.3 (prepared)
+
+- Extend reviewer-only temperature omission to qualified DSH native `github-copilot` Responses calls, preserving ordinary Chat and native verdict/permission ownership (#460).
+- Add optional canonical-account Copilot hosted search through the existing native Web registry, with one bounded proof and one final query, cancellation and configuration/credential invalidation (#461).
+- Preserve native settings, selected backends, accounts and histories. No live installation, restart or supplier acceptance is implied.
 
 ## 0.1.0-alpha.2.dsh.0.2.2.rc.3 (prepared)
 

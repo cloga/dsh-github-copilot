@@ -100,9 +100,17 @@ additional-account requests and switching. The native picker is not guaranteed
 to filter its bundled catalog by account entitlement.
 Starting the plugin or completing sign-in does not automatically repair the
 native provider's settings.
-The candidate does not register Copilot-hosted search or the former plugin
-search-routing controls. DSH's existing Web search provider remains separate;
-installing the plugin does not configure one.
+The plugin registers optional `github-copilot-hosted` search in DSH's existing
+Web service. Select it explicitly in native Web settings and enable the native
+search tool as needed; installation does not change the selected backend.
+Search uses only the canonical OAuth account and models shared by the native
+configured catalog and current account metadata. Each search makes one fixed
+capability probe and, only after proof, one user query; both may incur charges.
+Custom endpoint, credential or transport overrides and unproven models remain
+unavailable. There is no model retry, backend replacement or plugin routing UI.
+The native Auto reviewer's qualified Copilot Responses requests omit
+`temperature`; ordinary Chat and native allow/deny/error/cancel behavior remain
+unchanged. See [reviewer compatibility](./docs/auto-review-sampling.md).
 The native route's quota display uses only the canonical OAuth account. If the
 provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a

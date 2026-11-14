@@ -12,6 +12,7 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import { PluginPackages, type RuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import * as AutoReview from '@deepseek-ai/dsh-experimental-auto-review'
+import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import LlmRuntime, { createMessage, createUserMessage, LlmAdapter, ToolCallId,
   type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import PermissionPresetService, { AUTO_PRESET } from '@deepseek-ai/dsh-permission-presets'
@@ -24,6 +25,7 @@ import ApprovalService, { setApprovalPolicy } from '@deepseek-ai/dsh-user-approv
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../../src/preview-route.ts'
 import { installAutoReviewSampling } from '../../src/auto-review-sampling.ts'
+import { captureNativeCopilot } from '../../src/native-copilot-access.ts'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
 import * as GitHubCopilotPlugin from '../../src/index.ts'
@@ -32,12 +34,15 @@ import {
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
 } from '../../src/copilot-identity.ts'
 
-const MODEL = 'synthetic-model'
 const contexts: Context[] = []
 
 class ReviewerFixtureLoader extends Loader {
   constructor(ctx: Context, private fixture: { scope: ScopeCase }) { super(ctx, { baseUrl: import.meta.url }) }
   async import(name: string) {
+    if (name === '@deepseek-ai/dsh-llm-pi-ai') {
+      return process.env.DSH_CORE_EVIDENCE === 'published-artifact-runtime'
+        ? super.import(name, () => []) : import('@deepseek-ai/dsh-llm-pi-ai')
+    }
     if (name !== '@deepseek-ai/dsh-experimental-auto-review' && name !== 'fixture-reviewer-alias') {
       throw new Error('unexpected fixture import')
     }
@@ -69,6 +74,7 @@ type ScopeCase = 'native' | 'impostor' | 'descendant' | 'alias' | 'missing-resol
   | 'other-protocol' | 'canonical' | 'other-provider' | 'bound-account'
   | 'retained-facade' | 'late-identity' | 'other-listener' | 'dispose-before-dispatch'
   | 'production' | 'production-disposed'
+  | 'canonical-native' | 'canonical-native-disabled'
 
 function sourceResolution(): RuntimeResolution | undefined {
   if (process.env.DSH_CORE_EVIDENCE !== 'tagged-source-runtime') return undefined
@@ -116,9 +122,13 @@ function reviewerResponse(outcome: Outcome, completions = false): Response {
 }
 
 async function run(outcome: Outcome, automatic = false, thinking?: boolean, scope: ScopeCase = 'native') {
+  const canonicalNative = scope === 'canonical-native' || scope === 'canonical-native-disabled'
+  const MODEL = canonicalNative
+    ? getBuiltinModels('github-copilot').find(model => model.api === 'openai-responses')!.id
+    : 'synthetic-model'
   const ctx = new Context()
   contexts.push(ctx)
-  const provider = scope === 'canonical' ? 'github-copilot' : scope === 'other-provider' ? 'fixture-other' : PREVIEW
+  const provider = scope === 'canonical' || canonicalNative ? 'github-copilot' : scope === 'other-provider' ? 'fixture-other' : PREVIEW
   const completions = scope === 'other-protocol'
   const second = '11111111-1111-4111-8111-111111111111'
   const controller = new AbortController()
@@ -145,6 +155,9 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     wireTokens.push(new Headers(init?.headers).get('authorization'))
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>
     wireBodies.push(body)
+    if (canonicalNative && body.temperature === 0) {
+      return Response.json({ message: "Unsupported parameter: 'temperature'", code: 'invalid_request_body' }, { status: 400 })
+    }
     if (body.temperature === 0.37) return reviewerResponse('allow', completions)
     if (outcome === 'cancel') {
       controller.abort(new DOMException('Synthetic review cancellation', 'AbortError'))
@@ -170,6 +183,11 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(AgentRegistry)
   ctx.provide('workingDirectory', { ensure: async () => process.cwd() })
+  if (canonicalNative) ctx.provide('settings', {
+    configure: () => () => {},
+    describe: () => [{ ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': {} } } }],
+    mutate: async () => { throw new Error('native enhancement must not write settings') },
+  })
   if (scope === 'bound-account') {
     ctx.provide('settings', {
       describe: () => [{ ns: 'github-copilot', revision: 1, value: {
@@ -183,7 +201,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     ctx.provide('githubCopilotSessionAccounts', owner)
     ctx.effect(() => () => { owner.dispose(); host.dispose() })
   }
-  if (provider !== PREVIEW) {
+  if (provider !== PREVIEW && !canonicalNative) {
     ctx.llm.registerAdapter([provider], new class extends LlmAdapter {
       async *stream(options: GenerateOptions): AsyncGenerator<StreamChunk> {
         wireCalls += 1
@@ -246,6 +264,13 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   if (automatic) {
     if (scope !== 'missing-resolution') await ctx.plugin(PluginPackages, { resolution: sourceResolution() })
     await ctx.plugin(ReviewerFixtureLoader, { scope })
+    if (canonicalNative) {
+      await ctx.loader.create({ id: 'llm-pi-ai', name: '@deepseek-ai/dsh-llm-pi-ai',
+        config: { providers: { 'github-copilot': {} } } })
+      await ctx.loader.await()
+      const reasons: string[] = []
+      expect(await captureNativeCopilot(ctx, code => reasons.push(code)), reasons.join(',')).toBeDefined()
+    }
     const production = scope === 'production' || scope === 'production-disposed'
       ? await ctx.plugin(GitHubCopilotPlugin, { enabled: true, providers: [], probe: false })
       : undefined
@@ -256,6 +281,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     await ctx.loader.await()
     if (scope === 'disposed') await stop()
     if (scope === 'production-disposed') await production!.dispose()
+    if (scope === 'canonical-native-disabled') stop()
   } else {
     await ctx.plugin(AutoReview)
   }
@@ -335,6 +361,21 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
 }
 
 describe('native Auto reviewer Copilot compatibility', () => {
+  it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
+    'uses the actual canonical adapter without changing the native %s boundary', async outcome => {
+      const result = await run(outcome, true, undefined, 'canonical-native')
+      expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
+      expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature')), JSON.stringify(result.result)).toHaveLength(1)
+      expect(result.wireCalls).toBe(2)
+      expect(result.executions).toBe(outcome === 'allow' ? 1 : 0)
+      expect(result.result.isError).toBe(outcome !== 'allow')
+    })
+  it('reproduces the canonical temperature failure when the enhancement is disposed', async () => {
+    const result = await run('allow', true, undefined, 'canonical-native-disabled')
+    expect(result.wireBodies.filter(body => body.temperature === 0)).toHaveLength(1)
+    expect(result.result.isError).toBe(true)
+    expect(result.executions).toBe(0)
+  })
   it.each(['allow', 'deny', 'malformed', 'http-error', 'cancel'] as const)(
     'omits temperature with explicit opt-in without weakening the %s verdict boundary', async outcome => {
       const result = await run(outcome)
