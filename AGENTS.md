@@ -483,7 +483,7 @@ The release CI matrix targets only exact official `0.2.1-rc.3` on Windows and Li
 | Last-success timestamp (alpha.7, #97) | Show `snapshot.discoveredAt` once beside count outside Manage: English relative text, full LOCAL date/time/zone tooltip and accessible semantic `time`; missing/invalid/no account hides it, future uses absolute text. Pending/error retains last success, successful refresh replaces it and sign-out clears it. One mounted 60s display-only timer makes no RPC/status/discovery calls and is disposed with timestamp/unmount; cache/discovery lifecycle unchanged |
 | Definitive `UNKNOWN_MODEL` | One bounded metadata refresh, never message replay or automatic model switching; generic HTTP/network errors are not guessed to be unknown models |
 | README screenshot | `copilot-search-routing.png` shows the current built plugin-detail routing card with synthetic providers in an isolated browser fixture. It proves only the current presentation surface, not live credentials, provider availability, search success or Desktop activation. |
-| Host attach/restart | Reconciles the stored profile; search proofs stay lazy and do not start at attach |
+| Host attach/restart | Does not repair or rewrite the stored native profile; search proofs stay lazy and do not start at attach |
 | Background credential/reset notifications | Invalidate evidence and clear Client state with read-only status; no forced discovery on every token event; next Models open/use ensures metadata |
 | Eligible model/search request | May resolve/refresh credentials and run bounded capability proof; changes during proof must fail closed rather than reuse another account's proof |
 | Release install | Writes a named user profile; installed on disk is not loaded in the running Host |

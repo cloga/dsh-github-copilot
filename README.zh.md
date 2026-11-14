@@ -79,6 +79,7 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 没有指定密钥时，原生路线使用已保存的 canonical OAuth 凭据，而不是另行选择的
 附加账号。在托管路线仍然注册的期间，保存原生 provider 可能阻止附加账号的请求
 和切换。原生选择器不保证按账号权限过滤内置模型目录。
+启动插件或完成登录时，不会自动修复原生 provider 设置。
 原生路线的额度显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
 端点或请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。

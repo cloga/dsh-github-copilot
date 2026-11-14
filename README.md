@@ -95,6 +95,8 @@ OAuth grant, not an independently selected additional account. While the
 managed route remains registered, saving the native provider can block
 additional-account requests and switching. The native picker is not guaranteed
 to filter its bundled catalog by account entitlement.
+Starting the plugin or completing sign-in does not automatically repair the
+native provider's settings.
 The native route's quota display uses only the canonical OAuth account. If the
 provider names a credential, endpoint or headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a
