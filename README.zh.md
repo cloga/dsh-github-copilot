@@ -74,6 +74,8 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 无需手工定义 Copilot 模型、粘贴 token、使用外部网关或安装
 `copilot2api`。账号登录成功不代表所有模型及其能力都可用。
+插件自动发现的账号模型及能力适用于 `github-copilot-preview` 路线；DSH 原生
+`github-copilot` 路线使用自己的内置目录，两条路线不共享模型发现结果。
 
 添加 DSH 原生 GitHub Copilot provider 时，可使用独立的插件账号面板登录。
 没有指定密钥时，原生路线使用已保存的 canonical OAuth 凭据，而不是另行选择的

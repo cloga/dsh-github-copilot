@@ -88,6 +88,9 @@ Choose the intended profile explicitly. Then:
 No manually defined Copilot model, pasted token, external gateway, or
 `copilot2api` service is required. Account and model availability are separate:
 successful sign-in does not guarantee every model or capability is available.
+The plugin's account-discovered models and capabilities apply to the
+`github-copilot-preview` route. DSH's native `github-copilot` route uses its
+own bundled catalog; the two routes do not share model discovery.
 
 When adding DSH's native GitHub Copilot provider, use the separate plugin account
 panel to sign in. With no named key, the native route uses a stored canonical
