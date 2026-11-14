@@ -37,7 +37,7 @@ function response(model: string) {
   ].join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
 
-it('selects and dispatches a native Copilot model in a native subagent using its canonical OAuth grant', async () => {
+it('selects and concurrently dispatches native Copilot subagents using the canonical OAuth grant', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
   const model = githubCopilotProvider().getModels().find(entry => entry.api === 'openai-responses')
@@ -47,12 +47,14 @@ it('selects and dispatches a native Copilot model in a native subagent using its
   const ctx = new Context()
   const release = Promise.withResolvers<void>()
   const requests: Array<{ model: string; authorization: string | null }> = []
+  const signals: Array<AbortSignal | null | undefined> = []
   const completed: SubagentRunEndInfo[] = []
   ctx.on('subagent/end', info => { completed.push(info) })
   vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
     if (!String(input).endsWith('/responses')) throw new Error('unexpected fixture request')
     const body = JSON.parse(String(init?.body)) as { model: string }
     requests.push({ model: body.model, authorization: new Headers(init?.headers).get('authorization') })
+    signals.push(init?.signal)
     await release.promise
     return response(body.model)
   })
@@ -112,23 +114,36 @@ it('selects and dispatches a native Copilot model in a native subagent using its
       sessionId: SessionId('native-copilot-subagent-parent'),
       agentOptions: { provider: parentProvider, model: parentProvider },
     })
-    const batch = await ctx.agents.withInitiator(parent, () => ctx.tools.execute({
+    const call = (id: string) => ctx.agents.withInitiator(parent, () => ctx.tools.execute({
       agent: parent, signal: new AbortController().signal,
-      calls: [{ type: 'tool-call', id: ToolCallId('native-child'), name: 'subagent',
-        arguments: JSON.stringify({ description: 'fixture child', prompt: 'Handle this task.',
+      calls: [{ type: 'tool-call', id: ToolCallId(id), name: 'subagent',
+        arguments: JSON.stringify({ description: 'fixture child', prompt: `Handle ${id}.`,
           provider, model: model.id }) }],
     }))
-    expect(batch.results).toHaveLength(1)
-    expect(batch.results[0]!.result.isError).toBe(false)
-    await vi.waitFor(() => expect(requests).toHaveLength(1), { timeout: 15_000 })
-    expect(ctx.agents.list().filter(agent => agent.session.header.parentSession === parent.session.id)).toHaveLength(1)
+    const batches = await Promise.all([call('native-child-first'), call('native-child-second')])
+    expect(batches).toHaveLength(2)
+    for (const batch of batches) {
+      expect(batch.results).toHaveLength(1)
+      expect(batch.results[0]!.result.isError).toBe(false)
+    }
+    await vi.waitFor(() => expect(requests).toHaveLength(2), { timeout: 15_000 })
+    expect(ctx.agents.list().filter(agent => agent.session.header.parentSession === parent.session.id)).toHaveLength(2)
+    expect(signals).toHaveLength(2)
+    expect(signals[0]).toBeTruthy()
+    expect(signals[1]).toBeTruthy()
+    expect(signals[0]).not.toBe(signals[1])
     release.resolve()
     do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
-    expect(requests).toEqual([{ model: model.id, authorization: 'Bearer synthetic-access' }])
-    expect(completed).toHaveLength(1)
-    expect(completed[0]?.stopReason).toBe('completed')
-    expect(completed[0]?.lastAssistantMessage?.some(block =>
-      block.type === 'text' && block.text === `finished ${model.id}`)).toBe(true)
+    expect(requests).toEqual([
+      { model: model.id, authorization: 'Bearer synthetic-access' },
+      { model: model.id, authorization: 'Bearer synthetic-access' },
+    ])
+    expect(completed).toHaveLength(2)
+    for (const info of completed) {
+      expect(info.stopReason).toBe('completed')
+      expect(info.lastAssistantMessage?.some(block =>
+        block.type === 'text' && block.text === `finished ${model.id}`)).toBe(true)
+    }
   } finally {
     release.resolve()
     try { await ctx.fiber.dispose() }
