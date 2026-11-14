@@ -1065,6 +1065,7 @@ describe('GitHub Copilot Models client', () => {
     expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
     expect(text).toContain('native github-copilot route uses a separate catalog')
     expect(text).toContain('does not prove')
+    expect(text).not.toContain('hosted search')
     expect(text).not.toContain('Snapshot time')
     expect(elements.some(element => element.type === 'time' || element.type === GitHubCopilotAccountModelsUpdatedAt)).toBe(false)
     expect(elements.some(element => element.type === 'script' || element.props.dangerouslySetInnerHTML !== undefined)).toBe(false)

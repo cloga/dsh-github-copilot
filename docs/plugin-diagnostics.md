@@ -38,7 +38,9 @@ contribute independent Client/Host populations. The retired plugin-owned Auto
 allocator no longer produces observations. Its existing setting is not rewritten,
 and retained historical aggregates remain available in the explicit JSON export
 under their existing retention and storage limits; they are not evidence of
-execution, quality or billing. Older strict plugin versions may reject new
+execution, quality or billing. When historical Auto data is present, the JSON
+review disclosure notes that its rows may include model IDs and policy/cohort
+dimensions. Older strict plugin versions may reject new
 snapshot fields on rollback; do not delete or silently rewrite retained evidence.
 The separate **Enable request observations** control uses the hidden volatile
 `github-copilot.requestDiagnosticsEnabled` leaf with path-level CAS and exact
