@@ -1057,7 +1057,9 @@
         {"file": "scripts/verify-upstream-baseline.mjs", "marker": "if (block.text.trim() === '') break"}
       ],
       "tests": [
-        {"file": "tests/client.spec.ts", "name": "does not register plugin-owned Auto UI or projections"},
+        {"file": "tests/client.spec.ts", "name": "mounts account and usage evidence without restoring plugin-owned Auto UI"},
+        {"file": "tests/auto-model-presentation.spec.ts", "name": "mounts account and usage evidence without Auto attribution"},
+        {"file": "tests/turn-usage-integration.spec.ts", "name": "retains the Usage explanation without exposing or reading Auto selection"},
         {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "renders native answers and summaries without blank Thinking disclosures (%s)"}
       ]
     },
@@ -1388,7 +1390,9 @@
       "tests": [
         {"file": "tests/preview-route.spec.ts", "name": "does not publish retired Auto routes or silently redirect their old selections"},
         {"file": "tests/preview-route.spec.ts", "name": "leaves an explicit child route unchanged even when legacy parent-follow settings are present"},
-        {"file": "tests/client.spec.ts", "name": "does not register plugin-owned Auto UI or projections"},
+        {"file": "tests/client.spec.ts", "name": "mounts account and usage evidence without restoring plugin-owned Auto UI"},
+        {"file": "tests/auto-model-presentation.spec.ts", "name": "mounts account and usage evidence without Auto attribution"},
+        {"file": "tests/turn-selection-card.spec.ts", "name": "preserves turn account details without reading or showing plugin Auto selection"},
         {"file": "tests/client-search-inject.spec.ts", "name": "does not render or write retired parent-model settings (bundle=%s)"},
         {"file": "tests/config.spec.ts", "name": "retains retired Auto settings as hidden legacy values without changing saved data"},
         {"file": "tests/turn-request-models-runtime.spec.ts", "name": "cold-folds same-turn requested models through the native public registry without changing events"},
