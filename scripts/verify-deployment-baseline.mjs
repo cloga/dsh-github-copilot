@@ -337,9 +337,20 @@ assert(!/github-copilot-(?:original-web|web-delegate|routed-web)/u.test(overlay)
 const metadata = manifest.capabilities?.find(capability => capability.id === 'account-driven-provider-metadata')
 const autoIntent = manifest.capabilities?.find(capability => capability.id === 'managed-copilot-auto-intent-continuity')
 assert(autoIntent?.required === true
+  && autoIntent.activation === 'historical-projection-compatibility-only'
   && autoIntent.sourceMarkers.some(item => item.file === 'src/auto-model-intent.ts')
-  && autoIntent.tests.some(item => item.file === 'tests/fixtures/session-context-core.fixture.ts'),
-  'Auto intent continuity requires plugin-owned projection and native consumption regression evidence')
+  && autoIntent.tests.some(item => item.file === 'tests/auto-model-intent.spec.ts'),
+  'retired Auto intent must retain historical projection compatibility evidence')
+assert(!/installAutoModelRouting|installParentModelFollow/u.test(hostEntry)
+  && !(await read('src/preview-route.ts')).includes('installAutoModelRouting')
+  && !clientEntry.includes('installAutoModelPresentation'),
+  'retired plugin Auto and parent-follow must not be reactivated')
+const retiredAuto = manifest.capabilities?.find(capability => capability.id === 'managed-copilot-auto-model-routing')
+assert(retiredAuto?.required === true && retiredAuto.activation === 'retired-preserve-legacy-settings'
+  && retiredAuto.tests.some(item => item.name === 'does not publish retired Auto routes or silently redirect their old selections')
+  && retiredAuto.tests.some(item => item.name === 'leaves an explicit child route unchanged even when legacy parent-follow settings are present')
+  && retiredAuto.tests.some(item => item.name === 'retains retired Auto settings as hidden legacy values without changing saved data'),
+  'retired routing must preserve legacy settings and reject silent model substitution')
 assert(metadata?.activation === 'validated-account-endpoints-and-capabilities', 'managed models must follow account endpoint and capability evidence')
 const publicAdapter = manifest.capabilities?.find(capability => capability.id === 'public-adapter-account-model-route')
 assert(publicAdapter?.activation === 'published-adapter-and-native-sdk', 'managed route must reuse the public adapter and native SDK')
