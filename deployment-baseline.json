@@ -632,7 +632,7 @@
       "evidenceScope": "native-web-composition-and-synthetic-tool-execution-not-live-search",
       "sourceMarkers": [
         {"file": "cordis.patch.yml", "marker": "name: dsh-github-copilot"},
-        {"file": "src/index.ts", "marker": "Profile repair and model configuration must not depend on hosted search"},
+        {"file": "src/index.ts", "marker": "ctx.plugin(GitHubCopilotAuthorizationController)"},
         {"file": "scripts/check-search-composition.mjs", "marker": "PREEXISTING_WEB_ISOLATION"},
         {"file": "src/config.ts", "marker": "searchRouting: WebSearchRoutingConfigSchema.default({}).hidden().volatile()"}
       ],
@@ -1188,16 +1188,17 @@
       ]
     },
     {
-      "id": "existing-grant-legacy-profile-repair",
+      "id": "explicit-legacy-profile-repair",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/index.ts", "marker": "ensureGitHubCopilotProviderProfile(ctx)"},
+        {"file": "src/authorization-controller.ts", "marker": "await this.ensureProviderProfile()"},
         {"file": "src/authorization-controller.ts", "marker": "validateGrant(record)"},
         {"file": "src/authorization-controller.ts", "marker": "providerSupportsStrictMode"}
       ],
       "tests": [
         {"file": "tests/loader-composition.spec.ts", "name": "does not rewrite an existing Copilot profile during Host startup"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not repair the native route when the grant is already configured"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "explicitly reconciles the stored snapshot without forcing sign-in or network access"},
         {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing resolved Copilot route matches the account catalog"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not install global protocols or headers for new account models"}
       ]
