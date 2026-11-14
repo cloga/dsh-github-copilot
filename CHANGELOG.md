@@ -1,9 +1,15 @@
 # Changelog
 
-## 0.1.0-alpha.4.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.5.dsh.0.2.2.rc.3 (prepared)
 
 - Show the native Credits account identity only after verifying the canonical OAuth grant and quota belong together; keep quota available when identity is unavailable.
 - Use scoped Node and system certificate trust for the existing GitHub identity lookup without weakening TLS verification.
+
+## 0.1.0-alpha.4.dsh.0.2.2.rc.3 (prepared)
+
+- Remove the hosted-search aside from the managed account-model summary and hide retired Auto descriptions when no historical diagnostic data exists. Historical Auto data remains available and is identified before JSON sharing, including its possible model IDs (#467).
+- Preserve existing settings, diagnostic evidence, quota and compatibility; no live profile, history or account is changed.
+- Target DSH 0.2.2-rc.3; publication and live Desktop activation remain separate from this source change.
 
 ## 0.1.0-alpha.3.dsh.0.2.2.rc.3 (prepared)
 
