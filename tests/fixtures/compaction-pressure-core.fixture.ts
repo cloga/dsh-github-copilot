@@ -368,7 +368,8 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   let model = 'fixture-model-A'
   let inputBudgetTokens: number | undefined
   let autoLoads = 0
-  const removeAuto = nativeAdmission ? () => {} : installAutoModelRouting(ctx, {
+  const nativeSelection = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3'
+  const removeAuto = nativeAdmission || nativeSelection ? () => {} : installAutoModelRouting(ctx, {
     async loadModels() {
       autoLoads++
       return [autoCandidate(model)]
@@ -377,7 +378,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   ctx.effect(() => removeAuto)
   // Exact stand-in for Core's model-selection middleware: the plugin's prepended
   // listener must observe this resolved virtual route after awaiting next().
-  if (!nativeAdmission) ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider, model: autoModel }))
+  if (!nativeAdmission && !nativeSelection) ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider, model: autoModel }))
   const failures: Array<{ code: string; message: string }> = []
   ctx.on('agent/request-error', async ({ failure }, next) => {
     failures.push({ code: failure.code, message: failure.message })
@@ -423,7 +424,11 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
     ctx, adapter, agent, events, failures, priced, forbiddenFetch, seedCount, originalGeneration, originalTokens, removeAdapter, engineMount, ownerHandle,
     autoLoads: () => autoLoads,
     oldUserSeq: oldUser!.seq,
-    enable(budget = 1000, selectedModel = 'fixture-model-B') { inputBudgetTokens = budget; model = selectedModel },
+    enable(budget = 1000, selectedModel = 'fixture-model-B') {
+      inputBudgetTokens = budget
+      model = selectedModel
+      if (nativeSelection) agent.model.select({ provider, model })
+    },
     send,
     currentEvents: () => events.slice(seedCount),
   }
@@ -523,7 +528,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     expect(f.forbiddenFetch).not.toHaveBeenCalled()
   })
 
-  it.each([false, true])('compacts and rebuilds an Auto request with large historical continuation reasoning, continuing=%s', async continuing => {
+  it.each([false, true])('compacts and rebuilds the selected model request with large historical continuation reasoning, continuing=%s', async continuing => {
     const f = await fixture('stop', false, false, false, true)
     installController(f.ctx)
     const value = {
@@ -947,7 +952,11 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
 
     expect(f.agent.options.model).toBe('fixture-model-A')
     expect(f.agent.session.requestHeader()?.config.model).toBe('fixture-model-B')
-    expect(f.autoLoads()).toBe(2)
+    if (process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3') {
+      expect(f.agent.model.current()).toMatchObject({ provider, model: 'fixture-model-B' })
+    } else {
+      expect(f.autoLoads()).toBe(2)
+    }
     expect(f.failures).toEqual([{ code: 'CONTEXT_WINDOW_EXCEEDED', message: expect.stringContaining('Copilot local estimated input budget exceeded') }])
     expect(f.priced).toHaveLength(2)
     expect(f.priced[0]?.text).toContain(oldSentinel)

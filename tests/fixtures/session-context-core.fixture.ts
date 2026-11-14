@@ -470,7 +470,9 @@ describe('tagged Core public Session context (actual controller projection)', ()
     expect(header?.adapterDefaults).toEqual({ reasoningEffort: true })
     expect(Object.isFrozen(header)).toBe(true)
     expect(Object.isFrozen(header?.config)).toBe(true)
-    expect(f.projections.stateOf(a.session, 'modelSelection')).toEqual({ lastUsed: nativeA, pending: null })
+    const lastUsed = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3'
+      ? { provider: nativeA.provider, model: nativeA.model } : nativeA
+    expect(f.projections.stateOf(a.session, 'modelSelection')).toEqual({ lastUsed, pending: null })
     expect(f.observe().sessions).toEqual([
       { id: a.id, status: 'running', selectionSource: 'request-header',
         effectiveSelection: { provider: nativeA.provider, model: nativeA.model }, activeRequestSelection: nativeA },

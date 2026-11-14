@@ -8,6 +8,7 @@ import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { createScope } from '@deepseek-ai/dsh-scope'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { applyWebSearchTool } from '@deepseek-ai/dsh-tool-web'
@@ -70,9 +71,13 @@ describe('native web ownership', () => {
     await ctx.plugin({ inject: ['web'], apply(owner) {
       owner.web.registerSearchProvider({ id: 'native', available: () => true, search })
     } })
+    const session = Session.create(SessionId('copilot-agent'))
+    session.append('request/header', { header: {
+      config: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' }, tools: [],
+    }, reason: 'initial' })
     const agent = {
       id: 'copilot-agent',
-      session: { id: 'copilot-agent', requestHeader: () => ({ config: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }) },
+      session,
     } as unknown as Agent
     const scope = createScope(ctx, agent)
     await ctx.plugin({ inject: ['tools', 'web', 'systemPrompt'], apply(owner) {

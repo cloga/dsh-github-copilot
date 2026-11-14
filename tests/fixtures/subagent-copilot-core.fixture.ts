@@ -53,7 +53,12 @@ it('routes concurrently authorized native children to their selected Copilot mod
   const authorizations: Array<string | null> = []
   const signals: Array<AbortSignal | null | undefined> = []
   const completed: SubagentRunEndInfo[] = []
+  const failures: Array<{ code: string; message: string }> = []
   ctx.on('subagent/end', info => { completed.push(info) })
+  ctx.on('agent/request-error', async ({ failure }, next) => {
+    failures.push({ code: failure.code, message: failure.message })
+    return next()
+  })
   vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
     if (String(input).endsWith('/user')) {
       const second = new Headers(init?.headers).get('authorization') === 'token synthetic-refresh-second'
@@ -178,7 +183,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     ])
     expect(first.isError).toBe(false)
     expect(second.isError).toBe(false)
-    await vi.waitFor(() => expect(wire).toHaveLength(2), { timeout: 15_000 })
+    await vi.waitFor(() => expect(wire, JSON.stringify({ failures, completed })).toHaveLength(2), { timeout: 15_000 })
     expect(wire.map(body => [body.model, body.reasoning?.effort]).sort()).toEqual([
       [MODELS[0], 'low'], [MODELS[1], 'high'],
     ])
