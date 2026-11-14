@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { AgentModel } from '@deepseek-ai/dsh-agent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { describe, expect, it, vi } from 'vitest'
 import { currentChatRoute } from '../src/current-provider.ts'
@@ -86,6 +87,7 @@ describe('initiating Session route selection', () => {
   it.skipIf(typeof AgentRegistry.prototype.withInitiator !== 'function')(
     'uses native selected-model request headers across concurrent initiators despite stale activation options', async () => {
       const root = new Context()
+      await root.plugin(SessionProjectionRegistry)
       const fiber = await root.plugin(AgentRegistry)
       const agents = root.agents
       const ctx = new Context()

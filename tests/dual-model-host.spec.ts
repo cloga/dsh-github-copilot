@@ -321,7 +321,7 @@ describe('optional dedicated planner/executor Host', () => {
     const f = await fixture(); const { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     f.ctx.emit(scopeTarget(parent as unknown as CoreAgent, parent), 'agent/disposed', { agent: parent as unknown as CoreAgent })
     await Promise.resolve(); await Promise.resolve()
-    await expect(f.systemPrompt.assemble({ scope: parent })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_UNSUPPORTED' } })
+    await expect(f.systemPrompt.assemble({ scope: parent })).rejects.toMatchObject({ code: 'TOOL_EXECUTOR_UNAVAILABLE' })
     f.ctx.emit('session/event', parent.session, parent.session.append('turn/start', { turn: 1 }))
     const toolSet = await f.tools.resolve({ agent: parent as unknown as CoreAgent,
       modelSelection: { provider: PROVIDER, model: 'plan-A' }, signal: new AbortController().signal })
@@ -428,7 +428,7 @@ describe('optional dedicated planner/executor Host', () => {
     f.ctx.emit(scopeTarget(parent as unknown as CoreAgent, parent), 'agent/disposed', { agent: parent as unknown as CoreAgent })
     await Promise.resolve()
     f.ctx.set('sessionProjections', undefined)
-    expect((await f.execute(parent, 'write')).isError).toBe(true)
+    await expect(f.execute(parent, 'write')).rejects.toMatchObject({ code: 'TOOL_EXECUTOR_UNAVAILABLE' })
     await expect(f.publish(parent)).rejects.toThrow('DUAL_MODEL_UNSUPPORTED')
   })
   it('ignores fork-inherited root policy and refuses an own malformed policy', () => {

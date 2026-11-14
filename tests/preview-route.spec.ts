@@ -13,6 +13,7 @@ import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import LlmRuntime, { BlockAssembler, createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { GenerateOptions, Message, PreparedAdapterCall, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -499,6 +500,7 @@ describe('account-local managed runtimes', () => {
     type ImageRef = Parameters<LlmRuntime['imageRequestTarget']>[2]
     const image: ImageRef = { attachmentId: 'synthetic-image' as ImageRef['attachmentId'],
       mediaType: 'image/png', bytes: 2_000_000, width: 4096, height: 4096 }
+    await harness.ctx.plugin(SessionProjectionRegistry)
     await harness.ctx.plugin(AgentRegistry)
     const a = { session: Session.create('canonical' as Agent['id']) } as Agent
     const b = { session: Session.create(second as Agent['id']) } as Agent
@@ -956,9 +958,9 @@ describe('plugin-owned account Copilot route', () => {
       stubFetch(fetch, true)
       const harness = await runtime(grant(), { accountModelTtlMs: 1000, accountModelFailureCooldownMs: 2000 })
       const service = harness.ctx.get('githubCopilotPreview')!
-      expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(4)
+      expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id)).toEqual([MODEL])
       clock.mockReturnValue(start + 999)
-      expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(4)
+      expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id)).toEqual([MODEL])
       expect(fetch).toHaveBeenCalledTimes(1)
       clock.mockReturnValue(start + 1000)
       fetch.mockRejectedValue(new Error('synthetic-current-access private provider body'))
@@ -988,7 +990,7 @@ describe('plugin-owned account Copilot route', () => {
     const fetch = vi.fn(async () => catalogResponse())
     stubFetch(fetch, true)
     const harness = await runtime()
-    expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(4)
+    expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id)).toEqual([MODEL])
     const prepared = await harness.adapter.prepareCall(PREVIEW, MODEL)
     harness.replace(grant({ refresh: 'synthetic-account-b', access: 'synthetic-access-b', availableModelIds: ['future-account-b'] }))
     const service = harness.ctx.get('githubCopilotPreview')!
@@ -1228,7 +1230,7 @@ describe('plugin-owned account Copilot route', () => {
       expect(assembler.finish.kind).toBe('error')
       expect(fetch).toHaveBeenCalledTimes(1)
       release(new Response('', { status: 503 }))
-      await expect(listing).resolves.toEqual([])
+      await expect(listing).rejects.toThrow('COPILOT_MODEL_SOURCE_HTTP_ERROR')
       expect(await discovering).toMatchObject({ state: 'error', available: false, models: fresh.models })
       await expect(service.resolveRequestAuth(MODEL)).rejects.toThrow(/MODEL_SOURCE/)
       await expect(harness.adapter.resolveModel(PREVIEW, MODEL)).rejects.toThrow(/MODEL_SOURCE/)
@@ -2265,7 +2267,7 @@ describe('plugin-owned account Copilot route', () => {
       throw new Error('unexpected synthetic URL')
     }), true)
     const harness = await runtime(grant({ expires: 0 }))
-    if (entry === 'catalog') expect(await harness.ctx.llm.listModels(PREVIEW)).toHaveLength(4)
+    if (entry === 'catalog') expect((await harness.ctx.llm.listModels(PREVIEW)).map(model => model.id)).toEqual([MODEL])
     const result = await call(harness.ctx)
     expect(result.assembler.finish).toEqual({ kind: 'stop' })
     expect(harness.modify).toHaveBeenCalledTimes(1)
@@ -2899,17 +2901,18 @@ describe('plugin-owned account Copilot route', () => {
     })
   })
 
-  it('allows Core retry middleware to re-dispatch the same prepared adapter snapshot', async () => {
+  it('allows native retry to re-dispatch the same prepared adapter snapshot', async () => {
     const harness = await runtime()
     let requests = 0
     stubFetch(vi.fn(async () => ++requests === 1 ? new Response('{}', { status: 503 }) : response()))
-    harness.ctx.on('llm/stream', (_options, next) => (async function* () {
-      const first = []
-      for await (const chunk of next()) first.push(chunk)
-      if (first.some(chunk => chunk.type === 'finish' && chunk.reason.kind === 'error')) yield* next()
-      else yield* first
-    })())
-    expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    const attempt = async () => {
+      const assembler = new BlockAssembler()
+      for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) assembler.push(chunk)
+      return assembler.finish
+    }
+    expect((await attempt()).kind).toBe('error')
+    expect(await attempt()).toEqual({ kind: 'stop' })
     expect(requests).toBe(2)
   })
 
@@ -2917,14 +2920,13 @@ describe('plugin-owned account Copilot route', () => {
     const harness = await runtime()
     let requests = 0
     stubFetch(vi.fn(async () => { requests++; return new Response('{}', { status: 503 }) }))
-    harness.ctx.on('llm/stream', (_options, next) => (async function* () {
-      for await (const _chunk of next()) { /* discard the failed first attempt */ }
-      harness.replace(grant({ refresh: 'synthetic-account-b', access: 'synthetic-access-b' }))
-      yield* next()
-    })())
-    const result = await call(harness.ctx)
-    expect(result.assembler.finish.kind).not.toBe('stop')
-    expect(JSON.stringify(result.assembler.finish)).toContain('COPILOT_PREVIEW_ACCOUNT_CHANGED')
+    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    for await (const _chunk of prepared.stream({ ...prepared.config, messages: [] })) { /* first failed attempt */ }
+    harness.replace(grant({ refresh: 'synthetic-account-b', access: 'synthetic-access-b' }))
+    const retry = async () => {
+      for await (const _chunk of prepared.stream({ ...prepared.config, messages: [] })) { /* consume retry */ }
+    }
+    await expect(retry()).rejects.toThrow(/INVALIDATED|ACCOUNT_CHANGED/)
     expect(requests).toBe(1)
   })
 
