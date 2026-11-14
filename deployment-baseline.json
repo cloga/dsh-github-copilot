@@ -651,8 +651,9 @@
       "evidenceScope": "synthetic-two-account-tagged-source-production-host-child-invocation-with-default-switch-not-live-or-explicit-child-account-policy",
       "sourceMarkers": [
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/subagent-copilot-core.fixture.ts"},
-        {"file": ".github/workflows/ci.yml", "marker": "for (const name of ['subagent-copilot-core.fixture.ts','native-subagent-copilot-core.fixture.ts'])"},
+        {"file": ".github/workflows/ci.yml", "marker": "['subagent-copilot-core.fixture.ts',1],['native-subagent-copilot-core.fixture.ts',3]"},
         {"file": ".github/workflows/ci.yml", "marker": "s.assertionResults.some(t=>t.status!=='passed')"},
+        {"file": "tests/fixtures/native-subagent-copilot-core.fixture.ts", "marker": "it.each(['absent', 'enabled', 'disposed'] as const)"},
         {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "await ctx.plugin(GitHubCopilotPlugin,"},
         {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "accounts.turns.current(child.session)"},
         {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"}
