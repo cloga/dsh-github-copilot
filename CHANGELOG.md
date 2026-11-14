@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.4.dsh.0.2.2.rc.3 (prepared)
+
+- Remove obsolete hosted-search and Auto descriptions from current account and diagnostics views. Historical Auto data remains available and is identified before JSON sharing, including its possible model IDs (#467).
+- Preserve existing settings, diagnostic evidence, quota and compatibility; no live profile, history or account is changed.
+- Target DSH 0.2.2-rc.3; publication and live Desktop activation remain separate from this source change.
+
 ## 0.1.0-alpha.2.dsh.0.2.2.rc.3 (prepared)
 
 - Explain the native provider's canonical OAuth binding and the existing additional-account coexistence limit, while retaining the visible account panel outside the native Add draft (#458).

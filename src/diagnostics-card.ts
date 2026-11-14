@@ -49,6 +49,11 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
   const rows = view?.snapshot.rows ?? []
   const requests = view?.snapshot.requests
   const credentials = requests?.credentialChanges
+  const legacyAuto = view?.snapshot.autoAllocation
+  const hasLegacyAuto = legacyAuto !== undefined && (legacyAuto.status === 'observed'
+    || legacyAuto.rows.length > 0 || legacyAuto.noFitRows.length > 0 || legacyAuto.observationStart !== null
+    || legacyAuto.rowsTruncated || legacyAuto.dropped > 0 || legacyAuto.expired > 0
+    || legacyAuto.saturated > 0 || legacyAuto.restarts > 0)
   const populations = [...new Set(rows.filter(row => row.operation !== 'collection').map(row => `${row.layer}/${row.operation}`))]
   const count = (metrics: readonly string[], population: string) => rows
     .filter(row => metrics.includes(row.metric) && `${row.layer}/${row.operation}` === population)
@@ -154,11 +159,13 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
     view ? h('details', null,
       h('summary', null, 'Data scope, limits and JSON'),
       h('p', { style: { margin: 0 } },
-        'Aggregates stay in this profile for 14 days; request observations for 24 hours. Auto rows contain policy/model/cohort dimensions and aggregate counts only; no Session or turn IDs, conversation content, upload or automatic tuning. Expired counts are strata, not removed decisions.'),
+        'Aggregates stay in this profile for 14 days; request observations for 24 hours. They contain no Session or turn IDs or conversation content and are not uploaded automatically or used for automatic tuning.'),
       h('p', { style: { margin: 0 } },
         `Host pending: ${view.snapshot.pending.reduce((sum, row) => sum + row.count, 0)}. Host dropped: ${view.snapshot.dropped}; Client dropped: ${view.snapshot.clientDropped}; Client unconfirmed: ${view.snapshot.clientUnconfirmed}; evicted/expired: ${view.snapshot.evicted}; saturated: ${view.snapshot.saturated}. At most 4,096 aggregate rows and 2 MiB. Client pending samples are periodic observations, not a live outstanding count. Other settled includes policy rejection, revocation, environment faults and unknown/no-checkpoint results. Stock/custom-engine physical summaries, native recovery opt-out, OAuth, quota and unwrapped RPCs are not covered.`),
       h('details', null, h('summary', null, requests ? 'Review local diagnostics JSON' : 'Review aggregate-only JSON'),
-        h('p', { style: { margin: 0 } }, 'Review before sharing. This includes build versions and diagnostic counts; when request observations were enabled it also includes request times, model IDs, byte counts and random stream IDs, never account or Session identifiers. Client timing does not prove supplier receipt or fault ownership.'),
+        h('p', { style: { margin: 0 } }, 'Review before sharing. This includes build versions and diagnostic counts. Retained request observations may include request times, model IDs, byte counts and random stream IDs. It never includes account or Session identifiers. Client timing does not prove supplier receipt or fault ownership.'),
+        hasLegacyAuto ? h('p', { style: { margin: 0 } },
+          'Historical Auto data is retained in this export; rows may contain model IDs, policy/cohort dimensions and aggregate counts. No new plugin Auto data is collected. Expired counts are strata, not removed decisions.') : null,
         control('Prepare current JSON', () => setExported(true)),
         exported ? h('textarea', { 'aria-label': requests ? 'Local diagnostics JSON' : 'Local diagnostics aggregate JSON', readOnly: true,
           value: JSON.stringify(view, null, 2), rows: 12, style: { width: '100%', boxSizing: 'border-box', font: 'inherit' } }) : null)) : null)
