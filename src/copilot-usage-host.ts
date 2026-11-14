@@ -1,6 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { getCACertificates } from 'node:tls'
 import { Agent } from 'undici'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from './copilot-usage-remote.ts'
@@ -14,6 +13,7 @@ import type { CopilotUsageView, CopilotUsageDiagnostic } from './copilot-usage-t
 import { onSettingsNamespaceUpdated, readSettingsNamespace } from './settings-reader.ts'
 import { activeCopilotBinding, isActiveCopilotRecord } from './copilot-accounts-host.ts'
 import type { CopilotAccountBinding } from './copilot-accounts-types.ts'
+import { createCopilotSystemTrustAgent } from './copilot-system-trust.ts'
 
 export const COPILOT_USAGE_ENDPOINT = 'https://api.github.com/copilot_internal/user'
 const TTL_MS = 60_000
@@ -115,6 +115,7 @@ export class CopilotUsageSource {
   }
   get(): Promise<CopilotUsageView> { return this.load(false) }
   refresh(): Promise<CopilotUsageView> { return this.load(true) }
+  version(): number { return this.generation }
 
   private active(generation: number): void {
     if (this.disposed) failure('COPILOT_USAGE_DISPOSED')
@@ -143,18 +144,7 @@ export class CopilotUsageSource {
   private quotaDispatcher(): Agent {
     if (this.dispatcher) return this.dispatcher
     try {
-      const certificates = this.dependencies.getCACertificates ?? getCACertificates
-      const defaults = certificates('default')
-      const system = certificates('system')
-      if (!Array.isArray(defaults) || !Array.isArray(system) || system.length === 0
-        || [...defaults, ...system].some(ca => typeof ca !== 'string' || ca.length === 0)) {
-        failure('COPILOT_USAGE_TRUST_UNAVAILABLE')
-      }
-      const ca = [...new Set([...defaults, ...system])]
-      this.dispatcher = (this.dependencies.createDispatcher ?? (options => new Agent(options)))({
-        connect: { ca, rejectUnauthorized: true },
-      })
-      if (!this.dispatcher) failure('COPILOT_USAGE_TRUST_UNAVAILABLE')
+      this.dispatcher = createCopilotSystemTrustAgent(this.dependencies.getCACertificates, this.dependencies.createDispatcher)
       return this.dispatcher
     } catch {
       failure('COPILOT_USAGE_TRUST_UNAVAILABLE')
@@ -380,4 +370,25 @@ export default class GitHubCopilotUsageController extends TypertRemoteService {
   getNative(): Promise<CopilotUsageView> { return this.nativeUsage(false) }
   @Remote
   refreshNative(): Promise<CopilotUsageView> { return this.nativeUsage(true) }
+  private async nativeIdentity(force: boolean): Promise<CopilotUsageView> {
+    const before = await this.nativeUsage(false)
+    if (before.state !== 'ready' && before.state !== 'stale') return before
+    const version = this.nativeSource.version()
+    try {
+      const accounts = this.ctx.get('githubCopilotAccounts')
+      if (!accounts) return before
+      const identity = await accounts.host.verifiedIdentityFor('canonical', force)
+      const after = await this.nativeUsage(false)
+      if (!identity || version !== this.nativeSource.version()
+        || after.state !== 'ready' && after.state !== 'stale') return after
+      return { ...after, identity }
+    } catch {
+      this.ctx.logger.warn('[github-copilot] COPILOT_USAGE_IDENTITY_UNAVAILABLE')
+      return this.nativeUsage(false)
+    }
+  }
+  @Remote
+  ensureNativeIdentity(): Promise<CopilotUsageView> { return this.nativeIdentity(false) }
+  @Remote
+  refreshNativeIdentity(): Promise<CopilotUsageView> { return this.nativeIdentity(true) }
 }

@@ -104,10 +104,10 @@ const sessionAccountDescriptors = remote.descriptors.filter(descriptor => descri
 const continuationDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotSessionContinuation')
 const diagnosticsDescriptors = remote.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotDiagnostics')
 const methods = authorizationDescriptors.map(descriptor => descriptor.method).sort()
-if (remote.descriptors.length !== 54 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status'])
+if (remote.descriptors.length !== 56 || JSON.stringify(methods) !== JSON.stringify(['cancel', 'discoverModels', 'ensureModels', 'excludeModel', 'migrationStatus', 'reconcile', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'signOut', 'start', 'status'])
   || JSON.stringify(roleDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['create', 'save', 'view'])
   || JSON.stringify(catalogDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['providers'])
-  || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['get', 'getNative', 'refresh', 'refreshNative'])
+  || JSON.stringify(usageDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['ensureNativeIdentity', 'get', 'getNative', 'refresh', 'refreshNative', 'refreshNativeIdentity'])
   || JSON.stringify(selectionDescriptors.map(descriptor => descriptor.method)) !== JSON.stringify(['get', 'requestedModels', 'allocationSummary'])
   || JSON.stringify(replayDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['authorize', 'get', 'setEnabled'])
   || JSON.stringify(accountDescriptors.map(descriptor => descriptor.method).sort()) !== JSON.stringify(['add', 'addForEnvironment', 'cancel', 'ensureIdentity', 'get', 'reauthorize', 'reauthorizeForEnvironment', 'refreshIdentity', 'removeAccount', 'switchAccount'])
@@ -277,9 +277,13 @@ for (const descriptor of usageDescriptors) {
     || descriptor.result.typeSymbol !== 'dsh-github-copilot#CopilotUsageView') throw new Error('quota Remote identity or codec differs')
   const view = { state: 'ready', billing: 'credits', budget: 'pooled', used: 10, observedAt: 1 }
   descriptor.result.schema.parse(view)
+  const nativeView = { ...view, accountId: 'canonical', identity: { login: 'synthetic-user', userId: 1 } }
+  descriptor.result.schema.parse(nativeView)
   if (descriptor.result.schema.safeParse({ ...view, credentials: 'private' }).success
-    || descriptor.result.schema.safeParse({ ...view, remaining: 20 }).success) {
-    throw new Error('quota Remote accepts private fields or fabricated pooled balances')
+    || descriptor.result.schema.safeParse({ ...view, remaining: 20 }).success
+    || descriptor.result.schema.safeParse({ ...nativeView, accountId: '11111111-1111-4111-8111-111111111111' }).success
+    || descriptor.result.schema.safeParse({ ...nativeView, identity: { ...nativeView.identity, credentials: 'private' } }).success) {
+    throw new Error('quota Remote accepts private fields, unattributed identity or fabricated pooled balances')
   }
 }
 const catalog = catalogDescriptors[0]

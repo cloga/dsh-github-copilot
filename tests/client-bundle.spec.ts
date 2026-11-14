@@ -414,7 +414,8 @@ describe('tsdown client artifact', () => {
       && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative',
+      'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())
       .toEqual(['add', 'addForEnvironment', 'cancel', 'ensureIdentity', 'get', 'reauthorize',
@@ -504,7 +505,8 @@ describe('tsdown client artifact', () => {
     const usage = { state: 'ready', billing: 'credits', budget: 'individual',
       used: 3600, remaining: 16400, limit: 20000, percentUsed: 18, observedAt: 1 }
     const usageDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
-    expect(usageDescriptors.map(descriptor => descriptor.method)).toEqual(['get', 'refresh', 'getNative', 'refreshNative'])
+    expect(usageDescriptors.map(descriptor => descriptor.method)).toEqual(
+      ['get', 'refresh', 'getNative', 'refreshNative', 'ensureNativeIdentity', 'refreshNativeIdentity'])
     for (const descriptor of usageDescriptors) {
       if (descriptor.result.mode !== 'strict') throw new Error('expected independent strict usage codec')
       const codec = descriptor.result

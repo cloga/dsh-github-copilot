@@ -28,7 +28,7 @@ test('quota Remote reaches the actual Host gateway without startup or signed-out
   assert.equal(reads, 0, 'Mounting must not resolve credentials or quota')
   const handler = connection.createSharedFetchHandler('/api')
   const peer = new Peer(ctx, { principal: { kind: 'owner' } })
-  for (const method of ['get', 'refresh', 'getNative', 'refreshNative']) {
+  for (const method of ['get', 'refresh', 'getNative', 'refreshNative', 'ensureNativeIdentity', 'refreshNativeIdentity']) {
     const endpoint = `githubCopilotUsage/${method}`
     const response = await handler.fetch(new Request(`http://fixture.invalid/api/${endpoint}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
