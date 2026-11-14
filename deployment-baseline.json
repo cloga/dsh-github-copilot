@@ -876,7 +876,7 @@
         {"file": "tests/preview-route.spec.ts", "name": "invalidates prepared model metadata on an explicit force-discovery without changing the selected ID"},
         {"file": "tests/preview-route.spec.ts", "name": "cancels an in-flight SDK request on disposal without deleting the shared grant"},
         {"file": "tests/preview-route.spec.ts", "name": "re-prepares a native retry after a single-dispatch prepared call"},
-        {"file": "tests/preview-route.spec.ts", "name": "does not let a retry cross to another account after its first attempt"},
+        {"file": "tests/preview-route.spec.ts", "name": "re-prepares a failed attempt with the same bound account after the global default changes"},
         {"file": "tests/preview-route.spec.ts", "name": "refuses a duplicate route through the public registry without taking over the existing adapter"},
         {"file": "tests/preview-route.spec.ts", "name": "withdraws only its own route and refuses an already-prepared call after disposal"}
       ]
@@ -1154,7 +1154,7 @@
       "id": "copilot-optional-tool-arguments",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/tool-schema-compat.ts", "marker": "assembly.variables.provider !== GITHUB_COPILOT_PROVIDER_ID"},
+        {"file": "src/tool-schema-compat.ts", "marker": "options.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID"},
         {"file": "src/tool-schema-compat.ts", "marker": "ESCALATION_FIELDS"},
         {"file": "src/tool-schema-compat.ts", "marker": "GOAL_UPDATE_TOOL_NAME"},
         {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"}
@@ -1163,7 +1163,7 @@
         {"file": "tests/tool-schema-compat.spec.ts", "name": "removes escalation properties and required entries only for Copilot"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "turns update_goal into action-specific schemas only for Copilot"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves every schema for non-Copilot providers"},
-        {"file": "tests/tool-schema-compat.spec.ts", "name": "filters a real Cordis waterfall after model selection supplies the provider"},
+        {"file": "tests/fixtures/tool-schema-core.fixture.ts", "name": "preserves frozen native requests and conditional tool execution while adapting managed wire schemas"},
         {"file": "tests/authorization-controller.spec.ts", "name": "preserves configured Anthropic and OpenAI models while repairing only strict mode"},
         {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "applies route strict-mode compatibility only to supported model protocols"}
       ]
