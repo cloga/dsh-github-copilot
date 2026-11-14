@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.1.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.2.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.1.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.2.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -632,7 +632,7 @@
       "evidenceScope": "native-web-composition-and-synthetic-tool-execution-not-live-search",
       "sourceMarkers": [
         {"file": "cordis.patch.yml", "marker": "name: dsh-github-copilot"},
-        {"file": "src/index.ts", "marker": "Profile repair and model configuration must not depend on hosted search"},
+        {"file": "src/index.ts", "marker": "ctx.plugin(GitHubCopilotAuthorizationController)"},
         {"file": "scripts/check-search-composition.mjs", "marker": "PREEXISTING_WEB_ISOLATION"},
         {"file": "src/config.ts", "marker": "searchRouting: WebSearchRoutingConfigSchema.default({}).hidden().volatile()"}
       ],
@@ -640,7 +640,7 @@
         {"file": "tests/native-web-composition.spec.ts", "name": "leaves the configured native web entry unchanged in the plugin overlay"},
         {"file": "tests/native-web-composition.spec.ts", "name": "keeps native web tool execution for a Copilot Agent before and after plugin disposal"},
         {"file": "tests/loader-composition.spec.ts", "name": "keeps native web and the account and model owners independent as web attaches and leaves"},
-        {"file": "tests/loader-composition.spec.ts", "name": "repairs an existing provider profile even when web is unavailable"},
+        {"file": "tests/loader-composition.spec.ts", "name": "does not rewrite an existing provider profile when web is unavailable"},
         {"file": "tests/client-bundle.spec.ts", "name": "registers plugin settings without search routing in the built bundle detail page"},
         {"file": "tests/config.spec.ts", "name": "preserves legacy search configuration without exposing it as an active setting"}
       ]
@@ -651,7 +651,9 @@
       "evidenceScope": "synthetic-two-account-tagged-source-production-host-child-invocation-with-default-switch-not-live-or-explicit-child-account-policy",
       "sourceMarkers": [
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/subagent-copilot-core.fixture.ts"},
-        {"file": ".github/workflows/ci.yml", "marker": "expected native subagent invocation test to execute without skips"},
+        {"file": ".github/workflows/ci.yml", "marker": "['subagent-copilot-core.fixture.ts',1],['native-subagent-copilot-core.fixture.ts',3]"},
+        {"file": ".github/workflows/ci.yml", "marker": "s.assertionResults.some(t=>t.status!=='passed')"},
+        {"file": "tests/fixtures/native-subagent-copilot-core.fixture.ts", "marker": "it.each(['absent', 'enabled', 'disposed'] as const)"},
         {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "await ctx.plugin(GitHubCopilotPlugin,"},
         {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "accounts.turns.current(child.session)"},
         {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"}
@@ -1167,7 +1169,7 @@
         {"file": "tests/tool-schema-compat.spec.ts", "name": "turns update_goal into action-specific schemas only for Copilot"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves every schema for non-Copilot providers"},
         {"file": "tests/fixtures/tool-schema-core.fixture.ts", "name": "preserves frozen native requests and conditional tool execution while adapting managed wire schemas"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "preserves configured Anthropic and OpenAI models while repairing only strict mode"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "preserves configured Anthropic and OpenAI models during explicit strict mode repair"},
         {"file": "tests/fixtures/controlled-core-per-model-api.fixture.ts", "name": "applies route strict-mode compatibility only to supported model protocols"}
       ]
     },
@@ -1187,16 +1189,17 @@
       ]
     },
     {
-      "id": "existing-grant-legacy-profile-repair",
+      "id": "explicit-legacy-profile-repair",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/index.ts", "marker": "ensureGitHubCopilotProviderProfile(ctx)"},
+        {"file": "src/authorization-controller.ts", "marker": "await this.ensureProviderProfile()"},
         {"file": "src/authorization-controller.ts", "marker": "validateGrant(record)"},
         {"file": "src/authorization-controller.ts", "marker": "providerSupportsStrictMode"}
       ],
       "tests": [
-        {"file": "tests/loader-composition.spec.ts", "name": "repairs an existing valid Copilot grant during Host startup"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "repairs a pre-existing grant with an empty Copilot route"},
+        {"file": "tests/loader-composition.spec.ts", "name": "does not rewrite an existing Copilot profile during Host startup"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not repair the native route when the grant is already configured"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "explicitly reconciles the stored snapshot without forcing sign-in or network access"},
         {"file": "tests/authorization-controller.spec.ts", "name": "is idempotent when the existing resolved Copilot route matches the account catalog"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not install global protocols or headers for new account models"}
       ]
@@ -1411,7 +1414,7 @@
         {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow while exposing only the account-driven provider"},
         {"file": "tests/single-route.spec.ts", "name": "discovers new IDs and reasoning metadata without a canonical model profile"},
         {"file": "tests/single-route.spec.ts", "name": "honors explicit legacy-profile removal from settings without deleting OAuth"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "does not recreate an absent canonical profile during status or startup and auth reconciliation helpers"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "does not recreate an absent canonical profile during status or explicit reconciliation"},
         {"file": "tests/authorization-controller.spec.ts", "name": "keeps absent-profile legacy journal conflicts visible instead of bypassing ownership review"}
       ]
     },
@@ -1434,7 +1437,7 @@
         {"file": "tests/compact-account.spec.ts", "name": "discovers exactly once after immediate confirmed completion and permits later manual refresh"},
         {"file": "tests/compact-account.spec.ts", "name": "waits through repeated authorization polls and discovers only on confirmed completion"},
         {"file": "tests/compact-account.spec.ts", "name": "keeps automatic post-login discovery owned across Manage toggles and shows a retryable error"},
-        {"file": "tests/authorization-controller.spec.ts", "name": "keeps completion pending through post-login repair so the Client discovers exactly once afterwards"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "completes sign-in without changing native settings and discovers once afterwards"},
         {"file": "tests/compact-account.spec.ts", "name": "keeps stale count visible during initial metadata refresh without a warning or header refresh button"},
         {"file": "tests/authorization-controller.spec.ts", "name": "ensures account metadata without forcing past the shared cache or cooldown"},
         {"file": "tests/client.spec.ts", "name": "owns a minute-only UI timer through committed mount, timestamp change and unmount"},

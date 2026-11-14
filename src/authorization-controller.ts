@@ -507,8 +507,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
         route = { state: 'needs-repair', diagnosticCode: 'RECONCILIATION_FAILED' }
       }
     }
-    // Completion must use the same barrier as discoverModels(): native OAuth
-    // can finish before this attempt's post-grant profile repair has settled.
+    // Keep the attempt visible until its native authorization promise settles.
     const inFlight = authorization.describe(GITHUB_COPILOT_CREDENTIAL_KEY)?.inFlight === true
       || this.attempt !== undefined
     const discovered = accountModelsView(this.ctx)
@@ -606,7 +605,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     }
     const current = await this.status()
     if (current.inFlight || this.attempt !== undefined) return current
-    if (current.configured) return this.reconcile()
+    if (current.configured) return current
 
     const authorization = service<AuthorizationServiceView>(
       this.ctx,
@@ -658,12 +657,9 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
     const running = begun.then(async (outcome) => {
       if (outcome.status === 'authorized') {
         // Device-code notices are instructions for an in-flight attempt, not
-        // durable provider status. Clear them before the profile repair so a
-        // completed grant cannot render "Signed in" beside an expired code.
+        // durable provider status.
         this.notices = []
         this.authorizationMilestone = undefined
-        await this.ensureProviderProfile()
-        if (this.reconciliationFailed) this.failure = 'COPILOT_ROUTE_REPAIR_FAILED'
         return
       }
       this.notices = []

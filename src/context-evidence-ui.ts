@@ -11,6 +11,7 @@ import {
 import { CompactionContinuationNotice, CompactionNoticePresentation } from './compaction-continuation-ui.ts'
 import { COMPACTION_CONTINUATION, CompactionContinuationLifecycleSchema } from './session-continuation-types.ts'
 import type { CompactionContinuationStatus } from './session-continuation-types.ts'
+import { isSessionContinuationRemote } from './session-continuation-ui.ts'
 import type { SessionContinuationRemote } from './session-continuation-ui.ts'
 
 const slot = 'conversation.input.dock'
@@ -27,6 +28,10 @@ interface Slots {
   spec(name: string): { kind: string; scope: string } | undefined
   inject(name: string, callback: () => () => void): () => void
   register(options: { name: string; id: string; order: number }, component: (props: Record<string, unknown>) => ReactElement | null): () => void
+}
+interface ContinuationSource {
+  subscribe(listener: () => void): () => void
+  getSnapshot(): SessionContinuationRemote | undefined
 }
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -186,12 +191,13 @@ export function ContextEvidenceNotice({ evidence, locale = 'en', applicable = tr
   return h('div', { 'data-copilot-composer-frame': '', style: composerNoticeFrameStyle }, notice)
 }
 
-function Surface({ runtime, locale, diagnostic, continuation, presentation, incidentPresentation }: {
+function Surface({ runtime, locale, diagnostic, continuationSource, presentation, incidentPresentation }: {
   runtime: Runtime; locale: Locale | undefined; diagnostic(code: string): void
-  continuation?: SessionContinuationRemote
+  continuationSource: ContinuationSource
   presentation: CompactionNoticePresentation
   incidentPresentation: ContextIncidentPresentation
 }): ReactElement | null {
+  const continuation = useSyncExternalStore(continuationSource.subscribe, continuationSource.getSnapshot, continuationSource.getSnapshot)
   const valid = runtime.useSession(value => record(value) && value.sessionId === runtime.sessionId
     && value.removed === false && value.openState === 'open')
   const selection = runtime.useProjection('modelSelection')
@@ -240,7 +246,21 @@ export function registerContextEvidenceUi(ctx: Context): () => void {
   if (!isSlots(slots)) { diagnostic('COPILOT_CONTEXT_SLOT_UNAVAILABLE'); return noop }
   const candidate: unknown = ctx.get('locale')
   const locale = isLocale(candidate) ? candidate : undefined
-  let faces: { continuation: SessionContinuationRemote } | undefined
+  let continuation: SessionContinuationRemote | undefined
+  let active = true
+  const listeners = new Set<() => void>()
+  const publish = () => { if (active) for (const listener of listeners) listener() }
+  const continuationSource: ContinuationSource = {
+    subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    getSnapshot: () => continuation,
+  }
+  const continuationInjection = ctx.inject(['remote.githubCopilotSessionContinuation'], scope => {
+    const candidate: unknown = scope.remote.githubCopilotSessionContinuation
+    continuation = isSessionContinuationRemote(candidate) ? candidate : undefined
+    if (continuation === undefined) diagnostic('COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
+    publish()
+    return () => { continuation = undefined; publish() }
+  })
   const presentation = new CompactionNoticePresentation()
   const incidentPresentation = new ContextIncidentPresentation()
   const remove = slots.inject(slot, () => {
@@ -249,14 +269,20 @@ export function registerContextEvidenceUi(ctx: Context): () => void {
       diagnostic('COPILOT_CONTEXT_SLOT_UNAVAILABLE')
       return noop
     }
-    faces ??= { continuation: ctx.remote.githubCopilotSessionContinuation }
-    const { continuation } = faces
     return slots.register({ name: slot, id: 'github-copilot-context-evidence', order: 25 }, props => {
       if (!isRuntime(props)) { diagnostic('COPILOT_CONTEXT_SESSION_RUNTIME_UNAVAILABLE'); return null }
       return h(Surface, {
-        runtime: props, locale, diagnostic, continuation, presentation, incidentPresentation,
+        runtime: props, locale, diagnostic, continuationSource, presentation, incidentPresentation,
       })
     })
   })
-  return () => { remove(); presentation.dispose(); incidentPresentation.dispose() }
+  return () => {
+    if (!active) return
+    active = false
+    remove()
+    void continuationInjection.dispose()
+    listeners.clear()
+    presentation.dispose()
+    incidentPresentation.dispose()
+  }
 }

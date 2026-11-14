@@ -24,6 +24,7 @@ import {
 } from '../../src/copilot-identity.ts'
 
 const MODELS = ['fixture-child-a', 'fixture-child-b']
+const NEW_MODEL = 'fixture-child-added-later'
 const PARENT = 'fixture-parent'
 const MISSING = 'fixture-missing'
 const SECOND = '22222222-2222-4222-8222-222222222222'
@@ -49,6 +50,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
   const directory = await mkdtemp(join(tmpdir(), 'copilot-subagent-fixture-'))
   const ctx = new Context()
   const release = Promise.withResolvers<void>()
+  let advertisedModels = MODELS
   const wire: Array<{ model: string; reasoning?: { effort?: string } }> = []
   const authorizations: Array<string | null> = []
   const signals: Array<AbortSignal | null | undefined> = []
@@ -70,7 +72,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
       const second = new Headers(init?.headers).get('authorization') === 'token synthetic-refresh-second'
       return Response.json({ login: second ? 'fixture-second' : 'fixture-first', id: second ? 2 : 1 })
     }
-    if (String(input).endsWith('/models')) return Response.json({ data: MODELS.map(id => ({
+    if (String(input).endsWith('/models')) return Response.json({ data: advertisedModels.map(id => ({
       id, name: id, model_picker_enabled: true, policy: { state: 'enabled' },
       supported_endpoints: ['/responses'],
       capabilities: {
@@ -89,7 +91,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
 
   try {
     const grant = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-refresh',
-      access: 'synthetic-access', expires: Date.now() + 3_600_000, availableModelIds: MODELS } }
+      access: 'synthetic-access', expires: Date.now() + 3_600_000, availableModelIds: [...MODELS, NEW_MODEL] } }
     const secondGrant = { kind: 'grant', payload: { ...grant.payload, refresh: 'synthetic-refresh-second',
       access: 'synthetic-access-second' } }
     const records = new Map([[KEY, grant], [SECOND_KEY, secondGrant]])
@@ -146,7 +148,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     await ctx.plugin(SubagentRuntime)
     await ctx.plugin(Spawn, { providerName: 'spawn' })
     await ctx.plugin(ToolSubagent, { provider: 'spawn', modelSelection: true, modelDiscovery: true })
-    const allowedModels = [...MODELS, MISSING].map(model => ({ provider: PREVIEW, model }))
+    const allowedModels = [...MODELS, NEW_MODEL, MISSING].map(model => ({ provider: PREVIEW, model }))
     await ctx.plugin(SubagentModelSelectionConfig, { enabled: true, allowedModels })
 
     const controller = new SessionController(ctx, { nativeOpen: false }, { canOpenPath: () => false })
@@ -175,6 +177,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     const discoveryText = discoveryResult?.content.filter(block => block.type === 'text')
       .map(block => block.text).join('')
     for (const model of MODELS) expect(discoveryText).toContain(`${PREVIEW}/${model}`)
+    expect(discoveryText).not.toContain(NEW_MODEL)
     expect(discoveryText).not.toContain(MISSING)
 
     const call = async (id: string, model: string, effort: string) => {
@@ -227,6 +230,32 @@ it('routes concurrently authorized native children to their selected Copilot mod
       .filter(block => block.type === 'text').map(block => block.text)
     for (const model of MODELS) expect(output).toContain(`finished ${model}`)
 
+    advertisedModels = [...MODELS, NEW_MODEL]
+    const refreshed = await ctx.get('githubCopilotPreview')!.discover({ force: true })
+    expect(refreshed.state).toBe('ready')
+    const refreshedCatalog = await controller.modelCatalog()
+    const newEntry = refreshedCatalog.groups.find(group => group.id === PREVIEW)?.models.find(model => model.id === NEW_MODEL)
+    expect(newEntry?.reasoning?.efforts.map(effort => effort.id)).toEqual(['low', 'high'])
+    const refreshedDiscovery = await ctx.agents.withInitiator(parent, () => ctx.tools.execute({
+      agent: parent, signal: new AbortController().signal,
+      calls: [{ type: 'tool-call', id: ToolCallId('discover-refreshed'), name: 'list_subagent_models',
+        arguments: JSON.stringify({ provider: PREVIEW }) }],
+    }))
+    expect(refreshedDiscovery.results[0]!.result.isError).toBe(false)
+    expect(refreshedDiscovery.results[0]!.result.content.filter(block => block.type === 'text').map(block => block.text).join(''))
+      .toContain(`${PREVIEW}/${NEW_MODEL}`)
+    const newChild = await call('newly-discovered', NEW_MODEL, 'high')
+    expect(newChild.isError).toBe(false)
+    do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
+    expect(wire).toHaveLength(4)
+    expect(wire[3]).toMatchObject({ model: NEW_MODEL, reasoning: { effort: 'high' } })
+    expect(authorizations[3]).toBe('Bearer synthetic-access-second')
+    expect(completed).toHaveLength(4)
+    expect(completed[3]?.stopReason).toBe('completed')
+    expect(completed[3]?.lastAssistantMessage).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'text', text: `finished ${NEW_MODEL}` }),
+    ]))
+
     const missing = await call('missing', MISSING, 'low')
     const unauthorized = await call('unauthorized', 'fixture-unauthorized', 'low')
     const unsupported = await call('unsupported', MODELS[0]!, 'unsupported-effort')
@@ -235,7 +264,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     expect(unauthorized.content.filter(block => block.type === 'text').map(block => block.text).join(''))
       .toContain('is not allowed for this Session')
     expect(unsupported.isError).toBe(true)
-    expect(wire).toHaveLength(3)
+    expect(wire).toHaveLength(4)
   } finally {
     release.resolve()
     try { await ctx.fiber.dispose() }

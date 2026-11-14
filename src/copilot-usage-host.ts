@@ -8,10 +8,10 @@ import { copilotAccountKey } from './account-model-auth.ts'
 import { createGitHubCopilotCredentialStore } from './copilot-auth.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
-import { GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
+import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 import { normalizeCopilotUsage, unavailableCopilotUsage } from './copilot-usage-normalize.ts'
 import type { CopilotUsageView, CopilotUsageDiagnostic } from './copilot-usage-types.ts'
-import { onSettingsNamespaceUpdated } from './settings-reader.ts'
+import { onSettingsNamespaceUpdated, readSettingsNamespace } from './settings-reader.ts'
 import { activeCopilotBinding, isActiveCopilotRecord } from './copilot-accounts-host.ts'
 import type { CopilotAccountBinding } from './copilot-accounts-types.ts'
 
@@ -286,21 +286,28 @@ declare module '@deepseek-ai/cordis' {
 
 export default class GitHubCopilotUsageController extends TypertRemoteService {
   private readonly accountSources = new Map<string, CopilotUsageSource>()
+  private readonly nativeSource: CopilotUsageSource
   private source: CopilotUsageSource
   private accountSignature: string | undefined
   private sourceInitialized = false
   constructor(ctx: Context) {
     super(ctx, 'githubCopilotUsage')
     this.source = new CopilotUsageSource({ readCredential: async () => { throw new Error('COPILOT_USAGE_CREDENTIALS_UNAVAILABLE') } })
+    const nativeCredentials = createGitHubCopilotCredentialStore(ctx, GITHUB_COPILOT_PROVIDER_ID)
+    this.nativeSource = new CopilotUsageSource({ accountId: 'canonical',
+      readCredential: () => nativeCredentials.read(GITHUB_COPILOT_PROVIDER_ID) })
     ctx.on('credentials/record-updated', key => {
       if (isActiveCopilotRecord(ctx, key)) this.source.invalidate()
       this.accountSources.get(key)?.invalidate()
+      if (key === GITHUB_COPILOT_CREDENTIAL_KEY) this.nativeSource.invalidate()
     })
     onSettingsNamespaceUpdated(ctx, namespace => {
       if (namespace === 'github-copilot' || namespace === 'llm-pi-ai') this.source.invalidate()
+      if (namespace === 'llm-pi-ai') this.nativeSource.invalidate()
     })
     ctx.effect(() => async () => {
       await this.source.dispose()
+      await this.nativeSource.dispose()
       await Promise.all([...this.accountSources.values()].map(source => source.dispose()))
       this.accountSources.clear()
     })
@@ -347,4 +354,30 @@ export default class GitHubCopilotUsageController extends TypertRemoteService {
     try { return await (await this.current()).refresh() }
     catch { return unavailableCopilotUsage('COPILOT_USAGE_CREDENTIALS_UNAVAILABLE') }
   }
+  private nativeOAuthRoute(): boolean {
+    const section = readSettingsNamespace(this.ctx, 'llm-pi-ai')
+    if (typeof section !== 'object' || section === null || Array.isArray(section)) return false
+    const providers: unknown = Reflect.get(section, 'providers')
+    if (typeof providers !== 'object' || providers === null || Array.isArray(providers)) return false
+    const profile: unknown = Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
+    if (typeof profile !== 'object' || profile === null || Array.isArray(profile)
+      || Reflect.get(profile, 'apiKeyEnv') !== undefined
+      || Reflect.get(profile, 'baseURL') !== undefined) return false
+    const headers: unknown = Reflect.get(profile, 'headers')
+    if (headers === undefined) return true
+    if (typeof headers !== 'object' || headers === null || Array.isArray(headers)) return false
+    const prototype: unknown = Object.getPrototypeOf(headers)
+    return (prototype === Object.prototype || prototype === null) && Reflect.ownKeys(headers).length === 0
+  }
+  private async nativeUsage(force: boolean): Promise<CopilotUsageView> {
+    try {
+      if (!this.nativeOAuthRoute()) return unavailableCopilotUsage('COPILOT_USAGE_NATIVE_AUTH_UNPROVEN')
+      const result = await (force ? this.nativeSource.refresh() : this.nativeSource.get())
+      return this.nativeOAuthRoute() ? result : unavailableCopilotUsage('COPILOT_USAGE_NATIVE_AUTH_UNPROVEN')
+    } catch { return unavailableCopilotUsage('COPILOT_USAGE_CREDENTIALS_UNAVAILABLE') }
+  }
+  @Remote
+  getNative(): Promise<CopilotUsageView> { return this.nativeUsage(false) }
+  @Remote
+  refreshNative(): Promise<CopilotUsageView> { return this.nativeUsage(true) }
 }

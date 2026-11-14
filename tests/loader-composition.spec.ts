@@ -190,34 +190,23 @@ describe('loader composition', () => {
     expect(registerAdapter).toHaveBeenCalledOnce()
   })
 
-  it('repairs an existing valid Copilot grant during Host startup', async () => {
+  it('does not rewrite an existing Copilot profile during Host startup', async () => {
     const ctx = new Context()
     const harness = await mountProfile(ctx, true, true)
 
     await mountIntegration(ctx)
+    await new Promise<void>(resolve => setImmediate(resolve))
 
-    await vi.waitFor(() => {
-      expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({
-        customField: 'preserved',
-        compat: { supportsStrictMode: false },
-      })
-    })
-    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
-      value: false,
-    }], 0)
+    expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({ customField: 'preserved' })
+    expect(harness.mutate).not.toHaveBeenCalledWith('llm-pi-ai', expect.anything(), expect.anything())
   })
 
-  it('repairs an existing provider profile even when web is unavailable', async () => {
+  it('does not rewrite an existing provider profile when web is unavailable', async () => {
     const ctx = new Context()
     const harness = await mountProfile(ctx, true, true, false)
     await mountIntegration(ctx)
-    await vi.waitFor(() => {
-      expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({
-        customField: 'preserved',
-        compat: { supportsStrictMode: false },
-      })
-    })
+    await new Promise<void>(resolve => setImmediate(resolve))
+    expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({ customField: 'preserved' })
+    expect(harness.mutate).not.toHaveBeenCalledWith('llm-pi-ai', expect.anything(), expect.anything())
   })
 })

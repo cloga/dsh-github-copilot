@@ -313,7 +313,7 @@ assert(nativeWeb?.required === true && nativeWeb.evidenceScope === 'native-web-c
 for (const [file, name] of [
   ['tests/native-web-composition.spec.ts', 'leaves the configured native web entry unchanged in the plugin overlay'],
   ['tests/native-web-composition.spec.ts', 'keeps native web tool execution for a Copilot Agent before and after plugin disposal'],
-  ['tests/loader-composition.spec.ts', 'repairs an existing provider profile even when web is unavailable'],
+  ['tests/loader-composition.spec.ts', 'does not rewrite an existing provider profile when web is unavailable'],
   ['tests/config.spec.ts', 'preserves legacy search configuration without exposing it as an active setting'],
 ]) {
   assert(nativeWeb.tests?.some(entry => entry.file === file && entry.name === name), `native web acceptance is missing ${name}`)

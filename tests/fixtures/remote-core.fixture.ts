@@ -485,7 +485,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     expect(remote.descriptors.filter(item => item.namespace !== 'githubCopilotAccounts').map(item => item.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
       'get', 'set', 'refreshIdentity', 'ensureIdentity', 'usage', 'refreshUsage', 'turn',
       'get', 'set', 'authorizeNext', 'defaults', 'setDefault',
       'get', 'clear', 'setEnabled', 'setAutoAllocationEnabled', 'setRequestEnabled', 'recordClient',
@@ -522,7 +522,7 @@ it('mounts authorization, account, role and search-catalog Remotes on the exact 
     await expect(ctx.remote.githubCopilotSearchRouting.providers()).resolves.toEqual({ ok: true, value: catalog })
     expect(rpc).toHaveBeenLastCalledWith('/api', 'githubCopilotSearchRouting/providers', { args: {} }, expect.any(AbortSignal))
     expect(rpc).toHaveBeenCalledTimes(11)
-    for (const method of ['get', 'refresh'] as const) {
+    for (const method of ['get', 'refresh', 'getNative', 'refreshNative'] as const) {
       await expect(ctx.remote.githubCopilotUsage[method]()).resolves.toEqual({ ok: true, value: usage })
       expect(rpc).toHaveBeenLastCalledWith('/api', `githubCopilotUsage/${method}`, { args: {} }, expect.any(AbortSignal))
     }

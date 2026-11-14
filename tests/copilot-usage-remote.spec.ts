@@ -13,7 +13,7 @@ describe('Copilot quota strict Remote', () => {
     }
   })
   it('uses a separate no-argument namespace and shared strict codec on both supported gateways', () => {
-    expect(contribution.descriptors.map(value => value.method)).toEqual(['get', 'refresh'])
+    expect(contribution.descriptors.map(value => value.method)).toEqual(['get', 'refresh', 'getNative', 'refreshNative'])
     for (const descriptor of contribution.descriptors) {
       expect(descriptor).toMatchObject({ namespace: 'githubCopilotUsage', service: 'githubCopilotUsage', parameters: [] })
       expect(descriptor.result).toMatchObject({ mode: 'strict', schema: CopilotUsageViewSchema })

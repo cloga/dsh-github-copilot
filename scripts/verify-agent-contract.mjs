@@ -36,7 +36,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && productScope.preserve.includes('account-isolation')
     && productScope.preserve.includes('account-advertised-model-capabilities')
     && productScope.preserve.includes('copilot-account-quota')
-    && productScope.preserve.includes('existing-history-and-settings-compatibility')
+    && productScope.preserve.includes('stored-data-without-rewriting')
+    && productScope.routeTarget === 'native-github-copilot'
+    && productScope.legacyConversationContinuationRequired === false
     && productScope.enhancementPolicy === 'preserve-useful-remove-only-demonstrably-redundant'
     && productScope.nativeModelCapabilityCompatibility === 'best-effort-account-and-metadata-driven-with-exact-release-tests'
     && productScope.subagentSelectionAndInvocationRequired === true

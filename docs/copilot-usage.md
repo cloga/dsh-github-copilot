@@ -42,6 +42,11 @@ The separate, strict `githubCopilotContextEvidence` session projection reads onl
 
 An additive composer disclosure identifies only a concrete failed-zero or invalid-sample incident for the current open Copilot Session. Ordinary request progress, a newly opened step and absence of a fresh sample do not create a warning. Any retained count is explicitly a **historical input sample, not current occupancy**; no capacity or percentage is inferred, and the copy does not assert what the separate native meter currently displays. The native context ring and account Credits control remain separate and unchanged. Missing, malformed or otherwise unknown projection/slot/runtime evidence produces a named diagnostic instead of a success-shaped UI or guessed count.
 
+The context disclosure does not require the managed continuation Remote.
+Native-route incidents remain visible if that optional service is absent or
+withdrawn. Managed continuation status is read only while its Remote is
+available; missing status remains unavailable, not a confirmed recovery.
+
 Compaction feedback shares this disclosure without turning sampling absence into a second warning. **Compaction completed** requires a matching native checkpoint and successful end, or the account-bound Host's confirmed native commit. The existing eight-second result can separately report a subsequent request outcome; running, failed, cancelled and unconfirmed compaction outcomes remain distinct. Once that transient result expires, ordinary post-compaction steps stay quiet unless they produce a concrete sampling incident. The native expandable **Context compacted** history row remains unchanged.
 
 The independent projection retains only the latest compaction bracket, subsequent ordinary-request evidence and latest sequenced sampling incident. A normal successful settlement after that bracket is reported separately from an applicable input-plus-cache sample. It observes public step/header and same-step source/terminal metadata, including unchanged-header steps and retries; summary output is never a subsequent chat success. Missing usage can coexist with request success without becoming an incident. A failed zero or malformed/conflicting usage sample creates an incident; a later applicable valid sample clears it. Model changes, compaction and surface replacement revoke the old incident rather than allowing it to reappear for another route. A recorded post-compaction count is still historical, not exact current occupancy. No extra test message, automatic retry, content/replay read, durable event or replacement percentage is added. Projection state version 3 requests a native refold, not history conversion.
@@ -80,8 +85,15 @@ Synthetic unit/UI tests and exact unchanged Core accounting/registry fixtures pr
 
 ## Account data boundary
 
-The Host uses the selected account's OAuth grant through public credential APIs,
-with `llm-pi-ai/github-copilot` retained for canonical compatibility. GitHub's
+For the native `github-copilot` route, quota reads use only the canonical
+`llm-pi-ai/github-copilot` OAuth grant, independently of the plugin account
+selector. When the native profile is missing or names an `apiKeyEnv`, endpoint,
+or nonempty headers override, the quota is unavailable with
+`COPILOT_USAGE_NATIVE_AUTH_UNPROVEN` rather than attributing another
+credential's quota. Other public header contributors may still modify a request;
+configuration-based evidence does not prove which account a request billed.
+The managed route continues to use its
+session-bound selected account. GitHub's
 `copilot_internal/user` endpoint uses the GitHub grant, not a quota-specific
 sign-in or a newly pasted token. Access-token renewal remains owned by pi-ai;
 quota inspection must not introduce a refresh implementation or credential
@@ -94,7 +106,7 @@ The plugin's default quota fetch lazily creates one request-scoped Undici agent 
 
 This removes reliance on a Desktop launcher inheriting `NODE_USE_SYSTEM_CA=1` for **quota requests only**. On a machine where Watt Toolkit / Steam++ installs a trusted Windows root, quota worked under a correctly environmented launch, then failed when a recovery launcher omitted the process variable despite its persistence in HKCU; a normal manual relaunch restored quota. That is operational evidence for the launcher-inheritance explanation, not proof that this new plugin build has been installed or loaded. Other Desktop traffic, including sign-in and models, still follows its existing process-level trust configuration. If system CA retrieval or agent creation fails, the quota shows `COPILOT_USAGE_TRUST_UNAVAILABLE` without issuing a request or weakening TLS. Certificate verification failures still show `COPILOT_USAGE_TLS`; other fetch failures remain `COPILOT_USAGE_NETWORK`. No diagnostic alone proves proxy routing, authorization or a live balance. Inspect approved Host trust/proxy settings without disabling TLS validation. When unavailable, details show guidance instead of implying a budget. The popover background is opaque even if the host's menu token contains transparency.
 
-The Client receives only the separate strict `githubCopilotUsage` namespace (`get` and `refresh`). Existing authorization and migration methods retain their schemas. Refresh does not change settings, budget, plan, model selection or billing policy. This meter is informational and does not authorize spending or implement a budget enforcement loop.
+The Client receives only the separate strict `githubCopilotUsage` namespace. The additive `getNative` and `refreshNative` methods address the native OAuth account; existing `get` and `refresh` retain their selected-account contract. Existing authorization and migration methods retain their schemas. Refresh does not change settings, budget, plan, model selection or billing policy. This meter is informational and does not authorize spending or implement a budget enforcement loop.
 
 ## Source contracts and limitations
 

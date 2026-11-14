@@ -58,6 +58,7 @@ describe('GitHub Copilot Models client', () => {
     vi.mocked(React.useState).mockReturnValue([false, vi.fn()])
     const closed = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
     expect(closed.filter(element => element.type === 'button').map(element => element.props.children)).toEqual(['Manage'])
+    expect(closed.some(element => element.props.children === 'Account catalog: 0 models')).toBe(true)
     expect(closed.filter(element => element.type === CopilotAccountsPanel)).toHaveLength(1)
     vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
     const open = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
@@ -1061,8 +1062,8 @@ describe('GitHub Copilot Models client', () => {
     expect(text).toContain('UNSUPPORTED_ENDPOINT')
     expect(text).toContain('COPILOT_MODEL_METADATA_REJECTED')
     expect(text).not.toContain('secret=value')
-    expect(text).toContain('Select models under GitHub Copilot')
-    expect(text).not.toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
+    expect(text).toContain('native github-copilot route uses a separate catalog')
     expect(text).toContain('does not prove')
     expect(text).not.toContain('Snapshot time')
     expect(elements.some(element => element.type === 'time' || element.type === GitHubCopilotAccountModelsUpdatedAt)).toBe(false)
@@ -1444,13 +1445,15 @@ describe('GitHub Copilot Models client', () => {
     }
     const inject = vi.fn((services: string[], callback: (value: unknown) => unknown) => {
       if (services.includes('remote.githubCopilotUsage') || services.includes('remote.githubCopilotDiagnostics')
-        || services.includes('uiConversation') || services.includes('remote.githubCopilotTurnSelection')) {
+        || services.includes('uiConversation') || services.includes('remote.githubCopilotTurnSelection')
+        || services.length === 1 && services[0] === 'remote.githubCopilotSessionContinuation') {
         return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
       }
       const cleanup = callback(ctx)
       if (services.includes('remote.githubCopilotReplayRecovery')
         || services.length === 2 && services[0] === 'remote.githubCopilotSessionContinuation' && services[1] === 'slots'
-        || services.length === 1 && services[0] === 'slots') {
+        || services.length === 1 && services[0] === 'slots'
+        || services.length === 2 && services[0] === 'remote' && services[1] === 'slots') {
         return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })
       }
       if (typeof cleanup === 'function') cleanupUi = cleanup as () => void
@@ -1492,16 +1495,18 @@ describe('GitHub Copilot Models client', () => {
     return { ctx, disposeRemote, disposeUi, register, registrations, injections }
   }
 
-  it('warns before native Copilot re-add without pretending to disable Core Save or creating another account owner', async () => {
+  it('guides native Copilot setup without moving the account panel into a potentially hidden draft', async () => {
     const { ctx, register } = clientContext(['settings.models.provider-card', 'settings.models.footer'])
     const dispose = await apply(ctx as never)
     const render = register.mock.calls.find(([options]) => options.name === 'settings.models.provider-card')?.[1] as (props: object) => ReactElement
     const draft = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: false, keyConfigured: false }
     const warning = render(draft)
     expect(warning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
-    expect(warning.props.children).toContain('another model group')
-    expect(warning.props.children).toContain('cannot disable the native Save action')
-    expect(warning.type).not.toBe(GitHubCopilotAccountSurface)
+    expect(warning.props.children).toContain('canonical account')
+    expect(warning.props.children).toContain('account panel')
+    expect(warning.props.children).toContain('separately selected plugin account')
+    expect(warning.props.children).toContain('block additional-account requests and switching')
+    expect(warning.type).toBe('p')
     expect(render({ ...draft, provider: { ...draft.provider, provider: 'openai' } }).props['data-dsh-github-copilot-native-add-warning']).toBeUndefined()
     expect(render({ ...draft, configured: true }).type).toBe(GitHubCopilotAccountSurface)
     await dispose()
@@ -1524,12 +1529,14 @@ describe('GitHub Copilot Models client', () => {
     expect(first.props).not.toHaveProperty('copilot')
     await dispose()
   })
-  it('declares account namespace access for both Models and Credits injection scopes', async () => {
+  it('does not make native Credits or context diagnostics depend on managed services', async () => {
     const { ctx } = clientContext(['settings.models.footer'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'slots'], expect.any(Function))
+    expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote', 'slots'], expect.any(Function))
+    expect(ctx.inject.mock.calls.filter(([services]) => services.length === 1 && services[0] === 'slots')).toHaveLength(1)
     await dispose()
   })
 

@@ -67,15 +67,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -88,6 +88,27 @@ Choose the intended profile explicitly. Then:
 No manually defined Copilot model, pasted token, external gateway, or
 `copilot2api` service is required. Account and model availability are separate:
 successful sign-in does not guarantee every model or capability is available.
+The plugin's account-discovered models and capabilities apply to the
+`github-copilot-preview` route. DSH's native `github-copilot` route uses its
+own bundled or configured catalog; the two routes do not share model discovery.
+
+When adding DSH's native GitHub Copilot provider, use the separate plugin account
+panel to sign in. With no named key, the native route uses a stored canonical
+OAuth grant, not an independently selected additional account. While the
+managed route remains registered, saving the native provider can block
+additional-account requests and switching. The native picker is not guaranteed
+to filter its bundled catalog by account entitlement.
+Starting the plugin or completing sign-in does not automatically repair the
+native provider's settings.
+The candidate does not register Copilot-hosted search or the former plugin
+search-routing controls. DSH's existing Web search provider remains separate;
+installing the plugin does not configure one.
+The native route's quota display uses only the canonical OAuth account. If the
+provider names a credential, endpoint or nonempty headers override, or its configuration
+cannot be verified, quota is shown as unavailable rather than attributed to a
+different account. This is not proof of request-level billing attribution.
+Native context-incident diagnostics remain available without the optional
+managed continuation service; they do not replace DSH's context meter.
 
 Desktop's native package manager and its bundled CLI have different contracts
 from a standalone profile. Review the [Desktop CLI evidence](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)

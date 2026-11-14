@@ -15,9 +15,7 @@ import { readInlineConfig } from './config.ts'
 import type { InlineConfig, LiveInlineConfig } from './config.ts'
 import { assertDshCompatibility } from './compatibility.ts'
 import { readSettingsNamespace } from './settings-reader.ts'
-import GitHubCopilotAuthorizationController, {
-  ensureGitHubCopilotProviderProfile,
-} from './authorization-controller.ts'
+import GitHubCopilotAuthorizationController from './authorization-controller.ts'
 import previewPlugin from './preview-route.ts'
 import { installAutoReviewSampling } from './auto-review-sampling.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
@@ -175,11 +173,5 @@ function activate(ctx: Context, config: LiveInlineConfig): void {
   ctx.plugin(GitHubCopilotAuthorizationController)
   ctx.plugin(GitHubCopilotDualModel)
   ctx.plugin(GitHubCopilotUsageController)
-
-  // Profile repair and model configuration must not depend on hosted search.
-  void ensureGitHubCopilotProviderProfile(ctx).catch((error: unknown) => {
-    ctx.logger.error('github-copilot: failed to repair the GitHub Copilot provider route during startup')
-    ctx.logger.error(error)
-  })
 
 }

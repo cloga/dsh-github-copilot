@@ -17,7 +17,7 @@ test('Client retains account, settings and usage contributions without search ro
   assert.match(client, /ctx\.inject\(\['remote\.githubCopilot', 'remote\.githubCopilotAccounts', 'slots'\], registerUi\)/)
   assert.match(client, /ctx\.inject\(\['slots'\], registerPluginSettingsUi\)/)
   assert.doesNotMatch(client, /ctx\.inject\(\[[^\]]*remote\.githubCopilotSearchRouting/)
-  assert.match(client, /ctx\.inject\(\['remote\.githubCopilotUsage', 'remote\.githubCopilotAccounts', 'remote\.githubCopilotSessionAccount', 'remote\.githubCopilotSessionContinuation', 'slots'\], registerCopilotUsageUi\)/)
+  assert.match(client, /ctx\.inject\(\['remote\.githubCopilotUsage', 'slots'\], registerCopilotUsageUi\)/)
   for (const slot of ['settings.models.provider-card', 'settings.models.footer', 'settings.section', 'plugins.bundle.config']) {
     assert.ok(client.includes(`name: '${slot}'`), `Missing retained slot: ${slot}`)
   }

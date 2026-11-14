@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-copilot",
   "description": "Account-aware GitHub Copilot models for DeepSeek Harness through its published native adapter.",
-  "version": "0.1.0-alpha.1.dsh.0.2.2.rc.3",
+  "version": "0.1.0-alpha.2.dsh.0.2.2.rc.3",
   "releaseNotes": "CHANGELOG.md",
   "publishConfig": {
     "access": "public",

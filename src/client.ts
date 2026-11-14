@@ -543,7 +543,7 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
   const messages: Record<AccountModelsSnapshot['state'], string> = {
     idle: 'Account models have not been refreshed.',
     loading: 'Account model discovery is still in progress. This panel does not poll automatically.',
-    ready: 'Account metadata is ready. Select models under GitHub Copilot in the model picker.',
+    ready: 'Account metadata is ready.',
     stale: 'Showing the last checked model list. Freshness is checked when opening Models or preparing a model request.',
     error: 'Account model discovery failed. Use Refresh account models to retry.',
     disposed: 'Account model discovery is no longer active in this profile.',
@@ -553,7 +553,7 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
 
   return createElement('section', { 'data-dsh-github-copilot-account-models': true },
     createElement('p', { role: 'status', 'aria-live': 'polite', 'data-dsh-github-copilot-account-models-state': snapshot.state }, messages[snapshot.state]),
-    createElement('p', null, 'Discovery does not prove a successful model call or hosted search. No default model or account policy is changed.'),
+    createElement('p', null, 'This list applies to github-copilot-preview. The native github-copilot route uses a separate catalog. Discovery does not prove a successful model call or hosted search, or change your default model or account policy.'),
     snapshot.error === undefined ? null : createElement('p', { role: 'alert' }, discoveryCode(snapshot.error, 'COPILOT_MODEL_DISCOVERY_FAILED')),
     createElement('details', null,
       createElement('summary', null, `${snapshot.models.length} accepted model(s)`),
@@ -707,7 +707,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
   // The Host alone retains same-account TTL-stale presentation. This count is
   // not readiness, entitlement, or a reason to skip the freshness check.
   const count = models !== undefined && (models.state === 'ready' || models.models.length > 0)
-    ? `${models.models.length} model${models.models.length === 1 ? '' : 's'}` : undefined
+    ? `Account catalog: ${models.models.length} model${models.models.length === 1 ? '' : 's'}` : undefined
   const modelStatus = refreshing ? count === undefined ? 'Refreshing models…' : `${count} · Refreshing…`
     : models?.state === 'error' ? count === undefined ? 'Model discovery failed' : `${count} · Refresh failed`
       : count ?? (models?.state === 'unavailable' || models?.state === 'disposed' ? 'Models unavailable' : undefined)
@@ -778,7 +778,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     }) : createElement('p', { role: 'status' }, 'Sign in to manage model preferences.'),
     createElement('details', null,
       createElement('summary', null, 'Discovery details'),
-      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches your account models once. Opening this view refreshes missing or stale metadata when needed. No manual model definitions are needed. Refresh models updates account metadata; it does not verify a model call or change your selected model.'),
+      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches account models once. Opening this view refreshes missing or stale metadata when needed. These models are for github-copilot-preview, not the native github-copilot catalog. Refreshing does not verify a model call or change your selected model.'),
       models === undefined ? createElement('p', { style: nativeCaptionStyle }, 'Account model metadata is not available yet.')
         : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models })),
     signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
@@ -960,9 +960,8 @@ function registerUi(ctx: ClientContext): () => void {
       key: 'llm-pi-ai',
     }, (props: ProviderCardExtrasOwnerProps) => {
       if (!props.configured && props.provider.provider === GITHUB_COPILOT_PROVIDER_ID && props.provider.settingsNs === 'llm-pi-ai') {
-        return createElement('p', { role: 'note', 'data-dsh-github-copilot-native-add-warning': true,
-          style: { fontSize: '13px', lineHeight: 1.6 } },
-        'GitHub Copilot account models are already managed by the account panel. Saving this additional provider profile enables another model group; it does not connect a second account. Use the account panel instead. This plugin cannot disable the native Save action.')
+        return createElement('p', { role: 'note', 'data-dsh-github-copilot-native-add-warning': true, style: nativeCaptionStyle },
+          'Use the GitHub Copilot account panel to sign in. With a stored OAuth grant and no named key, the native provider uses the canonical account, not a separately selected plugin account. Saving can block additional-account requests and switching.')
       }
       return createElement(GitHubCopilotAccountSurface, {
         surfaces, seat, remote, accountsRemote, continuationContext: ctx, eligible: isGitHubCopilotAccountRow(props), localeReader,
@@ -1153,8 +1152,8 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }
   const settingsUi = ctx.inject(['slots'], registerPluginSettingsUi)
   const diagnosticsUi = ctx.inject(['remote.githubCopilotDiagnostics'], scope => installDiagnosticsClient(scope))
-  const usageUi = ctx.inject(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], registerCopilotUsageUi)
-  const contextUi = ctx.inject(['remote.githubCopilotSessionContinuation', 'slots'], registerContextEvidenceUi)
+  const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
+  const contextUi = ctx.inject(['remote', 'slots'], registerContextEvidenceUi)
   const recoveryUi = ctx.inject(['remote.githubCopilotReplayRecovery', 'remote.githubCopilotSessionContinuation', 'slots'], registerReplayRecoveryUi)
   const accountUsageUi = ctx.inject(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], scope => installAccountUsagePresentation({
     slots: scope.slots,
