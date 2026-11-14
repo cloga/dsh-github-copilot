@@ -51,6 +51,8 @@ jobs:
           test "$(pnpm config get minimumReleaseAge)" = 0
           test "$(cd dsh-upstream && pnpm config get minimumReleaseAge)" = 0
       - run: pnpm install --frozen-lockfile
+      - name: Verify deployment baseline before Core fixtures
+        run: pnpm verify:baseline
       - name: Install Core pi-ai closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'

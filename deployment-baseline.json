@@ -828,7 +828,7 @@
         {"file": "tests/preview-route.spec.ts", "name": "resolves and prepares a validated account model with the actual Core profile diagnostics contract"},
         {"file": "tests/preview-route.spec.ts", "name": "discovers mixed and unseen account models without model-name routing rules"},
         {"file": "tests/preview-route.spec.ts", "name": "uses unmodified stock LlmRuntime preparation and leaves canonical model registration alone"},
-        {"file": "tests/fixtures/model-exclusions-core.fixture.ts", "name": "keeps native tool steps in an admitted turn after exclusion and enforces exclusion on the next turn (%s)"},
+        {"file": "tests/fixtures/model-exclusions-core.fixture.ts", "name": "keeps native tool steps in an admitted turn after exclusion and enforces exclusion on the next turn"},
         {"file": "tests/authorization-controller.spec.ts", "name": "answers a narrow single-model save without reading credentials or enumerating sessions"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "keeps a real mounted row saving across equivalent parent snapshots and applies the strict result without rereading"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "sends one CAS intent at a time and never sends a queued intent after an unconfirmed response"},
@@ -1056,7 +1056,7 @@
         {"file": "scripts/verify-upstream-baseline.mjs", "marker": "if (block.text.trim() === '') break"}
       ],
       "tests": [
-        {"file": "tests/client.spec.ts", "name": "does not delay authorization while optional Auto projections wait for Core services"},
+        {"file": "tests/client.spec.ts", "name": "does not register plugin-owned Auto UI or projections"},
         {"file": "tests/fixtures/reasoning-presentation-core.fixture.ts", "name": "renders native answers and summaries without blank Thinking disclosures (%s)"}
       ]
     },
