@@ -168,6 +168,17 @@ See `src/compaction-replay.ts` and `docs/manual-compaction-recovery.md` (#349).
 
 ## Approved multi-account ownership extension (#297)
 
+The explicit #470 enhancement permits managed-account switching alongside
+independently configured native Copilot. Keep native UI and label the managed
+route `GitHub Copilot (multi-account)`; do not mirror grants, intercept native
+credentials, redirect native requests or change native selections. Missing
+managed registration and incomplete evidence remain blockers. Reuse native
+canonical quota/search isolation; do not revive retired Auto or routing UI.
+Disposal removes only plugin registrations. Plugin-model selections and explicit
+`web.searchProvider=github-copilot-hosted` need user-selected replacements before
+uninstall; missing configured Web backends return `WEB_PROVIDER_CONFIGURED_MISSING`,
+not automatic fallback. No automatic Settings/history migration or sign-out.
+
 Login environments (#424) use only pinned native pi-ai OAuth for GitHub.com and
 validated single-label `tenant.ghe.com` Enterprise Cloud hosts. Preserve host
 binding through identity, duplicate checks, reauthorization and native refresh/

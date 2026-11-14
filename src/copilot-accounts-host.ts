@@ -229,10 +229,8 @@ export class CopilotAccountsHost {
     const evidence = migrationStatus(this.ctx)
     if (!evidence.complete.routes || includeActivity && (!evidence.complete.sessions || !evidence.complete.defaultSelection)
       || !evidence.capabilities.settingsCas) return 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE'
-    if (evidence.routes.nativeConfigured || evidence.routes.nativeRegistered || !evidence.routes.managedRegistered
-      || includeActivity && (evidence.defaultSelection?.provider === GITHUB_COPILOT_PROVIDER_ID
-        || evidence.sessions.some(row => row.effectiveSelection?.provider === GITHUB_COPILOT_PROVIDER_ID
-          || row.activeRequestSelection?.provider === GITHUB_COPILOT_PROVIDER_ID))) return 'COPILOT_ACCOUNTS_ROUTE_BLOCKED'
+    // The managed selector never changes the canonical record or native selection.
+    if (!evidence.routes.managedRegistered) return 'COPILOT_ACCOUNTS_ROUTE_BLOCKED'
     if (!this.ctx.get('githubCopilotSessionAccounts') && includeActivity && evidence.sessions.some(row => row.status === 'running'
       && row.effectiveSelection?.provider === 'github-copilot-preview')) return 'COPILOT_ACCOUNTS_BUSY'
     return undefined

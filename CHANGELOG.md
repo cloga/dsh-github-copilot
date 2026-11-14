@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.6.dsh.0.2.2.rc.3 (prepared)
+
+- Permit managed multi-account switching alongside independently configured native Copilot, retaining credential/turn isolation and the native interface (#470).
+- Label managed models `GitHub Copilot (multi-account)` and preserve native configuration, credentials and selected models on disposal.
+- Clarify that plugin-model and configured plugin-search selections require explicit replacements before uninstall; no automatic fallback or settings rewrite.
+
 ## 0.1.0-alpha.5.dsh.0.2.2.rc.3 (prepared)
 
 - Show the native Credits account identity only after verifying the canonical OAuth grant and quota belong together; keep quota available when identity is unavailable.
