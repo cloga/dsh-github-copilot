@@ -48,16 +48,18 @@ function hasSearchEvidence(value: unknown): boolean {
 /** Add only a backend to the existing Web service; never select it or replace native tools. */
 export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
   let active = true
-  const pending = new Set<AbortController>()
+  const pending = new Map<AbortController, string | undefined>()
   ctx.effect(() => () => {
     active = false
-    for (const controller of pending) controller.abort()
+    for (const controller of pending.keys()) controller.abort()
   })
-  const revoke = () => { for (const controller of pending) controller.abort() }
+  const revoke = () => { for (const controller of pending.keys()) controller.abort() }
   ctx.on('credentials/record-updated', key => { if (key === GITHUB_COPILOT_CREDENTIAL_KEY) revoke() })
   ctx.on('llm/adapters-updated', revoke)
   ctx.on('llm/models-updated', provider => { if (provider === NATIVE_COPILOT) revoke() })
-  ctx.effect(() => onSettingsNamespaceUpdated(ctx, revoke))
+  ctx.effect(() => onSettingsNamespaceUpdated(ctx, namespace => {
+    for (const [controller, owner] of pending) if (owner === namespace) controller.abort()
+  }))
 
   return {
     id: 'github-copilot-hosted',
@@ -68,10 +70,11 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
     async ready() {
       if (!active) return false
       try {
-        const route = await captureNativeCopilot(ctx)
-        const record = await ctx.credentials.readRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
-        if (!active || !route || record?.kind !== 'grant') return false
-        normalizeGitHubCopilotOAuthCredential(record.payload)
+        const signal = AbortSignal.timeout(10000)
+        const route = await abortable(captureNativeCopilot(ctx), signal)
+        if (!route) return false
+        const credential = await abortable(createGitHubCopilotCredentialStore(ctx).read(NATIVE_COPILOT), signal)
+        if (!active || credential?.type !== 'oauth') return false
         route.assertCurrent()
         return true
       } catch {
@@ -87,11 +90,12 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
       const controller = new AbortController()
       const deadline = AbortSignal.timeout(25000)
       const signal = AbortSignal.any([controller.signal, deadline, ...(callerSignal ? [callerSignal] : [])])
-      pending.add(controller)
+      pending.set(controller, undefined)
       let disposeSource: (() => void) | undefined
       try {
         const route = await abortable(captureNativeCopilot(ctx), signal)
         if (!route) throw unavailable()
+        pending.set(controller, route.namespace)
         const check = () => { signal.throwIfAborted(); route.assertCurrent() }
         check()
         const store = createGitHubCopilotCredentialStore(ctx)
@@ -107,10 +111,18 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
         const grant = normalizeGitHubCopilotOAuthCredential(current)
         if (grant.access !== auth.auth.apiKey || grant.expires <= Date.now()) throw unavailable()
         const baseURL = trustedGitHubCopilotBaseUrl(auth.auth.baseUrl, grant)
-        const headers = { ...copilotPublicHeaders(), ...attributionHeaders(),
-          ...(auth.auth.headers ?? {}), authorization: `Bearer ${auth.auth.apiKey}` }
+        const apiKey = auth.auth.apiKey
+        const headers = new Headers({ ...copilotPublicHeaders(), ...attributionHeaders() })
+        for (const [name, value] of Object.entries(auth.auth.headers ?? {})) {
+          if (value !== null) headers.set(name, value)
+        }
+        headers.set('authorization', `Bearer ${apiKey}`)
+        headers.set('content-type', 'application/json')
+        headers.set('accept', 'application/json')
+        headers.set('X-Initiator', 'user')
+        headers.set('Openai-Intent', 'conversation-edits')
         const source = createAccountModelSource({
-          resolveAuth: async () => ({ apiKey: auth.auth.apiKey!, baseURL,
+          resolveAuth: async () => ({ apiKey, baseURL,
             accountKey: 'native-canonical-operation', availableModelIds: grant.availableModelIds }),
           assertAuthCurrent: check,
           nativeApis: new Map([...route.models].map(([id, model]) => [id, model.api])),
@@ -128,8 +140,7 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
           const callSignal = probe ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : signal
           const response = await abortable(fetch(`${baseURL}/responses`, {
             method: 'POST', redirect: 'error', signal: callSignal,
-            headers: { ...headers, 'content-type': 'application/json', accept: 'application/json',
-              'X-Initiator': 'user', 'Openai-Intent': 'conversation-edits' },
+            headers,
             body: JSON.stringify({
               model: model.id, input: [{ role: 'user', content: [{ type: 'input_text', text: query }] }],
               tools: [{ type: 'web_search' }], tool_choice: 'required', stream: false,
@@ -139,7 +150,7 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
             if (callSignal.aborted) { void response.body?.cancel().catch(() => undefined); throw failed() }
             return response
           }), callSignal)
-          check()
+          // json owns the reader even if invalidation wins immediately after headers.
           const body = await json(response, callSignal)
           check()
           if (!hasSearchEvidence(body)) throw unavailable()
@@ -147,7 +158,13 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
         }
         await dispatch('Probe web search capability.', true)
         const body = await dispatch(request.query, false)
-        return normalizeSearchResponse(body)
+        const result = normalizeSearchResponse(body)
+        return { ...result, sources: result.sources.filter(source => {
+          try {
+            const url = new URL(source.url)
+            return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password
+          } catch { return false }
+        }).slice(0, 64), truncated: result.sources.length > 64 }
       } catch (error) {
         if (callerSignal?.aborted) throw new WebError('web search aborted', 'ABORTED')
         if (controller.signal.aborted || !active) throw unavailable()

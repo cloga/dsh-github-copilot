@@ -82,9 +82,38 @@ describe('optional native Copilot hosted search', () => {
 
   it('does not send the user query when the proof has no search evidence', async () => {
     const fixture = setup()
-    fixture.fetch.mockImplementationOnce(async () => Response.json({ data: [] }))
+    const original = fixture.fetch.getMockImplementation()!
+    fixture.fetch.mockImplementation(async (url, init) => {
+      const response = await original(url, init)
+      return String(url).endsWith('/responses') ? Response.json({ output: [] }) : response
+    })
     await expect(fixture.provider.search({ query: 'must not send' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
-    expect(fixture.requests).toHaveLength(0)
+    expect(fixture.requests).toHaveLength(1)
+  })
+
+  it('does not retry a failed final query', async () => {
+    const fixture = setup()
+    const original = fixture.fetch.getMockImplementation()!
+    fixture.fetch.mockImplementation(async (url, init) => {
+      const response = await original(url, init)
+      return fixture.requests.length === 2 ? new Response('private upstream body', { status: 400 }) : response
+    })
+    await expect(fixture.provider.search({ query: 'one final query' })).rejects.toMatchObject({
+      code: 'WEB_PROVIDER_ERROR', message: 'COPILOT_NATIVE_SEARCH_FAILED',
+    })
+    expect(fixture.requests).toHaveLength(2)
+  })
+
+  it('bounds concurrency and cancels uncooperative metadata fetches', async () => {
+    const fixture = setup()
+    fixture.fetch.mockImplementation(() => new Promise<Response>(() => {}))
+    const controller = new AbortController()
+    const operations = Array.from({ length: 4 }, () =>
+      fixture.provider.search({ query: 'bounded' }, controller.signal).catch(error => error))
+    await vi.waitFor(() => expect(fixture.fetch).toHaveBeenCalledTimes(4))
+    await expect(fixture.provider.search({ query: 'fifth' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    controller.abort()
+    expect(await Promise.all(operations)).toEqual(Array.from({ length: 4 }, () => expect.objectContaining({ code: 'ABORTED' })))
   })
 
   it('revokes an in-flight operation on canonical credential change without retry', async () => {

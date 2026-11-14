@@ -1,11 +1,13 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
+import type {} from '@deepseek-ai/dsh-experimental-auto-review'
 import type { GenerateOptions, LlmRuntime, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { currentSearchInitiator } from './current-provider.ts'
 import type {} from './preview-route.ts'
 import { captureNativeCopilot, NATIVE_COPILOT } from './native-copilot-access.ts'
+import { onSettingsNamespaceUpdated } from './settings-reader.ts'
 
 const REVIEWER = '@deepseek-ai/dsh-experimental-auto-review'
 const CORE_VERSIONS = new Set(['0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'])
@@ -79,24 +81,34 @@ export function installAutoReviewSampling(ctx: Context): () => void {
           yield* runtime.stream(options)
           return
         }
-        const signal = options.signal === undefined ? lifecycle.signal : AbortSignal.any([options.signal, lifecycle.signal])
-        signal.throwIfAborted()
-        route.assertCurrent()
-        const prepared = await runtime.prepareCall({
-          provider: options.provider, model: options.model,
-          ...(options.reasoningEffort === undefined ? {} : { reasoningEffort: options.reasoningEffort }),
-          ...(options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens }),
-          ...(options.stop === undefined ? {} : { stop: options.stop }),
-        }, signal)
-        // Once prepared, never fall back to another generation or resend on failure.
-        signal.throwIfAborted()
-        route.assertCurrent()
-        if (!await isNativeReviewerContext(caller)) throw new Error('COPILOT_AUTO_REVIEW_IDENTITY_REVOKED')
-        signal.throwIfAborted()
-        route.assertCurrent()
-        const request = { ...options, temperature: undefined, ...prepared.config, signal }
-        if (Object.isFrozen(options)) Object.freeze(request)
-        yield* prepared.stream(request)
+        const invalidation = new AbortController()
+        const signal = AbortSignal.any([lifecycle.signal, invalidation.signal, ...(options.signal ? [options.signal] : [])])
+        const stopSettings = onSettingsNamespaceUpdated(ctx, namespace => {
+          if (namespace === route.namespace) invalidation.abort()
+        })
+        const stopAdapters = ctx.on('llm/adapters-updated', () => invalidation.abort())
+        try {
+          signal.throwIfAborted()
+          route.assertCurrent()
+          const prepared = await runtime.prepareCall({
+            provider: options.provider, model: options.model,
+            ...(options.reasoningEffort === undefined ? {} : { reasoningEffort: options.reasoningEffort }),
+            ...(options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens }),
+            ...(options.stop === undefined ? {} : { stop: options.stop }),
+          }, signal)
+          // Once prepared, never fall back to another generation or resend on failure.
+          signal.throwIfAborted()
+          route.assertCurrent()
+          if (!await isNativeReviewerContext(caller)) throw new Error('COPILOT_AUTO_REVIEW_IDENTITY_REVOKED')
+          signal.throwIfAborted()
+          route.assertCurrent()
+          const request = { ...options, temperature: undefined, ...prepared.config, signal }
+          if (Object.isFrozen(options)) Object.freeze(request)
+          yield* prepared.stream(request)
+        } finally {
+          stopSettings()
+          stopAdapters()
+        }
         return
       }
       const preview = ctx.get('githubCopilotPreview')
