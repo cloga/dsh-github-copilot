@@ -33,7 +33,17 @@ function registry({ existing = null, tag = '0.4.0-alpha.9', missing = false, fai
     },
   }
 }
-const options = api => ({ manifest: manifest(), bytes, archive: 'artifacts/test.tgz', ...api })
+const options = api => ({ manifest: manifest(), bytes, archive: 'artifacts/test.tgz', allowPublish: true, ...api })
+
+function virtualClock() {
+  let time = 0
+  const sleeps = []
+  return {
+    sleeps,
+    now: () => time,
+    wait: async ms => { sleeps.push(ms); time += ms },
+  }
+}
 
 test('public manifest validation rejects wrong identity, lifecycle hooks and accidental latest', () => {
   validatePublicPackage(manifest())
@@ -58,6 +68,10 @@ test('distribution channels are explicit and never inferred from lexical version
 test('npm metadata reads distinguish E404 from auth, TLS, timeout and malformed responses', () => {
   const run = (status, stdout) => () => ({ status, stdout })
   assert.deepEqual(npmJson(['view', `${name}@${version}`], { run: run(0, JSON.stringify(published())) }), published())
+  npmJson(['view', name], { run: (cmd, args) => {
+    assert.ok(args.includes('--prefer-online'))
+    return { status: 0, stdout: JSON.stringify(published()) }
+  } })
   assert.equal(npmJson(['view', name], { run: run(1, '{"error":{"code":"E404"}}') }), null)
   for (const [status, text] of [[1, '{"error":{"code":"ENEEDAUTH"}}'], [1, 'TLS error'],
     [null, '{"error":{"code":"E404"}}'], [0, '[]'], [0, ''], [0, '{"error":{"code":"E404"}}']]) {
@@ -69,6 +83,7 @@ test('alpha-only package discovery uses dist-tag ls without relying on latest', 
   const result = npmPackageTags({ run: (cmd, args) => {
     assert.equal(cmd, 'npm')
     assert.deepEqual(args.slice(0, 3), ['dist-tag', 'ls', name])
+    assert.ok(args.includes('--prefer-online'))
     return { status: 0, stdout: `alpha: ${version}\n` }
   } })
   assert.equal(result['dist-tags'].alpha, version)
@@ -86,6 +101,120 @@ test('new direct publication uses original tgz and verifies registry SRI after o
   assert.equal(result.integrity, sri)
   assert.deepEqual(api.calls, [['publish', 'artifacts/test.tgz', '--tag', 'alpha', '--access', 'public',
     '--registry', 'https://registry.npmjs.org/', '--ignore-scripts']])
+})
+
+test('successful publication waits for delayed version and dist-tag visibility without another write', async () => {
+  const clock = virtualClock()
+  const calls = []
+  let written = false
+  let versionReads = 0
+  let tagReads = 0
+  const api = {
+    ...clock,
+    readPackage: async () => {
+      if (!written) return { name, 'dist-tags': { alpha: '0.4.0-alpha.9' } }
+      tagReads++
+      return { name, 'dist-tags': { alpha: tagReads < 3 ? '0.4.0-alpha.9' : version } }
+    },
+    readVersion: async () => ++versionReads < 4 ? null : published(),
+    publish: async args => { calls.push(args); written = true },
+  }
+
+  const result = await publishNpm(options(api))
+  assert.equal(result.state, 'published')
+  assert.equal(result.integrity, sri)
+  assert.equal(calls.length, 1)
+  assert.equal(versionReads, 4)
+  assert.equal(tagReads, 3)
+  assert.deepEqual(clock.sleeps, [15_000, 15_000, 15_000, 15_000])
+})
+
+test('missing version or stale dist-tag exhausts one bounded read-only deadline', async () => {
+  for (const missing of ['version', 'tag']) {
+    const clock = virtualClock()
+    const calls = []
+    let written = false
+    let reads = 0
+    const api = {
+      ...clock,
+      readPackage: async () => ({ name, 'dist-tags': { alpha: '0.4.0-alpha.9' } }),
+      readVersion: async () => {
+        reads++
+        return written && missing === 'tag' ? published() : null
+      },
+      publish: async args => { calls.push(args); written = true },
+    }
+
+    await assert.rejects(publishNpm(options(api)), /readback.*deadline/i)
+    assert.equal(calls.length, 1, missing)
+    assert.equal(clock.now(), 600_000, missing)
+    assert.ok(reads <= 41, missing)
+    assert.ok(clock.sleeps.every(ms => ms > 0 && ms <= 15_000), missing)
+  }
+})
+
+test('version and dist-tag readback share the same deadline', async () => {
+  const clock = virtualClock()
+  let written = false
+  let versionReads = 0
+  let writes = 0
+  const api = {
+    ...clock,
+    readPackage: async () => ({ name, 'dist-tags': { alpha: '0.4.0-alpha.9' } }),
+    readVersion: async () => ++versionReads <= 34 ? null : published(),
+    publish: async () => { writes++; written = true },
+  }
+
+  await assert.rejects(publishNpm(options(api)), /dist-tag readback deadline/i)
+  assert.equal(written, true)
+  assert.equal(writes, 1)
+  assert.equal(clock.now(), 600_000)
+  assert.equal(versionReads, 35)
+})
+
+test('post-publish mismatches and registry errors fail immediately without another write', async () => {
+  for (const failure of ['integrity', 'identity', 'network', 'tag-network', 'malformed-tag']) {
+    const clock = virtualClock()
+    const calls = []
+    let written = false
+    let postVersionReads = 0
+    const api = {
+      ...clock,
+      readPackage: async () => {
+        if (!written) return { name, 'dist-tags': { alpha: '0.4.0-alpha.9' } }
+        if (failure === 'tag-network') throw new Error('registry unavailable')
+        return { name, 'dist-tags': { alpha: failure === 'malformed-tag' ? 'invalid' : version } }
+      },
+      readVersion: async () => {
+        if (!written) return null
+        postVersionReads++
+        if (failure === 'network') throw new Error('registry unavailable')
+        if (failure === 'integrity') return { ...published(), dist: { integrity: 'wrong' } }
+        if (failure === 'identity') return { ...published(), name: 'wrong-package' }
+        return published()
+      },
+      publish: async args => { calls.push(args); written = true },
+    }
+    await assert.rejects(publishNpm(options(api)))
+    assert.equal(calls.length, 1, failure)
+    assert.equal(postVersionReads, 1, failure)
+    assert.deepEqual(clock.sleeps, [], failure)
+  }
+})
+
+test('recovered archives reconcile only and never treat an npm 404 as permission to publish', async () => {
+  const api = registry()
+  await assert.rejects(publishNpm(options({ ...api, allowPublish: false })), /read.only|recovered/i)
+  assert.equal(api.calls.length, 0)
+
+  const present = registry({ existing: published(), tag: version })
+  const result = await publishNpm(options({ ...present, allowPublish: false }))
+  assert.equal(result.reconciled, true)
+  assert.equal(present.calls.length, 0)
+
+  const unspecified = options(registry())
+  delete unspecified.allowPublish
+  await assert.rejects(publishNpm(unspecified), /publication mode/i)
 })
 
 test('stable publication promotes its same-version prerelease latest pointer without lowering it', async () => {
@@ -114,6 +243,30 @@ test('stable publication promotes its same-version prerelease latest pointer wit
   assert.equal(result.integrity, sri)
   assert.deepEqual(calls, [['publish', 'artifacts/test.tgz', '--tag', 'latest', '--access', 'public',
     '--registry', 'https://registry.npmjs.org/', '--ignore-scripts']])
+})
+
+test('stable publication waits for its previously valid prerelease latest pointer to advance', async () => {
+  const stableVersion = '0.4.0'
+  const stableManifest = {
+    ...manifest(), version: stableVersion,
+    publishConfig: { ...manifest().publishConfig, tag: 'latest' },
+  }
+  const clock = virtualClock()
+  let written = false
+  let postTagReads = 0
+  let writes = 0
+  const api = {
+    ...clock,
+    readPackage: async () => ({
+      name, 'dist-tags': { latest: !written || ++postTagReads === 1 ? '0.4.0-alpha.134' : stableVersion },
+    }),
+    readVersion: async () => written ? { ...published(), version: stableVersion } : null,
+    publish: async () => { writes++; written = true },
+  }
+
+  assert.equal((await publishNpm(options({ ...api, manifest: stableManifest }))).state, 'published')
+  assert.equal(writes, 1)
+  assert.deepEqual(clock.sleeps, [15_000])
 })
 
 test('stable publication rejects a latest pointer to a different version prerelease channel', async () => {
@@ -186,7 +339,7 @@ test('independent Core line publishes original bytes across a known historical g
   let existing = null
   const calls = []
   const api = {
-    manifest: candidate, baseline, bytes, archive: 'artifacts/original.tgz',
+    manifest: candidate, baseline, bytes, archive: 'artifacts/original.tgz', allowPublish: true,
     readPackage: async () => ({ name, 'dist-tags': { alpha: tag } }),
     readVersion: async () => existing,
     publish: async args => {
@@ -222,7 +375,7 @@ test('historical suffixed channel pointers use published Core metadata, not new 
   let existing = null
   const calls = []
   const api = {
-    manifest: candidate, baseline, bytes, archive: 'artifacts/original.tgz',
+    manifest: candidate, baseline, bytes, archive: 'artifacts/original.tgz', allowPublish: true,
     readPackage: async () => ({ name, 'dist-tags': { alpha: tag } }),
     readVersion: async () => existing,
     readTaggedVersion: async current => ({ name, version: current, engines: { dsh: '0.2.0-rc.2' } }),
@@ -277,8 +430,8 @@ test('artifact recovery uses remote original bytes and rejects commit, digest an
   const release = { tag_name: `v${version}`, target_commitish: sha, draft: false, immutable: true, prerelease: true }
   const annotation = { tag: `v${version}`, object: { type: 'commit', sha } }
   const input = { version, sha, release, annotation, assets, readAsset: async id => files[id - 1].data }
-  assert.deepEqual(await recoverArtifact(input), files)
-  assert.equal(await recoverArtifact({ ...input, release: null, assets: [] }), null)
+  assert.deepEqual(await recoverArtifact(input), { source: 'recovered', files })
+  assert.deepEqual(await recoverArtifact({ ...input, release: null, assets: [] }), { source: 'packed', files: null })
   for (const change of [
     { release: { ...release, immutable: false } },
     { annotation: { ...annotation, object: { type: 'commit', sha: '2'.repeat(40) } } },
@@ -287,7 +440,9 @@ test('artifact recovery uses remote original bytes and rejects commit, digest an
     { readAsset: async () => Buffer.from('changed') },
   ]) await assert.rejects(recoverArtifact({ ...input, ...change }))
   const draft = await recoverArtifact({ ...input, release: { ...release, draft: true, immutable: false }, assets: assets.slice(0, 1) })
-  assert.deepEqual(draft, files)
+  assert.deepEqual(draft, { source: 'recovered', files })
+  const emptyDraft = await recoverArtifact({ ...input, release: { ...release, draft: true, immutable: false }, assets: [] })
+  assert.deepEqual(emptyDraft, { source: 'packed', files: null })
 })
 
 test('normal release requires npm and OIDC without a silent opt-out', async () => {
@@ -303,6 +458,9 @@ test('normal release requires npm and OIDC without a silent opt-out', async () =
   assert.match(release, /ref: \$\{\{ needs\.plan\.outputs\.sha \}\}/)
   assert.match(release, /ref: \$\{\{ github\.sha \}\}\s+path: release-tools/)
   assert.match(release, /publisher_version=.*release-tools\/package\.json/)
+  assert.match(release, /node release-tools\/scripts\/prepare-release-artifact\.mjs/)
+  assert.match(release, /RELEASE_ARTIFACT_SOURCE: \$\{\{ steps\.artifact\.outputs\.artifact_source \}\}/)
+  assert.match(prepare, /artifact_source=\$\{result\.source\}/)
   assert.match(release, /cmp -- "artifacts\/dsh-github-copilot-\$version\.tgz" "release-tools\/artifacts\/dsh-github-copilot-\$version\.tgz"/)
   assert.match(release, /node "release-tools\/scripts\/publish-npm\.mjs" "\$version"/)
 })

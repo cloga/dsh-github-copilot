@@ -729,7 +729,7 @@ const orderedReleaseSteps = [
   '- run: pnpm verify:controlled-core -- dsh-upstream',
   '- name: Verify plugin package',
   '- name: Recover original release archive or pack once',
-  'node scripts/prepare-release-artifact.mjs',
+  'node release-tools/scripts/prepare-release-artifact.mjs',
   '- name: Verify packed archive',
   'pnpm verify:tarball --',
   '- name: Write and verify SHA-256 manifest',
