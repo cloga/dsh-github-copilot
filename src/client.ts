@@ -1153,7 +1153,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const settingsUi = ctx.inject(['slots'], registerPluginSettingsUi)
   const diagnosticsUi = ctx.inject(['remote.githubCopilotDiagnostics'], scope => installDiagnosticsClient(scope))
   const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
-  const contextUi = ctx.inject(['slots'], registerContextEvidenceUi)
+  const contextUi = ctx.inject(['remote', 'slots'], registerContextEvidenceUi)
   const recoveryUi = ctx.inject(['remote.githubCopilotReplayRecovery', 'remote.githubCopilotSessionContinuation', 'slots'], registerReplayRecoveryUi)
   const accountUsageUi = ctx.inject(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], scope => installAccountUsagePresentation({
     slots: scope.slots,

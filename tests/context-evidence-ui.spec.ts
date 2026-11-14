@@ -228,7 +228,7 @@ describe('additive historical context notice', () => {
       }
       const undeclare = slots.register({ name: 'root', children: { 'conversation.input.dock': { kind: 'list', scope: 'session' } } }, () => null)
       const observed: unknown[] = []
-      const binding = ctx.inject(['slots'], scope => {
+      const binding = ctx.inject(['remote', 'slots'], scope => {
         const probe = scope.inject(['remote.githubCopilotSessionContinuation'], child => {
           observed.push(child.remote.githubCopilotSessionContinuation)
         })

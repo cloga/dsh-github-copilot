@@ -1452,7 +1452,8 @@ describe('GitHub Copilot Models client', () => {
       const cleanup = callback(ctx)
       if (services.includes('remote.githubCopilotReplayRecovery')
         || services.length === 2 && services[0] === 'remote.githubCopilotSessionContinuation' && services[1] === 'slots'
-        || services.length === 1 && services[0] === 'slots') {
+        || services.length === 1 && services[0] === 'slots'
+        || services.length === 2 && services[0] === 'remote' && services[1] === 'slots') {
         return Object.assign(Promise.resolve(), { dispose: async () => { if (typeof cleanup === 'function') cleanup() } })
       }
       if (typeof cleanup === 'function') cleanupUi = cleanup as () => void
@@ -1534,7 +1535,8 @@ describe('GitHub Copilot Models client', () => {
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'slots'], expect.any(Function))
     expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
-    expect(ctx.inject.mock.calls.filter(([services]) => services.length === 1 && services[0] === 'slots')).toHaveLength(2)
+    expect(ctx.inject).toHaveBeenCalledWith(['remote', 'slots'], expect.any(Function))
+    expect(ctx.inject.mock.calls.filter(([services]) => services.length === 1 && services[0] === 'slots')).toHaveLength(1)
     await dispose()
   })
 
