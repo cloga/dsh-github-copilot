@@ -36,6 +36,14 @@ interface RuntimeProps {
   useSession<T>(selector: (snapshot: unknown) => T): T
   useProjection(key: 'modelSelection'): unknown
 }
+interface ManagedRemotes {
+  readonly session: SessionAccountRemote | undefined
+  readonly continuation: SessionContinuationRemote | undefined
+}
+interface ManagedRemoteSource {
+  getSnapshot(): ManagedRemotes
+  subscribe(listener: () => void): () => void
+}
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -84,14 +92,16 @@ function effectiveCopilot(projection: unknown): { provider: string; model: strin
   return next.provider === 'github-copilot' || next.provider === 'github-copilot-preview' ? next : undefined
 }
 
-function Surface({ runtime, nativeRemote, sessionRemote, continuationRemote, locale, diagnostic }: {
+function Surface({ runtime, nativeRemote, managedRemotes, locale, diagnostic }: {
   runtime: RuntimeProps
   nativeRemote: CopilotUsageRemote | undefined
-  sessionRemote: SessionAccountRemote | undefined
-  continuationRemote: SessionContinuationRemote | undefined
+  managedRemotes: ManagedRemoteSource
   locale: LocaleReader | undefined
   diagnostic: (code: string) => void
 }): ReactElement | null {
+  const { session: sessionRemote, continuation: continuationRemote } = useSyncExternalStore(
+    managedRemotes.subscribe, managedRemotes.getSnapshot, managedRemotes.getSnapshot,
+  )
   const valid = runtime.useSession(session => record(session) && session.sessionId === runtime.sessionId
     && session.removed === false && session.openState === 'open')
   const projection = runtime.useProjection('modelSelection')
@@ -168,14 +178,32 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
     const face = record(namespaces) ? namespaces.githubCopilotUsage : undefined
     if (isNativeRemote(face)) nativeRemote = { get: () => face.getNative(), refresh: () => face.refreshNative() }
     else diagnostic('COPILOT_USAGE_NATIVE_REMOTE_UNAVAILABLE')
-    const session = record(namespaces) ? namespaces.githubCopilotSessionAccount : undefined
-    if (isSessionRemote(session)) sessionRemote = session
-    else diagnostic('COPILOT_SESSION_ACCOUNTS_REMOTE_UNAVAILABLE')
-    const continuation = record(namespaces) ? namespaces.githubCopilotSessionContinuation : undefined
-    if (isContinuationRemote(continuation)) {
-      continuationRemote = continuation
-    } else diagnostic('COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
   } catch { diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE') }
+  const listeners = new Set<() => void>()
+  let managedSnapshot: ManagedRemotes = { session: undefined, continuation: undefined }
+  const publishManaged = () => {
+    if (managedSnapshot.session === sessionRemote && managedSnapshot.continuation === continuationRemote) return
+    managedSnapshot = { session: sessionRemote, continuation: continuationRemote }
+    for (const listener of listeners) listener()
+  }
+  const managedRemotes: ManagedRemoteSource = {
+    getSnapshot: () => managedSnapshot,
+    subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener) } },
+  }
+  const sessionInjection = ctx.inject(['remote.githubCopilotSessionAccount'], scope => {
+    const candidate: unknown = scope.remote.githubCopilotSessionAccount
+    sessionRemote = isSessionRemote(candidate) ? candidate : undefined
+    if (sessionRemote === undefined) diagnostic('COPILOT_SESSION_ACCOUNTS_REMOTE_UNAVAILABLE')
+    publishManaged()
+    return () => { sessionRemote = undefined; publishManaged() }
+  })
+  const continuationInjection = ctx.inject(['remote.githubCopilotSessionContinuation'], scope => {
+    const candidate: unknown = scope.remote.githubCopilotSessionContinuation
+    continuationRemote = isContinuationRemote(candidate) ? candidate : undefined
+    if (continuationRemote === undefined) diagnostic('COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
+    publishManaged()
+    return () => { continuationRemote = undefined; publishManaged() }
+  })
   const localeCandidate: unknown = ctx.get('locale')
   const locale = isLocale(localeCandidate) ? localeCandidate : undefined
   let active = true
@@ -197,7 +225,7 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
             return null
           }
           return createElement(Surface, {
-            runtime: props, nativeRemote, sessionRemote, continuationRemote, locale, diagnostic,
+            runtime: props, nativeRemote, managedRemotes, locale, diagnostic,
           })
         })
         let removed = false
@@ -212,5 +240,8 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
     active = false
     injection()
     remove?.()
+    void sessionInjection.dispose()
+    void continuationInjection.dispose()
+    listeners.clear()
   }
 }

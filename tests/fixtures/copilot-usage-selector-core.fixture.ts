@@ -101,11 +101,12 @@ describe('built usage Client under the pinned Core selector and Slot error bound
     document.body.append(container)
     let unmount = () => {}
     let disposeClient: (() => Promise<void>) | undefined
+    let disposeOptional: (() => Promise<void>) | undefined
     try {
       await ctx.plugin({ inject: UiRenderer.inject, apply: UiRenderer.apply })
       await ctx.plugin({ apply(context) {
         new RemoteRoot(context); new AccountNamespace(context); new UsageRemote(context)
-        new AccountsRemote(context); new SessionAccountRemote(context); new ContinuationRemote(context)
+        new AccountsRemote(context)
       } })
       const slots = ctx.get('slots')!
       const binding: ScopedStandardSourceBinding = {
@@ -138,6 +139,17 @@ describe('built usage Client under the pinned Core selector and Slot error bound
       await React.act(async () => { unmount = ctx.get('uiRenderer')!.mount(container) })
       expect(errors).not.toHaveBeenCalled()
       expect(container.querySelector('[data-copilot-usage-trigger]')).not.toBeNull()
+      if (provider === 'github-copilot-preview') {
+        expect(container.textContent).toContain('Not available')
+        expect(quota).not.toHaveBeenCalled()
+        await React.act(async () => {
+          const optional = ctx.plugin({ apply(context) {
+            new SessionAccountRemote(context); new ContinuationRemote(context)
+          } })
+          await optional
+          disposeOptional = async () => { await optional.dispose() }
+        })
+      }
       expect(container.textContent).toContain('7 used')
       expect(quota).toHaveBeenCalledTimes(1)
       const native = container.querySelector('[data-native-context]')
@@ -157,12 +169,18 @@ describe('built usage Client under the pinned Core selector and Slot error bound
       expect(errors).not.toHaveBeenCalled()
       expect(refresh).not.toHaveBeenCalled()
       expect(network).not.toHaveBeenCalled()
+      if (disposeOptional) {
+        await React.act(async () => { projection.set({ lastUsed: null, next: selection(provider) }) })
+        await React.act(async () => { await disposeOptional!() })
+        disposeOptional = undefined
+        expect(container.textContent).toContain('Not available')
+      }
       await React.act(async () => { await disposeClient!() })
       disposeClient = undefined
       expect(slots.entriesOfSlot(dock)).toHaveLength(0)
       expect(session.subscribers()).toBe(0)
     } finally {
-      await React.act(async () => { unmount(); await disposeClient?.(); await ctx.fiber.dispose() })
+      await React.act(async () => { unmount(); await disposeOptional?.(); await disposeClient?.(); await ctx.fiber.dispose() })
       container.remove()
     }
   })

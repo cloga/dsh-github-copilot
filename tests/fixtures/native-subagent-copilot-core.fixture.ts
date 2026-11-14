@@ -64,6 +64,7 @@ it('selects and dispatches a native Copilot model in a native subagent using its
     })
     ctx.provide('fileUploads', { registerAgentResolver: registration })
     ctx.provide('credentials', {
+      describeRecord: async (key: string) => ({ configured: key === 'llm-pi-ai/github-copilot', writable: true }),
       readRecord: async (key: string) => key === 'llm-pi-ai/github-copilot'
         ? { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-refresh',
           access: 'synthetic-access', expires: Date.now() + 3_600_000, availableModelIds: [model.id] } }
@@ -75,7 +76,8 @@ it('selects and dispatches a native Copilot model in a native subagent using its
     ctx.provide('settings', {
       configure: registration,
       describe: () => [
-        { ns: 'github-copilot', revision: 1, value: { activeAccountId: 'canonical' } },
+        { ns: 'github-copilot', revision: 1, value: { activeAccountId: 'canonical',
+          continuationDefaultHistory: [{ enabled: true, changedAt: 1 }] } },
         { ns: 'llm-pi-ai', revision: 1, value: { providers: { [provider]: {} } } },
       ],
       mutate: async () => { throw new Error('unexpected fixture settings mutation') },

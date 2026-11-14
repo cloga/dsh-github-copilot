@@ -43,6 +43,12 @@ function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unkno
   Object.defineProperty(namespace, 'githubCopilotSessionContinuation', { value: continuation })
   const ctx = {
     remote: namespace, get: vi.fn(() => undefined), logger: { warn: vi.fn() },
+    inject: vi.fn((dependencies: string[], callback: (scope: { remote: typeof namespace }) => () => void) => {
+      const key = dependencies[0]!.split('.')[1]!
+      const cleanup = key in namespace && Reflect.get(namespace, key) !== undefined
+        ? callback({ remote: namespace }) : undefined
+      return { dispose: () => { cleanup?.() } }
+    }),
     slots: {
       spec: vi.fn(() => spec),
       inject: vi.fn((_name: string, callback: () => () => void) => { injection = callback; return () => { release?.(); component = undefined } }),
