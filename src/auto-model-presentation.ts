@@ -379,15 +379,16 @@ export function installAutoModelPresentation(capabilities: {
     return noop
   }
 
-  export function installAccountUsagePresentation(capabilities: Omit<Parameters<typeof installAutoModelPresentation>[0], 'accountUsageOnly'>): Dispose {
-    return installAutoModelPresentation({ ...capabilities, accountUsageOnly: true })
-  }
-
-  export function installAccountUsageProjections(capabilities: Omit<Parameters<typeof installAutoModelProjections>[0], 'accountUsageOnly'>): Dispose {
-    return installAutoModelProjections({ ...capabilities, accountUsageOnly: true })
-  }
   return () => {
     removeInjection()
     removeProjections()
   }
+}
+
+export function installAccountUsagePresentation(capabilities: Omit<Parameters<typeof installAutoModelPresentation>[0], 'accountUsageOnly'>): Dispose {
+  return installAutoModelPresentation({ ...capabilities, accountUsageOnly: true })
+}
+
+export function installAccountUsageProjections(capabilities: Omit<Parameters<typeof installAutoModelProjections>[0], 'accountUsageOnly'>): Dispose {
+  return installAutoModelProjections({ ...capabilities, accountUsageOnly: true })
 }
