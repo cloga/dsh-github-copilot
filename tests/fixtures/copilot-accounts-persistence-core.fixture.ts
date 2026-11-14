@@ -104,7 +104,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
     const profile: ProfileContext = { name: 'synthetic', startedBundles: ['synthetic-bundle'], dir,
       patchPath: join(dir, 'cordis.patch.yml'), installAnchor: join(home, 'package.json'),
       cwd: home, home, overlays: [], telemetryDisabledEnv: undefined }
-    const start = async () => {
+    const start = async (nativeConfigured = false) => {
       const ctx = await boot('synthetic', join(dir, 'cordis.yml'), readProfilePatches('synthetic', profile), scope => {
         scope.provide('profileContext', profile)
         scope.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
@@ -123,7 +123,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
       expect(migrationStatus(ctx)).toMatchObject({
         capabilities: { settingsCas: true },
         complete: { routes: true, sessions: true, defaultSelection: true },
-        routes: { nativeConfigured: false, nativeRegistered: false, managedRegistered: true },
+        routes: { nativeConfigured, nativeRegistered: false, managedRegistered: true },
       })
       const host = new CopilotAccountsHost(ctx, {
         validateModels: async () => {},
@@ -218,7 +218,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
       .rejects.toThrow('changed since it was read')
     host.dispose()
     await ctx.fiber.dispose()
-    const reopened = await start()
+    const reopened = await start(true)
     ctx = reopened.ctx
     host = reopened.host
     expect(await host.get()).toMatchObject({ state: 'ready', activeAccountId: A })
@@ -280,7 +280,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
     expect(await ctx.credentials.readRecord(key(B))).toEqual(beforeB)
     host.dispose()
     await ctx.fiber.dispose()
-    const restored = await start()
+    const restored = await start(true)
     ctx = restored.ctx
     host = restored.host
     expect(await host.get()).toMatchObject({ activeAccountId: A })
