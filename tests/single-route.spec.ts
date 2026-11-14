@@ -109,16 +109,13 @@ describe('single managed Copilot route with native OAuth', () => {
     const h = await runtime()
     expect(fetch).not.toHaveBeenCalled()
     expect((await h.ctx.llm.listModels(MANAGED)).map(model => [model.provider, model.id])).toEqual([
-      [MANAGED, 'auto'],
-      [MANAGED, 'auto-efficiency'],
-      [MANAGED, 'auto-intelligence'],
       [MANAGED, 'future-account-model'],
     ])
     const view = await h.ctx.get('githubCopilotAuthorization')!.ensureModels()
     expect(view.accountModels).toMatchObject({ state: 'ready', models: [{ id: 'future-account-model', api: 'openai-responses' }] })
     expect(h.ctx.llm.listProviders().map(provider => ({ id: provider.id, name: provider.name }))).toEqual([{ id: MANAGED, name: 'GitHub Copilot' }])
     expect((await h.ctx.llm.listModels(MANAGED)).map(model => model.id))
-      .toEqual(['auto', 'auto-efficiency', 'auto-intelligence', 'future-account-model'])
+      .toEqual(['future-account-model'])
     const model = await h.ctx.llm.resolveModelInfo(MANAGED, 'future-account-model')
     expect(model.reasoning?.efforts.map(effort => effort.id)).toEqual(['low', 'high'])
     expect(fetch).toHaveBeenCalledTimes(1)
@@ -156,9 +153,6 @@ describe('single managed Copilot route with native OAuth', () => {
       }] }), { headers: { 'content-type': 'application/json' } }))
       const [models, settings, other] = await Promise.all([listing, ensuring, concurrent])
       expect(models.map(model => [model.provider, model.id])).toEqual([
-        [MANAGED, 'auto'],
-        [MANAGED, 'auto-efficiency'],
-        [MANAGED, 'auto-intelligence'],
         [MANAGED, 'future-account-model'],
       ])
       expect(other).toEqual(models)
@@ -171,6 +165,32 @@ describe('single managed Copilot route with native OAuth', () => {
       expect(h.modifyRecord).not.toHaveBeenCalled()
       expect(h.mutate).toHaveBeenCalledOnce()
       expect(h.mutate.mock.calls[0]?.[0]).toBe('github-copilot')
+    } finally { remove() }
+  })
+
+  it('invalidates native model catalogs when capabilities change without changing model identity', async () => {
+    let updated = false
+    const fetch = vi.fn(async () => Response.json({ data: [{
+      id: 'future-account-model', name: 'Future model', model_picker_enabled: true,
+      policy: { state: 'enabled' }, supported_endpoints: ['/responses'],
+      capabilities: { supports: { streaming: true, tool_calls: true, reasoning_effort: updated ? ['high'] : ['low'] },
+        limits: { max_context_window_tokens: updated ? 192000 : 128000, max_output_tokens: 16000 } },
+    }] }))
+    vi.stubGlobal('fetch', fetch)
+    const h = await runtime()
+    await h.ctx.llm.listModels(MANAGED)
+    const changed = vi.fn()
+    const remove = h.ctx.on('llm/adapters-updated', changed)
+    try {
+      updated = true
+      await h.ctx.get('githubCopilotPreview')!.discover({ force: true })
+      expect(changed).toHaveBeenCalledTimes(1)
+      const info = await h.ctx.llm.resolveModelInfo(MANAGED, 'future-account-model')
+      expect(info.context?.contextWindow).toBe(192000)
+      expect(info.reasoning?.efforts.map(effort => effort.id)).toEqual(['high'])
+      await h.ctx.llm.listModels(MANAGED)
+      expect(changed).toHaveBeenCalledTimes(1)
+      expect(fetch).toHaveBeenCalledTimes(2)
     } finally { remove() }
   })
 

@@ -41,6 +41,9 @@ jobs:
   release:
     needs: [plan]
     if: ${{ needs.plan.outputs.release == 'true' }}
+    # The pinned source fixture is a separate workspace.
+    env:
+      PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'
     permissions:
       contents: write
       id-token: write
@@ -61,7 +64,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: 1f81c047fc48fa190a683e469daa699857e9afe8
+          ref: 38a6a5c965aa99ab525161efb7cc5cf1fe62fced
           path: dsh-upstream
           persist-credentials: false
       - uses: pnpm/action-setup@v6
@@ -69,6 +72,11 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Verify the project and source-fixture age policy
+        shell: bash
+        run: |
+          test "$(pnpm config get minimumReleaseAge)" = 0
+          test "$(cd dsh-upstream && pnpm config get minimumReleaseAge)" = 0
       - run: pnpm install --frozen-lockfile
       - name: Install rc.3 Core pi-ai closure
         working-directory: dsh-upstream
@@ -93,12 +101,18 @@ jobs:
       - name: Install rc.3 subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
+      - name: Install native subagent model invocation verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop-testkit...' --filter '@deepseek-ai/dsh-tool-subagent...' --filter '@deepseek-ai/dsh-subagent-spawn-in-process...' --filter '@deepseek-ai/dsh-session-persistence-jsonl...'
       - name: Install rc.3 image-offload verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-compaction-image-offload...'
       - name: Install tagged search verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
+      - name: Install native and PTC tool executor verification closures
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-executor-native...' --filter '@deepseek-ai/dsh-tool-executor-ptc...'
       - name: Install native account persistence verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-credentials-local...' --filter '@deepseek-ai/dsh-app-boot...' --filter '@deepseek-ai/dsh-config-editor...' --filter '@deepseek-ai/dsh-settings...' --filter '@deepseek-ai/dsh-authorization...'
@@ -108,12 +122,15 @@ jobs:
       - name: Install pinned Core renderer verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-client-ui-renderer...'
+      - name: Install the official pinned system addon outside both source trees
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/copilot-native-addon" --ignore-scripts --no-save --no-audit --fund=false --registry=https://registry.npmjs.org @deepseek-ai/node-addon-system@0.1.2
       - name: Build plugin Client for pinned Core selector regression
         run: pnpm build
       - name: Verify current unchanged tagged runtime before packing
         shell: bash
         run: |
-          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.2.1-rc.3
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.2.2-rc.3 --native-addon "$RUNNER_TEMP/copilot-native-addon"
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-release/vitest.config.mts"
       - name: Verify plugin package
         run: pnpm verify

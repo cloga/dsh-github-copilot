@@ -274,6 +274,12 @@ console.log('EXPECTED_MISSING_RUNTIME_DEPENDENCY:' + ${JSON.stringify(packageNam
 `
 }
 
+export function assertSmokeCoreRelease(coreRelease) {
+  if (coreRelease !== '0.2.2-rc.3') {
+    throw new Error(`Install smoke is pinned to DSH 0.2.2-rc.3; got ${JSON.stringify(coreRelease)}`)
+  }
+}
+
 async function expectLinkedDependencyFailure({ directory, name, dependencies, sourceDirectory, omitted, entrypoint }) {
   dependencies['dsh-github-copilot'] = `link:${slash(sourceDirectory)}`
   await installFixture(directory, name, dependencies)
@@ -306,9 +312,7 @@ export async function verifyInstalledPlugin({ archive, hostModules }) {
   const files = readTarball(archiveBytes)
   const pkg = JSON.parse(files.get('package/package.json').toString('utf8'))
   const coreRelease = pkg.engines?.dsh
-  if (typeof coreRelease !== 'string' || coreRelease !== '0.2.1-rc.3') {
-    throw new Error(`Install smoke is pinned to DSH 0.2.1-rc.3; got ${JSON.stringify(coreRelease)}`)
-  }
+  assertSmokeCoreRelease(coreRelease)
   const scratch = await mkdtemp(join(tmpdir(), 'dsh-copilot-install-smoke-'))
   try {
     const validDirectory = join(scratch, 'packed-install')

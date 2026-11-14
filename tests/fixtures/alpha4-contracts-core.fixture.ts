@@ -6,12 +6,13 @@ import type { Model, SimpleStreamOptions } from '@earendil-works/pi-ai'
 import { createDeveloperMessage, createUserMessage, ReasoningEffortId, resolveRetryPolicy, type ToolSchema } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { Context } from '@deepseek-ai/cordis'
-import { ToolRuntime, renderToolsSdk } from '@deepseek-ai/dsh-tools'
+import { PtcExecutor, renderToolsSdk } from '@deepseek-ai/dsh-tool-executor-ptc'
+import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { coreProviderView } from '../../src/pi-provider-bridge.ts'
 import type { SimpleNativeProvider } from '../../src/pi-provider-bridge.ts'
-import { filterCopilotToolAssembly } from '../../src/tool-schema-compat.ts'
+import { filterCopilotToolRequest } from '../../src/tool-schema-compat.ts'
 
 const provider = 'candidate-fixture'
 const model: Model<'openai-responses'> = {
@@ -25,7 +26,7 @@ const model: Model<'openai-responses'> = {
 
 beforeAll(() => {
   expect(['published-artifact-runtime', 'tagged-source-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(['0.2.1-alpha.5', '0.2.1-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   const release = process.env.DSH_PUBLISHED_CORE_RELEASE
   for (const name of ['@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-llm-pi-ai']) {
     const path = findPackageJSON(name, import.meta.url)
@@ -43,6 +44,7 @@ function adapter(simple: SimpleNativeProvider['streamSimple'], streamIdleTimeout
   const profile = {
     provider, displayName: 'Synthetic candidate', piProvider: coreProviderView(native),
     streamIdleTimeoutMs, maxRequestImageBytes: 20971520,
+    maxRequestImages: 50, imageOffloadCountQuantum: 10,
     requestImagePixelBudget: 4194304, requestImageMaxBytes: 1048576,
     retryPolicy: resolveRetryPolicy(undefined, 'fixture'),
     configuredMaxTokens: new Map<string, number>(), modelErrors: new Map<string, string>(),
@@ -79,15 +81,18 @@ describe('fixed DSH public adapter and SDK contracts', () => {
     const ctx = new Context()
     try {
       new SystemPrompt(ctx, {})
-      const tools = new ToolRuntime(ctx, { mode: 'ptc' })
-      const schemas = tools.schemas()
+      new ToolRuntime(ctx)
+      ctx.provide('ptcRuntime', { language: 'typescript', programFormat: 'function-body' } as never)
+      const schemas = new PtcExecutor(ctx).describe([]).schemas
       const native = schemas.find(tool => tool.name === 'run_code')
       expect(native).toBeDefined()
       expect(Object.keys(native!.parameters.properties ?? {}).slice(0, 2)).toEqual(['code', 'description'])
       expect(native!.parameters.required).toEqual(['code', 'description'])
-      const filtered = filterCopilotToolAssembly({ variables: { provider: 'github-copilot' }, tools: schemas })
-      expect(filtered.tools[0]!.description).toBe(schemas[0]!.description)
-      expect(filtered.tools[0]!.parameters.required).toEqual(['code', 'description'])
+      const filtered = filterCopilotToolRequest({
+        provider: 'github-copilot-preview', model: 'fixture', messages: [], tools: [...schemas],
+      })
+      expect(filtered.tools![0]!.description).toBe(schemas[0]!.description)
+      expect(filtered.tools![0]!.parameters.required).toEqual(['code', 'description'])
       const functionBody = renderToolsSdk([], 'function-body')
       const repl = renderToolsSdk([], 'repl')
       expect(functionBody).toContain('the body of an async TypeScript function')

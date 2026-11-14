@@ -15,16 +15,16 @@ import Commands from '@deepseek-ai/dsh-commands'
 import LocalJobs from '@deepseek-ai/dsh-jobs-local'
 import LlmRuntime, { LlmAdapter, LlmError, ToolCallId, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId, SessionLogOffset, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import SessionStore, { SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { deriveTurnTokenUsage } from '@deepseek-ai/dsh-token-meter/client'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PiEstimate from '@earendil-works/pi-ai/utils/estimate'
 import '@earendil-works/pi-ai/api/openai-responses'
-import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCopilotCompactionPressure } from '../../src/compaction-pressure.ts'
 import { installCopilotPreStepPressure } from '../../src/pre-step-pressure.ts'
@@ -48,7 +48,7 @@ const oldSentinel = 'OLD_HISTORY_SENTINEL'
 const currentSentinel = 'CURRENT_REQUEST_SENTINEL'
 const checkpoint = 'RECOVERY_CHECKPOINT'
 const contexts: Context[] = []
-const expectedSessionFormatVersion = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '') ? 4 : 3
+const expectedSessionFormatVersion = ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(process.env.DSH_PUBLISHED_CORE_RELEASE ?? '') ? 4 : 3
 type SummaryMode = 'stop' | 'max-tokens' | 'await-abort' | 'reject-overflow' | 'slow'
 
 vi.mock('@earendil-works/pi-ai/utils/estimate', async importOriginal => {
@@ -287,7 +287,7 @@ describe('native background compaction lifetime', () => {
 
 beforeAll(() => {
   expect(['tagged-source-runtime', 'installed-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   expect(SESSION_FORMAT_VERSION).toBe(expectedSessionFormatVersion)
 })
 
@@ -315,6 +315,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(ToolRuntime, {})
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(TokenMeter)
@@ -366,7 +367,8 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   let model = 'fixture-model-A'
   let inputBudgetTokens: number | undefined
   let autoLoads = 0
-  const removeAuto = nativeAdmission ? () => {} : installAutoModelRouting(ctx, {
+  const nativeSelection = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3'
+  const removeAuto = nativeAdmission || nativeSelection ? () => {} : installAutoModelRouting(ctx, {
     async loadModels() {
       autoLoads++
       return [autoCandidate(model)]
@@ -375,7 +377,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   ctx.effect(() => removeAuto)
   // Exact stand-in for Core's model-selection middleware: the plugin's prepended
   // listener must observe this resolved virtual route after awaiting next().
-  if (!nativeAdmission) ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider, model: autoModel }))
+  if (!nativeAdmission && !nativeSelection) ctx.on('agent/request', async (_payload, next) => ({ ...await next(), provider, model: autoModel }))
   const failures: Array<{ code: string; message: string }> = []
   ctx.on('agent/request-error', async ({ failure }, next) => {
     failures.push({ code: failure.code, message: failure.message })
@@ -421,7 +423,11 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
     ctx, adapter, agent, events, failures, priced, forbiddenFetch, seedCount, originalGeneration, originalTokens, removeAdapter, engineMount, ownerHandle,
     autoLoads: () => autoLoads,
     oldUserSeq: oldUser!.seq,
-    enable(budget = 1000, selectedModel = 'fixture-model-B') { inputBudgetTokens = budget; model = selectedModel },
+    enable(budget = 1000, selectedModel = 'fixture-model-B') {
+      inputBudgetTokens = budget
+      model = selectedModel
+      if (nativeSelection) agent.model.select({ provider, model })
+    },
     send,
     currentEvents: () => events.slice(seedCount),
   }
@@ -521,7 +527,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     expect(f.forbiddenFetch).not.toHaveBeenCalled()
   })
 
-  it.each([false, true])('compacts and rebuilds an Auto request with large historical continuation reasoning, continuing=%s', async continuing => {
+  it.each([false, true])('compacts and rebuilds the selected model request with large historical continuation reasoning, continuing=%s', async continuing => {
     const f = await fixture('stop', false, false, false, true)
     installController(f.ctx)
     const value = {
@@ -822,103 +828,6 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     expect(replacements(f.events)).toEqual([])
   })
 
-  it.each(['bindings', 'switch'])('follows parents using %s across real turns, independent Auto inputs and reconstructed histories', async mode => {
-    const ctx = new Context()
-    contexts.push(ctx)
-    const forbidden = vi.fn((): never => { throw new Error('follow-fixture-external-side-effect') })
-    vi.stubGlobal('fetch', forbidden)
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(SessionProjectionRegistry)
-    await ctx.plugin(SystemPrompt, {})
-    await ctx.plugin(ToolRuntime, {})
-    await ctx.plugin(AgentRegistry)
-    await ctx.plugin(AgentLoop, { agents: [] })
-    await ctx.plugin(TokenMeter)
-    const register = () => () => {}
-    ctx.provide('typert', {
-      resources: { register },
-      lookups: { configure: register, register },
-      contexts: { configureHost: register, registerHost: register },
-    })
-    ctx.provide('fileUploads', { registerAgentResolver: register })
-    ctx.provide('agentDefaultModel', { currentSelection: () => undefined, saveSelection: forbidden })
-    new SessionController(ctx, { nativeOpen: false }, { canOpenPath: () => false, openPath: forbidden })
-    const adapter = new FixtureAdapter('stop')
-    ctx.llm.registerAdapter([provider], adapter)
-    const parent = await ctx.agentLoop.create(SessionId('follow-loop-parent'), { provider, model: 'fixture-A' })
-    const childId = SessionId('follow-loop-child')
-    const siblingId = SessionId('follow-loop-sibling')
-    const inputs: string[] = []
-    const errors: unknown[] = []
-    ctx.on('agent/error', ({ error }) => { errors.push(error) })
-    const removeAuto = installAutoModelRouting(ctx, {
-      followParentModel: () => mode === 'switch',
-      parentModelBindings: () => mode === 'switch' ? [] : [childId, siblingId].map(childSessionId => ({
-        childSessionId, parentSessionId: parent.id,
-      })),
-      loadModels: async () => [autoCandidate('fixture-A'), autoCandidate('fixture-B')],
-    })
-    ctx.effect(() => removeAuto)
-    const create = (id: typeof childId, seed?: readonly SessionEvent[]) => ctx.agents.create({
-      sessionId: id, parentAgent: parent,
-      meta: { parentSession: parent.id, origin: 'subagent', delegationDepth: 1, isSeeded: false },
-      inheritedEventCount: SessionLogOffset(0),
-      agentOptions: { provider, model: 'fixture-initial', maxTokens: 8192 },
-      ...(seed === undefined ? {} : { seed }),
-      setup(_agentCtx, agent) {
-        if (seed !== undefined) return
-        Reflect.apply(agent.session.append, agent.session, ['subagent/descriptor', {
-          version: 3, provider: 'spawn', mode: 'continuable', label: 'Native-loop fixture',
-          agentProvider: provider, agentModel: 'fixture-initial',
-        }])
-      },
-    })
-    const send = async (agent: typeof parent, text: string) => {
-      agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
-      await agent.whenIdle()
-      if (errors.length > 0) throw new AggregateError(errors, 'Native child turn failed')
-      expect(agent.session.requestHeader()).toBeDefined()
-    }
-    parent.session.append('model/selection', { provider, model: 'fixture-A' })
-    const child = await create(childId)
-    await send(child.agent, 'CHILD_FIRST')
-    expect(child.agent.session.requestHeader()?.config.model).toBe('fixture-A')
-    parent.session.append('model/selection', { provider, model: 'fixture-B' })
-    await send(child.agent, 'CHILD_SECOND')
-    expect(child.agent.session.requestHeader()?.config.model).toBe('fixture-B')
-    const sibling = await create(siblingId)
-    for (const preference of ['auto', 'auto-efficiency', 'auto-intelligence']) {
-      parent.session.append('model/selection', { provider, model: preference })
-      await Promise.all([send(child.agent, `CHILD_${preference}`), send(sibling.agent, `SIBLING_${preference}`)])
-      const requests = adapter.conversation.slice(-2)
-      expect(requests.every(request => ['fixture-A', 'fixture-B'].includes(request.model))).toBe(true)
-      expect(requests.some(request => request.text.includes(`CHILD_${preference}`) && !request.text.includes('SIBLING_'))).toBe(true)
-      expect(requests.some(request => request.text.includes(`SIBLING_${preference}`) && !request.text.includes('CHILD_'))).toBe(true)
-      inputs.push(...requests.map(request => request.text))
-    }
-    expect(inputs).toHaveLength(6)
-    const header = JSON.parse(JSON.stringify(child.agent.session.header))
-    const reader = sessionFormatCatalog.createRestore(sessionFormatCatalog.encodeCurrentHeader(header, 0), {
-      recovery: 'strict', validation: 'current',
-    })
-    for (const event of child.agent.session.snapshotEvents()) {
-      reader.decodeRow(sessionFormatCatalog.encodeCurrentEvent(JSON.parse(JSON.stringify(event))))
-    }
-    const restored = reader.finish()
-    expect(restored.events.some(event => event.type === 'model/selection')).toBe(false)
-    await child.dispose()
-    parent.session.append('model/selection', { provider, model: 'fixture-A' })
-    const resumed = await create(childId, restored.events)
-    await send(resumed.agent, 'CHILD_RECONSTRUCTED')
-    expect(resumed.agent.session.requestHeader()?.config.model).toBe('fixture-A')
-    resumed.agent.session.append('model/selection', { provider, model: 'fixture-A' })
-    parent.session.append('model/selection', { provider, model: 'fixture-B' })
-    await send(resumed.agent, 'CHILD_EXPLICIT_OVERRIDE')
-    expect(resumed.agent.session.requestHeader()?.config.model).toBe('fixture-A')
-    expect(forbidden).not.toHaveBeenCalled()
-  })
-
   it('prices Core assistant text and reasoning with the unchanged native token meter', async () => {
     const f = await fixture()
     const message = createAssistantMessage({
@@ -944,7 +853,11 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
 
     expect(f.agent.options.model).toBe('fixture-model-A')
     expect(f.agent.session.requestHeader()?.config.model).toBe('fixture-model-B')
-    expect(f.autoLoads()).toBe(2)
+    if (process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3') {
+      expect(f.agent.model.current()).toMatchObject({ provider, model: 'fixture-model-B' })
+    } else {
+      expect(f.autoLoads()).toBe(2)
+    }
     expect(f.failures).toEqual([{ code: 'CONTEXT_WINDOW_EXCEEDED', message: expect.stringContaining('Copilot local estimated input budget exceeded') }])
     expect(f.priced).toHaveLength(2)
     expect(f.priced[0]?.text).toContain(oldSentinel)

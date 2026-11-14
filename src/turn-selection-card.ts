@@ -18,12 +18,12 @@ function turnAccountLabel(account: TurnAccountView, zh: boolean): string {
 }
 
 export function TurnSelectionCard({ selection, locale = 'en', incomplete = false, readState = 'ready', retry,
-  account, accountFailed = false, retryAccount, models, modelsFailed = false, retryModels, allocationEvidence }: {
+  account, accountFailed = false, retryAccount, models, modelsFailed = false, retryModels, allocationEvidence, accountOnly = false }: {
   selection: TurnSelection; locale?: string; incomplete?: boolean
   readState?: 'loading' | 'ready' | 'failed'; retry?: () => void
   account?: TurnAccountView; accountFailed?: boolean; retryAccount?: () => void
   models?: TurnModelEvidence; modelsFailed?: boolean; retryModels?: () => void
-  allocationEvidence?: ReactElement
+  allocationEvidence?: ReactElement; accountOnly?: boolean
 }): ReactElement {
   const zh = locale.startsWith('zh')
   const id = useId()
@@ -72,20 +72,20 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
       : account?.state === 'recorded'
         ? `${zh ? '账号' : 'Account'} · ${turnAccountLabel(account, zh)}`
         : zh ? 'Account · 未知' : 'Account · unknown'),
-  h('span', { role: readState === 'ready' ? undefined : 'status',
+  accountOnly ? null : h('span', { role: readState === 'ready' ? undefined : 'status',
     title: readState === 'ready' && selection.mode === 'unknown' ? zh ? '本轮选择记录未保留；不从当前选择推断历史。' : 'No retained selection evidence; the current picker is not historical evidence.' : undefined },
   readState === 'loading' ? zh ? '正在读取选择记录…' : 'Loading selection…'
     : readState === 'failed' ? zh ? '选择记录读取失败' : 'Selection unavailable' : label),
-  readState === 'failed' && retry ? h('button', { type: 'button', style: button, onClick: retry }, zh ? '重试' : 'Retry') : null,
-  (readState === 'ready' && (selection.mode === 'auto' || incomplete) || models !== undefined || modelsFailed) ? h('button', { ref: accountOpen ? undefined : trigger, type: 'button', style: { ...button, width: 24, height: 24, flexShrink: 0 },
-    'aria-label': zh ? '查看本轮模型与选择记录' : 'View turn model and selection evidence', 'aria-expanded': open && !accountOpen, 'aria-controls': open && !accountOpen ? id : undefined,
+  !accountOnly && readState === 'failed' && retry ? h('button', { type: 'button', style: button, onClick: retry }, zh ? '重试' : 'Retry') : null,
+  ((!accountOnly && readState === 'ready' && (selection.mode === 'auto' || incomplete)) || models !== undefined || modelsFailed) ? h('button', { ref: accountOpen ? undefined : trigger, type: 'button', style: { ...button, width: 24, height: 24, flexShrink: 0 },
+    'aria-label': accountOnly ? zh ? '查看本轮模型记录' : 'View turn model evidence' : zh ? '查看本轮模型与选择记录' : 'View turn model and selection evidence', 'aria-expanded': open && !accountOpen, 'aria-controls': open && !accountOpen ? id : undefined,
     'aria-haspopup': 'dialog', onClick: () => { setAccountOpen(false); setOpen(value => !value) } }, 'ⓘ') : null,
-  open ? h('div', { ref: panel, id, popover: 'manual', role: 'dialog', 'aria-label': accountOpen ? zh ? '本轮账号' : 'Turn account' : zh ? '本轮模型与选择记录' : 'Turn model and selection evidence',
+  open ? h('div', { ref: panel, id, popover: 'manual', role: 'dialog', 'aria-label': accountOpen ? zh ? '本轮账号' : 'Turn account' : accountOnly ? zh ? '本轮模型记录' : 'Turn model evidence' : zh ? '本轮模型与选择记录' : 'Turn model and selection evidence',
     style: { position: 'fixed', inset: 'auto', ...position, margin: 0, zIndex: 1000, width: 390, maxWidth: 'calc(100vw - 24px)',
       maxHeight: `calc(100dvh - ${position.top + 12}px)`, overflowY: 'auto', overflowWrap: 'anywhere', boxSizing: 'border-box',
       padding: 16, borderRadius: 12, border: button.border, background: 'var(--dsw-alias-bg-layer-2, Canvas)',
       color: 'var(--dsw-alias-label-primary, CanvasText)', lineHeight: 1.6 } },
-    h('strong', null, accountOpen ? zh ? '本轮账号' : 'Turn account' : zh ? '本轮模型与选择记录' : 'Turn model and selection evidence'),
+    h('strong', null, accountOpen ? zh ? '本轮账号' : 'Turn account' : accountOnly ? zh ? '本轮模型记录' : 'Turn model evidence' : zh ? '本轮模型与选择记录' : 'Turn model and selection evidence'),
     !accountOpen && models !== undefined ? h('section', { 'aria-label': zh ? '模型证据' : 'Model evidence' },
       h('p', { style: { fontWeight: 600, marginBottom: 6 } }, models.kind === 'recorded' ? zh ? '已记录模型' : 'Recorded models'
         : models.kind === 'requested' ? zh ? '请求模型' : 'Requested model' : zh ? '模型记录不可用' : 'Model evidence unavailable'),
@@ -116,7 +116,7 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
       h('p', null, zh ? '这是有原生流返回的请求账号记录，不是单轮费用或子 Agent 的账号汇总。仅保留在 Host 生命周期内；重启后缺失显示未知。'
         : 'Account evidence from a native stream delivery, not turn billing or subagent attribution. Retained for the Host lifetime only; missing evidence after restart is unknown.'),
       accountFailed && retryAccount ? h('button', { type: 'button', style: button, onClick: retryAccount }, zh ? '重试' : 'Retry') : null)
-      : h('details', { style: { borderTop: button.border, marginTop: 18, paddingTop: 12 } },
+      : accountOnly ? null : h('details', { style: { borderTop: button.border, marginTop: 18, paddingTop: 12 } },
       h('summary', { style: { cursor: 'pointer' } }, zh ? '为什么选择此模型' : 'Why this model was selected'),
       selection.mode === 'auto' ? explanation === undefined
       ? h('p', null, zh ? '本轮未保留详细选模原因；不使用当前设置反推历史。' : 'Detailed selection reasons were not retained for this turn; today’s settings cannot reconstruct them.')
@@ -132,8 +132,8 @@ export function TurnSelectionCard({ selection, locale = 'en', incomplete = false
           : 'An explicit manual selection was captured for this turn; selection is not execution proof.'
           : zh ? '本轮选择记录未保留；不使用当前设置反推历史。' : 'Selection evidence was not retained; today’s settings cannot reconstruct it.')),
     !accountOpen && incomplete && models === undefined ? h('p', null, zh ? '模型归属不完整：部分尝试或历史未记录模型。原生 Usage 保持不变。' : 'Model attribution is incomplete: some attempts or history have no recorded model. Native Usage is unchanged.') : null,
-    !accountOpen ? allocationEvidence : null,
-    accountOpen ? null : h('p', null, zh ? '模型记录与计费归属不同。选择记录不是执行证明；原生 Usage、失败状态和重试保持不变。'
+    !accountOpen && !accountOnly ? allocationEvidence : null,
+    accountOpen || accountOnly ? null : h('p', null, zh ? '模型记录与计费归属不同。选择记录不是执行证明；原生 Usage、失败状态和重试保持不变。'
       : 'Model evidence is not billing attribution. Selection is not execution proof; native Usage is unchanged, as are failures and retries.'),
     h('button', { ref: close, type: 'button', style: button, onClick: () => { setOpen(false); trigger.current?.focus() } }, zh ? '关闭' : 'Close'),
   ) : null)

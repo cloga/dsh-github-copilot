@@ -24,6 +24,26 @@ export async function verifyAgentContract(root = repositoryRoot) {
   'Auto iteration review must require prior evidence, explicit missing data, local-only sharing and follow-up')
   const implementation = contract.boundaries?.implementationScope
   require(implementation?.mode === 'plugin-only', 'plugin-only implementation policy is missing')
+  const productScope = contract.boundaries?.confirmedProductScope
+  require(productScope?.source === 'user-confirmed #455/#456 on 2026-11-14'
+    && productScope.product === 'lightweight-native-github-copilot-model-integration'
+    && productScope.desktopCandidate === '0.2.2-rc.3'
+    && productScope.desktopCandidateQualified === false
+    && JSON.stringify(productScope.retirePluginOwned) === JSON.stringify([
+      'auto', 'parent-model-follow', 'hosted-search-routing',
+    ])
+    && productScope.preserve.includes('native-copilot-oauth')
+    && productScope.preserve.includes('account-isolation')
+    && productScope.preserve.includes('account-advertised-model-capabilities')
+    && productScope.preserve.includes('copilot-account-quota')
+    && productScope.preserve.includes('existing-history-and-settings-compatibility')
+    && productScope.enhancementPolicy === 'preserve-useful-remove-only-demonstrably-redundant'
+    && productScope.nativeModelCapabilityCompatibility === 'best-effort-account-and-metadata-driven-with-exact-release-tests'
+    && productScope.subagentSelectionAndInvocationRequired === true
+    && productScope.parentChildPolicyOwner === 'dsh-native-only'
+    && productScope.hydrafusion === 'out-of-scope'
+    && productScope.supersedesConflictingLegacyProductRequirements === true,
+  'confirmed Copilot-only model integration scope must supersede conflicting legacy product requirements')
   const implementationKeys = ['mode', 'coreInspection', 'allowedIntegration', 'coreSourceChanges', 'coreArtifactPatching', 'coreRuntimeMonkeyPatching', 'corePatchDependency', 'coreCommitPrRelease', 'unsupportedCapability', 'scopeException']
   require(Object.keys(implementation).every(key => implementationKeys.includes(key)), 'plugin-only policy contains an unrecognized override')
   require(implementation.coreInspection === 'read-only', 'plugin-only Core inspection must remain read-only')
@@ -45,6 +65,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(JSON.stringify(release.requiredConditions) === JSON.stringify(['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets']), 'release delivery prerequisites differ')
   require(release.localGateWhenRegistryBlocked === 'record-environment-blocker-and-require-complete-github-ci', 'blocked local gate must require full GitHub CI')
   const agentGuide = await readFile(resolve(root, 'AGENTS.md'), 'utf8')
+  require(agentGuide.includes('### Confirmed product scope (#455, #456)')
+    && agentGuide.includes('When any later legacy detail in this guide conflicts with this confirmed scope'),
+  'the confirmed product scope must be authoritative over historical guide details')
   require(agentGuide.includes('local validation blocked') && agentGuide.includes('complete required GitHub CI matrix')
     && agentGuide.includes('Never weaken or skip CI'), 'blocked local gate guidance is missing')
   require(JSON.stringify(release.completionEvidence) === JSON.stringify(['published-release-url', 'tag-and-commit', 'asset-and-sha256', 'npm-version-and-integrity']), 'release delivery completion evidence differs')

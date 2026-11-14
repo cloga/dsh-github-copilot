@@ -1,7 +1,7 @@
 # Native Auto reviewer sampling compatibility
 
-The plugin automatically omits `temperature` only from the official DSH
-exact `0.2.0-rc.2`, `0.2.1-alpha.4` or `0.2.1-alpha.5` Auto reviewer root's account-proven managed `openai-responses`
+The plugin automatically omits `temperature` only from a supported official DSH
+Auto reviewer root's account-proven managed `openai-responses`
 requests. No user opt-in is required. Concurrent ordinary Chat, even on the same
 Session/model, retains its requested sampling. No supplier capability is inferred
 from `supports.thinking`; the policy addresses the reported unsupported-temperature
@@ -26,6 +26,8 @@ At official commit `639ed015397290b3745d163aafe02ffee4aa3f84`:
 The plugin requires exact entry-root equality, the official package/version,
 matching manifest ownership in the Loader tree and plugin import contexts, and
 independently imported public `apply` equality with the caller's runtime callback.
+The loader's returned fiber can be a thenable wrapper; root ownership compares
+its public `ctx.fiber` with the caller's fiber, not the wrapper object.
 It rechecks root/liveness after asynchronous resolution. Names alone are not
 identity. Importing the public module does not apply/register another reviewer.
 
@@ -43,7 +45,8 @@ Canonical Core-owned Copilot, other providers/protocols, aliases, descendants,
 impostor callbacks and unresolved identity remain native. Unqualified reviewer
 identity reports bounded fixed-code Host diagnostics, not a broad omission
 fallback. Missing optional reviewer packages do not prevent ordinary startup.
-Future official versions need qualification; the exact rc.2 check is intentional.
+The `0.2.2-rc.3` candidate remains subject to its exact-source and
+published-artifact qualification; future versions also require qualification.
 
 The independent legacy `responsesOmitTemperature` setting remains default false.
 Explicit true still changes **all** managed Responses sampling; it is not needed

@@ -49,32 +49,6 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
   const rows = view?.snapshot.rows ?? []
   const requests = view?.snapshot.requests
   const credentials = requests?.credentialChanges
-  const auto = view?.snapshot.autoAllocation
-  const autoOpportunities = auto?.rows.reduce((sum, row) => sum + row.opportunities, 0) ?? 0
-  const autoExpected = auto?.rows.reduce((sum, row) => sum + row.expectedSelections, 0) ?? 0
-  const autoSelections = auto?.rows.reduce((sum, row) => sum + row.selections, 0) ?? 0
-  const autoNoFit = auto?.noFitRows.reduce((sum, row) => sum + row.decisions, 0) ?? 0
-  const autoWindow = auto === undefined || auto.observationStart === null || auto.observationEnd === null
-    ? 'No retained observation window'
-    : `${new Date(auto.observationStart).toISOString().slice(0, 10)} – ${new Date(auto.observationEnd).toISOString().slice(0, 10)} UTC`
-  const autoRows = auto ? [
-    ...auto.rows.map(row => ({
-      key: JSON.stringify([row.day, row.version, row.policyVersion, row.modelId, row.targetCategory, row.category, row.demand,
-        row.assessmentSource, row.assessmentOutcome, row.method, row.fallback, row.highCost, row.previous]),
-      day: row.day, policy: row.policyVersion, model: row.modelId,
-      cohort: `${row.targetCategory} → ${row.category} · ${row.demand} · ${row.assessmentSource} · assessment: ${row.assessmentOutcome ?? 'not recorded'} · ${row.method}`
-        + (row.fallback ? ' · fallback' : '') + (row.highCost ? ' · high-cost' : '') + (row.previous ? ' · continuity' : ''),
-      opportunities: row.opportunities, expected: row.expectedSelections, selected: row.selections, noFit: null as number | null,
-    })),
-    ...auto.noFitRows.map(row => ({
-      key: JSON.stringify([row.day, row.version, row.policyVersion, row.targetCategory, row.category, row.demand, row.assessmentSource, row.assessmentOutcome]),
-      day: row.day, policy: row.policyVersion, model: '—',
-      cohort: `${row.targetCategory} → ${row.category} · ${row.demand} · ${row.assessmentSource} · assessment: ${row.assessmentOutcome ?? 'not recorded'} · no fit`,
-      opportunities: null as number | null, expected: null as number | null, selected: null as number | null,
-      noFit: row.decisions,
-    })),
-  ].sort((left, right) => right.day - left.day || left.policy.localeCompare(right.policy) || left.model.localeCompare(right.model))
-    : []
   const populations = [...new Set(rows.filter(row => row.operation !== 'collection').map(row => `${row.layer}/${row.operation}`))]
   const count = (metrics: readonly string[], population: string) => rows
     .filter(row => metrics.includes(row.metric) && `${row.layer}/${row.operation}` === population)
@@ -88,48 +62,6 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
     h('p', { style: { ...nativeCaptionStyle, margin: 0 } }, 'Expand a diagnostic group to inspect its evidence. Collection controls are independent; opening a group does not enable collection.'),
     failed ? h('p', { role: 'alert', style: { margin: 0 } },
       'Could not confirm the operation. Read status before retrying; no write is automatically replayed.') : null,
-    h('details', null,
-      h('summary', null, 'Auto allocation observations',
-        h('span', { style: { ...nativeCaptionStyle, marginInlineStart: 8 } },
-          !view ? 'Status unknown' : `${view.autoAllocationEnabled ? 'Enabled' : 'Paused'} · ${auto ? `${autoRows.length} retained strata` : 'Evidence unavailable'}`)),
-      h('p', { role: 'status', style: { margin: 0 } },
-        !view ? busy ? 'Reading observation status…' : 'Observation status is unknown.'
-          : `${view.autoAllocationEnabled
-            ? view.state === 'ready' ? 'Enabled' : 'Enabled · storage unavailable'
-            : 'Paused'} · ${auto === undefined ? 'Auto observations unavailable in this snapshot'
-            : auto.status === 'observed' ? 'Data observed'
-              : view.state === 'ready' ? 'No observations collected' : 'Observation status unavailable'}`
-          + (view.dirty ? ' · Latest changes not fully persisted' : '')),
-      auto ? h('p', { style: { margin: 0 } },
-        `${autoWindow} · ${auto.rows.length + auto.noFitRows.length} retained strata · ${auto.rowsTruncated ? 'row limit reached' : 'row limit not reached'}`
-        + (auto.dropped ? ` · ${auto.dropped} dropped` : '')
-        + (auto.expired ? ` · ${auto.expired} expired` : '')
-        + (auto.restarts ? ` · ${auto.restarts} restarts observed` : '')
-        + (auto.saturated ? ` · ${auto.saturated} counters saturated` : '')) : null,
-      autoRows.length ? h('div', { style: { overflowX: 'auto', minWidth: 0 } },
-        h('table', { style: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', font: 'inherit' } },
-          h('caption', { style: { ...nativeCaptionStyle, textAlign: 'left', marginBottom: 8 } },
-            'Daily aggregates by matching policy, model and decision cohort'),
-          h('thead', null, h('tr', null,
-            ...['Date (UTC)', 'Policy', 'Model', 'Cohort', 'Opportunities', 'Expected', 'Selected', 'No-fit'].map(label =>
-              h('th', { key: label, scope: 'col', style: { padding: 6, font: 'inherit', fontWeight: 500, textAlign: label === 'Cohort' || label === 'Model' ? 'left' : 'right' } }, label)))),
-          h('tbody', null, ...autoRows.map(row => h('tr', { key: row.key },
-            h('td', { style: { padding: 6, whiteSpace: 'nowrap' } }, new Date(row.day).toISOString().slice(0, 10)),
-            h('td', { style: { padding: 6, overflowWrap: 'anywhere' } }, row.policy),
-            h('td', { style: { padding: 6, overflowWrap: 'anywhere' } }, row.model),
-            h('td', { style: { padding: 6, minWidth: 220 } }, row.cohort),
-            h('td', { style: { padding: 6, textAlign: 'right' } }, row.opportunities ?? '—'),
-            h('td', { style: { padding: 6, textAlign: 'right' } }, row.expected === null ? '—' : row.expected.toFixed(3)),
-            h('td', { style: { padding: 6, textAlign: 'right' } }, row.selected ?? '—'),
-            h('td', { style: { padding: 6, textAlign: 'right' } }, row.noFit ?? '—')))))) : null,
-      auto?.status === 'observed' && autoRows.length === 0
-        ? h('p', { style: { margin: 0 } }, 'No retained strata in this snapshot; this does not mean there were no decisions.')
-        : !auto ? h('p', { style: { margin: 0 } }, 'Auto allocation aggregates are unavailable in this snapshot.')
-          : view && auto.status !== 'observed' && view.state !== 'ready'
-            ? h('p', { style: { margin: 0 } }, 'Storage is not ready; retained Auto observation status is unknown.')
-            : view && auto.status !== 'observed' ? h('p', { style: { margin: 0 } }, 'No retained observations yet.') : null,
-      autoRows.length ? h('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        `${autoOpportunities} candidate opportunities · ${autoExpected.toFixed(3)} expected selections · ${autoSelections} actual selections · ${autoNoFit} no-fit decisions. Compare expected and selected counts only within matching cohorts; these are not execution, quality or billing evidence. Assessment outcomes explain classification only, not the supplier root cause. Legacy reasons are not recorded; sum Selected or No-fit, not candidate opportunities, when counting decisions by outcome.`) : null),
     view ? h('details', null,
       h('summary', null, 'Physical request observations',
         h('span', { style: { ...nativeCaptionStyle, marginInlineStart: 8 } },
@@ -211,9 +143,6 @@ export function DiagnosticsCard({ remote }: { remote?: DiagnosticsRemote }) {
         control(view?.enabled ? 'Pause collection' : 'Enable local collection',
           () => { void run(value => value.setEnabled(!view?.enabled)) },
           !remote || !view || !view.enabled && view.state !== 'ready'),
-        control(view?.autoAllocationEnabled ? 'Pause Auto allocation observation' : 'Enable Auto allocation observation',
-          () => { void run(value => value.setAutoAllocationEnabled(!view?.autoAllocationEnabled)) },
-          !remote || !view || !view.autoAllocationEnabled && view.state !== 'ready'),
         control(view?.requestEnabled ? 'Pause request observations' : 'Enable request observations',
           () => { void run(value => value.setRequestEnabled(!view?.requestEnabled)) },
           !remote || !view || view.requestEnabled === undefined || !view.requestEnabled && view.state !== 'ready'),

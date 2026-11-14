@@ -3,19 +3,19 @@ import { act, createElement } from 'react'
 import type { ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
-import { installAutoModelPresentation } from '../src/auto-model-presentation.ts'
+import { installAutoModelPresentation, installAccountUsagePresentation } from '../src/auto-model-presentation.ts'
 import { TURN_USAGE_EVIDENCE_KEY } from '../src/turn-usage-evidence.ts'
 
 const cleanups: Array<() => void> = []
 afterEach(async () => { await act(async () => cleanups.splice(0).forEach(fn => fn())); document.body.replaceChildren() })
-async function mount({ provider = 'github-copilot-preview', tokenUsage, hasEvidence = true, remoteFails = false, seq = 42, locale = 'en' }: {
-  provider?: string; tokenUsage?: unknown; hasEvidence?: boolean; remoteFails?: boolean; seq?: number; locale?: string
+async function mount({ provider = 'github-copilot-preview', tokenUsage, hasEvidence = true, remoteFails = false, seq = 42, locale = 'en', accountUsageOnly = false }: {
+  provider?: string; tokenUsage?: unknown; hasEvidence?: boolean; remoteFails?: boolean; seq?: number; locale?: string; accountUsageOnly?: boolean
 } = {}) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   let Entry: ComponentType<Record<string, unknown>> | undefined
   const get = vi.fn(async () => ({ ok: !remoteFails, value: { mode: 'unknown' } }))
   const diagnostic = vi.fn()
-  cleanups.push(installAutoModelPresentation({
+  cleanups.push((accountUsageOnly ? installAccountUsagePresentation : installAutoModelPresentation)({
     remote: { githubCopilotTurnSelection: { get } }, diagnostic,
     locale: { getLocale: () => ({ active: locale }), subscribe: () => () => {} },
     slots: {
@@ -73,4 +73,21 @@ it('localizes evidence without reading the current picker or repeating model nam
   const { container } = await mount({ locale: 'zh-CN' })
   expect(container.textContent).toContain('本轮用量统计不完整')
   expect(container.textContent).not.toContain('fixture')
+})
+it('retains the Usage explanation without exposing or reading Auto selection', async () => {
+  const { container, get } = await mount({ accountUsageOnly: true })
+  expect(container.textContent).not.toContain('Selection')
+  expect(get).not.toHaveBeenCalled()
+  const modelButton = container.querySelector<HTMLButtonElement>('[aria-label="View turn model evidence"]')
+  expect(modelButton).not.toBeNull()
+  await act(async () => modelButton!.click())
+  expect(container.textContent).toContain('Recorded models')
+  expect(container.textContent).not.toContain('Why this model was selected')
+  await act(async () => container.querySelector<HTMLButtonElement>('[role=dialog] button')!.click())
+  await act(async () => usageButton(container).click())
+  expect(container.textContent).toContain('before provider dispatch')
+  expect((await mount({ accountUsageOnly: true, tokenUsage: { totalTokens: 100 } })).container.textContent)
+    .not.toContain('Turn Usage incomplete')
+  expect((await mount({ accountUsageOnly: true, provider: 'other', hasEvidence: false })).container.textContent)
+    .not.toContain('Turn Usage incomplete')
 })

@@ -38,6 +38,7 @@ export function checkSearchComposition(entries) {
     if (entry.disabled !== undefined && entry.disabled !== false) reasons.add('WEB_DISABLED_OR_DYNAMIC')
     if (entry.config !== undefined && (!entry.config || typeof entry.config !== 'object' || Array.isArray(entry.config)
       || Object.entries(entry.config).some(([key, value]) => !['searchProvider', 'fetchProvider'].includes(key) || typeof value !== 'string'))) reasons.add('WEB_CONFIG_REQUIRES_REVIEW')
+    if (entry.config?.searchProvider === 'github-copilot-hosted') reasons.add('LEGACY_COPILOT_SEARCH_PROVIDER')
     if (entry.isolate !== undefined && (!entry.isolate || typeof entry.isolate !== 'object' || Array.isArray(entry.isolate) || Object.keys(entry.isolate).length > 0)) reasons.add('PREEXISTING_WEB_ISOLATION')
   }
   return { schemaVersion: 1, supported: reasons.size === 0, reasons: [...reasons].sort(), scope: 'pre-install-structural-only; no boot, credentials, network or writes' }
@@ -66,42 +67,21 @@ function accountRows(entries) {
   return matches
 }
 
-/** Only the bundle's reviewed, static service wiring is automatically supported. */
-function routingRowValid(entry, name, isolated, account = false) {
-  if (!entry || entry.name !== name) return false
-  const keys = ['id', 'name', 'disabled', 'group', 'isolate', ...(account ? ['config'] : [])]
+/** Only the bundle's reviewed, static account entry is automatically supported. */
+function accountRowValid(entry) {
+  const name = 'dsh-github-copilot'
+  if (!entry || entry.id !== 'github-copilot' || entry.name !== name) return false
+  const keys = ['id', 'name', 'disabled', 'group', 'isolate', 'config']
   if (Object.keys(entry).some(key => !keys.includes(key))) return false
   if (entry.disabled !== undefined && entry.disabled !== false) return false
   if (entry.group !== undefined && entry.group !== false) return false
-  if (isolated) {
-    if (!isDeepStrictEqual(entry.isolate, { web: realm })) return false
-  } else if (entry.isolate !== undefined && (!isRecord(entry.isolate) || Object.keys(entry.isolate).length !== 0)) return false
-  return entry.config === undefined || (account && isRecord(entry.config) && !hasExpression(entry.config))
+  if (entry.isolate !== undefined && (!isRecord(entry.isolate) || Object.keys(entry.isolate).length !== 0)) return false
+  return entry.config === undefined || (isRecord(entry.config) && !hasExpression(entry.config))
 }
 
 function candidateViable(entries, baseline) {
-  const original = baseline.find(entry => entry.id === 'web')
-  const web = entries.find(entry => entry.id === 'web')
-  if (!original || !web || !isDeepStrictEqual(web.isolate, { web: realm })) return false
-  for (const [id, name, isolated, account] of [
-    ['github-copilot-web-delegate', 'dsh-github-copilot/web-delegate', true, false],
-    ['github-copilot-routed-web', 'dsh-github-copilot/routed-web', false, false],
-    ['github-copilot', 'dsh-github-copilot', false, true],
-  ]) {
-    const matches = entries.filter(entry => entry.id === id)
-    if (matches.length !== 1 || !routingRowValid(matches[0], name, isolated, account)) return false
-  }
-  // Apart from the two new service rows and the original web's realm, the
-  // candidate must preserve the entire routing-free tree, including user config.
-  // These are parsed, owned config objects, never live Loader/Service objects.
-  const restored = entries.filter(entry => !reserved.has(entry.id)).map(entry => {
-    if (entry.id !== 'web') return entry
-    const copy = { ...entry }
-    if (Object.hasOwn(original, 'isolate')) copy.isolate = original.isolate
-    else delete copy.isolate
-    return copy
-  })
-  return isDeepStrictEqual(restored, baseline)
+  const accounts = accountRows(entries)
+  return accounts.length === 1 && accountRowValid(accounts[0]) && isDeepStrictEqual(entries, baseline)
 }
 
 /** Read and compose the proposed normal launch without loadProfile's initialization/normalization writes. */
@@ -119,11 +99,9 @@ export async function inspectProfileSearchComposition({ profileDir, home, instal
   const layers = []
   const baselineLayers = []
   let copilotLayers = 0
-  let candidateIndex
   function addCandidate() {
-    candidateIndex ??= layers.length
     layers.push(candidate)
-    // The routing-free comparison retains the account row and its user config.
+    // The baseline contains only the account entry and preserves later user patches.
     baselineLayers.push([{ insert: [{ id: 'github-copilot', name: 'dsh-github-copilot' }] }])
   }
   for (const name of manifest.dsh?.profile?.bundles ?? []) {
@@ -149,14 +127,13 @@ export async function inspectProfileSearchComposition({ profileDir, home, instal
   const warn = () => reasons.add('UNAPPLIED_PATCH_REQUIRES_REVIEW')
   // Public composeEntries flattens each complete stack in one pass. Repeatedly
   // patching a previously composed tree would change the include's id index.
-  const beforeGuard = composeEntries(layers.slice(0, candidateIndex), warn)
   const baseline = composeEntries([...baselineLayers, ...late], warn)
-  for (const entries of [beforeGuard, baseline]) {
-    for (const reason of checkSearchComposition(entries).reasons) reasons.add(reason)
-  }
   const entries = composeEntries([...layers, ...late], warn)
+  for (const row of [baseline, entries]) {
+    for (const reason of checkSearchComposition(row).reasons) reasons.add(reason)
+  }
   if (copilotLayers > 1 || accountRows(entries).length !== 1) reasons.add('DUPLICATE_COPILOT_ACCOUNT_ENTRY')
-  if (!candidateViable(entries, baseline)) reasons.add('CANDIDATE_ROUTING_NOT_VIABLE')
+  if (!candidateViable(entries, baseline)) reasons.add('CANDIDATE_NATIVE_COMPOSITION_CHANGED')
   return reportCandidate(reasons)
 }
 

@@ -6,7 +6,7 @@ import { currentSearchInitiator } from './current-provider.ts'
 import type {} from './preview-route.ts'
 
 const REVIEWER = '@deepseek-ai/dsh-experimental-auto-review'
-const CORE_VERSIONS = new Set(['0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3'])
+const CORE_VERSIONS = new Set(['0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'])
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object'
@@ -20,7 +20,7 @@ function streamService(value: unknown): value is Pick<LlmRuntime, 'stream'> {
 export async function isNativeReviewerContext(caller: Context): Promise<boolean> {
   const fiber = caller.fiber
   const entry = fiber.entry
-  if (entry === undefined || entry.fiber !== fiber || entry.options.name !== REVIEWER
+  if (entry === undefined || entry.fiber?.ctx.fiber !== fiber || entry.options.name !== REVIEWER
     || fiber.runtime === null || fiber.uid === null) return false
   const base = entry.parent.tree.ctx.baseUrl
   const packages = caller.get('pluginPackages')
@@ -31,7 +31,7 @@ export async function isNativeReviewerContext(caller: Context): Promise<boolean>
   if (importedOwner?.manifestPath !== owner.manifestPath) return false
   const module: unknown = await import(REVIEWER)
   return record(module) && typeof module.apply === 'function' && module.apply === fiber.runtime.callback
-    && fiber.uid !== null && entry.fiber === fiber && entry.options.name === REVIEWER
+    && fiber.uid !== null && entry.fiber?.ctx.fiber === fiber && entry.options.name === REVIEWER
 }
 
 /** Reversible service-read delegation; neither the native service nor its context is changed. */
@@ -48,7 +48,7 @@ export function installAutoReviewSampling(ctx: Context): () => void {
     const native: unknown = next()
     if (!active || name !== 'llm' || !streamService(native)) return native
     const entry = caller.fiber.entry
-    if (entry === undefined || entry.fiber !== caller.fiber || entry.options.name !== REVIEWER) return native
+    if (entry === undefined || entry.fiber?.ctx.fiber !== caller.fiber || entry.options.name !== REVIEWER) return native
     const runtime = native
     const scopedStream = (options: GenerateOptions): AsyncIterable<StreamChunk> => (async function* () {
       if (!active || options.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {

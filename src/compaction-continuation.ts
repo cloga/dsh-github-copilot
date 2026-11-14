@@ -11,9 +11,9 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap { githubCopilotCompactionLifecycle: CompactionContinuationLifecycle }
   interface SessionProjectionStateMap { githubCopilotCompactionLifecycle: CompactionContinuationLifecycle }
 }
-type Definition = Omit<ProjectionDefinition<typeof COMPACTION_CONTINUATION>, 'stateSchema' | 'wire'> & {
+type Definition = Omit<ProjectionDefinition<typeof COMPACTION_CONTINUATION, CompactionContinuationLifecycle>, 'stateSchema' | 'wire'> & {
   stateSchema: typeof CompactionContinuationLifecycleSchema
-  wire: Omit<NonNullable<ProjectionDefinition<typeof COMPACTION_CONTINUATION>['wire']>, 'viewSchema'> & {
+  wire: Omit<NonNullable<ProjectionDefinition<typeof COMPACTION_CONTINUATION, CompactionContinuationLifecycle>['wire']>, 'viewSchema'> & {
     viewSchema: typeof CompactionContinuationLifecycleSchema
   }
 }

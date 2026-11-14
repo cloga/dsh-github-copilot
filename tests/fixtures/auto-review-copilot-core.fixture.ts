@@ -18,7 +18,8 @@ import PermissionPresetService, { AUTO_PRESET } from '@deepseek-ai/dsh-permissio
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import Tools, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import Tools, { defineTool } from '@deepseek-ai/dsh-tools'
 import ApprovalService, { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../../src/preview-route.ts'
@@ -56,7 +57,7 @@ class ReviewerFixtureLoader extends Loader {
 
 beforeAll(() => {
   expect(['tagged-source-runtime', 'published-artifact-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(['0.2.0-rc.2', '0.2.1-alpha.5', '0.2.1-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.2.0-rc.2', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
 })
 afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
@@ -200,11 +201,11 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     if (name === 'llm') readScopes.push({
       reviewer: caller.fiber.runtime?.callback === AutoReview.apply,
       entry: caller.fiber.entry !== undefined,
-      root: caller.fiber.entry?.fiber === caller.fiber,
+      root: caller.fiber.entry?.fiber?.ctx.fiber === caller.fiber,
       service: typeof native,
     })
     if (name === 'llm' && caller.fiber.runtime?.callback === AutoReview.apply
-      && caller.fiber.entry?.fiber === caller.fiber && stopSampling !== undefined) {
+      && caller.fiber.entry?.fiber?.ctx.fiber === caller.fiber && stopSampling !== undefined) {
       if (scope === 'retained-facade') stopSampling()
       if (scope === 'late-identity') queueMicrotask(stopSampling)
     }
@@ -226,6 +227,7 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   await ctx.plugin(Projections)
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(Tools)
+  await ctx.plugin(NativeToolExecutor)
   ctx.provide('shell', {
     sandboxMode: 'workspace-write',
     resolve() { throw new Error('fixture must not resolve shell requests') },
@@ -258,10 +260,11 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     await ctx.plugin(AutoReview)
   }
   let executions = 0
-  ctx.tools.register(defineContentToolFixture({
+  ctx.tools.register(defineTool({
     name: 'probe', description: 'Synthetic reviewer compatibility probe.',
     parameters: { value: { type: 'string' } },
-    async execute() { executions += 1; return [{ type: 'text', text: 'executed' }] },
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+    async execute() { executions += 1; return 'executed' },
   }))
   const session = ctx.sessions.create(SessionId(`auto-review-${outcome}`), { meta: { cwd: process.cwd() } })
   session.append('request/header', {
@@ -313,8 +316,8 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     }, { prepend: true })
   }
   const pending = ctx.agents.withInitiator(agent, () => ctx.tools.execute({
-    signal: controller.signal, callId,
-    name: 'probe', arguments: { value: outcome }, agent,
+    signal: controller.signal, agent,
+    calls: [{ type: 'tool-call', id: callId, name: 'probe', arguments: rawArguments }],
   }))
   if (automatic) {
     const ordinary = ctx.agents.withInitiator(agent, async () => {
@@ -325,7 +328,9 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     })
     await Promise.all([pending, ordinary])
   }
-  const result = await pending
+  const batch = await pending
+  if (batch.results.length !== 1) throw new Error('expected one reviewer tool result')
+  const result = batch.results[0]!.result
   return { result, executions, wireCalls, wireBodies, wireTokens, readScopes }
 }
 

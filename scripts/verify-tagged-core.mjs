@@ -18,11 +18,15 @@ export const TAGGED_CORE_RELEASES = Object.freeze({
   '0.2.1-alpha.4': '86a402200d95fecef4529d969836f1fe13c6cb0d',
   '0.2.1-alpha.5': '1517a4dbca0a2789ff1d41ba439600f8547d23fa',
   '0.2.1-rc.3': '1f81c047fc48fa190a683e469daa699857e9afe8',
+  '0.2.2-rc.3': '38a6a5c965aa99ab525161efb7cc5cf1fe62fced',
 })
 const tests = ['tests/preview-route.spec.ts', 'tests/published-core.spec.ts', 'tests/single-route.spec.ts',
   'tests/search-routing.spec.ts', 'tests/routed-web.spec.ts', 'tests/deepseek-search-fallback.spec.ts']
 function runtimeTests(release) {
-  if (release === '0.2.1-alpha.5' || release === '0.2.1-rc.3') return [...runtimeTests('0.2.0-rc.2'),
+  if (release === '0.2.2-rc.3') return [...runtimeTests('0.2.1-rc.3'),
+    'tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts',
+    'tests/fixtures/tool-schema-core.fixture.ts', 'tests/fixtures/subagent-copilot-core.fixture.ts']
+  if (['0.2.1-alpha.5', '0.2.1-rc.3'].includes(release)) return [...runtimeTests('0.2.0-rc.2'),
     'tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts']
   return ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2'].includes(release)
     ? [...tests, ...release.startsWith('0.1.6-') ? ['tests/tool-schema-compat.spec.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
@@ -49,8 +53,13 @@ async function physicalDirectory(path) {
 async function exists(path) {
   try { return await lstat(path) } catch (error) { if (error.code === 'ENOENT') return undefined; throw error }
 }
-function readGit(core, args) {
-  return execFileSync('git', args, { cwd: core, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] })
+export function readTaggedGit(core, args) {
+  try {
+    return execFileSync('git', args, { cwd: core, encoding: 'utf8', timeout: 15000,
+      maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] })
+  } catch (error) {
+    throw new Error(`tagged Core git ${args.join(' ')} failed: ${error.message}`, { cause: error })
+  }
 }
 function runtimeExport(value) {
   if (typeof value === 'string') return value
@@ -122,7 +131,7 @@ export async function taggedCoreAliases(core, trackedPaths, release) {
 /** Keep the renderer, its external CJS selector shim and ReactDOM on one installed React. */
 export function taggedRendererRuntimeAliases(packages, release) {
   if (!release.startsWith('0.1.6-') && !release.startsWith('0.2.0-')
-    && release !== '0.2.1-alpha.5' && release !== '0.2.1-rc.3') return []
+    && !['0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(release)) return []
   const renderer = packages.find(item => item.name === '@deepseek-ai/dsh-client-ui-renderer')
   if (renderer === undefined) throw new Error('tagged selector fixture lacks the public renderer package')
   const require = createRequire(renderer.manifestPath)
@@ -147,7 +156,7 @@ function configSource(report) {
 }
 
 /** Prepare only runner-owned config/identity files; read Core and plugin source without changing either. */
-export async function prepareTaggedCoreFixture({ root, core, target, release }, { git = readGit, runner } = {}) {
+export async function prepareTaggedCoreFixture({ root, core, target, release, nativeAddon }, { git = readTaggedGit, runner } = {}) {
   const expected = TAGGED_CORE_RELEASES[release]
   if (expected === undefined) throw new Error('unsupported tagged Core release')
   const pluginRoot = await physicalDirectory(root)
@@ -157,7 +166,8 @@ export async function prepareTaggedCoreFixture({ root, core, target, release }, 
   await physicalDirectory(dirname(scratch))
   if (await exists(scratch)) throw new Error('tagged fixture target already exists')
   const plugin = JSON.parse(await readFile(join(pluginRoot, 'package.json'), 'utf8'))
-  const piAi = release === '0.2.1-alpha.5' || release === '0.2.1-rc.3' ? '1.1.0' : '0.87.1'
+  const piAi = release === '0.2.2-rc.3' ? '1.3.0'
+    : release === '0.2.1-alpha.5' || release === '0.2.1-rc.3' ? '1.1.0' : '0.87.1'
   if (plugin.name !== 'dsh-github-copilot' || plugin.dependencies?.['@earendil-works/pi-ai'] !== piAi) throw new Error(`tagged fixture requires the plugin own pi-ai ${piAi}`)
   const commit = git(coreRoot, ['rev-parse', '--verify', 'HEAD']).trim()
   if (commit !== expected) throw new Error('tagged Core commit does not match the exact release pin')
@@ -165,6 +175,18 @@ export async function prepareTaggedCoreFixture({ root, core, target, release }, 
   const tracked = git(coreRoot, ['ls-files', '-z']).split('\0').filter(Boolean)
   if (!tracked.includes('vitest.shared.ts')) throw new Error('tagged Core standard decorator test helper is missing')
   const inventory = await taggedCoreAliases(coreRoot, tracked, release)
+  if (nativeAddon !== undefined) {
+    if (release !== '0.2.2-rc.3') throw new Error('native addon fixture is only supported for rc.3')
+    const addonRoot = await physicalDirectory(nativeAddon)
+    if (inside(pluginRoot, addonRoot) || inside(coreRoot, addonRoot)) throw new Error('native addon fixture must be outside both source trees')
+    const requireAddon = createRequire(join(addonRoot, 'package.json'))
+    const manifest = JSON.parse(await readFile(requireAddon.resolve('@deepseek-ai/node-addon-system/package.json'), 'utf8'))
+    const pinned = JSON.parse(await readFile(join(coreRoot, 'native/system/packages/entry/package.json'), 'utf8'))
+    if (manifest.name !== '@deepseek-ai/node-addon-system' || manifest.version !== pinned.version) {
+      throw new Error('native addon fixture differs from the tagged package version')
+    }
+    inventory.vendors.push({ name: '@deepseek-ai/node-addon-system/flock', entry: requireAddon.resolve('@deepseek-ai/node-addon-system/flock') })
+  }
   const rendererRuntimeAliases = taggedRendererRuntimeAliases(inventory.packages, release)
   const require = createRequire(join(pluginRoot, 'package.json'))
   const vitestCli = runner ?? join(dirname(require.resolve('vitest/package.json')), 'vitest.mjs')
@@ -192,10 +214,14 @@ function parseArgs(args) {
   const options = {}
   for (let index = 0; index < rest.length; index += 2) {
     const name = rest[index]?.slice(2)
-    if (!['root', 'core', 'target', 'release'].includes(name) || rest[index] !== `--${name}` || !rest[index + 1] || options[name] !== undefined) throw new Error('invalid tagged fixture arguments')
+    if (!['root', 'core', 'target', 'release', 'native-addon'].includes(name) || rest[index] !== `--${name}` || !rest[index + 1] || options[name] !== undefined) throw new Error('invalid tagged fixture arguments')
     options[name] = rest[index + 1]
   }
   if (['root', 'core', 'target', 'release'].some(name => !options[name])) throw new Error('missing tagged fixture argument')
+  if (options['native-addon'] !== undefined) {
+    options.nativeAddon = options['native-addon']
+    delete options['native-addon']
+  }
   return options
 }
 if (process.argv[1] && same(resolve(process.argv[1]), fileURLToPath(import.meta.url))) {

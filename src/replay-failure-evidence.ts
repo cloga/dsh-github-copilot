@@ -7,9 +7,9 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap { githubCopilotReplayFailure: ReplayFailureEvidence }
   interface SessionProjectionStateMap { githubCopilotReplayFailure: ReplayFailureEvidence }
 }
-type Definition = Omit<ProjectionDefinition<typeof REPLAY_FAILURE_PROJECTION>, 'stateSchema' | 'wire'> & {
+type Definition = Omit<ProjectionDefinition<typeof REPLAY_FAILURE_PROJECTION, ReplayFailureEvidence>, 'stateSchema' | 'wire'> & {
   stateSchema: typeof ReplayFailureEvidenceSchema
-  wire: Omit<NonNullable<ProjectionDefinition<typeof REPLAY_FAILURE_PROJECTION>['wire']>, 'viewSchema'> & {
+  wire: Omit<NonNullable<ProjectionDefinition<typeof REPLAY_FAILURE_PROJECTION, ReplayFailureEvidence>['wire']>, 'viewSchema'> & {
     viewSchema: typeof ReplayFailureEvidenceSchema
   }
 }

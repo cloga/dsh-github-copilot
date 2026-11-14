@@ -10,6 +10,7 @@ import { verifyAgentContract } from '../../scripts/verify-agent-contract.mjs'
 test('describes actual package metadata without claiming a release exists', async () => {
   const result = await describeRepository()
   const pkg = JSON.parse(await readFile(join(repositoryRoot, 'package.json')))
+  const baseline = JSON.parse(await readFile(join(repositoryRoot, 'deployment-baseline.json')))
   assert.equal(result.package.version, pkg.version)
   assert.equal(result.release.tag, `v${pkg.version}`)
   assert.equal(result.release.publicationVerified, false)
@@ -27,10 +28,9 @@ test('describes actual package metadata without claiming a release exists', asyn
     disposition: 'separate-explicit-residual-risk-no-required-waiver',
     maxNavigationMethods: 2, maxObservationMs: 120000,
   })
-  assert.deepEqual(result.admittedReleases, ['0.2.1-rc.3'])
-  assert.deepEqual(result.baselines.map(baseline => baseline.release), [
-    '0.1.1-rc.2', '0.1.2-rc.1', '0.1.3-alpha.1', '0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc.2', '0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3',
-  ])
+  assert.deepEqual(result.admittedReleases, baseline.supportedBaselines.dsh.admittedReleases)
+  assert.deepEqual(result.baselines.map(item => item.release),
+    baseline.supportedBaselines.dsh.baselines.map(item => item.release))
 })
 
 test('plans only known task IDs with unexecuted argument arrays', async () => {
@@ -256,6 +256,25 @@ test('every task plan carries the plugin-only implementation boundary', async ()
     assert.deepEqual((await planTask(task)).boundaries.implementationScope, policy)
     assert.ok((await planTask(task)).commands.every(command => command.argv[2] === 'guard'))
   }
+})
+
+test('contract validation preserves quota and rejects plugin-owned parent-child policy', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-native-child-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    for (const mutate of [
+      contract => { contract.boundaries.confirmedProductScope.parentChildPolicyOwner = undefined },
+      contract => { contract.boundaries.confirmedProductScope.parentChildPolicyOwner = 'plugin' },
+      contract => { contract.boundaries.confirmedProductScope.preserve = contract.boundaries.confirmedProductScope.preserve.filter(value => value !== 'copilot-account-quota') },
+      contract => { contract.boundaries.confirmedProductScope.enhancementPolicy = 'remove-all' },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /confirmed Copilot-only model integration scope/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test('contract validation rejects removal or weakening of the plugin-only boundary', async () => {

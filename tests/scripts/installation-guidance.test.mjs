@@ -42,35 +42,22 @@ test('offline maintenance retains approval, verification and no-bypass boundarie
   assert.match(text, /not permission to bypass organizational registry restrictions/)
 })
 
-test('current user guides retain task-oriented entry points and honest screenshot evidence', async () => {
+test('current user guides retain task-oriented entry points and qualification limits', async () => {
   const pkg = JSON.parse(await doc('package.json'))
   for (const path of ['README.md', 'README.zh.md']) {
     const text = await doc(path)
     assert.ok(text.includes(pkg.version), path)
-    for (const image of ['copilot-model-preferences.png', 'copilot-search-routing.png',
-      'copilot-accounts.png', 'copilot-accounts-credits.png', 'copilot-session-continuation.png']) {
-      assert.ok(text.includes(`./docs/images/${image}`), `${path}: ${image}`)
-      const bytes = await readFile(new URL(`../../docs/images/${image}`, import.meta.url))
-      assert.deepEqual(bytes.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-    }
-    for (const marker of ['Follow parent model', 'Web search', 'Local diagnostics',
-      'Model preferences', 'Follow global default', 'New Session continuation default',
-      'copilot-session-continuation.png']) assert.ok(text.includes(marker), `${path}: ${marker}`)
-    assert.ok(text.includes('./CHANGELOG.md'), path)
-    assert.ok(text.includes('./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics'), path)
+    for (const marker of ['0.2.2-rc.3', '--profile web', 'scripts/select-core-release.mjs',
+      'scripts/check-search-composition.mjs', './docs/model-compatibility-acceptance.md',
+      './docs/copilot-accounts.md']) assert.ok(text.includes(marker), `${path}: ${marker}`)
   }
-  const provenance = JSON.parse(await doc('docs/images/copilot-current-provenance.json'))
-  assert.equal(provenance.synthetic, true)
-  assert.equal(provenance.capture.externalRequests, false)
-  assert.deepEqual(provenance.capture.pageErrors, [])
-  assert.match(provenance.limits, /No live OAuth/)
   const migration = await doc('docs/single-route-migration.md')
   assert.doesNotMatch(migration, /planned `0\.4\.0-alpha\.9`/)
   assert.match(migration, /live-agents-only/)
   assert.match(migration, /does not attest its publication or execution/)
 })
 
-test('current screenshot provenance covers every packaged README capture', async () => {
+test('historical screenshot provenance covers every packaged capture', async () => {
   const pkg = JSON.parse(await doc('package.json'))
   const provenance = JSON.parse(await doc('docs/images/copilot-current-provenance.json'))
   assert.match(provenance.clientVersion, /^\d+\.\d+\.\d+$/)
@@ -81,6 +68,8 @@ test('current screenshot provenance covers every packaged README capture', async
   assert.match(provenance.source, /release-candidate commit/)
   assert.doesNotMatch(provenance.source, /Actual published archive/)
   assert.ok(pkg.files.includes('docs/images/'))
+  assert.ok(pkg.files.includes('docs/images/copilot-current-provenance.json'))
+  assert.match(await doc('docs/session-continuation.md'), /images\/copilot-current-provenance\.json/)
   assert.deepEqual(provenance.capture.viewports, [920, 375])
   assert.deepEqual(provenance.capture.themes, ['dark', 'light'])
   assert.equal(provenance.capture.horizontalOverflow, false)
@@ -109,23 +98,18 @@ test('current screenshot provenance covers every packaged README capture', async
   assert.match(captureEntry, /src\/session-continuation-ui\.ts/)
 })
 
-test('README contracts stay bilingual, current and separate native summary routes', async () => {
+test('README contracts stay bilingual and keep native ownership explicit', async () => {
   const texts = await Promise.all(['README.md', 'README.zh.md'].map(doc))
   for (const text of texts) {
-    for (const marker of ['0.2.1-rc.3', '0.2', '1.5×', 'Switch account',
-      'High cost', 'autoSemanticAssessment: false', 'automaticRecovery: false',
-      'auto: false', '--mode persisted-unit', '--mode reviewed-view', '--profile-name',
-      './docs/dual-model.md', './docs/session-continuation.md',
-      './docs/images/copilot-current-provenance.json']) assert.ok(text.includes(marker), marker)
+    for (const marker of ['0.2.2-rc.3', 'HydraFusion', 'Auto', 'Usage',
+      './docs/npm-distribution.md', './docs/model-compatibility-acceptance.md'])
+      assert.ok(text.includes(marker), marker)
     assert.doesNotMatch(text, /prepared.*0\.4\.0-alpha\.130|0\.4\.0-alpha\.88/i)
   }
-  assert.match(texts[0], /finite continuity bonus/)
-  assert.match(texts[0], /weight decays tenfold to `0.02`/)
-  assert.match(texts[1], /权重十倍衰减到 `0.02`/)
-  assert.match(texts[0], /independently resolved native summary route/)
-  assert.match(texts[0], /additional accounts are independently authorized/)
-  assert.match(texts[1], /独立解析的原生摘要路由/)
-  assert.match(texts[1], /独立授权/)
+  assert.match(texts[0], /Parent\/child relationships, inheritance, and scheduling follow native DSH/)
+  assert.match(texts[1], /父子代理关系、继承与调度遵循 DSH 原生行为/)
+  assert.match(texts[0], /Native subagents selecting and actually invoking/)
+  assert.match(texts[1], /原生子代理选择并实际调用/)
 })
 
 test('README local Markdown links and target anchors exist', async () => {

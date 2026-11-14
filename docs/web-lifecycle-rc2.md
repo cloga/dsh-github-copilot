@@ -1,6 +1,11 @@
 # DSH 0.2.1-rc.3 Web lifecycle characterization
 
-This keeps the existing rc.2 documentation path for link stability, but updates its contents to the repository's current supported Core, DSH `0.2.1-rc.3`. It exercises the exact published Loader/Web packages and plugin bundle through public APIs. The synthetic fixture makes no network calls and removes its temporary files and Loader fibers. It does not exercise the native Desktop package manager or claim the observed account-status incident was caused by any one internal transition. Earlier rc.2 findings are historical; the rc.3 test results below are authoritative for the current plugin line.
+**Historical evidence:** this describes the former plugin-owned Web routing on
+DSH `0.2.1-rc.3`, not the current model-integration candidate. The current
+plugin no longer mounts those routing rows or makes account activation depend
+on Web; it does not claim that these observations apply to DSH `0.2.2-rc.3`.
+The historical synthetic fixture used public Loader/Web APIs and made no network
+calls; it did not exercise the Desktop package manager.
 
 ## Desktop guidance
 
@@ -10,16 +15,12 @@ If the native plugin manager explicitly reports `restart-required` after a plugi
 
 If the plugin is already **Off** and the manager shows only pending entries waiting for a service, do not repeatedly toggle it as a recovery attempt. The rc.2 disable observation below is historical context, not a diagnosis of the current host; the rc.3 synthetic transitions are separately scoped evidence. Other activation errors and mixed diagnostics require their own investigation.
 
-## Reproduce
+## Historical reproduction
 
-From the repository root, after the normal build:
-
-```powershell
-pnpm build
-node --test tests/scripts/web-lifecycle-characterization.test.mjs
-```
-
-The test checks that `package.json` pins `@deepseek-ai/dsh-app-boot` and `@deepseek-ai/dsh-web` to the currently supported DSH version and uses the pinned public `cordis-plugin-loader`. It loads the built plugin-owned delegate and router through the public Loader, and creates temporary synthetic search/fetch providers and an independent consumer. It makes no network calls.
+The [historical fixture at commit `cb6bccb`](https://github.com/cloga/dsh-github-copilot/blob/cb6bccbc861d1e09097abd5127772b9115a70c5a/tests/scripts/web-lifecycle-characterization.test.mjs)
+uses the corresponding historical bundle and dependency graph. Its results
+cannot be reproduced by running the current candidate's tests. The current
+native-Web composition tests separately check the retired routing boundary.
 
 ## Observed transitions
 
@@ -29,7 +30,7 @@ For a **staged** first-add, immediately before the bundle is applied, global `ct
 
 For **remove/re-add**, the complete Web-routing rows are loaded at boot and the global service plus independent consumer are verified usable before removal. Removal leaves `ctx.web` unavailable and the consumer pending, although the captured official runtime still serves the synthetic provider. Re-adding the exact rows does not restore the global service. Calling the public `ctx.reflect.notify(['web'])` after re-add also does not recreate it; the consumer remains pending. This is a minimal public-Loader reproduction of the preventable hot-readd failure.
 
-The lifecycle test does not call Core internals or mutate a live profile. The plugin's account integration is nested behind `ctx.inject()` for `web` in `src/index.ts`, so an unavailable global Web service can also keep dependent Host account services from activating. This links the reproduced service lifecycle failure to an account-controls availability risk; it does not prove that this was the sole cause of issue #371.
+The historical lifecycle test did not call Core internals or mutate a live profile. The former plugin's account integration was nested behind `ctx.inject()` for `web`, so an unavailable global Web service could also keep dependent Host account services from activating. This did not prove that it was the sole cause of issue #371.
 
 These synthetic observations do not reproduce or override the native Desktop manager's package-update contract. In the exact official rc.3 `dsh-plugin-manager` tests, an in-place upgrade without HMR returns `restart-required` and keeps the currently running version active; see [`package-reload.spec.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.3/packages/boot/plugin-manager/tests/package-reload.spec.ts). A plugin cannot truthfully promise seamless application of that update. Honor an explicit manager restart requirement. This is separate from a hot remove/re-add transition for which the manager allows runtime reconciliation.
 
@@ -52,7 +53,7 @@ In the exact published rc.3 `WebRuntime` declarations, public search/fetch APIs 
 
 The public-API test checks additive registration: a configured existing provider continues to win over an added routing provider, while two usable providers without a configured ID produce `WEB_PROVIDER_AMBIGUOUS`. Additive registration therefore cannot transparently preserve configured-provider selection and the plugin's exact primary/fallback dispatch. A second global `web` service collides with the existing service name; moving the official service to a child scope is the current composition that exposes the consumer lifecycle problem. Cordis `reflect.notify()` refreshes dependents but cannot recreate a missing global service, as the rc.3 re-add fixture demonstrates.
 
-The plugin-only fix requires one of these official public capabilities: (1) disposable search-dispatch middleware on the existing `WebRuntime`, invoked after normal provider selection with `(request, signal, next)` so eligible Copilot calls can route while all other requests delegate unchanged; or (2) a Loader-owned service-replacement/recomposition operation that restores the service and rebinds dependents when isolation changes. The Web hook must preserve cancellation, result caps, configured-provider semantics and registration ownership. Neither contract is present in the pinned rc.3 API.
+The former routing design would have required one of these official public capabilities: (1) disposable search-dispatch middleware on the existing `WebRuntime`, invoked after normal provider selection with `(request, signal, next)` so eligible Copilot calls can route while all other requests delegate unchanged; or (2) a Loader-owned service-replacement/recomposition operation that restores the service and rebinds dependents when isolation changes. Neither contract was present in the historical pinned rc.3 API. The current model-integration scope does not require either capability.
 
 Without one of these APIs, a plugin workaround would either leave `ctx.web`/existing consumers stranded or change Web provider selection and routing behavior. A public notification alone is insufficient. No runtime workaround is made, and issue #371 remains open.
 

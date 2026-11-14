@@ -369,7 +369,7 @@ and [continuation contract](./session-continuation.md). When off, an account cha
 persistent-enable/keep-off/cancel consent. See the [approved experience and mock](./account-management-experience.md).
 
 Completed managed turns have a compact **Account** disclosure alongside native
-Usage/selection actions through the public assistant-actions slot. This is
+Usage actions through the public assistant-actions slot. This is
 request-account evidence, not billing attribution or a subagent account rollup.
 It freezes a verified cached identity at admission. Missing identity starts one
 nonforcing, bounded lookup for the exact admitted account without delaying model

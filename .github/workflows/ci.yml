@@ -13,6 +13,9 @@ permissions:
 
 jobs:
   verify:
+    # Isolated official-source fixtures do not inherit this project's workspace config.
+    env:
+      PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'
     strategy:
       fail-fast: false
       matrix:
@@ -21,11 +24,11 @@ jobs:
           - windows-latest
         include:
           - os: ubuntu-latest
-            release: 0.2.1-rc.3
-            commit: 1f81c047fc48fa190a683e469daa699857e9afe8
+            release: 0.2.2-rc.3
+            commit: 38a6a5c965aa99ab525161efb7cc5cf1fe62fced
           - os: windows-latest
-            release: 0.2.1-rc.3
-            commit: 1f81c047fc48fa190a683e469daa699857e9afe8
+            release: 0.2.2-rc.3
+            commit: 38a6a5c965aa99ab525161efb7cc5cf1fe62fced
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -42,35 +45,14 @@ jobs:
           package-manager-cache: false
       - name: Verify exact-Core release selection and original-byte publication policy
         run: node --test tests/scripts/release-policy.test.mjs tests/scripts/npm-distribution.test.mjs tests/scripts/tarball.test.mjs
-      - name: Report complete candidate publication window
+      - name: Verify the project and source-fixture age policy
         shell: bash
-        env:
-          DSH_RELEASE: ${{ matrix.release }}
         run: |
-          node --input-type=module <<'NODE'
-          import { readFile } from 'node:fs/promises'
-          const lock = await readFile('pnpm-lock.yaml', 'utf8')
-          const names = [...lock.matchAll(/^  '(@deepseek-ai\/dsh-[^']+)@([^']+)':\r?$/gm)]
-            .filter(([, , version]) => version === process.env.DSH_RELEASE).map(([, name]) => name)
-          if (names.length === 0) throw new Error('Missing candidate lockfile packages')
-          const rows = []
-          for (let offset = 0; offset < names.length; offset += 6) {
-            rows.push(...await Promise.all(names.slice(offset, offset + 6).map(async name => {
-              const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`,
-                { signal: AbortSignal.timeout(15000) })
-              if (!response.ok) throw new Error(`Registry metadata unavailable: ${name} (${response.status})`)
-              const published = (await response.json()).time?.[process.env.DSH_RELEASE]
-              if (typeof published !== 'string' || !Number.isFinite(Date.parse(published))) {
-                throw new Error(`Missing candidate publication time: ${name}`)
-              }
-              return { name, published: new Date(published).toISOString() }
-            })))
-          }
-          rows.sort((a, b) => a.published.localeCompare(b.published) || a.name.localeCompare(b.name))
-          for (const row of rows) console.log(`${row.name}@${process.env.DSH_RELEASE}: ${row.published}`)
-          console.log(`Latest candidate publication (${rows.length} packages): ${rows.at(-1).published}`)
-          NODE
+          test "$(pnpm config get minimumReleaseAge)" = 0
+          test "$(cd dsh-upstream && pnpm config get minimumReleaseAge)" = 0
       - run: pnpm install --frozen-lockfile
+      - name: Verify deployment baseline before Core fixtures
+        run: pnpm verify:baseline
       - name: Install Core pi-ai closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-llm-pi-ai...'
@@ -100,22 +82,31 @@ jobs:
       - name: Install subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
+      - name: Install native subagent model invocation verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop-testkit...' --filter '@deepseek-ai/dsh-tool-subagent...' --filter '@deepseek-ai/dsh-subagent-spawn-in-process...' --filter '@deepseek-ai/dsh-session-persistence-jsonl...'
       - name: Install image-offload verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-compaction-image-offload...'
       - name: Install tagged search verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
+      - name: Install native and PTC tool executor verification closures
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-executor-native...' --filter '@deepseek-ai/dsh-tool-executor-ptc...'
       - name: Install native account persistence verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-credentials-local...' --filter '@deepseek-ai/dsh-app-boot...' --filter '@deepseek-ai/dsh-config-editor...' --filter '@deepseek-ai/dsh-settings...' --filter '@deepseek-ai/dsh-authorization...'
       - name: Install native diagnostic storage verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'
-      - name: Prepare exact DSH 0.2.1-rc.3 tagged-source runtime verification
+      - name: Install the official pinned system addon outside both source trees
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/copilot-native-addon" --ignore-scripts --no-save --no-audit --fund=false --registry=https://registry.npmjs.org @deepseek-ai/node-addon-system@0.1.2
+      - name: Prepare exact DSH 0.2.2-rc.3 tagged-source runtime verification
         shell: bash
         run: |
-          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.release }}"
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.release }}" --native-addon "$RUNNER_TEMP/copilot-native-addon"
       - name: Build plugin Client for pinned Core selector regression
         run: pnpm build
       - name: Exercise actual DSH 0.2 runtime without building or patching Core
@@ -123,6 +114,7 @@ jobs:
         run: |
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts" --reporter=default --reporter=json --outputFile "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
           node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==28||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 28 native reviewer tests, none skipped'); console.log('Verified 28 executed tagged-source reviewer tests')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
+          node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('subagent-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==1||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected native subagent invocation test to execute without skips'); console.log('Verified native subagent invocation test')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
       - run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts
@@ -140,6 +132,9 @@ jobs:
 
   published-adapter:
     name: Published adapter (${{ matrix.os }})
+    # The isolated npm fixture has no project workspace configuration.
+    env:
+      PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'
     strategy:
       fail-fast: false
       matrix:
@@ -158,21 +153,22 @@ jobs:
       - name: Prepare an isolated plugin fixture for published Core APIs
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-rc.3 --candidate true
+          node scripts/verify-published-core.mjs prepare --root . --target "$RUNNER_TEMP/copilot-published-core" --release 0.2.2-rc.3 --candidate true
       - name: Install unchanged public dependency artifacts
         shell: bash
         run: |
           cd "$RUNNER_TEMP/copilot-published-core"
+          test "$(pnpm config get minimumReleaseAge)" = 0
           pnpm install --ignore-scripts --strict-peer-dependencies --registry=https://registry.npmjs.org
       - name: Verify actual dependency paths and class identities
         shell: bash
         run: |
-          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release 0.2.1-rc.3 --candidate true
+          node scripts/verify-published-core.mjs inspect --root "$RUNNER_TEMP/copilot-published-core" --release 0.2.2-rc.3 --candidate true
       - name: Typecheck and exercise the published native adapter
         shell: bash
         env:
           DSH_CORE_EVIDENCE: published-artifact-runtime
-          DSH_PUBLISHED_CORE_RELEASE: 0.2.1-rc.3
+          DSH_PUBLISHED_CORE_RELEASE: 0.2.2-rc.3
         run: |
           cd "$RUNNER_TEMP/copilot-published-core"
           node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit

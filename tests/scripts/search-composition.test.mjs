@@ -28,6 +28,7 @@ for (const [label, entries, code] of [
   ['dynamic disabled', [{ ...stock(), disabled: { __js: 'never execute this' } }], 'WEB_DISABLED_OR_DYNAMIC'],
   ['dynamic web config', [{ ...stock(), config: { __js: 'never execute this' } }], 'WEB_CONFIG_REQUIRES_REVIEW'],
   ['dynamic selection', [{ ...stock(), config: { searchProvider: { __js: 'never execute' } } }], 'WEB_CONFIG_REQUIRES_REVIEW'],
+  ['retired Copilot provider', [{ ...stock(), config: { searchProvider: 'github-copilot-hosted' } }], 'LEGACY_COPILOT_SEARCH_PROVIDER'],
   ['named realm', [{ ...stock(), isolate: { web: 'existing' } }], 'PREEXISTING_WEB_ISOLATION'],
   ['private realm', [{ ...stock(), isolate: { web: true } }], 'PREEXISTING_WEB_ISOLATION'],
   ['unrelated isolate key', [{ ...stock(), isolate: { credentials: 'private' } }], 'PREEXISTING_WEB_ISOLATION'],
@@ -41,7 +42,7 @@ for (const [label, entries, code] of [
   ['web extra dependency', [{ ...stock(), inject: ['never-provided'] }], 'WEB_ENTRY_REQUIRES_REVIEW'],
   ['web intercept', [{ ...stock(), intercept: { web: 'custom' } }], 'WEB_ENTRY_REQUIRES_REVIEW'],
 ]) {
-  test(`rejects ${label} before routing overlay installation`, () => {
+  test(`reports ${label} before native web migration`, () => {
     const before = JSON.stringify(entries)
     const report = checkSearchComposition(entries)
     assert.equal(report.supported, false)
@@ -125,25 +126,24 @@ test('supports first install without requiring the Copilot package to be present
 })
 
 for (const layer of ['user', 'home', 'extra']) {
-  test(`rejects ${layer} resetting the candidate web realm to an empty map`, async () => {
+  test(`preserves ${layer} setting native web isolation to an empty map`, async () => {
     const reset = [{ id: 'web', isolate: {} }]
     const actual = composeEntries([[{ insert: [stock()] }], candidate(), reset])
     assert.deepEqual(actual.find(row => row.id === 'web').isolate, {})
     const { api } = nativeReaders({ [layer]: reset })
     const result = await inspectProfileSearchComposition({ ...options, patches: ['/extra.yml'] }, api)
-    assert.equal(result.supported, false)
-    assert.ok(result.reasons.includes('CANDIDATE_ROUTING_NOT_VIABLE'))
+    assert.equal(result.supported, true)
   })
 
-  test(`rejects web first inserted by the late ${layer} layer`, async () => {
+  test(`accepts native web first inserted by the late ${layer} layer`, async () => {
     const { api } = nativeReaders({ base: [], [layer]: [{ insert: [stock()] }] })
-    assert.equal((await inspectProfileSearchComposition({ ...options, patches: ['/extra.yml'] }, api)).supported, false)
+    assert.equal((await inspectProfileSearchComposition({ ...options, patches: ['/extra.yml'] }, api)).supported, true)
   })
 }
 
-test('rejects a web bundle ordered after the Copilot guard', async () => {
+test('allows a native web bundle ordered after the Copilot account entry', async () => {
   const { api } = nativeReaders({ bundles: ['dsh-github-copilot', 'base'] })
-  assert.equal((await inspectProfileSearchComposition(options, api)).supported, false)
+  assert.equal((await inspectProfileSearchComposition(options, api)).supported, true)
 })
 
 test('rejects duplicate Copilot layers and ambiguous account entries', async () => {
@@ -160,14 +160,14 @@ test('rejects duplicate Copilot layers and ambiguous account entries', async () 
   }
 })
 
-test('rejects late changes that disable or isolate the candidate bridge, facade or account', async () => {
+test('rejects stale routing patches and changes that disable or isolate the account', async () => {
   const invalid = ['github-copilot-web-delegate', 'github-copilot-routed-web', 'github-copilot'].flatMap(id => [
     { id, disabled: true },
     { id, isolate: { githubCopilotOriginalWeb: 'private' } },
     { id, group: true, config: [] },
     { id, inject: ['never-provided'] },
   ])
-  invalid.push({ id: 'github-copilot-web-delegate', isolate: {} })
+  invalid.push({ id: 'web', isolate: { web: 'github-copilot-original-web' } })
   invalid.push({ id: 'github-copilot', config: { __jsExpr: 'never execute' } })
   for (const patch of invalid) {
     const { api } = nativeReaders({ user: [patch] })
@@ -185,7 +185,7 @@ test('preserves supported stock provider overrides and does not mutate parsed in
   assert.equal(JSON.stringify(user), before)
   const actual = composeEntries([[{ insert: [stock()] }], candidate(), user])
   assert.deepEqual(actual.find(row => row.id === 'web').config, user[0].config)
-  assert.deepEqual(actual.find(row => row.id === 'web').isolate, { web: 'github-copilot-original-web' })
+  assert.equal(actual.find(row => row.id === 'web').isolate, undefined)
 })
 
 test('real public parsers validate candidate layers and preserve every input file', async () => {
@@ -207,7 +207,7 @@ test('real public parsers validate candidate layers and preserve every input fil
     const input = { profileDir, home: root, installAnchor: fileURLToPath(new URL('../../package.json', import.meta.url)), patches: [join(root, 'launcher.yml')] }
     assert.equal((await inspectProfileSearchComposition(input)).supported, true)
     for (const file of [join(profileDir, 'cordis.patch.yml'), join(root, 'cordis.patch.yml'), join(root, 'launcher.yml')]) {
-      const content = '- id: web\n  isolate: {}\n'
+      const content = '- id: web\n  isolate:\n    web: github-copilot-original-web\n'
       await writeFile(file, content)
       assert.equal((await inspectProfileSearchComposition(input)).supported, false)
       assert.equal(await readFile(file, 'utf8'), content)

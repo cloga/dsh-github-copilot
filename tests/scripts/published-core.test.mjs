@@ -121,6 +121,26 @@ test('pins rc.3 source and framework artifacts without widening other compatibil
   assert.equal(inspected.classIdentity, true)
 }))
 
+test('requires the current candidate pi-ai and framework versions without substituting them', async () => withSource(async ({ root, target, manifest }) => {
+  const release = '0.2.2-rc.3'
+  assert.deepEqual(CANDIDATE_CORE_RELEASES[release], {
+    commit: '38a6a5c965aa99ab525161efb7cc5cf1fe62fced', piAi: '1.3.0',
+    cordis: '4.1.0', loader: '1.1.0', schemastery: '3.19.0', zod: '4.6.6',
+  })
+  await assert.rejects(preparePublishedCoreFixture({ root, target, release, candidate: true }), /exact own pi-ai 1\.3\.0/)
+  manifest.dependencies['@earendil-works/pi-ai'] = '1.3.0'
+  await writeFile(join(root, 'package.json'), JSON.stringify(manifest))
+  const report = await preparePublishedCoreFixture({ root, target, release, candidate: true })
+  const output = JSON.parse(await readFile(join(target, 'package.json'), 'utf8'))
+  assert.equal(report.commit, CANDIDATE_CORE_RELEASES[release].commit)
+  assert.equal(output.dependencies['@earendil-works/pi-ai'], '1.3.0')
+  assert.equal(output.dependencies.zod, '4.6.6')
+  assert.equal(output.devDependencies['@deepseek-ai/cordis-plugin-loader'], '1.1.0')
+  await installedFixture(target, release)
+  const inspected = await inspectPublishedCoreFixture({ root: target, release, candidate: true })
+  assert.equal(inspected.classIdentity, true)
+}))
+
 test('candidate mode refuses floating or unreviewed releases before target creation', async () => withSource(async ({ root, target, base }) => {
   await assert.rejects(preparePublishedCoreFixture({ root, target, release: '0.2.1-rc.3' }), /unsupported published Core/)
   for (const release of ['latest', '0.2.1-alpha.2', '0.2.1-alpha.4', '0.2.1-alpha.6', '0.2.0-rc.2']) {
@@ -187,7 +207,7 @@ async function installedFixture(root, targetRelease = release) {
   await mockPackage(root, '@deepseek-ai/dsh-llm', targetRelease, 'export class LlmAdapter {}; export default class LlmRuntime {}')
   await mockPackage(root, '@deepseek-ai/dsh-llm-pi-ai', targetRelease,
     'import {LlmAdapter} from "@deepseek-ai/dsh-llm"; export class PiAiAdapter extends LlmAdapter {prepareCall(){}}; export function Config(){}')
-  await mockPackage(root, '@earendil-works/pi-ai', '1.1.0')
+  await mockPackage(root, '@earendil-works/pi-ai', target.piAi)
 }
 
 test('inspects real public class identity and paths without claiming route execution', async () => withSource(async ({ root, target }) => {

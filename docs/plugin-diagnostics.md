@@ -1,4 +1,4 @@
-# Local diagnostics: account, compaction, Auto allocation and requests
+# Local diagnostics: account, compaction and requests
 
 Roadmap: [#347](https://github.com/cloga/dsh-github-copilot/issues/347).
 Phase 0: [#354](https://github.com/cloga/dsh-github-copilot/issues/354).
@@ -15,60 +15,36 @@ No historical failure rate is reconstructed.
 
 After installing and loading the published build, open the plugin's detail
 settings page and find **Local diagnostics**. On hosts without that page the
-same additive control accompanies the existing Models/footer or settings-section
-search-routing fallback. **Read status** must show ready storage; choose
+same additive control appears in the Models/footer or settings-section options
+fallback. **Read status** must show ready storage; choose
 **Enable local collection** to persist only `github-copilot.diagnosticsEnabled`
 through native path-level Settings CAS and confirm readback. This enables
 collection **and bounded local aggregate persistence**, not exports or uploads.
 The normal installation does not change this default-off setting.
 
 The dedicated Local diagnostics region opens with independently collapsed
-**Auto allocation observations**, **Physical request observations**,
-**Credential change observations**, and **Account and compaction observations**.
-Summaries retain compact status/count information; expanding a group neither
-enables collection nor performs another status/request call. The Auto group contains
-the daily table: UTC date, policy, model,
-decision cohort, opportunities, expected selections, selected counts and no-fit
-decisions. Compare expected and selected counts only within matching cohorts;
-these aggregates do not establish execution, quality or billing. Account and
-compaction summaries, collection controls, and detailed data-scope/limits/JSON
+**Physical request observations**, **Credential change observations**, and,
+when present, **Account and compaction observations**. Summaries retain compact
+status/count information; expanding a group neither enables collection nor
+performs another status/request call. Account and compaction summaries,
+collection controls, and detailed data-scope/limits/JSON
 guidance are in collapsed disclosures. A failed operation remains visible outside
 the collapsed controls; expand Collection controls to find **Read status**.
 No failed operation is automatically replayed.
 Clearing aggregates still requires its separate confirmation.
 
 Use the plugin normally: account selection, Identity/Checking and compaction
-will contribute independent Client/Host populations. Auto model allocation has a
-separate **Enable Auto allocation observation** control and its own hidden,
-volatile `github-copilot.autoAllocationDiagnosticsEnabled` path-level CAS.
-It can be enabled without collecting the other diagnostics. Auto decisions
-contribute daily, profile-local allocation aggregates to the same storage
-domain while this switch is enabled. These contain plugin/policy version, model
-ID, target and selected category, task-demand/assessment-source strata,
-high-cost/continuity flags, effective weight, candidate opportunities,
-conditional expected selections, actual selections and no-fit counts. They do
-not contain Session/turn identifiers, prompts, outcomes, execution or billing
-attribution. Aggregate rows are capped at 1,024, retained for 14 days and
-included in the existing 2 MiB snapshot limit; expired, dropped, truncated,
-saturated and restart evidence remains explicit. There is no per-turn export,
-automatic tuning or upload. The aggregate controls can be paused independently.
-New rows also distinguish fixed assessment outcomes: local-known/local-unknown,
-semantic-known/semantic-unknown, disabled, unavailable, timeout, failed,
-invalid-result and context-omitted. Missing legacy outcomes remain **not recorded**,
-never reconstructed from demand/source. Count decisions using Selected plus
-No-fit, not candidate opportunities (one decision may have many candidates).
-These outcomes explain classifier settlement, not network root cause or model
-execution; no error bodies, signals, prompts or Session/turn IDs are added.
-Classification and the conservative omitted-context guard stay unchanged.
-The separately configured assessment budget defaults to 30 seconds as of alpha.7;
-producer versions separate this trial from the earlier eight-second budget.
-Older strict plugin versions may reject new snapshot fields on
-rollback; do not delete or silently rewrite retained evidence to make them parse.
+contribute independent Client/Host populations. The retired plugin-owned Auto
+allocator no longer produces observations. Its existing setting is not rewritten,
+and retained historical aggregates remain available in the explicit JSON export
+under their existing retention and storage limits; they are not evidence of
+execution, quality or billing. Older strict plugin versions may reject new
+snapshot fields on rollback; do not delete or silently rewrite retained evidence.
 The separate **Enable request observations** control uses the hidden volatile
 `github-copilot.requestDiagnosticsEnabled` leaf with path-level CAS and exact
 readback. Existing aggregate consent never enables request observations.
-**Clear local diagnostics** clears all three populations, including request
-observations, without changing the three enabled/paused controls.
+**Clear local diagnostics** also clears retained historical Auto aggregates and
+request observations, without changing saved collection settings.
 
 ### Credential-change decisions (#402)
 

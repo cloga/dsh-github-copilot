@@ -21,16 +21,16 @@ describe('local diagnostics control', () => {
     const root = createRoot(element)
     try {
       await act(async () => root.render(createElement(DiagnosticsCard, { remote })))
-      for (const label of ['Auto allocation observations', 'Physical request observations',
-        'Credential change observations', 'Account and compaction observations']) {
+      for (const label of ['Physical request observations', 'Credential change observations', 'Account and compaction observations']) {
         const summary = Array.from(element.querySelectorAll('summary')).find(node => node.textContent?.startsWith(label))
         expect(summary, label).toBeDefined()
         expect(summary?.parentElement?.hasAttribute('open')).toBe(false)
       }
-      const auto = Array.from(element.querySelectorAll('summary')).find(node => node.textContent?.startsWith('Auto allocation observations'))!
-      await act(async () => auto.click())
-      expect(auto.parentElement?.hasAttribute('open')).toBe(true)
+      const requests = Array.from(element.querySelectorAll('summary')).find(node => node.textContent?.startsWith('Physical request observations'))!
+      await act(async () => requests.click())
+      expect(requests.parentElement?.hasAttribute('open')).toBe(true)
       expect(element.querySelectorAll('details[open]')).toHaveLength(1)
+      expect(element.textContent).not.toContain('Auto allocation observation')
       expect(remote.get).toHaveBeenCalledTimes(1)
       expect(remote.setEnabled).not.toHaveBeenCalled()
       expect(remote.setAutoAllocationEnabled).not.toHaveBeenCalled()
@@ -103,14 +103,13 @@ describe('local diagnostics control', () => {
       const controls = Array.from(element.querySelectorAll('summary')).find(node => node.textContent === 'Collection controls')
       expect(controls?.parentElement?.hasAttribute('open')).toBe(false)
       await act(async () => { controls?.click() })
-      await click('Enable Auto allocation observation')
-      expect(remote.setAutoAllocationEnabled).toHaveBeenCalledWith(true)
+      expect(remote.setAutoAllocationEnabled).not.toHaveBeenCalled()
       expect(remote.setEnabled).not.toHaveBeenCalled()
       expect(element.textContent).toContain('Local collection paused')
       await click('Enable local collection')
       expect(remote.setEnabled).toHaveBeenCalledWith(true)
       expect(element.textContent).toContain('Local collection enabled')
-      expect(element.textContent).toContain('Auto allocation observations')
+      expect(element.textContent).not.toContain('Enable Auto allocation observation')
       await click('Clear local diagnostics')
       expect(remote.clear).not.toHaveBeenCalled()
       await click('Cancel')
@@ -137,14 +136,11 @@ describe('local diagnostics control', () => {
     try {
       await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
       expect(element.textContent).toContain('storage-unavailable')
-      expect(element.textContent).toContain('Observation status unavailable')
-      expect(element.textContent).toContain('retained Auto observation status is unknown')
-      expect(element.textContent).not.toContain('No observations collected')
-      expect(element.textContent).not.toContain('No retained observations yet')
+      expect(element.textContent).toContain('storage-unavailable')
       expect(Array.from(element.querySelectorAll('button')).find(node => node.textContent === 'Enable local collection')?.disabled).toBe(true)
     } finally { await act(async () => root.unmount()) }
   })
-  it('does not treat a missing Auto snapshot as an empty observation set', async () => {
+  it('does not expose retired Auto collection controls when legacy observations are absent', async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     const snapshot = emptyDiagnostics()
     delete snapshot.autoAllocation
@@ -157,13 +153,12 @@ describe('local diagnostics control', () => {
     const root = createRoot(element)
     try {
       await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
-      expect(element.textContent).toContain('Auto observations unavailable in this snapshot')
-      expect(element.textContent).toContain('Auto allocation aggregates are unavailable in this snapshot')
-      expect(element.textContent).not.toContain('No observations collected')
-      expect(element.textContent).not.toContain('No retained observations yet')
+      expect(element.textContent).not.toContain('Auto allocation observations')
+      expect(element.textContent).not.toContain('Enable Auto allocation observation')
+      expect(remote.setAutoAllocationEnabled).not.toHaveBeenCalled()
     } finally { await act(async () => root.unmount()) }
   })
-  it('identifies retained Auto aggregate scope and explicit coverage gaps', async () => {
+  it('preserves historical Auto aggregates in the explicit diagnostic export without offering new collection', async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     const snapshot = emptyDiagnostics()
     const observedDay = Math.floor(1_800_000_000_000 / (24 * 60 * 60 * 1000)) * (24 * 60 * 60 * 1000)
@@ -191,23 +186,13 @@ describe('local diagnostics control', () => {
     const root = createRoot(element)
     try {
       await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
-      expect(element.textContent).toContain('Auto allocation observations')
-      expect(element.textContent).toContain('4 candidate opportunities')
-      expect(element.textContent).toContain('no Session or turn IDs')
-      const table = element.querySelector('table')
-      expect(table?.textContent).toContain('fixture-model')
-      expect(table?.textContent).toContain('assessment: semantic-known')
-      expect(table?.textContent).toContain('assessment: not recorded')
-      expect(element.textContent).toContain('sum Selected or No-fit')
-      expect(table?.textContent).toContain('4')
-      expect(table?.textContent).toContain('0.800')
-      expect(table?.textContent).toContain('1')
-      expect(table?.textContent).toContain('2')
-      expect(Array.from(element.querySelectorAll('th')).map(node => node.textContent)).toEqual([
-        'Date (UTC)', 'Policy', 'Model', 'Cohort', 'Opportunities', 'Expected', 'Selected', 'No-fit',
-      ])
-      expect(Array.from(element.querySelectorAll('summary')).find(node => node.textContent === 'Collection controls')
-        ?.parentElement?.hasAttribute('open')).toBe(false)
+      expect(element.textContent).not.toContain('Auto allocation observations')
+      expect(element.textContent).not.toContain('Enable Auto allocation observation')
+      const prepare = Array.from(element.querySelectorAll('button')).find(node => node.textContent === 'Prepare current JSON')!
+      await act(async () => prepare.click())
+      expect(element.querySelector('textarea')?.value).toContain('"policyVersion": "high-cost-v1"')
+      expect(element.querySelector('textarea')?.value).toContain('"modelId": "fixture-model"')
+      expect(remote.setAutoAllocationEnabled).not.toHaveBeenCalled()
     } finally { await act(async () => root.unmount()) }
   })
   it('keeps Read status available after a failed initial status read', async () => {

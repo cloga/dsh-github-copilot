@@ -19,12 +19,9 @@ test('lifecycle notice is version-neutral, conditional guidance rather than runt
   assert.doesNotMatch(notice, /Desktop \d|After disabling, removing, or upgrading this plugin/)
 })
 
-test('README guidance links retain the stable evidence path and separate historical observations', async () => {
-  for (const name of ['README.md', 'README.zh.md']) {
-    const readme = await readFile(new URL(`../../${name}`, import.meta.url), 'utf8')
-    assert.match(readme, /\.\/docs\/web-lifecycle-rc2\.md#desktop-guidance/)
-  }
+test('historical lifecycle guidance separates prior observations from current behavior', async () => {
   const evidence = await readFile(new URL('../../docs/web-lifecycle-rc2.md', import.meta.url), 'utf8')
+  assert.match(evidence, /Historical evidence/)
   assert.match(evidence, /## Desktop guidance/)
   assert.match(evidence, /## Historical rc\.2 Desktop disable observation/)
   assert.match(evidence, /does not detect the installed Desktop version/)
