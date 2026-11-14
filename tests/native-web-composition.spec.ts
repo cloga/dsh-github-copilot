@@ -44,6 +44,7 @@ describe('native web ownership', () => {
     const ctx = new Context()
     contexts.push(ctx)
     const mutate = vi.fn(async () => { throw new Error('unexpected fixture settings mutation') })
+    const pluginSettings = { continuationDefaultHistory: [{ enabled: true, changedAt: 1 }] }
     await ctx.plugin({ apply(owner) {
       new AgentRegistry(owner)
       owner.plugin(SystemPrompt, {})
@@ -55,8 +56,8 @@ describe('native web ownership', () => {
         deleteRecord: async () => { throw new Error('unexpected fixture credential deletion') },
       })
       owner.provide('settings', {
-        get: (namespace: string) => namespace === 'github-copilot' ? {} : undefined,
-        describe: () => [{ ns: 'github-copilot', revision: 1, value: {} }],
+        get: (namespace: string) => namespace === 'github-copilot' ? pluginSettings : undefined,
+        describe: () => [{ ns: 'github-copilot', revision: 1, value: pluginSettings }],
         mutate,
       })
       owner.provide('agentDefaultModel', {
