@@ -93,7 +93,7 @@ async function accountCall(api: AccountModelApi, effort?: string, headers?: Reco
     ...compression === undefined ? {} : { responsesRequestCompression: compression.enabled } }
   const { provider } = createAccountProvider([item], guarded, baseURL, classifierReasoningOff)
   const profile: ResolvedPiAiProviderProfile = { provider: PREVIEW, displayName: 'Account models', piProvider: provider,
-    streamIdleTimeoutMs: 300_000, maxRequestImageBytes: 20_971_520,
+    streamIdleTimeoutMs: 300_000, maxRequestImageBytes: 20_971_520, maxRequestImages: 50, imageOffloadCountQuantum: 10,
     requestImagePixelBudget: 4_194_304, requestImageMaxBytes: 1_048_576,
     retryPolicy: resolveRetryPolicy(undefined, 'fixture'), configuredMaxTokens: new Map(),
     modelErrors: new Map(),

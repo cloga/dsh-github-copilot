@@ -377,10 +377,14 @@ function resolvedProfile(provider: ReturnType<typeof createAccountProvider>['pro
     }
     return value
   }
+  const maxRequestImages = positive(parsed.maxRequestImages)
   return Object.freeze({
     ...config,
     provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, displayName: 'GitHub Copilot', piProvider: provider,
     streamIdleTimeoutMs: positive(parsed.streamIdleTimeoutMs), maxRequestImageBytes: positive(parsed.maxRequestImageBytes),
+    maxRequestImages,
+    // The pinned Core's profile resolver defaults the quantum to ten, capped by the image count.
+    imageOffloadCountQuantum: Math.min(10, maxRequestImages),
     requestImagePixelBudget: positive(parsed.requestImagePixelBudget), requestImageMaxBytes: positive(parsed.requestImageMaxBytes),
     retryPolicy: resolveRetryPolicy(config.retryPolicy, 'github-copilot-preview'), configuredMaxTokens: new Map<string, number>(),
     // Core alpha2 reads this map for every model. Account descriptors are already

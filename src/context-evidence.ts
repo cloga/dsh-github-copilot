@@ -31,11 +31,11 @@ export const ContextEvidenceSchema = z.object({
 export type ContextEvidence = z.infer<typeof ContextEvidenceSchema>
 // Registry parsing is unary; optional Zod options/augmentations are copy-local.
 type ContextEvidenceParser = {
-  parse(value: unknown): ReturnType<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE>['stateSchema']['parse']>
+  parse(value: unknown): ReturnType<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE, ContextEvidence>['stateSchema']['parse']>
 }
-type ContextEvidenceDefinition = Omit<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE>, 'stateSchema' | 'wire'> & {
+type ContextEvidenceDefinition = Omit<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE, ContextEvidence>, 'stateSchema' | 'wire'> & {
   stateSchema: typeof ContextEvidenceSchema & ContextEvidenceParser
-  wire: Omit<NonNullable<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE>['wire']>, 'viewSchema'> & {
+  wire: Omit<NonNullable<ProjectionDefinition<typeof COPILOT_CONTEXT_EVIDENCE, ContextEvidence>['wire']>, 'viewSchema'> & {
     viewSchema: typeof ContextEvidenceSchema & ContextEvidenceParser
   }
 }

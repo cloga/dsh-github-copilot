@@ -78,6 +78,12 @@ if (['0.2.1-rc.3', '0.2.2-rc.3'].includes(baseline.release)) {
     'get(): VolatileSnapshot<T>',
   ])
 }
+if (baseline.release === '0.2.2-rc.3') {
+  await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', [
+    'export const DEFAULT_IMAGE_OFFLOAD_COUNT_QUANTUM = 10',
+    'source.imageOffloadCountQuantum ?? Math.min(DEFAULT_IMAGE_OFFLOAD_COUNT_QUANTUM, maxRequestImages)',
+  ])
+}
 if (baseline.providerHeaders === 'fetch-validated-discovery') {
   await assertMarkers('packages/llm/llm-pi-ai/src/config.ts', [
     'assertValidHeaders',

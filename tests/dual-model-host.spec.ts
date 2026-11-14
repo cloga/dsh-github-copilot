@@ -317,10 +317,12 @@ describe('optional dedicated planner/executor Host', () => {
     expect(JSON.stringify(result)).not.toContain('private account detail')
     expect(f.subagents.startContinuable).not.toHaveBeenCalled()
   })
-  it('assembles planner instructions and can restore them before the first post-HMR model call', async () => {
+  it('restores planner restrictions before collecting tools for the next turn', async () => {
     const f = await fixture(); const { sessionId } = await f.seedExisting(), parent = f.agentsMap.get(sessionId)!
     f.ctx.emit(scopeTarget(parent as unknown as CoreAgent, parent), 'agent/disposed', { agent: parent as unknown as CoreAgent })
     await Promise.resolve(); await Promise.resolve()
+    await expect(f.systemPrompt.assemble({ scope: parent })).rejects.toMatchObject({ details: { reason: 'DUAL_MODEL_UNSUPPORTED' } })
+    f.ctx.emit('session/event', parent.session, { type: 'turn/start', seq: 2, time: 1, data: { turn: 1 } })
     const result = await f.systemPrompt.assemble({ scope: parent })
     expect(result.variables).toMatchObject({ provider: PROVIDER, model: 'plan-A' })
     expect(result.sections.find(section => section.name === 'github-copilot:dual-model-role')?.text).toContain('independently review')

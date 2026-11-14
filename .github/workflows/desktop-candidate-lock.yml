@@ -57,7 +57,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm typecheck:tests
       - name: Exercise model and lifecycle regressions
-        run: pnpm exec vitest run tests/compatibility.spec.ts tests/loader-composition.spec.ts tests/client.spec.ts tests/client-search-inject.spec.ts tests/preview-route.spec.ts tests/preview-provider.spec.ts tests/published-core.spec.ts tests/copilot-usage-host.spec.ts tests/copilot-usage-card.spec.ts tests/copilot-usage-normalize.spec.ts tests/copilot-usage-remote.spec.ts tests/copilot-usage-ui.spec.ts
+        run: pnpm exec vitest run tests/compatibility.spec.ts tests/loader-composition.spec.ts tests/client.spec.ts tests/client-search-inject.spec.ts tests/preview-route.spec.ts tests/preview-provider.spec.ts tests/copilot-stream-adapter.spec.ts tests/dual-model-host.spec.ts tests/published-core.spec.ts tests/copilot-usage-host.spec.ts tests/copilot-usage-card.spec.ts tests/copilot-usage-normalize.spec.ts tests/copilot-usage-remote.spec.ts tests/copilot-usage-ui.spec.ts
   fixture-tooling:
     runs-on: ubuntu-latest
     steps:
