@@ -23,6 +23,8 @@ patch, rebuild, or replace DSH Core or dependency artifacts.
 - This plugin connects GitHub Copilot authorization, discovers models and
   capabilities from the authorized account, and composes the published native
   adapter with only verified Copilot-specific compatibility handling.
+- GitHub Copilot account quota remains available; it is separate from DSH's
+  native token Usage.
 - Native subagents selecting and actually invoking account-available Copilot
   models are a required compatibility goal. A picker entry alone is not
   sufficient evidence. Unsupported or incomplete endpoint/capability metadata
@@ -32,8 +34,9 @@ patch, rebuild, or replace DSH Core or dependency artifacts.
   Copilot request through another provider.
 
 The candidate still mounts legacy planner/executor compatibility and optional
-recovery and analytics; their safe retirement is not yet complete. It does not
-provide a separate subagent runtime.
+recovery and analytics. Useful enhancements are retained; only demonstrably
+unnecessary functionality is a retirement target. It does not provide a
+separate subagent runtime.
 
 The intended environment is a normally configured DSH app with its usual
 DeepSeek-backed features, plus GitHub Copilot authorization for Copilot models.

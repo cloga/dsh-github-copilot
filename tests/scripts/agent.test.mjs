@@ -258,14 +258,19 @@ test('every task plan carries the plugin-only implementation boundary', async ()
   }
 })
 
-test('contract validation rejects plugin-owned parent-child policy', async () => {
+test('contract validation preserves quota and rejects plugin-owned parent-child policy', async () => {
   const root = await mkdtemp(join(tmpdir(), 'copilot-native-child-policy-'))
   try {
     const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
     await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
-    for (const owner of [undefined, 'plugin']) {
+    for (const mutate of [
+      contract => { contract.boundaries.confirmedProductScope.parentChildPolicyOwner = undefined },
+      contract => { contract.boundaries.confirmedProductScope.parentChildPolicyOwner = 'plugin' },
+      contract => { contract.boundaries.confirmedProductScope.preserve = contract.boundaries.confirmedProductScope.preserve.filter(value => value !== 'copilot-account-quota') },
+      contract => { contract.boundaries.confirmedProductScope.enhancementPolicy = 'remove-all' },
+    ]) {
       const contract = structuredClone(original)
-      contract.boundaries.confirmedProductScope.parentChildPolicyOwner = owner
+      mutate(contract)
       await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
       await assert.rejects(verifyAgentContract(root), /confirmed Copilot-only model integration scope/)
     }

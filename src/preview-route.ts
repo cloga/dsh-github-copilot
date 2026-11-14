@@ -43,6 +43,7 @@ import type { CopilotAccountBinding, CopilotAccountLease } from './copilot-accou
 import { COPILOT_ACCOUNTS_DIAGNOSTICS, COPILOT_ACCOUNTS_MAX } from './copilot-accounts-types.ts'
 import type {} from './session-accounts-host.ts'
 
+type AccountModelSettings = Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds'>
 /** Safe request knobs; identities, model tables, endpoints and credentials are not configurable. */
 export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   'reasoning' | 'cacheRetention' | 'transport' | 'timeoutMs' | 'websocketConnectTimeoutMs'
@@ -53,7 +54,7 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
     readonly chatRequestSettings?: () => Pick<InlineConfig,
       'chatStreamIdleTimeoutMs' | 'chatStreamLiveness' | 'chatMaxRequestImageBytes'
       | 'responsesRequestCompression' | 'responsesOmitTemperature'>
-    readonly accountModelSettings?: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel' | 'autoAllocationEvidence'>
+    readonly accountModelSettings?: () => AccountModelSettings
     readonly requestBudget?: Partial<RequestBudgetPolicy>
     readonly requestBudgetSettings?: () => Partial<RequestBudgetPolicy>
   }
@@ -605,7 +606,7 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
   publish: () => void) {
   const { accountModelTtlMs, accountModelFailureCooldownMs, accountModelSettings,
     requestBudget, requestBudgetSettings, streamLiveness, chatRequestSettings, ...requestConfig } = config
-  const cacheSettings: () => Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'autoSemanticAssessment' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel' | 'autoAllocationEvidence'>
+  const cacheSettings: () => AccountModelSettings
     = accountModelSettings ?? (() => ({ accountModelTtlMs, accountModelFailureCooldownMs, excludedModelIds: [] }))
   const budgetSettings = requestBudgetSettings ?? (() => requestBudget ?? {})
   const excludedModels = () => excludedModelSet(cacheSettings().excludedModelIds)

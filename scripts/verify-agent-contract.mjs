@@ -30,12 +30,14 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && productScope.desktopCandidate === '0.2.2-rc.3'
     && productScope.desktopCandidateQualified === false
     && JSON.stringify(productScope.retirePluginOwned) === JSON.stringify([
-      'auto', 'parent-model-follow', 'hosted-search-routing', 'redundant-recovery-and-analytics',
+      'auto', 'parent-model-follow', 'hosted-search-routing',
     ])
     && productScope.preserve.includes('native-copilot-oauth')
     && productScope.preserve.includes('account-isolation')
     && productScope.preserve.includes('account-advertised-model-capabilities')
+    && productScope.preserve.includes('copilot-account-quota')
     && productScope.preserve.includes('existing-history-and-settings-compatibility')
+    && productScope.enhancementPolicy === 'preserve-useful-remove-only-demonstrably-redundant'
     && productScope.nativeModelCapabilityCompatibility === 'best-effort-account-and-metadata-driven-with-exact-release-tests'
     && productScope.subagentSelectionAndInvocationRequired === true
     && productScope.parentChildPolicyOwner === 'dsh-native-only'

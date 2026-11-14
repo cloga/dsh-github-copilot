@@ -53,11 +53,13 @@ routing. Verify authentication and request isolation through the same provider
 contract used by ordinary native calls. A missing public seam is a concrete
 compatibility limit to report, not permission to invent a parallel relationship.
 
-Retire plugin-owned Auto and parent-follow policy/UI, custom hosted-search
-execution/routing, and optional recovery/analytics surfaces that duplicate DSH
-ownership, preserving bounded compatibility for existing selections and
-histories where needed. Never delete or rewrite user settings, accounts, or
-history, silently substitute a model, or claim a native replacement until the
+Retire plugin-owned Auto and parent-follow policy/UI and custom hosted-search
+execution/routing, preserving bounded compatibility for existing selections and
+histories where needed. Retain GitHub Copilot account quota and useful
+enhancements; remove other functionality only when it is demonstrably redundant
+or unnecessary, not merely because it extends the basic model route. Never delete
+or rewrite user settings, accounts, or history, silently substitute a model, or
+claim a native replacement until the
 exact public API and behavior are verified. Preserve necessary Copilot
 authentication, account/turn isolation, request correctness, and actionable
 diagnostics. HydraFusion/Max are explicitly out of scope (#441).
