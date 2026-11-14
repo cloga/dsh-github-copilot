@@ -647,10 +647,12 @@
     {
       "id": "native-subagent-copilot-invocation",
       "required": true,
-      "evidenceScope": "single-synthetic-account-tagged-source-child-invocation-and-separate-session-account-unit-tests-not-live-or-multi-account-child-isolation",
+      "evidenceScope": "single-synthetic-account-tagged-source-production-host-child-invocation-and-separate-session-account-unit-tests-not-live-or-multi-account-child-isolation",
       "sourceMarkers": [
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/subagent-copilot-core.fixture.ts"},
         {"file": ".github/workflows/ci.yml", "marker": "expected native subagent invocation test to execute without skips"},
+        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "await ctx.plugin(GitHubCopilotPlugin,"},
+        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "accounts.turns.current(child.session)"},
         {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"}
       ],
       "tests": [

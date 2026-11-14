@@ -16,7 +16,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
-import previewPlugin from '../../src/preview-route.ts'
+import * as GitHubCopilotPlugin from '../../src/index.ts'
 import {
   GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
@@ -47,9 +47,11 @@ it('routes concurrently authorized native children to their selected Copilot mod
   const ctx = new Context()
   const release = Promise.withResolvers<void>()
   const wire: Array<{ model: string; reasoning?: { effort?: string } }> = []
+  const authorizations: Array<string | null> = []
   const completed: SubagentRunEndInfo[] = []
   ctx.on('subagent/end', info => { completed.push(info) })
   vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+    if (String(input).endsWith('/user')) return Response.json({ login: 'fixture', id: 1 })
     if (String(input).endsWith('/models')) return Response.json({ data: MODELS.map(id => ({
       id, name: id, model_picker_enabled: true, policy: { state: 'enabled' },
       supported_endpoints: ['/responses'],
@@ -58,8 +60,10 @@ it('routes concurrently authorized native children to their selected Copilot mod
         limits: { max_context_window_tokens: 128_000, max_prompt_tokens: 96_000, max_output_tokens: 4_096 },
       },
     })) })
+    if (!String(input).endsWith('/responses')) throw new Error('unexpected fixture request')
     const body = JSON.parse(String(init?.body)) as typeof wire[number]
     wire.push(body)
+    authorizations.push(new Headers(init?.headers).get('authorization'))
     await release.promise
     return response(body.model)
   })
@@ -75,15 +79,28 @@ it('routes concurrently authorized native children to their selected Copilot mod
     })
     ctx.provide('fileUploads', { registerAgentResolver: registration })
     ctx.provide('credentials', {
+      describeRecord: async (key: string) => ({ configured: key === KEY, writable: true }),
       readRecord: async (key: string) => { expect(key).toBe(KEY); return grant },
       listRecords: async () => [{ key: KEY, kind: 'grant' }],
       deleteRecord: async () => { throw new Error('unexpected fixture credential deletion') },
       modifyRecord: async () => { throw new Error('valid synthetic credential must not refresh') },
     })
+    const settings = { 'github-copilot': {}, 'llm-pi-ai': { providers: {} } }
+    ctx.provide('settings', {
+      describe: () => Object.entries(settings).map(([ns, value]) => ({ ns, revision: 0, value, user: value })),
+      mutate: async () => { throw new Error('unexpected fixture settings mutation') },
+    })
     ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: PARENT, model: PARENT }) })
     await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     ctx.provide('tokenMeter', { estimateMessage: () => 1, measure: () => ({ totalTokens: 1 }) })
-    await ctx.plugin(previewPlugin, {})
+    await ctx.plugin(GitHubCopilotPlugin, {
+      enabled: true, providers: [], includeSources: true, stripServerTools: true,
+      idleTimeoutMs: 300_000, probe: false, probeTimeoutMs: 30_000,
+    })
+    await vi.waitFor(() => {
+      expect(ctx.get('githubCopilotSessionAccounts')).toBeDefined()
+      expect(ctx.get('githubCopilotPreview')).toBeDefined()
+    })
     await ctx.get('githubCopilotPreview')!.refresh()
     ctx.llm.registerAdapter([PARENT], new class extends LlmAdapter {
       async *stream(_options: GenerateOptions): AsyncGenerator<StreamChunk> {
@@ -151,6 +168,13 @@ it('routes concurrently authorized native children to their selected Copilot mod
     expect(wire.map(body => [body.model, body.reasoning?.effort]).sort()).toEqual([
       [MODELS[0], 'low'], [MODELS[1], 'high'],
     ])
+    expect(authorizations).toEqual(['Bearer synthetic-access', 'Bearer synthetic-access'])
+    const children = ctx.agents.list().filter(agent => agent.session.header.parentSession === parent.session.id)
+    expect(children).toHaveLength(2)
+    const accounts = ctx.get('githubCopilotSessionAccounts')!
+    for (const child of children) {
+      expect(accounts.turns.current(child.session)).toMatchObject({ accountId: 'canonical', source: 'global' })
+    }
     release.resolve()
     do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
     expect(completed).toHaveLength(2)
