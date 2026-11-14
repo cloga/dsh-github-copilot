@@ -25,6 +25,7 @@ const sectionSlot = 'settings.section'
 const providerSlot = 'settings.models.provider-card'
 const usageSlot = 'conversation.composer.dock'
 const noticeSlot = 'conversation.input.dock'
+const actionsSlot = 'conversation.chat.assistant-actions'
 
 async function fixture(footer: boolean, legacyRemote: boolean) {
   const root = new Context()
@@ -32,11 +33,14 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
   const registrations = new Map<string, Registration>()
   const attempts: Seat[] = []
   const watchers = new Set<{ name: string; activate: () => void; deactivate: () => void }>()
-  const declared = new Set([sectionSlot, providerSlot, usageSlot, noticeSlot, ...footer ? [footerSlot] : []])
+  const declared = new Set([sectionSlot, providerSlot, usageSlot, noticeSlot, actionsSlot, ...footer ? [footerSlot] : []])
+  const projections = new Set<string>()
   const legacyCalls = { view: vi.fn(), save: vi.fn(), create: vi.fn() }
   const disposeRemote = vi.fn()
   class Remote extends NamedService {
     constructor(ctx: Context) { super(ctx, 'remote') }
+    githubCopilotTurnSelection = { get: vi.fn() }
+    githubCopilotSessionAccount = { turn: vi.fn() }
     async $mount() { return this.ctx.effect(() => disposeRemote) }
     $on() { return () => {} }
   }
@@ -51,10 +55,17 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
     get = vi.fn()
     refresh = vi.fn()
   }
+  class Conversation extends NamedService {
+    constructor(ctx: Context) { super(ctx, 'uiConversation') }
+    events = { register: (definition: { kind: string }) => {
+      projections.add(definition.kind)
+      return () => { projections.delete(definition.kind) }
+    } }
+  }
   class Slots extends NamedService {
     constructor(ctx: Context) { super(ctx, 'slots') }
     spec(name: string) {
-      return { kind: name === providerSlot ? 'keyed' : 'list', scope: name === usageSlot || name === noticeSlot ? 'session' : 'root' }
+      return { kind: name === providerSlot ? 'keyed' : 'list', scope: name === usageSlot || name === noticeSlot || name === actionsSlot ? 'session' : 'root' }
     }
     inject(name: string, callback: () => () => void) {
       return this.ctx.effect(() => {
@@ -85,10 +96,12 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
     new NamedService(ctx, 'remote.githubCopilot')
     new NamedService(ctx, 'remote.githubCopilotAccounts')
     new NamedService(ctx, 'remote.githubCopilotSessionAccount')
+    new NamedService(ctx, 'remote.githubCopilotTurnSelection')
     new NamedService(ctx, 'remote.githubCopilotSessionContinuation')
     new NamedService(ctx, 'remote.settings')
     new NamedService(ctx, 'remote.githubCopilotSearchRouting')
     new UsageRemote(ctx)
+    new Conversation(ctx)
   } })
   const addLegacyRemote = () => root.plugin({ apply(ctx) { new LegacyRoles(ctx) } })
   if (legacyRemote) await addLegacyRemote()
@@ -96,6 +109,7 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
   await mounted
   await vi.waitFor(() => expect(registrations.has(`${usageSlot}:github-copilot-usage`)).toBe(true))
   await vi.waitFor(() => expect(registrations.has(`${noticeSlot}:github-copilot-context-evidence`)).toBe(true))
+  await vi.waitFor(() => expect(registrations.has(`${actionsSlot}:github-copilot-account-usage`)).toBe(true))
   const setFooter = (enabled: boolean) => {
     if (enabled) declared.add(footerSlot)
     else declared.delete(footerSlot)
@@ -106,7 +120,7 @@ async function fixture(footer: boolean, legacyRemote: boolean) {
       }
     }
   }
-  return { mounted, registrations, attempts, legacyCalls, disposeRemote, watchers, addLegacyRemote, setFooter }
+  return { mounted, registrations, attempts, legacyCalls, disposeRemote, watchers, projections, addLegacyRemote, setFooter }
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>
 
@@ -116,8 +130,10 @@ function expectOnlyRetainedUi(f: Fixture, footer: boolean) {
   expect([...f.registrations.keys()].sort()).toEqual([
     `${providerSlot}:llm-pi-ai`, `${settingsSlot}:${accountId}`,
     `${settingsSlot}:github-copilot-options`, `${usageSlot}:github-copilot-usage`,
-    `${noticeSlot}:github-copilot-context-evidence`,
+    `${noticeSlot}:github-copilot-context-evidence`, `${actionsSlot}:github-copilot-account-usage`,
   ].sort())
+  expect([...f.projections].sort()).toEqual(['github-copilot-turn-model-provenance', 'github-copilot-turn-usage-evidence'].sort())
+  expect(f.attempts.some(seat => seat.id === 'github-copilot-auto-model')).toBe(false)
   // Adjacent positive assertions rule out an unactivated Client or empty registry.
   const account = f.registrations.get(`${settingsSlot}:${accountId}`)!.render({})!
   expect(account.type).toBe(client.GitHubCopilotAccountSurface)
@@ -162,6 +178,7 @@ describe('Client model-role retirement', () => {
     await f.mounted.dispose()
     expect(f.registrations.size).toBe(0)
     expect(f.watchers.size).toBe(0)
+    expect(f.projections.size).toBe(0)
     expect(f.disposeRemote).toHaveBeenCalledOnce()
   })
 
