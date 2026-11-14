@@ -45,6 +45,14 @@ and narrowly evidenced Copilot compatibility. Do not add a DeepSeek login check,
 read DeepSeek credentials, add another Copilot login or wire, or redirect failed
 Copilot calls to another provider.
 
+Parent/child relationships, inheritance, delegation, lifecycle and scheduling
+follow DSH's native contract, not a plugin-defined policy. Subagent compatibility
+means supplying models to that existing flow. Do not add a child-account
+inheritance mode, parent lookup as credential authority, or plugin-owned child
+routing. Verify authentication and request isolation through the same provider
+contract used by ordinary native calls. A missing public seam is a concrete
+compatibility limit to report, not permission to invent a parallel relationship.
+
 Retire plugin-owned Auto and parent-follow policy/UI, custom hosted-search
 execution/routing, and optional recovery/analytics surfaces that duplicate DSH
 ownership, preserving bounded compatibility for existing selections and

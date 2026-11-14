@@ -36,6 +36,7 @@
       "preserve": ["native-copilot-oauth", "account-isolation", "account-advertised-model-capabilities", "published-adapter", "existing-history-and-settings-compatibility"],
       "nativeModelCapabilityCompatibility": "best-effort-account-and-metadata-driven-with-exact-release-tests",
       "subagentSelectionAndInvocationRequired": true,
+      "parentChildPolicyOwner": "dsh-native-only",
       "hydrafusion": "out-of-scope",
       "supersedesConflictingLegacyProductRequirements": true
     },

@@ -38,6 +38,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && productScope.preserve.includes('existing-history-and-settings-compatibility')
     && productScope.nativeModelCapabilityCompatibility === 'best-effort-account-and-metadata-driven-with-exact-release-tests'
     && productScope.subagentSelectionAndInvocationRequired === true
+    && productScope.parentChildPolicyOwner === 'dsh-native-only'
     && productScope.hydrafusion === 'out-of-scope'
     && productScope.supersedesConflictingLegacyProductRequirements === true,
   'confirmed Copilot-only model integration scope must supersede conflicting legacy product requirements')

@@ -40,12 +40,17 @@ endpoint, supplier behavior, publication, installation, or Desktop activation.
    model and supported reasoning effort, both child completion results,
    account binding/isolation, concurrency, and that unauthorized, unavailable,
    or unsupported selections fail before dispatch. A configured allowlist or
-   visible picker row alone is insufficient.
+   visible picker row alone is insufficient. Parent/child relationships,
+   inheritance, delegation, lifecycle, and scheduling remain DSH-owned. Do not
+   introduce a plugin child-account mode or use lineage as credential authority.
 5. **Account and turn isolation.** Requests, retries, discovery, and concurrent
    children must stay bound to the exact authorized account and turn. Global or
    Session selection changes cannot redirect admitted work. Missing selected
    accounts or permissions fail closed; there is no fallback to another
-   account or provider.
+   account or provider. This checks the existing authenticated provider contract;
+   it does not authorize designing parent-to-child account inheritance. If a
+   native public seam cannot safely carry that contract, report the specific
+   compatibility limit rather than implementing a separate child policy.
 6. **Protocol correctness.** Preserve supported text, tools, images, public
    reasoning summaries, replay ownership, and cancellation through the native
    adapter. Do not add a second wire, silently trim history, rewrite history,

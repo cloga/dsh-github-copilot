@@ -18,6 +18,8 @@ patch, rebuild, or replace DSH Core or dependency artifacts.
 
 - DSH owns application authentication, model selection, Auto, tools, Web,
   subagents, permissions, history, context management, and Usage.
+- Parent/child relationships, inheritance, and scheduling follow native DSH.
+  The plugin adds models, not a separate subagent or child-account policy.
 - This plugin connects GitHub Copilot authorization, discovers models and
   capabilities from the authorized account, and composes the published native
   adapter with only verified Copilot-specific compatibility handling.

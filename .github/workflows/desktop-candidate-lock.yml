@@ -58,4 +58,4 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - run: node --test tests/scripts/published-core.test.mjs tests/scripts/tagged-core.test.mjs
+      - run: node --test tests/scripts/agent.test.mjs tests/scripts/published-core.test.mjs tests/scripts/tagged-core.test.mjs
