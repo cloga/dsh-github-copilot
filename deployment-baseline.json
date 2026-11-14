@@ -594,16 +594,17 @@
     {
       "id": "desktop-shared-package-ownership",
       "required": true,
-      "evidenceScope": "historical-shared-package-ownership-audit-plus-synthetic-current-contract; no-current-desktop-package-set-proof",
+      "evidenceScope": "local-current-descriptor-and-shared-peer-manifests-plus-historical-projections; no-signature-or-plugin-activation-proof",
       "sourceMarkers": [
         {"file": "scripts/verify-desktop-package-graph.mjs", "marker": "verifyDesktopPackageGraph"},
         {"file": "scripts/verify-tarball.mjs", "marker": "desktopSharedGraphs"},
         {"file": "tests/fixtures/desktop-shared-package-contracts.json", "marker": "desktop-0.1.6-alpha.1-generated-package-set"},
+        {"file": "tests/fixtures/desktop-shared-package-contracts.json", "marker": "desktop-0.2.2-rc.3-installed-runtime"},
         {"file": "tsdown.config.ts", "marker": "const externals = new Set(['react'])"},
         {"file": "package.json", "marker": "\"external\": ["}
       ],
       "tests": [
-        {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "retains historical graphs without claiming an unverified alpha.4 Desktop graph"},
+        {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "audits the current installed graph while retaining historical projections"},
         {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "shared graph gate rejects bundled, optional, incompatible, or unaudited host ownership"},
         {"file": "tests/scripts/desktop-package-graph.test.mjs", "name": "client externals stay outside the strict Node peer graph"}
       ]
