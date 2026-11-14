@@ -1413,7 +1413,7 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "current !== undefined && providerSupportsStrictMode(current) !== false"},
-        {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot'"},
+        {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot (multi-account)'"},
         {"file": "src/client.ts", "marker": "GitHubCopilotAccountSurface"}
       ],
       "tests": [

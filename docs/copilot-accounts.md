@@ -478,7 +478,7 @@ settlement and mutation fences; a read deadline never unlocks a pending mutation
 - Races: A refresh versus B selection, admission versus switch, external record
   replacement, settings conflicts, disposal and late identity/quota responses.
 - Behavior: absent-selector compatibility, missing-selector fail-closed,
-  duplicate identity, same-account renewal, canonical route blocker, selected
+  duplicate identity, same-account renewal, missing managed-route blocker, selected
   model missing, revoked permissions and account-bound replay.
 - UI: Models global-default management, Session switching only inside Credits,
   global inheritance/explicit same-value override, frozen running turns,
