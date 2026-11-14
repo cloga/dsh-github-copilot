@@ -2,6 +2,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { createElement, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
+import type { NativeModelSyncSkipCode } from './native-model-sync.ts'
 import {
   GitHubCopilotAuthorizationViewSchema, GitHubCopilotModelPreferencesViewSchema,
   GitHubCopilotNativeModelSyncPreviewSchema, GitHubCopilotNativeModelSyncResultSchema,
@@ -45,6 +46,8 @@ function nativeSyncMessage(code: string): string {
   switch (code) {
     case 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH':
       return 'Switch the global Copilot account to the canonical account used by the native provider, then preview again.'
+    case 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE':
+      return 'Could not verify the current Copilot account. No native settings were changed.'
     case 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE':
     case 'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE':
       return 'Could not verify a fresh account model list. No native settings were changed.'
@@ -58,6 +61,12 @@ function nativeSyncMessage(code: string): string {
       return 'Configure the native GitHub Copilot provider first. This action does not create or migrate a provider profile.'
     case 'NATIVE_MODEL_SYNC_ROUTE_OWNERSHIP_CONFLICT':
       return 'A route migration or protected setting is present. Resolve it before syncing.'
+    case 'NATIVE_MODEL_SYNC_NATIVE_AUTH_UNPROVEN':
+      return 'The native provider uses custom authentication, an endpoint, or headers; its account cannot be verified for sync.'
+    case 'NATIVE_MODEL_SYNC_OVERRIDES_CONFLICT':
+      return 'Native model overrides conflict with a custom model list. Review them before syncing; they will not be removed automatically.'
+    case 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN':
+      return 'Native route compatibility overrides cannot be verified for the new model list. Review them before syncing.'
     case 'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS':
       return 'No enabled account models can be represented by the native provider configuration.'
     case 'NATIVE_MODEL_SYNC_PLAN_EXPIRED':
@@ -70,6 +79,19 @@ function nativeSyncMessage(code: string): string {
       return 'Could not confirm the native settings update. Read the saved settings before trying again.'
     default:
       return 'Native model sync is unavailable. No settings were changed.'
+  }
+}
+
+function nativeSyncSkipMessage(code: NativeModelSyncSkipCode): string {
+  switch (code) {
+    case 'NATIVE_API_UNAVAILABLE': return 'The native protocol for this model is unknown.'
+    case 'NATIVE_API_MISMATCH': return 'The native route uses a different protocol.'
+    case 'NATIVE_CONTEXT_LIMIT_UNKNOWN': return 'The server context capacity is unknown.'
+    case 'NATIVE_INPUT_LIMIT_UNKNOWN': return 'The server input limit is unknown.'
+    case 'NATIVE_INPUT_LIMIT_UNSUPPORTED': return 'The native route cannot enforce the narrower input limit.'
+    case 'NATIVE_REASONING_UNSUPPORTED': return 'The native route cannot represent the advertised or configured reasoning.'
+    case 'NATIVE_VISION_MEDIA_TYPES_UNKNOWN': return 'The server image formats are unknown.'
+    case 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED': return 'The native route cannot enforce these image format restrictions.'
   }
 }
 
@@ -145,7 +167,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     const scope = request.current
     const generation = scope.generation
     const current = () => scope.generation === generation
-    setSyncBusy(true); setSyncError(undefined); setSyncResult(undefined)
+    setSyncBusy(true); setSyncError(undefined); setSyncResult(undefined); setSyncPreview(undefined)
     try {
       const result = await props.remote.applyNativeModelSync(planId)
       if (!current()) return
@@ -289,7 +311,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       syncPreview.skipped.length === 0 ? null : createElement('details', null,
         createElement('summary', null, 'Models skipped by native compatibility checks'),
         createElement('ul', null, ...syncPreview.skipped.map(item => createElement('li', { key: item.id },
-          createElement('code', null, item.id), ` — ${item.code}`)))),
+          createElement('code', null, item.id), ` — ${nativeSyncSkipMessage(item.code)} (${item.code})`)))),
       syncPreview.removedIds.length === 0 ? null : createElement('details', null,
         createElement('summary', null, 'Native models that will be removed'),
         createElement('ul', null, ...syncPreview.removedIds.map(id => createElement('li', { key: id }, createElement('code', null, id))))),

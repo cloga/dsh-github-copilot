@@ -68,10 +68,7 @@ describe('planNativeModelSync', () => {
       currentModels: [],
       currentModelsUseCatalog: true,
       routeApi: 'openai-responses',
-      nativeCatalog: [{
-        id: 'messages-model', name: 'Messages', api: 'anthropic-messages',
-        contextWindow: 131_072, maxTokens: 8_192, input: ['text'],
-      }],
+      nativeCatalog: [{ id: 'messages-model', api: 'anthropic-messages' }],
     })
     expect(result.models.map(model => model.id)).toEqual(['responses-model'])
     expect(result.skipped).toEqual([
@@ -102,12 +99,7 @@ describe('planNativeModelSync', () => {
       excludedModelIds: new Set(),
       currentModels: [],
       currentModelsUseCatalog: true,
-      nativeCatalog: [{
-        id: 'known', name: 'Known', api: 'openai-responses', contextWindow: 131_072, maxTokens: 8_192, input: ['text'],
-      }, {
-        id: 'other-api', name: 'Other API', api: 'anthropic-messages',
-        contextWindow: 131_072, maxTokens: 8_192, input: ['text'],
-      }],
+      nativeCatalog: [{ id: 'known', api: 'openai-responses' }, { id: 'other-api', api: 'anthropic-messages' }],
     })
 
     expect(result.models.map(model => model.id)).toEqual(['known'])
@@ -121,13 +113,27 @@ describe('planNativeModelSync', () => {
       currentModels: [],
       currentModelsUseCatalog: false,
       nativeCatalog: [
-        { id: 'known-a', name: 'Known A', api: 'openai-responses', contextWindow: 131_072, maxTokens: 8_192, input: ['text'] },
-        { id: 'known-b', name: 'Known B', api: 'openai-responses', contextWindow: 131_072, maxTokens: 8_192, input: ['text'] },
+        { id: 'known-a', api: 'openai-responses' },
+        { id: 'known-b', api: 'openai-responses' },
       ],
     })
 
     expect(result.models.map(model => model.id)).toEqual(['future'])
     expect(result.skipped).toEqual([])
+  })
+
+  it('reports a catalog-backed model as updated when sync adds an output request default', () => {
+    const model = accountModel('same')
+    const result = planNativeModelSync({
+      accountModels: [model],
+      excludedModelIds: new Set(),
+      currentModels: [],
+      currentModelsUseCatalog: true,
+      nativeCatalog: [{ id: model.id, api: model.api }],
+    })
+
+    expect(result.updatedIds).toEqual(['same'])
+    expect(result.outputTokenDefaults).toEqual([{ id: 'same', maxTokens: 8_192 }])
   })
 
   it('rejects reasoning controls that the native profile cannot represent', () => {
@@ -136,6 +142,7 @@ describe('planNativeModelSync', () => {
         accountModel('unmapped', 'openai-responses', { unmappedEfforts: ['future-effort'] }),
         accountModel('adaptive', 'anthropic-messages', { adaptiveThinking: true }),
         accountModel('messages-thinking', 'anthropic-messages'),
+        accountModel('off-only', 'openai-responses', { advertisedEfforts: ['off'] }),
         accountModel('without-reasoning', 'openai-responses', { advertisedEfforts: [] }),
       ],
       excludedModelIds: new Set(),
@@ -150,6 +157,7 @@ describe('planNativeModelSync', () => {
       { id: 'unmapped', code: 'NATIVE_REASONING_UNSUPPORTED' },
       { id: 'adaptive', code: 'NATIVE_API_MISMATCH' },
       { id: 'messages-thinking', code: 'NATIVE_API_MISMATCH' },
+      { id: 'off-only', code: 'NATIVE_REASONING_UNSUPPORTED' },
     ])
   })
 
@@ -170,9 +178,38 @@ describe('planNativeModelSync', () => {
     }])
   })
 
-  it('skips models whose server input cap cannot be represented natively', () => {
+  it('skips models that cannot satisfy the existing native route default reasoning effort', () => {
     const result = planNativeModelSync({
-      accountModels: [{ ...accountModel('bounded-input'), maxInputTokens: 64_000 }],
+      accountModels: [
+        accountModel('supports-high'),
+        accountModel('low-only', 'openai-responses', { advertisedEfforts: ['low'] }),
+        accountModel('no-reasoning', 'openai-responses', { advertisedEfforts: [] }),
+      ],
+      excludedModelIds: new Set(),
+      currentModels: [],
+      currentModelsUseCatalog: false,
+      routeApi: 'openai-responses',
+      routeReasoning: 'high',
+      nativeCatalog: [],
+    })
+
+    expect(result.models.map(model => model.id)).toEqual(['supports-high'])
+    expect(result.skipped).toEqual([
+      { id: 'low-only', code: 'NATIVE_REASONING_UNSUPPORTED' },
+      { id: 'no-reasoning', code: 'NATIVE_REASONING_UNSUPPORTED' },
+    ])
+  })
+
+  it('skips narrower or unknown server input caps that cannot be represented natively', () => {
+    const result = planNativeModelSync({
+      accountModels: [
+        { ...accountModel('bounded-input'), maxInputTokens: 64_000 },
+        { ...accountModel('unknown-input'), maxInputTokens: undefined },
+        { ...accountModel('unknown-context'), evidence: {
+          ...accountModel('unknown-context').evidence, contextWindowSource: 'max_prompt_tokens',
+        } },
+        accountModel('full-input'),
+      ],
       excludedModelIds: new Set(),
       currentModels: [],
       currentModelsUseCatalog: false,
@@ -180,17 +217,25 @@ describe('planNativeModelSync', () => {
       nativeCatalog: [],
     })
 
-    expect(result.models).toEqual([])
-    expect(result.skipped).toEqual([{ id: 'bounded-input', code: 'NATIVE_INPUT_LIMIT_UNSUPPORTED' }])
+    expect(result.models.map(model => model.id)).toEqual(['full-input'])
+    expect(result.skipped).toEqual([
+      { id: 'bounded-input', code: 'NATIVE_INPUT_LIMIT_UNSUPPORTED' },
+      { id: 'unknown-input', code: 'NATIVE_INPUT_LIMIT_UNKNOWN' },
+      { id: 'unknown-context', code: 'NATIVE_CONTEXT_LIMIT_UNKNOWN' },
+    ])
   })
 
-  it('skips image models with account-specific MIME restrictions', () => {
+  it('syncs vision only when account metadata covers every native request image format', () => {
     const model = accountModel('restricted-vision')
     const result = planNativeModelSync({
       accountModels: [{
         ...model,
         input: ['text', 'image'],
-        evidence: { ...model.evidence, visionMediaTypes: ['image/png'] },
+        evidence: { ...model.evidence, visionMediaTypes: ['image/png', 'image/jpeg', 'image/webp'] },
+      }, { ...accountModel('unknown-vision'), input: ['text', 'image'] }, {
+        ...accountModel('full-vision'),
+        input: ['text', 'image'],
+        evidence: { ...model.evidence, visionMediaTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] },
       }],
       excludedModelIds: new Set(),
       currentModels: [],
@@ -199,10 +244,12 @@ describe('planNativeModelSync', () => {
       nativeCatalog: [],
     })
 
-    expect(result.models).toEqual([])
-    expect(result.skipped).toEqual([{
-      id: 'restricted-vision', code: 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED',
-    }])
+    expect(result.models.map(value => value.id)).toEqual(['full-vision'])
+    expect(result.models[0]?.input).toEqual(['text', 'image'])
+    expect(result.skipped).toEqual([
+      { id: 'restricted-vision', code: 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED' },
+      { id: 'unknown-vision', code: 'NATIVE_VISION_MEDIA_TYPES_UNKNOWN' },
+    ])
   })
 
   it('does not produce a target when every enabled model is incompatible', () => {

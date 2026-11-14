@@ -98,10 +98,14 @@ native provider, use **Manage → Model preferences → Preview enabled models**
 review the additions, updates, removals, skipped models and per-request output
 defaults, then choose **Apply sync**. This one-time snapshot replaces only
 `llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
-Protocols, narrower server input caps, account-specific image MIME restrictions
-and reasoning metadata that the native profile cannot express are skipped
-rather than guessed. Core uses each configured `maxTokens` as that model's
-per-request output default. The sync does not change credentials, select a
+Models with unproven protocols, unknown or narrower server input caps, unknown
+context capacity, or unsupported reasoning are skipped rather than guessed.
+Image models are included only when the account explicitly supports all four
+native request formats: PNG, JPEG, WebP, and GIF. Custom native authentication,
+endpoints, headers, nonempty model overrides, or route compatibility overrides
+block sync rather than changing those settings. An existing native default
+reasoning effort must also be supported by each synced model. Core uses each
+configured `maxTokens` as that model's per-request output default. The sync does not change credentials, select a
 model, alter history, or automatically follow later account changes.
 
 When adding DSH's native GitHub Copilot provider, use the separate plugin account

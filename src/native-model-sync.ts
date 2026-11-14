@@ -1,7 +1,9 @@
+import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import type { AccountModelDescriptor } from './account-model-catalog.ts'
 
 export type NativeModelSyncSkipCode = 'NATIVE_API_UNAVAILABLE' | 'NATIVE_API_MISMATCH'
-  | 'NATIVE_INPUT_LIMIT_UNSUPPORTED' | 'NATIVE_REASONING_UNSUPPORTED' | 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED'
+  | 'NATIVE_CONTEXT_LIMIT_UNKNOWN' | 'NATIVE_INPUT_LIMIT_UNKNOWN' | 'NATIVE_INPUT_LIMIT_UNSUPPORTED'
+  | 'NATIVE_REASONING_UNSUPPORTED' | 'NATIVE_VISION_MEDIA_TYPES_UNKNOWN' | 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED'
 
 export interface NativeModelProfile {
   readonly id: string
@@ -25,12 +27,7 @@ export interface NativeModelSyncPreview {
 
 export interface NativeCatalogModel {
   readonly id: string
-  readonly name: string
   readonly api: string
-  readonly contextWindow: number
-  readonly maxTokens: number
-  readonly input: readonly ('text' | 'image')[]
-  readonly thinkingLevelMap?: Readonly<Record<string, string | null>>
 }
 
 export interface NativeModelSyncInput {
@@ -39,10 +36,13 @@ export interface NativeModelSyncInput {
   readonly currentModels: readonly Readonly<Record<string, unknown>>[]
   readonly currentModelsUseCatalog: boolean
   readonly routeApi?: string
+  readonly routeReasoning?: string
   readonly nativeCatalog: readonly NativeCatalogModel[]
 }
 
-const knownEfforts = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+const nativeImageMediaTypes = {
+  'image/png': true, 'image/jpeg': true, 'image/webp': true, 'image/gif': true,
+} satisfies Record<ImageMediaType, true>
 
 function profileFor(model: AccountModelDescriptor): NativeModelProfile {
   const efforts = model.reasoning.advertisedEfforts
@@ -79,25 +79,16 @@ function sameNativeProfile(left: Readonly<Record<string, unknown>>, right: Nativ
     && effortsMatch
 }
 
-function staticProfile(model: NativeCatalogModel): Readonly<Record<string, unknown>> {
-  const supported = Object.entries(model.thinkingLevelMap ?? {})
-    .filter(([effort]) => effort === 'off' || knownEfforts.has(effort))
-  const reasoningEfforts = supported.length === 0 ? false
-    : Object.fromEntries(supported.map(([effort, value]) => [effort, value]))
-  return {
-    id: model.id, name: model.name, contextWindow: model.contextWindow, maxTokens: model.maxTokens,
-    input: [...model.input], reasoningEfforts,
-  }
-}
-
 /** Build a safe one-protocol native model snapshot; unsupported metadata is reported, never guessed. */
 export function planNativeModelSync(input: NativeModelSyncInput): NativeModelSyncPreview {
+  if (input.nativeCatalog.length > 512) throw new Error('NATIVE_MODEL_SYNC_SETTINGS_INVALID')
   const staticById = new Map(input.nativeCatalog.map(model => [model.id, model]))
+  if (staticById.size !== input.nativeCatalog.length) throw new Error('NATIVE_MODEL_SYNC_SETTINGS_INVALID')
   const catalogApis = new Set(input.nativeCatalog.map(model => model.api))
   const catalogApi = catalogApis.size === 1 ? [...catalogApis][0] : undefined
   const currentById = new Map<string, Readonly<Record<string, unknown>>>()
   const currentEntries = input.currentModelsUseCatalog
-    ? input.nativeCatalog.map(staticProfile)
+    ? input.nativeCatalog.map(({ id }) => ({ id }))
     : input.currentModels
   for (const entry of currentEntries) {
     if (typeof entry.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u.test(entry.id)
@@ -121,18 +112,33 @@ export function planNativeModelSync(input: NativeModelSyncInput): NativeModelSyn
       skipped.push({ id: model.id, code: 'NATIVE_API_MISMATCH' })
       continue
     }
-    if (model.maxInputTokens !== undefined && model.maxInputTokens < model.contextWindow) {
+    if (model.evidence.contextWindowSource !== 'max_context_window_tokens') {
+      skipped.push({ id: model.id, code: 'NATIVE_CONTEXT_LIMIT_UNKNOWN' })
+      continue
+    }
+    if (model.maxInputTokens === undefined) {
+      skipped.push({ id: model.id, code: 'NATIVE_INPUT_LIMIT_UNKNOWN' })
+      continue
+    }
+    if (model.maxInputTokens < model.contextWindow) {
       skipped.push({ id: model.id, code: 'NATIVE_INPUT_LIMIT_UNSUPPORTED' })
       continue
     }
-    if ((model.evidence.visionMediaTypes?.length ?? 0) > 0) {
-      skipped.push({ id: model.id, code: 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED' })
-      continue
+    if (model.input.includes('image')) {
+      const supported = model.evidence.visionMediaTypes
+      if (supported === undefined || !Object.keys(nativeImageMediaTypes).every(type => supported.includes(type))) {
+        skipped.push({ id: model.id, code: supported === undefined
+          ? 'NATIVE_VISION_MEDIA_TYPES_UNKNOWN' : 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED' })
+        continue
+      }
     }
     const reasoning = model.reasoning
     if (reasoning.unmappedEfforts.length > 0 || reasoning.adaptiveThinking === true
       || reasoning.minThinkingBudget !== undefined || reasoning.maxThinkingBudget !== undefined
-      || model.api !== 'openai-responses' && reasoning.advertisedEfforts.length > 0) {
+      || reasoning.advertisedEfforts.length > 0 && reasoning.advertisedEfforts.every(effort => effort === 'off')
+      || model.api !== 'openai-responses' && reasoning.advertisedEfforts.length > 0
+      || input.routeReasoning !== undefined && !(reasoning.advertisedEfforts.length === 0
+        ? input.routeReasoning === 'off' : reasoning.advertisedEfforts.includes(input.routeReasoning))) {
       skipped.push({ id: model.id, code: 'NATIVE_REASONING_UNSUPPORTED' })
       continue
     }

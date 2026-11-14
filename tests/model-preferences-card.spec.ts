@@ -99,6 +99,7 @@ it('previews a native model sync and applies it only after the explicit confirma
   expect(document.body.textContent).toContain('Models to add')
   expect(document.body.textContent).toContain('Models to update')
   expect(document.body.textContent).toContain('NATIVE_API_MISMATCH')
+  expect(document.body.textContent).toContain('The native route uses a different protocol')
   expect(document.body.textContent).toContain('Core also uses each configured maxTokens')
   expect(document.body.textContent).toContain('Per-request output defaults (2)')
   expect(document.body.textContent).toContain(`${new Intl.NumberFormat().format(8192)} max output tokens`)
@@ -108,6 +109,22 @@ it('previews a native model sync and applies it only after the explicit confirma
   await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!)
   expect(face.applyNativeModelSync).toHaveBeenCalledExactlyOnceWith('12345678-1234-4234-8234-123456789012')
   expect(document.body.textContent).toContain('Synced 2 models')
+})
+
+it('consumes the preview after an uncertain apply instead of offering the same plan again', async () => {
+  const face = remote()
+  face.previewNativeModelSync.mockResolvedValue({ ok: true, value: {
+    state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
+    enabledCount: 1, syncableCount: 1, addedIds: ['first'], removedIds: [], updatedIds: [],
+    outputTokenDefaults: [{ id: 'first', maxTokens: 8192 }], skipped: [],
+  } })
+  face.applyNativeModelSync.mockResolvedValue({ ok: false, error: new RemoteError('gateway/internal', 'Synthetic failure', {}) })
+  await mount({ remote: face, models, preferences })
+  await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-preview]')!)
+  await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!)
+  expect(document.querySelector('[data-dsh-github-copilot-native-model-sync-apply]')).toBeNull()
+  expect(document.body.textContent).toContain('Read the saved settings before trying again')
+  expect(face.applyNativeModelSync).toHaveBeenCalledOnce()
 })
 
 it('ignores a preview response after the preference scope changes', async () => {

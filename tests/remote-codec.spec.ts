@@ -48,4 +48,16 @@ describe('strict Remote factory compatibility', () => {
     expect(duration.create().parse('next-turn')).toBe('next-turn')
     expect(() => duration.create().parse('always')).toThrow()
   })
+  it('accepts named native-sync safety diagnostics without accepting extra fields', () => {
+    const descriptor = remote.descriptors.find(value => value.method === 'previewNativeModelSync')!
+    const result = descriptor.result as ReturnType<typeof strictRemoteCodec>
+    const preview = {
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN', enabledCount: 1, syncableCount: 0,
+      outputTokenDefaults: [], addedIds: [], removedIds: [], updatedIds: [],
+      skipped: [{ id: 'image-model', code: 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED' }],
+    }
+    expect(result.create().parse(preview)).toEqual(preview)
+    expect(() => result.create().parse({ ...preview, credentials: 'private' })).toThrow()
+    expect(() => result.create().parse({ ...preview, skipped: [{ id: 'model', code: 'invented' }] })).toThrow()
+  })
 })
