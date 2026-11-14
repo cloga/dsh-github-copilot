@@ -20,6 +20,15 @@ test('admits a stock top-level official service without mutating or exposing its
   assert.ok(!JSON.stringify(report).includes('never-print-me'))
 })
 
+test('admits an explicitly selected native Copilot backend without claiming account readiness', () => {
+  const entries = [{ ...stock(), config: { searchProvider: 'github-copilot-hosted' } }]
+  const before = JSON.stringify(entries)
+  const report = checkSearchComposition(entries)
+  assert.equal(report.supported, true)
+  assert.match(report.scope, /structural-only/)
+  assert.equal(JSON.stringify(entries), before)
+})
+
 for (const [label, entries, code] of [
   ['missing', [], 'WEB_ROW_MISSING'],
   ['duplicate', [stock(), stock()], 'MULTIPLE_WEB_ROWS'],
@@ -28,7 +37,6 @@ for (const [label, entries, code] of [
   ['dynamic disabled', [{ ...stock(), disabled: { __js: 'never execute this' } }], 'WEB_DISABLED_OR_DYNAMIC'],
   ['dynamic web config', [{ ...stock(), config: { __js: 'never execute this' } }], 'WEB_CONFIG_REQUIRES_REVIEW'],
   ['dynamic selection', [{ ...stock(), config: { searchProvider: { __js: 'never execute' } } }], 'WEB_CONFIG_REQUIRES_REVIEW'],
-  ['retired Copilot provider', [{ ...stock(), config: { searchProvider: 'github-copilot-hosted' } }], 'LEGACY_COPILOT_SEARCH_PROVIDER'],
   ['named realm', [{ ...stock(), isolate: { web: 'existing' } }], 'PREEXISTING_WEB_ISOLATION'],
   ['private realm', [{ ...stock(), isolate: { web: true } }], 'PREEXISTING_WEB_ISOLATION'],
   ['unrelated isolate key', [{ ...stock(), isolate: { credentials: 'private' } }], 'PREEXISTING_WEB_ISOLATION'],

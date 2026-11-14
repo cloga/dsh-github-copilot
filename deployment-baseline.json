@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.3.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.4.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.3.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.4.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -1026,10 +1026,15 @@
         {"file": "src/preview-provider.ts", "marker": "guard.responsesOmitTemperature === true"},
         {"file": "src/index.ts", "marker": "ctx.effect(() => installAutoReviewSampling(ctx))"},
         {"file": "src/auto-review-sampling.ts", "marker": "module.apply === fiber.runtime.callback"},
+        {"file": "src/native-copilot-access.ts", "marker": "captureNativeCopilot"},
+        {"file": "src/native-copilot-search.ts", "marker": "createNativeCopilotSearch"},
         {"file": "vitest.auto-review-published.config.ts", "marker": "passWithNoTests: false"},
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/auto-review-copilot-core.fixture.ts"}
       ],
       "tests": [
+        {"file": "tests/native-copilot-access.spec.ts", "name": "uses the published catalog only within the native configured model set"},
+        {"file": "tests/native-copilot-search.spec.ts", "name": "sends one fixed proof and one user query using the canonical account"},
+        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "uses the actual canonical adapter without changing the native %s boundary"},
         {"file": "tests/config.spec.ts", "name": "keeps managed Responses temperature omission default-off and boolean-only"},
         {"file": "tests/preview-provider.spec.ts", "name": "applies explicit Responses omission=%s independently of thinking metadata %j"},
         {"file": "tests/preview-provider.spec.ts", "name": "preserves default Responses temperature regardless of thinking metadata %j"},

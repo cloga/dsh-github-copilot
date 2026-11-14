@@ -55,15 +55,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.3.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.3.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -82,8 +82,15 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 附加账号。在托管路线仍然注册的期间，保存原生 provider 可能阻止附加账号的请求
 和切换。原生选择器不保证按账号权限过滤内置模型目录。
 启动插件或完成登录时，不会自动修复原生 provider 设置。
-当前候选版不注册 Copilot 托管搜索，也不提供旧的插件搜索路由控件。
-DSH 现有的 Web 搜索 provider 独立运行；安装插件不会为其配置搜索服务。
+插件在 DSH 现有 Web 服务中注册可选的 `github-copilot-hosted` 搜索后端。
+请在原生 Web 设置中明确选择，并按需启用原生搜索工具；安装不会改变默认后端。
+搜索只使用 canonical OAuth 账号，以及原生配置目录与当前账号元数据共同支持的模型。
+每次先发送一个固定能力探测，证明可用后才发送一次用户查询；两者均可能产生费用。
+自定义端点、凭据或传输覆盖，以及无法确认的模型，保持不可用。没有自动换模型重试、
+Web 服务替换或旧插件路由 UI。
+原生 Auto reviewer 经确认的 Copilot Responses 审核请求会省略 `temperature`；
+普通聊天和原生 allow/deny/error/cancel 行为不变。参见
+[审核兼容说明](./docs/auto-review-sampling.md)。
 原生路线的额度和可选身份显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
 端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。

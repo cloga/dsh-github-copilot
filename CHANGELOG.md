@@ -1,9 +1,15 @@
 # Changelog
 
-## 0.1.0-alpha.3.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.4.dsh.0.2.2.rc.3 (prepared)
 
 - Show the native Credits account identity only after verifying the canonical OAuth grant and quota belong together; keep quota available when identity is unavailable.
 - Use scoped Node and system certificate trust for the existing GitHub identity lookup without weakening TLS verification.
+
+## 0.1.0-alpha.3.dsh.0.2.2.rc.3 (prepared)
+
+- Extend reviewer-only temperature omission to qualified DSH native `github-copilot` Responses calls, preserving ordinary Chat and native verdict/permission ownership (#460).
+- Add optional canonical-account Copilot hosted search through the existing native Web registry, with one bounded proof and one final query, cancellation and configuration/credential invalidation (#461).
+- Preserve native settings, selected backends, accounts and histories. No live installation, restart or supplier acceptance is implied.
 
 ## 0.1.0-alpha.2.dsh.0.2.2.rc.3 (prepared)
 
