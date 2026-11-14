@@ -75,6 +75,13 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 无需手工定义 Copilot 模型、粘贴 token、使用外部网关或安装
 `copilot2api`。账号登录成功不代表所有模型及其能力都可用。
 
+Desktop 原生包管理器及其内置 CLI 与独立 profile 的操作约束不同。安装前请阅读
+[Desktop CLI 证据](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及
+[独立 profile 维护流程](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)；
+rc.2 的证据不能证明 rc.3 的行为。安装不会自动运行预检：
+只读的 `scripts/check-search-composition.mjs` 可发现冲突的旧 Web 配置，
+但不能证明运行状态。请保留并审查现有 profile 数据；安装和重启均需单独授权。
+
 ## 开发与交付
 
 精确开发目标见 `deployment-baseline.json`；修改代码前请阅读

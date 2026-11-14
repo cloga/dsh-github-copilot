@@ -89,6 +89,15 @@ No manually defined Copilot model, pasted token, external gateway, or
 `copilot2api` service is required. Account and model availability are separate:
 successful sign-in does not guarantee every model or capability is available.
 
+Desktop's native package manager and its bundled CLI have different contracts
+from a standalone profile. Review the [Desktop CLI evidence](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)
+and [standalone maintenance procedure](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
+before installation; the rc.2 evidence does not establish rc.3 behavior.
+Installation does not automatically run this preflight: the read-only
+`scripts/check-search-composition.mjs` check detects conflicting legacy Web
+configuration but does not prove runtime health. Preserve and review existing
+profile data, and obtain separate approval before installation or restart.
+
 ## Development and delivery
 
 The exact development target is in `deployment-baseline.json`; follow
