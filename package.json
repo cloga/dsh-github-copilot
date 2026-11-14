@@ -85,6 +85,7 @@
     "scripts/analyze-diagnostics.mjs",
     "scripts/iteration-review.mjs",
     "docs/image-input-compatibility.md",
+    "docs/images/copilot-current-provenance.json",
     "docs/images/dual-model-provenance.json",
     "scripts/check-search-composition.mjs",
     "scripts/select-core-release.mjs",
