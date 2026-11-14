@@ -18,6 +18,7 @@ import type { ContextEvidence } from '../src/context-evidence.ts'
 import { ContextEvidenceNotice, registerContextEvidenceUi } from '../src/context-evidence-ui.ts'
 import { foldContextEvidence } from '../src/context-evidence.ts'
 import { COMPACTION_CONTINUATION } from '../src/session-continuation-types.ts'
+import { isSessionContinuationRemote } from '../src/session-continuation-ui.ts'
 
 const cleanups: Array<() => void> = []
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }) })
@@ -226,7 +227,14 @@ describe('additive historical context notice', () => {
         entriesOfSlot(name: string): readonly { component: ComponentType<Record<string, unknown>> }[]
       }
       const undeclare = slots.register({ name: 'root', children: { 'conversation.input.dock': { kind: 'list', scope: 'session' } } }, () => null)
-      const binding = ctx.inject(['slots'], registerContextEvidenceUi)
+      const observed: unknown[] = []
+      const binding = ctx.inject(['slots'], scope => {
+        const probe = scope.inject(['remote.githubCopilotSessionContinuation'], child => {
+          observed.push(child.remote.githubCopilotSessionContinuation)
+        })
+        const dispose = registerContextEvidenceUi(scope)
+        return () => { dispose(); void probe.dispose() }
+      })
       await binding
       expect(slots.entriesOfSlot('conversation.input.dock')).toHaveLength(1)
       const entry = slots.entriesOfSlot('conversation.input.dock')[0]!
@@ -255,6 +263,8 @@ describe('additive historical context notice', () => {
         disposeRemote = async () => { await remote.dispose() }
       })
       await vi.waitFor(() => expect(ctx.get('remote.githubCopilotSessionContinuation')).toBeDefined(), { timeout: 3000 })
+      await vi.waitFor(() => expect(observed).toHaveLength(1), { timeout: 3000 })
+      expect(isSessionContinuationRemote(observed[0])).toBe(true)
       await vi.waitFor(() => expect(get).toHaveBeenCalledExactlyOnceWith('native'), { timeout: 3000 })
       expect(view.container.textContent).toContain('Hidden reasoning context was omitted')
       await act(async () => { await disposeRemote() })
