@@ -320,7 +320,7 @@ for (const [file, name] of [
 }
 const nativeSubagent = manifest.capabilities?.find(capability => capability.id === 'native-subagent-copilot-invocation')
 assert(nativeSubagent?.required === true
-  && nativeSubagent.evidenceScope === 'single-synthetic-account-tagged-source-production-host-child-invocation-and-separate-session-account-unit-tests-not-live-or-multi-account-child-isolation'
+  && nativeSubagent.evidenceScope === 'synthetic-two-account-tagged-source-production-host-child-invocation-with-default-switch-not-live-or-explicit-child-account-policy'
   && nativeSubagent.tests?.some(entry => entry.file === 'tests/fixtures/subagent-copilot-core.fixture.ts'
     && entry.name === 'routes concurrently authorized native children to their selected Copilot models and efforts')
   && nativeSubagent.tests?.some(entry => entry.file === 'tests/session-accounts-host.spec.ts'

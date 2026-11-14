@@ -25,6 +25,8 @@ import {
 const MODELS = ['fixture-child-a', 'fixture-child-b']
 const PARENT = 'fixture-parent'
 const MISSING = 'fixture-missing'
+const SECOND = '22222222-2222-4222-8222-222222222222'
+const SECOND_KEY = `github-copilot/account-${SECOND}`
 
 function response(model: string) {
   const item = { type: 'message', id: `message-${model}`, role: 'assistant',
@@ -48,10 +50,14 @@ it('routes concurrently authorized native children to their selected Copilot mod
   const release = Promise.withResolvers<void>()
   const wire: Array<{ model: string; reasoning?: { effort?: string } }> = []
   const authorizations: Array<string | null> = []
+  const signals: Array<AbortSignal | null | undefined> = []
   const completed: SubagentRunEndInfo[] = []
   ctx.on('subagent/end', info => { completed.push(info) })
   vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
-    if (String(input).endsWith('/user')) return Response.json({ login: 'fixture', id: 1 })
+    if (String(input).endsWith('/user')) {
+      const second = new Headers(init?.headers).get('authorization') === 'token synthetic-refresh-second'
+      return Response.json({ login: second ? 'fixture-second' : 'fixture-first', id: second ? 2 : 1 })
+    }
     if (String(input).endsWith('/models')) return Response.json({ data: MODELS.map(id => ({
       id, name: id, model_picker_enabled: true, policy: { state: 'enabled' },
       supported_endpoints: ['/responses'],
@@ -64,6 +70,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     const body = JSON.parse(String(init?.body)) as typeof wire[number]
     wire.push(body)
     authorizations.push(new Headers(init?.headers).get('authorization'))
+    signals.push(init?.signal)
     await release.promise
     return response(body.model)
   })
@@ -71,6 +78,9 @@ it('routes concurrently authorized native children to their selected Copilot mod
   try {
     const grant = { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-refresh',
       access: 'synthetic-access', expires: Date.now() + 3_600_000, availableModelIds: MODELS } }
+    const secondGrant = { kind: 'grant', payload: { ...grant.payload, refresh: 'synthetic-refresh-second',
+      access: 'synthetic-access-second' } }
+    const records = new Map([[KEY, grant], [SECOND_KEY, secondGrant]])
     const registration = () => ctx.effect(() => () => {})
     ctx.provide('typert', {
       resources: { register: registration },
@@ -79,13 +89,13 @@ it('routes concurrently authorized native children to their selected Copilot mod
     })
     ctx.provide('fileUploads', { registerAgentResolver: registration })
     ctx.provide('credentials', {
-      describeRecord: async (key: string) => ({ configured: key === KEY, writable: true }),
-      readRecord: async (key: string) => { expect(key).toBe(KEY); return grant },
-      listRecords: async () => [{ key: KEY, kind: 'grant' }],
+      describeRecord: async (key: string) => ({ configured: records.has(key), writable: true }),
+      readRecord: async (key: string) => records.get(key),
+      listRecords: async () => [...records.keys()].map(key => ({ key, kind: 'grant' })),
       deleteRecord: async () => { throw new Error('unexpected fixture credential deletion') },
       modifyRecord: async () => { throw new Error('valid synthetic credential must not refresh') },
     })
-    const settings = { 'github-copilot': {}, 'llm-pi-ai': { providers: {} } }
+    const settings = { 'github-copilot': { activeAccountId: 'canonical' }, 'llm-pi-ai': { providers: {} } }
     ctx.provide('settings', {
       describe: () => Object.entries(settings).map(([ns, value]) => ({ ns, revision: 0, value, user: value })),
       mutate: async () => { throw new Error('unexpected fixture settings mutation') },
@@ -175,9 +185,22 @@ it('routes concurrently authorized native children to their selected Copilot mod
     for (const child of children) {
       expect(accounts.turns.current(child.session)).toMatchObject({ accountId: 'canonical', source: 'global' })
     }
+    settings['github-copilot'].activeAccountId = SECOND
+    ctx.emit('settings/document-updated', 'github-copilot' as never)
+    expect(signals.every(signal => signal && !signal.aborted)).toBe(true)
+    const third = await call('third', MODELS[0]!, 'high')
+    expect(third.isError).toBe(false)
+    await vi.waitFor(() => expect(wire).toHaveLength(3), { timeout: 15_000 })
+    expect(wire[2]).toMatchObject({ model: MODELS[0], reasoning: { effort: 'high' } })
+    expect(authorizations).toEqual(['Bearer synthetic-access', 'Bearer synthetic-access', 'Bearer synthetic-access-second'])
+    expect(signals.every(signal => signal && !signal.aborted)).toBe(true)
+    const laterChildren = ctx.agents.list().filter(agent => agent.session.header.parentSession === parent.session.id)
+    expect(laterChildren).toHaveLength(3)
+    expect(laterChildren.map(child => accounts.turns.current(child.session)?.accountId).sort())
+      .toEqual([SECOND, 'canonical', 'canonical'].sort())
     release.resolve()
     do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
-    expect(completed).toHaveLength(2)
+    expect(completed).toHaveLength(3)
     expect(completed.every(info => info.stopReason === 'completed')).toBe(true)
     const output = completed.flatMap(info => info.lastAssistantMessage ?? [])
       .filter(block => block.type === 'text').map(block => block.text)
@@ -191,7 +214,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     expect(unauthorized.content.filter(block => block.type === 'text').map(block => block.text).join(''))
       .toContain('is not allowed for this Session')
     expect(unsupported.isError).toBe(true)
-    expect(wire).toHaveLength(2)
+    expect(wire).toHaveLength(3)
   } finally {
     release.resolve()
     try { await ctx.fiber.dispose() }
