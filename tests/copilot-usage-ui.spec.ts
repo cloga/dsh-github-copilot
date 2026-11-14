@@ -30,6 +30,10 @@ function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unkno
   const nativeGet = vi.fn(async () => ({ ok: true as const, value: { state: 'ready' as const, accountId: 'canonical',
     billing: 'credits' as const, budget: 'individual' as const, used: 9, remaining: 11, limit: 20, observedAt: 1 } }))
   const nativeRefresh = vi.fn()
+  const nativeIdentity = vi.fn(async () => ({ ok: true as const, value: {
+    state: 'ready' as const, accountId: 'canonical', billing: 'credits' as const, budget: 'individual' as const,
+    used: 9, remaining: 11, limit: 20, observedAt: 1, identity: { login: 'native-user', userId: 1 },
+  } }))
   const accountView = { source: 'global', accountId: 'canonical', globalAccountId: 'canonical',
     accounts: { state: 'ready', activeAccountId: 'canonical', revision: 1, writable: true, switchable: true,
       accounts: [{ id: 'canonical', configured: true, identityState: 'unknown' }], notices: [] } }
@@ -37,7 +41,8 @@ function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unkno
     set: vi.fn(), refreshIdentity: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
     ensureIdentity: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
     usage: vi.fn(async (_id: string) => remote.get()), refreshUsage: vi.fn() }
-  const capture = vi.fn(() => ({ ...remote, getNative: nativeGet, refreshNative: nativeRefresh }))
+  const capture = vi.fn(() => ({ ...remote, getNative: nativeGet, refreshNative: nativeRefresh,
+    ensureNativeIdentity: nativeIdentity, refreshNativeIdentity: nativeIdentity }))
   const namespace = Object.defineProperty({}, 'githubCopilotUsage', { get: capture })
   if (sessionAvailable) Object.defineProperty(namespace, 'githubCopilotSessionAccount', { value: sessionRemote })
   Object.defineProperty(namespace, 'githubCopilotSessionContinuation', { value: continuation })
@@ -60,7 +65,7 @@ function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unkno
   }
   const dispose = registerCopilotUsageUi(ctx as unknown as Context)
   cleanups.push(dispose)
-  return { ctx, remote, nativeGet, nativeRefresh, sessionRemote, capture, declare: () => { release = injection?.() }, component: () => component! }
+  return { ctx, remote, nativeGet, nativeRefresh, nativeIdentity, sessionRemote, capture, declare: () => { release = injection?.() }, component: () => component! }
 }
 function source<T>(initial: T) {
   let value = initial
@@ -110,6 +115,34 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
     expect(f.nativeGet).toHaveBeenCalledOnce()
     expect(container.textContent).toContain('9 used')
     expect(f.sessionRemote.usage).not.toHaveBeenCalled()
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-copilot-usage-trigger]')!.click() })
+    expect(container.querySelector('[data-copilot-credits-account]')?.textContent).toBe('@native-user')
+    expect(f.nativeIdentity).toHaveBeenCalledOnce()
+    expect(f.sessionRemote.ensureIdentity).not.toHaveBeenCalled()
+  })
+
+  it('keeps native quota visible while identity is pending and rejects late identity after a route change', async () => {
+    const f = fixture()
+    let finish!: (value: Awaited<ReturnType<typeof f.nativeIdentity>>) => void
+    f.nativeIdentity.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    f.declare()
+    const projection = source<unknown>({ lastUsed: null, next: selected('github-copilot') })
+    const session = source({ sessionId: 'native', removed: false, openState: 'open' })
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    cleanups.push(() => { root.unmount() })
+    await act(async () => { root.render(createElement(f.component(), {
+      sessionId: 'native', useSession: session.useSelector, useProjection: projection.use,
+    })) })
+    expect(container.textContent).toContain('9 used')
+    await act(async () => { projection.set({ lastUsed: null, next: selected('github-copilot-preview') }) })
+    await act(async () => { finish({ ok: true, value: {
+      state: 'ready', accountId: 'canonical', billing: 'credits', budget: 'individual',
+      used: 9, remaining: 11, limit: 20, observedAt: 1, identity: { login: 'old-user', userId: 1 },
+    } }) })
+    expect(container.textContent).toContain('7 used')
+    expect(container.textContent).not.toContain('old-user')
   })
 
   it.each([{ kind: 'single', scope: 'session' }, { kind: 'list', scope: 'root' }])('rejects incompatible slot contracts', spec => {

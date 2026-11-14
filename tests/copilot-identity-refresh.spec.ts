@@ -1,6 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { expect, it, vi } from 'vitest'
 import { CopilotAccountsHost } from '../src/copilot-accounts-host.ts'
+import { Agent } from 'undici'
 
 const A = '11111111-1111-4111-8111-111111111111'
 function fixture(accountId = 'canonical', enterpriseUrl?: string) {
@@ -11,18 +12,50 @@ function fixture(accountId = 'canonical', enterpriseUrl?: string) {
     describe: () => [{ ns: 'github-copilot', revision: 1, value: { activeAccountId: selected } }],
     mutate: vi.fn(),
   })
+  const readRecord = vi.fn(async () => ({ kind: 'grant' as const, payload: {
+    type: 'oauth', refresh: 'synthetic-refresh', access: 'synthetic-access', expires: 9999999999999,
+    ...enterpriseUrl === undefined ? {} : { enterpriseUrl },
+  } }))
   ctx.provide('credentials', {
     listRecords: async () => [{ key, kind: 'grant' }],
-    readRecord: async () => ({ kind: 'grant', payload: {
-      type: 'oauth', refresh: 'synthetic-refresh', access: 'synthetic-access', expires: 9999999999999,
-      ...enterpriseUrl === undefined ? {} : { enterpriseUrl },
-    } }),
+    readRecord,
     modifyRecord: vi.fn(), deleteRecord: vi.fn(),
   })
   const fetcher = vi.fn(async () => new Response(JSON.stringify({ login: 'synthetic-user', id: 123 })))
   const host = new CopilotAccountsHost(ctx, { fetch: fetcher, routeDiagnostic: () => undefined })
-  return { ctx, host, fetcher, key, change() { selected = A; host.selectionChanged() } }
+  return { ctx, host, fetcher, readRecord, key, change() { selected = A; host.selectionChanged() } }
 }
+
+it('revalidates cached identity against the canonical grant before presentation', async () => {
+  const f = fixture()
+  try {
+    expect(await f.host.verifiedIdentityFor('canonical', false)).toEqual({ login: 'synthetic-user', userId: 123 })
+    f.readRecord.mockResolvedValue({ kind: 'grant', payload: {
+      type: 'oauth', refresh: 'changed-token', access: 'synthetic-access', expires: 9999999999999,
+    } })
+    await expect(f.host.verifiedIdentityFor('canonical', false)).rejects.toThrow('COPILOT_ACCOUNTS_CHANGED')
+    expect(f.fetcher).toHaveBeenCalledOnce()
+  } finally { f.host.dispose(); await f.ctx.fiber.dispose() }
+})
+
+it('uses scoped system trust for native identity without changing global TLS settings', async () => {
+  const f = fixture()
+  const agent = new Agent()
+  const destroy = vi.spyOn(agent, 'destroy')
+  const createDispatcher = vi.fn(() => agent)
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response(JSON.stringify({ login: 'synthetic-user', id: 123 })))
+  const host = new CopilotAccountsHost(f.ctx, { routeDiagnostic: () => undefined,
+    getCACertificates: type => type === 'default' ? ['default', 'shared'] : ['shared', 'system'], createDispatcher })
+  try {
+    expect(await host.verifiedIdentityFor('canonical', false)).toMatchObject({ login: 'synthetic-user' })
+    expect(createDispatcher).toHaveBeenCalledWith({ connect: { ca: ['default', 'shared', 'system'], rejectUnauthorized: true } })
+    expect(fetcher).toHaveBeenCalledWith('https://api.github.com/user', expect.objectContaining({ dispatcher: agent, redirect: 'error' }))
+  } finally {
+    host.dispose(); f.host.dispose(); fetcher.mockRestore(); await f.ctx.fiber.dispose()
+  }
+  expect(destroy).toHaveBeenCalledOnce()
+})
 
 it('binds GHE identity to the validated tenant with redirects disabled', async () => {
   const f = fixture(A, 'tenant.ghe.com')

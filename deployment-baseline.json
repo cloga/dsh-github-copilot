@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.2.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.3.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.2.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.3.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -585,6 +585,9 @@
         {"file": "tests/copilot-usage-card.spec.ts", "name": "shows supplied account amounts without an unsupported Session credits section"},
         {"file": "tests/copilot-usage-ui.spec.ts", "name": "uses real Cordis Remote tracing and reversible public SlotRegistry registration"},
         {"file": "tests/copilot-usage-ui.spec.ts", "name": "renders the usage trigger through a required Session selector for %s"},
+        {"file": "tests/copilot-usage-ui.spec.ts", "name": "keeps native quota visible while identity is pending and rejects late identity after a route change"},
+        {"file": "tests/copilot-usage-host.spec.ts", "name": "binds native identity to the canonical quota and rejects a credential change during lookup"},
+        {"file": "tests/copilot-identity-refresh.spec.ts", "name": "uses scoped system trust for native identity without changing global TLS settings"},
         {"file": "tests/fixtures/copilot-usage-selector-core.fixture.ts", "name": "renders and reacts to the owning Session on %s"},
         {"file": "tests/scripts/copilot-usage-gateway.test.mjs", "name": "quota Remote reaches the actual Host gateway without startup or signed-out network requests"},
         {"file": "tests/client-bundle.spec.ts", "name": "mounts strict Host result codecs through the published rc.1 client carrier"},

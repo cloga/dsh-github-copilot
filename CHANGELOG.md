@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.3.dsh.0.2.2.rc.3 (prepared)
+
+- Show the native Credits account identity only after verifying the canonical OAuth grant and quota belong together; keep quota available when identity is unavailable.
+- Use scoped Node and system certificate trust for the existing GitHub identity lookup without weakening TLS verification.
+
 ## 0.1.0-alpha.2.dsh.0.2.2.rc.3 (prepared)
 
 - Explain the native provider's canonical OAuth binding and the existing additional-account coexistence limit, while retaining the visible account panel outside the native Add draft (#458).

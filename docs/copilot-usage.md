@@ -90,7 +90,11 @@ For the native `github-copilot` route, quota reads use only the canonical
 selector. When the native profile is missing or names an `apiKeyEnv`, endpoint,
 or nonempty headers override, the quota is unavailable with
 `COPILOT_USAGE_NATIVE_AUTH_UNPROVEN` rather than attributing another
-credential's quota. Other public header contributors may still modify a request;
+credential's quota. The optional native identity lookup uses the same canonical
+grant, verifies that the grant and route still match the quota, and never delays
+the initial quota display. If identity cannot be verified it remains unavailable
+without hiding the quota. Both GitHub lookups use scoped default and system CA
+trust with TLS verification enabled. Other public header contributors may still modify a request;
 configuration-based evidence does not prove which account a request billed.
 The managed route continues to use its
 session-bound selected account. GitHub's
