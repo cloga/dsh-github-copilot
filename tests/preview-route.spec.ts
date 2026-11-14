@@ -627,6 +627,27 @@ describe('account-local managed runtimes', () => {
     expect(requests).toHaveLength(2)
     expect(harness.captured.mock.calls.map(([signal]) => signal)).toEqual(expect.arrayContaining([a, b]))
   })
+  it('re-prepares a failed attempt with the same bound account after the global default changes', async () => {
+    const authorizations: string[] = []
+    stubFetch(async (input, init) => {
+      const token = new Headers(init?.headers).get('authorization') ?? ''
+      if (String(input).endsWith('/models')) return catalogResponse([catalogItem(
+        token.includes('synthetic-b') ? 'account-b-model' : 'account-a-model',
+      )])
+      authorizations.push(token)
+      return authorizations.length === 1 ? new Response('{}', { status: 503 }) : response()
+    }, true)
+    const harness = await scopedRuntime()
+    const signal = harness.bind('canonical')
+    const first = await harness.adapter.prepareCall(PREVIEW, 'account-a-model', signal)
+    const assembler = new BlockAssembler()
+    for await (const chunk of first.stream({ provider: PREVIEW, model: 'account-a-model', messages: [], signal })) assembler.push(chunk)
+    expect(assembler.finish.kind).toBe('error')
+    harness.switchDefault(second)
+    const retry = await harness.adapter.prepareCall(PREVIEW, 'account-a-model', signal)
+    await drain(retry, signal)
+    expect(authorizations).toEqual(['Bearer synthetic-a-token', 'Bearer synthetic-a-token'])
+  })
   it('revokes only the matching account proof and prepared turn on credential updates', async () => {
     const requests = scopedFetch()
     const harness = await scopedRuntime()
@@ -2901,33 +2922,21 @@ describe('plugin-owned account Copilot route', () => {
     })
   })
 
-  it('allows native retry to re-dispatch the same prepared adapter snapshot', async () => {
+  it('re-prepares a native retry after a single-dispatch prepared call', async () => {
     const harness = await runtime()
     let requests = 0
     stubFetch(vi.fn(async () => ++requests === 1 ? new Response('{}', { status: 503 }) : response()))
     const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
-    const attempt = async () => {
+    const attempt = async (call: typeof prepared) => {
       const assembler = new BlockAssembler()
-      for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) assembler.push(chunk)
+      for await (const chunk of call.stream({ ...call.config, messages: [] })) assembler.push(chunk)
       return assembler.finish
     }
-    expect((await attempt()).kind).toBe('error')
-    expect(await attempt()).toEqual({ kind: 'stop' })
+    expect((await attempt(prepared)).kind).toBe('error')
+    await expect(attempt(prepared)).rejects.toMatchObject({ code: 'INVALID_PREPARED_CALL' })
+    const retry = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
+    expect(await attempt(retry)).toEqual({ kind: 'stop' })
     expect(requests).toBe(2)
-  })
-
-  it('does not let a retry cross to another account after its first attempt', async () => {
-    const harness = await runtime()
-    let requests = 0
-    stubFetch(vi.fn(async () => { requests++; return new Response('{}', { status: 503 }) }))
-    const prepared = await harness.ctx.llm.prepareCall({ provider: PREVIEW, model: MODEL })
-    for await (const _chunk of prepared.stream({ ...prepared.config, messages: [] })) { /* first failed attempt */ }
-    harness.replace(grant({ refresh: 'synthetic-account-b', access: 'synthetic-access-b' }))
-    const retry = async () => {
-      for await (const _chunk of prepared.stream({ ...prepared.config, messages: [] })) { /* consume retry */ }
-    }
-    await expect(retry()).rejects.toThrow(/INVALIDATED|ACCOUNT_CHANGED/)
-    expect(requests).toBe(1)
   })
 
   it('detaches nested retry policy configuration from external mutation', async () => {
