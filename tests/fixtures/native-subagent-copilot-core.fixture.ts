@@ -129,11 +129,20 @@ it('selects and concurrently dispatches native Copilot subagents using the canon
       sessionId: SessionId('native-copilot-subagent-parent'),
       agentOptions: { provider: parentProvider, model: parentProvider },
     })
-    const call = (id: string, effort: 'low' | 'high') => ctx.agents.withInitiator(parent, () => ctx.tools.execute({
+    const discovery = await ctx.agents.withInitiator(parent, () => ctx.tools.execute({
+      agent: parent, signal: new AbortController().signal,
+      calls: [{ type: 'tool-call', id: ToolCallId('discover-native'), name: 'list_subagent_models',
+        arguments: JSON.stringify({ provider }) }],
+    }))
+    const discoveryResult = discovery.results[0]!.result
+    expect(discoveryResult.isError).toBe(false)
+    expect(discoveryResult.content.filter(block => block.type === 'text').map(block => block.text).join(''))
+      .toContain(`${provider}/${model.id}`)
+    const call = (id: string, effort: 'low' | 'high', modelId = model.id) => ctx.agents.withInitiator(parent, () => ctx.tools.execute({
       agent: parent, signal: new AbortController().signal,
       calls: [{ type: 'tool-call', id: ToolCallId(id), name: 'subagent',
         arguments: JSON.stringify({ description: 'fixture child', prompt: `Handle ${id}.`,
-          provider, model: model.id, reasoning_effort: effort }) }],
+          provider, model: modelId, reasoning_effort: effort }) }],
     }))
     const batches = await Promise.all([call('native-child-first', 'low'), call('native-child-second', 'high')])
     expect(batches).toHaveLength(2)
@@ -182,6 +191,11 @@ it('selects and concurrently dispatches native Copilot subagents using the canon
     })
     expect(requests).toHaveLength(4)
     expect(requests.slice(2).every(request => request.authorization === 'Bearer synthetic-access')).toBe(true)
+    const unauthorized = (await call('native-child-unauthorized', 'low', 'fixture-unauthorized')).results[0]!.result
+    expect(unauthorized.isError).toBe(true)
+    expect(unauthorized.content.filter(block => block.type === 'text').map(block => block.text).join(''))
+      .toContain('is not allowed for this Session')
+    expect(requests).toHaveLength(4)
   } finally {
     release.resolve()
     releaseCancellationPair.resolve()
