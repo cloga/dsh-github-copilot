@@ -91,7 +91,7 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
     async search(request, callerSignal) {
       if (callerSignal?.aborted) throw new WebError('web search aborted', 'ABORTED')
       if (!active || !selected() || pending.size >= 4) throw unavailable()
-      if (typeof request.query !== 'string' || request.query.trim().length === 0
+      if (typeof request.query !== 'string' || request.query.length > 16384 || request.query.trim().length === 0
         || new TextEncoder().encode(request.query).byteLength > 16384) throw failed()
       const controller = new AbortController()
       const deadline = AbortSignal.timeout(25000)

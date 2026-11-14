@@ -75,7 +75,7 @@ export function installAutoReviewSampling(ctx: Context): () => void {
         return
       }
       if (canonical) {
-        const route = await captureNativeCopilot(ctx)
+        const route = await captureNativeCopilot(ctx, diagnose)
         if (!route || route.models.get(options.model)?.api !== 'openai-responses') {
           diagnose('COPILOT_AUTO_REVIEW_NATIVE_ROUTE_UNPROVEN')
           yield* runtime.stream(options)

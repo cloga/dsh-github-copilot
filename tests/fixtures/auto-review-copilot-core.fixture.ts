@@ -25,6 +25,7 @@ import ApprovalService, { setApprovalPolicy } from '@deepseek-ai/dsh-user-approv
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import previewPlugin from '../../src/preview-route.ts'
 import { installAutoReviewSampling } from '../../src/auto-review-sampling.ts'
+import { captureNativeCopilot } from '../../src/native-copilot-access.ts'
 import { CopilotAccountsHost } from '../../src/copilot-accounts-host.ts'
 import { SessionAccountsHost } from '../../src/session-accounts-host.ts'
 import * as GitHubCopilotPlugin from '../../src/index.ts'
@@ -267,6 +268,8 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       await ctx.loader.create({ id: 'llm-pi-ai', name: '@deepseek-ai/dsh-llm-pi-ai',
         config: { providers: { 'github-copilot': {} } } })
       await ctx.loader.await()
+      const reasons: string[] = []
+      expect(await captureNativeCopilot(ctx, code => reasons.push(code)), reasons.join(',')).toBeDefined()
     }
     const production = scope === 'production' || scope === 'production-disposed'
       ? await ctx.plugin(GitHubCopilotPlugin, { enabled: true, providers: [], probe: false })
@@ -362,7 +365,7 @@ describe('native Auto reviewer Copilot compatibility', () => {
     'uses the actual canonical adapter without changing the native %s boundary', async outcome => {
       const result = await run(outcome, true, undefined, 'canonical-native')
       expect(result.wireBodies.filter(body => body.temperature === 0.37)).toHaveLength(1)
-      expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature'))).toHaveLength(1)
+      expect(result.wireBodies.filter(body => !Object.hasOwn(body, 'temperature')), JSON.stringify(result.result)).toHaveLength(1)
       expect(result.wireCalls).toBe(2)
       expect(result.executions).toBe(outcome === 'allow' ? 1 : 0)
       expect(result.result.isError).toBe(outcome !== 'allow')
