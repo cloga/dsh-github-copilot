@@ -107,6 +107,8 @@ The native route's quota display uses only the canonical OAuth account. If the
 provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
+Native context-incident diagnostics remain available without the optional
+managed continuation service; they do not replace DSH's context meter.
 
 Desktop's native package manager and its bundled CLI have different contracts
 from a standalone profile. Review the [Desktop CLI evidence](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)

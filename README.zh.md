@@ -87,6 +87,7 @@ DSH 现有的 Web 搜索 provider 独立运行；安装插件不会为其配置�
 原生路线的额度显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
 端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。
+原生上下文异常诊断不依赖可选的托管续接服务，也不会替代 DSH 的上下文计量。
 
 Desktop 原生包管理器及其内置 CLI 与独立 profile 的操作约束不同。安装前请阅读
 [Desktop CLI 证据](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及

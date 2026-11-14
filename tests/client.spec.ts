@@ -1445,7 +1445,8 @@ describe('GitHub Copilot Models client', () => {
     }
     const inject = vi.fn((services: string[], callback: (value: unknown) => unknown) => {
       if (services.includes('remote.githubCopilotUsage') || services.includes('remote.githubCopilotDiagnostics')
-        || services.includes('uiConversation') || services.includes('remote.githubCopilotTurnSelection')) {
+        || services.includes('uiConversation') || services.includes('remote.githubCopilotTurnSelection')
+        || services.length === 1 && services[0] === 'remote.githubCopilotSessionContinuation') {
         return Object.assign(new Promise<void>(() => {}), { dispose: vi.fn() })
       }
       const cleanup = callback(ctx)
@@ -1527,12 +1528,13 @@ describe('GitHub Copilot Models client', () => {
     expect(first.props).not.toHaveProperty('copilot')
     await dispose()
   })
-  it('does not make native Credits depend on managed account or continuation services', async () => {
+  it('does not make native Credits or context diagnostics depend on managed services', async () => {
     const { ctx } = clientContext(['settings.models.footer'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'slots'], expect.any(Function))
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).not.toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject.mock.calls.filter(([services]) => services.length === 1 && services[0] === 'slots')).toHaveLength(2)
     await dispose()
   })
 

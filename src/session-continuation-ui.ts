@@ -13,6 +13,14 @@ export interface SessionContinuationRemote {
   defaults?(): Promise<{ ok: boolean; value?: unknown }>
   setDefault?(revision: number, enabled: boolean): Promise<{ ok: boolean; value?: unknown }>
 }
+export function isSessionContinuationRemote(value: unknown): value is SessionContinuationRemote {
+  if (typeof value !== 'object' || value === null) return false
+  const remote = value as Record<string, unknown>
+  return typeof remote.get === 'function' && typeof remote.set === 'function'
+    && (remote.authorizeNext === undefined || typeof remote.authorizeNext === 'function')
+    && (remote.defaults === undefined || typeof remote.defaults === 'function')
+    && (remote.setDefault === undefined || typeof remote.setDefault === 'function')
+}
 const control: CSSProperties = nativeCompactButtonStyle
 const paragraph: CSSProperties = nativeCaptionStyle
 

@@ -7,7 +7,7 @@ import { CopilotUsageCard } from './copilot-usage-card.ts'
 import type { CopilotUsageRemote } from './copilot-usage-card.ts'
 import { SessionAccountViewSchema } from './session-accounts-remote.ts'
 import type { SessionAccountView } from './session-accounts-remote.ts'
-import { useSessionContinuationSwitch } from './session-continuation-ui.ts'
+import { isSessionContinuationRemote, useSessionContinuationSwitch } from './session-continuation-ui.ts'
 import type { SessionContinuationRemote } from './session-continuation-ui.ts'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { CopilotUsageView } from './copilot-usage-types.ts'
@@ -60,12 +60,6 @@ function isSessionRemote(value: unknown): value is SessionAccountRemote {
   return record(value) && typeof value.get === 'function' && typeof value.set === 'function'
     && typeof value.refreshIdentity === 'function' && typeof value.ensureIdentity === 'function'
     && typeof value.usage === 'function' && typeof value.refreshUsage === 'function'
-}
-function isContinuationRemote(value: unknown): value is SessionContinuationRemote {
-  return record(value) && typeof value.get === 'function' && typeof value.set === 'function'
-    && (value.authorizeNext === undefined || typeof value.authorizeNext === 'function')
-    && (value.defaults === undefined || typeof value.defaults === 'function')
-    && (value.setDefault === undefined || typeof value.setDefault === 'function')
 }
 function isLocale(value: unknown): value is LocaleReader {
   return record(value) && typeof value.getLocale === 'function' && typeof value.subscribe === 'function'
@@ -199,7 +193,7 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
   })
   const continuationInjection = ctx.inject(['remote.githubCopilotSessionContinuation'], scope => {
     const candidate: unknown = scope.remote.githubCopilotSessionContinuation
-    continuationRemote = isContinuationRemote(candidate) ? candidate : undefined
+    continuationRemote = isSessionContinuationRemote(candidate) ? candidate : undefined
     if (continuationRemote === undefined) diagnostic('COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
     publishManaged()
     return () => { continuationRemote = undefined; publishManaged() }
