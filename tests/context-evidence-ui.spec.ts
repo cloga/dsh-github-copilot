@@ -197,13 +197,13 @@ describe('additive historical context notice', () => {
   it('keeps the native slot mounted through real Cordis continuation service changes', async () => {
     const ctx = new Context()
     class RemoteRoot extends Service { constructor(context: Context) { super(context, 'remote') } }
-    const get = vi.fn(async () => ({ ok: true, value: {
+    const get = vi.fn(async (_sessionId: string) => ({ ok: true, value: {
       enabled: true, revision: 1, compaction: { id: 'c', state: 'completed' },
     } }))
     class ContinuationRemote extends Service {
       constructor(context: Context) { super(context, 'remote.githubCopilotSessionContinuation') }
-      get = get
-      set = vi.fn()
+      get(sessionId: string) { return get(sessionId) }
+      async set() { throw new Error('No continuation writes expected') }
     }
     try {
       let module: { factory(require: (id: string) => unknown): { SlotRegistry: typeof SlotRegistry } } | undefined
@@ -248,12 +248,16 @@ describe('additive historical context notice', () => {
         lifecycle.set({ id: 'c', running: false })
       })
       expect(view.container.textContent).toContain('Compaction recovery status is unavailable')
-      const remote = ctx.plugin({ apply(context) { new ContinuationRemote(context) } })
-      await act(async () => { await remote })
+      let disposeRemote = async () => {}
+      await act(async () => {
+        const remote = ctx.plugin({ apply(context) { new ContinuationRemote(context) } })
+        await remote
+        disposeRemote = async () => { await remote.dispose() }
+      })
       await vi.waitFor(() => expect(ctx.get('remote.githubCopilotSessionContinuation')).toBeDefined(), { timeout: 3000 })
       await vi.waitFor(() => expect(get).toHaveBeenCalledExactlyOnceWith('native'), { timeout: 3000 })
       expect(view.container.textContent).toContain('Hidden reasoning context was omitted')
-      await act(async () => { await remote.dispose() })
+      await act(async () => { await disposeRemote() })
       expect(view.container.textContent).toContain('Compaction recovery status is unavailable')
       expect(slots.entriesOfSlot('conversation.input.dock')).toHaveLength(1)
       await view.hide()
