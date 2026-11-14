@@ -5,7 +5,14 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
-import { hostDependencies, missingDependencyProbe, versionSatisfiesPeer } from '../../scripts/verify-install-smoke.mjs'
+import { assertSmokeCoreRelease, hostDependencies, missingDependencyProbe, versionSatisfiesPeer } from '../../scripts/verify-install-smoke.mjs'
+
+test('install smoke admits the current exact Core and rejects older or missing pins', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'))
+  assert.doesNotThrow(() => assertSmokeCoreRelease(manifest.engines.dsh))
+  assert.throws(() => assertSmokeCoreRelease('0.2.1-rc.3'), /pinned to DSH 0\.2\.2-rc\.3/)
+  assert.throws(() => assertSmokeCoreRelease(undefined), /pinned to DSH 0\.2\.2-rc\.3/)
+})
 
 test('generated missing-dependency probe executes and rejects unexpected success or another missing package', () => {
   const run = (dependency, entry) => spawnSync(process.execPath, ['--input-type=module', '--eval',
