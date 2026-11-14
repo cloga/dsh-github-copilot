@@ -27,6 +27,15 @@ This repository follows a **plugin-only** policy: implement fixes in `dsh-github
 
 Use native DSH tools for goals, background jobs and scoped subagents. Use local Git and the GitHub REST API for delivery; no external orchestration daemon, roster or `vcs_*` tool is required. Do not assume a model provider's identity is the assisting agent.
 
+## Session isolation and temporary artifacts (#442)
+
+- Prefer one app-managed worktree per independent repository session when supported and authorized. A branch-backed session, folder session or shared checkout is not necessarily isolated. Verify the actual workspace and branch; preserve the user's chosen workspace. Creating or checking out another worktree still requires separate approval.
+- Store temporary evidence, downloads, scratch files and backups in the session-owned artifact area outside the repository checkout. Keep only intentional deliverables in the repository. Clean up only explicitly identified temporary files created by the current task; never hide, move, delete or stage pre-existing files merely to make a gate pass.
+- Inspect the explicit staged and committed diff before delivery. Unrelated untracked files are not by themselves a Git conflict or proof of a GitHub permission failure. Respect each delivery tool's own instructions and allowed fallback paths; repository guidance cannot override those requirements or branch protection.
+- Continue routine investigation and authorized delivery without repeated approval prompts. For a genuine decision, safety boundary or tool-policy blocker, ask or report it once with the exact consequence; do not loop while the user is unavailable. Preserve existing approval boundaries for profile installation, sign-out, disruptive restart and worktree checkout.
+
+These are agent instructions and contract-drift checks, not a filesystem sandbox or a guarantee that every session uses a worktree.
+
 ## Product and architecture
 
 ### Confirmed product scope (#455, #456)
