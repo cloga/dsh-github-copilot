@@ -60,17 +60,18 @@ async function independentCatalogFixture() {
 }
 
 describe('native Copilot protocol qualification', () => {
-  const model = getBuiltinModels('github-copilot').find(model => model.api === 'openai-responses')!
+  const catalog = getBuiltinModels('github-copilot')
+  const model = catalog.find(model => model.api === 'openai-responses')!
 
   it('uses the published catalog only within the native configured model set', () => {
-    expect(nativeCopilotModels({ models: [{ id: model.id }] })?.get(model.id)?.api).toBe('openai-responses')
-    expect(nativeCopilotModels({ models: [{ id: 'unknown-native-model' }] })?.size).toBe(0)
-    expect(nativeCopilotModels({ models: [] })?.has(model.id)).toBe(true)
+    expect(nativeCopilotModels({ models: [{ id: model.id }] }, catalog)?.get(model.id)?.api).toBe('openai-responses')
+    expect(nativeCopilotModels({ models: [{ id: 'unknown-native-model' }] }, catalog)?.size).toBe(0)
+    expect(nativeCopilotModels({ models: [] }, catalog)?.has(model.id)).toBe(true)
   })
 
   it('honors the native provider protocol override without guessing custom models', () => {
-    expect(nativeCopilotModels({ api: 'openai-completions' })?.get(model.id)?.api).toBe('openai-completions')
-    expect(nativeCopilotModels({ api: 'openai-responses', models: [{ id: 'unknown-native-model' }] })?.size).toBe(0)
+    expect(nativeCopilotModels({ api: 'openai-completions' }, catalog)?.get(model.id)?.api).toBe('openai-completions')
+    expect(nativeCopilotModels({ api: 'openai-responses', models: [{ id: 'unknown-native-model' }] }, catalog)?.size).toBe(0)
   })
 
   it.each([
@@ -80,7 +81,7 @@ describe('native Copilot protocol qualification', () => {
     { compat: { thinkingFormat: 'custom' } },
     { models: [{ id: model.id, headers: { authorization: 'custom' } }] },
   ])('leaves custom authentication or transport outside the enhancement', profile => {
-    expect(nativeCopilotModels(profile)).toBeUndefined()
+    expect(nativeCopilotModels(profile, catalog)).toBeUndefined()
   })
 
   it('uses the adapter-owned catalog when native and plugin pi-ai copies have different paths', async () => {
@@ -98,6 +99,11 @@ describe('native Copilot protocol qualification', () => {
     expect(await captureNativeCopilot(fixture.ctx, code => reasons.push(code))).toBeUndefined()
     expect(reasons).toContain('COPILOT_NATIVE_PI_UNPROVEN')
     fixture.nativePi.version = '1.3.0'
+    fixture.localPi.version = '1.2.0'
+    reasons.length = 0
+    expect(await captureNativeCopilot(fixture.ctx, code => reasons.push(code))).toBeUndefined()
+    expect(reasons).toContain('COPILOT_NATIVE_PI_UNPROVEN')
+    fixture.localPi.version = '1.3.0'
     fixture.nativePi.manifest.exports['./providers/*'].import = '../../outside/*.js'
     reasons.length = 0
     expect(await captureNativeCopilot(fixture.ctx, code => reasons.push(code))).toBeUndefined()
@@ -119,6 +125,9 @@ describe('native Copilot protocol qualification', () => {
     fixture.state.revision += 1
     expect(() => route?.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
     fixture.state.revision -= 1
+    fixture.nativePi.manifestPath += '.replaced'
+    expect(() => route?.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
+    fixture.nativePi.manifestPath = fixture.nativePi.manifestPath.slice(0, -'.replaced'.length)
     fixture.fiber.uid = null
     expect(() => route?.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
   })
