@@ -13,6 +13,7 @@ import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
 import * as Spawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import SubagentModelSelectionConfig from '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -40,20 +41,23 @@ function response(model: string) {
 it('selects and concurrently dispatches native Copilot subagents using the canonical OAuth grant', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
-  const model = githubCopilotProvider().getModels().find(entry => entry.api === 'openai-responses')
+  const model = githubCopilotProvider().getModels().find(entry => entry.api === 'openai-responses'
+    && entry.reasoning && getSupportedThinkingLevels(entry).includes('low')
+    && getSupportedThinkingLevels(entry).includes('high'))
   expect(model).toBeDefined()
-  if (!model) throw new Error('NATIVE_COPILOT_RESPONSES_MODEL_UNAVAILABLE')
+  if (!model) throw new Error('NATIVE_COPILOT_REASONING_MODEL_UNAVAILABLE')
   const directory = await mkdtemp(join(tmpdir(), 'copilot-native-subagent-'))
   const ctx = new Context()
   const release = Promise.withResolvers<void>()
-  const requests: Array<{ model: string; authorization: string | null }> = []
+  const requests: Array<{ model: string; authorization: string | null; effort: unknown }> = []
   const signals: Array<AbortSignal | null | undefined> = []
   const completed: SubagentRunEndInfo[] = []
   ctx.on('subagent/end', info => { completed.push(info) })
   vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
     if (!String(input).endsWith('/responses')) throw new Error('unexpected fixture request')
-    const body = JSON.parse(String(init?.body)) as { model: string }
-    requests.push({ model: body.model, authorization: new Headers(init?.headers).get('authorization') })
+    const body = JSON.parse(String(init?.body)) as { model: string; reasoning?: { effort?: unknown } }
+    requests.push({ model: body.model, authorization: new Headers(init?.headers).get('authorization'),
+      effort: body.reasoning?.effort })
     signals.push(init?.signal)
     await release.promise
     return response(body.model)
@@ -114,13 +118,13 @@ it('selects and concurrently dispatches native Copilot subagents using the canon
       sessionId: SessionId('native-copilot-subagent-parent'),
       agentOptions: { provider: parentProvider, model: parentProvider },
     })
-    const call = (id: string) => ctx.agents.withInitiator(parent, () => ctx.tools.execute({
+    const call = (id: string, effort: 'low' | 'high') => ctx.agents.withInitiator(parent, () => ctx.tools.execute({
       agent: parent, signal: new AbortController().signal,
       calls: [{ type: 'tool-call', id: ToolCallId(id), name: 'subagent',
         arguments: JSON.stringify({ description: 'fixture child', prompt: `Handle ${id}.`,
-          provider, model: model.id }) }],
+          provider, model: model.id, reasoning_effort: effort }) }],
     }))
-    const batches = await Promise.all([call('native-child-first'), call('native-child-second')])
+    const batches = await Promise.all([call('native-child-first', 'low'), call('native-child-second', 'high')])
     expect(batches).toHaveLength(2)
     for (const batch of batches) {
       expect(batch.results).toHaveLength(1)
@@ -134,10 +138,10 @@ it('selects and concurrently dispatches native Copilot subagents using the canon
     expect(signals[0]).not.toBe(signals[1])
     release.resolve()
     do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
-    expect(requests).toEqual([
-      { model: model.id, authorization: 'Bearer synthetic-access' },
-      { model: model.id, authorization: 'Bearer synthetic-access' },
-    ])
+    expect(requests).toEqual(expect.arrayContaining([
+      { model: model.id, authorization: 'Bearer synthetic-access', effort: model.thinkingLevelMap?.low ?? 'low' },
+      { model: model.id, authorization: 'Bearer synthetic-access', effort: model.thinkingLevelMap?.high ?? 'high' },
+    ]))
     expect(completed).toHaveLength(2)
     for (const info of completed) {
       expect(info.stopReason).toBe('completed')
