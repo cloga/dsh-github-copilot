@@ -104,10 +104,11 @@ it.each(['absent', 'enabled', 'disposed'] as const)('selects and concurrently di
     ctx.provide('tokenMeter', { estimateMessage: () => 1, measure: () => ({ totalTokens: 1 }) })
     await ctx.plugin(LlmPiAi, { providers: { [provider]: {} } })
     if (state !== 'absent') {
-      const plugin = await ctx.plugin(GitHubCopilotPlugin, {
+      const plugin = ctx.plugin(GitHubCopilotPlugin, {
         enabled: true, providers: [], includeSources: true, stripServerTools: true,
         idleTimeoutMs: 300_000, probe: false, probeTimeoutMs: 30_000,
       })
+      await plugin
       await vi.waitFor(() => expect(ctx.get('githubCopilotUsage')).toBeDefined())
       if (state === 'disposed') {
         await plugin.dispose()
