@@ -51,10 +51,14 @@ it('uses scoped system trust for native identity without changing global TLS set
     expect(await host.verifiedIdentityFor('canonical', false)).toMatchObject({ login: 'synthetic-user' })
     expect(createDispatcher).toHaveBeenCalledWith({ connect: { ca: ['default', 'shared', 'system'], rejectUnauthorized: true } })
     expect(fetcher).toHaveBeenCalledWith('https://api.github.com/user', expect.objectContaining({ dispatcher: agent, redirect: 'error' }))
+    host.dispose()
+    expect(destroy).toHaveBeenCalled()
+    const callsAfterDisposal = destroy.mock.calls.length
+    host.dispose()
+    expect(destroy.mock.calls).toHaveLength(callsAfterDisposal)
   } finally {
     host.dispose(); f.host.dispose(); fetcher.mockRestore(); await f.ctx.fiber.dispose()
   }
-  expect(destroy).toHaveBeenCalledOnce()
 })
 
 it('binds GHE identity to the validated tenant with redirects disabled', async () => {
