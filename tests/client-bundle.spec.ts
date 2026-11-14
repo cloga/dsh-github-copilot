@@ -293,7 +293,9 @@ describe('tsdown client artifact', () => {
       const draftWarning = renderProvider()
       expect(draftWarning.type).toBe('p')
       expect(draftWarning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
-      expect(draftWarning.props.children).toContain('another model group')
+      expect(draftWarning.props.children).toContain('canonical account')
+      expect(draftWarning.props.children).toContain('separately selected plugin account')
+      expect(draftWarning.props.children).toContain('block additional-account requests and switching')
       footer.render(footerElement)
       const fallback = footer.render(footerElement)
       const account = fallback?.props.children.props.account
@@ -412,7 +414,7 @@ describe('tsdown client artifact', () => {
       && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
       'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())
       .toEqual(['add', 'addForEnvironment', 'cancel', 'ensureIdentity', 'get', 'reauthorize',
@@ -502,7 +504,7 @@ describe('tsdown client artifact', () => {
     const usage = { state: 'ready', billing: 'credits', budget: 'individual',
       used: 3600, remaining: 16400, limit: 20000, percentUsed: 18, observedAt: 1 }
     const usageDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
-    expect(usageDescriptors.map(descriptor => descriptor.method)).toEqual(['get', 'refresh'])
+    expect(usageDescriptors.map(descriptor => descriptor.method)).toEqual(['get', 'refresh', 'getNative', 'refreshNative'])
     for (const descriptor of usageDescriptors) {
       if (descriptor.result.mode !== 'strict') throw new Error('expected independent strict usage codec')
       const codec = descriptor.result

@@ -561,12 +561,8 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.mutate).not.toHaveBeenCalled()
     await harness.controller.cancel()
   })
-  it('keeps completion pending through post-login repair so the Client discovers exactly once afterwards', async () => {
+  it('completes sign-in without changing native settings and discovers once afterwards', async () => {
     const harness = runtime({ providerProfile: {} })
-    let releaseRepair!: () => void
-    const repair = new Promise<void>(resolve => { releaseRepair = resolve })
-    const mutate = harness.mutate.getMockImplementation()!
-    harness.mutate.mockImplementationOnce(async (...args) => { await repair; return mutate(...args) })
     const discover = vi.fn(async () => undefined)
     harness.services.set('githubCopilotPreview', {
       getView: () => ({ state: 'ready', models: [], rejected: [] }), discover,
@@ -586,17 +582,6 @@ describe('GitHubCopilotAuthorizationController', () => {
       await vi.waitFor(() => expect(account.getSnapshot().checking).toBe(false))
       await account.start()
       harness.authorize()
-      await vi.waitFor(() => expect(harness.mutate).toHaveBeenCalledOnce())
-      // Core authorization has ended, but the plugin still refuses discovery
-      // until its existing configuration-repair barrier has settled.
-      await account.retryStatus()
-      expect(account.getSnapshot().view).toMatchObject({
-        phase: 'authorizing', configured: true, inFlight: true, notices: [],
-      })
-      expect(remote.discoverModels).not.toHaveBeenCalled()
-      expect(discover).not.toHaveBeenCalled()
-      expect(harness.mutate).toHaveBeenCalledOnce()
-      releaseRepair()
       await vi.waitFor(async () => expect(await harness.controller.status()).toMatchObject({
         phase: 'signed-in', configured: true, inFlight: false, notices: [],
       }))
@@ -606,8 +591,8 @@ describe('GitHubCopilotAuthorizationController', () => {
       await account.retryStatus()
       expect(remote.discoverModels).toHaveBeenCalledOnce()
       expect(discover).toHaveBeenCalledOnce()
+      expect(harness.mutate).not.toHaveBeenCalled()
     } finally {
-      releaseRepair()
       detach()
     }
   })
@@ -766,7 +751,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(observed).not.toContain('SYNTHETIC_CAUSE_GETTER_READ')
   })
 
-  it('reports post-authorization route repair failure without undoing sign-in or leaking its error', async () => {
+  it('does not attempt native route repair after authorization', async () => {
     const harness = runtime({
       providerProfile: {},
       beforeMutate() { throw new Error('SYNTHETIC_ROUTE_REPAIR_RESPONSE_BODY') },
@@ -774,37 +759,31 @@ describe('GitHubCopilotAuthorizationController', () => {
     await harness.controller.start()
     harness.authorize()
     await vi.waitFor(async () => expect(await harness.controller.status()).toMatchObject({
-      phase: 'error',
+      phase: 'signed-in',
       configured: true,
       inFlight: false,
       notices: [],
-      error: 'COPILOT_ROUTE_REPAIR_FAILED',
-      route: { state: 'needs-repair', diagnosticCode: 'RECONCILIATION_FAILED' },
+      route: { state: 'needs-repair' },
     }))
     const status = await harness.controller.status()
-    expect(status.error).toBe('COPILOT_ROUTE_REPAIR_FAILED')
+    expect(status.error).toBeUndefined()
     const observed = JSON.stringify({
       status,
       errorLogs: vi.mocked(harness.ctx.logger.error).mock.calls,
       warningLogs: vi.mocked(harness.ctx.logger.warn).mock.calls,
     })
     expect(observed).not.toContain('SYNTHETIC_ROUTE_REPAIR_RESPONSE_BODY')
+    expect(harness.mutate).not.toHaveBeenCalled()
     expect(harness.deleteRecord).not.toHaveBeenCalled()
     expect(harness.ctx.logger.error).not.toHaveBeenCalled()
-    expect(harness.ctx.logger.warn).toHaveBeenCalledExactlyOnceWith(
-      'github-copilot: route reconciliation failed; review route status before retrying',
-    )
+    expect(harness.ctx.logger.warn).not.toHaveBeenCalled()
   })
 
-  it('repairs a pre-existing grant with an empty Copilot route', async () => {
+  it('does not repair the native route when the grant is already configured', async () => {
     const harness = runtime({ configured: true, providerProfile: {} })
 
     await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
-    expect(harness.mutate).toHaveBeenCalledWith('llm-pi-ai', [{
-      op: 'set',
-      path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
-      value: false,
-    }], expect.any(Number))
+    expect(harness.mutate).not.toHaveBeenCalled()
   })
 
   it('preserves canonical models and all unrelated profile fields instead of projecting the companion catalog', async () => {
@@ -925,7 +904,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     } })
   })
 
-  it('does not recreate an absent canonical profile during status or startup and auth reconciliation helpers', async () => {
+  it('does not recreate an absent canonical profile during status or explicit reconciliation', async () => {
     const harness = runtime({ configured: true })
     const before = structuredClone(harness.settingsDocument)
     const fetchMock = vi.fn(() => { throw new Error('configuration planning must not perform network I/O') })
@@ -934,7 +913,7 @@ describe('GitHubCopilotAuthorizationController', () => {
     await expect(harness.controller.status()).resolves.toMatchObject({
       configured: true, phase: 'signed-in', route: { state: 'not-configured' },
     })
-    // Host startup and token-refresh callbacks share this exported helper.
+    // Explicit reconciliation retains the exported compatibility helper.
     await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
     await expect(ensureGitHubCopilotProviderProfile(harness.ctx)).resolves.toBe(false)
     await expect(inspectGitHubCopilotProviderProfile(harness.ctx)).resolves.toEqual({ changed: false })
@@ -970,11 +949,11 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.mutate).not.toHaveBeenCalled()
   })
 
-  it('preserves configured Anthropic and OpenAI models while repairing only strict mode', async () => {
+  it('preserves configured Anthropic and OpenAI models during explicit strict mode repair', async () => {
     const models = [{ id: 'claude-sonnet-4.5', api: 'anthropic-messages' }, { id: 'gpt-5.4', api: 'openai-responses' }]
     const profile = { models, headers: { 'X-Custom': 'preserved' }, compat: { supportsStrictMode: true } }
     const harness = runtime({ configured: true, availableModelIds: ['claude-sonnet-4.5', 'gpt-5.4'], providerProfile: profile })
-    await expect(harness.controller.start()).resolves.toMatchObject({ phase: 'signed-in' })
+    await expect(harness.controller.reconcile()).resolves.toMatchObject({ phase: 'signed-in' })
     expect(profile.models).toBe(models)
     expect(profile.models).toEqual(models)
     expect(profile.headers).toEqual({ 'X-Custom': 'preserved' })

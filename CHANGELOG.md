@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-alpha.2.dsh.0.2.2.rc.3 (prepared)
+
+- Explain the native provider's canonical OAuth binding and the existing additional-account coexistence limit, while retaining the visible account panel outside the native Add draft (#458).
+- Bind native-route quota to the canonical OAuth record rather than the plugin-selected account, and show an explicit unavailable state when native credential or endpoint attribution cannot be proven.
+- Keep native quota and context-incident diagnostics available without optional managed-route Remotes, and stop automatically modifying native provider settings at startup or sign-in.
+- Exercise native Copilot subagent selection and synthetic concurrent requests with the plugin absent, enabled and disposed.
+- The native route still uses its own catalog; account-discovered models apply to `github-copilot-preview`. Copilot-hosted search, native Auto-review sampling compatibility and native per-Session multi-account routing remain incomplete.
+- Live OAuth, provider calls, billing attribution and Desktop activation remain unverified.
+
 ## 0.1.0-alpha.1.dsh.0.2.2.rc.3 (prepared)
 
 - Begin narrowing the product to account-authorized Copilot models through DSH's published native adapter. Plugin-owned Auto and parent-follow routing and hosted-search composition are retired in the candidate; preserve account quota and review other enhancements before removing only demonstrably unnecessary functionality.

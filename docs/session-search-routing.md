@@ -1,5 +1,9 @@
 # Provider-aware Web search
 
+> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
+> does not register Copilot-hosted search or the plugin routing page described
+> below. DSH's separately configured Web search remains native-owned.
+
 Target: official DSH / Windows Desktop `0.2.0-rc.2`. The routed facade and
 configuration page are shipped plugin functionality, not a pending proposal.
 

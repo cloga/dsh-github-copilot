@@ -262,6 +262,7 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         await writeFile(join(value.root, 'tests/dual-model-host.spec.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/tool-schema-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/subagent-copilot-core.fixture.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/fixtures/native-subagent-copilot-core.fixture.ts'), 'export {}')
         value.nativeAddon = join(value.base, 'native-addon')
         const addon = join(value.nativeAddon, 'node_modules/@deepseek-ai/node-addon-system')
         await mkdir(addon, { recursive: true })
@@ -311,7 +312,8 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts',
         ...recent ? ['tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
         ...release === '0.2.2-rc.3' ? ['tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts',
-          'tests/fixtures/tool-schema-core.fixture.ts', 'tests/fixtures/subagent-copilot-core.fixture.ts'] : []])
+          'tests/fixtures/tool-schema-core.fixture.ts', 'tests/fixtures/subagent-copilot-core.fixture.ts',
+          'tests/fixtures/native-subagent-copilot-core.fixture.ts'] : []])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })
 }

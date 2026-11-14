@@ -1,14 +1,24 @@
 // @vitest-environment jsdom
 import { act, createElement as h, useSyncExternalStore } from 'react'
+import * as React from 'react'
+import * as Cordis from '@deepseek-ai/cordis'
+import * as ReactDOM from 'react-dom'
+import * as ReactDOMClient from 'react-dom/client'
+import * as ReactJSX from 'react/jsx-runtime'
+import * as Slots from '@deepseek-ai/dsh-client-ui-slots'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { ComponentType, ComponentProps } from 'react'
 import { createRoot } from 'react-dom/client'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
+import type { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { COPILOT_CONTEXT_EVIDENCE, initialContextEvidence } from '../src/context-evidence.ts'
 import type { ContextEvidence } from '../src/context-evidence.ts'
 import { ContextEvidenceNotice, registerContextEvidenceUi } from '../src/context-evidence-ui.ts'
 import { foldContextEvidence } from '../src/context-evidence.ts'
 import { COMPACTION_CONTINUATION } from '../src/session-continuation-types.ts'
+import { isSessionContinuationRemote } from '../src/session-continuation-ui.ts'
 
 const cleanups: Array<() => void> = []
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }) })
@@ -37,10 +47,12 @@ function source<T>(initial: T) {
     use() { return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener) } }, () => value) },
   }
 }
-function fixture(spec = { kind: 'list', scope: 'session' }) {
+function fixture(spec = { kind: 'list', scope: 'session' }, connected = true) {
   let component: ComponentType<Record<string, unknown>> | undefined
   let declare: (() => () => void) | undefined
   let remove: (() => void) | undefined
+  let connect: (() => () => void) | undefined
+  let disconnect: (() => void) | undefined
   const released = vi.fn()
   const continuation = { get: vi.fn(async () => ({ ok: true, value: {
     enabled: true, revision: 1, compaction: { id: 'c', state: 'completed' },
@@ -49,6 +61,11 @@ function fixture(spec = { kind: 'list', scope: 'session' }) {
     remote: { githubCopilotSessionContinuation: continuation },
     get: (name: string): unknown => name === 'slots' ? ctx.slots
       : name === 'remote' ? { githubCopilotSessionContinuation: continuation } : undefined, logger: { warn: vi.fn() },
+    inject: vi.fn((_dependencies: string[], callback: (scope: { remote: { githubCopilotSessionContinuation: typeof continuation } }) => () => void) => {
+      connect = () => callback(ctx)
+      if (connected) disconnect = connect()
+      return { dispose: () => { disconnect?.(); disconnect = undefined; connect = undefined } }
+    }),
     slots: {
       spec: () => spec,
       inject: vi.fn((_name: string, callback: () => () => void) => {
@@ -63,7 +80,8 @@ function fixture(spec = { kind: 'list', scope: 'session' }) {
   }
   const dispose = registerContextEvidenceUi(ctx as unknown as Context)
   cleanups.push(dispose)
-  return { ctx, continuation, released, component: () => component!, declare: () => { remove = declare?.() }, dispose }
+  return { ctx, continuation, released, component: () => component!, declare: () => { remove = declare?.() },
+    connect: () => { disconnect = connect?.() }, disconnect: () => { disconnect?.(); disconnect = undefined }, dispose }
 }
 describe('additive historical context notice', () => {
   const completed = (): ContextEvidence => [
@@ -140,6 +158,123 @@ describe('additive historical context notice', () => {
       expect(view.container.querySelector('[aria-label="Close compaction notice"]')).toBeNull()
       expect(f.continuation.get).toHaveBeenCalledTimes(2)
     } finally { vi.useRealTimers() }
+  })
+  it('keeps native context incidents available without the managed continuation Remote', async () => {
+    const f = fixture(undefined, false)
+    f.declare()
+    const nativeRoute = { provider: 'github-copilot', model: 'native-model' }
+    const evidence = { ...invalid, route: nativeRoute, sample: { tokens: 42, seq: 2, route: nativeRoute } }
+    const useProjection = (key: string) => key === COPILOT_CONTEXT_EVIDENCE ? evidence
+      : key === COMPACTION_CONTINUATION ? undefined : { next: nativeRoute }
+    const useSession = <T,>(select: (value: unknown) => T): T =>
+      select({ sessionId: 'native', removed: false, openState: 'open' })
+    const view = mount(f.component(), { sessionId: 'native', useProjection, useSession })
+    await view.render()
+    expect(view.container.textContent).toContain('42 tokens')
+    expect(f.continuation.get).not.toHaveBeenCalled()
+    await act(async () => { f.connect() })
+    expect(view.container.textContent).toContain('42 tokens')
+    await act(async () => { f.disconnect() })
+    expect(view.container.textContent).toContain('42 tokens')
+    expect(f.continuation.get).not.toHaveBeenCalled()
+  })
+  it('binds and revokes the managed continuation Remote without remounting the notice', async () => {
+    const f = fixture(undefined, false)
+    f.declare()
+    const useProjection = (key: string) => key === COPILOT_CONTEXT_EVIDENCE ? completed()
+      : key === COMPACTION_CONTINUATION ? { id: 'c', running: false } : { next: route }
+    const useSession = <T,>(select: (value: unknown) => T): T =>
+      select({ sessionId: 'a', removed: false, openState: 'open' })
+    const view = mount(f.component(), { sessionId: 'a', useProjection, useSession })
+    await view.render()
+    expect(view.container.textContent).toContain('Compaction recovery status is unavailable')
+    await act(async () => { f.connect() })
+    expect(f.continuation.get).toHaveBeenCalledExactlyOnceWith('a')
+    expect(view.container.textContent).toContain('Hidden reasoning context was omitted')
+    await act(async () => { f.disconnect() })
+    expect(view.container.textContent).toContain('Compaction recovery status is unavailable')
+    expect(f.continuation.set).not.toHaveBeenCalled()
+  })
+  it('keeps the native slot mounted through real Cordis continuation service changes', async () => {
+    const ctx = new Context()
+    class RemoteRoot extends Service { constructor(context: Context) { super(context, 'remote') } }
+    const get = vi.fn(async (_sessionId: string) => ({ ok: true, value: {
+      enabled: true, revision: 1, compaction: { id: 'c', state: 'completed' },
+    } }))
+    class ContinuationRemote extends Service {
+      constructor(context: Context) { super(context, 'remote.githubCopilotSessionContinuation') }
+      get(sessionId: string) { return get(sessionId) }
+      async set() { throw new Error('No continuation writes expected') }
+    }
+    try {
+      let module: { factory(require: (id: string) => unknown): { SlotRegistry: typeof SlotRegistry } } | undefined
+      const code = readFileSync(resolve('node_modules/@deepseek-ai/dsh-client-ui-renderer/lib/client.js'), 'utf8')
+      new Function('window', code)({ __ModuleLoader__: { load(value: NonNullable<typeof module>) { module = value } } })
+      if (!module) throw new Error('Missing published renderer ModuleLoader carrier')
+      const loaded = module.factory(id => {
+        if (id === 'react') return React
+        if (id === 'react-dom') return ReactDOM
+        if (id === 'react-dom/client') return ReactDOMClient
+        if (id === 'react/jsx-runtime') return ReactJSX
+        if (id === '@deepseek-ai/dsh-client-ui-slots') return Slots
+        if (id === '@deepseek-ai/cordis') return Cordis
+        throw new Error(`Unexpected renderer external: ${id}`)
+      })
+      await ctx.plugin(loaded.SlotRegistry)
+      await ctx.plugin({ apply(context) { new RemoteRoot(context) } })
+      const slots = ctx.slots as unknown as {
+        register(options: unknown, render: () => null): () => void
+        entriesOfSlot(name: string): readonly { component: ComponentType<Record<string, unknown>> }[]
+      }
+      const undeclare = slots.register({ name: 'root', children: { 'conversation.input.dock': { kind: 'list', scope: 'session' } } }, () => null)
+      const observed: unknown[] = []
+      const binding = ctx.inject(['remote', 'slots'], scope => {
+        const probe = scope.inject(['remote.githubCopilotSessionContinuation'], child => {
+          observed.push(child.remote.githubCopilotSessionContinuation)
+        })
+        const dispose = registerContextEvidenceUi(scope)
+        return () => { dispose(); void probe.dispose() }
+      })
+      await binding
+      expect(slots.entriesOfSlot('conversation.input.dock')).toHaveLength(1)
+      const entry = slots.entriesOfSlot('conversation.input.dock')[0]!
+      const nativeRoute = { provider: 'github-copilot', model: 'native-model' }
+      const nativeEvidence = { ...invalid, route: nativeRoute, sample: { tokens: 42, seq: 2, route: nativeRoute } }
+      const selection = source<unknown>({ next: nativeRoute })
+      const evidence = source<unknown>(nativeEvidence)
+      const lifecycle = source<unknown>(undefined)
+      const useProjection = (key: string) => key === COPILOT_CONTEXT_EVIDENCE ? evidence.use()
+        : key === COMPACTION_CONTINUATION ? lifecycle.use() : selection.use()
+      const useSession = <T,>(select: (value: unknown) => T): T =>
+        select({ sessionId: 'native', removed: false, openState: 'open' })
+      const view = mount(entry.component, { sessionId: 'native', useProjection, useSession })
+      await view.render()
+      expect(view.container.textContent).toContain('42 tokens')
+      await act(async () => {
+        selection.set({ next: route })
+        evidence.set(completed())
+        lifecycle.set({ id: 'c', running: false })
+      })
+      expect(view.container.textContent).toContain('Compaction recovery status is unavailable')
+      let disposeRemote = async () => {}
+      await act(async () => {
+        const remote = ctx.plugin({ apply(context) { new ContinuationRemote(context) } })
+        await remote
+        disposeRemote = async () => { await remote.dispose() }
+      })
+      await vi.waitFor(() => expect(ctx.get('remote.githubCopilotSessionContinuation')).toBeDefined(), { timeout: 3000 })
+      await vi.waitFor(() => expect(observed).toHaveLength(1), { timeout: 3000 })
+      expect(isSessionContinuationRemote(observed[0])).toBe(true)
+      await vi.waitFor(() => expect(get).toHaveBeenCalledExactlyOnceWith('native'), { timeout: 3000 })
+      expect(view.container.textContent).toContain('Hidden reasoning context was omitted')
+      await act(async () => { await disposeRemote() })
+      expect(view.container.textContent).toContain('Compaction recovery status is unavailable')
+      expect(slots.entriesOfSlot('conversation.input.dock')).toHaveLength(1)
+      await view.hide()
+      await binding.dispose()
+      expect(slots.entriesOfSlot('conversation.input.dock')).toHaveLength(0)
+      undeclare()
+    } finally { await ctx.fiber.dispose() }
   })
   it.each(['en', 'zh-CN'])('matches composer statistics typography without changing disclosure behavior in %s', async locale => {
     const view = mount<ComponentProps<typeof ContextEvidenceNotice>>(ContextEvidenceNotice, { evidence: invalid, locale })

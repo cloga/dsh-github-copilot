@@ -11,6 +11,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     githubCopilotUsage: {
       get(): Promise<RemoteResult<CopilotUsageView>>
       refresh(): Promise<RemoteResult<CopilotUsageView>>
+      getNative(): Promise<RemoteResult<CopilotUsageView>>
+      refreshNative(): Promise<RemoteResult<CopilotUsageView>>
     }
   }
 }
@@ -50,7 +52,7 @@ export const CopilotUsageViewSchema = z.object({
 
 const contribution: TypertRemoteContribution = {
   package: 'dsh-github-copilot',
-  descriptors: ['get', 'refresh'].map(method => ({
+  descriptors: ['get', 'refresh', 'getNative', 'refreshNative'].map(method => ({
     id: `dsh-github-copilot:githubCopilotUsage.${method}`,
     namespace: 'githubCopilotUsage', service: 'githubCopilotUsage', method,
     invocation: { kind: 'direct' }, parameters: [],

@@ -5,10 +5,9 @@ import { createElement, useCallback, useEffect, useMemo, useSyncExternalStore } 
 import type { ReactElement } from 'react'
 import { CopilotUsageCard } from './copilot-usage-card.ts'
 import type { CopilotUsageRemote } from './copilot-usage-card.ts'
-import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
 import { SessionAccountViewSchema } from './session-accounts-remote.ts'
 import type { SessionAccountView } from './session-accounts-remote.ts'
-import { useSessionContinuationSwitch } from './session-continuation-ui.ts'
+import { isSessionContinuationRemote, useSessionContinuationSwitch } from './session-continuation-ui.ts'
 import type { SessionContinuationRemote } from './session-continuation-ui.ts'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { CopilotUsageView } from './copilot-usage-types.ts'
@@ -37,6 +36,14 @@ interface RuntimeProps {
   useSession<T>(selector: (snapshot: unknown) => T): T
   useProjection(key: 'modelSelection'): unknown
 }
+interface ManagedRemotes {
+  readonly session: SessionAccountRemote | undefined
+  readonly continuation: SessionContinuationRemote | undefined
+}
+interface ManagedRemoteSource {
+  getSnapshot(): ManagedRemotes
+  subscribe(listener: () => void): () => void
+}
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -44,19 +51,15 @@ function isSlots(value: unknown): value is Slots {
   return record(value) && typeof value.spec === 'function'
     && typeof value.inject === 'function' && typeof value.register === 'function'
 }
-function isRemote(value: unknown): value is CopilotUsageRemote {
-  return record(value) && typeof value.get === 'function' && typeof value.refresh === 'function'
+function isNativeRemote(value: unknown): value is {
+  getNative: CopilotUsageRemote['get']; refreshNative: CopilotUsageRemote['refresh']
+} {
+  return record(value) && typeof value.getNative === 'function' && typeof value.refreshNative === 'function'
 }
 function isSessionRemote(value: unknown): value is SessionAccountRemote {
   return record(value) && typeof value.get === 'function' && typeof value.set === 'function'
     && typeof value.refreshIdentity === 'function' && typeof value.ensureIdentity === 'function'
     && typeof value.usage === 'function' && typeof value.refreshUsage === 'function'
-}
-function isContinuationRemote(value: unknown): value is SessionContinuationRemote {
-  return record(value) && typeof value.get === 'function' && typeof value.set === 'function'
-    && (value.authorizeNext === undefined || typeof value.authorizeNext === 'function')
-    && (value.defaults === undefined || typeof value.defaults === 'function')
-    && (value.setDefault === undefined || typeof value.setDefault === 'function')
 }
 function isLocale(value: unknown): value is LocaleReader {
   return record(value) && typeof value.getLocale === 'function' && typeof value.subscribe === 'function'
@@ -83,15 +86,16 @@ function effectiveCopilot(projection: unknown): { provider: string; model: strin
   return next.provider === 'github-copilot' || next.provider === 'github-copilot-preview' ? next : undefined
 }
 
-function Surface({ runtime, remote, accountsRemote, sessionRemote, continuationRemote, locale, diagnostic }: {
+function Surface({ runtime, nativeRemote, managedRemotes, locale, diagnostic }: {
   runtime: RuntimeProps
-  remote: CopilotUsageRemote | undefined
-  accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'> | undefined
-  sessionRemote: SessionAccountRemote | undefined
-  continuationRemote: SessionContinuationRemote | undefined
+  nativeRemote: CopilotUsageRemote | undefined
+  managedRemotes: ManagedRemoteSource
   locale: LocaleReader | undefined
   diagnostic: (code: string) => void
 }): ReactElement | null {
+  const { session: sessionRemote, continuation: continuationRemote } = useSyncExternalStore(
+    managedRemotes.subscribe, managedRemotes.getSnapshot, managedRemotes.getSnapshot,
+  )
   const valid = runtime.useSession(session => record(session) && session.sessionId === runtime.sessionId
     && session.removed === false && session.openState === 'open')
   const projection = runtime.useProjection('modelSelection')
@@ -139,8 +143,8 @@ function Surface({ runtime, remote, accountsRemote, sessionRemote, continuationR
   if (!valid || current === undefined) return null
   const contextKey = JSON.stringify([runtime.sessionId, current.provider, current.model])
   return createElement(CopilotUsageCard, { key: contextKey, contextKey,
-    remote: current.provider === 'github-copilot-preview' ? bound?.usage : remote,
-    accountsRemote: current.provider === 'github-copilot-preview' ? bound?.identity : accountsRemote,
+    remote: current.provider === 'github-copilot-preview' ? bound?.usage : nativeRemote,
+    accountsRemote: current.provider === 'github-copilot-preview' ? bound?.identity : undefined,
     sessionAccount: current.provider === 'github-copilot-preview' ? bound?.account : undefined, locale: language,
     continuation: current.provider === 'github-copilot-preview' ? continuation.content : undefined,
     beforeAccountChange: current.provider === 'github-copilot-preview' ? continuation.beforeAccountChange : undefined,
@@ -160,29 +164,40 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
   }
   const slots = candidate
   // Resolve a traced Remote once, not on each render or Session-model update.
-  let remote: CopilotUsageRemote | undefined
-  let accountsRemote: Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'> | undefined
+  let nativeRemote: CopilotUsageRemote | undefined
   let sessionRemote: SessionAccountRemote | undefined
   let continuationRemote: SessionContinuationRemote | undefined
   try {
     const namespaces: unknown = ctx.remote
     const face = record(namespaces) ? namespaces.githubCopilotUsage : undefined
-    if (isRemote(face)) {
-      remote = face
-    } else diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE')
-    const accounts = record(namespaces) ? namespaces.githubCopilotAccounts : undefined
-    if (record(accounts) && typeof accounts.get === 'function' && typeof accounts.refreshIdentity === 'function'
-      && typeof accounts.ensureIdentity === 'function') {
-      accountsRemote = accounts as Pick<CopilotAccountsRemote, 'get' | 'refreshIdentity' | 'ensureIdentity'>
-    } else diagnostic('COPILOT_ACCOUNTS_REMOTE_UNAVAILABLE')
-    const session = record(namespaces) ? namespaces.githubCopilotSessionAccount : undefined
-    if (isSessionRemote(session)) sessionRemote = session
-    else diagnostic('COPILOT_SESSION_ACCOUNTS_REMOTE_UNAVAILABLE')
-    const continuation = record(namespaces) ? namespaces.githubCopilotSessionContinuation : undefined
-    if (isContinuationRemote(continuation)) {
-      continuationRemote = continuation
-    } else diagnostic('COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
+    if (isNativeRemote(face)) nativeRemote = { get: () => face.getNative(), refresh: () => face.refreshNative() }
+    else diagnostic('COPILOT_USAGE_NATIVE_REMOTE_UNAVAILABLE')
   } catch { diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE') }
+  const listeners = new Set<() => void>()
+  let managedSnapshot: ManagedRemotes = { session: undefined, continuation: undefined }
+  const publishManaged = () => {
+    if (managedSnapshot.session === sessionRemote && managedSnapshot.continuation === continuationRemote) return
+    managedSnapshot = { session: sessionRemote, continuation: continuationRemote }
+    for (const listener of listeners) listener()
+  }
+  const managedRemotes: ManagedRemoteSource = {
+    getSnapshot: () => managedSnapshot,
+    subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener) } },
+  }
+  const sessionInjection = ctx.inject(['remote.githubCopilotSessionAccount'], scope => {
+    const candidate: unknown = scope.remote.githubCopilotSessionAccount
+    sessionRemote = isSessionRemote(candidate) ? candidate : undefined
+    if (sessionRemote === undefined) diagnostic('COPILOT_SESSION_ACCOUNTS_REMOTE_UNAVAILABLE')
+    publishManaged()
+    return () => { sessionRemote = undefined; publishManaged() }
+  })
+  const continuationInjection = ctx.inject(['remote.githubCopilotSessionContinuation'], scope => {
+    const candidate: unknown = scope.remote.githubCopilotSessionContinuation
+    continuationRemote = isSessionContinuationRemote(candidate) ? candidate : undefined
+    if (continuationRemote === undefined) diagnostic('COPILOT_CONTINUATION_REMOTE_UNAVAILABLE')
+    publishManaged()
+    return () => { continuationRemote = undefined; publishManaged() }
+  })
   const localeCandidate: unknown = ctx.get('locale')
   const locale = isLocale(localeCandidate) ? localeCandidate : undefined
   let active = true
@@ -204,7 +219,7 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
             return null
           }
           return createElement(Surface, {
-            runtime: props, remote, accountsRemote, sessionRemote, continuationRemote, locale, diagnostic,
+            runtime: props, nativeRemote, managedRemotes, locale, diagnostic,
           })
         })
         let removed = false
@@ -219,5 +234,8 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
     active = false
     injection()
     remove?.()
+    void sessionInjection.dispose()
+    void continuationInjection.dispose()
+    listeners.clear()
   }
 }
