@@ -82,6 +82,8 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 附加账号。在托管路线仍然注册的期间，保存原生 provider 可能阻止附加账号的请求
 和切换。原生选择器不保证按账号权限过滤内置模型目录。
 启动插件或完成登录时，不会自动修复原生 provider 设置。
+当前候选版不注册 Copilot 托管搜索，也不提供旧的插件搜索路由控件。
+DSH 现有的 Web 搜索 provider 独立运行；安装插件不会为其配置搜索服务。
 原生路线的额度显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
 端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。
