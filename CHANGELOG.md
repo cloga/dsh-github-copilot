@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.7.dsh.0.2.2.rc.3 (prepared)
+
+- Qualify native search and Auto reviewer compatibility using the adapter-owned pi-ai catalog even when the plugin resolves a separate copy (#461).
+- Leave unknown package exports, model protocols and changed route ownership unavailable rather than guessing or changing native settings.
+
 ## 0.1.0-alpha.6.dsh.0.2.2.rc.3 (prepared)
 
 - Permit managed multi-account switching alongside independently configured native Copilot, retaining credential/turn isolation and the native interface (#470).

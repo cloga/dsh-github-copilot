@@ -67,15 +67,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.6.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.6.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.6.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.7.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.7.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.7.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.6.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.6.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.7.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.7.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -113,7 +113,9 @@ Custom endpoint, credential or transport overrides and unproven models remain
 unavailable. There is no model retry, backend replacement or plugin routing UI.
 The native Auto reviewer's qualified Copilot Responses requests omit
 `temperature`; ordinary Chat and native allow/deny/error/cancel behavior remain
-unchanged. See [reviewer compatibility](./docs/auto-review-sampling.md).
+unchanged. Qualification uses the native adapter's pi-ai catalog even when
+the plugin resolves a separate copy; missing protocol facts remain unavailable.
+See [reviewer compatibility](./docs/auto-review-sampling.md).
 The native route's quota and optional identity display use only the canonical OAuth account. If the
 provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a

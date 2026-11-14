@@ -55,15 +55,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.6.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.6.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.6.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.7.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.7.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.7.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.6.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.6.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.7.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.7.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -91,7 +91,8 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 自定义端点、凭据或传输覆盖，以及无法确认的模型，保持不可用。没有自动换模型重试、
 Web 服务替换或旧插件路由 UI。
 原生 Auto reviewer 经确认的 Copilot Responses 审核请求会省略 `temperature`；
-普通聊天和原生 allow/deny/error/cancel 行为不变。参见
+普通聊天和原生 allow/deny/error/cancel 行为不变。即使插件解析到另一份 pi-ai，
+资格判断也使用原生适配器的目录；无法确认协议时仍不可用。参见
 [审核兼容说明](./docs/auto-review-sampling.md)。
 原生路线的额度和可选身份显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
 端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
