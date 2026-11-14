@@ -140,10 +140,10 @@ describe('local diagnostics control', () => {
       expect(Array.from(element.querySelectorAll('button')).find(node => node.textContent === 'Enable local collection')?.disabled).toBe(true)
     } finally { await act(async () => root.unmount()) }
   })
-  it('does not expose retired Auto collection controls when legacy observations are absent', async () => {
+  it.each(['absent', 'empty'] as const)('does not describe retired Auto data when it is %s', async legacyState => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     const snapshot = emptyDiagnostics()
-    delete snapshot.autoAllocation
+    if (legacyState === 'absent') delete snapshot.autoAllocation
     const remote: DiagnosticsRemote = {
       get: async () => ({ ok: true, value: { enabled: false, autoAllocationEnabled: false, state: 'ready',
         diagnostic: 'none', dirty: false, snapshot } }),
@@ -155,6 +155,8 @@ describe('local diagnostics control', () => {
       await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
       expect(element.textContent).not.toContain('Auto allocation observations')
       expect(element.textContent).not.toContain('Enable Auto allocation observation')
+      expect(element.textContent).not.toContain('Auto rows')
+      expect(element.textContent).not.toContain('Historical Auto')
       expect(remote.setAutoAllocationEnabled).not.toHaveBeenCalled()
     } finally { await act(async () => root.unmount()) }
   })
@@ -188,10 +190,35 @@ describe('local diagnostics control', () => {
       await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
       expect(element.textContent).not.toContain('Auto allocation observations')
       expect(element.textContent).not.toContain('Enable Auto allocation observation')
+      const dataScope = Array.from(element.querySelectorAll('summary')).find(node => node.textContent === 'Data scope, limits and JSON')!
+      await act(async () => dataScope.click())
+      const jsonDisclosure = Array.from(element.querySelectorAll('summary')).find(node => node.textContent === 'Review aggregate-only JSON')!
+      await act(async () => jsonDisclosure.click())
+      expect(jsonDisclosure.parentElement?.textContent).toContain('Historical Auto data is retained')
+      expect(jsonDisclosure.parentElement?.textContent).toContain('rows may contain model IDs')
+      expect(jsonDisclosure.parentElement?.textContent).toContain('No new plugin Auto data is collected')
       const prepare = Array.from(element.querySelectorAll('button')).find(node => node.textContent === 'Prepare current JSON')!
       await act(async () => prepare.click())
       expect(element.querySelector('textarea')?.value).toContain('"policyVersion": "high-cost-v1"')
       expect(element.querySelector('textarea')?.value).toContain('"modelId": "fixture-model"')
+      expect(remote.setAutoAllocationEnabled).not.toHaveBeenCalled()
+    } finally { await act(async () => root.unmount()) }
+  })
+  it('discloses historical Auto data when only expired aggregates remain', async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+    const snapshot = emptyDiagnostics()
+    snapshot.autoAllocation = { ...snapshot.autoAllocation!, status: 'observed', expired: 2 }
+    const remote: DiagnosticsRemote = {
+      get: async () => ({ ok: true, value: { enabled: false, autoAllocationEnabled: false, state: 'ready',
+        diagnostic: 'none', dirty: false, snapshot } }),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+    }
+    const element = document.createElement('div')
+    const root = createRoot(element)
+    try {
+      await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
+      expect(element.textContent).toContain('Historical Auto data is retained')
+      expect(element.textContent).toContain('Expired counts are strata')
       expect(remote.setAutoAllocationEnabled).not.toHaveBeenCalled()
     } finally { await act(async () => root.unmount()) }
   })

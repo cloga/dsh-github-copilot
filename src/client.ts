@@ -553,7 +553,7 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
 
   return createElement('section', { 'data-dsh-github-copilot-account-models': true },
     createElement('p', { role: 'status', 'aria-live': 'polite', 'data-dsh-github-copilot-account-models-state': snapshot.state }, messages[snapshot.state]),
-    createElement('p', null, 'This list applies to github-copilot-preview. The native github-copilot route uses a separate catalog. Discovery does not prove a successful model call or hosted search, or change your default model or account policy.'),
+    createElement('p', null, 'This list applies to github-copilot-preview. The native github-copilot route uses a separate catalog. Discovery does not prove a successful model call; it does not change your default model or account policy.'),
     snapshot.error === undefined ? null : createElement('p', { role: 'alert' }, discoveryCode(snapshot.error, 'COPILOT_MODEL_DISCOVERY_FAILED')),
     createElement('details', null,
       createElement('summary', null, `${snapshot.models.length} accepted model(s)`),
