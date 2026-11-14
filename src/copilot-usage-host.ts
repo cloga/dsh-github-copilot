@@ -360,10 +360,14 @@ export default class GitHubCopilotUsageController extends TypertRemoteService {
     const providers: unknown = Reflect.get(section, 'providers')
     if (typeof providers !== 'object' || providers === null || Array.isArray(providers)) return false
     const profile: unknown = Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
-    return typeof profile === 'object' && profile !== null && !Array.isArray(profile)
-      && Reflect.get(profile, 'apiKeyEnv') === undefined
-      && Reflect.get(profile, 'baseURL') === undefined
-      && Reflect.get(profile, 'headers') === undefined
+    if (typeof profile !== 'object' || profile === null || Array.isArray(profile)
+      || Reflect.get(profile, 'apiKeyEnv') !== undefined
+      || Reflect.get(profile, 'baseURL') !== undefined) return false
+    const headers: unknown = Reflect.get(profile, 'headers')
+    if (headers === undefined) return true
+    if (typeof headers !== 'object' || headers === null || Array.isArray(headers)) return false
+    const prototype: unknown = Object.getPrototypeOf(headers)
+    return (prototype === Object.prototype || prototype === null) && Reflect.ownKeys(headers).length === 0
   }
   private async nativeUsage(force: boolean): Promise<CopilotUsageView> {
     try {

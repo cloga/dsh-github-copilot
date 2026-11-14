@@ -369,7 +369,8 @@ describe('Copilot usage Host lifecycle', () => {
     const controller = new GitHubCopilotUsageController(ctx)
     try {
       for (const value of [undefined, null, 'invalid', { apiKeyEnv: 'COPILOT_GITHUB_TOKEN' },
-        { baseURL: 'https://example.invalid' }, { headers: { Authorization: 'synthetic' } }]) {
+        { baseURL: 'https://example.invalid' }, { headers: null }, { headers: [] },
+        { headers: 'invalid' }, { headers: { Authorization: 'synthetic' } }]) {
         profile = value
         expect(await controller.getNative()).toMatchObject({ state: 'unavailable', diagnostic: 'COPILOT_USAGE_NATIVE_AUTH_UNPROVEN' })
       }

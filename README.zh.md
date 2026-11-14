@@ -83,7 +83,7 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 和切换。原生选择器不保证按账号权限过滤内置模型目录。
 启动插件或完成登录时，不会自动修复原生 provider 设置。
 原生路线的额度显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
-端点或请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
+端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。
 
 Desktop 原生包管理器及其内置 CLI 与独立 profile 的操作约束不同。安装前请阅读

@@ -101,7 +101,7 @@ to filter its bundled catalog by account entitlement.
 Starting the plugin or completing sign-in does not automatically repair the
 native provider's settings.
 The native route's quota display uses only the canonical OAuth account. If the
-provider names a credential, endpoint or headers override, or its configuration
+provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
 

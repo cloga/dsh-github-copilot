@@ -83,7 +83,7 @@ Synthetic unit/UI tests and exact unchanged Core accounting/registry fixtures pr
 For the native `github-copilot` route, quota reads use only the canonical
 `llm-pi-ai/github-copilot` OAuth grant, independently of the plugin account
 selector. When the native profile is missing or names an `apiKeyEnv`, endpoint,
-or headers override, the quota is unavailable with
+or nonempty headers override, the quota is unavailable with
 `COPILOT_USAGE_NATIVE_AUTH_UNPROVEN` rather than attributing another
 credential's quota. Other public header contributors may still modify a request;
 configuration-based evidence does not prove which account a request billed.
