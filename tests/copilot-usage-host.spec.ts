@@ -328,9 +328,10 @@ describe('Copilot usage Host lifecycle', () => {
     const accountId = '11111111-1111-4111-8111-111111111111'
     const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(quota))
     const reads: string[] = []
+    let profile: object = {}
     ctx.provide('settings', { describe: () => [
       { ns: 'github-copilot', revision: 1, value: { activeAccountId: accountId } },
-      { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': {} } } },
+      { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': profile } } },
     ], mutate: vi.fn() })
     ctx.provide('credentials', {
       readRecord: async (key: string) => {
@@ -349,6 +350,9 @@ describe('Copilot usage Host lifecycle', () => {
       expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
         Authorization: 'token synthetic-llm-pi-ai/github-copilot',
       })
+      profile = { headers: {} }
+      expect(await controller.getNative()).toMatchObject({ state: 'ready', accountId: 'canonical' })
+      expect(fetcher).toHaveBeenCalledTimes(1)
     } finally { await ctx.fiber.dispose(); accounts.dispose() }
   })
   it('does not attribute native quota when the route has unverified credential or endpoint overrides', async () => {
