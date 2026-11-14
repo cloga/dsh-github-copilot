@@ -1,5 +1,25 @@
 # Native Auto reviewer sampling compatibility
 
+## Canonical native route (DSH 0.2.2-rc.3)
+
+The same reviewer-only policy also covers `github-copilot` when the public
+Loader root, native adapter package callback, configurable-provider directory,
+settings revision and exact shared pi-ai 1.3.0 catalog prove a native Responses
+route. It requires `purpose: 'auto-review'` and excludes loop-owned requests.
+Custom credential, endpoint and compatibility overrides remain native; unknown
+models are diagnosed, never assigned a guessed protocol.
+
+The auxiliary request is cloned without temperature and prepared through public
+`llm.prepareCall`. Identity and configuration are checked again after awaits,
+and the prepared generation is dispatched once. Preparation failures, cancellation
+and revocation never trigger a fallback or resend. The canonical fixture uses
+the actual native pi-ai adapter and reviewer/tool pipeline with synthetic HTTP
+responses for allow, deny, malformed verdict, HTTP error and cancellation.
+Disposing the enhancement reproduces the unsupported-temperature failure.
+These are synthetic acceptance requirements, not proof of live supplier access.
+
+## Managed-route compatibility
+
 The plugin automatically omits `temperature` only from a supported official DSH
 Auto reviewer root's account-proven managed `openai-responses`
 requests. No user opt-in is required. Concurrent ordinary Chat, even on the same
@@ -41,7 +61,7 @@ Plugin disposal revokes its listener and in-flight scoped dispatch.
 
 ## Scope and evidence limits
 
-Canonical Core-owned Copilot, other providers/protocols, aliases, descendants,
+Unqualified canonical Copilot, other providers/protocols, aliases, descendants,
 impostor callbacks and unresolved identity remain native. Unqualified reviewer
 identity reports bounded fixed-code Host diagnostics, not a broad omission
 fallback. Missing optional reviewer packages do not prevent ordinary startup.

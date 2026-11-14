@@ -1,9 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type { GenerateOptions, LlmRuntime, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from './copilot-identity.ts'
 import { currentSearchInitiator } from './current-provider.ts'
 import type {} from './preview-route.ts'
+import { captureNativeCopilot, NATIVE_COPILOT } from './native-copilot-access.ts'
 
 const REVIEWER = '@deepseek-ai/dsh-experimental-auto-review'
 const CORE_VERSIONS = new Set(['0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'])
@@ -12,8 +14,8 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object'
 }
 
-function streamService(value: unknown): value is Pick<LlmRuntime, 'stream'> {
-  return record(value) && typeof value.stream === 'function'
+function streamService(value: unknown): value is Pick<LlmRuntime, 'stream' | 'prepareCall'> {
+  return record(value) && typeof value.stream === 'function' && typeof value.prepareCall === 'function'
 }
 
 /** Resolve the published callback, never the configured entry's display name. */
@@ -51,7 +53,9 @@ export function installAutoReviewSampling(ctx: Context): () => void {
     if (entry === undefined || entry.fiber?.ctx.fiber !== caller.fiber || entry.options.name !== REVIEWER) return native
     const runtime = native
     const scopedStream = (options: GenerateOptions): AsyncIterable<StreamChunk> => (async function* () {
-      if (!active || options.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID) {
+      const canonical = options.provider === NATIVE_COPILOT
+      if (!active || !canonical && options.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID
+        || canonical && (options.purpose !== 'auto-review' || isAgentLoopRequest(options))) {
         yield* runtime.stream(options)
         return
       }
@@ -66,6 +70,33 @@ export function installAutoReviewSampling(ctx: Context): () => void {
       if (!active || !identified) {
         if (active) diagnose('COPILOT_AUTO_REVIEW_IDENTITY_UNPROVEN')
         yield* runtime.stream(options)
+        return
+      }
+      if (canonical) {
+        const route = await captureNativeCopilot(ctx)
+        if (!route || route.models.get(options.model)?.api !== 'openai-responses') {
+          diagnose('COPILOT_AUTO_REVIEW_NATIVE_ROUTE_UNPROVEN')
+          yield* runtime.stream(options)
+          return
+        }
+        const signal = options.signal === undefined ? lifecycle.signal : AbortSignal.any([options.signal, lifecycle.signal])
+        signal.throwIfAborted()
+        route.assertCurrent()
+        const prepared = await runtime.prepareCall({
+          provider: options.provider, model: options.model,
+          ...(options.reasoningEffort === undefined ? {} : { reasoningEffort: options.reasoningEffort }),
+          ...(options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens }),
+          ...(options.stop === undefined ? {} : { stop: options.stop }),
+        }, signal)
+        // Once prepared, never fall back to another generation or resend on failure.
+        signal.throwIfAborted()
+        route.assertCurrent()
+        if (!await isNativeReviewerContext(caller)) throw new Error('COPILOT_AUTO_REVIEW_IDENTITY_REVOKED')
+        signal.throwIfAborted()
+        route.assertCurrent()
+        const request = { ...options, temperature: undefined, ...prepared.config, signal }
+        if (Object.isFrozen(options)) Object.freeze(request)
+        yield* prepared.stream(request)
         return
       }
       const preview = ctx.get('githubCopilotPreview')
