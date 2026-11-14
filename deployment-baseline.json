@@ -945,7 +945,7 @@
         {"file": "tests/session-continuation.spec.ts", "name": "does not traverse or serialize ordinary contents when a request exceeds 16 MiB"},
         {"file": "tests/session-continuation.spec.ts", "name": "omits large historical ciphertext without a whole-request byte cap"},
         {"file": "tests/session-continuation.spec.ts", "name": "yields during ciphertext hashing and rejects revocation without establishing a baseline"},
-        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "compacts and rebuilds an Auto request with large historical continuation reasoning, continuing=%s"},
+        {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "compacts and rebuilds the selected model request with large historical continuation reasoning, continuing=%s"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "enables only persistent Session continuation after loss disclosure, without legacy authorization or sending"},
         {"file": "tests/replay-recovery-ui.spec.ts", "name": "does not reauthorize an already enabled policy or change it when failure evidence expires"},
         {"file": "tests/session-continuation.spec.ts", "name": "does not replay baseline ciphertext after its ID or embedded summary changes"},

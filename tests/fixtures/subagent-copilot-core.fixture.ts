@@ -54,7 +54,13 @@ it('routes concurrently authorized native children to their selected Copilot mod
   const signals: Array<AbortSignal | null | undefined> = []
   const completed: SubagentRunEndInfo[] = []
   const failures: Array<{ code: string; message: string }> = []
+  const turnEnds: unknown[] = []
+  const agentErrors: string[] = []
   ctx.on('subagent/end', info => { completed.push(info) })
+  ctx.on('agent/error', ({ error }) => { agentErrors.push(String(error)) })
+  ctx.on('session/event', (session, event) => {
+    if (session.id !== 'copilot-subagent-parent' && event.type === 'turn/end') turnEnds.push(event.data)
+  })
   ctx.on('agent/request-error', async ({ failure }, next) => {
     failures.push({ code: failure.code, message: failure.message })
     return next()
@@ -183,7 +189,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     ])
     expect(first.isError).toBe(false)
     expect(second.isError).toBe(false)
-    await vi.waitFor(() => expect(wire, JSON.stringify({ failures, completed })).toHaveLength(2), { timeout: 15_000 })
+    await vi.waitFor(() => expect(wire, JSON.stringify({ failures, completed, turnEnds, agentErrors })).toHaveLength(2), { timeout: 15_000 })
     expect(wire.map(body => [body.model, body.reasoning?.effort]).sort()).toEqual([
       [MODELS[0], 'low'], [MODELS[1], 'high'],
     ])

@@ -73,7 +73,7 @@ describe('native web ownership', () => {
     } })
     const session = Session.create(SessionId('copilot-agent'))
     session.append('request/header', { header: {
-      config: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' }, tools: [],
+      config: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' },
     }, reason: 'initial' })
     const agent = {
       id: 'copilot-agent',
