@@ -9,7 +9,7 @@
  * No private Core imports, prototype replacements, Core builds or disk writes.
  */
 import { Context } from '@deepseek-ai/cordis'
-import { AgentRegistry, type Agent } from '@deepseek-ai/dsh-agent'
+import { AgentRegistry, modelSelectionProjectionDefinition, type Agent } from '@deepseek-ai/dsh-agent'
 import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
@@ -95,6 +95,9 @@ async function fixture({ mountController = true } = {}) {
     }])
   }
   const projections = new SessionProjectionRegistry(ctx)
+  if (mountController && process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.2-rc.3') {
+    await projections.register(modelSelectionProjectionDefinition)
+  }
   let selectedDefault = defaultC
   const currentSelection = vi.fn(() => selectedDefault)
   provideDouble(ctx, 'agentDefaultModel', { currentSelection, saveSelection: forbidden })
@@ -126,7 +129,7 @@ async function fixture({ mountController = true } = {}) {
     getView: forbidden, ensureModels: forbidden, routeFacts: forbidden,
   })
 
-  // Public constructor, not a copy/import of its private projection installer.
+  // The rc.3 Agent owns the exported selection projection; older controllers install theirs.
   // Optional UI/file/skill plugins remain dependency-gated in this isolated ctx.
   const controller = mountController ? new SessionController(ctx, { nativeOpen: false }, {
     canOpenPath: () => false, openPath: forbidden,

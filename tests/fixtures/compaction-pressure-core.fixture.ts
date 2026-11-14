@@ -22,6 +22,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { deriveTurnTokenUsage } from '@deepseek-ai/dsh-token-meter/client'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PiEstimate from '@earendil-works/pi-ai/utils/estimate'
 import '@earendil-works/pi-ai/api/openai-responses'
 import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
@@ -315,6 +316,7 @@ async function fixture(mode: SummaryMode = 'stop', recovery = false, nativeAdmis
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(ToolRuntime, {})
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(TokenMeter)
@@ -832,6 +834,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
     await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt, {})
     await ctx.plugin(ToolRuntime, {})
+    await ctx.plugin(NativeToolExecutor)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(TokenMeter)

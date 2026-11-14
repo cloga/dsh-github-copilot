@@ -122,12 +122,15 @@ jobs:
       - name: Install pinned Core renderer verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-client-ui-renderer...'
+      - name: Install the official pinned system addon outside both source trees
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/copilot-native-addon" --ignore-scripts --no-save --no-audit --fund=false --registry=https://registry.npmjs.org @deepseek-ai/node-addon-system@0.1.2
       - name: Build plugin Client for pinned Core selector regression
         run: pnpm build
       - name: Verify current unchanged tagged runtime before packing
         shell: bash
         run: |
-          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.2.2-rc.3
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-release" --release 0.2.2-rc.3 --native-addon "$RUNNER_TEMP/copilot-native-addon"
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-release/vitest.config.mts"
       - name: Verify plugin package
         run: pnpm verify

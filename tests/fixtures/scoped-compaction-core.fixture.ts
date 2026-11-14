@@ -11,6 +11,7 @@ import Projections from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import Tools from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Group from '@deepseek-ai/cordis-plugin-group'
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
@@ -37,6 +38,7 @@ test.each([
     await root.plugin(Projections)
     await root.plugin(SystemPrompt, {})
     await root.plugin(Tools, {})
+    await root.plugin(NativeToolExecutor)
     await root.plugin(Agents)
     await root.plugin(AgentLoop, { agents: [] })
     await root.plugin(TokenMeter)

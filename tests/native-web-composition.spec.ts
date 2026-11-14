@@ -117,10 +117,12 @@ describe('native web ownership', () => {
         return batch.results[0]!.result
       } finally { toolSet.dispose() }
     })
-    expect(await run('before-dispose')).toMatchObject({ isError: false })
+    const before = await run('before-dispose')
+    expect(before.isError, JSON.stringify(before)).toBe(false)
     await plugin.dispose()
     await expect(ctx.web.searchReady(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)).resolves.toBe(true)
-    expect(await run('after-dispose')).toMatchObject({ isError: false })
+    const after = await run('after-dispose')
+    expect(after.isError, JSON.stringify(after)).toBe(false)
     expect(search).toHaveBeenCalledTimes(2)
     await scope.dispose()
   })

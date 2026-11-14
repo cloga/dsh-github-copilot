@@ -262,11 +262,30 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         await writeFile(join(value.root, 'tests/dual-model-host.spec.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/tool-schema-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/subagent-copilot-core.fixture.ts'), 'export {}')
+        value.nativeAddon = join(value.base, 'native-addon')
+        const addon = join(value.nativeAddon, 'node_modules/@deepseek-ai/node-addon-system')
+        await mkdir(addon, { recursive: true })
+        await writeFile(join(addon, 'package.json'), JSON.stringify({
+          name: '@deepseek-ai/node-addon-system', version: '0.1.2',
+          exports: { './package.json': './package.json', './flock': './flock.js' },
+        }))
+        await writeFile(join(addon, 'flock.js'), 'throw new Error("resolver fixture must not execute")\n')
+        const taggedAddon = join(value.core, 'native/system/packages/entry')
+        await mkdir(taggedAddon, { recursive: true })
+        await writeFile(join(taggedAddon, 'package.json'), JSON.stringify({ version: '0.1.1' }))
+        await assert.rejects(prepareTaggedCoreFixture(value, value), /differs from the tagged package version/)
+        await writeFile(join(taggedAddon, 'package.json'), JSON.stringify({ version: '0.1.2' }))
       }
       const report = await prepareTaggedCoreFixture(value, value)
       const config = (await import(pathToFileURL(report.configPath).href)).default
       assert.equal(report.commit, TAGGED_CORE_RELEASES[release])
       assert.equal(config.test.env.DSH_PUBLISHED_CORE_RELEASE, release)
+      if (release === '0.2.2-rc.3') {
+        const guard = config.plugins.find(item => item.name === 'tagged-core-public-import-guard')
+        const addon = join(value.nativeAddon, 'node_modules/@deepseek-ai/node-addon-system/flock.js')
+        assert.equal(guard.resolveId('@deepseek-ai/node-addon-system/flock', join(value.core, 'packages/session/session-persistence-jsonl/src/lease.ts')), addon)
+        assert.equal(guard.resolveId('@deepseek-ai/node-addon-system/flock', join(value.root, 'src/index.ts')), null)
+      }
       if (release.startsWith('0.1.6-') || modern) {
         const require = createRequire(join(value.core, 'packages/client/ui-renderer/package.json'))
         const names = ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-dom', 'react-dom/client',

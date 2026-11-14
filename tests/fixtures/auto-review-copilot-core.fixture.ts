@@ -201,11 +201,11 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
     if (name === 'llm') readScopes.push({
       reviewer: caller.fiber.runtime?.callback === AutoReview.apply,
       entry: caller.fiber.entry !== undefined,
-      root: caller.fiber.entry?.fiber === caller.fiber,
+      root: caller.fiber.entry?.fiber?.ctx.fiber === caller.fiber,
       service: typeof native,
     })
     if (name === 'llm' && caller.fiber.runtime?.callback === AutoReview.apply
-      && caller.fiber.entry?.fiber === caller.fiber && stopSampling !== undefined) {
+      && caller.fiber.entry?.fiber?.ctx.fiber === caller.fiber && stopSampling !== undefined) {
       if (scope === 'retained-facade') stopSampling()
       if (scope === 'late-identity') queueMicrotask(stopSampling)
     }

@@ -156,7 +156,7 @@ function configSource(report) {
 }
 
 /** Prepare only runner-owned config/identity files; read Core and plugin source without changing either. */
-export async function prepareTaggedCoreFixture({ root, core, target, release }, { git = readTaggedGit, runner } = {}) {
+export async function prepareTaggedCoreFixture({ root, core, target, release, nativeAddon }, { git = readTaggedGit, runner } = {}) {
   const expected = TAGGED_CORE_RELEASES[release]
   if (expected === undefined) throw new Error('unsupported tagged Core release')
   const pluginRoot = await physicalDirectory(root)
@@ -175,6 +175,18 @@ export async function prepareTaggedCoreFixture({ root, core, target, release }, 
   const tracked = git(coreRoot, ['ls-files', '-z']).split('\0').filter(Boolean)
   if (!tracked.includes('vitest.shared.ts')) throw new Error('tagged Core standard decorator test helper is missing')
   const inventory = await taggedCoreAliases(coreRoot, tracked, release)
+  if (nativeAddon !== undefined) {
+    if (release !== '0.2.2-rc.3') throw new Error('native addon fixture is only supported for rc.3')
+    const addonRoot = await physicalDirectory(nativeAddon)
+    if (inside(pluginRoot, addonRoot) || inside(coreRoot, addonRoot)) throw new Error('native addon fixture must be outside both source trees')
+    const requireAddon = createRequire(join(addonRoot, 'package.json'))
+    const manifest = JSON.parse(await readFile(requireAddon.resolve('@deepseek-ai/node-addon-system/package.json'), 'utf8'))
+    const pinned = JSON.parse(await readFile(join(coreRoot, 'native/system/packages/entry/package.json'), 'utf8'))
+    if (manifest.name !== '@deepseek-ai/node-addon-system' || manifest.version !== pinned.version) {
+      throw new Error('native addon fixture differs from the tagged package version')
+    }
+    inventory.vendors.push({ name: '@deepseek-ai/node-addon-system/flock', entry: requireAddon.resolve('@deepseek-ai/node-addon-system/flock') })
+  }
   const rendererRuntimeAliases = taggedRendererRuntimeAliases(inventory.packages, release)
   const require = createRequire(join(pluginRoot, 'package.json'))
   const vitestCli = runner ?? join(dirname(require.resolve('vitest/package.json')), 'vitest.mjs')
@@ -202,10 +214,14 @@ function parseArgs(args) {
   const options = {}
   for (let index = 0; index < rest.length; index += 2) {
     const name = rest[index]?.slice(2)
-    if (!['root', 'core', 'target', 'release'].includes(name) || rest[index] !== `--${name}` || !rest[index + 1] || options[name] !== undefined) throw new Error('invalid tagged fixture arguments')
+    if (!['root', 'core', 'target', 'release', 'native-addon'].includes(name) || rest[index] !== `--${name}` || !rest[index + 1] || options[name] !== undefined) throw new Error('invalid tagged fixture arguments')
     options[name] = rest[index + 1]
   }
   if (['root', 'core', 'target', 'release'].some(name => !options[name])) throw new Error('missing tagged fixture argument')
+  if (options['native-addon'] !== undefined) {
+    options.nativeAddon = options['native-addon']
+    delete options['native-addon']
+  }
   return options
 }
 if (process.argv[1] && same(resolve(process.argv[1]), fileURLToPath(import.meta.url))) {

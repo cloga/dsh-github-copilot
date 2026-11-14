@@ -98,10 +98,13 @@ jobs:
       - name: Install native diagnostic storage verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-storage-domain...' --filter '@deepseek-ai/dsh-storage-json...'
+      - name: Install the official pinned system addon outside both source trees
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/copilot-native-addon" --ignore-scripts --no-save --no-audit --fund=false --registry=https://registry.npmjs.org @deepseek-ai/node-addon-system@0.1.2
       - name: Prepare exact DSH 0.2.2-rc.3 tagged-source runtime verification
         shell: bash
         run: |
-          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.release }}"
+          node scripts/verify-tagged-core.mjs prepare --root . --core dsh-upstream --target "$RUNNER_TEMP/copilot-tagged-core" --release "${{ matrix.release }}" --native-addon "$RUNNER_TEMP/copilot-native-addon"
       - name: Build plugin Client for pinned Core selector regression
         run: pnpm build
       - name: Exercise actual DSH 0.2 runtime without building or patching Core
