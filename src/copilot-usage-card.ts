@@ -19,6 +19,8 @@ import type { SessionAccountView } from './session-accounts-remote.ts'
 export interface CopilotUsageRemote {
   get(): Promise<{ ok: true; value: CopilotUsageView } | { ok: false; error: unknown }>
   refresh(): Promise<{ ok: true; value: CopilotUsageView } | { ok: false; error: unknown }>
+  ensureIdentity?(): Promise<{ ok: true; value: CopilotUsageView } | { ok: false; error: unknown }>
+  refreshIdentity?(): Promise<{ ok: true; value: CopilotUsageView } | { ok: false; error: unknown }>
 }
 export interface CopilotUsageCardProps {
   remote?: CopilotUsageRemote
@@ -180,6 +182,10 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     setBusy(true)
     setFailed(false)
     try {
+      const nativeIdentityOperation = props.accountsRemote === undefined ? (async () => {
+        try { return await (force ? props.remote!.refreshIdentity?.() : props.remote!.ensureIdentity?.()) }
+        catch { return undefined }
+      })() : undefined
       const identityOperation = props.accountsRemote === undefined ? undefined : (async () => {
         const observed = diagnostics.current.begin('identity-read')
         try {
@@ -216,6 +222,12 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
       } else setView(parsed.data)
       owner.busy = false
       setBusy(false)
+      const nativeIdentityResult = await nativeIdentityOperation
+      if (!current()) return
+      if (nativeIdentityResult?.ok === true) {
+        const nativeView = CopilotUsageViewSchema.safeParse(nativeIdentityResult.value)
+        if (nativeView.success) setView(nativeView.data)
+      }
       const renewed = await identityOperation
       if (!current()) return
       const renewedView = renewed?.ok === true ? accountsViewFrom(renewed.value) : undefined
@@ -451,7 +463,8 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
   const observed = available ? dateLabel(view.observedAt, language) : undefined
   const reset = available && view.resetAt !== undefined && view.observedAt !== undefined
     && view.resetAt > view.observedAt ? dateLabel(view.resetAt, language) : undefined
-  const currentIdentity = accountIdentityLabel(accounts) ?? t.identityUnavailable
+  const currentIdentity = (view?.identity === undefined ? undefined : copilotIdentityLabel(view.identity))
+    ?? accountIdentityLabel(accounts) ?? t.identityUnavailable
   const runningIdentity = sessionAccount?.runningAccountId === undefined ? undefined
     : accountIdentityLabel({ ...sessionAccount.accounts, activeAccountId: sessionAccount.runningAccountId })
   const accountOptions = open && choosingAccount && sessionAccount ? [

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { Agent } from 'undici'
 import { beginDiagnostics } from './diagnostics-host.ts'
 import { diagnosticsOutcome, diagnosticsReason } from './diagnostics-types.ts'
 import type { DiagnosticsHandle } from './diagnostics-collector.ts'
@@ -25,6 +26,7 @@ import type { CopilotAccountBinding, CopilotAccountIdentity, CopilotAccountLease
 import type {} from './copilot-accounts-remote.ts'
 import { CopilotLoginEnvironmentError, copilotLoginHost, copilotIdentityEndpoint,
   copilotVerificationUri, sameCopilotIdentity } from './copilot-login-environment.ts'
+import { createCopilotSystemTrustAgent } from './copilot-system-trust.ts'
 
 const IDENTITY_TTL = 600_000
 const IDENTITY_FAILURE_COOLDOWN = 30_000
@@ -36,6 +38,8 @@ interface Settings {
 }
 interface Dependencies {
   fetch?: typeof globalThis.fetch
+  getCACertificates?: (type: 'default' | 'system') => string[]
+  createDispatcher?: (options: Agent.Options) => Agent
   validateModels?: (binding: CopilotAccountBinding, signal: AbortSignal) => Promise<void>
   routeDiagnostic?: () => CopilotAccountsDiagnostic | undefined
 }
@@ -90,6 +94,7 @@ export class CopilotAccountsHost {
   private authorizationAbort: AbortController | undefined
   private notices: CopilotAccountsNotice[] = []
   private lastFailure: CopilotAccountsDiagnostic | undefined
+  private identityDispatcher: Agent | undefined
 
   constructor(private readonly ctx: Context, private readonly dependencies: Dependencies = {}) {}
   private settings(): Settings {
@@ -327,9 +332,14 @@ export class CopilotAccountsHost {
   private async fetchIdentityResponse(grant: GitHubCopilotOAuthCredential, signal: AbortSignal): Promise<CopilotAccountIdentity> {
     const host = loginHost(grant.enterpriseUrl)
     signal.throwIfAborted()
+    if (!this.dependencies.fetch && !this.identityDispatcher) {
+      try { this.identityDispatcher = createCopilotSystemTrustAgent(this.dependencies.getCACertificates, this.dependencies.createDispatcher) }
+      catch { fail('COPILOT_ACCOUNTS_IDENTITY_TLS') }
+    }
     const response = await abortable((this.dependencies.fetch ?? globalThis.fetch)(copilotIdentityEndpoint(host), {
       method: 'GET', redirect: 'error', cache: 'no-store', signal,
       headers: { Authorization: `token ${grant.refresh}`, Accept: 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
+      ...(!this.dependencies.fetch && { dispatcher: this.identityDispatcher }),
     }), signal)
     if (!response.ok || response.redirected || !response.body) {
       void response.body?.cancel().catch(() => undefined)
@@ -397,6 +407,13 @@ export class CopilotAccountsHost {
   }
   async ensureIdentityFor(accountId: string): Promise<CopilotAccountsView> {
     return this.readIdentity(accountId, false)
+  }
+  async verifiedIdentityFor(accountId: string, force: boolean): Promise<CopilotAccountIdentity | undefined> {
+    await this.readIdentity(accountId, force)
+    const cached = this.identities.get(accountId)
+    if (!cached) return undefined
+    await this.assertIdentityCurrent(this.captureAccount(accountId), cached.key)
+    return !this.disposed && this.identities.get(accountId) === cached ? cached.identity : undefined
   }
   async ensureAccountNamesFor(accountId: string): Promise<CopilotAccountsView> {
     const view = await this.ensureIdentityFor(accountId)
@@ -768,6 +785,9 @@ export class CopilotAccountsHost {
     this.authorizationAbort?.abort()
     this.abort.abort()
     this.revoke()
+    const dispatcher = this.identityDispatcher
+    this.identityDispatcher = undefined
+    if (dispatcher) void dispatcher.destroy().catch(() => this.ctx.logger.warn('[github-copilot] COPILOT_ACCOUNTS_IDENTITY_DISPOSE_FAILED'))
     this.identityFailures.clear()
     for (const release of this.leases) release()
     for (const leases of this.accountLeases.values()) for (const release of leases) release()

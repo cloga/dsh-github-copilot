@@ -57,6 +57,15 @@
     },
     "diagnostics": "Repository checks only; no live profile, credential, network or model calls",
     "approvalRequired": ["install into a user profile", "sign-out", "worktree checkout"],
+    "workspaceIsolation": {
+      "default": "app-managed-worktree-when-authorized",
+      "nonWorktree": "inspect-and-preserve-shared-workspace",
+      "temporaryArtifacts": "session-owned-outside-checkout",
+      "existingFiles": "preserve-never-hide-or-delete-for-gates",
+      "delivery": "review-explicit-commit-and-respect-tool-policy",
+      "escalation": "once-for-genuine-blocker-or-risk",
+      "enforcement": "advisory-not-a-sandbox"
+    },
     "releaseDelivery": {
       "mode": "important-update-follow-through",
       "importantChanges": ["user-visible-feature", "behavior-fix", "compatibility-fix", "security-fix", "stability-fix"],
@@ -137,8 +146,9 @@
     },
     "usage": {
       "purpose": "Bounded account quota snapshots and an optional Copilot-only composer usage control",
-      "read": ["src/copilot-usage-types.ts", "src/copilot-usage-normalize.ts", "src/copilot-usage-host.ts", "src/copilot-usage-remote.ts", "src/copilot-usage-card.ts", "src/copilot-usage-ui.ts", "docs/copilot-usage.md"],
-      "tests": ["tests/copilot-usage-normalize.spec.ts", "tests/copilot-usage-host.spec.ts", "tests/copilot-usage-remote.spec.ts", "tests/copilot-usage-card.spec.ts", "tests/copilot-usage-ui.spec.ts", "tests/scripts/copilot-usage-gateway.test.mjs", "tests/client-bundle.spec.ts", "tests/fixtures/remote-core.fixture.ts"],
+      "nativeIdentityBoundary": "Native identity is optional, canonical-only and independently hydrated without delaying quota. Pair it only with quota whose grant generation and native route still match after the identity lookup; cached names require current credential revalidation. Both identity and quota use scoped default plus system CA trust with certificate verification enabled. Never use the managed Session selector or change native provider settings.",
+      "read": ["src/copilot-usage-types.ts", "src/copilot-usage-normalize.ts", "src/copilot-usage-host.ts", "src/copilot-usage-remote.ts", "src/copilot-usage-card.ts", "src/copilot-usage-ui.ts", "src/copilot-system-trust.ts", "src/copilot-accounts-host.ts", "docs/copilot-usage.md"],
+      "tests": ["tests/copilot-usage-normalize.spec.ts", "tests/copilot-usage-host.spec.ts", "tests/copilot-usage-remote.spec.ts", "tests/copilot-usage-card.spec.ts", "tests/copilot-usage-ui.spec.ts", "tests/copilot-identity-refresh.spec.ts", "tests/scripts/copilot-usage-gateway.test.mjs", "tests/client-bundle.spec.ts", "tests/fixtures/remote-core.fixture.ts"],
       "risk": "Account billing-cycle usage is not context occupancy or session credits. Managed requests use the captured Session account; native quota uses the canonical Host-only OAuth record only when the native profile has no named credential, endpoint or headers override, otherwise attribution is unavailable. Public request-header contributors mean configuration evidence is not a request billing receipt. Use public credentials and a separate strict namespace; the accounts task owns the approved addressing extension. Quota introduces no credential storage or refresh owner, guessed enterprise endpoint, redirected credential, provider raw error, general model wire or Core patch. Validate amounts and units; pooled credits_used has no individual denominator, legacy requests are not AI credits, percentage-only data does not prove precise remaining units. Missing data is unavailable, not zero or unlimited. Bound network/cache/failure behavior and guard account continuity across asynchronous work, cached reads, invalidation and disposal. Add only a session-scoped public composer dock contribution; no private DOM/store injection or global-default inference for existing Sessions. Per-session credit accounting stays unavailable until complete attributable receipts are exposed by supported unchanged public APIs. Synthetic endpoint/UI evidence does not establish real quota permissions, billing latency or live Desktop activation."
     },
     "authorization": {

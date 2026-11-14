@@ -114,7 +114,7 @@ unavailable. There is no model retry, backend replacement or plugin routing UI.
 The native Auto reviewer's qualified Copilot Responses requests omit
 `temperature`; ordinary Chat and native allow/deny/error/cancel behavior remain
 unchanged. See [reviewer compatibility](./docs/auto-review-sampling.md).
-The native route's quota display uses only the canonical OAuth account. If the
+The native route's quota and optional identity display use only the canonical OAuth account. If the
 provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
