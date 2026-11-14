@@ -1,5 +1,9 @@
 # High-cost Auto: requirements and evidence
 
+> Historical documentation for earlier releases. The `0.2.2-rc.3` candidate
+> retires plugin-owned Auto and its high-cost control. Existing preferences
+> are not deleted.
+
 Tracking: #333. Evidence-review workflow: #332.
 Post-delivery review: [#334](https://github.com/cloga/dsh-github-copilot/issues/334).
 Advisor qualification: [#335](https://github.com/cloga/dsh-github-copilot/issues/335).

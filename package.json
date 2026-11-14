@@ -85,7 +85,6 @@
     "scripts/analyze-diagnostics.mjs",
     "scripts/iteration-review.mjs",
     "docs/image-input-compatibility.md",
-    "output/auto-model-mockup/index.html",
     "docs/images/dual-model-provenance.json",
     "scripts/check-search-composition.mjs",
     "scripts/select-core-release.mjs",
