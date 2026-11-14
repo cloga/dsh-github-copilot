@@ -80,8 +80,15 @@ Synthetic unit/UI tests and exact unchanged Core accounting/registry fixtures pr
 
 ## Account data boundary
 
-The Host uses the selected account's OAuth grant through public credential APIs,
-with `llm-pi-ai/github-copilot` retained for canonical compatibility. GitHub's
+For the native `github-copilot` route, quota reads use only the canonical
+`llm-pi-ai/github-copilot` OAuth grant, independently of the plugin account
+selector. When the native profile is missing or names an `apiKeyEnv`, endpoint,
+or headers override, the quota is unavailable with
+`COPILOT_USAGE_NATIVE_AUTH_UNPROVEN` rather than attributing another
+credential's quota. Other public header contributors may still modify a request;
+configuration-based evidence does not prove which account a request billed.
+The managed route continues to use its
+session-bound selected account. GitHub's
 `copilot_internal/user` endpoint uses the GitHub grant, not a quota-specific
 sign-in or a newly pasted token. Access-token renewal remains owned by pi-ai;
 quota inspection must not introduce a refresh implementation or credential
@@ -94,7 +101,7 @@ The plugin's default quota fetch lazily creates one request-scoped Undici agent 
 
 This removes reliance on a Desktop launcher inheriting `NODE_USE_SYSTEM_CA=1` for **quota requests only**. On a machine where Watt Toolkit / Steam++ installs a trusted Windows root, quota worked under a correctly environmented launch, then failed when a recovery launcher omitted the process variable despite its persistence in HKCU; a normal manual relaunch restored quota. That is operational evidence for the launcher-inheritance explanation, not proof that this new plugin build has been installed or loaded. Other Desktop traffic, including sign-in and models, still follows its existing process-level trust configuration. If system CA retrieval or agent creation fails, the quota shows `COPILOT_USAGE_TRUST_UNAVAILABLE` without issuing a request or weakening TLS. Certificate verification failures still show `COPILOT_USAGE_TLS`; other fetch failures remain `COPILOT_USAGE_NETWORK`. No diagnostic alone proves proxy routing, authorization or a live balance. Inspect approved Host trust/proxy settings without disabling TLS validation. When unavailable, details show guidance instead of implying a budget. The popover background is opaque even if the host's menu token contains transparency.
 
-The Client receives only the separate strict `githubCopilotUsage` namespace (`get` and `refresh`). Existing authorization and migration methods retain their schemas. Refresh does not change settings, budget, plan, model selection or billing policy. This meter is informational and does not authorize spending or implement a budget enforcement loop.
+The Client receives only the separate strict `githubCopilotUsage` namespace. The additive `getNative` and `refreshNative` methods address the native OAuth account; existing `get` and `refresh` retain their selected-account contract. Existing authorization and migration methods retain their schemas. Refresh does not change settings, budget, plan, model selection or billing policy. This meter is informational and does not authorize spending or implement a budget enforcement loop.
 
 ## Source contracts and limitations
 

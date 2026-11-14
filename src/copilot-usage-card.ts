@@ -47,6 +47,7 @@ const copy = {
     budgetUnknown: 'Budget unavailable',
     close: 'Close usage details', refresh: 'Refresh', refreshing: 'Refreshing…',
     error: 'Could not refresh usage. Try again.', unavailableExplanation: 'Account usage is currently unavailable.',
+    nativeAuthUnproven: 'Could not verify the native provider account. Check its credential, endpoint and header configuration.',
     tlsError: 'Could not verify the connection to GitHub using Node and system CA trust. Check the Host certificate store or proxy configuration; TLS verification remains enabled.',
     trustError: 'Could not load system CA trust for the quota request. Check that the Host supports Node system certificates; TLS verification was not bypassed.',
     signedOut: 'Sign in to Copilot in Models to view account usage.',
@@ -76,6 +77,7 @@ const copy = {
     budgetUnknown: '额度上限暂不可用',
     close: '关闭用量详情', refresh: '刷新', refreshing: '正在刷新…',
     error: '无法刷新用量，请重试。', unavailableExplanation: '当前无法获取账号用量。',
+    nativeAuthUnproven: '无法确认原生 provider 的账号，请检查其凭据、端点和请求头配置。',
     tlsError: '使用 Node 和系统证书信任仍无法验证 GitHub 连接。请检查 Host 的证书库或代理配置；TLS 验证保持开启。',
     trustError: '无法为额度请求加载系统证书信任。请检查 Host 是否支持 Node 系统证书；不会绕过 TLS 验证。',
     signedOut: '请在模型设置中登录 Copilot，以查看账号用量。',
@@ -535,7 +537,8 @@ export function CopilotUsageCard(props: CopilotUsageCardProps): ReactElement {
     view?.state === 'signed-out' ? h('p', { style: muted }, t.signedOut)
       : !available && !busy && props.remote !== undefined
         ? h('p', { style: muted }, view?.diagnostic === 'COPILOT_USAGE_TLS' ? t.tlsError
-          : view?.diagnostic === 'COPILOT_USAGE_TRUST_UNAVAILABLE' ? t.trustError : t.unavailableExplanation)
+          : view?.diagnostic === 'COPILOT_USAGE_TRUST_UNAVAILABLE' ? t.trustError
+            : view?.diagnostic === 'COPILOT_USAGE_NATIVE_AUTH_UNPROVEN' ? t.nativeAuthUnproven : t.unavailableExplanation)
         : null,
     available ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 } },
       h('div', { style: { minWidth: 0 } }, h('p', { style: muted }, t.usedLabel),

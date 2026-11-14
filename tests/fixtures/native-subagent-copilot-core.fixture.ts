@@ -1,0 +1,138 @@
+import '@earendil-works/pi-ai/api/openai-responses'
+import { Context } from '@deepseek-ai/cordis'
+import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
+import { LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
+import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import SubagentRuntime from '@deepseek-ai/dsh-subagent'
+import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
+import * as Spawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
+import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
+import SubagentModelSelectionConfig from '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
+import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { expect, it, vi } from 'vitest'
+import * as GitHubCopilotPlugin from '../../src/index.ts'
+
+const provider = 'github-copilot'
+const parentProvider = 'fixture-parent'
+
+function response(model: string) {
+  const item = { type: 'message', id: 'message-1', role: 'assistant',
+    content: [{ type: 'output_text', text: `finished ${model}` }] }
+  const event = (type: string, data: object) => `data: ${JSON.stringify({ type, ...data })}\n\n`
+  return new Response([
+    event('response.created', { response: { id: 'response-1' } }),
+    event('response.output_item.added', { output_index: 0, item }),
+    event('response.output_text.delta', { output_index: 0, delta: `finished ${model}` }),
+    event('response.output_item.done', { output_index: 0, item }),
+    event('response.completed', { response: { status: 'completed', output: [item],
+      usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 } } }),
+  ].join(''), { headers: { 'content-type': 'text/event-stream' } })
+}
+
+it('selects and dispatches a native Copilot model in a native subagent using its canonical OAuth grant', async () => {
+  expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
+  expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
+  const model = githubCopilotProvider().getModels().find(entry => entry.api === 'openai-responses')
+  expect(model).toBeDefined()
+  if (!model) throw new Error('NATIVE_COPILOT_RESPONSES_MODEL_UNAVAILABLE')
+  const directory = await mkdtemp(join(tmpdir(), 'copilot-native-subagent-'))
+  const ctx = new Context()
+  const release = Promise.withResolvers<void>()
+  const requests: Array<{ model: string; authorization: string | null }> = []
+  const completed: SubagentRunEndInfo[] = []
+  ctx.on('subagent/end', info => { completed.push(info) })
+  vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+    if (!String(input).endsWith('/responses')) throw new Error('unexpected fixture request')
+    const body = JSON.parse(String(init?.body)) as { model: string }
+    requests.push({ model: body.model, authorization: new Headers(init?.headers).get('authorization') })
+    await release.promise
+    return response(body.model)
+  })
+  try {
+    const registration = () => ctx.effect(() => () => {})
+    ctx.provide('typert', {
+      resources: { register: registration }, lookups: { configure: registration, register: registration },
+      contexts: { configureHost: registration, registerHost: registration },
+    })
+    ctx.provide('fileUploads', { registerAgentResolver: registration })
+    ctx.provide('credentials', {
+      readRecord: async (key: string) => key === 'llm-pi-ai/github-copilot'
+        ? { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-refresh',
+          access: 'synthetic-access', expires: Date.now() + 3_600_000, availableModelIds: [model.id] } }
+        : undefined,
+      listRecords: async () => [{ key: 'llm-pi-ai/github-copilot', kind: 'grant' }],
+      modifyRecord: async () => { throw new Error('unexpected fixture credential mutation') },
+      deleteRecord: async () => { throw new Error('unexpected fixture credential deletion') },
+    })
+    ctx.provide('settings', {
+      configure: registration,
+      describe: () => [
+        { ns: 'github-copilot', revision: 1, value: { activeAccountId: 'canonical' } },
+        { ns: 'llm-pi-ai', revision: 1, value: { providers: { [provider]: {} } } },
+      ],
+      mutate: async () => { throw new Error('unexpected fixture settings mutation') },
+    })
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: parentProvider, model: parentProvider }) })
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+    ctx.provide('tokenMeter', { estimateMessage: () => 1, measure: () => ({ totalTokens: 1 }) })
+    await ctx.plugin(LlmPiAi, { providers: { [provider]: {} } })
+    await ctx.plugin(GitHubCopilotPlugin, {
+      enabled: true, providers: [], includeSources: true, stripServerTools: true,
+      idleTimeoutMs: 300_000, probe: false, probeTimeoutMs: 30_000,
+    })
+    await vi.waitFor(() => expect(ctx.get('githubCopilotUsage')).toBeDefined())
+    ctx.llm.registerAdapter([parentProvider], new class extends LlmAdapter {
+      async *stream(_options: GenerateOptions): AsyncGenerator<StreamChunk> {
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        yield { type: 'text-delta', index: 0, text: 'Parent received child result.' }
+        yield { type: 'block-end', index: 0, block: { type: 'text', text: 'Parent received child result.' } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
+    })
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(JsonlSessionPersistence, { root: join(directory, 'sessions'), compression: 'none' })
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(Spawn, { providerName: 'spawn' })
+    await ctx.plugin(ToolSubagent, { provider: 'spawn', modelSelection: true, modelDiscovery: true })
+    await ctx.plugin(SubagentModelSelectionConfig, { enabled: true, allowedModels: [{ provider, model: model.id }] })
+    const controller = new SessionController(ctx, { nativeOpen: false }, { canOpenPath: () => false })
+    const catalog = await controller.modelCatalog()
+    expect(catalog.groups.find(group => group.id === provider)?.models.map(entry => entry.id)).toContain(model.id)
+    const { agent: parent } = await ctx.agents.create({
+      sessionId: SessionId('native-copilot-subagent-parent'),
+      agentOptions: { provider: parentProvider, model: parentProvider },
+    })
+    const batch = await ctx.agents.withInitiator(parent, () => ctx.tools.execute({
+      agent: parent, signal: new AbortController().signal,
+      calls: [{ type: 'tool-call', id: ToolCallId('native-child'), name: 'subagent',
+        arguments: JSON.stringify({ description: 'fixture child', prompt: 'Handle this task.',
+          provider, model: model.id }) }],
+    }))
+    expect(batch.results).toHaveLength(1)
+    expect(batch.results[0]!.result.isError).toBe(false)
+    await vi.waitFor(() => expect(requests).toHaveLength(1), { timeout: 15_000 })
+    expect(ctx.agents.list().filter(agent => agent.session.header.parentSession === parent.session.id)).toHaveLength(1)
+    release.resolve()
+    do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
+    expect(requests).toEqual([{ model: model.id, authorization: 'Bearer synthetic-access' }])
+    expect(completed).toHaveLength(1)
+    expect(completed[0]?.stopReason).toBe('completed')
+    expect(completed[0]?.lastAssistantMessage?.some(block =>
+      block.type === 'text' && block.text === `finished ${model.id}`)).toBe(true)
+  } finally {
+    release.resolve()
+    try { await ctx.fiber.dispose() }
+    finally {
+      try { await rm(directory, { recursive: true, force: true }) }
+      finally { vi.unstubAllGlobals() }
+    }
+  }
+}, 30_000)

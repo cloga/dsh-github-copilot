@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.2.dsh.0.2.2.rc.3 (prepared)
+
+- Explain the native provider's canonical OAuth binding and the existing additional-account coexistence limit, while retaining the visible account panel outside the native Add draft (#458).
+- Bind native-route quota to the canonical OAuth record rather than the plugin-selected account, and show an explicit unavailable state when a named credential override prevents attribution.
+- Native account filtering, route convergence and live Desktop invocation remain unverified.
+
 ## 0.1.0-alpha.1.dsh.0.2.2.rc.3 (prepared)
 
 - Begin narrowing the product to account-authorized Copilot models through DSH's published native adapter. Plugin-owned Auto and parent-follow routing and hosted-search composition are retired in the candidate; preserve account quota and review other enhancements before removing only demonstrably unnecessary functionality.

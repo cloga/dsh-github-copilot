@@ -54,8 +54,8 @@ contract used by ordinary native calls. A missing public seam is a concrete
 compatibility limit to report, not permission to invent a parallel relationship.
 
 Retire plugin-owned Auto and parent-follow policy/UI and custom hosted-search
-execution/routing, preserving bounded compatibility for existing selections and
-histories where needed. Retain GitHub Copilot account quota and useful
+execution/routing. Old conversation continuity is not an acceptance requirement.
+Retain GitHub Copilot account quota and useful
 enhancements; remove other functionality only when it is demonstrably redundant
 or unnecessary, not merely because it extends the basic model route. Never delete
 or rewrite user settings, accounts, or history, silently substitute a model, or
@@ -72,9 +72,18 @@ unsupported behavior must fail or diagnose explicitly; do not infer support,
 add model-ID routing rules, patch Core, or claim untested parity.
 
 When any later legacy detail in this guide conflicts with this confirmed scope,
-follow this section and the current acceptance criteria in #455/#456. Legacy
-behavior that is still needed to safely read old settings or histories remains
-compatibility code, not a reason to restore retired UI or product features.
+follow this section and the current acceptance criteria in #455/#456.
+
+The user clarified that the ordinary route should be DSH's native
+`github-copilot` provider, with only useful plugin enhancements through public
+APIs. Retire the separate managed route when native-route acceptance is met;
+do not preserve it solely to continue old conversations or create a history
+migration. Existing stored conversations, credentials and settings are not
+authorized for deletion or rewriting. Explicitly document that old managed
+route selections may become unavailable. Native model selection and actual
+subagent invocation must be verified on `github-copilot`, not inferred from
+managed-route tests. Record enhancements that cannot safely attach to native
+APIs rather than patching Core or misrepresenting support.
 
 The last qualified release line is official DSH `0.2.1-rc.3`; its source/artifact CI passed on Windows/Linux in run `40098031196`, while Desktop artifacts/signatures remain unverified. DSH `0.2.2-rc.3` is the current requested candidate and has not passed this repository's required CI. The previous thirteen pins remain historical evidence, not current support or release gates. Do not treat either prerelease as a production Core upgrade recommendation. DSH's built-in `llm-pi-ai` owns the canonical GitHub Copilot provider, OAuth, grant format, token exchange, refresh, and normal model transport.
 

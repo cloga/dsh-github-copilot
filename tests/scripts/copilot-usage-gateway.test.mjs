@@ -16,6 +16,9 @@ test('quota Remote reaches the actual Host gateway without startup or signed-out
     async modifyRecord() { assert.fail('Quota inspection must not modify credentials') },
     async deleteRecord() { assert.fail('Quota inspection must not delete credentials') },
   })
+  ctx.provide('settings', {
+    describe: () => [{ ns: 'llm-pi-ai', value: { providers: { 'github-copilot': {} } } }],
+  })
   t.mock.method(globalThis, 'fetch', () => { assert.fail('Signed-out quota reads must not make network requests') })
   new TypertRegistry(ctx)
   const connection = new HostConnectionService(ctx, [], {})
@@ -25,7 +28,7 @@ test('quota Remote reaches the actual Host gateway without startup or signed-out
   assert.equal(reads, 0, 'Mounting must not resolve credentials or quota')
   const handler = connection.createSharedFetchHandler('/api')
   const peer = new Peer(ctx, { principal: { kind: 'owner' } })
-  for (const method of ['get', 'refresh']) {
+  for (const method of ['get', 'refresh', 'getNative', 'refreshNative']) {
     const endpoint = `githubCopilotUsage/${method}`
     const response = await handler.fetch(new Request(`http://fixture.invalid/api/${endpoint}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },

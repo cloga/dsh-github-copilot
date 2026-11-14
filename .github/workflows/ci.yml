@@ -114,7 +114,7 @@ jobs:
         run: |
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts" --reporter=default --reporter=json --outputFile "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
           node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==28||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 28 native reviewer tests, none skipped'); console.log('Verified 28 executed tagged-source reviewer tests')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
-          node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('subagent-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==1||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected native subagent invocation test to execute without skips'); console.log('Verified native subagent invocation test')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
+          node -e "const r=require(process.argv[1]); for (const name of ['subagent-copilot-core.fixture.ts','native-subagent-copilot-core.fixture.ts']) { const s=r.testResults.find(s=>s.name.endsWith('/'+name)||s.name.endsWith('\\\\'+name)); if(!s||s.assertionResults.length!==1||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected '+name+' to execute without skips'); } console.log('Verified managed and native Copilot subagent invocation tests')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
       - run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts

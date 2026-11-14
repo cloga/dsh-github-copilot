@@ -55,15 +55,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.2.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.2.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -74,6 +74,14 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 无需手工定义 Copilot 模型、粘贴 token、使用外部网关或安装
 `copilot2api`。账号登录成功不代表所有模型及其能力都可用。
+
+添加 DSH 原生 GitHub Copilot provider 时，可使用独立的插件账号面板登录。
+没有指定密钥时，原生路线使用已保存的 canonical OAuth 凭据，而不是另行选择的
+附加账号。在托管路线仍然注册的期间，保存原生 provider 可能阻止附加账号的请求
+和切换。原生选择器不保证按账号权限过滤内置模型目录。
+原生路线的额度显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
+端点或请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
+这不证明单次请求实际计费的账号。
 
 Desktop 原生包管理器及其内置 CLI 与独立 profile 的操作约束不同。安装前请阅读
 [Desktop CLI 证据](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及

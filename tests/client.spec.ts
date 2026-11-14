@@ -1492,16 +1492,18 @@ describe('GitHub Copilot Models client', () => {
     return { ctx, disposeRemote, disposeUi, register, registrations, injections }
   }
 
-  it('warns before native Copilot re-add without pretending to disable Core Save or creating another account owner', async () => {
+  it('guides native Copilot setup without moving the account panel into a potentially hidden draft', async () => {
     const { ctx, register } = clientContext(['settings.models.provider-card', 'settings.models.footer'])
     const dispose = await apply(ctx as never)
     const render = register.mock.calls.find(([options]) => options.name === 'settings.models.provider-card')?.[1] as (props: object) => ReactElement
     const draft = { provider: { provider: GITHUB_COPILOT_PROVIDER_ID, displayName: 'GitHub Copilot', settingsNs: 'llm-pi-ai' }, configured: false, keyConfigured: false }
     const warning = render(draft)
     expect(warning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
-    expect(warning.props.children).toContain('another model group')
-    expect(warning.props.children).toContain('cannot disable the native Save action')
-    expect(warning.type).not.toBe(GitHubCopilotAccountSurface)
+    expect(warning.props.children).toContain('canonical account')
+    expect(warning.props.children).toContain('account panel')
+    expect(warning.props.children).toContain('separately selected plugin account')
+    expect(warning.props.children).toContain('block additional-account requests and switching')
+    expect(warning.type).toBe('p')
     expect(render({ ...draft, provider: { ...draft.provider, provider: 'openai' } }).props['data-dsh-github-copilot-native-add-warning']).toBeUndefined()
     expect(render({ ...draft, configured: true }).type).toBe(GitHubCopilotAccountSurface)
     await dispose()
@@ -1524,11 +1526,11 @@ describe('GitHub Copilot Models client', () => {
     expect(first.props).not.toHaveProperty('copilot')
     await dispose()
   })
-  it('declares account namespace access for both Models and Credits injection scopes', async () => {
+  it('does not make native Credits depend on managed account or continuation services', async () => {
     const { ctx } = clientContext(['settings.models.footer'])
     const dispose = await apply(ctx as never)
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'slots'], expect.any(Function))
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
     await dispose()
   })

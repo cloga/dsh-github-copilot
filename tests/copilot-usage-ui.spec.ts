@@ -22,11 +22,14 @@ afterEach(async () => {
   vi.restoreAllMocks()
   document.body.replaceChildren()
 })
-function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unknown) {
+function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unknown, sessionAvailable = true) {
   let component: ComponentType<Record<string, unknown>> | undefined
   let injection: (() => () => void) | undefined
   let release: (() => void) | undefined
   const remote = { get: vi.fn(async () => ({ ok: true, value: { state: 'ready', accountId: 'canonical', billing: 'credits', budget: 'individual', used: 7, remaining: 13, limit: 20, observedAt: 1 } })), refresh: vi.fn() }
+  const nativeGet = vi.fn(async () => ({ ok: true as const, value: { state: 'ready' as const, accountId: 'canonical',
+    billing: 'credits' as const, budget: 'individual' as const, used: 9, remaining: 11, limit: 20, observedAt: 1 } }))
+  const nativeRefresh = vi.fn()
   const accountView = { source: 'global', accountId: 'canonical', globalAccountId: 'canonical',
     accounts: { state: 'ready', activeAccountId: 'canonical', revision: 1, writable: true, switchable: true,
       accounts: [{ id: 'canonical', configured: true, identityState: 'unknown' }], notices: [] } }
@@ -34,9 +37,9 @@ function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unkno
     set: vi.fn(), refreshIdentity: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
     ensureIdentity: vi.fn(async (_id: string) => ({ ok: true, value: accountView })),
     usage: vi.fn(async (_id: string) => remote.get()), refreshUsage: vi.fn() }
-  const capture = vi.fn(() => remote)
+  const capture = vi.fn(() => ({ ...remote, getNative: nativeGet, refreshNative: nativeRefresh }))
   const namespace = Object.defineProperty({}, 'githubCopilotUsage', { get: capture })
-  Object.defineProperty(namespace, 'githubCopilotSessionAccount', { value: sessionRemote })
+  if (sessionAvailable) Object.defineProperty(namespace, 'githubCopilotSessionAccount', { value: sessionRemote })
   Object.defineProperty(namespace, 'githubCopilotSessionContinuation', { value: continuation })
   const ctx = {
     remote: namespace, get: vi.fn(() => undefined), logger: { warn: vi.fn() },
@@ -51,7 +54,7 @@ function fixture(spec = { kind: 'list', scope: 'session' }, continuation?: unkno
   }
   const dispose = registerCopilotUsageUi(ctx as unknown as Context)
   cleanups.push(dispose)
-  return { ctx, remote, sessionRemote, capture, declare: () => { release = injection?.() }, component: () => component! }
+  return { ctx, remote, nativeGet, nativeRefresh, sessionRemote, capture, declare: () => { release = injection?.() }, component: () => component! }
 }
 function source<T>(initial: T) {
   let value = initial
@@ -82,6 +85,25 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
     )
     expect(f.capture).toHaveBeenCalledTimes(1)
     expect(f.remote.get).not.toHaveBeenCalled()
+  })
+
+  it('shows native quota without managed account or continuation Remotes', async () => {
+    const f = fixture(undefined, undefined, false)
+    f.declare()
+    const session = source({ sessionId: 'native', removed: false, openState: 'open' })
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    cleanups.push(() => { root.unmount() })
+    await act(async () => {
+      root.render(createElement(f.component(), {
+        sessionId: 'native', useSession: session.useSelector,
+        useProjection: () => ({ lastUsed: null, next: selected('github-copilot') }),
+      }))
+    })
+    expect(f.nativeGet).toHaveBeenCalledOnce()
+    expect(container.textContent).toContain('9 used')
+    expect(f.sessionRemote.usage).not.toHaveBeenCalled()
   })
 
   it.each([{ kind: 'single', scope: 'session' }, { kind: 'list', scope: 'root' }])('rejects incompatible slot contracts', spec => {
@@ -151,13 +173,20 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
     expect(useSession).toHaveBeenCalledWith(expect.any(Function))
     if (provider === 'github-copilot-preview') expect(f.sessionRemote.usage).toHaveBeenCalledExactlyOnceWith('current')
     expect(container.querySelector('[data-copilot-usage-trigger]')).not.toBeNull()
-    expect(container.textContent).toContain('7 used')
-    expect(f.remote.get).toHaveBeenCalledTimes(1)
+    expect(container.textContent).toContain(provider === 'github-copilot' ? '9 used' : '7 used')
+    if (provider === 'github-copilot') {
+      expect(f.nativeGet).toHaveBeenCalledOnce()
+      expect(f.remote.get).not.toHaveBeenCalled()
+    } else {
+      expect(f.nativeGet).not.toHaveBeenCalled()
+      expect(f.remote.get).toHaveBeenCalledOnce()
+    }
     await act(async () => { session.set({ sessionId: 'current', removed: true, openState: 'open' }) })
     expect(container.querySelector('[data-copilot-usage-trigger]')).toBeNull()
     await act(async () => { session.set({ sessionId: 'current', removed: false, openState: 'loading' }) })
     expect(container.querySelector('[data-copilot-usage-trigger]')).toBeNull()
-    expect(f.remote.get).toHaveBeenCalledTimes(1)
+    expect(f.nativeGet).toHaveBeenCalledTimes(provider === 'github-copilot' ? 1 : 0)
+    expect(f.remote.get).toHaveBeenCalledTimes(provider === 'github-copilot-preview' ? 1 : 0)
   })
 
   it('disables only this feature with a named missing runtime diagnostic', async () => {
@@ -178,6 +207,8 @@ describe('verified alpha.2 session-scoped composer usage integration', () => {
       constructor(context: Context) { super(context, 'remote.githubCopilotUsage') }
       get = get
       refresh = get
+      getNative = get
+      refreshNative = get
     }
     try {
       let module: { factory(require: (id: string) => unknown): { SlotRegistry: typeof SlotRegistry } } | undefined

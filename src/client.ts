@@ -960,9 +960,8 @@ function registerUi(ctx: ClientContext): () => void {
       key: 'llm-pi-ai',
     }, (props: ProviderCardExtrasOwnerProps) => {
       if (!props.configured && props.provider.provider === GITHUB_COPILOT_PROVIDER_ID && props.provider.settingsNs === 'llm-pi-ai') {
-        return createElement('p', { role: 'note', 'data-dsh-github-copilot-native-add-warning': true,
-          style: { fontSize: '13px', lineHeight: 1.6 } },
-        'GitHub Copilot account models are already managed by the account panel. Saving this additional provider profile enables another model group; it does not connect a second account. Use the account panel instead. This plugin cannot disable the native Save action.')
+        return createElement('p', { role: 'note', 'data-dsh-github-copilot-native-add-warning': true, style: nativeCaptionStyle },
+          'Use the GitHub Copilot account panel to sign in. With a stored OAuth grant and no named key, the native provider uses the canonical account, not a separately selected plugin account. Saving can block additional-account requests and switching.')
       }
       return createElement(GitHubCopilotAccountSurface, {
         surfaces, seat, remote, accountsRemote, continuationContext: ctx, eligible: isGitHubCopilotAccountRow(props), localeReader,
@@ -1153,7 +1152,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }
   const settingsUi = ctx.inject(['slots'], registerPluginSettingsUi)
   const diagnosticsUi = ctx.inject(['remote.githubCopilotDiagnostics'], scope => installDiagnosticsClient(scope))
-  const usageUi = ctx.inject(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], registerCopilotUsageUi)
+  const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
   const contextUi = ctx.inject(['remote.githubCopilotSessionContinuation', 'slots'], registerContextEvidenceUi)
   const recoveryUi = ctx.inject(['remote.githubCopilotReplayRecovery', 'remote.githubCopilotSessionContinuation', 'slots'], registerReplayRecoveryUi)
   const accountUsageUi = ctx.inject(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], scope => installAccountUsagePresentation({

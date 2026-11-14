@@ -71,6 +71,8 @@ describe('built usage Client under the pinned Core selector and Slot error bound
       constructor(context: Context) { super(context, 'remote.githubCopilotUsage') }
       get = quota
       refresh = refresh
+      getNative = quota
+      refreshNative = refresh
     }
     class AccountsRemote extends Service {
       constructor(context: Context) { super(context, 'remote.githubCopilotAccounts') }
