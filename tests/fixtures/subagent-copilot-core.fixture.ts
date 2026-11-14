@@ -107,7 +107,13 @@ it('routes concurrently authorized native children to their selected Copilot mod
       deleteRecord: async () => { throw new Error('unexpected fixture credential deletion') },
       modifyRecord: async () => { throw new Error('valid synthetic credential must not refresh') },
     })
-    const settings = { 'github-copilot': { activeAccountId: 'canonical' }, 'llm-pi-ai': { providers: {} } }
+    const settings = {
+      'github-copilot': {
+        activeAccountId: 'canonical',
+        continuationDefaultHistory: [{ enabled: true, changedAt: 1 }],
+      },
+      'llm-pi-ai': { providers: {} },
+    }
     let accountSettingsRevision = 0
     ctx.provide('settings', {
       describe: () => Object.entries(settings).map(([ns, value]) => ({
