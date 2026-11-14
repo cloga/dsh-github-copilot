@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto'
 import { Context } from '@deepseek-ai/cordis'
 import * as dshScope from '@deepseek-ai/dsh-scope'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
 import { z as json } from 'zod'
@@ -43,7 +44,7 @@ interface Route { readonly provider: string; readonly model: string; readonly re
 interface Llm { resolveCallConfig(config: Route, signal?: AbortSignal): Promise<Route> }
 interface ToolExec { readonly agent?: Agent; readonly name: string; readonly arguments: unknown; readonly signal: AbortSignal }
 interface ToolDefinition { name: string; description: string; parameters: object; output: { schema: object; render(args: unknown, value: unknown): { type: 'text'; text: string }[] }; execute(args: unknown, exec: ToolExec): Promise<unknown> }
-interface Tools { schemas(scope?: object): readonly { name: string; description: string; parameters: Record<string, unknown> }[]; register(definition: ToolDefinition): () => void; restrict(filter: { allow: readonly string[] }): () => void; guard(check: (execution: ToolExec) => string | undefined): () => void; presentAs(mode: 'native'): () => void }
+interface Tools { schemas(scope?: object): readonly { name: string; description: string; parameters: Record<string, unknown> }[]; register(definition: ToolDefinition): () => void; restrict(filter: { allow: readonly string[] }): () => void; guard(check: (execution: ToolExec) => string | undefined): () => void; setExecutor(executor: NativeToolExecutor): () => void }
 interface Prompt { section(section: { name: string; order: number; text: string }): () => void }
 interface Subagents { getProvider(name: string): { capabilities: { agentOptions: boolean; toolFilter: boolean; persona: boolean; depthLimit: boolean }; prepareContinuable?: unknown } | undefined; startContinuable(spec: { provider: string; label: string; request: { parent: Agent; prompt: { type: 'text'; text: string }[]; agentOptions: Route; persona: string; toolFilter: { allow: readonly string[] }; maxDepth: number }; signal: AbortSignal }): Promise<{ childId: string; messageId: string }>; sendMessage(...args: unknown[]): unknown; listChildren(...args: unknown[]): unknown; drainContinuableDescendants(roots: readonly Agent[]): Promise<void> }
 interface Capabilities { agents: Agents; workspaces: Workspaces; settings: Settings; projections: Projections; persistence: Persistence; sessions: Sessions; inspector: Inspector; presets: Presets; llm: Llm; tools: Tools; subagents: Subagents; preview: GitHubCopilotPreview }
@@ -225,7 +226,7 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
     const inspector = api<Inspector>(this.owner.ctx, 'sessionController', ['inspect'])
     const presets = api<Presets>(this.owner.ctx, 'agentPresets', ['resolve', 'mount', 'composedPreset', 'standingKeyFor'])
     const llm = api<Llm>(this.owner.ctx, 'llm', ['resolveCallConfig'])
-    const tools = api<Tools>(this.owner.ctx, 'tools', ['register', 'restrict', 'guard', 'schemas', 'presentAs'])
+    const tools = api<Tools>(this.owner.ctx, 'tools', ['register', 'restrict', 'guard', 'schemas', 'setExecutor'])
     const subagents = api<Subagents>(this.owner.ctx, 'subagents', ['getProvider', 'startContinuable', 'sendMessage', 'listChildren', 'drainContinuableDescendants'])
     const preview = api<GitHubCopilotPreview>(this.owner.ctx, 'githubCopilotPreview', ['getView', 'discover'])
     if (!agents || !workspaces || !settings || !projections || !persistence || !sessions || !inspector || !presets || !llm || !tools || !subagents || !preview) return undefined
@@ -358,7 +359,7 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
     // every overlay on unload, including roots cold-resumed by another owner.
     const overlay = dshScope.createScope(agent.ctx, agent), scoped = overlay.ctx
     try {
-      const tools = api<Tools>(scoped, 'tools', ['schemas', 'register', 'restrict', 'guard', 'presentAs'])
+      const tools = api<Tools>(scoped, 'tools', ['schemas', 'register', 'restrict', 'guard', 'setExecutor'])
       const prompt = api<Prompt>(scoped, 'systemPrompt', ['section'])
       if (!tools || !prompt) fail('DUAL_MODEL_UNSUPPORTED')
       const allowed = new Set(role === 'planner' ? policy.plannerTools : policy.executorTools)
@@ -366,7 +367,7 @@ export default class GitHubCopilotDualModel extends TypertRemoteService {
       // Restriction filters inherited capabilities; a monotonic guard also covers
       // same-Agent registrations, PTC dispatch, and future dynamic registrations.
       tools.guard(exec => allowed.has(exec.name) ? undefined : 'DUAL_MODEL_TOOL_DENIED')
-      tools.presentAs('native')
+      tools.setExecutor(new NativeToolExecutor(scoped))
       tools.restrict({ allow: available.filter(name => allowed.has(name) && name !== DUAL_MODEL_EXECUTE_TOOL) })
       const selectedModel = role === 'planner' ? policy.plannerModel : policy.executorModel
       prompt.section({ name: 'github-copilot:dual-model-role', order: 1000,

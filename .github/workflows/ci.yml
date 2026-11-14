@@ -100,12 +100,18 @@ jobs:
       - name: Install subagent descriptor verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-subagent...'
+      - name: Install native subagent model invocation verification closure
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-agent-loop-testkit...' --filter '@deepseek-ai/dsh-tool-subagent...' --filter '@deepseek-ai/dsh-subagent-spawn-in-process...' --filter '@deepseek-ai/dsh-session-persistence-jsonl...'
       - name: Install image-offload verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-compaction-image-offload...'
       - name: Install tagged search verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-web...' --filter '@deepseek-ai/dsh-web-search-deepseek...'
+      - name: Install native and PTC tool executor verification closures
+        working-directory: dsh-upstream
+        run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-tool-executor-native...' --filter '@deepseek-ai/dsh-tool-executor-ptc...'
       - name: Install native account persistence verification closure
         working-directory: dsh-upstream
         run: pnpm install --frozen-lockfile --filter '@deepseek-ai/dsh-credentials-local...' --filter '@deepseek-ai/dsh-app-boot...' --filter '@deepseek-ai/dsh-config-editor...' --filter '@deepseek-ai/dsh-settings...' --filter '@deepseek-ai/dsh-authorization...'
@@ -123,6 +129,7 @@ jobs:
         run: |
           node node_modules/vitest/vitest.mjs run --config "$RUNNER_TEMP/copilot-tagged-core/vitest.config.mts" --reporter=default --reporter=json --outputFile "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
           node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('auto-review-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==28||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected all 28 native reviewer tests, none skipped'); console.log('Verified 28 executed tagged-source reviewer tests')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
+          node -e "const r=require(process.argv[1]); const s=r.testResults.find(s=>s.name.endsWith('subagent-copilot-core.fixture.ts')); if(!s||s.assertionResults.length!==1||s.assertionResults.some(t=>t.status!=='passed')) throw new Error('expected native subagent invocation test to execute without skips'); console.log('Verified native subagent invocation test')" "$RUNNER_TEMP/copilot-tagged-reviewer-results.json"
       - run: pnpm verify
       - run: mkdir artifacts
       - run: pnpm pack --pack-destination artifacts

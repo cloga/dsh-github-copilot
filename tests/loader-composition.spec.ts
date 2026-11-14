@@ -157,7 +157,7 @@ describe('loader composition', () => {
     expect(Array.from(ctx.registry.get(AuthorizationService)?.fibers ?? [])[0]?.uid).toBe(authorizationFiberUid)
   })
 
-  it('keeps the account and model owners stable as optional web attaches and leaves', async () => {
+  it('keeps native web and the account and model owners independent as web attaches and leaves', async () => {
     const ctx = new Context()
     await mountProfile(ctx, true, false, false, true)
     const registerAdapter = vi.spyOn(ctx.llm, 'registerAdapter')
@@ -170,12 +170,14 @@ describe('loader composition', () => {
     expect(registerAdapter).toHaveBeenCalledOnce()
 
     const registerSearchProvider = vi.fn(() => () => undefined)
+    const nativeWeb = { registerSearchProvider, registerFetchProvider: () => () => undefined }
     const web = ctx.plugin({ apply(scope) {
-      scope.provide('web', { registerSearchProvider, registerFetchProvider: () => () => undefined })
+      scope.provide('web', nativeWeb)
     } })
     await web
-    await vi.waitFor(() => expect(ctx.get('githubCopilotSearchRouter')).toBeDefined())
-    expect(registerSearchProvider).toHaveBeenCalledOnce()
+    expect(ctx.get('web')).toBe(nativeWeb)
+    expect(ctx.get('githubCopilotSearchRouter')).toBeUndefined()
+    expect(registerSearchProvider).not.toHaveBeenCalled()
     expect(ctx.get('githubCopilotAccounts')).toBe(accounts)
     expect(ctx.get('githubCopilotAuthorization')).toBe(authorization)
     expect(ctx.get('githubCopilotPreview')).toBe(preview)

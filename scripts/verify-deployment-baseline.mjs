@@ -307,26 +307,33 @@ const alphaCore = dshBaselines.find(entry => entry.release === '0.1.3-alpha.1')
 assert(alphaCore.evidenceScope === 'unchanged-tagged-source-target'
   && alphaCore.standaloneNpmArtifacts === 'not-published'
   && alphaCore.managedProviderValidation === 'not-verified', 'alpha.1 source evidence must not pretend unavailable npm artifacts were tested')
-const providerOnlySearch = manifest.capabilities?.find(capability => capability.id === 'provider-only-search-settings')
-assert(providerOnlySearch?.required === true
-  && providerOnlySearch.evidenceScope === 'pinned-settings-and-client-contracts-plus-synthetic-routing-no-live-save-claim',
-  'provider-only search settings must retain bounded Settings/Client evidence, not claim live save acceptance')
-for (const name of [
-  'published SettingsForms exposes descriptor/mutation APIs without installSection, and module lacks installSettingsSection',
-  'real pinned Client namespace lookups require stable capture across render calls',
-  'search routing saves both leaves in github-copilot namespace using nested paths',
-  'stale routing revisions fail CAS and preserve the last successful settings',
-  'hidden legacy searchModel and searchRouting share namespace revision and coordinate CAS',
-  'pinned generated Client mutate codecs accept routing ops and a flat namespace revision',
+const nativeWeb = manifest.capabilities?.find(capability => capability.id === 'native-web-ownership')
+assert(nativeWeb?.required === true && nativeWeb.evidenceScope === 'native-web-composition-and-synthetic-tool-execution-not-live-search',
+  'native web ownership must retain bounded composition evidence, not claim live search')
+for (const [file, name] of [
+  ['tests/native-web-composition.spec.ts', 'leaves the configured native web entry unchanged in the plugin overlay'],
+  ['tests/native-web-composition.spec.ts', 'keeps native web tool execution for a Copilot Agent before and after plugin disposal'],
+  ['tests/loader-composition.spec.ts', 'repairs an existing provider profile even when web is unavailable'],
+  ['tests/config.spec.ts', 'preserves legacy search configuration without exposing it as an active setting'],
 ]) {
-  assert(providerOnlySearch.tests?.some(entry => entry.file === 'tests/scripts/search-settings-contract.test.mjs' && entry.name === name),
-    `provider-only search settings must retain real pinned contract regression: ${name}`)
+  assert(nativeWeb.tests?.some(entry => entry.file === file && entry.name === name), `native web acceptance is missing ${name}`)
 }
-const searchCard = await read('src/web-search-routing-card.ts')
-assert(!searchCard.includes('GitHubCopilotAuthorizationViewSchema') && !searchCard.includes('props.copilot'),
-  'ordinary provider settings must not depend on account status or model suggestions')
-assert(searchCard.includes('data-dsh-copilot-search-reset') && !searchCard.includes('data-dsh-copilot-search-model'),
-  'ordinary provider settings must preserve explicit legacy reset without a required model selector')
+const nativeSubagent = manifest.capabilities?.find(capability => capability.id === 'native-subagent-copilot-invocation')
+assert(nativeSubagent?.required === true
+  && nativeSubagent.evidenceScope === 'single-synthetic-account-tagged-source-child-invocation-and-separate-session-account-unit-tests-not-live-or-multi-account-child-isolation'
+  && nativeSubagent.tests?.some(entry => entry.file === 'tests/fixtures/subagent-copilot-core.fixture.ts'
+    && entry.name === 'routes concurrently authorized native children to their selected Copilot models and efforts')
+  && nativeSubagent.tests?.some(entry => entry.file === 'tests/session-accounts-host.spec.ts'
+    && entry.name === 'freezes a running turn while allowing later Session/default choices independently'),
+  'native subagent invocation must retain explicitly scoped source and account isolation evidence')
+const hostEntry = await read('src/index.ts')
+const clientEntry = await read('src/client.ts')
+const overlay = await read('cordis.patch.yml')
+assert(!/githubCopilotSearchRouter|registerSearchProvider|resolveCandidates|routeSearchTools/u.test(hostEntry),
+  'plugin Host must not own native web routing')
+assert(!clientEntry.includes('ctx.remote.githubCopilotSearchRouting'), 'plugin Client must not activate retired search routing')
+assert(!/github-copilot-(?:original-web|web-delegate|routed-web)/u.test(overlay),
+  'plugin overlay must not isolate or replace native web')
 const metadata = manifest.capabilities?.find(capability => capability.id === 'account-driven-provider-metadata')
 const autoIntent = manifest.capabilities?.find(capability => capability.id === 'managed-copilot-auto-intent-continuity')
 assert(autoIntent?.required === true
@@ -551,7 +558,7 @@ assert(candidateCore?.tag === currentDsh.tag && candidateCore.commit === current
   && candidateCore.managedProviderValidation === 'not-verified',
   '0.2.2-rc.3 must not claim unrun runtime or artifact qualification')
 for (const path of candidateCore.runtimeTests) await access(resolve(root, path))
-for (const path of ['tests/routed-web.spec.ts', 'tests/fixtures/auto-review-copilot-core.fixture.ts',
+for (const path of ['tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts', 'tests/fixtures/auto-review-copilot-core.fixture.ts',
   'tests/fixtures/alpha4-contracts-core.fixture.ts']) {
   assert(candidateCore.runtimeTests.includes(path), `current candidate qualification is missing ${path}`)
 }

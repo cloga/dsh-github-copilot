@@ -43,7 +43,7 @@ function remote() {
   return {
     status: vi.fn<Props['remote']['status']>(),
     setModelExcluded: vi.fn<Props['remote']['setModelExcluded']>(),
-    setModelHighCost: vi.fn<Props['remote']['setModelHighCost']>(),
+    setModelHighCost: vi.fn(),
   }
 }
 

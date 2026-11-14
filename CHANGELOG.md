@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.1.dsh.0.2.2.rc.3 (pending qualification)
+
+- Narrow the product to account-authorized Copilot models through DSH's published native adapter. Retire plugin-owned Auto, parent-follow policy, hosted-search routing, and redundant recovery/analytics surfaces while preserving necessary existing settings/history compatibility.
+- Require account-metadata-driven native subagent model selection and actual child invocation, including supported Thinking and concurrent/account-bound request checks; the new exact-source fixture is not yet validated.
+- Remove HydraFusion/Max from scope. No additional login, Core changes, model-name routing rules, silent provider substitution, publication, profile installation, or Desktop restart is included.
+- Target official DSH 0.2.2-rc.3. Required Windows/Linux CI, pnpm-lock alignment, publication, profile installation, and loaded-runtime compatibility remain unverified.
+
 ## 0.1.0-alpha.5.dsh.0.2.1.rc.3 (prepared)
 
 - Replace the stale rc.2 Desktop lifecycle heading with version-neutral guidance. Recommend a full exit and restart only when the native plugin manager reports `restart-required`; do not repeatedly toggle an Off plugin when the manager reports only pending service dependencies.

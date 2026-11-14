@@ -240,6 +240,12 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         await writeFile(join(value.root, 'tests/fixtures/alpha4-contracts-core.fixture.ts'), 'export {}')
         await writeFile(join(value.root, 'tests/fixtures/copilot-usage-selector-core.fixture.ts'), 'export {}')
       }
+      if (release === '0.2.2-rc.3') {
+        await writeFile(join(value.root, 'tests/native-web-composition.spec.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/dual-model-host.spec.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/fixtures/tool-schema-core.fixture.ts'), 'export {}')
+        await writeFile(join(value.root, 'tests/fixtures/subagent-copilot-core.fixture.ts'), 'export {}')
+      }
       const report = await prepareTaggedCoreFixture(value, value)
       const config = (await import(pathToFileURL(report.configPath).href)).default
       assert.equal(report.commit, TAGGED_CORE_RELEASES[release])
@@ -267,7 +273,9 @@ for (const release of ['0.1.5-alpha.1', '0.1.5-alpha.2', '0.1.5-rc.1', '0.1.5-rc
         ...current ? ['tests/fixtures/auto-review-copilot-core.fixture.ts'] : [],
         ...current ? ['tests/fixtures/diagnostics-storage-core.fixture.ts', 'tests/fixtures/diagnostics-gateway-core.fixture.ts'] : [],
         'tests/fixtures/session-context-core.fixture.ts', 'tests/fixtures/remote-core.fixture.ts',
-        ...recent ? ['tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : []])
+        ...recent ? ['tests/fixtures/alpha4-contracts-core.fixture.ts', 'tests/fixtures/copilot-usage-selector-core.fixture.ts'] : [],
+        ...release === '0.2.2-rc.3' ? ['tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts',
+          'tests/fixtures/tool-schema-core.fixture.ts', 'tests/fixtures/subagent-copilot-core.fixture.ts'] : []])
     } finally { await rm(value.base, { recursive: true, force: true }) }
   })
 }

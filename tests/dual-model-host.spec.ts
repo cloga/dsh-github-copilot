@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent as CoreAgent } from '@deepseek-ai/dsh-agent'
 import { createScope, bindScopeParent, scopeTarget } from '@deepseek-ai/dsh-scope'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
+import { PtcExecutor } from '@deepseek-ai/dsh-tool-executor-ptc'
 import { ToolRuntime, defineTool } from '@deepseek-ai/dsh-tools'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -24,10 +27,12 @@ afterEach(async () => { for (const ctx of contexts.splice(0)) await ctx.fiber.di
 type FakeAgent = Pick<CoreAgent, 'id' | 'ctx' | 'session'> & { cancel: ReturnType<typeof vi.fn>; whenIdle(): Promise<void> }
 const names = ['read', 'write', 'edit', 'pwsh', 'subagent', 'subagent_fork', 'workflow', 'ralph', 'cordis_define', 'ask_user_question', 'todo_write', 'send_message', 'list_agents', 'interrupt_agent']
 
-async function fixture() {
+async function fixture(execution: 'native' | 'ptc' = 'native') {
   const ctx = new Context(); contexts.push(ctx)
   const systemPrompt = new SystemPrompt(ctx, {})
   const tools = new ToolRuntime(ctx)
+  const defaultExecutor = execution === 'native' ? new NativeToolExecutor(ctx) : new PtcExecutor(ctx)
+  tools.setExecutor(defaultExecutor)
   const projections = new SessionProjectionRegistry(ctx)
   const presetKey = {}, presetScope = createScope(ctx, presetKey)
   for (const name of names) presetScope.ctx.get('tools')!.register(defineTool({ name, description: name, parameters: {},
@@ -103,8 +108,15 @@ async function fixture() {
     return { sessionId: id }
   }
   const create = (requestId = 'operation-one') => service.create({ requestId: operationId(requestId), workspaceId: workspace.id, expectedRevision: revision })
-  const execute = async (agent: FakeAgent, name: string, args: unknown = {}) => tools.execute({ agent: agent as unknown as CoreAgent, name, arguments: args, callId: 'call' as Parameters<ToolRuntime['execute']>[0]['callId'], signal: new AbortController().signal })
-  return { ctx, fiber, service, tools, systemPrompt, projections, settings, llm, preview, workspace, workspaces, presets, agents, agentsMap, stored, inspector, persistence, flush, subagents, makeAgent, publish, seedExisting, setConfiguration, create, execute,
+  const execute = async (agent: FakeAgent, name: string, args: unknown = {}, signal = new AbortController().signal) => {
+    const argumentsJson = JSON.stringify(args)
+    if (argumentsJson === undefined) throw new Error('fixture arguments must be JSON')
+    const batch = await tools.execute({ agent: agent as unknown as CoreAgent, signal,
+      calls: [{ type: 'tool-call', id: ToolCallId('call'), name, arguments: argumentsJson }] })
+    if (batch.results.length !== 1) throw new Error('expected one tool result')
+    return batch.results[0]!.result
+  }
+  return { ctx, fiber, service, tools, defaultExecutor, systemPrompt, projections, settings, llm, preview, workspace, workspaces, presets, agents, agentsMap, stored, inspector, persistence, flush, subagents, makeAgent, publish, seedExisting, setConfiguration, create, execute,
     configuration: () => configuration, revision: () => revision, setPreview: (value: typeof previewView) => { previewView = value }, previewView: () => previewView }
 }
 
@@ -182,6 +194,22 @@ describe('optional dedicated planner/executor Host', () => {
     expect((await f.execute(agent, 'dynamic_bypass')).isError).toBe(true)
     const ordinary = f.makeAgent('ordinary', Session.create('ordinary' as CoreAgent['id'])); bindScopeParent(ordinary, await f.presets.standingKeyFor())
     expect((await f.execute(ordinary, 'write')).isError).toBe(false)
+  })
+  it('uses a scoped native executor for retained roles without replacing the ordinary PTC executor', async () => {
+    const f = await fixture('ptc')
+    const ordinaryDispatch = vi.spyOn(f.defaultExecutor, 'execute').mockRejectedValue(new Error('ordinary PTC selected'))
+    const { sessionId } = await f.seedExisting()
+    const parent = f.agentsMap.get(sessionId)!
+    const ordinary = f.makeAgent('ordinary-ptc', Session.create('ordinary-ptc' as CoreAgent['id']))
+    bindScopeParent(ordinary, await f.presets.standingKeyFor())
+    expect((await f.execute(parent, 'read')).isError).toBe(false)
+    expect((await f.execute(parent, 'write')).isError).toBe(true)
+    expect(ordinaryDispatch).not.toHaveBeenCalled()
+    await expect(f.execute(ordinary, 'read')).rejects.toThrow('ordinary PTC selected')
+    await f.fiber.dispose()
+    await expect(f.execute(parent, 'read')).rejects.toThrow('executor is unavailable')
+    await expect(f.execute(ordinary, 'read')).rejects.toThrow('ordinary PTC selected')
+    expect(ordinaryDispatch).toHaveBeenCalledTimes(2)
   })
   it.each([
     { version: 3, mode: 'continuable', provider: 'spawn', label: 'inherited model' },
@@ -280,8 +308,8 @@ describe('optional dedicated planner/executor Host', () => {
       signal.addEventListener('abort', () => reject(new Error('private account detail')), { once: true })
       started.resolve(signal)
     }))
-    const operation = f.tools.execute({ agent: parent as unknown as CoreAgent, name: DUAL_MODEL_EXECUTE_TOOL,
-      arguments: { description: 'Implement', prompt: 'Implement the task' }, callId: 'cancelled-call' as Parameters<ToolRuntime['execute']>[0]['callId'], signal: controller.signal })
+    const operation = f.execute(parent, DUAL_MODEL_EXECUTE_TOOL,
+      { description: 'Implement', prompt: 'Implement the task' }, controller.signal)
     expect(await started.promise).toBe(controller.signal)
     controller.abort()
     const result = await operation

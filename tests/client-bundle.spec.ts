@@ -203,7 +203,7 @@ describe('tsdown client artifact', () => {
       slots: {
         spec: (name: string) => ({ kind: name === 'plugins.bundle.config' ? 'keyed' : 'list', scope: 'root' }),
         register(options: { name: string; id?: string; key?: string }, render: Render) {
-          const key = options.name === 'settings.models.footer' && options.id === 'github-copilot-search-routing'
+          const key = options.name === 'settings.models.footer' && options.id === 'github-copilot-options'
             ? `${options.name}:${options.id}` : options.name
           registrations.set(key, render)
           const dispose = vi.fn(() => { registrations.delete(key) })
@@ -264,18 +264,19 @@ describe('tsdown client artifact', () => {
     } finally { await fixture.dispose() }
   })
 
-  it('registers web-search routing in the built bundle detail page, leaving Models for account controls', async () => {
+  it('registers plugin settings without search routing in the built bundle detail page', async () => {
     const fixture = await surfaceFixture()
     try {
       expect(fixture.registrations.has('settings.models.footer')).toBe(true)
-      expect(fixture.registrations.has('settings.models.footer:github-copilot-search-routing')).toBe(false)
+      expect(fixture.registrations.has('settings.models.footer:github-copilot-options')).toBe(false)
       const element = fixture.registrations.get('plugins.bundle.config')!({ view: 'page' })
       expect(element.type).toBe(fixture.client.exports.CopilotPluginSettingsPage)
       const page = fixture.instance().render(element)
-      expect(page?.props.children[0].type).toBe(fixture.client.exports.ParentModelFollowCard)
-      expect(page?.props.children[1].type).toBe(fixture.client.exports.WebSearchRoutingCard)
+      expect(page?.props.children.props.ctx).toBe(fixture.ctx)
+      expect(fixture.client.exports.ParentModelFollowCard).toBeUndefined()
+      expect(element.props).not.toHaveProperty('routing')
       expect(fixture.registrations.get('plugins.bundle.config')!({ view: 'summary' })).toBeNull()
-      expect(element.props.settings).toBe(fixture.ctx.remote.settings)
+      expect(element.props).not.toHaveProperty('settings')
     } finally { await fixture.dispose() }
   })
 

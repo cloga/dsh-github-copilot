@@ -337,7 +337,7 @@
           "evidenceScope": "unchanged-tagged-source-target",
           "standaloneNpmArtifacts": "not-tested",
           "managedProviderValidation": "not-verified",
-          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts"]
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts", "tests/native-web-composition.spec.ts", "tests/dual-model-host.spec.ts"]
         }
       ],
       "packages": [
@@ -358,6 +358,7 @@
         "@deepseek-ai/dsh-scope",
         "@deepseek-ai/dsh-session",
         "@deepseek-ai/dsh-settings",
+        "@deepseek-ai/dsh-tool-executor-native",
         "@deepseek-ai/dsh-typert-protocol",
         "@deepseek-ai/dsh-web",
         "@deepseek-ai/dsh-web-search-deepseek"
@@ -621,86 +622,41 @@
         {"file": "tests/scripts/search-composition.test.mjs", "name": "includes home and launcher layers instead of ignoring a late web override"},
         {"file": "tests/scripts/search-composition.test.mjs", "name": "preflight refuses nonempty profile root without initialization, normalization or secret output"},
         {"file": "tests/scripts/search-composition.test.mjs", "name": "real public parsers validate candidate layers and preserve every input file"},
-        {"file": "tests/scripts/search-composition.test.mjs", "name": "rejects a web bundle ordered after the Copilot guard"}
+        {"file": "tests/scripts/search-composition.test.mjs", "name": "rejects stale routing patches and changes that disable or isolate the account"}
       ]
     },
     {
-      "id": "session-model-search-routing",
+      "id": "native-web-ownership",
       "required": true,
-      "evidenceScope": "development-real-consumer-loader-gateway-and-ui-synthetic",
+      "evidenceScope": "native-web-composition-and-synthetic-tool-execution-not-live-search",
       "sourceMarkers": [
-        {"file": "src/search-routing-host.ts", "marker": "extends TypertRemoteService"},
-        {"file": "src/search-routing-remote.ts", "marker": "githubCopilotSearchRouting.providers"},
-        {"file": "src/search-routing-policy.ts", "marker": "normalizeWebSearchRouting"},
-        {"file": "src/search-tool-routing.ts", "marker": "routeSearchTools"},
-        {"file": "src/routed-web.ts", "marker": "extends WebRuntime"},
-        {"file": "src/index.ts", "marker": "ctx.provide('githubCopilotSearchRouter'"},
-        {"file": "src/web-search-routing-config.ts", "marker": "WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE"},
-        {"file": "src/web-search-routing-card.ts", "marker": "data-dsh-web-search-routing"},
-        {"file": "src/web-search-routing-card.ts", "marker": "data-dsh-copilot-search-options"},
-        {"file": "cordis.patch.yml", "marker": "web: github-copilot-original-web"}
+        {"file": "cordis.patch.yml", "marker": "name: dsh-github-copilot"},
+        {"file": "src/index.ts", "marker": "Profile repair and model configuration must not depend on hosted search"},
+        {"file": "scripts/check-search-composition.mjs", "marker": "PREEXISTING_WEB_ISOLATION"},
+        {"file": "src/config.ts", "marker": "searchRouting: WebSearchRoutingConfigSchema.default({}).hidden().volatile()"}
       ],
       "tests": [
-        {"file": "tests/search-provider-catalog.spec.ts", "name": "lists only actual facade registrations without availability checks, auth or search"},
-        {"file": "tests/scripts/search-provider-gateway.test.mjs", "name": "search catalog Remote reaches actual facade registrations and unloads cleanly"},
-        {"file": "tests/web-search-routing-card.spec.ts", "name": "loads one actual provider catalog into both selectors without Copilot-specific Auto labels"},
-        {"file": "tests/client-search-inject.spec.ts", "name": "saves only edited hosted-search leaves in the existing namespace without broadening the route allowlist"},
-        {"file": "tests/routed-web.spec.ts", "name": "keeps the configured provider for DeepSeek and all other model routes"},
-        {"file": "tests/routed-web.spec.ts", "name": "dispatches a router-selected provider by exact registered id"},
-        {"file": "tests/routed-web.spec.ts", "name": "retains pre-execute denial and the surrounding execution middleware"},
-        {"file": "tests/inline/apply.spec.ts", "name": "uses an independently configured account model for a non-Copilot chat session"},
-        {"file": "tests/inline/apply.spec.ts", "name": "discovers an independent search model absent from the static catalog and keeps proof enabled"},
-        {"file": "tests/inline/apply.spec.ts", "name": "rejects independent search when managed proof expires during %s"},
-        {"file": "tests/inline/apply.spec.ts", "name": "uses the configured account model in fixed mode even for a different Copilot chat model"},
-        {"file": "tests/client-bundle.spec.ts", "name": "registers web-search routing in the built bundle detail page, leaving Models for account controls"},
-        {"file": "tests/routed-web-loader.spec.ts", "name": "loads the built facade and delegate entries without changing official tools"}
+        {"file": "tests/native-web-composition.spec.ts", "name": "leaves the configured native web entry unchanged in the plugin overlay"},
+        {"file": "tests/native-web-composition.spec.ts", "name": "keeps native web tool execution for a Copilot Agent before and after plugin disposal"},
+        {"file": "tests/loader-composition.spec.ts", "name": "keeps native web and the account and model owners independent as web attaches and leaves"},
+        {"file": "tests/loader-composition.spec.ts", "name": "repairs an existing provider profile even when web is unavailable"},
+        {"file": "tests/client-bundle.spec.ts", "name": "registers plugin settings without search routing in the built bundle detail page"},
+        {"file": "tests/config.spec.ts", "name": "preserves legacy search configuration without exposing it as an active setting"}
       ]
     },
     {
-      "id": "provider-only-search-settings",
+      "id": "native-subagent-copilot-invocation",
       "required": true,
-      "evidenceScope": "pinned-settings-and-client-contracts-plus-synthetic-routing-no-live-save-claim",
+      "evidenceScope": "single-synthetic-account-tagged-source-child-invocation-and-separate-session-account-unit-tests-not-live-or-multi-account-child-isolation",
       "sourceMarkers": [
-        {"file": "src/client.ts", "marker": "const settings = ctx.remote.settings"},
-        {"file": "src/client.ts", "marker": "const routing = ctx.remote.githubCopilotSearchRouting"},
-        {"file": "src/web-search-routing-card.ts", "marker": "Fallback provider"},
-        {"file": "src/web-search-routing-card.ts", "marker": "data-dsh-copilot-search-reset"},
-        {"file": "src/index.ts", "marker": "function configuredCandidates(cfg: InlineConfig)"}
+        {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/subagent-copilot-core.fixture.ts"},
+        {"file": ".github/workflows/ci.yml", "marker": "expected native subagent invocation test to execute without skips"},
+        {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"}
       ],
       "tests": [
-        {"file": "tests/web-search-routing-card.spec.ts", "name": "saves Copilot as %s with one routing write and no model prerequisite"},
-        {"file": "tests/web-search-routing-card.spec.ts", "name": "does not rewrite a legacy model override when saving provider routing"},
-        {"file": "tests/web-search-routing-card.spec.ts", "name": "never loads account model suggestions to display or save providers"},
-        {"file": "tests/web-search-routing-card.spec.ts", "name": "resets a legacy override only through an explicit separate action"},
-        {"file": "tests/web-search-routing-card.spec.ts", "name": "explains a real Remote settings-conflict without exposing its raw details"},
-        {"file": "tests/client-search-inject.spec.ts", "name": "keeps real mounted drafts and pending saves through parent rerenders (bundle=%s)"},
-        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "published SettingsForms exposes descriptor/mutation APIs without installSection, and module lacks installSettingsSection"},
-        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "real pinned Client namespace lookups require stable capture across render calls"},
-        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "search routing saves both leaves in github-copilot namespace using nested paths"},
-        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "stale routing revisions fail CAS and preserve the last successful settings"},
-        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "hidden legacy searchModel and searchRouting share namespace revision and coordinate CAS"},
-        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "pinned generated Client mutate codecs accept routing ops and a flat namespace revision"},
-        {"file": "tests/scripts/search-settings-contract.test.mjs", "name": "native routing edits preserve ordinary config, reject invalid paths and persist across restart"},
-        {"file": "tests/inline/apply.spec.ts", "name": "automatically resolves account-owned Responses candidates for %s without a search model"},
-        {"file": "tests/inline/apply.spec.ts", "name": "bounds automatic proof to three eligible candidates in deterministic id order"},
-        {"file": "tests/inline/apply.spec.ts", "name": "does not discover or probe allowlist-excluded automatic search"}
-      ]
-    },
-    {
-      "id": "explicit-deepseek-search-fallback",
-      "required": true,
-      "evidenceScope": "development-synthetic-no-live-search-claim",
-      "sourceMarkers": [
-        {"file": "src/config.ts", "marker": "searchFallback: z.union(['none', 'deepseek']).default('deepseek')"},
-        {"file": "src/deepseek-search-fallback.ts", "marker": "new native.DeepSeekSearchProvider"},
-        {"file": "src/search-routing.ts", "marker": "These are not Copilot search results."}
-      ],
-      "tests": [
-        {"file": "tests/search-routing.spec.ts", "name": "does not spend fallback credits unless explicitly enabled"},
-        {"file": "tests/search-routing.spec.ts", "name": "does not fallback when the primary reports cancellation"},
-        {"file": "tests/routed-web.spec.ts", "name": "preserves fallback provenance in canonical value, rendered content and web-card metadata"},
-        {"file": "tests/deepseek-search-fallback.spec.ts", "name": "checks the actual managed proof after native fallback auth: %s"},
-        {"file": "tests/deepseek-search-fallback.spec.ts", "name": "checks continuity after native literal-key auth (permitted=%s)"}
+        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "name": "routes concurrently authorized native children to their selected Copilot models and efforts"},
+        {"file": "tests/session-accounts-host.spec.ts", "name": "freezes a running turn while allowing later Session/default choices independently"},
+        {"file": "tests/session-accounts-host.spec.ts", "name": "rejects stale CAS and missing accounts instead of persisting a fallback"}
       ]
     },
     {
@@ -876,7 +832,6 @@
         {"file": "tests/preview-provider.spec.ts", "name": "takes protocol and independent input limits from descriptor evidence rather than the local GPT-6 catalog"},
         {"file": "tests/preview-provider.spec.ts", "name": "does not infer controls from a name or unfamiliar advertised effort labels"},
         {"file": "tests/preview-route.spec.ts", "name": "resolves and prepares a validated account model with the actual Core profile diagnostics contract"},
-        {"file": "tests/inline/apply.spec.ts", "name": "delegates Anthropic in-band system authority before probing at position %s"},
         {"file": "tests/preview-route.spec.ts", "name": "discovers mixed and unseen account models without model-name routing rules"},
         {"file": "tests/preview-route.spec.ts", "name": "uses unmodified stock LlmRuntime preparation and leaves canonical model registration alone"},
         {"file": "tests/fixtures/model-exclusions-core.fixture.ts", "name": "keeps native tool steps in an admitted turn after exclusion and enforces exclusion on the next turn (%s)"},
@@ -1090,22 +1045,14 @@
       "id": "responses-public-reasoning-and-safe-replay-delegation",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/wire.ts", "marker": "response.reasoning_summary_text.delta"},
-        {"file": "src/responses-reasoning.ts", "marker": "request.reasoningEffort ?? profile?.reasoning"},
-        {"file": "src/serialize.ts", "marker": "reasoning: { effort: reasoning.effort, summary: reasoning.summary }"},
-        {"file": "src/serialize.ts", "marker": "message.source.replayState"},
-        {"file": "src/index.ts", "marker": "hasResponsesReplayContext(request.messages)"}
+        {"file": "src/preview-route.ts", "marker": "new PiAiAdapter"},
+        {"file": "src/preview-route.ts", "marker": "ResponsesRetryReplay"},
+        {"file": "src/preview-provider.ts", "marker": "createAccountProvider"}
       ],
       "tests": [
-        {"file": "tests/inline/apply.spec.ts", "name": "transmits the selected effort and preserves the returned public summary"},
-        {"file": "tests/inline/apply.spec.ts", "name": "keeps preview conversations on their registered native adapter before any probe"},
-        {"file": "tests/inline/apply.spec.ts", "name": "delegates opaque assistant replay state without serializing its fields"},
-        {"file": "tests/inline/serialize.spec.ts", "name": "refuses the actual Core source.replayState location without opening its payload"},
-        {"file": "tests/responses-reasoning.spec.ts", "name": "honors request effort before the profile default and asks for a public summary"},
-        {"file": "tests/responses-reasoning.spec.ts", "name": "does not force a reasoning mode without a selection"},
-        {"file": "tests/responses-reasoning.spec.ts", "name": "preserves the Core off omission rather than claiming to disable server reasoning"},
         {"file": "tests/preview-provider.spec.ts", "name": "does not synthesize none or disabled thinking by default for %s"},
-        {"file": "tests/preview-route.spec.ts", "name": "preserves the native enabled reasoning setting %s and summary request"}
+        {"file": "tests/preview-route.spec.ts", "name": "preserves the native enabled reasoning setting %s and summary request"},
+        {"file": "tests/preview-route.spec.ts", "name": "replays opaque reasoning and tool-call identities through the native adapter on a second turn"}
       ]
     },
     {
@@ -1278,23 +1225,6 @@
       ]
     },
     {
-      "id": "credential-bound-lazy-search-proof",
-      "required": true,
-      "sourceMarkers": [
-        {"file": "src/index.ts", "marker": "credentials/record-updated"},
-        {"file": "src/index.ts", "marker": "invalidatePlans"},
-        {"file": "src/probe.ts", "marker": "signal?: AbortSignal"}
-      ],
-      "tests": [
-        {"file": "tests/inline/apply.spec.ts", "name": "retries a cached missing-grant failure on a same-route credential event"},
-        {"file": "tests/inline/apply.spec.ts", "name": "evicts a successful proof for revocation/account changes and coalesces event bursts"},
-        {"file": "tests/inline/apply.spec.ts", "name": "ignores unrelated record updates and retains the verified proof"},
-        {"file": "tests/inline/apply.spec.ts", "name": "rejects account replacement during search auth after a successful proof"},
-        {"file": "tests/inline/apply.spec.ts", "name": "makes no network calls at attach, availability checks, settings or credential events"},
-        {"file": "tests/inline/apply.spec.ts", "name": "removes its Fiber listener and makes retained entry points inert on disposal"}
-      ]
-    },
-    {
       "id": "legacy-route-conflict-protection",
       "required": true,
       "activation": "legacy-restoration-only",
@@ -1339,7 +1269,7 @@
       "sourceMarkers": [
         {"file": "src/copilot-auth.ts", "marker": "models.getAuth('github-copilot')"},
         {"file": "src/copilot-auth.ts", "marker": "GITHUB_COPILOT_CREDENTIAL_KEY"},
-        {"file": "src/index.ts", "marker": "createGitHubCopilotTokenResolver(ctx, async () =>"}
+        {"file": "src/preview-route.ts", "marker": "createAccountModelAuth"}
       ],
       "tests": [
         {"file": "tests/copilot-auth.spec.ts", "name": "refreshes the llm-pi-ai grant in-place and returns the Copilot API token"},
@@ -1367,64 +1297,20 @@
       ]
     },
     {
-      "id": "direct-provider-hosted-search",
+      "id": "native-model-attachment-projection",
       "required": true,
-      "sourceMarkers": [
-        {"file": "src/plan.ts", "marker": "route.provider !== 'github-copilot'"},
-        {"file": "src/index.ts", "marker": "route.model !== request.model"},
-        {"file": "src/index.ts", "marker": "resolveRequestAuth"},
-        {"file": "src/copilot-request.ts", "marker": "Openai-Intent"},
-        {"file": "src/probe.ts", "marker": "RESPONSES_PROBE_ROUNDS = 2"}
-      ],
+      "sourceMarkers": [{"file": "src/preview-route.ts", "marker": "imageRequestTarget(provider: string, model: string"}],
       "tests": [
-        {"file": "tests/inline/apply.spec.ts", "name": "captures an explicit request model instead of substituting a changed Session selection"},
-        {"file": "tests/inline/apply.spec.ts", "name": "routes concurrent hosted tools from real model-selection request headers rather than activation seeds"},
-        {"file": "tests/inline/apply.spec.ts", "name": "disposes only A during final %s HTTP %s while B completes without cross-cancellation"},
-        {"file": "tests/inline/apply.spec.ts", "name": "ensures cold metadata only on actual search and captures selection before discovery awaits"},
-        {"file": "tests/preview-route.spec.ts", "name": "resolves Host-only search auth from the live generic snapshot without exposing it in status"},
-        {"file": "tests/copilot-request.spec.ts", "name": "combines installed catalog headers with provider-required request metadata"},
-        {"file": "tests/copilot-request.spec.ts", "name": "applies a credential-specific Copilot endpoint before request construction"},
-        {"file": "tests/copilot-request.spec.ts", "name": "preserves the Anthropic v1 path on a credential-specific endpoint"},
-        {"file": "tests/copilot-request.spec.ts", "name": "adds dynamic headers for business and enterprise Copilot endpoints"},
-        {"file": "tests/probe.spec.ts", "name": "confirms support via the standard spelling and reports it"},
-        {"file": "tests/probe.spec.ts", "name": "bounds all-transient replies to two complete spelling rounds"},
-        {"file": "tests/probe.spec.ts", "name": "shares one whole-probe deadline and signal across retries"},
-        {"file": "tests/inline/wire.spec.ts", "name": "skips web_search_call events and streams the answer normally"},
-        {"file": "tests/inline/wire.spec.ts", "name": "skips a pass-through function_call named web_search without slotting it"}
-      ]
-    },
-    {
-      "id": "hosted-search-file-context-fail-closed",
-      "required": true,
-      "sourceMarkers": [{"file": "src/index.ts", "marker": "contentHasFileCompat(message.content)"}],
-      "tests": [
-        {"file": "tests/inline/apply.spec.ts", "name": "preserves a top-level user file when bypassing the custom wire"},
-        {"file": "tests/inline/apply.spec.ts", "name": "preserves a file nested in tool-result content when bypassing the custom wire"},
+        {"file": "tests/preview-route.spec.ts", "name": "projects images through the proven initiating account rather than the empty registry profile"},
         {"file": "tests/preview-route.spec.ts", "name": "uses native attachment projection and execution-world mapping when available: %s"},
         {"file": "tests/preview-route.spec.ts", "name": "keeps the mapped read-only path when Core offloads an image to fit its request budget"}
-      ]
-    },
-    {
-      "id": "traditional-search-bridge",
-      "required": true,
-      "sourceMarkers": [
-        {"file": "src/traditional-search.ts", "marker": "github-copilot-hosted"},
-        {"file": "README.md", "marker": "github-copilot.searchFallback"},
-        {"file": "README.md", "marker": "Fetch is unchanged."},
-        {"file": "README.zh.md", "marker": "github-copilot.searchFallback"},
-        {"file": "README.zh.md", "marker": "网页抓取不变"}
-      ],
-      "tests": [
-        {"file": "tests/traditional-search.spec.ts", "name": "normalizes generated content and deduplicated sources"},
-        {"file": "tests/traditional-search.spec.ts", "name": "honors caller abort before credential or network access"},
-        {"file": "tests/traditional-search.spec.ts", "name": "maps HTTP errors without leaking credentials or provider bodies"}
       ]
     },
     {
       "id": "dsh-supported-baselines-fail-loud-guard",
       "required": true,
       "sourceMarkers": [
-        {"file": "src/compatibility.ts", "marker": "peerRange: '0.2.1-rc.3'"}
+        {"file": "src/compatibility.ts", "marker": "peerRange: '0.2.2-rc.3'"}
       ],
       "tests": [
         {"file": "tests/compatibility.spec.ts", "name": "admits only the exact current official release"},

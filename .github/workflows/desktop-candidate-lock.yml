@@ -9,6 +9,25 @@ permissions:
   contents: read
 
 jobs:
+  lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Resolve exact unchanged official dependencies
+        run: pnpm install --lockfile-only --ignore-scripts --strict-peer-dependencies --registry=https://registry.npmjs.org
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-candidate-lock
+          path: pnpm-lock.yaml
+          if-no-files-found: error
   focused:
     strategy:
       fail-fast: false

@@ -3,7 +3,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { AgentRegistry } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createScope } from '@deepseek-ai/dsh-scope'
-import type { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { applyWebSearchTool } from '@deepseek-ai/dsh-tool-web'
@@ -40,9 +41,12 @@ async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?
   })
   cleanup.push(root.dispose)
   await root
-  const toolFiber = ctx.plugin(ToolRuntime, { mode: 'native' })
+  const toolFiber = ctx.plugin(ToolRuntime)
   cleanup.push(toolFiber.dispose)
   await toolFiber
+  const executorFiber = ctx.plugin(NativeToolExecutor)
+  cleanup.push(executorFiber.dispose)
+  await executorFiber
   const isolated = ctx.isolate('web', Symbol('original-web'))
   const originalFiber = isolated.plugin(WebRuntime, webConfig('configured-provider', 'configured-fetch'))
   cleanup.push(originalFiber.dispose)
@@ -106,7 +110,7 @@ async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?
       for (const agent of [a, b, d]) {
         const scope = createScope(c, agent)
         cleanup.push(scope.dispose)
-        applyWebSearchTool(scope.ctx, 2, 2, 60000, false)
+        applyWebSearchTool(scope.ctx, 2, 2, 800, 60000, false)
       }
     },
   })
@@ -115,7 +119,14 @@ async function harness(fallback: 'none' | 'deepseek' = 'none', selectedProvider?
   const tools = ctx.get('tools')!
   const agents = ctx.get('agents')!
   let call = 0
-  const run = (agent: Agent, args: unknown, signal = new AbortController().signal) => agents.withInitiator(agent, () => tools.execute({ callId: `call-${++call}` as ToolCallId, name: 'web_search', arguments: args, agent, signal }))
+  const run = (agent: Agent, args: unknown, signal = new AbortController().signal) => agents.withInitiator(agent, async () => {
+    const argumentsJson = JSON.stringify(args)
+    if (argumentsJson === undefined) throw new Error('fixture arguments must be JSON')
+    const batch = await tools.execute({ agent, signal,
+      calls: [{ type: 'tool-call', id: ToolCallId(`call-${++call}`), name: 'web_search', arguments: argumentsJson }] })
+    if (batch.results.length !== 1) throw new Error('expected one native web result')
+    return batch.results[0]!.result
+  })
   return { ctx, tools, agents, a, b, d, run, copilot, deepseek, search, alternateSearch, fetch, providerFiber, routedFiber, router, original: isolated.get('web')! }
 }
 

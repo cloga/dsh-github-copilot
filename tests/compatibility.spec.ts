@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { assertDshCompatibility, assertDshSearchCompatibility, DSH_COMPATIBILITY } from '../src/compatibility.ts'
+import { assertDshCompatibility, DSH_COMPATIBILITY } from '../src/compatibility.ts'
 
 function context(overrides: Record<string, unknown> = {}): Context {
   const services: Record<string, unknown> = {
@@ -83,14 +83,12 @@ describe('assertDshCompatibility', () => {
 
   it('accepts the public service contract without reading private WebRuntime config', () => {
     expect(() => assertDshCompatibility(context())).not.toThrow()
-    expect(() => assertDshSearchCompatibility(context())).not.toThrow()
   })
 
-  it('allows model integration without web while diagnosing a missing search seam', () => {
+  it('allows model integration without a native web service', () => {
     const withoutWeb = context({ web: undefined })
     expect(() => assertDshCompatibility(withoutWeb)).not.toThrow()
-    expect(() => assertDshSearchCompatibility(withoutWeb)).toThrow('web.registerSearchProvider')
-    expect(() => assertDshSearchCompatibility(context({ web: {} }))).toThrow('web.registerSearchProvider')
+    expect(() => assertDshCompatibility(context({ web: {} }))).not.toThrow()
   })
 
   it('fails before startup when a required API is absent', () => {

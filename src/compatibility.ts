@@ -45,11 +45,6 @@ function incompatible(api: string): never {
   )
 }
 
-/** Validate the optional hosted-search seam only when web is mounted. */
-export function assertDshSearchCompatibility(ctx: Context): void {
-  if (!method(ctx.get('web'), 'registerSearchProvider')) incompatible('web.registerSearchProvider')
-}
-
 /** Assert every required Core service shape before registering any effects. */
 export function assertDshCompatibility(ctx: Context): void {
   if (!method(ctx.get('agentDefaultModel'), 'currentSelection')) incompatible('agentDefaultModel.currentSelection')

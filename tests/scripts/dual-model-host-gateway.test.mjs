@@ -120,7 +120,7 @@ function supportedServices(ctx) {
   ctx.provide('sessionController', { inspect: async id => stored.get(id) })
   ctx.provide('agentPresets', { resolve: unexpected, mount: unexpected, composedPreset: unexpected, standingKeyFor: unexpected })
   ctx.provide('llm', { resolveCallConfig: async route => route })
-  ctx.provide('tools', { register: unexpected, restrict: unexpected, guard: () => () => {}, schemas: unexpected, presentAs: unexpected })
+  ctx.provide('tools', { register: unexpected, restrict: unexpected, guard: () => () => {}, schemas: unexpected, setExecutor: unexpected })
   ctx.provide('subagents', { getProvider: () => ({ capabilities: { agentOptions: true, persona: true, toolFilter: true, depthLimit: true }, prepareContinuable() {} }),
     startContinuable: unexpected, sendMessage: unexpected, listChildren: unexpected, drainContinuableDescendants: async () => {} })
   ctx.provide('githubCopilotPreview', { getView: () => preview, discover: async options => { discoveries.push(options); return preview } })

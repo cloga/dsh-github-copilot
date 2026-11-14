@@ -6,396 +6,91 @@
 
 **English** | [简体中文](./README.zh.md)
 
-GitHub Copilot account discovery, contextual Auto routing and hosted search for DSH. The plugin reuses DSH's published native adapter, retaining a profile-wide account default with independent Session next-turn choices; it does not patch Core or maintain a second model catalog.
+Add account-available GitHub Copilot models to DeepSeek Harness (DSH). The
+plugin reuses DSH's GitHub Copilot OAuth and published model adapter; it does
+not add another login, model wire, static catalog, or agent loop.
 
-**Historical stable release: [`0.4.1`](https://github.com/cloga/dsh-github-copilot/releases/tag/v0.4.1); prepared, unreleased DSH rc.3 metadata candidate: `0.1.0-alpha.5.dsh.0.2.1.rc.3`.** This PR prepares version metadata only; the alpha.5 GitHub Release and npm package have not been published. Do not use the alpha.5 install commands until both publication channels are verified. DSH `0.2.1-rc.3` is a prerelease. This plugin line is a compatibility candidate, not a production Core upgrade recommendation; Desktop artifacts/signatures are unverified. Each exact DSH Core version starts an independent plugin sequence at `0.1.0-alpha.1.dsh.<Core>`; same-Core fixes increment `alpha.N`. The suffix normalizes Core `0.2.1-rc.3` to `dsh.0.2.1.rc.3`, but compatibility is validated against explicit metadata, not guessed from the name. Existing published versions/tags remain unchanged. Published, installed and loaded states remain separate.
+**Plugin-only implementation:** all implementation changes remain
+plugin-only and use published public DSH APIs. The plugin does not modify,
+patch, rebuild, or replace DSH Core or dependency artifacts.
 
-Select by **exact Core**, never global SemVer maximum or npm `latest`/`alpha`.
-The read-only `node scripts/select-core-release.mjs 0.2.0-rc.2` command checks
-`deployment-baseline.json`'s mapping and verifies the exact public GitHub Release,
-tarball/checksum assets and npm version's `engines.dsh` before returning an
-install spec. Rc.2 maps to alpha.15, Core alpha.4 to alpha.16, alpha.5 remains
-its historical line, and rc.3 maps to this pending candidate; until both channels are observable, it reports pending or
-incomplete without an install recommendation. Unknown targets fail explicitly. The existing npm
-`alpha` channel remains global and is not compatibility-aware; `latest` remains
-the historical stable pointer. No automatic updater integration or old-Core
-maintenance is promised. See [release selection](./docs/npm-distribution.md#exact-core-release-lines).
+## Scope and ownership
 
-**Native refresh protection:** 0.4.1 introduced preservation of already-dispatched HTTP streams across proven plugin-owned refresh with unchanged account, endpoint and entitlements. Versions through 0.4.2-alpha.13 still missed this proof across real Cordis traced service faces; 0.4.2-alpha.14 fixes that identity mismatch. Subsequent requests use freshly validated auth and metadata. Unknown/external credential notifications, revocation, cancellation and provider rejections remain explicit—not a promise of invisible recovery or automatic retry. See [the refresh boundary](./docs/copilot-accounts.md#native-oauth-refresh-and-dispatched-requests-385).
+- DSH owns application authentication, model selection, Auto, tools, Web,
+  subagents, permissions, history, context management, and Usage.
+- This plugin connects GitHub Copilot authorization, discovers models and
+  capabilities from the authorized account, and composes the published native
+  adapter with only verified Copilot-specific compatibility handling.
+- Native subagents selecting and actually invoking account-available Copilot
+  models are a required compatibility goal. A picker entry alone is not
+  sufficient evidence. Unsupported or incomplete endpoint/capability metadata
+  must fail explicitly rather than be guessed.
+- HydraFusion and HydraFusion Max are out of scope. The plugin does not add a
+  DeepSeek credential check, silently switch providers, or retry a failed
+  Copilot request through another provider.
 
-**Compaction planning:** alpha.15 fixes byte counts being compared with token budgets in the separately selected recovery engine. Planning now uses the public native token meter, preserving complete tool relations and final native admission. Truly oversized balanced units still fail explicitly; this is not history repair or guaranteed recovery. See [compaction recovery](./docs/manual-compaction-recovery.md).
+The intended environment is a normally configured DSH app with its usual
+DeepSeek-backed features, plus GitHub Copilot authorization for Copilot models.
+The plugin does not inspect or enforce the user's DeepSeek account status.
 
-**Responses replay refusal:** a locally rejected incomplete, reference-only, summary-only reasoning item, or previous-response reference now adds a bounded structural reason to the native `INVALID_REQUEST`: fixed reason code, zero-based input index when applicable, allowlisted type/status, and field-presence booleans only. The rejected request is not dispatched and history remains unchanged; IDs, summaries, tool data, unknown fields, and encrypted bytes are never included in diagnostics. Valid encrypted replay bytes and `call_id` pairing remain intact. This diagnosis does not recover or rewrite old history.
+## Compatibility status
 
-**Historical DSH alpha.5 adaptation:** exact public APIs used pi-ai `1.1.0`, the official
-Cordis/schemastery peers and storage-domain's Zod `4.4.3`. The
-[fixed-target official-first review](https://github.com/cloga/dsh-github-copilot/blob/main/docs/official-first-021-alpha5.md)
-records every retain/migrate/retire/defer decision. Alpha.4 natively hides blank
-Thinking disclosures; the redundant plugin renderer and provenance projection
-are retired without changing messages or replay. Exact native reviewer identity,
-dynamic system/tool conversion, replay, account/Remote/compaction and mounted
-selector regressions gate admission. No Core patch, version exemption, new
-wire/catalog, policy migration or durable decision recording is introduced.
+This line targets official DSH `0.2.2-rc.3`. A source checkout or pending
+mapping is not proof of qualification or publication. Before installing,
+confirm that the exact version has passed the required gates and its Release
+and npm artifacts are available. Published, installed, and loaded states are
+distinct.
 
-
-The rc.3 candidate additionally adapts the public `WebRuntime` Volatile provider
-getters and requires exact reviewer package/version/callback identity. Its
-tagged-source and published-artifact gates passed on Windows/Linux in
-[CI 40098031196](https://github.com/cloga/dsh-github-copilot/actions/runs/40098031196),
-including full verification and package checks; no rc.3 Desktop runtime is claimed.
-Alpha.5 qualification also preserves code-first PTC schemas and function-body/REPL instructions. The new inline model-label slot is an opportunity only: no label UI or historical model attribution is added. Alpha.4 hosts may retain alpha.16.
-
-## What you can do
-
-**High-cost Auto:** in **Manage → Model preferences**, mark costly models with
-**High cost**. Cost and task difficulty are independent: across every category,
-all eligible fitting candidates retain a nonzero chance. Ordinary
-weight `1` gets a finite continuity bonus (`1.5×` for the previous model).
-High-cost base weight is `0.2`; if that model was used in the previous turn,
-its weight decays tenfold to `0.02` instead of receiving a bonus.
-This one-turn recency penalty is a declared trial, not calibrated quality.
-Marking does not change fixed choices or admitted turns. This is a declared
-policy, not a price/quality ranking or proven savings.
-
-The existing turn selection dialog exposes **Auto allocation observations**:
-local retained opportunities, expected shares and actual selections for this
-Session, with a read-only JSON export. This view remains Host-lifetime only.
-For durable evaluation, default-off **Local diagnostics** also retains daily
-aggregates by policy/model/category, demand and assessment source, high-cost
-and continuity state, expected/actual selections and no-fit decisions for 14
-days. Enable it independently through the plugin detail settings page; this
-does not enable account/Checking or compaction collection. No Session/turn IDs,
-conversation content, execution/outcome claims, automatic tuning or upload.
-`autoAllocationEvidence: false` stops future candidate evidence in the
-turn-selection view without changing routing. The auxiliary classifier
-prefers unmarked eligible Lightweight models separately. Advisor calls are not
-implemented. See [requirements](./docs/auto-high-cost.md),
-[local diagnostics](./docs/plugin-diagnostics.md) and the
-[required iteration review](./docs/evidence-driven-iteration.md).
-
-The [local diagnostics pilot](./docs/plugin-diagnostics.md) records bounded
-account/Checking, compaction and Auto allocation aggregates, **default off**. After installing
-and loading the published build, open the plugin detail settings page →
-**Local diagnostics → Read status → Enable local collection**. This enables
-local account/Checking and compaction persistence, not uploads or scheduled
-analysis. Enable **Auto allocation observation** separately to collect only
-Auto allocation aggregates. **Enable request observations** is a third, independent,
-default-off control: up to 128 content-free managed-adapter physical requests
-for 24 hours, with model, JSON/wire byte counts, timings, HTTP status and terminal
-categories. No bodies, headers, credentials or Session/turn IDs are collected.
-Local body-write completion does not prove supplier receipt; these diagnostics
-do not fix timeouts or alter retry/Usage behavior.
-All diagnostic groups, including Auto, are independently collapsed by default
-inside the Local diagnostics region. Request consent also covers up to 128
-credential-change notification/commit observations for 24 hours: fixed
-qualification reasons and live-wire counts only. Unknown source remains unknown;
-no past incident or account/Session attribution is reconstructed. See
-[credential-change evidence](./docs/plugin-diagnostics.md#credential-change-decisions-402).
-Large JSON bodies up to 32 MiB can receive bounded, cooperative composition
-counts without a full payload parse; the approximately 20.4 MiB class no longer
-necessarily hits the old 16 MiB diagnostic blind spot. Time/work/cancellation
-limits remain explicit, and settled rows may acquire counts on a later read.
-No gzip, history trimming or extra retry is enabled. See [request observations](./docs/plugin-diagnostics.md#content-free-physical-request-observations-392).
-The package also has an explicit offline analyzer
-for a caller-selected persisted unit or reviewed aggregate view; it writes only
-to a new local report file and never scans, uploads or changes collection. Pause
-preserves evidence; Clear requires separate confirmation. Client/Host
-populations, uncovered paths and reporting/storage gaps remain explicit.
-Descriptive counts are not reconstructed history, failure rates or proof of an
-improvement. The diagnostics page opens on a daily Auto allocation table by UTC
-date, policy, model and cohort, with opportunities, expected selections, selected
-counts and no-fit decisions. Compare expected and selected counts only within
-matching cohorts. New cohorts distinguish assessment timeouts, unavailable/invalid
-results, omitted context, disabled assessment and genuinely unknown local/semantic
-results; legacy reasons remain **not recorded**. Count tasks with Selected plus
-No-fit, not candidate opportunities. This is diagnostic coverage, not a routing
-change or proof of the supplier root cause. Account/Checking and compaction reports, collection controls,
-and detailed scope, limits and JSON are in collapsed disclosures; clearing still
-requires separate confirmation.
-
-To analyze an explicitly qualified file from a built package or source checkout:
+Use the read-only exact-Core selector from a verified source checkout to check
+the release mapping:
 
 ```sh
-node scripts/analyze-diagnostics.mjs --input "ABSOLUTE_UNIT_FILE.json" --mode persisted-unit --profile-name "PROFILE_NAME" --output "NEW_LOCAL_REPORT.json"
+node scripts/select-core-release.mjs 0.2.2-rc.3
 ```
 
-Replace the placeholders with the reviewed file/profile and a new absolute output path. For a reviewed aggregate view export, use `--mode reviewed-view` without `--profile-name`. [Read qualification and interpretation limits](./docs/plugin-diagnostics.md#explicit-offline-analysis-368) explain the accepted envelope, bounds and persisted-only evidence; no daily schedule is included.
+It must report a fully verified published release before an install is
+recommended. See [release selection and distribution](./docs/npm-distribution.md)
+and the [model compatibility acceptance criteria](./docs/model-compatibility-acceptance.md).
 
-| Task | Where to start |
-|---|---|
-| Sign in and manage account models | **Settings → Models → GitHub Copilot → Sign in** |
-| Add or switch GitHub accounts | **Manage → Account management → Switch**; managed-only profiles |
-| Select this Session's next-turn account | **Credits → Switch account**; saved authorizations only |
-| Return this Session to the global default account | **Credits → Follow global default**; account selection only, not the model |
-| Exclude or restore individual models | **Manage → Model preferences** |
-| Choose models automatically | Pick **Auto · Balance**, **Auto · Efficiency** or **Auto · Intelligence** |
-| Follow a parent model in supported subagents | **Plugins → dsh-github-copilot → Details → Follow parent model** |
-| Choose primary/fallback search providers | **Plugin details → Web search** |
-| Set the visible-history default for new Sessions | **Settings → Models → GitHub Copilot → Manage → New Session continuation default** |
-| Enable visible-history for an existing Session | Select a managed Copilot model, open the composer **Credits/usage** pill → **Visible-history continuation** → **Session policy → On** |
-| Read account Credits and context evidence | Copilot Session composer; native Turn Usage stays separate |
+## Use
 
-![Client account controls and model preferences](./docs/images/copilot-model-preferences.png)
-
-This 0.4.0 release-candidate capture uses the built Client with synthetic accounts and models. It shows the Models account controls, the expanded **New Session continuation default**, and exact-ID model preferences including High cost. The default applies only to eligible Sessions created after its policy epoch; it does not enroll existing or seeded histories. This is not live sign-in, model availability or loaded Desktop proof.
-
-![Switching between saved GitHub accounts in Models](./docs/images/copilot-accounts.png)
-
-![Session account selection and account-wide quota in Credits](./docs/images/copilot-accounts-credits.png)
-
-![Existing Session visible-history policy in the composer Credits popover](./docs/images/copilot-session-continuation.png)
-
-These Credits captures use the 0.4.0 release-candidate Client and synthetic identities, quota and Session state. The account panel shows **Follow global default** for this Session's account choice; the continuation capture shows the persistent **Session policy → On** disclosure, same-account loss notice and next-turn boundary. No real account or billing data is shown; no message is sent or retried. [Capture provenance](./docs/images/copilot-current-provenance.json) accompanies the images.
-
-## Install and sign in
-
-Use the exact verified release, the intended profile and an authorized package source. No `copilot2api`, external gateway, pasted GitHub token, placeholder key or separate `dsh-web-search-provider` is required.
-
-Before installation, extract the checksum-verified archive and run its **read-only composition preflight** with absolute paths:
+After the exact compatible release is available and verified, download its
+original asset and checksum in an empty directory:
 
 ```sh
-node package/scripts/check-search-composition.mjs --profile-dir /absolute/profile --home /absolute/DSH_HOME --install-anchor /absolute/dsh/package.json
-```
-
-Supply any launcher patches with repeated `--patch /absolute/file`. Require `supported: true`: the install command does not automatically run this preflight. Unsupported/custom Web composition and `NONEMPTY_DISPOSABLE_PROFILE_ROOT` are stop conditions. Preserve a nonempty root and review whether public composition reconstructs it before any separately approved normalization; never assume it can be cleared. Check effective shared-peer resolution so stale profile-local packages do not shadow Desktop's official peers.
-
-Install the exact, checksum-verified release archive shown below; do not use a
-checkout directory as a release package. `pnpm add <directory>` creates a
-`link:` development dependency and does not install that directory's production
-dependencies. For development, install the checkout's dependencies before
-linking it and keep the checkout available at the linked path. A package manager
-showing **Installed** confirms its profile record, not that runtime dependencies
-resolved or that the plugin loaded; verify the exact DSH/profile startup result
-separately.
-
-For a **standalone named profile**:
-
-```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.5.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.5.dsh.0.2.1.rc.3.tgz
-```
-
-The command above is a prepared-release example, usable only after publication and required CI qualification; it requires official DSH prerelease `0.2.1-rc.3`. **Do not install this candidate into production Desktop profiles.** Desktop artifacts/signatures and profile peer composition remain unverified; retain the existing compatible plugin on rc.2. The [historical rc.2 bundled-CLI qualification](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2) does not qualify rc.3, and a generic/global `dsh` shim is not equivalent. No installation or restart is authorized.
-
-Desktop's native package manager and qualified bundled CLI are profile-specific.
-[Standalone offline maintenance](./docs/npm-distribution.md#controlled-offline-cli-maintenance-for-standalone-profiles)
-is not a workaround for a Desktop-managed/reserved profile.
-
-After an approved reload/restart:
-
-1. Open **Settings → Models → GitHub Copilot** and select **Sign in with GitHub**. No native provider or manual model definition is needed.
-2. Copy the displayed one-time code and complete GitHub's device flow in your own browser. Desktop uses its system-browser handoff; a selectable verification URL remains available if it does not open.
-3. Wait for **Signed in** and account discovery, then choose a model. Opening Models and normal use ensure missing/stale metadata; **Manage → Refresh models** is an intentional forced refresh, not routine setup.
-
-Sign-out requires an explicit action and removes only the active account's authorization, not other saved grants or route settings. Upgrades preserve existing native Copilot profiles; two groups can remain until [explicit single-route migration](./docs/single-route-migration.md). Installation never migrates conversations or defaults.
-
-In **Manage → Account management**, choose **Login environment** before Add/Reauthorize: **GitHub.com** or **GitHub Enterprise Cloud (GHE.com)** with your data-residency tenant, such as `company.ghe.com`. Arbitrary hosts, ports and URL paths are rejected. Reauthorization must retain the saved host; use Add for another environment. Verified tenant names appear beside account logins. **GitHub Enterprise Server and Enterprise quota are unsupported.** Plugin identity requests reject redirects; native pi-ai OAuth has no redirect-control seam, so OAuth redirect rejection is not claimed. See [login environment boundaries](./docs/copilot-accounts.md#github-login-environments-424).
-
-The **Switch** dropdown lists saved accounts and **Add GitHub account** at the bottom. Adding never replaces the global default. During device authorization, the card keeps the verification URL, one-time code, **Copy authorization code** and **Cancel adding account** together; identity/model verification follows separately. A confirmed switch changes future inherited turns, not running turns or explicit Session overrides. **Manage saved authorizations** contains **Reauthorize** and **Remove**; removal affects only a nondefault saved authorization, never a running turn's pinned account or GitHub-side access. **Refresh account information** updates identity, not authorization. Native-route or incomplete evidence blocks switching; missing/revoked accounts never fall back. A new account may lack your selected model, and encrypted replay may be account-bound: no automatic model substitution or history removal occurs. See [account requirements](./docs/copilot-accounts.md).
-
-Completed managed turns show **Account** beside native Usage. It records the request account, not billing or subagent totals. A verified name is frozen at admission; if missing, an existing bounded non-forcing lookup for that exact account runs without delaying model delivery and can fill identity only while the same turn remains active. No account evidence exists before native delivery. Missing identity remains unavailable; completed history is never backfilled from current settings. Evidence is bounded to the Host lifetime; restart, cold history or missing delivery displays unknown. Credits labels an unidentified original or saved authorization without displaying opaque account IDs.
-
-Saved account names can load without activating the account. Names are cached for the Host lifetime, invalidated by credential changes or failed verification, and never prove authorization or model access. A global switch requires fresh identity/model validation and confirmed settings persistence. If switching is blocked, let authorization or pinned work settle and use **Refresh account information**; unknown route/activity evidence remains a blocker. The dropdown, not a button beside each saved account, is the selection control.
-
-Account-management metadata and identity reads have a fifteen-second Client deadline instead of indefinite Checking. An initial read failure offers metadata-only **Retry**; late results are ignored. This does not cancel Host work, retry automatically or unlock an unresolved account mutation.
-
-**Desktop lifecycle:** the current rc.3 public-Loader fixture preserves active Web consumers on a single-step add, but staged add and remove/re-add can leave the global `web` service unavailable and dependent account integration inactive. No feature-equivalent plugin-only recovery API is currently available; [issue #371](https://github.com/cloga/dsh-github-copilot/issues/371) remains open. An in-place upgrade without native HMR is explicitly `restart-required`; honor that manager result. The synthetic fixture does not justify repeated toggles or a restart when the manager has not requested one. The card's **Desktop plugin lifecycle** note is general guidance, not detection of your Desktop version or a restart requirement. See [Desktop guidance and version-scoped lifecycle evidence](./docs/web-lifecycle-rc2.md#desktop-guidance); the rc.2 filename is retained for link stability, not current-host identification.
-
-## Auto and model preferences
-
-**Saving preferences:** Exclude/Restore and High cost save immediately with confirmed settings readback. Other rows remain usable: up to 32 distinct-row edits can wait, marked **Waiting…**, while one is **Saving…**. An unconfirmed result or changed scope cancels unsent edits; **Retry** reads saved settings without replaying writes. The queue does not survive unmount.
-
-**Provider-directory load failures:** native Models `llm/listProviders failed: Failed to fetch` is a Client-to-Host/gateway transport failure, not proof of forced Copilot discovery. Use the native page's **Retry** after the connection recovers; the plugin does not substitute a stale or empty catalog.
-
-All three Auto preferences use the same account-verified, non-excluded eligible pool. Hard input/image capability checks run before soft task preferences.
-
-| Task demand | Efficiency | Balance | Intelligence |
-|---|---|---|---|
-| Proven simple | Lightweight | Lightweight | Lightweight |
-| Routine | Lightweight | Versatile | Powerful |
-| Complex | Powerful | Powerful | Powerful |
-| Unknown | Versatile | Versatile | Powerful |
-
-Categories come from authenticated supplier metadata, not model names, context capacity or measured quality rankings. Every eligible fitting model retains positive opportunity across categories. The table above is the preferred target, not a hard filter: category factors are target `1`, second `0.25`, third `0.05`, unknown `0.02`, multiplied by cost/recency weights. These are uncalibrated trial coefficients, not fixed category probability quotas; candidate counts also affect shares. The penalty applies to the previous high-cost model, not other marked peers, and resets after a different model's turn. Fit does not prove task success; non-target selection is intentional opportunity, not task-failure escalation. One real answer model stays fixed throughout each admitted turn's steps and retries; compaction preserves its independently resolved native summary route.
-
-Semantic assessment is **enabled by default only for locally unknown tasks**. It makes at most one bounded auxiliary call with a **30-second default end-to-end deadline** and **128-token output budget**. Set `github-copilot.autoSemanticAssessment: false` to opt out. The native plugin configuration exposes `autoSemanticAssessmentTimeoutMs` (1000–120000 ms; `8000` restores the old budget) and `autoSemanticAssessmentModel` (empty for automatic selection, or an exact current-account model ID). They apply to subsequent assessments, not admitted retries. An unavailable/excluded/unsuitable explicit classifier reports unavailable, never silently switches. Automatic selection is metadata-driven, not measured optimal; the new default is a trial, not proof of past timeout causes. See [assessment settings](./docs/auto-task-routing.md#using-auto).
-
-Timeout/invalid output leaves demand unknown and uses the preference fallback; it never means simple or triggers another classifier. Caller cancellation and account invalidation remain terminal. Auxiliary calls add latency and supplier charges outside native answer Usage.
-
-The deadline is checked against a monotonic clock at preparation, native request and result boundaries, even if the event loop delays the timer. Such delays can postpone settlement; they do not authorize late dispatch or late-result acceptance. Eligible Lightweight classifiers must advertise an explicit reasoning-disable mode: `off`, or protocol-native `none` for Responses/Completions or `disabled` for Anthropic. Deterministic ID tie-breaking follows. This is not a measured speed ranking. Explanations distinguish the fitting category pool and previous-model continuity from semantic merit.
-
-The auxiliary classifier always requests the protocol's explicit disabled-reasoning mode (`none` for Responses/Completions, `disabled` for Anthropic) and receives no tools. A candidate is not dispatched unless both account metadata and the isolated public adapter model expose that capability; otherwise assessment fails closed. Missing or empty effort metadata is not proof that a model never reasons. The classifier does not inherit configured Chat reasoning effort, and its off mapping is not added to shared account models. Synthetic tests verify the outgoing payload, not supplier-side implementation. One call, bounded text input and 128 requested output tokens constrain overhead without promising a hard credit cap; ordinary Chat reasoning/tools remain unchanged.
-
-Classification preserves the current request and a bounded substantive continuation
-anchor before verbose historical output. Incidental historical omission alone no
-longer forces a valid simple/routine result to unknown; missing anchors, limited
-task text and nontext task dependencies still block downshift. The prompt does not
-pre-fill an unknown answer. Assessment details distinguish projection limitations
-from the classifier's returned demand. Unknown remains valid; retained text and
-synthetic regressions do not prove calibrated accuracy or a reduced live unknown rate.
-
-Request-local strict selection evidence includes candidate counts and one fixed first-rejection reason per model: exclusion, configured-ID mismatch, category, text input, unproven disable capability or budget. No model IDs are added to these counts. No-fit warnings use fixed codes only, and native off preparation failure is distinguished from selection failure. This evidence is ephemeral, not a new persisted diagnostic population; legacy records without these fields remain unknown.
-
-The reply's selection disclosure shows captured reasons and optional content-free auxiliary milestones. `uncertain` and `insufficient-evidence` do not mean the conversation is empty. **Selection unknown** means no retained record; **Selection unavailable → Retry** means the read failed. Retry rereads that turn, not inference. Evidence is bounded and Host-local, so restart/eviction can lose it.
-
-When a failed/incomplete turn has no native Usage model row, the existing ⓘ opens **Turn model and selection evidence**: successful same-turn sources show **Recorded models** with incomplete failed-attempt attribution; reliable same-turn recorded request configuration shows **Requested model**, not dispatch, execution or billing proof. Missing evidence stays **Unknown**, never inferred from today's picker/default or adjacent turns. Selection reasons remain in a disclosure underneath. Complete native routes avoid repeated model UI; turns without a closing message have no existing assistant-actions entry. Native Usage and retries are unchanged. [Evidence boundaries](./docs/automatic-model-routing.md#attribution-and-explanation).
-
-**Model exclusions** remove exact IDs from the managed picker and new Auto pools. Selected models are excludable: an admitted turn keeps its model, but a new turn/direct request cannot use an excluded ID. A fixed selection is never silently replaced. Unknown preference settings leave controls read-only, not falsely enabled. Saves use narrow native CAS without credentials, discovery or Session scans.
-
-See [task assessment](./docs/auto-task-routing.md) and [routing contracts, exclusions and history recovery](./docs/automatic-model-routing.md).
-
-Explicit Auto intent survives native pending-selection consumption and cold restore through a plugin-owned projection of existing selection events. Later explicit fixed choices still win for future turns; admitted turns keep their route. This does not backfill historical selection reasons or turn unknown evidence into guessed Auto.
-
-## Subagents and search
-
-![Parent-following and Web search controls](./docs/images/copilot-search-routing.png)
-
-This 0.4.0 release-candidate capture shows the built Client's parent-following switch, Web search routing and default-off local diagnostics together. Settings/providers and paused, empty diagnostics are synthetic. No search, collection or live service was invoked for the capture; see [provenance](./docs/images/copilot-current-provenance.json).
-
-**Follow parent model** defaults Off and applies profile-wide to supported native children/Team mates of managed Copilot parents. Fixed parents apply on each child's next turn; Auto parents pass the exact preference while each child evaluates its own context. Child-owned explicit selections win. Running turns, roots, forks, other providers and dedicated legacy policies are not rewritten. Existing legacy bindings remain independent when the broad switch is Off. [Parent-following contract](./docs/parent-model-follow.md).
-
-**Web search** has two ordinary controls in the plugin-detail page: primary provider and final fallback. Routing can be saved without Copilot sign-in or account-model discovery; the choices must be registered search providers. Saving only records routing and does not prove Copilot search capability, which is checked when a search runs. Auto follows the initiating Chat provider when a corresponding search registration exists; fixed choices stay fixed when Chat changes. At most one distinct final fallback is tried, with possible charges disclosed. Cancellation/account-proof loss never authorizes a fallback.
-
-Copilot search requires current account/protocol evidence and capability proof. Fixed/fallback Copilot preserves a nonempty legacy `searchModel`; otherwise it considers at most three account-owned Responses candidates. The final user query is sent once, never replayed across those candidates. A saved choice or successful Chat request does not prove hosted search. [Search routing and composition](./docs/session-search-routing.md).
-The legacy `github-copilot.searchFallback` setting applies only to its separate
-canonical inline path; it is not a third routed fallback. Fetch is unchanged.
-
-## Usage, request limits and recovery
-
-**Credits** shows validated account billing-cycle data, not context tokens or Session cost. Stale, pooled and unavailable readings keep their real meanings. The quota request alone uses Node plus system CA roots with TLS verification enabled; it does not change trust for sign-in, models, search or Desktop globally.
-
-Native context occupancy and Turn Usage remain Core-owned. The plugin forwards usage unchanged, including zero samples on failure/cancellation. Ordinary in-progress requests and missing new samples stay quiet; only a concrete failed-zero or invalid-sample incident opens the separate, dismissible context warning. Any retained count is labeled historical evidence, never current occupancy or a replacement percentage. **Turn Usage incomplete** explains missing samples/lifecycle and recorded local blocks; it invents neither zero usage nor partial totals. Cancellation can retain usage, but does not guarantee a final supplier receipt. [Usage boundaries](./docs/copilot-usage.md).
-
-Owned timeout/replay errors preserve native usage before terminal failure restoration, including nonzero samples. A failed zero can still make the native ring show `0%`; this is not proof of an empty request. Retry-entry times describe backoff, not the failed request's duration. These accounting fixes do not cure supplier HTTP 408 or change retry policy.
-
-Compaction planning prices model-facing content and tools, not native IDs/provenance or opaque replay envelopes, avoiding metadata-driven exhaustion of the 16-call limit. The original messages/replay remain unchanged; final native admission still checks converted input. A typed capacity fallback keeps fixed prefixes and balanced tool units, never repeats an indivisible rejected input. This is conservative planning, not provider-exact token accounting.
-
-Managed request admission preserves truthful input/output limits and native transactions. Automatic pressure uses the initiating Agent's actual bound compaction service; a preset without an engine cannot borrow global recovery. The separately selected [recovery engine](./docs/manual-compaction-recovery.md) defaults to automatic segmented fallback for oversized summaries or an explicit summary context-limit failure. Fitting summaries stay native; timeout/408/auth/quota failures do not trigger segmentation. Up to 16 calls may add time and charges; cancellation or incomplete recovery never commits a partial summary. `automaticRecovery: false` disables this fallback; native `auto: false` still disables automatic compaction. Installation alone does not select the engine: follow the explicit same-scope configuration migration, preserving preset/custom-engine ownership and existing policies.
-
-For continuing steps with a committed managed route and no pending model change, known input pressure is reduced before Core opens the next model attempt. Successful native reduction avoids an unsampled local-pressure attempt that would make whole-turn Usage unavailable. First steps, pending selections, new fixed-prefix growth and final hard-budget refusals retain existing admission; this does not repair historical totals or invent missing usage.
-
-**Visible-history continuation also covers this Session's native managed Responses compaction**, including automatic summaries: no extra manual recovery command or failure-first retry is required when enabled. Old encrypted reasoning and embedded summaries are omitted from outgoing input; hidden context may be lost. Visible messages/tool pairs and source history remain intact, and only the native transaction commits a smaller checkpoint. A composer notice identifies degradation and distinguishes committed, failed and cancelled outcomes. When off, an exact replay-scope rejection offers the same loss-disclosed enable control; unknown failures do not authorize loss. `/copilot-compact visible-history` remains a one-time alternative through the selected recovery engine. Read [recovery consent and limits](./docs/manual-compaction-recovery.md#explicit-visible-history-summary-recovery); this does not enable an absent engine or repair capacity, quota or timeout failures.
-
-Compaction feedback separates **compaction completed** and **subsequent request succeeded** during the existing eight-second result window. It does not turn ordinary request progress or absence of a fresh sample into a persistent composer warning. A later concrete sampling incident can appear independently and may include a labeled historical count, but never an occupancy percentage. The plugin sends no extra test request, adds no retry and leaves the native context ring, Usage accounting and expandable compaction history unchanged. See [context evidence](./docs/copilot-usage.md#historical-context-evidence).
-
-Running visible-history compaction notices stay visible. Confirmed success disappears eight seconds after first observation; settled failures, cancellation, unavailable status and enable prompts stay until **Close** (or the existing **Cancel**). Closing only hides this Session/operation/status notice, never changes consent, history or native proof, and never sends or retries. A bounded Client registration retains expiry/dismissal across incidental remounts and Session switches, not across teardown or eviction.
-
-For exact verified `408 / user_request_timeout`, diagnostics describe bounded request composition and observable timing, not a proven payload limit or root cause. They include the validated model/protocol, UTC response-header observation time and strictly recognized supplier request IDs when available, without other headers or new stored diagnostics. IDs are correlation only, not receipt/execution proof. Image counts include native Responses tool outputs; older stored diagnostics may have counted those images as residual history. Only positive recognized image bytes suggest explicit image offload; zero/unknown image evidence does not. Bytes are not tokens; timing is not upload duration. Small, image-free requests can also time out. Follow [request-budget and timeout guidance](./docs/copilot-compaction.md); do not automatically trim history, disable proof, switch models or add retries.
-
-The experimental `github-copilot.responsesRequestCompression` option is **off by default**. When explicitly enabled, it losslessly gzips only eligible managed HTTP Responses requests through the existing native Fetch seam. It starts at 256 KiB, skips compression work above 32 MiB and requires at least 5% and 4 KiB savings; every skip sends the original request. This changes prepared HTTP body bytes, not context/token admission. Custom Fetch, explicit `auto`/WebSocket and other protocols remain native, and a gzip rejection is never automatically resent uncompressed. On a verified 408, diagnostics distinguish original JSON composition from the prepared gzip body size; neither proves delivery or cures every timeout. Installation does not enable the option.
-
-The same failure can include request-scoped native local body-write/header milestones, negotiated TLS ALPN and a Node writable-buffer count. These are local submission observations, not kernel ACK or supplier receipt; missing events do not prove an incomplete upload. Unsupported or ambiguous transports report unavailable evidence. No request contents are logged and no connection, proxy, dispatcher or retry is changed.
-
-HTTP/SSE liveness separates five-minute byte idle from bounded ten-minute assistant-output silence by default. Consumer work is excluded; WebSocket/explicit `auto` stays native-only. This does not cure supplier HTTP 408s. Images are admitted against actual native-projected MIME evidence; the plugin does not own conversion or infer format support from filenames. [Image compatibility](./docs/image-input-compatibility.md).
-
-Image admission errors explain historical-image failures even on text-only continuations. The native error includes bounded selected-model, projected/allowed MIME, projected role/position and current plugin-build details, without image content, URLs or paths. Auto checks general vision capability, not candidate-specific projected formats; the final gate remains fail-closed. Explicitly choose a compatible model for a subsequent turn or start a separate text-only Session; nothing is automatically switched, removed or retried. These diagnostics cannot reconstruct an earlier incident.
-
-Native rc.2 Auto authorization review requests `temperature: 0`. The plugin now automatically omits it **only for the authenticated official Auto reviewer root on account-discovered managed OpenAI Responses**; no switch is needed. Concurrent ordinary Chat, even on the same Session/model, retains its temperature. Public Loader callback identity and same-profile package ownership authenticate the caller; unknown identity, aliases, descendants, other protocols/providers and canonical Core-owned Copilot remain native, with bounded diagnostics for unqualified reviewer scope. No capability is inferred from `supports.thinking`. Frozen inputs, native account/cancellation guards, strict verdicts and fail-closed tool denial remain intact; no retries, permission changes or settings migration occur. The independent legacy `github-copilot.responsesOmitTemperature` override remains default `false`; explicit `true` still omits temperature from **all** managed Responses requests, not just review. See [public scope and qualification limits](./docs/auto-review-sampling.md).
-
-## Settings and troubleshooting
-
-Configuration is under `github-copilot`. Credentials, endpoint definitions and a static model catalog are not plugin settings.
-
-| Key | Default | Purpose |
-|---|---:|---|
-| `autoSemanticAssessment` | `true` | One auxiliary assessment for locally unknown Auto tasks |
-| `followParentModel` | `false` | Supported child following; explicit child selections win |
-| `excludedModelIds` | `[]` | Exact exclusions through Model preferences |
-| `accountModelTtlMs` | `86400000` | 24h maximum metadata reuse, not token/proof validity |
-| `accountModelFailureCooldownMs` | `300000` | 5min non-forcing discovery failure cooldown |
-| `chatStreamLiveness` | `true` | Managed HTTP/SSE byte observation |
-| `chatStreamIdleTimeoutMs` | `300000` | Byte-idle deadline; separate from search |
-| `responsesRequestCompression` | `false` | Experimental lossless gzip for eligible managed HTTP Responses requests |
-| `responsesOmitTemperature` | `false` | Explicitly omit temperature from every managed Responses request |
-| `chatMaxRequestImageBytes` | `20971520` | Native 20 MiB outgoing-image budget, not a total JSON limit |
-| `requestBudgetSafetyTokens` | `4096` | Estimated input safety allowance |
-| `requestBudgetPressureRatio` | `0.9` | Early pressure with supported enabled recovery |
-| `compactionReasoning` | `prefer-low` | Supported low effort only when none is resolved |
-| `enabled` / `probe` | `true` / `true` | Hosted search / capability proof |
-| `providers` | `[]` | Optional explicit search route allowlist |
-| `includeSources` / `stripServerTools` | `true` / `true` | Inline citations / hosted-tool schema handling |
-| `idleTimeoutMs` / `probeTimeoutMs` | `300000` / `30000` | Search request / probe deadlines |
-
-| Symptom | Next safe action |
-|---|---|
-| No sign-in controls | Check active profile and loaded Host/Client; do not add a native provider merely to reveal login |
-| Signed in, missing models | Inspect discovery diagnostics; use visible Retry or intentional Refresh, not repeated sign-in |
-| Two Copilot groups | Review [explicit migration](./docs/single-route-migration.md); no automatic removal |
-| Selection unknown/unavailable | Distinguish lost evidence from read failure; Retry only rereads |
-| Missing/cancelled Turn Usage | Read [usage limitations](./docs/copilot-usage.md); do not infer zero billing |
-| History fails on `github-copilot/auto-model-decision` | Use [detached, check-first recovery](./docs/automatic-model-routing.md#recovering-affected-histories); never replace live history without stopped writers and approval |
-| AUTH, Responses replay-scope or TLS failure | Review [request diagnostics](./docs/model-compatibility-acceptance.md#authentication-replay-and-request-diagnostics) and [usage TLS boundaries](./docs/copilot-usage.md#account-data-boundary). After an exact scope rejection, **Replay recovery** shows the same persistent Session continuation policy: when off, disclose loss and offer **Enable visible-history continuation** or Cancel; when already on, show diagnostic guidance without repeated authorization. No duration or next-turn-only choice. Evidence expiry does not disable the policy. Use native Retry separately; no automatic send/retry or history rewrite, and not a 408 fix. Never reset credentials or disable TLS as an automatic repair. |
-| Hosted search unavailable | Check account/protocol/probe diagnostics; a legacy override stays authoritative until explicitly reset |
-
-Confirmed account saves restore controls immediately, independently of quota loading. Changing only follow mode for the same account retains its attributed quota without another read. Switching accounts clears the old quota and loads the new snapshot without blocking further account edits; quota errors do not undo a confirmed selection.
-
-The Credits account panel shows the current account and **Switch account**. Its dropdown lists only configured accounts, marks the effective account and scrolls long lists internally. **Follow global default** is a separate checkbox for the account only—not the global model choice: enabling it clears this Session's account override; disabling it fixes the current account. Choosing any account also fixes it, even if it is today's default. The choice affects subsequent turns in this Session, not a running turn or another Session. Both actions retain continuation confirmation and revision-checked saving. Account addition belongs only in Models, where one **Manage** disclosure contains account management and shared model preferences. Models retains Add in its dropdown footer without selecting the new account, plus guarded local removal and reauthorization. Neither surface has account search. Exact-ID exclusions are shared across accounts; availability is account-specific. See the [approved experience and interactive mock](./docs/account-management-experience.md).
-
-[Visible-history continuation](./docs/session-continuation.md) has two controls: **Manage → New Session continuation default** sets what eligible new Sessions inherit; **Credits → Visible-history continuation → Session policy** controls the current Session. The initial default-on epoch is recorded at first successful activation. Only new, unseeded Sessions created after that epoch inherit it; existing, seeded/forked, or unknown histories are not enrolled retroactively. Changing the global default affects future Sessions only.
-
-The name “New Session” describes default inheritance, not a one-message feature: an enabled Session policy is frozen at admission for each subsequent managed Copilot turn and also governs that Session's managed native compaction summaries. For an existing eligible Session, select the managed Copilot model, open the composer **Credits/usage** pill, expand **Visible-history continuation**, then choose **On** in **Session policy**. This control appears only for an open Session using the managed account-discovered route; it is not shown for the canonical/native route. The loss disclosure is shown before the choice. Enabling is explicit consent to omit prior encrypted reasoning and embedded summaries, even on the same account; hidden details may be lost, while visible messages, tool relations and source history remain. The policy persists across account switches and restarts until changed. It takes effect on the next turn; an already admitted turn keeps its captured policy. With continuation off, switching to a different account offers persistent enable, keep off or cancel—there is no next-turn-only choice. `/copilot-compact visible-history` is a separate one-time operation through the selected recovery engine, not the persistent Session setting. Neither path auto-sends/retries or cures quota/context limits; exact replay failures use the same persistent Session policy and require a separate native retry. The pinned Core lacks a public Models deep link, so Chat omits the nonfunctional management entry.
-
-Context evidence and Replay recovery use compact, centered notices bounded by the native composer width. Model/item counts and status refresh live in collapsed technical details; loss consent remains explicit. Context sampling warns only for a concrete incident, can be dismissed for that Session/incident, and never asserts the native meter's current value; native statistics stay unchanged. Switching accounts does not make old encrypted reasoning portable. The concise scope error points to explicit recovery or a new conversation; bounded, sanitized dispatch counts stay in Host diagnostics, not the main error. **Authorized** means permission is ready, not that a message was sent or recovery succeeded.
-
-Notice frames also follow native horizontal clearance on narrow and embedded layouts; nested details do not apply the width limit twice. Recovery uses one primary **Enable** action and a quiet **Cancel**, without changing consent or initiating a retry.
-
-For a failed scheduled/background task, open its original Session to review **Replay recovery**. The latest recorded exact scope rejection keeps this entry available after temporary request diagnostics expire, Host restart or a picker change. Unavailable item/account diagnostics stay unknown; copied fork history does not create an entry. Enablement still requires the loss-disclosed Session policy choice and never resends the task. Check its possible side effects before choosing native Retry; a later native turn clears the old failure notice.
-
-## Ownership and further reading
-
-DSH Core owns Sessions, tools, sandboxing, attachments, native accounting and other providers. `llm-pi-ai` owns OAuth, token exchange/refresh and normal model transport. This plugin composes the published adapter with authenticated account metadata; new supported account model IDs need no name-based routing patch. Credentials stay Host-only: `llm-pi-ai/github-copilot` is the canonical compatibility record; additional accounts are independently authorized plugin-owned records in the same DSH credentials service, never copied grants.
-
-Public APIs cannot replace Core Edit/Delete, restructure its flat picker or make native Add a single-route enforcement mechanism. Retired [Model roles](./docs/dual-model.md) remain compatibility-only. Fixes must stay [plugin-only](./AGENTS.md#plugin-only-implementation-boundary).
-
-| Guide | Scope |
-|---|---|
-| [Compatibility acceptance](./docs/model-compatibility-acceptance.md) | Metadata, reasoning, replay and public-interface limits |
-| [Current compatibility review](./docs/official-first-021-rc3.md) | Exact rc.3 WebRuntime contract, reviewer identity and source/artifact qualification |
-| [Historical rc.2 official-first review](./docs/official-first-020-rc2.md) | Earlier rc.2 seams and retained gaps |
-| [Migration](./docs/single-route-migration.md) | Fresh read-only readiness and explicit config-only maintenance |
-| [Distribution](./docs/npm-distribution.md) | Same-byte GitHub/npm publication and qualified installation |
-| [Agent guide](./AGENTS.md), [contributing](./CONTRIBUTING.md) | Owners, task plans, gates and delivery policy |
-
-Version history belongs in [CHANGELOG.md](./CHANGELOG.md) and immutable [Releases](https://github.com/cloga/dsh-github-copilot/releases), not the setup instructions. `deployment-baseline.json` retains historical pins without admitting them as current support.
-
-## Build and verify
-
-Use Node 24 LTS and the exact pnpm version in `package.json`; runtime Node must be >=22.19.0.
-
-```sh
-pnpm install --frozen-lockfile
-pnpm verify
-pnpm pack --pack-destination artifacts
-pnpm verify:tarball -- artifacts/dsh-github-copilot-<package-version>.tgz
-```
-
-`pnpm verify` covers contracts, types, baseline, build, tests and built entry smoke. Required CI passed against unchanged official rc.3 source and published artifacts on Windows/Linux; see the [qualification evidence](./docs/official-first-021-rc3.md). This unpublished candidate is not installed or Desktop-qualified. Passing synthetic tests does not prove live account/model/search behavior.
-
-Agents start with `node scripts/agent.mjs describe --json`, `doctor --json` and `plan <task> --json`; plans are unexecuted arguments, not action approval. Follow [AGENTS.md](./AGENTS.md) for the full change/release policy. Important updates require protected merge and verified dual-channel publication; documentation-only work does not release by default. Profile installation, sign-out and session-interrupting restart need separate authorization.
-
-The source-checkout [task acceptance pilot](https://github.com/cloga/dsh-github-copilot/blob/main/docs/agent-acceptance.md) adds
-`node scripts/agent.mjs accept --contract CONTRACT_FILE --report REPORT_FILE`.
-It checks requirement coverage, the clean current commit, exact contract bytes
-and local evidence hashes; failed, blocked and not-run outcomes remain distinct.
-It does not attest execution, independent review, live behavior or delivery
-permission. Keep evidence outside Git; no agents, uploads or profile changes are
-started. Existing CI and release gates remain authoritative.
-
-Commit attribution uses `Assisted-by` with the actual tool, never the model provider or an unverified collaborator identity.
-
-## Release and checksum verification
-
-GitHub Releases and npm distribute the same original verified tarball. Pin a version; verify Release SHA-256 or npm `dist.integrity`. Never repack an immutable release or move/reuse its tag.
-
-```sh
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.5.dsh.0.2.1.rc.3/dsh-github-copilot-0.1.0-alpha.5.dsh.0.2.1.rc.3.tgz
-curl -LO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.5.dsh.0.2.1.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
-```powershell
-$expected = (Get-Content .\SHA256SUMS).Split()[0]
-$actual = (Get-FileHash .\dsh-github-copilot-0.1.0-alpha.5.dsh.0.2.1.rc.3.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actual -cne $expected) { throw 'Release checksum mismatch' }
+For the `web` profile, install the same Release asset:
+
+```sh
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.1.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.1.dsh.0.2.2.rc.3.tgz
 ```
 
-Checksums detect corruption/drift; protected workflows and repository controls establish publisher provenance. Report vulnerabilities privately through [SECURITY.md](./SECURITY.md).
+Choose the intended profile explicitly. Then:
+
+1. In **Settings → Models → GitHub Copilot**, sign in with GitHub.
+2. Choose an account-available Copilot model in the native DSH model picker.
+3. For subagents, use the native DSH model selection flow. Compatibility is
+   limited to account-advertised and tested protocol capabilities.
+
+No manually defined Copilot model, pasted token, external gateway, or
+`copilot2api` service is required. Account and model availability are separate:
+successful sign-in does not guarantee every model or capability is available.
+
+## Development and delivery
+
+The exact development target is in `deployment-baseline.json`; follow
+[AGENTS.md](./AGENTS.md) before changing code. The required complete verification
+and package/release gates run in GitHub Actions. A successful local source
+check, synthetic fixture, release publication, profile installation, and loaded
+Desktop runtime are different evidence layers; report each accurately.
+Commit attribution must use an `Assisted-by` trailer for the actual assisting
+tool; do not invent a co-author identity.
+
+For behavior and qualification limits, see
+[account integration](./docs/copilot-accounts.md),
+[model compatibility](./docs/model-compatibility-acceptance.md), and
+[distribution](./docs/npm-distribution.md).

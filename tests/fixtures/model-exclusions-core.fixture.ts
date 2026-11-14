@@ -4,17 +4,18 @@
  */
 import '@earendil-works/pi-ai/api/openai-responses'
 import { Context } from '@deepseek-ai/cordis'
-import Agents, { installModelSelection } from '@deepseek-ai/dsh-agent'
+import Agents from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import LlmRuntime, { createUserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import Tools, { defineTool } from '@deepseek-ai/dsh-tools'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import previewPlugin, { type PreviewRouteConfig } from '../../src/preview-route.ts'
 import {
-  GITHUB_COPILOT_AUTO_MODEL_ID as AUTO, GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
+  GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW, GITHUB_COPILOT_PREVIEW_MODEL_ID as MODEL,
 } from '../../src/copilot-identity.ts'
 
@@ -45,7 +46,7 @@ function response(tool: boolean) {
 }
 
 describe('turn-scoped model exclusions on native Core', () => {
-  it.each([MODEL, AUTO])('keeps native tool steps in an admitted turn after exclusion and enforces exclusion on the next turn (%s)', async selected => {
+  it('keeps native tool steps in an admitted turn after exclusion and enforces exclusion on the next turn', async () => {
     const ctx = new Context()
     contexts.push(ctx)
     const settings: PreviewRouteConfig & { excludedModelIds?: string[] } = { excludedModelIds: [] }
@@ -78,6 +79,7 @@ describe('turn-scoped model exclusions on native Core', () => {
     await ctx.plugin(Projections)
     await ctx.plugin(SystemPrompt, {})
     await ctx.plugin(Tools, {})
+    await ctx.plugin(NativeToolExecutor)
     await ctx.plugin(Agents)
     await ctx.plugin(AgentLoop, { agents: [] })
     ctx.provide('tokenMeter', { estimateMessage: () => 1, measure: () => ({ totalTokens: 1 }) })
@@ -96,8 +98,7 @@ describe('turn-scoped model exclusions on native Core', () => {
     const id = SessionId('single-model-exclusion-fixture')
     ctx.on('session/event', (session, event) => { if (session.id === id) events.push(event) })
     const { agent } = await ctx.agents.create({
-      sessionId: id, agentOptions: { provider: PREVIEW, model: selected },
-      setup: async owner => { installModelSelection(owner, { current: { provider: PREVIEW, model: selected }, assembled: undefined }) },
+      sessionId: id, agentOptions: { provider: PREVIEW, model: MODEL },
     })
     const send = async () => {
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Continue.' }], source: { kind: 'user' } }))
@@ -110,6 +111,6 @@ describe('turn-scoped model exclusions on native Core', () => {
     await send()
     expect(calls).toBe(2)
     expect(JSON.stringify(events.filter(event => event.type === 'turn/end').at(-1)))
-      .toContain(selected === AUTO ? 'COPILOT_AUTO_NO_ELIGIBLE_MODEL' : 'COPILOT_PREVIEW_MODEL_EXCLUDED')
+      .toContain('COPILOT_PREVIEW_MODEL_EXCLUDED')
   })
 })

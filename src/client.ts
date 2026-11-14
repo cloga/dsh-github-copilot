@@ -16,11 +16,7 @@ import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './rem
 import { DiagnosticsCard } from './diagnostics-card.ts'
 import type { DiagnosticsRemote } from './diagnostics-card.ts'
 import { installDiagnosticsClient } from './diagnostics-client.ts'
-import { installAutoModelPresentation, installAutoModelProjections } from './auto-model-presentation.ts'
-import { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
-import { ParentModelFollowCard } from './parent-model-follow-card.ts'
 export { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
-export { ParentModelFollowCard } from './parent-model-follow-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
 import { registerCopilotUsageUi } from './copilot-usage-ui.ts'
 import { registerContextEvidenceUi } from './context-evidence-ui.ts'
@@ -1035,15 +1031,10 @@ function registerUi(ctx: ClientContext): () => void {
 }
 
 export function CopilotPluginSettingsPage(props: {
-  settings: ClientContext['remote']['settings']
-  routing: ClientContext['remote']['githubCopilotSearchRouting']
   diagnostics?: DiagnosticsRemote
   diagnosticsControl?: ReactElement
 }) {
-  const [revision, setRevision] = useState<{ previous: number; next: number }>()
   return createElement('div', null,
-    createElement(ParentModelFollowCard, { settings: props.settings, onSaved: setRevision }),
-    createElement(WebSearchRoutingCard, { ...props, settingsRevision: revision }),
     props.diagnosticsControl ?? createElement(DiagnosticsCard, { remote: props.diagnostics }))
 }
 function DiagnosticsConnectionCard({ ctx }: { ctx: ClientContext }): ReactElement {
@@ -1060,28 +1051,24 @@ function DiagnosticsConnectionCard({ ctx }: { ctx: ClientContext }): ReactElemen
   return createElement(DiagnosticsCard, { remote })
 }
 
-/** Optional search settings must never hold account authorization UI in waiting. */
-function registerSearchUi(ctx: ClientContext): () => void {
+/** Optional plugin settings must never hold account authorization UI in waiting. */
+function registerPluginSettingsUi(ctx: ClientContext): () => void {
   let active = true
   let bundleActive = false
   let footerReady = false
   let sectionActive = false
   let footerSeat: (() => void) | undefined
   let fallback: (() => void) | undefined
-  // Keep traced Remote identities stable across parent renders and async saves.
-  const settings = ctx.remote.settings
-  const routing = ctx.remote.githubCopilotSearchRouting
   const diagnosticsControl = createElement(DiagnosticsConnectionCard, { ctx })
-  const render = () => createElement('div', null,
-    createElement(WebSearchRoutingCard, { settings, routing }), diagnosticsControl)
+  const render = () => createElement(CopilotPluginSettingsPage, { diagnosticsControl })
   const syncFallback = () => {
     if (active && footerReady && !bundleActive && footerSeat === undefined) {
       try {
         footerSeat = ctx.slots.register({
-          name: 'settings.models.footer', id: 'github-copilot-search-routing', order: 20,
+          name: 'settings.models.footer', id: 'github-copilot-options', order: 20,
         }, render)
       } catch {
-        ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_FOOTER_UNAVAILABLE')
+        ctx.logger.warn('[github-copilot] COPILOT_SETTINGS_FOOTER_UNAVAILABLE')
       }
     } else if ((!active || !footerReady || bundleActive) && footerSeat !== undefined) {
       footerSeat()
@@ -1089,7 +1076,7 @@ function registerSearchUi(ctx: ClientContext): () => void {
     }
     if (active && sectionActive && !bundleActive && footerSeat === undefined) {
       fallback ??= ctx.slots.register({
-        name: 'settings.section', id: 'github-copilot-search-routing', order: 12, label: 'Web search',
+        name: 'settings.section', id: 'github-copilot-options', order: 12, label: 'GitHub Copilot options',
       }, render)
     } else {
       fallback?.()
@@ -1101,16 +1088,16 @@ function registerSearchUi(ctx: ClientContext): () => void {
     bundle = ctx.slots.inject('plugins.bundle.config', () => {
       const spec = ctx.slots.spec?.('plugins.bundle.config')
       if (spec?.kind !== 'keyed' || spec.scope !== 'root') {
-        ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_BUNDLE_UNAVAILABLE')
+        ctx.logger.warn('[github-copilot] COPILOT_SETTINGS_BUNDLE_UNAVAILABLE')
         return () => {}
       }
       let dispose: () => void
       try {
         dispose = ctx.slots.register({
           name: 'plugins.bundle.config', key: 'dsh-github-copilot',
-        }, ({ view }) => view === 'page' ? createElement(CopilotPluginSettingsPage, { settings, routing, diagnosticsControl }) : null)
+        }, ({ view }) => view === 'page' ? render() : null)
       } catch {
-        ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_BUNDLE_UNAVAILABLE')
+        ctx.logger.warn('[github-copilot] COPILOT_SETTINGS_BUNDLE_UNAVAILABLE')
         return () => {}
       }
       bundleActive = true
@@ -1122,7 +1109,7 @@ function registerSearchUi(ctx: ClientContext): () => void {
       }
     })
   } catch {
-    ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_BUNDLE_UNAVAILABLE')
+    ctx.logger.warn('[github-copilot] COPILOT_SETTINGS_BUNDLE_UNAVAILABLE')
   }
   let footer: () => void = () => {}
   try {
@@ -1136,7 +1123,7 @@ function registerSearchUi(ctx: ClientContext): () => void {
         syncFallback()
       }
     })
-  } catch { ctx.logger.warn('[github-copilot] WEB_SEARCH_ROUTING_FOOTER_UNAVAILABLE') }
+  } catch { ctx.logger.warn('[github-copilot] COPILOT_SETTINGS_FOOTER_UNAVAILABLE') }
   const section = ctx.slots.inject('settings.section', () => {
     sectionActive = true
     syncFallback()
@@ -1163,36 +1150,17 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     await disposeRemote()
     throw error
   }
-  const searchUi = ctx.inject(['remote.settings', 'remote.githubCopilotSearchRouting', 'slots'], registerSearchUi)
+  const settingsUi = ctx.inject(['slots'], registerPluginSettingsUi)
   const diagnosticsUi = ctx.inject(['remote.githubCopilotDiagnostics'], scope => installDiagnosticsClient(scope))
   const usageUi = ctx.inject(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], registerCopilotUsageUi)
   const contextUi = ctx.inject(['remote.githubCopilotSessionContinuation', 'slots'], registerContextEvidenceUi)
   const recoveryUi = ctx.inject(['remote.githubCopilotReplayRecovery', 'remote.githubCopilotSessionContinuation', 'slots'], registerReplayRecoveryUi)
-  const autoUi = ctx.inject(['remote.githubCopilotTurnSelection', 'remote.githubCopilotSessionAccount', 'slots'], scope => installAutoModelPresentation({
-    slots: scope.slots,
-    remote: scope.remote,
-    locale: scope.get('locale'),
-    diagnostic: code => scope.logger.warn(`[github-copilot] ${code}`),
-  }))
-  // Optional Chat contributions must not hold authorization activation on older Cores.
-  const presentation = ctx.inject(['uiConversation', 'slots'], scope => {
-    const capabilities = {
-      slots: scope.slots,
-      uiConversation: scope.get('uiConversation'),
-      remote: scope.remote,
-      locale: scope.get('locale'),
-      diagnostic: (code: string) => scope.logger.warn(`[github-copilot] ${code}`),
-    }
-    return installAutoModelProjections(capabilities)
-  })
   return async () => {
     await diagnosticsUi.dispose()
     await recoveryUi.dispose()
     await contextUi.dispose()
     await usageUi.dispose()
-    await autoUi.dispose()
-    await presentation.dispose()
-    await searchUi.dispose()
+    await settingsUi.dispose()
     await ui.dispose()
     await disposeRemote()
   }

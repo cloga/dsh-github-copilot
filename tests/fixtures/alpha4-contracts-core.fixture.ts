@@ -6,12 +6,13 @@ import type { Model, SimpleStreamOptions } from '@earendil-works/pi-ai'
 import { createDeveloperMessage, createUserMessage, ReasoningEffortId, resolveRetryPolicy, type ToolSchema } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { Context } from '@deepseek-ai/cordis'
-import { ToolRuntime, renderToolsSdk } from '@deepseek-ai/dsh-tools'
+import { PtcExecutor, renderToolsSdk } from '@deepseek-ai/dsh-tool-executor-ptc'
+import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { coreProviderView } from '../../src/pi-provider-bridge.ts'
 import type { SimpleNativeProvider } from '../../src/pi-provider-bridge.ts'
-import { filterCopilotToolAssembly } from '../../src/tool-schema-compat.ts'
+import { filterCopilotToolRequest } from '../../src/tool-schema-compat.ts'
 
 const provider = 'candidate-fixture'
 const model: Model<'openai-responses'> = {
@@ -79,15 +80,18 @@ describe('fixed DSH public adapter and SDK contracts', () => {
     const ctx = new Context()
     try {
       new SystemPrompt(ctx, {})
-      const tools = new ToolRuntime(ctx, { mode: 'ptc' })
-      const schemas = tools.schemas()
+      new ToolRuntime(ctx)
+      ctx.provide('ptcRuntime', { language: 'typescript', programFormat: 'function-body' } as never)
+      const schemas = new PtcExecutor(ctx).describe([]).schemas
       const native = schemas.find(tool => tool.name === 'run_code')
       expect(native).toBeDefined()
       expect(Object.keys(native!.parameters.properties ?? {}).slice(0, 2)).toEqual(['code', 'description'])
       expect(native!.parameters.required).toEqual(['code', 'description'])
-      const filtered = filterCopilotToolAssembly({ variables: { provider: 'github-copilot' }, tools: schemas })
-      expect(filtered.tools[0]!.description).toBe(schemas[0]!.description)
-      expect(filtered.tools[0]!.parameters.required).toEqual(['code', 'description'])
+      const filtered = filterCopilotToolRequest({
+        provider: 'github-copilot-preview', model: 'fixture', messages: [], tools: [...schemas],
+      })
+      expect(filtered.tools![0]!.description).toBe(schemas[0]!.description)
+      expect(filtered.tools![0]!.parameters.required).toEqual(['code', 'description'])
       const functionBody = renderToolsSdk([], 'function-body')
       const repl = renderToolsSdk([], 'repl')
       expect(functionBody).toContain('the body of an async TypeScript function')

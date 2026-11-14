@@ -29,9 +29,48 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 ## Product and architecture
 
-`dsh-github-copilot` currently admits and targets only official DSH `0.2.1-rc.3`, a prerelease. The prior thirteen DSH pins remain in `deployment-baseline.json` as historical evidence, not current support or CI release gates. Rc.3 source/artifact CI qualification passed on Windows/Linux in run `40098031196`; Desktop artifacts/signatures remain unverified. Do not treat this unpublished candidate as a production Core upgrade recommendation. The signed rc.2 Desktop evidence is historical peer ownership only. Rc.2 installations must retain alpha.15 or their existing compatible plugin. It does not own a general Copilot chat adapter. DSH's built-in `llm-pi-ai` mount owns the GitHub Copilot provider, catalog, OAuth method and grant format, token exchange, refresh, and normal model transport.
+### Confirmed product scope (#455, #456)
 
-This repository maintains twelve narrow surfaces and ownership boundaries:
+The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
+requirements below: this plugin is a lightweight GitHub Copilot model integration
+for DSH Desktop, not a second agent product. The qualification target is the exact
+official DSH `0.2.2-rc.3` source and published package graph; it is a candidate,
+not supported or delivered until the required CI gates pass.
+
+DSH owns application login, AgentLoop, model selection, Auto, parent-model
+following, subagents, tools, Web, permissions, history, context/compaction, and
+Usage. The plugin owns only Copilot's native OAuth/credential integration,
+account-proven model and capability discovery, published-adapter composition,
+and narrowly evidenced Copilot compatibility. Do not add a DeepSeek login check,
+read DeepSeek credentials, add another Copilot login or wire, or redirect failed
+Copilot calls to another provider.
+
+Retire plugin-owned Auto and parent-follow policy/UI, custom hosted-search
+execution/routing, and optional recovery/analytics surfaces that duplicate DSH
+ownership, preserving bounded compatibility for existing selections and
+histories where needed. Never delete or rewrite user settings, accounts, or
+history, silently substitute a model, or claim a native replacement until the
+exact public API and behavior are verified. Preserve necessary Copilot
+authentication, account/turn isolation, request correctness, and actionable
+diagnostics. HydraFusion/Max are explicitly out of scope (#441).
+
+Model-facing DSH capabilities added over time, including native subagent model
+selection and actual child invocation (#456), are compatibility goals for
+account-available Copilot models. Verify each against exact public Core APIs and
+supplier-advertised capabilities with focused tests. Unknown metadata or
+unsupported behavior must fail or diagnose explicitly; do not infer support,
+add model-ID routing rules, patch Core, or claim untested parity.
+
+When any later legacy detail in this guide conflicts with this confirmed scope,
+follow this section and the current acceptance criteria in #455/#456. Legacy
+behavior that is still needed to safely read old settings or histories remains
+compatibility code, not a reason to restore retired UI or product features.
+
+The last qualified release line is official DSH `0.2.1-rc.3`; its source/artifact CI passed on Windows/Linux in run `40098031196`, while Desktop artifacts/signatures remain unverified. DSH `0.2.2-rc.3` is the current requested candidate and has not passed this repository's required CI. The previous thirteen pins remain historical evidence, not current support or release gates. Do not treat either prerelease as a production Core upgrade recommendation. DSH's built-in `llm-pi-ai` owns the canonical GitHub Copilot provider, OAuth, grant format, token exchange, refresh, and normal model transport.
+
+The following is a historical architecture inventory, not a requirement to keep
+every surface as a product feature; apply the confirmed scope above when deciding
+which runtime registrations, UI, and settings remain active:
 
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution with one shared account-state owner, Client-safe Remote descriptors and a nested plugin-owned model-preferences disclosure; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
