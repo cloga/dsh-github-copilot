@@ -155,7 +155,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
     const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => { throw new Error('unexpected fixture request') })
     try {
       const usage = new GitHubCopilotUsageController(ctx)
-      expect(await usage.getNative()).toMatchObject({ state: 'unavailable', diagnostic: 'COPILOT_USAGE_SIGNED_OUT' })
+      expect(await usage.getNative()).toMatchObject({ state: 'signed-out', diagnostic: 'COPILOT_USAGE_SIGNED_OUT' })
       await ctx.settings.mutate('llm-pi-ai', [
         { op: 'set', path: ['providers', 'github-copilot', 'headers'], value: { Authorization: 'synthetic' } },
       ], providerRevision())
