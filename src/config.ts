@@ -206,11 +206,11 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   continuationDefaultHistory: z.array(z.object({
     enabled: z.boolean(), changedAt: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER),
   })).default([]).hidden().volatile(),
-  followParentModel: z.boolean().default(false).volatile(),
-  autoSemanticAssessment: z.boolean().default(true),
-  autoSemanticAssessmentTimeoutMs: z.number().step(1).min(1000).max(120_000).default(DEFAULT_AUTO_ASSESSMENT_TIMEOUT_MS).volatile(),
-  autoSemanticAssessmentModel: z.string().max(512).default('').volatile(),
-  autoAllocationEvidence: z.boolean().default(true),
+  followParentModel: z.boolean().default(false).hidden().volatile(),
+  autoSemanticAssessment: z.boolean().default(true).hidden(),
+  autoSemanticAssessmentTimeoutMs: z.number().step(1).min(1000).max(120_000).default(DEFAULT_AUTO_ASSESSMENT_TIMEOUT_MS).hidden().volatile(),
+  autoSemanticAssessmentModel: z.string().max(512).default('').hidden().volatile(),
+  autoAllocationEvidence: z.boolean().default(true).hidden(),
   parentModelFollow: z.array(z.object({
     childSessionId: z.string().min(1), parentSessionId: z.string().min(1),
   })).default([]).hidden().volatile(),

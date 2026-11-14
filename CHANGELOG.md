@@ -2,9 +2,10 @@
 
 ## 0.1.0-alpha.1.dsh.0.2.2.rc.3 (pending qualification)
 
-- Narrow the product to account-authorized Copilot models through DSH's published native adapter. Retire plugin-owned Auto, parent-follow policy, hosted-search routing, and redundant recovery/analytics surfaces while preserving necessary existing settings/history compatibility.
+- Begin narrowing the product to account-authorized Copilot models through DSH's published native adapter. Plugin-owned Auto and parent-follow routing and hosted-search composition are retired in the candidate; legacy role orchestration, recovery and analytics remain pending safe retirement.
+- Hide inactive Auto and parent-follow settings and remove the obsolete Auto high-cost marking control without changing saved preferences; retain legacy settings and Remote for compatibility.
 - Require account-metadata-driven native subagent model selection and actual child invocation, including supported Thinking and concurrent/account-bound request checks; the new exact-source fixture is not yet validated.
-- Keep parent/child relationships, inheritance and scheduling entirely DSH-owned; do not introduce plugin-specific child-account or routing policy.
+- Target DSH ownership of parent/child relationships, inheritance and scheduling; legacy dedicated-role orchestration still requires safe retirement.
 - Remove HydraFusion/Max from scope. No additional login, Core changes, model-name routing rules, silent provider substitution, publication, profile installation, or Desktop restart is included.
 - Target official DSH 0.2.2-rc.3. Required Windows/Linux CI, pnpm-lock alignment, publication, profile installation, and loaded-runtime compatibility remain unverified.
 

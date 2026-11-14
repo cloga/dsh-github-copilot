@@ -10,7 +10,6 @@ const controlStyle: CSSProperties = nativeCompactButtonStyle
 interface PreferenceEdit {
   readonly modelId: string
   readonly restore: boolean
-  readonly marking: boolean | undefined
   readonly resolve: () => void
 }
 
@@ -40,7 +39,7 @@ function preferenceMessage(code: string): string {
 }
 
 export function GitHubCopilotModelPreferencesPanel(props: {
-  readonly remote: Pick<ClientContext['remote']['githubCopilot'], 'status' | 'setModelExcluded' | 'setModelHighCost'>
+  readonly remote: Pick<ClientContext['remote']['githubCopilot'], 'status' | 'setModelExcluded'>
   readonly models: GitHubCopilotAuthorizationView['accountModels']
   readonly preferences: GitHubCopilotAuthorizationView['modelPreferences']
 }): ReactElement {
@@ -78,15 +77,12 @@ export function GitHubCopilotModelPreferencesPanel(props: {
   const availabilityKnown = models?.state === 'ready'
   const settingsKnown = preferences !== undefined && preferences.revision !== undefined
   const excluded = new Set(preferences?.excludedModelIds ?? [])
-  const highCost = new Set(preferences?.highCostModelIds ?? [])
-  const highCostKnown = settingsKnown && preferences?.highCostModelIds !== undefined
   const diagnostic = error ?? preferences?.error
     ?? (preferences === undefined ? 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE' : undefined)
   const writable = preferences?.writable === true && settingsKnown
   const rows = [
     ...available.map(model => ({ id: model.id, name: model.name, available: true })),
-    ...Array.from(new Set([...(preferences?.excludedModelIds ?? []), ...(preferences?.unavailableExcludedModelIds ?? []),
-      ...(preferences?.highCostModelIds ?? [])]))
+    ...Array.from(new Set([...(preferences?.excludedModelIds ?? []), ...(preferences?.unavailableExcludedModelIds ?? [])]))
       .filter(id => !available.some(model => model.id === id))
       .map(id => ({ id, name: id, available: false })),
   ]
@@ -99,7 +95,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     && (needle.length === 0 || model.id.toLocaleLowerCase().includes(needle) || model.name.toLocaleLowerCase().includes(needle)))
   const visibleCount = available.filter(model => !excluded.has(model.id)).length
   const unavailableCount = rows.filter(model => !model.available).length
-  const save = async (modelId?: string, restore = false, marking?: boolean): Promise<boolean> => {
+  const save = async (modelId?: string, restore = false): Promise<boolean> => {
     const scope = request.current
     const generation = scope.generation
     const capturedMetadata = metadata.current
@@ -107,8 +103,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     setBusyModel(modelId ?? ''); setError(undefined); setErrorModel(modelId)
     try {
       if (modelId !== undefined) {
-        const result = marking === undefined ? await props.remote.setModelExcluded(modelId, !restore)
-          : await props.remote.setModelHighCost(modelId, marking)
+        const result = await props.remote.setModelExcluded(modelId, !restore)
         if (!current()) return false
         if (!result.ok) { setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return false }
         const parsed = GitHubCopilotModelPreferencesViewSchema.safeParse(result.value)
@@ -140,7 +135,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     } catch { if (current()) setError('COPILOT_MODEL_EXCLUSION_SAVE_FAILED'); return false }
     finally { if (current()) setBusyModel(undefined) }
   }
-  const update = async (modelId?: string, restore = false, marking?: boolean): Promise<void> => {
+  const update = async (modelId?: string, restore = false): Promise<void> => {
     const scope = request.current
     const generation = scope.generation
     const current = () => scope.generation === generation
@@ -157,7 +152,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       setError('COPILOT_MODEL_PREFERENCE_QUEUE_FULL'); setErrorModel(modelId)
       return
     }
-    const completed = new Promise<void>(resolve => { scope.queue.push({ modelId, restore, marking, resolve }) })
+    const completed = new Promise<void>(resolve => { scope.queue.push({ modelId, restore, resolve }) })
     setQueuedModels(scope.queue.map(edit => edit.modelId))
     if (!scope.pending) {
       scope.pending = true
@@ -166,7 +161,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
           const edit = scope.queue.shift()!
           scope.active = edit.modelId
           setQueuedModels(scope.queue.map(waiting => waiting.modelId))
-          const succeeded = await save(edit.modelId, edit.restore, edit.marking)
+          const succeeded = await save(edit.modelId, edit.restore)
           edit.resolve()
           if (!current()) return
           scope.active = ''
@@ -188,11 +183,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     createElement('summary', null, settingsKnown
       ? `Model preferences · ${visibleCount} enabled · ${excluded.size} excluded` : 'Model preferences · Read-only'),
     createElement('p', { style: { fontSize: '14px', marginBlock: '12px' } },
-      'Exclusions are shared across GitHub Copilot accounts; availability below reflects the current account. Newly discovered models are enabled by default. Unavailable saved exclusions are retained and apply again if that model returns. Excluded models disappear from the managed picker and cannot start a new turn, including Auto. An admitted turn keeps its model. Fixed selections are not changed; select another model before the next turn. Restoring a model does not select it.'),
-    createElement('p', { style: { fontSize: '14px', marginBlock: '12px' } },
-      'High cost is your preference, not a price or quality rating. Auto gives marked models a smaller, nonzero allocation weight within their fitting category, including Fast models. Continuity is a small bonus, not a lock. Markings are shared across accounts, save immediately and affect new Auto turns only; fixed selections and admitted turns are unchanged.'),
-    highCostKnown ? null : createElement('p', { role: 'status' },
-      'High-cost preferences are unknown. Retry to read settings; marking is disabled.'),
+      'Exclusions are shared across GitHub Copilot accounts; availability below reflects the current account. Newly discovered models are enabled by default. Unavailable saved exclusions are retained and apply again if that model returns. Excluded models disappear from the managed picker and cannot start a new turn. An admitted turn keeps its model. Fixed selections are not changed; select another model before the next turn. Restoring a model does not select it.'),
     availabilityKnown ? null : createElement('p', { role: 'status' },
       'Current account availability unconfirmed. Shown models reflect the last metadata snapshot and saved preferences, not a current availability check.'),
     diagnostic === undefined ? null : createElement('div', { role: 'alert',
@@ -244,13 +235,6 @@ export function GitHubCopilotModelPreferencesPanel(props: {
               createElement('span', { style: nativeCaptionStyle }, ` · ${!settingsKnown ? 'Exclusion status unknown' : isExcluded ? 'Excluded' : 'Enabled'}`),
               errorModel === model.id && error !== undefined
                 ? createElement('span', { role: 'status', style: { display: 'block', marginTop: '6px' } }, preferenceMessage(error)) : null),
-            createElement('label', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px',
-              fontSize: '14px', minHeight: '36px' } },
-              createElement('input', { type: 'checkbox', checked: highCost.has(model.id),
-                disabled: disabled || !highCostKnown, 'aria-label': `High cost ${model.name}`,
-                'data-dsh-github-copilot-high-cost': true, 'data-high-cost-model-id': model.id,
-                onChange: (event: { currentTarget: { checked: boolean } }) => update(model.id, false, event.currentTarget.checked) }),
-              'High cost'),
             createElement('button', {
               type: 'button', style: { ...controlStyle, flexShrink: 0, cursor: disabled ? 'not-allowed' : 'pointer',
                 color: disabled ? 'var(--dsw-alias-label-secondary, GrayText)' : 'inherit' },

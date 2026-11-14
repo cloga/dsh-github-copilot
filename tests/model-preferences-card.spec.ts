@@ -47,6 +47,20 @@ function remote() {
   }
 }
 
+it('does not expose retired Auto cost controls or change saved cost preferences', async () => {
+  const face = remote()
+  await mount({ remote: face, models, preferences: {
+    ...preferences, highCostModelIds: ['first', 'retired-only'],
+  } })
+  expect(document.querySelector('[data-dsh-github-copilot-high-cost]')).toBeNull()
+  expect(document.querySelector('[data-model-id="retired-only"]')).toBeNull()
+  expect(document.body.textContent).not.toContain('High cost')
+  expect(document.body.textContent).not.toContain('Auto gives')
+  expect(row('first').textContent).toBe('Exclude')
+  expect(face.setModelHighCost).not.toHaveBeenCalled()
+  expect(face.setModelExcluded).not.toHaveBeenCalled()
+})
+
 it('keeps a real mounted row saving across equivalent parent snapshots and applies the strict result without rereading', async () => {
   const face = remote()
   const write = deferred<{ ok: true; value: GitHubCopilotModelPreferencesView }>()

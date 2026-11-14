@@ -31,6 +31,10 @@ patch, rebuild, or replace DSH Core or dependency artifacts.
   DeepSeek credential check, silently switch providers, or retry a failed
   Copilot request through another provider.
 
+The candidate still mounts legacy planner/executor compatibility and optional
+recovery and analytics; their safe retirement is not yet complete. It does not
+provide a separate subagent runtime.
+
 The intended environment is a normally configured DSH app with its usual
 DeepSeek-backed features, plus GitHub Copilot authorization for Copilot models.
 The plugin does not inspect or enforce the user's DeepSeek account status.

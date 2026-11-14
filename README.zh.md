@@ -27,6 +27,9 @@ DSH 公共 API。插件不会修改、补丁化、重建或替换 DSH Core 及�
 - HydraFusion 与 HydraFusion Max 不在范围内。插件不检查 DeepSeek 凭据，
   不静默切换 provider，也不把失败的 Copilot 请求重试到其它 provider。
 
+当前候选版仍挂载旧规划／执行角色兼容逻辑和可选恢复、诊断功能，安全退役尚未
+完成；这些不是独立的子代理运行时。
+
 预期使用环境是正常配置的 DSH 应用，使用其既有 DeepSeek 能力，并额外授权
 GitHub Copilot 模型。插件不会读取或强制检查用户的 DeepSeek 账号状态。
 
