@@ -151,7 +151,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
     await ctx.settings.mutate('llm-pi-ai', [
       { op: 'set', path: ['providers', 'github-copilot'], value: {} },
     ], providerRevision())
-    expect(await host.get()).toMatchObject({ switchable: false, diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED' })
+    expect(await host.get()).toMatchObject({ switchable: true })
     const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => { throw new Error('unexpected fixture request') })
     try {
       const usage = new GitHubCopilotUsageController(ctx)
@@ -163,7 +163,7 @@ it('persists independent native credentials and SettingsForms CAS across profile
       expect(fetcher).not.toHaveBeenCalled()
     } finally { fetcher.mockRestore() }
     await ctx.settings.mutate('llm-pi-ai', [
-      { op: 'unset', path: ['providers', 'github-copilot'] },
+      { op: 'unset', path: ['providers', 'github-copilot', 'headers'] },
     ], providerRevision())
     await ctx.credentials.modifyRecord(key(A), async () => grant(A))
     await ctx.credentials.modifyRecord(key(B), async () => grant(B))

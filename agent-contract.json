@@ -25,7 +25,7 @@
     }
   },
   "boundaries": {
-    "credentialOwner": "DSH credentials and pi-ai OAuth; canonical compatibility record is preserved. Approved #297 plugin account records are directly authorized, never copied; immutable request binding and managed-only CAS switching. Only an exact single committed plugin-owned native refresh with unchanged account, entitlement and endpoint may retain already-dispatched HTTP streams; all reusable proof is invalidated. Unknown/external/Core-only notifications still revoke. Never request, log or export grants.",
+    "credentialOwner": "DSH credentials and pi-ai OAuth; canonical compatibility record is preserved. Approved #297 plugin account records are directly authorized, never copied; immutable request binding and managed-route CAS switching with independent native coexistence (#470). Disposal never rewrites native credentials, model selections or Web settings; plugin-dependent model/search selections require explicit replacement before uninstall. Only an exact single committed plugin-owned native refresh with unchanged account, entitlement and endpoint may retain already-dispatched HTTP streams; all reusable proof is invalidated. Unknown/external/Core-only notifications still revoke. Never request, log or export grants.",
     "transportOwner": "DSH llm-pi-ai; no second general Copilot adapter",
     "confirmedProductScope": {
       "source": "user-confirmed #455/#456 on 2026-11-14",

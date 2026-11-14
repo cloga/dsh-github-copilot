@@ -55,15 +55,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.5.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.5.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.5.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.5.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.5.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -79,8 +79,10 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 添加 DSH 原生 GitHub Copilot provider 时，可使用独立的插件账号面板登录。
 没有指定密钥时，原生路线使用已保存的 canonical OAuth 凭据，而不是另行选择的
-附加账号。在托管路线仍然注册的期间，保存原生 provider 可能阻止附加账号的请求
-和切换。原生选择器不保证按账号权限过滤内置模型目录。
+附加账号。原生与托管路线可以共存：在 **Manage → 账号管理 → 切换** 中选择账号，
+再在原生模型选择器中选择 **GitHub Copilot (multi-account)** 下的模型。
+切换仅改变托管路线的默认账号；托管 Session 的 **Credits** 可指定后续 turn 的账号。
+不会重定向原生登录、已选模型或正在运行的 turn。原生选择器不保证按账号权限过滤内置模型目录。
 启动插件或完成登录时，不会自动修复原生 provider 设置。
 插件在 DSH 现有 Web 服务中注册可选的 `github-copilot-hosted` 搜索后端。
 请在原生 Web 设置中明确选择，并按需启用原生搜索工具；安装不会改变默认后端。
@@ -95,6 +97,18 @@ Web 服务替换或旧插件路由 UI。
 端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。
 原生上下文异常诊断不依赖可选的托管续接服务，也不会替代 DSH 的上下文计量。
+
+### 移除增强
+
+卸载插件只撤销插件自己的路线、界面和监听，不删除原生 Copilot 凭据、配置、模型选择或历史。
+已独立配置的原生 **GitHub Copilot** 仍使用原来的账号。卸载不是退出登录；
+显式退出或移除原始授权是另一项操作，会影响原生登录。
+
+依赖插件的选择不会自动变成原生选择。卸载前，请明确将使用 `github-copilot-preview`
+的 Session／默认模型切回原生模型。如果 Web 选中了 `github-copilot-hosted`，
+请先在原生 Web 设置中选择其他可用后端。卸载不会改写 Web 设置；
+保留已缺失的后端会返回 `WEB_PROVIDER_CONFIGURED_MISSING`，不会自动回退。
+附加账号切换和插件搜索仍然依赖插件。
 
 Desktop 原生包管理器及其内置 CLI 与独立 profile 的操作约束不同。安装前请阅读
 [Desktop CLI 证据](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及
