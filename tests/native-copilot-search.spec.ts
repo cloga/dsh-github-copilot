@@ -1,4 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
+import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import { WebRuntime } from '@deepseek-ai/dsh-web'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureNativeCopilot } from '../src/native-copilot-access.ts'
@@ -10,7 +12,7 @@ vi.mock('../src/native-copilot-access.ts', async importOriginal => ({
 }))
 
 const model = getBuiltinModels('github-copilot').find(model => model.api === 'openai-responses')!
-const key = 'llm-pi-ai/github-copilot'
+const key = credentialKey('llm-pi-ai', 'github-copilot')
 const contexts: Context[] = []
 afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
@@ -22,6 +24,10 @@ function setup() {
   const ctx = new Context()
   contexts.push(ctx)
   const assertCurrent = vi.fn()
+  const webSettings: { searchProvider?: string } = { searchProvider: 'github-copilot-hosted' }
+  ctx.provide('settings', {
+    get: (ns: string) => ns === 'web' ? webSettings : undefined,
+  })
   vi.mocked(captureNativeCopilot).mockResolvedValue({ namespace: 'llm-pi-ai',
     models: new Map([[model.id, model]]), assertCurrent })
   const readRecord = vi.fn(async (record: string) => {
@@ -52,10 +58,26 @@ function setup() {
     ] })
   })
   vi.stubGlobal('fetch', fetch)
-  return { ctx, provider: createNativeCopilotSearch(ctx), readRecord, fetch, requests, assertCurrent }
+  return { ctx, provider: createNativeCopilotSearch(ctx), readRecord, fetch, requests, assertCurrent, webSettings }
 }
 
 describe('optional native Copilot hosted search', () => {
+  it('preserves implicit native selection until explicitly selected, and unregisters cleanly', async () => {
+    const fixture = setup()
+    delete fixture.webSettings.searchProvider
+    await fixture.ctx.plugin(WebRuntime, {
+      searchProvider: undefined, fetchProvider: undefined,
+    })
+    const nativeSearch = vi.fn(async () => ({ content: 'native', sources: [], truncated: false }))
+    fixture.ctx.web.registerSearchProvider({ id: 'native', available: () => true, search: nativeSearch })
+    const dispose = fixture.ctx.web.registerSearchProvider(fixture.provider)
+    expect(fixture.provider.available()).toBe(false)
+    await expect(fixture.ctx.web.search({ query: 'native' })).resolves.toMatchObject({ content: 'native' })
+    expect(fixture.fetch).not.toHaveBeenCalled()
+    dispose()
+    await expect(fixture.ctx.web.search({ query: 'still native' })).resolves.toMatchObject({ content: 'native' })
+    expect(nativeSearch).toHaveBeenCalledTimes(2)
+  })
   it('registers without I/O and checks readiness without discovery or refresh', async () => {
     const fixture = setup()
     expect(fixture.fetch).not.toHaveBeenCalled()

@@ -38,7 +38,6 @@ export function checkSearchComposition(entries) {
     if (entry.disabled !== undefined && entry.disabled !== false) reasons.add('WEB_DISABLED_OR_DYNAMIC')
     if (entry.config !== undefined && (!entry.config || typeof entry.config !== 'object' || Array.isArray(entry.config)
       || Object.entries(entry.config).some(([key, value]) => !['searchProvider', 'fetchProvider'].includes(key) || typeof value !== 'string'))) reasons.add('WEB_CONFIG_REQUIRES_REVIEW')
-    if (entry.config?.searchProvider === 'github-copilot-hosted') reasons.add('LEGACY_COPILOT_SEARCH_PROVIDER')
     if (entry.isolate !== undefined && (!entry.isolate || typeof entry.isolate !== 'object' || Array.isArray(entry.isolate) || Object.keys(entry.isolate).length > 0)) reasons.add('PREEXISTING_WEB_ISOLATION')
   }
   return { schemaVersion: 1, supported: reasons.size === 0, reasons: [...reasons].sort(), scope: 'pre-install-structural-only; no boot, credentials, network or writes' }

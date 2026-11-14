@@ -10,7 +10,7 @@ import { GITHUB_COPILOT_CREDENTIAL_KEY } from './copilot-identity.ts'
 import { abortable } from './http.ts'
 import { captureNativeCopilot, NATIVE_COPILOT } from './native-copilot-access.ts'
 import { copilotPublicHeaders } from './preview-provider.ts'
-import { onSettingsNamespaceUpdated } from './settings-reader.ts'
+import { onSettingsNamespaceUpdated, readSettingsNamespace } from './settings-reader.ts'
 import { normalizeSearchResponse } from './traditional-search.ts'
 
 const unavailable = () => new WebError('COPILOT_NATIVE_SEARCH_UNAVAILABLE', 'WEB_PROVIDER_UNAVAILABLE')
@@ -48,6 +48,11 @@ function hasSearchEvidence(value: unknown): boolean {
 /** Add only a backend to the existing Web service; never select it or replace native tools. */
 export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
   let active = true
+  const selected = () => {
+    const value = readSettingsNamespace(ctx, 'web')
+    return value !== null && typeof value === 'object' && 'searchProvider' in value
+      && value.searchProvider === 'github-copilot-hosted'
+  }
   const pending = new Map<AbortController, string | undefined>()
   ctx.effect(() => () => {
     active = false
@@ -58,7 +63,7 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
   ctx.on('llm/adapters-updated', revoke)
   ctx.on('llm/models-updated', provider => { if (provider === NATIVE_COPILOT) revoke() })
   ctx.effect(() => onSettingsNamespaceUpdated(ctx, namespace => {
-    for (const [controller, owner] of pending) if (owner === namespace) controller.abort()
+    for (const [controller, owner] of pending) if (owner === namespace || namespace === 'web') controller.abort()
   }))
 
   return {
@@ -66,9 +71,10 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
     title: 'GitHub Copilot',
     description: { en: 'Optional Copilot hosted search using the native account. Each search runs one capability probe before the query; both may incur supplier charges.',
       zh: '使用原生账号的可选 Copilot 搜索。每次先执行一次能力探测，再发送查询；两者均可能产生供应商费用。' },
-    available: () => active,
+    // Never turn a previously unique implicit native backend into an ambiguous set.
+    available: () => active && selected(),
     async ready() {
-      if (!active) return false
+      if (!active || !selected()) return false
       try {
         const signal = AbortSignal.timeout(10000)
         const route = await abortable(captureNativeCopilot(ctx), signal)
@@ -84,7 +90,7 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
     },
     async search(request, callerSignal) {
       if (callerSignal?.aborted) throw new WebError('web search aborted', 'ABORTED')
-      if (!active || pending.size >= 4) throw unavailable()
+      if (!active || !selected() || pending.size >= 4) throw unavailable()
       if (typeof request.query !== 'string' || request.query.trim().length === 0
         || new TextEncoder().encode(request.query).byteLength > 16384) throw failed()
       const controller = new AbortController()
@@ -96,7 +102,11 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
         const route = await abortable(captureNativeCopilot(ctx), signal)
         if (!route) throw unavailable()
         pending.set(controller, route.namespace)
-        const check = () => { signal.throwIfAborted(); route.assertCurrent() }
+        const check = () => {
+          signal.throwIfAborted()
+          if (!selected()) throw unavailable()
+          route.assertCurrent()
+        }
         check()
         const store = createGitHubCopilotCredentialStore(ctx)
         const models = createModels({ credentials: store })
