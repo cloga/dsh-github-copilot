@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseVersion, isPrereleaseVersion } from './release-policy.mjs'
@@ -12,7 +12,7 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex')
 export async function recoverArtifact({ version, sha, release, annotation, assets, readAsset }) {
   parseVersion(version)
   check(/^[a-f0-9]{40}$/.test(sha), 'Exact release commit required')
-  if (release === null) return null
+  if (release === null) return { source: 'packed', files: null }
   check(release.tag_name === `v${version}` && release.target_commitish === sha
     && typeof release.draft === 'boolean' && release.prerelease === isPrereleaseVersion(version),
   'Release metadata differs from planned version/commit')
@@ -29,7 +29,7 @@ export async function recoverArtifact({ version, sha, release, annotation, asset
   const sums = find('SHA256SUMS')
   if (!tar) {
     check(release.draft && !sums, 'Release artifact incomplete; refusing to repack existing partial bytes')
-    return null
+    return { source: 'packed', files: null }
   }
   check(release.draft || sums, 'Published release checksum asset missing')
   const download = async asset => {
@@ -43,12 +43,12 @@ export async function recoverArtifact({ version, sha, release, annotation, asset
   const data = await download(tar)
   const expected = Buffer.from(`${hash(data)}  ${tarName}\n`)
   if (sums) check((await download(sums)).equals(expected), 'Release SHA256SUMS differs from original tarball')
-  return [{ name: tarName, data }, { name: 'SHA256SUMS', data: expected }]
+  return { source: 'recovered', files: [{ name: tarName, data }, { name: 'SHA256SUMS', data: expected }] }
 }
 
 async function main() {
   check(process.argv.length === 2, 'Usage: node scripts/prepare-release-artifact.mjs')
-  const root = fileURLToPath(new URL('..', import.meta.url))
+  const root = process.cwd()
   const { version } = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
   parseVersion(version)
   const sha = process.env.RELEASE_SHA
@@ -82,18 +82,21 @@ async function main() {
     annotation = json(`/git/tags/${ref.object.sha}`)
     assets = list(`/releases/${release.id}/assets`)
   }
-  const recovered = await recoverArtifact({
+  const result = await recoverArtifact({
     version, sha, release, annotation, assets,
     readAsset: id => gh(['api', `repos/${REPOSITORY}/releases/assets/${id}`, '-H', 'Accept: application/octet-stream']),
   })
   await mkdir(resolve(root, 'artifacts'), { recursive: true })
-  if (recovered) {
-    for (const file of recovered) await writeFile(resolve(root, 'artifacts', file.name), file.data, { flag: 'wx' })
+  if (result.source === 'recovered') {
+    for (const file of result.files) await writeFile(resolve(root, 'artifacts', file.name), file.data, { flag: 'wx' })
     console.log('Recovered original release archive; no repack')
   } else {
     const packed = spawnSync('pnpm', ['--config.ignore-scripts=true', 'pack', '--pack-destination', 'artifacts'],
       { cwd: root, shell: false, stdio: 'inherit' })
     check(packed.status === 0, 'Release pack failed')
+  }
+  if (process.env.GITHUB_OUTPUT) {
+    await appendFile(process.env.GITHUB_OUTPUT, `artifact_source=${result.source}\n`)
   }
 }
 

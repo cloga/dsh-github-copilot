@@ -20,4 +20,14 @@ Once the workflow is on the default branch, its `workflow_dispatch` entry may ve
 
 A matching visible version/SRI and non-decreasing channel receipt may support a separately authorized rerun of the established publisher, which must recover the same original immutable archive and reconcile it read-only. Missing or mismatching data, credentials/TLS failure, a stranded tag or unverified provenance is not permission to republish, weaken checks or alter credentials. Preserve the failure receipt, original release bytes and exact workflow/source identity for review.
 
+After one successful `npm publish`, the publisher waits up to ten minutes for
+the exact version and its dist-tag using read-only checks at fifteen-second
+intervals with npm cache revalidation. Both checks share one deadline; an
+in-flight npm read may take up to its own 60-second timeout. Authentication,
+network, invalid metadata, identity
+or integrity failures stop immediately. A version still missing at the deadline
+is an uncertain outcome, not permission to publish again. A release recovered
+from an existing archive is always reconciliation-only, even if npm reports a
+404; a separately reviewed recovery is required if publication is absent.
+
 For `0.4.0-alpha.25`, the target is source `5458fda2854d5956e0c8d68a0f0b0a6e55833c8b`. The first main pipeline published the immutable GitHub Release but ended with `npm version integrity differs or is not yet observable; no overwrite or automatic retry`. That error alone does not establish whether the npm write succeeded. The read-only verifier supplies the missing evidence without changing either distribution channel.

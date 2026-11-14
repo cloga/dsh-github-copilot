@@ -135,10 +135,11 @@ jobs:
       - name: Verify plugin package
         run: pnpm verify
       - name: Recover original release archive or pack once
+        id: artifact
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ needs.plan.outputs.sha }}
-        run: node scripts/prepare-release-artifact.mjs
+        run: node release-tools/scripts/prepare-release-artifact.mjs
       - name: Verify packed archive
         shell: bash
         run: |
@@ -160,6 +161,8 @@ jobs:
       - name: Install pinned OIDC-capable npm CLI
         run: npm install --global npm@11.5.1 --registry=https://registry.npmjs.org/ --ignore-scripts
       - name: Publish the same verified archive to npm and verify integrity
+        env:
+          RELEASE_ARTIFACT_SOURCE: ${{ steps.artifact.outputs.artifact_source }}
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
