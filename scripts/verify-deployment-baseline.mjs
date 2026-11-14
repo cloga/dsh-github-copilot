@@ -423,6 +423,7 @@ assert(
 assert(Array.isArray(manifest.capabilities) && manifest.capabilities.length > 0, 'capability inventory is missing')
 const capabilityIds = new Set(manifest.capabilities.map(capability => capability.id))
 assert(capabilityIds.size === manifest.capabilities.length, 'capability IDs must be unique')
+const missingEvidence = []
 for (const required of ['independent-copilot-accounts', 'account-quota-composer-usage', 'account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
   'public-adapter-account-model-route', 'managed-request-budget-and-compaction-policy', 'managed-model-generation-and-lifetime', 'managed-http-auth-rejection-recovery', 'managed-responses-replay-scope-isolation', 'account-discovery-native-oauth',
   'canonical-owner-preservation', 'single-managed-route-native-oauth', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
@@ -434,12 +435,15 @@ for (const capability of manifest.capabilities) {
   assert(capability.sourceMarkers?.length > 0, `${capability.id} has no source evidence`)
   assert(capability.tests?.length > 0, `${capability.id} has no test evidence`)
   for (const evidence of capability.sourceMarkers) {
-    assert((await read(evidence.file)).includes(evidence.marker), `${capability.id} marker missing from ${evidence.file}`)
+    if (!(await read(evidence.file)).includes(evidence.marker))
+      missingEvidence.push(`${capability.id} marker missing from ${evidence.file}: ${evidence.marker}`)
   }
   for (const test of capability.tests) {
-    assert((await testNames(test.file)).has(test.name), `${capability.id} enabled test missing: ${test.name} (${test.file})`)
+    if (!(await testNames(test.file)).has(test.name))
+      missingEvidence.push(`${capability.id} enabled test missing: ${test.name} (${test.file})`)
   }
 }
+assert(missingEvidence.length === 0, missingEvidence.join('\n'))
 const alpha016Core = dshBaselines.find(entry => entry.release === '0.1.6-alpha.1')
 assert(alpha016Core?.tag === 'dsh-v0.1.6-alpha.1'
   && alpha016Core.commit === '0a15e36e7f82b6ed45af6fa9759f29b40dcd965d'
