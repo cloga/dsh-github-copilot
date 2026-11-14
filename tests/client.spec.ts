@@ -1533,7 +1533,7 @@ describe('GitHub Copilot Models client', () => {
   it('declares account namespace access for both Models and Credits injection scopes', async () => {
     const { ctx } = clientContext(['settings.models.footer'])
     const dispose = await apply(ctx as never)
-    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
+    expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilot', 'remote.githubCopilotAccounts', 'slots'], expect.any(Function))
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotUsage', 'remote.githubCopilotAccounts', 'remote.githubCopilotSessionAccount', 'remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
     expect(ctx.inject).toHaveBeenCalledWith(['remote.githubCopilotSessionContinuation', 'slots'], expect.any(Function))
     await dispose()
@@ -1568,6 +1568,7 @@ describe('GitHub Copilot Models client', () => {
         const next = render(props)
         expect(next.props.remote).toBe(first.props.remote)
         expect(next.props.continuationRemote).toBe(first.props.continuationRemote)
+        expect(next.props.continuationContext).toBe(first.props.continuationContext)
         expect(next.props.seat).toBe(first.props.seat)
         surfaces.mount(next.props.seat, token, next.props.remote)
         expect(surfaces.getSnapshot()!.account).toBe(account)
@@ -1575,7 +1576,7 @@ describe('GitHub Copilot Models client', () => {
         expect(account.getSnapshot().view?.modelPreferences).toEqual(view.modelPreferences)
       }
       expect(namespace).toHaveBeenCalledTimes(1)
-      expect(continuation).toHaveBeenCalledTimes(1)
+      expect(continuation).not.toHaveBeenCalled()
       expect(status).toHaveBeenCalledTimes(1)
       expect(ensureModels).not.toHaveBeenCalled()
       expect(discoverModels).not.toHaveBeenCalled()

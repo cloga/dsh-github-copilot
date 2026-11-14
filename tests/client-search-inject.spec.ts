@@ -19,14 +19,26 @@ const copilotNamespace = { ns: 'github-copilot', revision: 7, value: {
   searchRouting: { searchProvider: 'auto', defaultSearchProvider: 'none' },
 }, schema: {}, applies: 'live' as const, secrets: [], autoGenerate: false }
 
-async function fixture(footer: boolean, routingAvailable = true, bundle = true, optionsAvailable = true) {
+async function fixture(footer: boolean, routingAvailable = true, bundle = true, optionsAvailable = true, continuationAvailable = true) {
   const root = new Context()
   const registrations = new Map<string, { name: string; key?: string; render: (props?: { view: string }) => ReactElement | null }>()
   let remoteDisposals = 0
   const describeSettings = vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true,
     namespaces: [copilotNamespace] } }))
   const mutateSettings = vi.fn(async (ns: string) => ({ ok: true as const, value: { ...copilotNamespace, ns, revision: 8, autoGenerate: false } }))
+  const status = vi.fn(async () => ({ ok: true as const, value: {
+    phase: 'signed-out' as const, configured: false, writable: true, inFlight: false, notices: [],
+  } }))
   let settingsRemote!: SettingsRemote
+  class CopilotRemote extends NamedService {
+    constructor(ctx: Context) { super(ctx, 'remote.githubCopilot') }
+    status = status
+  }
+  class ContinuationRemote extends NamedService {
+    constructor(ctx: Context) { super(ctx, 'remote.githubCopilotSessionContinuation') }
+    async defaults() { return { ok: true, value: { enabled: false, revision: 0 } } }
+    async setDefault() { return { ok: true, value: { enabled: false, revision: 0 } } }
+  }
   class SettingsRemote extends NamedService {
     constructor(ctx: Context) { super(ctx, 'remote.settings'); settingsRemote = this }
     describe = describeSettings
@@ -59,12 +71,13 @@ async function fixture(footer: boolean, routingAvailable = true, bundle = true, 
   await root.plugin({ apply(ctx) {
     new Remote(ctx)
     new Slots(ctx)
-    new NamedService(ctx, 'remote.githubCopilot')
+    new CopilotRemote(ctx)
     new NamedService(ctx, 'remote.githubCopilotAccounts')
-    new NamedService(ctx, 'remote.githubCopilotSessionContinuation')
+    if (continuationAvailable) new ContinuationRemote(ctx)
     new SettingsRemote(ctx)
   } })
   const addRouting = () => root.plugin({ apply(ctx) { new RoutingRemote(ctx) } })
+  const addContinuation = () => root.plugin({ apply(ctx) { new ContinuationRemote(ctx) } })
   const addDiagnostics = () => root.plugin({ apply(ctx) {
     class DiagnosticsRemote extends NamedService {
       constructor() { super(ctx, 'remote.githubCopilotDiagnostics') }
@@ -77,7 +90,7 @@ async function fixture(footer: boolean, routingAvailable = true, bundle = true, 
   if (routingAvailable) await addRouting()
   const client = root.plugin({ inject, apply })
   await client
-  return { root, client, registrations, addRouting, addDiagnostics, describeSettings, mutateSettings, settings: settingsRemote, remoteDisposals: () => remoteDisposals }
+  return { root, client, registrations, addRouting, addContinuation, addDiagnostics, describeSettings, mutateSettings, status, settings: settingsRemote, remoteDisposals: () => remoteDisposals }
 }
 
 const searchId = 'github-copilot-search-routing'
@@ -189,6 +202,43 @@ describe('search UI traced Remote dependency', () => {
       await vi.waitFor(() => expect(f.registrations.has(searchId)).toBe(false))
       expect(f.registrations.has('github-copilot-preview')).toBe(true)
     } finally { await f.root.fiber.dispose() }
+  })
+
+  it('keeps one account owner while the optional continuation Remote appears and disappears', async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+    const f = await fixture(true, true, true, true, false)
+    const container = document.createElement('div')
+    const mounted = createRoot(container)
+    try {
+      const render = f.registrations.get('github-copilot-preview')!.render
+      const first = render()!
+      expect(first.props.remote.name).toBe('remote.githubCopilot')
+      await act(async () => { mounted.render(first) })
+      await vi.waitFor(() => expect(f.status).toHaveBeenCalledOnce())
+      const owner = first.props.surfaces.getSnapshot()!.account
+      await act(async () => {
+        Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Manage')!.click()
+      })
+      await vi.waitFor(() => expect(container.textContent).toContain('COPILOT_CONTINUATION_STATUS_UNAVAILABLE'))
+      let continuation!: ReturnType<typeof f.addContinuation>
+      await act(async () => { continuation = f.addContinuation(); await continuation })
+      await vi.waitFor(() => expect(container.textContent).not.toContain('COPILOT_CONTINUATION_STATUS_UNAVAILABLE'))
+      const attached = f.registrations.get('github-copilot-preview')!.render()!
+      expect(attached.props.surfaces).toBe(first.props.surfaces)
+      expect(attached.props.remote).toBe(first.props.remote)
+      expect(attached.props.surfaces.getSnapshot()!.account).toBe(owner)
+      expect(f.status).toHaveBeenCalledOnce()
+      await act(async () => { await continuation.dispose() })
+      await vi.waitFor(() => expect(container.textContent).toContain('COPILOT_CONTINUATION_STATUS_UNAVAILABLE'))
+      const detached = f.registrations.get('github-copilot-preview')!.render()!
+      expect(detached.props.surfaces).toBe(first.props.surfaces)
+      expect(detached.props.remote).toBe(first.props.remote)
+      expect(detached.props.surfaces.getSnapshot()!.account).toBe(owner)
+      expect(f.status).toHaveBeenCalledOnce()
+    } finally {
+      await act(async () => { mounted.unmount(); await f.root.fiber.dispose() })
+      Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
+    }
   })
 
   it('saves only edited hosted-search leaves in the existing namespace without broadening the route allowlist', async () => {

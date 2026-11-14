@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { assertDshCompatibility, DSH_COMPATIBILITY } from '../src/compatibility.ts'
+import { assertDshCompatibility, assertDshSearchCompatibility, DSH_COMPATIBILITY } from '../src/compatibility.ts'
 
 function context(overrides: Record<string, unknown> = {}): Context {
   const services: Record<string, unknown> = {
@@ -33,14 +33,14 @@ function context(overrides: Record<string, unknown> = {}): Context {
 
 describe('assertDshCompatibility', () => {
   it('admits only the exact current official release', () => {
-    expect(DSH_COMPATIBILITY.release).toBe('0.2.1-rc.3')
-    expect(DSH_COMPATIBILITY.developmentRelease).toBe('0.2.1-rc.3')
-    expect(DSH_COMPATIBILITY.supportedReleases).toEqual(['0.2.1-rc.3'])
-    expect(DSH_COMPATIBILITY.peerRange).toBe('0.2.1-rc.3')
+    expect(DSH_COMPATIBILITY.release).toBe('0.2.2-rc.3')
+    expect(DSH_COMPATIBILITY.developmentRelease).toBe('0.2.2-rc.3')
+    expect(DSH_COMPATIBILITY.supportedReleases).toEqual(['0.2.2-rc.3'])
+    expect(DSH_COMPATIBILITY.peerRange).toBe('0.2.2-rc.3')
     expect(() => assertDshCompatibility(context({ authorization: {} })))
       .toThrow('authorization.describe')
     expect(() => assertDshCompatibility(context({ authorization: {} })))
-      .toThrow('0.2.1-rc.3')
+      .toThrow('0.2.2-rc.3')
   })
 
   it('declares the current and retained exact contract targets without claiming live Desktop validation', () => {
@@ -48,8 +48,8 @@ describe('assertDshCompatibility', () => {
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
     const current = baseline.supportedBaselines.dsh
     expect(current.admittedReleases).toEqual(DSH_COMPATIBILITY.supportedReleases)
-    expect(current.baselines).toHaveLength(14)
-    expect(current).toMatchObject({ release: '0.2.1-rc.3', tag: 'dsh-v0.2.1-rc.3', commit: '1f81c047fc48fa190a683e469daa699857e9afe8' })
+    expect(current.baselines).toHaveLength(15)
+    expect(current).toMatchObject({ release: '0.2.2-rc.3', tag: 'dsh-v0.2.2-rc.3', commit: '38a6a5c965aa99ab525161efb7cc5cf1fe62fced' })
     expect(current.baselines.at(-1)).toMatchObject({
       release: current.release, tag: current.tag, commit: current.commit,
       source: 'https://github.com/deepseek-ai/deepseek-harness',
@@ -59,8 +59,8 @@ describe('assertDshCompatibility', () => {
       runtimeDependencies: 'public-resolution-and-unload',
       clientSessionContext: 'multiple-session-owner-isolation',
       evidenceScope: 'unchanged-tagged-source-target',
-      standaloneNpmArtifacts: 'tested',
-      desktopRelease: 'not-verified', desktopPackageSet: 'not-materialized',
+      standaloneNpmArtifacts: 'not-tested',
+      desktopRelease: 'local-installed-version-only', desktopPackageSet: 'not-materialized',
     })
     expect(current.baselines.at(-1).runtimeTests).toEqual(expect.arrayContaining([
       'tests/fixtures/alpha2-contracts-core.fixture.ts',
@@ -73,8 +73,7 @@ describe('assertDshCompatibility', () => {
     expect(baseline.evidence.peerRangeMeaning).toBe('package-admission-not-runtime-validation')
     expect(baseline.evidence.doesNotProve).toEqual(expect.arrayContaining(['live-discovery', 'live-model-transport', 'published-release', 'local-upgrade']))
     expect(baseline.package.version).toBe(pkg.version)
-    const artifactRelease = process.env.DSH_PUBLISHED_CORE_RELEASE === '0.2.1-rc.3'
-      ? '0.2.1-rc.3' : DSH_COMPATIBILITY.developmentRelease
+    const artifactRelease = process.env.DSH_PUBLISHED_CORE_RELEASE ?? DSH_COMPATIBILITY.developmentRelease
     for (const [name, version] of Object.entries(pkg.devDependencies)) {
       if (name.startsWith('@deepseek-ai/dsh-')) expect(version).toBe(artifactRelease)
     }
@@ -84,6 +83,14 @@ describe('assertDshCompatibility', () => {
 
   it('accepts the public service contract without reading private WebRuntime config', () => {
     expect(() => assertDshCompatibility(context())).not.toThrow()
+    expect(() => assertDshSearchCompatibility(context())).not.toThrow()
+  })
+
+  it('allows model integration without web while diagnosing a missing search seam', () => {
+    const withoutWeb = context({ web: undefined })
+    expect(() => assertDshCompatibility(withoutWeb)).not.toThrow()
+    expect(() => assertDshSearchCompatibility(withoutWeb)).toThrow('web.registerSearchProvider')
+    expect(() => assertDshSearchCompatibility(context({ web: {} }))).toThrow('web.registerSearchProvider')
   })
 
   it('fails before startup when a required API is absent', () => {
@@ -93,7 +100,5 @@ describe('assertDshCompatibility', () => {
       .toThrow('credentials.describeRecord')
     expect(() => assertDshCompatibility(context({ settings: { get: () => undefined, mutate: async () => undefined } })))
       .toThrow('settings.describe')
-    expect(() => assertDshCompatibility(context({ web: {} })))
-      .toThrow('web.registerSearchProvider')
   })
 })

@@ -25,7 +25,7 @@ const model: Model<'openai-responses'> = {
 
 beforeAll(() => {
   expect(['published-artifact-runtime', 'tagged-source-runtime']).toContain(process.env.DSH_CORE_EVIDENCE)
-  expect(['0.2.1-alpha.5', '0.2.1-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
+  expect(['0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3']).toContain(process.env.DSH_PUBLISHED_CORE_RELEASE)
   const release = process.env.DSH_PUBLISHED_CORE_RELEASE
   for (const name of ['@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-llm-pi-ai']) {
     const path = findPackageJSON(name, import.meta.url)

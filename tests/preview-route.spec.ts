@@ -408,7 +408,7 @@ beforeEach(() => { discoveryRequests = []; stubFetch(async () => { throw new Err
 
 describe('account-local managed runtimes', () => {
   const second = '11111111-1111-4111-8111-111111111111'
-  async function scopedRuntime() {
+  async function scopedRuntime(config: PreviewRouteConfig = {}) {
     const ctx = new Context()
     contexts.push(ctx)
     let active = 'canonical'
@@ -457,7 +457,7 @@ describe('account-local managed runtimes', () => {
     } })
     await ctx.plugin(LlmRuntime)
     const registrations = vi.spyOn(ctx.llm, 'registerAdapter')
-    await ctx.plugin(previewPlugin, { accountModelFailureCooldownMs: 0 })
+    await ctx.plugin(previewPlugin, { accountModelFailureCooldownMs: 0, ...config })
     expect(registrations).toHaveBeenCalledTimes(1)
     const adapter = registrations.mock.calls[0]![1]
     registrations.mockRestore()
@@ -491,6 +491,31 @@ describe('account-local managed runtimes', () => {
     for await (const chunk of prepared.stream({ provider: PREVIEW, model: prepared.model.id, messages: [], signal })) chunks.push(chunk)
     expect(chunks.some(chunk => chunk.type === 'finish' && chunk.reason.kind === 'stop')).toBe(true)
   }
+  it('projects images through the proven initiating account rather than the empty registry profile', async () => {
+    const requests = scopedFetch()
+    const harness = await scopedRuntime({ requestImagePixelBudget: 4_194_304, requestImageMaxBytes: 1_048_576 })
+    type ImageRef = Parameters<LlmRuntime['imageRequestTarget']>[2]
+    const image: ImageRef = { attachmentId: 'synthetic-image' as ImageRef['attachmentId'],
+      mediaType: 'image/png', bytes: 2_000_000, width: 4096, height: 4096 }
+    expect(() => harness.ctx.llm.imageRequestTarget(PREVIEW, 'account-a-model', image))
+      .toThrow('COPILOT_IMAGE_TARGET_METADATA_UNAVAILABLE')
+    await harness.adapter.prepareCall(PREVIEW, 'account-a-model', harness.bind('canonical'))
+    await harness.adapter.prepareCall(PREVIEW, 'account-b-model', harness.bind(second))
+    const fetch = vi.spyOn(globalThis, 'fetch')
+    const expected = { width: 2048, height: 2048, maxBytes: 1_048_576 }
+    harness.within('canonical')
+    expect(harness.ctx.llm.imageRequestTarget(PREVIEW, 'account-a-model', image)).toEqual(expected)
+    expect(harness.ctx.llm.imageRequestTarget(PREVIEW, AUTO, image)).toEqual(expected)
+    expect(() => harness.ctx.llm.imageRequestTarget(PREVIEW, 'account-b-model', image))
+      .toThrow('COPILOT_IMAGE_TARGET_MODEL_UNAVAILABLE')
+    harness.within(second)
+    expect(harness.ctx.llm.imageRequestTarget(PREVIEW, 'account-b-model', image)).toEqual(expected)
+    harness.rotate(second)
+    expect(() => harness.ctx.llm.imageRequestTarget(PREVIEW, 'account-b-model', image))
+      .toThrow('COPILOT_IMAGE_TARGET_METADATA_UNAVAILABLE')
+    expect(fetch).not.toHaveBeenCalled()
+    expect(requests).toEqual([])
+  })
   it('isolates a proven refresh and later revocation from another admitted account', async () => {
     const start = Date.now()
     const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
@@ -2922,7 +2947,7 @@ describe('plugin-owned account Copilot route', () => {
       content: [{ type: 'image', attachment }], source: { kind: 'user' },
     })
     const first = await call(harness.ctx, { messages: [original] })
-    if (!['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3'].includes(coreRelease)) {
+    if (!['0.1.6-alpha.1', '0.1.6-alpha.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-alpha.5', '0.2.1-rc.3', '0.2.2-rc.3'].includes(coreRelease)) {
       expect(first.assembler.finish).toEqual({ kind: 'stop' })
       return
     }

@@ -51,7 +51,7 @@ import type { SearchSelection } from './search-routing.ts'
 import { createDeepSeekSearchFallback } from './deepseek-search-fallback.ts'
 import { isPluginPreviewProvider } from './model-protocol.ts'
 import type {} from './routed-web.ts'
-import { assertDshCompatibility } from './compatibility.ts'
+import { assertDshCompatibility, assertDshSearchCompatibility } from './compatibility.ts'
 import { onSettingsNamespaceUpdated, readSettingsNamespace } from './settings-reader.ts'
 import GitHubCopilotAuthorizationController, {
   ensureGitHubCopilotProviderProfile,
@@ -85,7 +85,6 @@ const integrationInject = [
   'settings',
   'credentials',
   'authorization',
-  'web',
   'agentDefaultModel',
 ]
 
@@ -202,19 +201,10 @@ function ensureAuthorization(ctx: Context): void {
 function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
   assertDshCompatibility(ctx)
   let current: () => InlineConfig = () => readInlineConfig(config)
-  const readRouting = (): WebSearchRoutingConfig => {
-    const rawCopilot = readSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE) as Record<string, unknown> | undefined
-    const rawRouting = rawCopilot?.searchRouting as Partial<WebSearchRoutingConfig> | undefined
-    if (rawRouting && (rawRouting.searchProvider !== undefined || rawRouting.defaultSearchProvider !== undefined || rawRouting.searchMode !== undefined)) {
-      return rawRouting
-    }
-    const legacy = readSettingsNamespace(ctx, WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE) as Partial<WebSearchRoutingConfig> | undefined
-    if (legacy && (legacy.searchProvider !== undefined || legacy.defaultSearchProvider !== undefined || legacy.searchMode !== undefined)) {
-      return legacy
-    }
-    const cfg = current()
-    return cfg.searchRouting ?? {}
-  }
+  observeSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, config, {
+    setSource: source => { current = source },
+    onChange: () => {},
+  })
   const sessionAccounts = new SessionAccountsHost(ctx)
   ctx.provide('githubCopilotSessionAccounts', sessionAccounts)
   ctx.plugin({ apply(scope) { new SessionAccountController(scope, sessionAccounts) } })
@@ -270,6 +260,43 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
   ctx.plugin(GitHubCopilotDualModel)
   ctx.plugin(SearchRoutingController)
   ctx.plugin(GitHubCopilotUsageController)
+
+  // Profile repair and model configuration must not depend on hosted search.
+  void ensureGitHubCopilotProviderProfile(ctx).catch((error: unknown) => {
+    ctx.logger.error('github-copilot: failed to repair the GitHub Copilot provider route during startup')
+    ctx.logger.error(error)
+  })
+
+  let promptText: PromptRouteText = () => ''
+  ctx.inject(['web'], scope => {
+    assertDshSearchCompatibility(scope)
+    const searchPrompt = activateSearch(scope, config, () => current(), sessionAccounts, acquireAccount)
+    promptText = searchPrompt
+    scope.effect(() => () => { if (promptText === searchPrompt) promptText = () => '' })
+  })
+  return (owner, selection) => promptText(owner, selection)
+}
+
+function activateSearch(
+  ctx: Context,
+  config: LiveInlineConfig,
+  current: () => InlineConfig,
+  sessionAccounts: SessionAccountsHost,
+  acquireAccount: (signal?: AbortSignal, provider?: string) => CopilotAccountLease | undefined,
+): PromptRouteText {
+  const readRouting = (): WebSearchRoutingConfig => {
+    const rawCopilot = readSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE) as Record<string, unknown> | undefined
+    const rawRouting = rawCopilot?.searchRouting as Partial<WebSearchRoutingConfig> | undefined
+    if (rawRouting && (rawRouting.searchProvider !== undefined || rawRouting.defaultSearchProvider !== undefined || rawRouting.searchMode !== undefined)) {
+      return rawRouting
+    }
+    const legacy = readSettingsNamespace(ctx, WEB_SEARCH_ROUTING_SETTINGS_NAMESPACE) as Partial<WebSearchRoutingConfig> | undefined
+    if (legacy && (legacy.searchProvider !== undefined || legacy.defaultSearchProvider !== undefined || legacy.searchMode !== undefined)) {
+      return legacy
+    }
+    const cfg = current()
+    return cfg.searchRouting ?? {}
+  }
   const resolveGitHubCopilotToken = createGitHubCopilotTokenResolver(ctx, async () => {
     await ensureGitHubCopilotProviderProfile(ctx)
   })
@@ -855,23 +882,13 @@ function activate(ctx: Context, config: LiveInlineConfig): PromptRouteText {
   }
   let settingsSignature = searchSettingsSignature()
   observeSettingsNamespace(ctx, GITHUB_COPILOT_SETTINGS_NAMESPACE, config, {
-    setSource: (source) => {
-      current = source
-      settingsSignature = searchSettingsSignature()
-    },
+    setSource: () => { settingsSignature = searchSettingsSignature() },
     // Invalidate only. Even an event burst coalesces into one fresh proof per
     // search surface on its next actual request, never one probe per event.
     onChange: () => {
       const next = searchSettingsSignature()
       if (next !== settingsSignature) { settingsSignature = next; invalidatePlans() }
     },
-  })
-
-  // SettingsForms projects the Loader entry's volatile Config fields; it does
-  // not expose a manual namespace registration API.
-  void ensureGitHubCopilotProviderProfile(ctx).catch((error: unknown) => {
-    ctx.logger.error('github-copilot: failed to repair the GitHub Copilot provider route during startup')
-    ctx.logger.error(error)
   })
 
   ctx.on('llm/stream', (request: GenerateOptions, next: () => AsyncIterable<StreamChunk>) => {

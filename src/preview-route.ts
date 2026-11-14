@@ -790,7 +790,8 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     // stream. Never replay a model wire request or retry generic provider errors.
     try { await discoverSnapshot({ force: true, signal }) } catch { /* Original failure remains authoritative. */ }
   }
-  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'requestCheckpoint' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'> = {}, classifier = false): PiAiAdapterOptions => {
+  const optionsFor = (lease?: Lease, hooks: Pick<AccountProviderGuard, 'inspectRequest' | 'requestCheckpoint' | 'onReplayFailure' | 'onWireAbort' | 'onRequestBodyTimeout' | 'onStreamIdleTimeout' | 'onStreamLiveness' | 'recoverReplay' | 'onReplayScopeRejected'> = {}, classifier = false,
+    projection?: { readonly snapshot: AccountModelSnapshot; readonly proof: Proof }): PiAiAdapterOptions => {
     const settings = chatRequestSettings?.()
     const idle = settings?.chatStreamIdleTimeoutMs ?? template.streamIdleTimeoutMs
     const enabled = (settings?.chatStreamLiveness ?? streamLiveness ?? true)
@@ -821,8 +822,8 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
         // next independent caller through the shared discovery single flight.
       },
     }
-    const { provider } = createAccountProvider(lease?.snapshot.models ?? [], guard,
-      lease?.proof.baseURL ?? 'https://api.individual.githubcopilot.com', classifier)
+    const { provider } = createAccountProvider(lease?.snapshot.models ?? projection?.snapshot.models ?? [], guard,
+      lease?.proof.baseURL ?? projection?.proof.baseURL ?? 'https://api.individual.githubcopilot.com', classifier)
     // Byte-idle retains the original interval; real SSE progress earns only a bounded
     // extra semantic window. WebSocket/auto keep the untouched native policy.
     const profile = resolvedProfile(provider, { ...requestConfig,
@@ -899,6 +900,28 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
   }
   const adapter = new PreviewAdapter(lifetime, optionsFor, discoverSnapshot, refreshRejected, budgetSettings, cacheSettings,
     false, replayRecovery, undefined, signal => ctx.get('githubCopilotSessionAccounts')?.recordRequest(signal))
+  let imageProjection: { readonly snapshot: AccountModelSnapshot; readonly proof: Proof; readonly adapter: PiAiAdapter } | undefined
+  const imageRequestTarget = (provider: string, model: string, image: Parameters<PiAiAdapter['imageRequestTarget']>[2]) => {
+    owned(provider)
+    lifetime.assertActive()
+    binding?.assertCurrent()
+    const snapshot = source.readSnapshot()
+    const proof = snapshot === undefined ? undefined : proofFor(snapshot)
+    if (snapshot === undefined || proof === undefined) {
+      imageProjection = undefined
+      throw failure('COPILOT_IMAGE_TARGET_METADATA_UNAVAILABLE', 'INVALID_REQUEST')
+    }
+    // Auto is virtual; its vision candidates share this profile's image budget.
+    const excluded = autoModelPreference(model) === undefined ? undefined : excludedModels()
+    const descriptor = excluded === undefined
+      ? snapshot.models.find(item => item.id === model)
+      : snapshot.models.find(item => item.input.includes('image') && !excluded.has(item.id))
+    if (descriptor === undefined) throw failure('COPILOT_IMAGE_TARGET_MODEL_UNAVAILABLE', 'UNKNOWN_MODEL')
+    if (imageProjection?.snapshot !== snapshot || imageProjection.proof !== proof) {
+      imageProjection = { snapshot, proof, adapter: new PiAiAdapter(optionsFor(undefined, {}, false, { snapshot, proof })) }
+    }
+    return imageProjection.adapter.imageRequestTarget(provider, descriptor.id, image)
+  }
   const pressureCallbacks = { resolve(request: GenerateOptions) {
     const snapshot = source.readSnapshot()
     if (snapshot === undefined || proofFor(snapshot) === undefined) return undefined
@@ -968,12 +991,13 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
     try { await discoverSnapshot(options) } catch { lifetime.assertActive() }
     return getView()
   } }
-  return { adapter, preview, auto, pressureCallbacks, optionsFor, lifetime,
+  return { adapter, preview, auto, pressureCallbacks, optionsFor, lifetime, imageRequestTarget,
     proof() {
       if (snapshotProof === undefined || snapshotProof.expires <= Date.now()) return undefined
       return `${binding?.accountId ?? 'canonical'}:${lifetime.revision}:${snapshotProof.accountKey}:${snapshotProof.tokenFingerprint}`
     },
     invalidate(preserveDispatched = false) {
+      imageProjection = undefined
       lifetime.change(preserveDispatched); provenSnapshot = undefined; snapshotProof = undefined; lastValidatedProof = undefined
       void refresh().catch(() => undefined)
     },
@@ -993,6 +1017,9 @@ class AccountRoutingAdapter extends PiAiAdapter {
   }
   override prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
     return this.requestRuntime(signal).adapter.prepareCall(provider, model, signal)
+  }
+  override imageRequestTarget(provider: string, model: string, image: Parameters<PiAiAdapter['imageRequestTarget']>[2]) {
+    return this.requestRuntime().imageRequestTarget(provider, model, image)
   }
   override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     return this.requestRuntime(options.signal).adapter.stream(options)

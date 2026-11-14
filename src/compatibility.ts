@@ -8,10 +8,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 
 export const DSH_COMPATIBILITY = {
-  release: '0.2.1-rc.3',
-  developmentRelease: '0.2.1-rc.3',
-  peerRange: '0.2.1-rc.3',
-  supportedReleases: ['0.2.1-rc.3'],
+  release: '0.2.2-rc.3',
+  developmentRelease: '0.2.2-rc.3',
+  peerRange: '0.2.2-rc.3',
+  supportedReleases: ['0.2.2-rc.3'],
   requiredApis: [
     'agentDefaultModel.currentSelection',
     'authorization.describe',
@@ -24,7 +24,6 @@ export const DSH_COMPATIBILITY = {
     'credentials.deleteRecord',
     'settings.describe',
     'settings.mutate',
-    'web.registerSearchProvider',
     'systemPrompt.section',
     'context.on',
     'context.effect',
@@ -46,6 +45,11 @@ function incompatible(api: string): never {
   )
 }
 
+/** Validate the optional hosted-search seam only when web is mounted. */
+export function assertDshSearchCompatibility(ctx: Context): void {
+  if (!method(ctx.get('web'), 'registerSearchProvider')) incompatible('web.registerSearchProvider')
+}
+
 /** Assert every required Core service shape before registering any effects. */
 export function assertDshCompatibility(ctx: Context): void {
   if (!method(ctx.get('agentDefaultModel'), 'currentSelection')) incompatible('agentDefaultModel.currentSelection')
@@ -60,8 +64,6 @@ export function assertDshCompatibility(ctx: Context): void {
   const settings = ctx.get('settings')
   if (!method(settings, 'describe')) incompatible('settings.describe')
   if (!method(settings, 'mutate')) incompatible('settings.mutate')
-  const web = ctx.get('web')
-  if (!method(web, 'registerSearchProvider')) incompatible('web.registerSearchProvider')
   if (!method((ctx as unknown as Record<string, unknown>)['systemPrompt'], 'section')) incompatible('systemPrompt.section')
   if (typeof (ctx as unknown as Record<string, unknown>)['on'] !== 'function') incompatible('context.on')
   if (typeof (ctx as unknown as Record<string, unknown>)['effect'] !== 'function') incompatible('context.effect')

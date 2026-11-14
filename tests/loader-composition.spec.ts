@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AuthorizationService from '@deepseek-ai/dsh-authorization'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
 import * as GitHubCopilotPlugin from '../src/index.ts'
 import type { InlineConfig } from '../src/config.ts'
 
@@ -48,6 +49,8 @@ async function mountProfile(
   ctx: Context,
   providesAuthorization = false,
   configured = false,
+  withWeb = true,
+  nativeLlm = false,
 ): Promise<{
   readonly settingsDocument: {
     readonly 'github-copilot': Record<string, unknown>
@@ -81,17 +84,20 @@ async function mountProfile(
     name: providesAuthorization ? 'alpha3-web-profile' : 'rc2-web-profile',
     apply(profileCtx) {
       profileCtx.provide('credentials', credentialService(configured))
-      profileCtx.provide('llm', {})
+      if (nativeLlm) profileCtx.plugin(LlmRuntime)
+      else profileCtx.provide('llm', {})
       profileCtx.provide('systemPrompt', { section: () => () => undefined })
       profileCtx.provide('settings', {
         get: (namespace: unknown) => settingsDocument[String(namespace) as keyof typeof settingsDocument],
         describe: () => Object.entries(settingsDocument).map(([ns, value]) => ({ ns, revision: 0, user: value, value })),
         mutate,
       })
-      profileCtx.provide('web', {
-        registerSearchProvider: () => () => undefined,
-        registerFetchProvider: () => () => undefined,
-      })
+      if (withWeb) {
+        profileCtx.provide('web', {
+          registerSearchProvider: () => () => undefined,
+          registerFetchProvider: () => () => undefined,
+        })
+      }
       profileCtx.provide('agentDefaultModel', {
         currentSelection: () => ({ provider: 'github-copilot', model: 'gpt-5.4' }),
       })
@@ -151,6 +157,38 @@ describe('loader composition', () => {
     expect(Array.from(ctx.registry.get(AuthorizationService)?.fibers ?? [])[0]?.uid).toBe(authorizationFiberUid)
   })
 
+  it('keeps the account and model owners stable as optional web attaches and leaves', async () => {
+    const ctx = new Context()
+    await mountProfile(ctx, true, false, false, true)
+    const registerAdapter = vi.spyOn(ctx.llm, 'registerAdapter')
+    await mountIntegration(ctx)
+    await vi.waitFor(() => expect(ctx.get('githubCopilotPreview')).toBeDefined())
+    const accounts = ctx.get('githubCopilotAccounts')
+    const authorization = ctx.get('githubCopilotAuthorization')
+    const preview = ctx.get('githubCopilotPreview')
+    expect(ctx.get('githubCopilotSearchRouter')).toBeUndefined()
+    expect(registerAdapter).toHaveBeenCalledOnce()
+
+    const registerSearchProvider = vi.fn(() => () => undefined)
+    const web = ctx.plugin({ apply(scope) {
+      scope.provide('web', { registerSearchProvider, registerFetchProvider: () => () => undefined })
+    } })
+    await web
+    await vi.waitFor(() => expect(ctx.get('githubCopilotSearchRouter')).toBeDefined())
+    expect(registerSearchProvider).toHaveBeenCalledOnce()
+    expect(ctx.get('githubCopilotAccounts')).toBe(accounts)
+    expect(ctx.get('githubCopilotAuthorization')).toBe(authorization)
+    expect(ctx.get('githubCopilotPreview')).toBe(preview)
+    expect(registerAdapter).toHaveBeenCalledOnce()
+
+    await web.dispose()
+    await vi.waitFor(() => expect(ctx.get('githubCopilotSearchRouter')).toBeUndefined())
+    expect(ctx.get('githubCopilotAccounts')).toBe(accounts)
+    expect(ctx.get('githubCopilotAuthorization')).toBe(authorization)
+    expect(ctx.get('githubCopilotPreview')).toBe(preview)
+    expect(registerAdapter).toHaveBeenCalledOnce()
+  })
+
   it('repairs an existing valid Copilot grant during Host startup', async () => {
     const ctx = new Context()
     const harness = await mountProfile(ctx, true, true)
@@ -168,5 +206,17 @@ describe('loader composition', () => {
       path: ['providers', 'github-copilot', 'compat', 'supportsStrictMode'],
       value: false,
     }], 0)
+  })
+
+  it('repairs an existing provider profile even when web is unavailable', async () => {
+    const ctx = new Context()
+    const harness = await mountProfile(ctx, true, true, false)
+    await mountIntegration(ctx)
+    await vi.waitFor(() => {
+      expect(harness.settingsDocument['llm-pi-ai'].providers['github-copilot']).toEqual({
+        customField: 'preserved',
+        compat: { supportsStrictMode: false },
+      })
+    })
   })
 })
