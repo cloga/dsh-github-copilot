@@ -329,8 +329,17 @@ assert(nativeSubagent?.required === true
 const hostEntry = await read('src/index.ts')
 const clientEntry = await read('src/client.ts')
 const overlay = await read('cordis.patch.yml')
-assert(!/githubCopilotSearchRouter|registerSearchProvider|resolveCandidates|routeSearchTools/u.test(hostEntry),
+assert(!/githubCopilotSearchRouter|resolveCandidates|routeSearchTools/u.test(hostEntry),
   'plugin Host must not own native web routing')
+assert(hostEntry.includes('scope.effect(() => scope.web.registerSearchProvider(createNativeCopilotSearch(scope)))')
+  && (hostEntry.match(/registerSearchProvider/gu) ?? []).length === 1,
+  'plugin Host may register only the optional native Copilot search backend')
+const nativeSearch = await read('src/native-copilot-search.ts')
+assert(nativeSearch.includes('available: () => active && selected()')
+  && nativeSearch.includes("value.searchProvider === 'github-copilot-hosted'")
+  && nativeSearch.includes('pending.size >= 4') && nativeSearch.includes('AbortSignal.timeout(25000)')
+  && !/settings\.mutate|registerAdapter|registerConfigurableProviders/u.test(nativeSearch),
+  'native search must preserve explicit native selection, bounded work and native ownership')
 assert(!clientEntry.includes('ctx.remote.githubCopilotSearchRouting'), 'plugin Client must not activate retired search routing')
 assert(!/github-copilot-(?:original-web|web-delegate|routed-web)/u.test(overlay),
   'plugin overlay must not isolate or replace native web')

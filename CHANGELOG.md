@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.3.dsh.0.2.2.rc.3 (prepared)
+
+- Extend reviewer-only temperature omission to qualified DSH native `github-copilot` Responses calls, preserving ordinary Chat and native verdict/permission ownership (#460).
+- Add optional canonical-account Copilot hosted search through the existing native Web registry, with one bounded proof and one final query, cancellation and configuration/credential invalidation (#461).
+- Preserve native settings, selected backends, accounts and histories. No live installation, restart or supplier acceptance is implied.
+
 ## 0.1.0-alpha.2.dsh.0.2.2.rc.3 (prepared)
 
 - Explain the native provider's canonical OAuth binding and the existing additional-account coexistence limit, while retaining the visible account panel outside the native Add draft (#458).

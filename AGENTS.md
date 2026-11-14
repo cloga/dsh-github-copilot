@@ -31,6 +31,15 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 ### Confirmed product scope (#455, #456)
 
+The native enhancement request (#460/#461) adds only reviewer-scoped Responses
+sampling compatibility and an optional canonical-account hosted-search backend.
+Use public native ownership/configuration proof and prepared dispatch; never
+replace Web, select a backend, migrate accounts/settings, or bypass review.
+Search permits one fixed capability proof and one final query within 25 seconds,
+with four concurrent operations and configuration/credential/disposal fences.
+The former plugin routing UI and managed Auto remain retired. Supplier calls,
+live installation and restarts are separate from synthetic CI acceptance.
+
 The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
 requirements below: this plugin is a lightweight GitHub Copilot model integration
 for DSH Desktop, not a second agent product. The qualification target is the exact
