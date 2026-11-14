@@ -70,7 +70,6 @@ describe('native web ownership', () => {
     await ctx.plugin({ inject: ['web'], apply(owner) {
       owner.web.registerSearchProvider({ id: 'native', available: () => true, search })
     } })
-    const nativeWeb = ctx.get('web')
     const agent = {
       id: 'copilot-agent',
       session: { id: 'copilot-agent', requestHeader: () => ({ config: { provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, model: 'account-model' } }) },
@@ -84,7 +83,7 @@ describe('native web ownership', () => {
     const plugin = ctx.plugin(Copilot, config)
     await plugin
     await vi.waitFor(() => expect(ctx.get('githubCopilotAuthorization')).toBeDefined())
-    expect(ctx.get('web') === nativeWeb).toBe(true)
+    await expect(ctx.web.searchReady(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)).resolves.toBe(true)
     expect(ctx.get('githubCopilotSearchRouter')).toBeUndefined()
     const next = vi.fn(async () => ({ kind: 'enter' as const, messages: [] }))
     await expect(Reflect.apply(ctx.waterfall, ctx, [scope, 'agent/pre-step', {
@@ -120,7 +119,7 @@ describe('native web ownership', () => {
     })
     expect(await run('before-dispose')).toMatchObject({ isError: false })
     await plugin.dispose()
-    expect(ctx.get('web') === nativeWeb).toBe(true)
+    await expect(ctx.web.searchReady(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)).resolves.toBe(true)
     expect(await run('after-dispose')).toMatchObject({ isError: false })
     expect(search).toHaveBeenCalledTimes(2)
     await scope.dispose()

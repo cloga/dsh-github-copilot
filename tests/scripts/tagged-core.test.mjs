@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
-import { prepareTaggedCoreFixture, taggedRendererRuntimeAliases, TAGGED_CORE_RELEASES } from '../../scripts/verify-tagged-core.mjs'
+import { execFileSync } from 'node:child_process'
+import { prepareTaggedCoreFixture, readTaggedGit, taggedRendererRuntimeAliases, TAGGED_CORE_RELEASES } from '../../scripts/verify-tagged-core.mjs'
 
 test('admits the exact 0.2.0-rc.2 source pin while retaining prior tagged baselines', () => {
   assert.deepEqual(TAGGED_CORE_RELEASES, {
@@ -27,6 +28,22 @@ test('admits the exact 0.2.0-rc.2 source pin while retaining prior tagged baseli
 })
 
 const release = '0.1.3-alpha.1'
+test('reads a tracked-file inventory larger than the default child-process buffer', async () => {
+  const core = await mkdtemp(join(tmpdir(), 'copilot-tagged-inventory-'))
+  try {
+    execFileSync('git', ['init', '-q', core])
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: core, input: '' }).toString().trim()
+    const entries = Array.from({ length: 12000 }, (_, index) =>
+      `100644 ${blob}\t${String(index).padStart(5, '0')}-${'x'.repeat(100)}.ts\n`).join('')
+    execFileSync('git', ['update-index', '--index-info'], { cwd: core, input: entries })
+    const inventory = readTaggedGit(core, ['ls-files', '-z'])
+    assert.ok(Buffer.byteLength(inventory) > 1024 * 1024)
+    assert.equal(inventory.split('\0').length - 1, 12000)
+  } finally {
+    await rm(core, { recursive: true, force: true })
+  }
+})
+
 test('installs the same unchanged diagnostic storage closure for CI and release qualification', async () => {
   for (const workflow of ['ci.yml', 'release.yml']) {
     const content = await readFile(join(process.cwd(), '.github', 'workflows', workflow), 'utf8')

@@ -53,8 +53,13 @@ async function physicalDirectory(path) {
 async function exists(path) {
   try { return await lstat(path) } catch (error) { if (error.code === 'ENOENT') return undefined; throw error }
 }
-function readGit(core, args) {
-  return execFileSync('git', args, { cwd: core, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] })
+export function readTaggedGit(core, args) {
+  try {
+    return execFileSync('git', args, { cwd: core, encoding: 'utf8', timeout: 15000,
+      maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] })
+  } catch (error) {
+    throw new Error(`tagged Core git ${args.join(' ')} failed: ${error.message}`, { cause: error })
+  }
 }
 function runtimeExport(value) {
   if (typeof value === 'string') return value
@@ -151,7 +156,7 @@ function configSource(report) {
 }
 
 /** Prepare only runner-owned config/identity files; read Core and plugin source without changing either. */
-export async function prepareTaggedCoreFixture({ root, core, target, release }, { git = readGit, runner } = {}) {
+export async function prepareTaggedCoreFixture({ root, core, target, release }, { git = readTaggedGit, runner } = {}) {
   const expected = TAGGED_CORE_RELEASES[release]
   if (expected === undefined) throw new Error('unsupported tagged Core release')
   const pluginRoot = await physicalDirectory(root)
