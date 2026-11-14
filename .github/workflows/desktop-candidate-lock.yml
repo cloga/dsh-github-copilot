@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Verify project age policy
+        shell: bash
+        run: test "$(pnpm config get minimumReleaseAge)" = 0
       - name: Resolve exact unchanged official dependencies
         run: pnpm install --lockfile-only --ignore-scripts --strict-peer-dependencies --registry=https://registry.npmjs.org
       - uses: actions/upload-artifact@v4

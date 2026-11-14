@@ -41,6 +41,9 @@ jobs:
   release:
     needs: [plan]
     if: ${{ needs.plan.outputs.release == 'true' }}
+    # The pinned source fixture is a separate workspace.
+    env:
+      PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'
     permissions:
       contents: write
       id-token: write
@@ -69,6 +72,11 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Verify the project and source-fixture age policy
+        shell: bash
+        run: |
+          test "$(pnpm config get minimumReleaseAge)" = 0
+          test "$(cd dsh-upstream && pnpm config get minimumReleaseAge)" = 0
       - run: pnpm install --frozen-lockfile
       - name: Install rc.3 Core pi-ai closure
         working-directory: dsh-upstream

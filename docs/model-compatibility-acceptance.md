@@ -60,6 +60,9 @@ endpoint, supplier behavior, publication, installation, or Desktop activation.
    version used by this candidate (`1.3.0` in `package.json`). Do not assume a
    model catalog entry overrides authenticated account endpoint/capability
    evidence.
+8. **Copilot account quota.** Preserve account quota and its presentation,
+   distinct from DSH's native token Usage. Retain the existing account and
+   consent boundaries without inferring quota from token estimates.
 
 ## Regression evidence
 
@@ -80,12 +83,12 @@ endpoint, supplier behavior, publication, installation, or Desktop activation.
 ## Out of scope
 
 HydraFusion/Max, plugin-owned Auto and parent-follow policy, hosted-search
-routing, a second agent loop, and broad recovery/analytics products are not part
-of this model-integration target. DSH retains those native responsibilities.
-Compatibility code may remain only where needed to preserve existing settings
-or histories safely; it must not reactivate retired product UI or mutate user
-data. No DeepSeek credential reader, login check, or forced account gate is
-added.
+routing, and a second agent loop are not part of this model-integration target.
+DSH retains its native responsibilities. Keep useful existing enhancements;
+review recovery and analytics individually and remove only functionality shown
+to be redundant or unnecessary. Preserve existing settings, histories and
+consent without reactivating retired UI or mutating user data. No DeepSeek
+credential reader, login check, or forced account gate is added.
 
 ## Delivery and upgrade
 
