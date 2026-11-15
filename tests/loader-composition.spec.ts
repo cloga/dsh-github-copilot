@@ -135,7 +135,9 @@ describe('loader composition', () => {
       requestDiagnosticsEnabled: true,
       nativeDiagnosticsEnabled: true,
     }
-    Object.assign(harness.settingsDocument['github-copilot'], legacy)
+    Object.assign(harness.settingsDocument['github-copilot'], legacy, {
+      continuationDefaultHistory: [{ enabled: true, changedAt: 1 }],
+    })
     const open = vi.fn(async () => { throw new Error('unexpected diagnostics storage access') })
     ctx.provide('profileContext', { name: 'synthetic' })
     ctx.provide('storageDomain', { open })
