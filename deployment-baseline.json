@@ -770,6 +770,7 @@
         {"file": "tests/model-preferences-card.spec.ts", "name": "previews a native model sync and applies it only after the explicit confirmation action"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "does not dispatch duplicate preview or apply actions before React renders the busy state"},
         {"file": "tests/remote-codec.spec.ts", "name": "accepts named native-sync safety diagnostics without accepting extra fields"},
+        {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds native model sync through actual Client and %s Host gateways"},
         {"file": "tests/fixtures/native-model-sync-core.fixture.ts", "name": "syncs a confirmed snapshot through real native Settings and model resolution across restart using synthetic catalog proof"}
       ]
     },
