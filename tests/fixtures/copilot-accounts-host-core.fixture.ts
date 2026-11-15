@@ -41,7 +41,8 @@ function fixture(activeAccountId: unknown = undefined) {
     readRecord: vi.fn(async (key: string) => records.get(key)),
     modifyRecord: vi.fn(async (key: string, mutate: (current: unknown) => Promise<unknown>) => {
       const next = await mutate(records.get(key))
-      if (next !== undefined) records.set(key, next as ReturnType<typeof grant>)
+      if (next === undefined) records.delete(key)
+      else records.set(key, next as ReturnType<typeof grant>)
       return records.get(key)
     }),
     deleteRecord: vi.fn(async (key: string) => { records.delete(key) }),
@@ -333,7 +334,10 @@ describe('independent Copilot account ownership', () => {
   it('blocks admission and switching until active sign-out settles', async () => {
     const f = fixture(A)
     let finish!: () => void
-    f.credentials.deleteRecord.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
+    f.credentials.deleteRecord.mockImplementationOnce(async recordKey => {
+      await new Promise<void>(resolve => { finish = resolve })
+      f.records.delete(recordKey)
+    })
     const signingOut = f.host.signOutActive()
     await vi.waitFor(() => expect(finish).toBeDefined())
     expect(() => f.host.acquire()).toThrow('COPILOT_ACCOUNTS_BUSY')
@@ -379,7 +383,7 @@ describe('independent Copilot account ownership', () => {
     let running = true, native = false, managed = true, complete = true
     f.settings.describe = () => [
       { ns: 'github-copilot', revision: 1, value: { activeAccountId: A } },
-      { ns: 'llm-pi-ai', revision: 1, value: { providers: {} } },
+      { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': {} } } },
     ]
     f.ctx.provide('agents', { list: () => [{ id: 'synthetic-agent', status: running ? 'running' : 'idle',
       session: { id: 'synthetic-agent', requestHeader: () => ({
@@ -398,7 +402,7 @@ describe('independent Copilot account ownership', () => {
     native = true
     expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
     managed = false
-    expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED', switchable: false })
+    expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
     f.credentials.readRecord.mockClear()
     managed = true; complete = false
     expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE', switchable: false })
@@ -511,19 +515,22 @@ describe('independent Copilot account ownership', () => {
   it('rechecks externally started canonical authorization before selector CAS', async () => {
     const f = fixture()
     const native = new AuthorizationService(f.ctx)
-    native.registerFlow({ key: credentialKey('llm-pi-ai', 'github-copilot'), label: 'Synthetic',
+    const nativeKey = credentialKey('llm-pi-ai', 'github-copilot')
+    native.registerFlow({ key: nativeKey, label: 'Synthetic',
       methods: [{ id: 'oauth', label: 'Synthetic' }],
       run: session => new Promise((_resolve, reject) => session.signal.addEventListener('abort', () => reject(session.signal.reason))) })
+    await vi.waitFor(() => expect(native.describe(nativeKey)).toBeDefined())
     let finish!: () => void
     f.validateModels.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
     const switching = f.host.switchAccount(B, 1)
     await vi.waitFor(() => expect(finish).toBeDefined())
-    const authorizing = native.begin({ key: credentialKey('llm-pi-ai', 'github-copilot'), method: 'oauth',
+    const authorizing = native.begin({ key: nativeKey, method: 'oauth',
       interaction: { notify() {}, prompt: async () => '' } }).catch(() => undefined)
+    await vi.waitFor(() => expect(native.describe(nativeKey)?.inFlight).toBe(true))
     finish()
     expect(await switching).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_BUSY', activeAccountId: 'canonical' })
     expect(f.settings.mutate).not.toHaveBeenCalled()
-    native.cancel(credentialKey('llm-pi-ai', 'github-copilot'))
+    native.cancel(nativeKey)
     await authorizing
     f.host.dispose()
   })

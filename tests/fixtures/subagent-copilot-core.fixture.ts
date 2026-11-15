@@ -56,6 +56,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
   const wire: Array<{ model: string; reasoning?: { effort?: string } }> = []
   const authorizations: Array<string | null> = []
   const signals: Array<AbortSignal | null | undefined> = []
+  const signalsActiveAtDispatch: boolean[] = []
   const completed: SubagentRunEndInfo[] = []
   const failures: Array<{ code: string; message: string }> = []
   const turnEnds: unknown[] = []
@@ -87,6 +88,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     wire.push(body)
     authorizations.push(new Headers(init?.headers).get('authorization'))
     signals.push(init?.signal)
+    signalsActiveAtDispatch.push(Boolean(init?.signal && !init.signal.aborted))
     await release.promise
     return response(body.model)
   })
@@ -242,7 +244,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     await vi.waitFor(() => expect(wire).toHaveLength(3), { timeout: 15_000 })
     expect(wire[2]).toMatchObject({ model: MODELS[0], reasoning: { effort: 'high' } })
     expect(authorizations).toEqual(['Bearer synthetic-access', 'Bearer synthetic-access', 'Bearer synthetic-access-second'])
-    expect(signals.every(signal => signal && !signal.aborted)).toBe(true)
+    expect(signalsActiveAtDispatch).toEqual([true, true, true])
     const laterChildren = ctx.agents.list().filter(agent => agent.session.header.parentSession === parent.session.id)
     expect(laterChildren).toHaveLength(3)
     expect(laterChildren.map(child => accounts.turns.current(child.session)?.accountId).sort())

@@ -190,10 +190,16 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
   })
   if (scope === 'bound-account') {
     ctx.provide('settings', {
+      configure: () => () => {},
       describe: () => [{ ns: 'github-copilot', revision: 1, value: {
         activeAccountId: 'canonical', sessionAccounts: [{ sessionId: `auto-review-${outcome}`, accountId: second }],
-      } }, { ns: 'llm-pi-ai', revision: 1, value: { providers: {} } }],
+      } }, { ns: 'llm-pi-ai', revision: 1, value: { providers: { 'github-copilot': {} } } }],
       mutate: async () => { throw new Error('reviewer qualification must not write settings') },
+    })
+    ctx.llm.registerAdapter(['github-copilot'], new class extends LlmAdapter {
+      async *stream(): AsyncGenerator<StreamChunk> {
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
     })
     const host = new CopilotAccountsHost(ctx)
     ctx.provide('githubCopilotAccounts', { host })
