@@ -30,9 +30,11 @@ endpoint, supplier behavior, publication, installation, or Desktop activation.
 
 1. **Account-driven discovery.** Read bounded model metadata from the authorized
    Copilot account. New model IDs with supported endpoint and capability
-   metadata must work without name-prefix branches or a static model list.
-   Missing, conflicting, or unsupported metadata must produce a specific
-   diagnostic rather than guessed capabilities.
+   metadata must work without name-prefix branches or a static model list when
+   the native provider can represent them. Updating its model list requires an
+   explicitly confirmed sync to an existing profile; discovery alone does not
+   register a provider or modify that list. Missing, conflicting, or unsupported
+   metadata must produce a specific diagnostic rather than guessed capabilities.
 2. **Native model use.** A discovered model must resolve through the published
    adapter and preserve native request ownership, errors, cancellation, and
    tool-result relationships. Sign-in or a picker entry alone is not proof of
@@ -82,7 +84,9 @@ endpoint, supplier behavior, publication, installation, or Desktop activation.
   text, tool calls/results, Thinking, images where supported, and interruption.
 - Exercise native subagent selection and actual child model calls against the
   exact tagged Core and published package graph, including parallel children,
-  supported Thinking, and account-bound routing.
+  supported Thinking, and account-bound routing. The two-account child fixture
+  explicitly configures synthetic native models; the separate native-sync fixture
+  verifies Settings persistence and resolution, not live supplier availability.
 - Run source/test typechecks, the full Windows/Linux test/build/package matrix,
   tagged-source and published-artifact fixtures, and exact archive verification.
   Do not weaken or skip required CI to make an unsupported candidate pass.

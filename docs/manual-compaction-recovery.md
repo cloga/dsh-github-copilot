@@ -45,14 +45,15 @@ Status and cancellation apply only to the invoking Agent's latest job. Duplicate
 
 For a verified `COPILOT_RESPONSES_REPLAY_SCOPE_MISMATCH`, repeating the same summary cannot repair supplier-scoped encrypted replay. The existing **Visible-history continuation** Session policy now authorizes managed Responses summaries as well as chat: ordinary `/compact`, `/copilot-compact` and automatic compaction apply it before dispatch, without a failure-first retry or extra command. The active turn retains its captured persistent policy; idle summaries capture the Session policy. Disabled/unknown policy never silently enables loss, and legacy next-turn-only consent does not authorize summaries. Stock and selected recovery engines remain independently owned. An additive composer notice reports filtering and distinguishes native commit, failure and cancellation; exact scope rejection when off offers the same persistent enable control. This is not a capacity/timeout/quota cure or permission to enable an absent engine.
 
-For an existing open Session on the managed account-discovered Copilot route,
-the persistent control is in the composer **Credits/usage** popover: expand
-**Visible-history continuation**, review the loss disclosure, then choose
-**On** under **Session policy**. The control is not shown for the
-canonical/native route. Enabling applies to subsequent turns and summaries in
-that Session even when the account does not change; an already admitted turn
-keeps its captured policy. The **New Session continuation default** in Models
-is separate and only determines inheritance for eligible new Sessions. See
+In earlier releases, an open Session on the managed account-discovered Copilot
+route had a persistent control in the composer **Credits/usage** popover:
+**Visible-history continuation** offered **On** under **Session policy**
+after the loss disclosure. The control was not shown for the canonical/native
+route. It applied to subsequent turns and summaries, while an admitted turn kept
+its captured policy. The separate **New Session continuation default** in Models
+determined inheritance for eligible new Sessions. Neither control is available
+for native calls, and the default is no longer shown now that production does not
+register the managed route. See
 [the synthetic composer capture](./images/copilot-session-continuation.png) and
 [Session continuation](./session-continuation.md) for the complete admission,
 scope and persistence contract.

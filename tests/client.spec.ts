@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID } from '../src/copilot-identity.ts'
 import type { GitHubCopilotAuthorizationView } from '../src/authorization-controller.ts'
 import { CopilotAccountsPanel } from '../src/copilot-accounts-card.ts'
-import { ContinuationDefaultCard } from '../src/session-continuation-ui.ts'
 
 // Element/lifecycle evidence, not a browser or live Remote integration. Keep the
 // actual React element implementation and control only hooks exercised below.
@@ -50,29 +49,24 @@ describe('GitHub Copilot Models client', () => {
     await Promise.resolve()
     const account = surfaces.getSnapshot()!.account
     const accountsRemote = {} as never
-    const continuationRemote = { get: vi.fn(), set: vi.fn(), defaults: vi.fn(), setDefault: vi.fn() }
     vi.mocked(React.useMemo).mockImplementation(factory => factory())
     vi.mocked(React.useSyncExternalStore).mockImplementation((_subscribe, snapshot) => snapshot())
     vi.mocked(React.useEffect).mockImplementation(() => undefined)
     vi.mocked(React.useId).mockReturnValue('layout-management')
     vi.mocked(React.useState).mockReturnValue([false, vi.fn()])
-    const closed = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
+    const closed = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, locale: 'zh-CN' }))
     expect(closed.filter(element => element.type === 'button').map(element => element.props.children)).toEqual(['Manage'])
     expect(closed.some(element => element.props.children === 'Account catalog: 0 models')).toBe(true)
     expect(closed.filter(element => element.type === CopilotAccountsPanel)).toHaveLength(1)
     vi.mocked(React.useState).mockReturnValue([true, vi.fn()])
-    const open = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, continuationRemote, locale: 'zh-CN' }))
+    const open = descendants(GitHubCopilotCompactAccount({ remote: remote as never, accountsRemote, account, locale: 'zh-CN' }))
     const manageIndex = open.findIndex(element => element.type === 'button' && element.props.children === 'Manage')
     const accountIndex = open.findIndex(element => element.type === CopilotAccountsPanel)
     expect(accountIndex).toBeGreaterThan(manageIndex)
     const region = open.find(element => element.props.id === 'github-copilot-management-layout-management')!
     expect(descendants(region).some(element => element.type === CopilotAccountsPanel)).toBe(true)
     expect(descendants(region).some(element => element.props['data-dsh-github-copilot-model-management'])).toBe(true)
-    const settings = open[accountIndex]!.props.continuationSettings
-    expect(settings.type).toBe(ContinuationDefaultCard)
-    expect(settings.props).toMatchObject({ remote: continuationRemote, locale: 'zh-CN' })
-    expect(continuationRemote.defaults).not.toHaveBeenCalled()
-    expect(continuationRemote.setDefault).not.toHaveBeenCalled()
+    expect(open[accountIndex]!.props.continuationSettings).toBeUndefined()
   })
 
   it('pairs native dropdown colors and preserves focus, disabled and error visibility in both schemes', async () => {
@@ -1063,8 +1057,8 @@ describe('GitHub Copilot Models client', () => {
     expect(text).toContain('UNSUPPORTED_ENDPOINT')
     expect(text).toContain('COPILOT_MODEL_METADATA_REJECTED')
     expect(text).not.toContain('secret=value')
-    expect(text).toContain(GITHUB_COPILOT_PREVIEW_PROVIDER_ID)
-    expect(text).toContain('native github-copilot route uses a separate catalog')
+    expect(text).toContain('explicit, reviewable sync to the native github-copilot model list')
+    expect(text).not.toContain('github-copilot-preview')
     expect(text).toContain('does not prove')
     expect(text).not.toContain('hosted search')
     expect(text).not.toContain('Snapshot time')
@@ -1506,9 +1500,7 @@ describe('GitHub Copilot Models client', () => {
     expect(warning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
     expect(warning.props.children).toContain('canonical account')
     expect(warning.props.children).toContain('account panel')
-    expect(warning.props.children).toContain('separately selected plugin account')
-    expect(warning.props.children).toContain('GitHub Copilot (multi-account)')
-    expect(warning.props.children).toContain('Both routes can coexist')
+    expect(warning.props.children).toContain('does not add a second model provider')
     expect(warning.type).toBe('p')
     expect(render({ ...draft, provider: { ...draft.provider, provider: 'openai' } }).props['data-dsh-github-copilot-native-add-warning']).toBeUndefined()
     expect(render({ ...draft, configured: true }).type).toBe(GitHubCopilotAccountSurface)
@@ -1571,8 +1563,7 @@ describe('GitHub Copilot Models client', () => {
       for (let i = 0; i < 5; i++) {
         const next = render(props)
         expect(next.props.remote).toBe(first.props.remote)
-        expect(next.props.continuationRemote).toBe(first.props.continuationRemote)
-        expect(next.props.continuationContext).toBe(first.props.continuationContext)
+        expect(next.props).not.toHaveProperty('continuationContext')
         expect(next.props.seat).toBe(first.props.seat)
         surfaces.mount(next.props.seat, token, next.props.remote)
         expect(surfaces.getSnapshot()!.account).toBe(account)

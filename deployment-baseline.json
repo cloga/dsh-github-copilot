@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.17.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.18.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.17.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.18.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -647,18 +647,19 @@
     {
       "id": "native-subagent-copilot-invocation",
       "required": true,
-      "evidenceScope": "synthetic-two-account-tagged-source-production-host-child-invocation-with-default-switch-not-live-or-explicit-child-account-policy",
+      "evidenceScope": "synthetic-two-account-tagged-source-native-provider-child-invocation-with-default-switch-and-explicit-model-configuration-not-live-or-session-account-policy",
       "sourceMarkers": [
         {"file": "scripts/verify-tagged-core.mjs", "marker": "tests/fixtures/subagent-copilot-core.fixture.ts"},
         {"file": ".github/workflows/ci.yml", "marker": "['subagent-copilot-core.fixture.ts',1],['native-subagent-copilot-core.fixture.ts',3]"},
         {"file": ".github/workflows/ci.yml", "marker": "s.assertionResults.some(t=>t.status!=='passed')"},
         {"file": "tests/fixtures/native-subagent-copilot-core.fixture.ts", "marker": "it.each(['absent', 'enabled', 'disposed'] as const)"},
         {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "await ctx.plugin(GitHubCopilotPlugin,"},
-        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "accounts.turns.current(child.session)"},
+        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "marker": "COPILOT_ACCOUNTS_BUSY"},
         {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"}
       ],
       "tests": [
-        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "name": "routes concurrently authorized native children to their selected Copilot models and efforts"},
+        {"file": "tests/fixtures/subagent-copilot-core.fixture.ts", "name": "routes native Copilot children across a confirmed account switch"},
+        {"file": "tests/fixtures/native-subagent-copilot-core.fixture.ts", "name": "selects and concurrently dispatches native Copilot subagents with the plugin %s"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "freezes a running turn while allowing later Session/default choices independently"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "rejects stale CAS and missing accounts instead of persisting a fallback"}
       ]
@@ -1449,17 +1450,19 @@
       ]
     },
     {
-      "id": "single-managed-route-native-oauth",
+      "id": "native-route-account-metadata",
       "required": true,
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "current !== undefined && providerSupportsStrictMode(current) !== false"},
-        {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot (multi-account)'"},
+        {"file": "src/index.ts", "marker": "registerLegacyProvider: false"},
+        {"file": "src/preview-route.ts", "marker": "registerLegacyProvider = false"},
         {"file": "src/client.ts", "marker": "GitHubCopilotAccountSurface"}
       ],
       "tests": [
-        {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow while exposing only the account-driven provider"},
-        {"file": "tests/single-route.spec.ts", "name": "discovers new IDs and reasoning metadata without a canonical model profile"},
-        {"file": "tests/single-route.spec.ts", "name": "honors explicit legacy-profile removal from settings without deleting OAuth"},
+        {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow without registering a second model provider"},
+        {"file": "tests/single-route.spec.ts", "name": "discovers account model metadata without registering a model provider"},
+        {"file": "tests/single-route.spec.ts", "name": "handles model preference updates without registering a legacy provider"},
+        {"file": "tests/single-route.spec.ts", "name": "does not replace a removed native profile with the retired provider"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not recreate an absent canonical profile during status or explicit reconciliation"},
         {"file": "tests/authorization-controller.spec.ts", "name": "keeps absent-profile legacy journal conflicts visible instead of bypassing ownership review"}
       ]
