@@ -56,6 +56,13 @@ function isNativeRemote(value: unknown): value is {
 } {
   return record(value) && typeof value.getNative === 'function' && typeof value.refreshNative === 'function'
 }
+function isNativeIdentityRemote(value: unknown): value is {
+  ensureNativeIdentity: NonNullable<CopilotUsageRemote['ensureIdentity']>
+  refreshNativeIdentity: NonNullable<CopilotUsageRemote['refreshIdentity']>
+} {
+  return record(value) && typeof value.ensureNativeIdentity === 'function'
+    && typeof value.refreshNativeIdentity === 'function'
+}
 function isSessionRemote(value: unknown): value is SessionAccountRemote {
   return record(value) && typeof value.get === 'function' && typeof value.set === 'function'
     && typeof value.refreshIdentity === 'function' && typeof value.ensureIdentity === 'function'
@@ -170,7 +177,13 @@ export function registerCopilotUsageUi(ctx: Context): () => void {
   try {
     const namespaces: unknown = ctx.remote
     const face = record(namespaces) ? namespaces.githubCopilotUsage : undefined
-    if (isNativeRemote(face)) nativeRemote = { get: () => face.getNative(), refresh: () => face.refreshNative() }
+    if (isNativeRemote(face)) nativeRemote = {
+      get: () => face.getNative(), refresh: () => face.refreshNative(),
+      ...(isNativeIdentityRemote(face) ? {
+        ensureIdentity: () => face.ensureNativeIdentity(),
+        refreshIdentity: () => face.refreshNativeIdentity(),
+      } : {}),
+    }
     else diagnostic('COPILOT_USAGE_NATIVE_REMOTE_UNAVAILABLE')
   } catch { diagnostic('COPILOT_USAGE_REMOTE_UNAVAILABLE') }
   const listeners = new Set<() => void>()

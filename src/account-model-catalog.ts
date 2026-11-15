@@ -44,6 +44,8 @@ export interface AccountModelDescriptor {
     readonly apiSource: 'advertised-native' | 'advertised-priority'
     readonly policySource: 'server-enabled' | 'account-available-id'
     readonly contextWindowSource: 'max_context_window_tokens' | 'max_prompt_tokens'
+    readonly visionSupportKnown?: true
+    readonly reasoningEffortsKnown?: true
     readonly visionMediaTypes?: readonly string[]
     readonly categoryDiagnostic?: 'missing' | 'unknown' | 'invalid'
   }
@@ -241,6 +243,8 @@ function normalizeModel(raw: object, id: string, options: AccountModelCatalogOpt
       apiSource: native === undefined ? 'advertised-priority' as const : 'advertised-native' as const,
       policySource,
       contextWindowSource: maxContext === undefined ? 'max_prompt_tokens' as const : 'max_context_window_tokens' as const,
+      ...vision === undefined ? {} : { visionSupportKnown: true as const },
+      ...rawEfforts === undefined ? {} : { reasoningEffortsKnown: true as const },
       ...visionMediaTypes === undefined ? {} : { visionMediaTypes },
       ...categoryDiagnostic === undefined ? {} : { categoryDiagnostic },
     }),

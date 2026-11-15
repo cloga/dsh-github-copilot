@@ -67,15 +67,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.8.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.8.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -90,13 +90,40 @@ No manually defined Copilot model, pasted token, external gateway, or
 successful sign-in does not guarantee every model or capability is available.
 The plugin's account-discovered models and capabilities apply to the
 `github-copilot-preview` route. DSH's native `github-copilot` route uses its
-own bundled or configured catalog; the two routes do not share model discovery.
+own bundled or configured catalog; the two routes do not automatically share
+model discovery.
+
+To copy enabled models from the current canonical account into an existing
+native provider, use **Manage → Model preferences → Preview enabled models**,
+review the additions, updates, removals, skipped models and per-request output
+defaults, then choose **Apply sync**. This one-time snapshot replaces only
+`llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
+The nonempty saved list replaces the native built-in catalog and remains after
+the plugin is unloaded or uninstalled. Copying model settings does not transfer
+the managed route's image admission checks or tool-schema filtering to native
+requests, nor prove that supplier calls will succeed.
+Models with unproven or incompatible native catalog protocols, unknown or
+narrower server input caps, unknown context or vision support, or unknown or
+unsupported reasoning controls are skipped rather than guessed.
+New Completions and Anthropic models without a native catalog compatibility
+baseline are also skipped; catalog-backed models retain native compatibility.
+Image models are included only when the account explicitly supports all four
+native request formats: PNG, JPEG, WebP, and GIF. Custom native authentication,
+endpoints, headers, nonempty model overrides, or route compatibility overrides
+block sync rather than changing those settings. An existing native default
+reasoning effort must also be supported by each synced model. Core uses each
+configured `maxTokens` as that model's per-request output default. The sync does
+not change credentials, select a model, alter history, or automatically follow
+later account changes.
 
 When adding DSH's native GitHub Copilot provider, use the separate plugin account
 panel to sign in. With no named key, the native route uses a stored canonical
-OAuth grant, not an independently selected additional account. While the
-managed route remains registered, saving the native provider can block
-additional-account requests and switching. The native picker is not guaranteed
+OAuth grant, not an independently selected additional account. Native and
+managed routes can coexist: use **Manage → Account management → Switch**, then
+choose a model under **GitHub Copilot (multi-account)** in the native picker.
+Switching changes only the managed default; managed **Credits** can select an
+account for that Session's subsequent turns. Native login, selected models and
+running turns are not redirected. The native picker is not guaranteed
 to filter its bundled catalog by account entitlement.
 Starting the plugin or completing sign-in does not automatically repair the
 native provider's settings.
@@ -110,13 +137,31 @@ Custom endpoint, credential or transport overrides and unproven models remain
 unavailable. There is no model retry, backend replacement or plugin routing UI.
 The native Auto reviewer's qualified Copilot Responses requests omit
 `temperature`; ordinary Chat and native allow/deny/error/cancel behavior remain
-unchanged. See [reviewer compatibility](./docs/auto-review-sampling.md).
-The native route's quota display uses only the canonical OAuth account. If the
+unchanged. Qualification uses the native adapter's pi-ai catalog even when
+the plugin resolves a separate copy; missing protocol facts remain unavailable.
+See [reviewer compatibility](./docs/auto-review-sampling.md).
+The native route's quota and optional identity display use only the canonical OAuth account. If the
 provider names a credential, endpoint or nonempty headers override, or its configuration
 cannot be verified, quota is shown as unavailable rather than attributed to a
 different account. This is not proof of request-level billing attribution.
 Native context-incident diagnostics remain available without the optional
 managed continuation service; they do not replace DSH's context meter.
+
+### Removing the enhancement
+
+Unloading the plugin removes its own routes, UI and listeners, not native
+Copilot credentials, configuration, model selections or history. Independently
+configured native **GitHub Copilot** remains usable with its original account.
+Removing the plugin is not signing out; explicit sign-out or removal of the
+original authorization is a different action and can affect native login.
+
+Plugin-dependent selections do not become native automatically. Before removal,
+explicitly select native models for Sessions/defaults using
+`github-copilot-preview`. If Web is set to `github-copilot-hosted`, select another
+available backend in native Web settings first. Removing the plugin does not
+rewrite Web settings: a retained missing backend produces
+`WEB_PROVIDER_CONFIGURED_MISSING`, not an automatic fallback. Additional-account
+switching and plugin-specific search require the plugin.
 
 Desktop's native package manager and its bundled CLI have different contracts
 from a standalone profile. Review the [Desktop CLI evidence](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)

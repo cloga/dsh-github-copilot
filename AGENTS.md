@@ -27,6 +27,15 @@ This repository follows a **plugin-only** policy: implement fixes in `dsh-github
 
 Use native DSH tools for goals, background jobs and scoped subagents. Use local Git and the GitHub REST API for delivery; no external orchestration daemon, roster or `vcs_*` tool is required. Do not assume a model provider's identity is the assisting agent.
 
+## Session isolation and temporary artifacts (#442)
+
+- Prefer one app-managed worktree per independent repository session when supported and authorized. A branch-backed session, folder session or shared checkout is not necessarily isolated. Verify the actual workspace and branch; preserve the user's chosen workspace. Creating or checking out another worktree still requires separate approval.
+- Store temporary evidence, downloads, scratch files and backups in the session-owned artifact area outside the repository checkout. Keep only intentional deliverables in the repository. Clean up only explicitly identified temporary files created by the current task; never hide, move, delete or stage pre-existing files merely to make a gate pass.
+- Inspect the explicit staged and committed diff before delivery. Unrelated untracked files are not by themselves a Git conflict or proof of a GitHub permission failure. Respect each delivery tool's own instructions and allowed fallback paths; repository guidance cannot override those requirements or branch protection.
+- Continue routine investigation and authorized delivery without repeated approval prompts. For a genuine decision, safety boundary or tool-policy blocker, ask or report it once with the exact consequence; do not loop while the user is unavailable. Preserve existing approval boundaries for profile installation, sign-out, disruptive restart and worktree checkout.
+
+These are agent instructions and contract-drift checks, not a filesystem sandbox or a guarantee that every session uses a worktree.
+
 ## Product and architecture
 
 ### Confirmed product scope (#455, #456)
@@ -39,6 +48,17 @@ Search permits one fixed capability proof and one final query within 25 seconds,
 with four concurrent operations and configuration/credential/disposal fences.
 The former plugin routing UI and managed Auto remain retired. Supplier calls,
 live installation and restarts are separate from synthetic CI acceptance.
+
+The user-authorized native model sync (#466) is a narrow exception to the
+no-settings-rewrite rule: after an explicit preview and confirmation, one
+revision-checked write may replace only
+`llm-pi-ai.providers.github-copilot.models` in an existing canonical profile.
+Prove current canonical-account metadata and the native adapter-owned catalog;
+skip unrepresentable or uncertain model capabilities. Disclose additions,
+updates, removals, skipped models and configured output request defaults.
+Recheck account/catalog/preferences and Settings evidence before the one-shot
+write, then read back both user and effective values. Never create a profile,
+change other paths or perform this sync automatically.
 
 The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
 requirements below: this plugin is a lightweight GitHub Copilot model integration
@@ -103,7 +123,7 @@ which runtime registrations, UI, and settings remain active:
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution with one shared account-state owner, Client-safe Remote descriptors and a nested plugin-owned model-preferences disclosure; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
 3. Strict JSON normalization of pi-ai's provider-owned Copilot OAuth grant.
-4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. Fresh installations use the single account-discovered route; existing profiles require explicit migration, never silent removal.
+4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. The confirmed #466 models-only sync is the narrow explicit exception above; never create or remove a native profile automatically.
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
 6. Provider-scoped tool-schema compatibility for Copilot payload behaviors; Core remains the tool and execution owner.
 7. A bounded account-discovery route that supplies validated endpoint/capability metadata to the published native adapter, including explicit managed Responses sampling compatibility, plus exact plugin-owned model exclusions enforced across its directory, Auto pools and direct admission, without maintaining model-ID routing rules or changing Core's catalog.
@@ -158,6 +178,17 @@ codes, never raw errors. Installation alone neither selects nor invokes recovery
 See `src/compaction-replay.ts` and `docs/manual-compaction-recovery.md` (#349).
 
 ## Approved multi-account ownership extension (#297)
+
+The explicit #470 enhancement permits managed-account switching alongside
+independently configured native Copilot. Keep native UI and label the managed
+route `GitHub Copilot (multi-account)`; do not mirror grants, intercept native
+credentials, redirect native requests or change native selections. Missing
+managed registration and incomplete evidence remain blockers. Reuse native
+canonical quota/search isolation; do not revive retired Auto or routing UI.
+Disposal removes only plugin registrations. Plugin-model selections and explicit
+`web.searchProvider=github-copilot-hosted` need user-selected replacements before
+uninstall; missing configured Web backends return `WEB_PROVIDER_CONFIGURED_MISSING`,
+not automatic fallback. No automatic Settings/history migration or sign-out.
 
 Login environments (#424) use only pinned native pi-ai OAuth for GitHub.com and
 validated single-label `tenant.ghe.com` Enterprise Cloud hosts. Preserve host

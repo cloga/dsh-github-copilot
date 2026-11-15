@@ -325,7 +325,8 @@ describe('GitHub Copilot Models client', () => {
   function modelRemote(discoverModels: ReturnType<typeof vi.fn> = vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] }))) {
     return { discoverModels, ensureModels: vi.fn(async () => accountResult({ state: 'ready', models: [], rejected: [] })),
       status: vi.fn(), reconcile: vi.fn(), start: vi.fn(), cancel: vi.fn(), signOut: vi.fn(),
-      excludeModel: vi.fn(), restoreModel: vi.fn(), setModelExcluded: vi.fn(), setModelHighCost: vi.fn() }
+      excludeModel: vi.fn(), restoreModel: vi.fn(), setModelExcluded: vi.fn(), setModelHighCost: vi.fn(),
+      previewNativeModelSync: vi.fn(), applyNativeModelSync: vi.fn() }
   }
   // Tiny deterministic hook host: component state/ref identity and effect cleanup,
   // without mounting a browser or invoking any real Remote implementation.
@@ -1506,7 +1507,8 @@ describe('GitHub Copilot Models client', () => {
     expect(warning.props.children).toContain('canonical account')
     expect(warning.props.children).toContain('account panel')
     expect(warning.props.children).toContain('separately selected plugin account')
-    expect(warning.props.children).toContain('block additional-account requests and switching')
+    expect(warning.props.children).toContain('GitHub Copilot (multi-account)')
+    expect(warning.props.children).toContain('Both routes can coexist')
     expect(warning.type).toBe('p')
     expect(render({ ...draft, provider: { ...draft.provider, provider: 'openai' } }).props['data-dsh-github-copilot-native-add-warning']).toBeUndefined()
     expect(render({ ...draft, configured: true }).type).toBe(GitHubCopilotAccountSurface)

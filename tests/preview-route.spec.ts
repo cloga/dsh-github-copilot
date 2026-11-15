@@ -494,6 +494,22 @@ describe('account-local managed runtimes', () => {
     for await (const chunk of prepared.stream({ provider: PREVIEW, model: prepared.model.id, messages: [], signal })) chunks.push(chunk)
     expect(chunks.some(chunk => chunk.type === 'finish' && chunk.reason.kind === 'stop')).toBe(true)
   }
+  it('binds native sync discovery and proof to the global account, not the initiating Session', async () => {
+    scopedFetch()
+    const harness = await scopedRuntime()
+    harness.within(second)
+
+    const view = await harness.ctx.githubCopilotPreview.discoverNativeModelSync()
+    const snapshot = harness.ctx.githubCopilotPreview.nativeModelSyncSnapshot()
+    expect(view.models.map(model => model.id)).toEqual(['account-a-model'])
+    expect(snapshot?.models.map(model => model.id)).toEqual(['account-a-model'])
+    expect(snapshot?.isCurrent()).toBe(true)
+
+    harness.rotate(second)
+    expect(snapshot?.isCurrent()).toBe(true)
+    harness.rotate('canonical')
+    expect(snapshot?.isCurrent()).toBe(false)
+  })
   it('projects images through the proven initiating account rather than the empty registry profile', async () => {
     const requests = scopedFetch()
     const harness = await scopedRuntime({ requestImagePixelBudget: 4_194_304, requestImageMaxBytes: 1_048_576 })

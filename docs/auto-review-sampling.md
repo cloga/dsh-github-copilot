@@ -4,10 +4,13 @@
 
 The same reviewer-only policy also covers `github-copilot` when the public
 Loader root, native adapter package callback, configurable-provider directory,
-settings revision and exact shared pi-ai 1.3.0 catalog prove a native Responses
-route. It requires `purpose: 'auto-review'` and excludes loop-owned requests.
-Custom credential, endpoint and compatibility overrides remain native; unknown
-models are diagnosed, never assigned a guessed protocol.
+settings revision and the adapter-owned public pi-ai 1.3.0 catalog prove a
+native Responses route. The adapter and plugin may resolve separate pi-ai copies;
+protocol facts come from the adapter's copy, not an assumed equivalent plugin
+catalog. Missing exports or incomplete metadata leave the enhancement
+unavailable with a diagnostic. It requires `purpose: 'auto-review'` and excludes
+loop-owned requests. Custom credential, endpoint and compatibility overrides
+remain native; unknown models are diagnosed, never assigned a guessed protocol.
 
 The auxiliary request is cloned without temperature and prepared through public
 `llm.prepareCall`. Identity and configuration are checked again after awaits,

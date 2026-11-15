@@ -55,15 +55,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.8.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.4.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.4.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.8.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -75,12 +75,28 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 无需手工定义 Copilot 模型、粘贴 token、使用外部网关或安装
 `copilot2api`。账号登录成功不代表所有模型及其能力都可用。
 插件自动发现的账号模型及能力适用于 `github-copilot-preview` 路线；DSH 原生
-`github-copilot` 路线使用自己的内置或用户配置目录，两条路线不共享模型发现结果。
+`github-copilot` 路线使用自己的内置或用户配置目录，两条路线不会自动共享模型发现结果。
+
+如需将当前 canonical 账号的已启用模型复制到已配置的原生 provider，请选择
+**Manage → Model preferences → Preview enabled models**，检查新增、更新、移除、
+跳过项和每次请求的输出默认值，然后选择 **Apply sync**。此显式单次快照只通过
+Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。原生 profile
+中保存的非空列表会替代原生内置目录，卸载或停用插件后仍然保留。复制模型设置不会将
+托管路线的图像准入检查或工具 schema 过滤迁移到原生请求，也不能证明供应商调用成功。
+无法证明或与原生目录不兼容的协议、未知或更窄的服务端输入上限、未知上下文或图像支持，
+以及未知或不支持的推理控制会被跳过，不会猜测。缺少原生目录兼容性基线的新 Completions 和
+Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只有账号明确支持 PNG、JPEG、WebP、GIF 四种原生请求图像格式时，
+才会同步图像模型。原生 provider 存在自定义认证、端点、请求头、非空模型覆盖或路线兼容性覆盖时，
+同步会停止，不会修改这些设置；已有的原生默认推理级别也必须受模型支持。Core 会将配置的
+`maxTokens` 同时作为模型的单次请求输出默认值。同步不修改凭据、选择或历史，也不会自动
+跟随后续账号变化。
 
 添加 DSH 原生 GitHub Copilot provider 时，可使用独立的插件账号面板登录。
 没有指定密钥时，原生路线使用已保存的 canonical OAuth 凭据，而不是另行选择的
-附加账号。在托管路线仍然注册的期间，保存原生 provider 可能阻止附加账号的请求
-和切换。原生选择器不保证按账号权限过滤内置模型目录。
+附加账号。原生与托管路线可以共存：在 **Manage → 账号管理 → 切换** 中选择账号，
+再在原生模型选择器中选择 **GitHub Copilot (multi-account)** 下的模型。
+切换仅改变托管路线的默认账号；托管 Session 的 **Credits** 可指定后续 turn 的账号。
+不会重定向原生登录、已选模型或正在运行的 turn。原生选择器不保证按账号权限过滤内置模型目录。
 启动插件或完成登录时，不会自动修复原生 provider 设置。
 插件在 DSH 现有 Web 服务中注册可选的 `github-copilot-hosted` 搜索后端。
 请在原生 Web 设置中明确选择，并按需启用原生搜索工具；安装不会改变默认后端。
@@ -89,12 +105,25 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 自定义端点、凭据或传输覆盖，以及无法确认的模型，保持不可用。没有自动换模型重试、
 Web 服务替换或旧插件路由 UI。
 原生 Auto reviewer 经确认的 Copilot Responses 审核请求会省略 `temperature`；
-普通聊天和原生 allow/deny/error/cancel 行为不变。参见
+普通聊天和原生 allow/deny/error/cancel 行为不变。即使插件解析到另一份 pi-ai，
+资格判断也使用原生适配器的目录；无法确认协议时仍不可用。参见
 [审核兼容说明](./docs/auto-review-sampling.md)。
-原生路线的额度显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
+原生路线的额度和可选身份显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
 端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。
 原生上下文异常诊断不依赖可选的托管续接服务，也不会替代 DSH 的上下文计量。
+
+### 移除增强
+
+卸载插件只撤销插件自己的路线、界面和监听，不删除原生 Copilot 凭据、配置、模型选择或历史。
+已独立配置的原生 **GitHub Copilot** 仍使用原来的账号。卸载不是退出登录；
+显式退出或移除原始授权是另一项操作，会影响原生登录。
+
+依赖插件的选择不会自动变成原生选择。卸载前，请明确将使用 `github-copilot-preview`
+的 Session／默认模型切回原生模型。如果 Web 选中了 `github-copilot-hosted`，
+请先在原生 Web 设置中选择其他可用后端。卸载不会改写 Web 设置；
+保留已缺失的后端会返回 `WEB_PROVIDER_CONFIGURED_MISSING`，不会自动回退。
+附加账号切换和插件搜索仍然依赖插件。
 
 Desktop 原生包管理器及其内置 CLI 与独立 profile 的操作约束不同。安装前请阅读
 [Desktop CLI 证据](./docs/npm-distribution.md#desktop-bundled-cli-on-official-rc2)及

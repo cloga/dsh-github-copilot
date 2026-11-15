@@ -137,6 +137,42 @@ test('important updates carry release follow-through without a second approval p
   assert.ok(plan.commands.every(command => command.executed === false))
 })
 
+test('workspace policy preserves isolation, existing files and tool-specific delivery boundaries', async () => {
+  const description = await describeRepository()
+  assert.deepEqual(description.boundaries.workspaceIsolation, {
+    default: 'app-managed-worktree-when-authorized',
+    nonWorktree: 'inspect-and-preserve-shared-workspace',
+    temporaryArtifacts: 'session-owned-outside-checkout',
+    existingFiles: 'preserve-never-hide-or-delete-for-gates',
+    delivery: 'review-explicit-commit-and-respect-tool-policy',
+    escalation: 'once-for-genuine-blocker-or-risk',
+    enforcement: 'advisory-not-a-sandbox',
+  })
+  const root = await mkdtemp(join(tmpdir(), 'copilot-workspace-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    const guide = await readFile(join(repositoryRoot, 'AGENTS.md'), 'utf8')
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    await writeFile(join(root, 'AGENTS.md'), guide)
+    for (const mutate of [
+      contract => { delete contract.boundaries.workspaceIsolation },
+      contract => { contract.boundaries.workspaceIsolation.temporaryArtifacts = 'inside-checkout' },
+      contract => { contract.boundaries.workspaceIsolation.existingFiles = 'delete-to-pass' },
+      contract => { contract.boundaries.workspaceIsolation.delivery = 'bypass-tool-policy' },
+      contract => { contract.boundaries.workspaceIsolation.enforcement = 'filesystem-sandbox' },
+      contract => { contract.boundaries.workspaceIsolation.allowUnapprovedCheckout = true },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /workspace isolation/)
+    }
+    await writeFile(join(root, 'agent-contract.json'), JSON.stringify(original))
+    await writeFile(join(root, 'AGENTS.md'), guide.replace('## Session isolation and temporary artifacts (#442)', '## Removed'))
+    await assert.rejects(verifyAgentContract(root), /workspace isolation/)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('manual replay recovery plan retains explicit consent and rejects weakened boundaries', async () => {
   const plan = await planTask('compaction')
   assert.ok(plan.read.includes('src/compaction-replay.ts'))
@@ -273,6 +309,24 @@ test('contract validation preserves quota and rejects plugin-owned parent-child 
       mutate(contract)
       await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
       await assert.rejects(verifyAgentContract(root), /confirmed Copilot-only model integration scope/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('contract validation preserves the explicitly confirmed native model sync boundary', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-native-sync-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    for (const mutate of [
+      contract => { delete contract.tasks.models.nativeModelSyncBoundary },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = 'Automatically replace every provider.' },
+      contract => { contract.tasks.models.tests = contract.tasks.models.tests.filter(value => !value.includes('native-model-sync')) },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /native model sync/)
     }
   } finally { await rm(root, { recursive: true, force: true }) }
 })

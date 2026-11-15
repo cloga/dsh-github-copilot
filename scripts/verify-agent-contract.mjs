@@ -55,6 +55,16 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }
   require(implementation.unsupportedCapability === 'report-limitation-and-plugin-local-alternative', 'plugin-only missing capabilities must not trigger Core patches')
   require(implementation.scopeException === 'separate-explicit-human-request-only', 'plugin-only scope must not expand from an inferred compatibility task')
+  const nativeSync = contract.tasks?.models
+  require(nativeSync?.nativeModelSyncBoundary?.includes('one explicit confirmation')
+    && nativeSync.nativeModelSyncBoundary.includes('native adapter-owned pi-ai catalog')
+    && nativeSync.nativeModelSyncBoundary.includes('CAS only llm-pi-ai.providers.github-copilot.models')
+    && nativeSync.nativeModelSyncBoundary.includes('read back user and effective values')
+    && nativeSync.nativeModelSyncBoundary.includes('No profile creation, automatic sync')
+    && nativeSync.read?.includes('src/native-model-sync.ts')
+    && nativeSync.tests?.includes('tests/native-model-sync.spec.ts')
+    && nativeSync.tests?.includes('tests/fixtures/native-model-sync-core.fixture.ts'),
+  'native model sync must retain explicit confirmation, adapter proof, one-path CAS, readback and bounded tests')
   require(!contract.boundaries?.approvalRequired?.includes('merge'), 'merge must not require a separate approval')
   require(!contract.boundaries?.approvalRequired?.includes('release'), 'release delivery must not require a second blanket release approval')
   for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {
@@ -67,6 +77,20 @@ export async function verifyAgentContract(root = repositoryRoot) {
   require(JSON.stringify(release.requiredConditions) === JSON.stringify(['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets']), 'release delivery prerequisites differ')
   require(release.localGateWhenRegistryBlocked === 'record-environment-blocker-and-require-complete-github-ci', 'blocked local gate must require full GitHub CI')
   const agentGuide = await readFile(resolve(root, 'AGENTS.md'), 'utf8')
+  const workspace = contract.boundaries?.workspaceIsolation
+  const workspaceRequirements = {
+    default: 'app-managed-worktree-when-authorized',
+    nonWorktree: 'inspect-and-preserve-shared-workspace',
+    temporaryArtifacts: 'session-owned-outside-checkout',
+    existingFiles: 'preserve-never-hide-or-delete-for-gates',
+    delivery: 'review-explicit-commit-and-respect-tool-policy',
+    escalation: 'once-for-genuine-blocker-or-risk',
+    enforcement: 'advisory-not-a-sandbox',
+  }
+  require(workspace && Object.keys(workspace).length === Object.keys(workspaceRequirements).length
+    && Object.entries(workspaceRequirements).every(([key, value]) => workspace[key] === value)
+    && agentGuide.includes('## Session isolation and temporary artifacts (#442)'),
+  'workspace isolation must preserve user files, authorized worktrees and delivery tool boundaries')
   require(agentGuide.includes('### Confirmed product scope (#455, #456)')
     && agentGuide.includes('When any later legacy detail in this guide conflicts with this confirmed scope'),
   'the confirmed product scope must be authoritative over historical guide details')

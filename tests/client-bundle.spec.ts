@@ -295,7 +295,8 @@ describe('tsdown client artifact', () => {
       expect(draftWarning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
       expect(draftWarning.props.children).toContain('canonical account')
       expect(draftWarning.props.children).toContain('separately selected plugin account')
-      expect(draftWarning.props.children).toContain('block additional-account requests and switching')
+      expect(draftWarning.props.children).toContain('GitHub Copilot (multi-account)')
+      expect(draftWarning.props.children).toContain('Both routes can coexist')
       footer.render(footerElement)
       const fallback = footer.render(footerElement)
       const account = fallback?.props.children.props.account
@@ -413,8 +414,10 @@ describe('tsdown client artifact', () => {
       && descriptor.namespace !== 'githubCopilotSessionContinuation'
       && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
-      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
+      'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
+      'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative',
+      'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
     expect(contributions[0]?.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotAccounts').map(descriptor => descriptor.method).sort())
       .toEqual(['add', 'addForEnvironment', 'cancel', 'ensureIdentity', 'get', 'reauthorize',
@@ -452,6 +455,10 @@ describe('tsdown client artifact', () => {
         expect(descriptor.parameters).toHaveLength(2)
         expect(descriptor.parameters.every(parameter => parameter.codec.mode === 'strict')).toBe(true)
       }
+      else if (descriptor.method === 'applyNativeModelSync') {
+        expect(descriptor.parameters).toHaveLength(1)
+        expect(descriptor.parameters[0]?.codec.mode).toBe('strict')
+      }
       else expect(descriptor.parameters).toEqual([])
       expect(descriptor).toMatchObject({
         id: `dsh-github-copilot:githubCopilot.${descriptor.method}`,
@@ -462,6 +469,8 @@ describe('tsdown client artifact', () => {
         typeSymbol: descriptor.method === 'migrationStatus'
           ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
           : descriptor.method === 'setModelExcluded' || descriptor.method === 'setModelHighCost' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
+          : descriptor.method === 'previewNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncPreview'
+            : descriptor.method === 'applyNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncResult'
           : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })
     }
@@ -504,7 +513,8 @@ describe('tsdown client artifact', () => {
     const usage = { state: 'ready', billing: 'credits', budget: 'individual',
       used: 3600, remaining: 16400, limit: 20000, percentUsed: 18, observedAt: 1 }
     const usageDescriptors = contributions[0]!.descriptors.filter(descriptor => descriptor.namespace === 'githubCopilotUsage')
-    expect(usageDescriptors.map(descriptor => descriptor.method)).toEqual(['get', 'refresh', 'getNative', 'refreshNative'])
+    expect(usageDescriptors.map(descriptor => descriptor.method)).toEqual(
+      ['get', 'refresh', 'getNative', 'refreshNative', 'ensureNativeIdentity', 'refreshNativeIdentity'])
     for (const descriptor of usageDescriptors) {
       if (descriptor.result.mode !== 'strict') throw new Error('expected independent strict usage codec')
       const codec = descriptor.result
