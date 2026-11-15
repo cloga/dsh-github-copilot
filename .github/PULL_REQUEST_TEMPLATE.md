@@ -61,10 +61,22 @@ Documentation-only PRs may explain their impact without filling these fields. --
 
 ## Release delivery
 
-- Classification: important update / documentation-only / internal-only / explicitly release-scoped.
+<!-- Choose exactly one classification before changing versions or package contents:
+repository-only: reviewed merge + required CI; no plugin version, expanded whitelist or local upgrade.
+plugin-update: real runtime/compatibility/existing consumer-package impact, not a version/whitelist-only edit.
+explicit-plugin-artifact: separate explicit engineering-artifact distribution request, or version-only follow-through of an already authorized plugin update.
+release-recovery: infrastructure/reconciliation for an already authorized version, without changing its payload.
+Details must explain the actual consumer impact (at least 20 characters).
+For explicit-plugin-artifact, Authorization must identify the artifact-specific request or already reviewed/authorized plugin update (at least 20 characters); existing release follow-through needs no second approval.
+Generic delivery/status questions do not grant artifact scope. The checker cannot verify the user's consent;
+review the actual request. Existing shipped-file, version and immutable-byte gates remain authoritative. -->
+
+- Classification:
+- Details:
+- Authorization:
 - Prepared version and release channel:
 - User delivery restrictions, if any:
-- After reviewed merge: important updates continue through green required CI, a fresh tag and verified Release without another release prompt.
+- After reviewed merge: repository-only work is delivered; plugin updates continue through required release gates without another release prompt. Report publication separately from local installation and runtime loading.
 - Published Release URL + tag/commit/assets/SHA-256, or concrete blocker and pending step (update after release):
 
 ## Approval boundary
