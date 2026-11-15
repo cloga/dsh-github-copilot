@@ -83,7 +83,10 @@ test('allows an honestly recorded not-run task and rejects missing outcomes', ()
     completed: 0, failed: 0, blocked: 0, notRun: 1, unknown: 0,
   })
   const incomplete = structuredClone(notRun)
-  incomplete.cases[0].events.pop()
+  incomplete.cases[0].events = [
+    { type: 'task-start', taskId: 'task-1' },
+    { type: 'progress', code: 'new-evidence' },
+  ]
   assert.deepEqual(evaluateAutonomyTrace(incomplete).violations, [
     { caseId: 'not-run', taskId: 'task-1', code: 'missing-task-outcome' },
   ])
