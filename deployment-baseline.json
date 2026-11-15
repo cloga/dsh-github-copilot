@@ -1461,17 +1461,19 @@
       ]
     },
     {
-      "id": "single-managed-route-native-oauth",
+      "id": "native-route-account-metadata",
       "required": true,
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "current !== undefined && providerSupportsStrictMode(current) !== false"},
-        {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot (multi-account)'"},
+        {"file": "src/index.ts", "marker": "registerLegacyProvider: false"},
+        {"file": "src/preview-route.ts", "marker": "registerLegacyProvider = false"},
         {"file": "src/client.ts", "marker": "GitHubCopilotAccountSurface"}
       ],
       "tests": [
-        {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow while exposing only the account-driven provider"},
-        {"file": "tests/single-route.spec.ts", "name": "discovers new IDs and reasoning metadata without a canonical model profile"},
-        {"file": "tests/single-route.spec.ts", "name": "honors explicit legacy-profile removal from settings without deleting OAuth"},
+        {"file": "tests/single-route.spec.ts", "name": "keeps the native login flow without registering a second model provider"},
+        {"file": "tests/single-route.spec.ts", "name": "discovers account model metadata without registering a model provider"},
+        {"file": "tests/single-route.spec.ts", "name": "handles model preference updates without registering a legacy provider"},
+        {"file": "tests/single-route.spec.ts", "name": "does not replace a removed native profile with the retired provider"},
         {"file": "tests/authorization-controller.spec.ts", "name": "does not recreate an absent canonical profile during status or explicit reconciliation"},
         {"file": "tests/authorization-controller.spec.ts", "name": "keeps absent-profile legacy journal conflicts visible instead of bypassing ownership review"}
       ]

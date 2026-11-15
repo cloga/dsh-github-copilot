@@ -50,6 +50,7 @@ export type PreviewRouteConfig = Pick<PiAiProviderProfile,
   & Pick<InlineConfig, 'accountModelTtlMs' | 'accountModelFailureCooldownMs'>
   & {
     readonly streamLiveness?: boolean
+    readonly registerLegacyProvider?: boolean
     readonly chatRequestSettings?: () => Pick<InlineConfig,
       'chatStreamIdleTimeoutMs' | 'chatStreamLiveness' | 'chatMaxRequestImageBytes'
       | 'responsesRequestCompression' | 'responsesOmitTemperature'>
@@ -993,6 +994,7 @@ class AccountRoutingAdapter extends PiAiAdapter {
 
 /** Register services once; account switches affect the directory, not admitted turns. */
 export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
+  const { registerLegacyProvider = false, ...routeConfig } = config
   const runtimes = new Map<string, AccountRuntime>()
   const exclusionTurns = new ModelExclusionTurns()
   const freezeBinding = (binding: CopilotAccountBinding | undefined) => binding === undefined ? undefined
@@ -1011,7 +1013,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (current !== undefined) return current
     // Do not evict prepared calls, discovery, or live Session proof owners.
     if (runtimes.size >= COPILOT_ACCOUNTS_MAX) throw failure('COPILOT_ACCOUNTS_RUNTIME_LIMIT', 'INVALID_REQUEST')
-    const runtime = createAccountRuntime(ctx, config, binding, exclusionTurns, replayRecovery, () => {
+    const runtime = createAccountRuntime(ctx, routeConfig, binding, exclusionTurns, replayRecovery, () => {
       if (disposed) return
       // A broken default directory cannot invalidate a different admitted account.
       try { if ((globalBinding()?.accountId ?? 'canonical') === accountId) publish() }
@@ -1050,9 +1052,12 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     dispose() { temporaryRecovery.dispose(); continuation.dispose(); compactionReplay.dispose() },
   }
   const initial = directoryRuntime()
-  const registration = ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
-    new AccountRoutingAdapter(initial.optionsFor(), currentRuntime, imageRuntime))
+  const registration = registerLegacyProvider
+    ? ctx.llm.registerAdapter([GITHUB_COPILOT_PREVIEW_PROVIDER_ID],
+      new AccountRoutingAdapter(initial.optionsFor(), currentRuntime, imageRuntime))
+    : undefined
   publish = () => {
+    if (registration === undefined) return
     const runtime = directoryRuntime()
     const view = runtime.preview.getView()
     const snapshot = runtime.lifetime.source.readSnapshot()
@@ -1061,7 +1066,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (directory === publishedDirectory && snapshot === publishedSnapshot || view.state === 'disposed') return
     publishedDirectory = directory
     publishedSnapshot = snapshot
-    registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
+    registration?.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
   }
   const selections = new TurnSelectionStore()
   new TurnSelectionController(ctx, selections)
@@ -1166,7 +1171,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
       publish()
       void directoryRuntime().preview.refresh().catch(() => undefined)
     } catch {
-      registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
+      registration?.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
       ctx.logger.warn('COPILOT_PREVIEW_DIRECTORY_ACCOUNT_UNAVAILABLE')
     }
   })
@@ -1177,7 +1182,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     if (next === exclusionSignature) return
     exclusionSignature = next
     publishedDirectory = ''
-    registration.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
+    registration?.replace([GITHUB_COPILOT_PREVIEW_PROVIDER_ID])
   })
   ctx.effect(() => () => {
     disposed = true
@@ -1191,7 +1196,7 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
     removeSelectionRequest()
     removeSelectionAgent()
     selections.clear()
-    registration()
+    registration?.()
   })
   void initial.preview.refresh().catch(() => undefined)
 }

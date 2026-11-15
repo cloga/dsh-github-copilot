@@ -296,9 +296,7 @@ describe('tsdown client artifact', () => {
       expect(draftWarning.type).toBe('p')
       expect(draftWarning.props['data-dsh-github-copilot-native-add-warning']).toBe(true)
       expect(draftWarning.props.children).toContain('canonical account')
-      expect(draftWarning.props.children).toContain('separately selected plugin account')
-      expect(draftWarning.props.children).toContain('GitHub Copilot (multi-account)')
-      expect(draftWarning.props.children).toContain('Both routes can coexist')
+      expect(draftWarning.props.children).toContain('does not add a second model provider')
       footer.render(footerElement)
       const fallback = footer.render(footerElement)
       const account = fallback?.props.children.props.account

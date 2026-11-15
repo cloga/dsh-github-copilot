@@ -554,7 +554,7 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
 
   return createElement('section', { 'data-dsh-github-copilot-account-models': true },
     createElement('p', { role: 'status', 'aria-live': 'polite', 'data-dsh-github-copilot-account-models-state': snapshot.state }, messages[snapshot.state]),
-    createElement('p', null, 'This list applies to github-copilot-preview. The native github-copilot route uses a separate catalog. Discovery does not prove a successful model call; it does not change your default model or account policy.'),
+    createElement('p', null, 'This is account metadata for an explicit, reviewable sync to the native github-copilot model list. Discovery does not prove a successful model call or change your model list, default model, or account policy.'),
     snapshot.error === undefined ? null : createElement('p', { role: 'alert' }, discoveryCode(snapshot.error, 'COPILOT_MODEL_DISCOVERY_FAILED')),
     createElement('details', null,
       createElement('summary', null, `${snapshot.models.length} accepted model(s)`),
@@ -782,7 +782,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     }) : createElement('p', { role: 'status' }, 'Sign in to manage model preferences.'),
     createElement('details', null,
       createElement('summary', null, 'Discovery details'),
-      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches account models once. Opening this view refreshes missing or stale metadata when needed. Discovery serves github-copilot-preview and does not change the native github-copilot list; an explicitly confirmed sync can copy eligible models. Refreshing does not verify a model call or change your selected model.'),
+      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches account models once. Opening this view refreshes missing or stale metadata when needed. Discovery supplies the reviewable native model sync; it does not change the native github-copilot list until you explicitly sync. Refreshing does not verify a model call or change your selected model.'),
       models === undefined ? createElement('p', { style: nativeCaptionStyle }, 'Account model metadata is not available yet.')
         : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models })),
     signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
@@ -965,7 +965,7 @@ function registerUi(ctx: ClientContext): () => void {
     }, (props: ProviderCardExtrasOwnerProps) => {
       if (!props.configured && props.provider.provider === GITHUB_COPILOT_PROVIDER_ID && props.provider.settingsNs === 'llm-pi-ai') {
         return createElement('p', { role: 'note', 'data-dsh-github-copilot-native-add-warning': true, style: nativeCaptionStyle },
-          'Use the GitHub Copilot account panel to sign in. With a stored OAuth grant and no named key, the native provider uses the canonical account, not a separately selected plugin account. For account switching, select a model under GitHub Copilot (multi-account). Both routes can coexist.')
+          'Use the GitHub Copilot account panel to sign in or switch the canonical account. The native GitHub Copilot provider uses that account for future requests; this plugin does not add a second model provider.')
       }
       return createElement(GitHubCopilotAccountSurface, {
         surfaces, seat, remote, accountsRemote, continuationContext: ctx, eligible: isGitHubCopilotAccountRow(props), localeReader,

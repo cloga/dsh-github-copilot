@@ -30,8 +30,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && productScope.desktopCandidate === '0.2.2-rc.3'
     && productScope.desktopCandidateQualified === false
     && JSON.stringify(productScope.retirePluginOwned) === JSON.stringify([
-      'auto', 'parent-model-follow', 'hosted-search-routing',
+      'auto', 'parent-model-follow', 'hosted-search-routing', 'managed-model-route',
     ])
+    && JSON.stringify(productScope.productionCopilotModelProviders) === JSON.stringify(['github-copilot'])
     && productScope.preserve.includes('native-copilot-oauth')
     && productScope.preserve.includes('account-isolation')
     && productScope.preserve.includes('account-advertised-model-capabilities')

@@ -656,7 +656,7 @@ describe('alpha2 stock compaction driven by the Copilot local pressure signal', 
           usage: { input_tokens: 42, output_tokens: 10, total_tokens: 52 } } }),
       ].join(''), { headers: { 'content-type': 'text/event-stream' } })
     })
-    await f.ctx.plugin(previewPlugin, { requestBudget: { safetyTokens: 0 } })
+    await f.ctx.plugin(previewPlugin, { registerLegacyProvider: true, requestBudget: { safetyTokens: 0 } })
     await f.ctx.githubCopilotPreview.refresh()
     await f.ctx.githubCopilotPreview.discover()
     expect(f.ctx.githubCopilotPreview.recoveryLimits('fixture-model-A'), JSON.stringify(f.ctx.githubCopilotPreview.getView())).toBeDefined()

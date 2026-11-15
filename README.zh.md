@@ -68,24 +68,26 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 请明确选择目标 profile，然后：
 
-1. 打开**设置 → 模型 → GitHub Copilot**，使用 GitHub 登录。
-2. 在 DSH 原生模型选择器中选择该账号实际可用的 Copilot 模型。
-3. 子代理使用 DSH 原生模型选择流程；兼容范围以账号公布且经过测试的协议能力为准。
+1. 打开**设置 → 模型**；如果尚未配置原生 GitHub Copilot provider，请先添加。
+   插件不会自动创建此 profile。
+2. 在 GitHub Copilot 账号面板中使用 GitHub 登录。
+3. 在 DSH 原生模型选择器中选择该账号实际可用的 Copilot 模型。
+4. 子代理使用 DSH 原生模型选择流程；兼容范围以账号公布且经过测试的协议能力为准。
 
 无需手工定义 Copilot 模型、粘贴 token、使用外部网关或安装
 `copilot2api`。账号登录成功不代表所有模型及其能力都可用。
-插件自动发现的账号模型及能力适用于 `github-copilot-preview` 路线；DSH 原生
-`github-copilot` 路线使用自己的内置或用户配置目录，两条路线不会自动共享模型发现结果。
+插件不再注册第二个 `github-copilot-preview` 模型 provider。
+自动发现的账号模型元数据可用于显式审核后同步到原生 `github-copilot` 模型列表；
+仅发现元数据不会更改原生目录或模型选择。
 
 如需将原生 provider 所用的已验证账号的启用模型复制到已配置的原生 provider，请打开
 **Manage → Model preferences**，查看显示的新增、更新、移除、跳过项和每次请求的输出
 默认值，然后选择 **Sync models**。页面使用当前已验证的账号快照准备这些信息，不强制
 重新发现；如果快照不可用，请使用 **Refresh models**。此显式单次快照只通过
 Settings CAS 和回读替换 `llm-pi-ai.providers.github-copilot.models`。原生 profile
-中保存的非空列表会替代原生内置目录，卸载或停用插件后仍然保留。复制模型设置不会将
-托管路线的权限参数过滤迁移到原生请求，也不能证明供应商调用成功。两条路线均不会在
-发送前将实际投影的图片 MIME 与账号模型的格式清单进行对照检查。
-托管路线也直接使用原生 Goal 更新 schema，不再改写。
+中保存的非空列表会替代原生内置目录，卸载或停用插件后仍然保留。复制模型设置不会
+更改原生适配器的请求行为，也不能证明供应商调用成功。原生请求仍由 DSH provider
+拥有传输和请求语义。
 无法证明或与原生目录不兼容的协议、未知或更窄的服务端输入上限、未知上下文或图像支持，
 以及未知或不支持的推理控制会被跳过，不会猜测。缺少原生目录兼容性基线的新 Completions 和
 Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只有账号明确支持 PNG、JPEG、WebP、GIF 四种原生请求图像格式时，
@@ -100,8 +102,9 @@ Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只�
 会将该账号应用到 DSH canonical 凭据槽 `llm-pi-ai/github-copilot`，供此 profile
 后续的原生请求使用。首次切换会将原有原生 OAuth 授权保留为已保存账号。
 切换不会重定向正在进行的请求，也不会更改模型选择、provider 设置或历史。
-原生 provider 的内置/配置模型目录不会因此按账号权限过滤。现有
-`github-copilot-preview` 仍是独立的插件模型路线，但原生账号切换不依赖它。
+原生 provider 的内置/配置模型目录不会因此按账号权限过滤。插件不再添加单独的 Copilot
+模型路线。已有的 `github-copilot-preview` 选择不会自动迁移，可能变为不可用；已保存的设置和
+对话历史保持不变。旧 preview 路线专用的 Session 账号覆盖和续接控件不适用于原生模型请求。
 启动插件或完成登录时，不会自动修复原生 provider 设置。
 插件在 DSH 现有 Web 服务中注册可选的 `github-copilot-hosted` 搜索后端。
 请在原生 Web 设置中明确选择，并按需启用原生搜索工具；安装不会改变默认后端。
@@ -131,9 +134,9 @@ CI 验收和 Desktop 实际加载属于不同证据层级。参见
 原生 **GitHub Copilot** 继续使用最近一次明确应用到 canonical 凭据槽的账号。卸载不是退出登录；
 显式退出或移除原始授权是另一项操作，会影响原生登录。
 
-依赖插件的选择不会自动变成原生选择。卸载前，请明确将使用 `github-copilot-preview`
-的 Session／默认模型切回原生模型。如果 Web 选中了 `github-copilot-hosted`，
-请先在原生 Web 设置中选择其他可用后端。卸载不会改写 Web 设置；
+已有的 `github-copilot-preview` 模型选择不会自动迁移，可能变为不可用；需要时请显式选择原生模型。
+如果 Web 选中了 `github-copilot-hosted`，请先在原生 Web 设置中选择其他可用后端。
+卸载不会改写 Web 设置；
 保留已缺失的后端会返回 `WEB_PROVIDER_CONFIGURED_MISSING`，不会自动回退。
 附加账号管理和插件专属搜索仍然依赖插件；最近选中的原生 OAuth 授权会保留在 DSH canonical 凭据记录中。
 

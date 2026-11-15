@@ -443,7 +443,7 @@ assert(capabilityIds.size === manifest.capabilities.length, 'capability IDs must
 const missingEvidence = []
 for (const required of ['confirmed-native-model-sync', 'independent-copilot-accounts', 'account-quota-composer-usage', 'account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
   'public-adapter-account-model-route', 'managed-request-budget-and-compaction-policy', 'managed-model-generation-and-lifetime', 'managed-http-auth-rejection-recovery', 'managed-responses-replay-scope-isolation', 'account-discovery-native-oauth',
-  'canonical-owner-preservation', 'single-managed-route-native-oauth', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
+  'canonical-owner-preservation', 'native-route-account-metadata', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
   'read-only-status-and-explicit-discovery', 'shared-copilot-credential-refresh', 'compact-account-row-and-auth-disclosure']) {
   assert(capabilityIds.has(required), `required plugin-only capability is missing: ${required}`)
 }

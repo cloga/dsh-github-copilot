@@ -111,15 +111,15 @@ add model-ID routing rules, patch Core, or claim untested parity.
 When any later legacy detail in this guide conflicts with this confirmed scope,
 follow this section and the current acceptance criteria in #455/#456.
 
-The user clarified that the ordinary route should be DSH's native
-`github-copilot` provider, with only useful plugin enhancements through public
-APIs. Retire the separate managed route when native-route acceptance is met;
-do not preserve it solely to continue old conversations or create a history
+The user clarified that the ordinary route is DSH's native
+`github-copilot` provider, with useful plugin enhancements attached only through
+public APIs. The production package registers no `github-copilot-preview`
+provider; do not restore it to preserve old selections or create a history
 migration. Existing stored conversations, credentials and settings are not
-authorized for deletion or rewriting. Explicitly document that old managed
+authorized for deletion or rewriting. Explicitly document that old preview
 route selections may become unavailable. Native model selection and actual
 subagent invocation must be verified on `github-copilot`, not inferred from
-managed-route tests. Record enhancements that cannot safely attach to native
+legacy-route tests. Record enhancements that cannot safely attach to native
 APIs rather than patching Core or misrepresenting support.
 
 The last qualified release line is official DSH `0.2.1-rc.3`; its source/artifact CI passed on Windows/Linux in run `40098031196`, while Desktop artifacts/signatures remain unverified. DSH `0.2.2-rc.3` is the current requested candidate and has not passed this repository's required CI. The previous thirteen pins remain historical evidence, not current support or release gates. Do not treat either prerelease as a production Core upgrade recommendation. DSH's built-in `llm-pi-ai` owns the canonical GitHub Copilot provider, OAuth, grant format, token exchange, refresh, and normal model transport.
@@ -213,10 +213,11 @@ Refresh remains owned by native pi-ai `Models.getAuth()` and DSH
 If selection and canonical credential diverge after an external native sign-in,
 show an actionable mismatch and require explicit recovery; never auto-migrate.
 
-Keep the native UI and its canonical quota/search attribution. Existing
-`github-copilot-preview` behavior and Session account overrides remain
-separately plugin-owned legacy behavior; they are not required for native
-switching. Disposal removes only plugin registrations. Native model selections
+Keep the native UI and its canonical quota/search attribution. The
+`github-copilot-preview` adapter remains compatibility code but is not
+registered by the production package entry. Session account overrides are not
+evidence of native-provider behavior or a reason to register a second model
+provider. Disposal removes only plugin registrations. Native model selections
 and explicit `web.searchProvider=github-copilot-hosted` still need user-selected
 replacements before uninstall; missing configured Web backends return
 `WEB_PROVIDER_CONFIGURED_MISSING`, not automatic fallback. Uninstall leaves the
@@ -339,7 +340,7 @@ evidence is content-free and ephemeral, never a new persistent population.
 - Copilot OAuth grant writes must rebuild only pi-ai's documented provider fields as a fresh plain JSON object; unrelated extension values never reach DSH credential storage.
 - Settings changes are path-level. Never replace the whole `llm-pi-ai` section or unrelated provider profiles.
 - Native sign-out deletes only `llm-pi-ai/github-copilot` and keeps plugin account records, the selector and route settings. A selected plugin account remains saved and must be explicitly applied again after sign-out; a missing selected slot fails explicitly, never automatic canonical fallback.
-- Hosted search serves either an eligible initiating `github-copilot` / managed `github-copilot-preview` route, or provider-owned independent search selected by the web-search router. Independent search preserves a nonempty explicit `searchModel` override; otherwise the Host considers at most three eligible Responses models from current account route facts, in deterministic ID order, without a static model list. Metadata alone is not search proof, and the final user query is sent once after candidate proof, never replayed across models. Both paths require an account-available model and supported search protocol; custom inline transport remains legacy-canonical only. Never substitute the global chat default or another Session's identity. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback. Any request containing a file block, including one nested in tool-result content, must bypass the custom wire through `next()` so Core retains file projection ownership.
+- Hosted search uses the canonical `github-copilot` account or provider-owned independent search selected by the Web router; the retired `github-copilot-preview` model route is not a production initiator. Independent search preserves a nonempty explicit `searchModel` override; otherwise the Host considers at most three eligible Responses models from current account metadata, in deterministic ID order, without a static model list. Metadata alone is not search proof, and the final user query is sent once after candidate proof, never replayed across models. Both paths require an account-available model and supported search protocol. Never substitute the global chat default or another Session's identity. The default `probe: true` path requires successful capability proof; `probe: false` is an explicit trust override, not an implicit fallback. Any request containing a file block, including one nested in tool-result content, must bypass the custom wire through `next()` so Core retains file projection ownership.
 - Misconfiguration and API drift fail loudly with a named missing seam. Do not fall back to process-local secrets or implicit machine state.
 - Host, Client, and Remote package entries must stay independently buildable and exported.
 - The package must self-provide authorization when Core omits it, reuse an existing service without duplicate registration, and never activate the integration body before authorization is available.
@@ -360,7 +361,7 @@ evidence is content-free and ephemeral, never a new persistent population.
 - Capabilities are `agentsList`, `sessionProjections`, `settingsCas`, `providerRegistry`, `defaultSelection`; `complete.sessions/defaultSelection/routes` describes evidence completeness, not migration approval. Effective selection uses pending projection, request-header config, then default only for genuinely empty Sessions with known projection state. Running `activeRequestSelection` is the latest recorded header, not proven in-flight LLM work. Native effective configuration and native/managed registration are separate flags.
 - This read invokes no auth status/model discovery, credentials or network and mutates no settings/Sessions. No normal UI/global current-model/search card is added. Nine ordinary authorization/model-preference Remotes retain their codec; the tenth migration Remote uses a separate strict `GitHubCopilotMigrationStatus` codec.
 - `historyScope: live-agents-only` excludes cold stored histories. Require operator acknowledgement that older conversations may need a new explicit selection later. Loaded version/structural capability self-reports are not full Desktop/Core byte attestation or an atomic cross-namespace guarantee; recheck immediately before CAS.
-- The planned `cloga/dsh-windows-ops` command `tools/migrate-copilot-managed-route.ps1` is separate config-only maintenance after release. V1 performs no automated Session/default writes, cold-history scan, plugin install, restart or full Desktop-baseline acceptance. Resolve selection blockers separately with explicit approval; never report this planned command or live migration as published/installed/completed without evidence.
+- The earlier planned `cloga/dsh-windows-ops` command `tools/migrate-copilot-managed-route.ps1` is superseded: production no longer registers the managed model route, so provider-profile removal is not required. Never claim that this historical command or a live migration was published/installed/completed without evidence.
 
 ## Supported DSH seams
 
@@ -392,7 +393,7 @@ These pins document compatibility evidence. They do not authorize creating anoth
 - Authorization service: rc.1 Core provides it; the rc.2 web/headless profiles rely on this package's runtime dependency and conditional bootstrap.
 - Credentials: use record description/read/modify/delete APIs on the Host. Never read records in the browser.
 - Copilot grant schema: `type: oauth`, non-empty `refresh`/`access`, finite `expires`, optional non-empty `enterpriseUrl`, and optional deduplicated non-empty-string `availableModelIds`.
-- Settings: never recreate a missing `providers.github-copilot` profile. Existing native profiles remain user/Core-owned and require explicit migration before only the account-discovered route is listed.
+- Settings: never recreate a missing `providers.github-copilot` profile. Existing native profiles remain user/Core-owned; production does not register a second account-discovered model route. Native model sync is an explicit, reviewed operation on an existing canonical profile.
 - Per-model API: do not assume stock Core honors a configured model.api. Verify the existing published behavior; where it cannot serve a model, use a plugin-local, exact-model alternative or report the limitation rather than patching Core.
 - Route activation: the dormant `llm-pi-ai` mount observes the profile and registers the route.
 - Client activation: package metadata injects DSH remotes and Models UI; `./client` mounts `./remote`.

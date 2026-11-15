@@ -121,9 +121,10 @@ it('applies confirmed account switches to native credentials and retains the nat
     await vi.waitFor(() => expect(ctx.get('githubCopilotAccounts')).toBeDefined())
     const accounts = ctx.get('githubCopilotAccounts')!
     expect(await accounts.get()).toMatchObject({ state: 'ready', activeAccountId: A, switchable: true })
-    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(expect.arrayContaining(['github-copilot', MANAGED]))
+    const providers = ctx.llm.listProviders().map(provider => provider.id)
+    expect(providers).toEqual(['github-copilot'])
+    expect(providers).not.toContain(MANAGED)
     await send('github-copilot')
-    await send(MANAGED)
     const requestAgent = { ctx, session: nativeAgent.session } as unknown as Agent
     const requestSignal = new AbortController()
     await ctx.waterfall(scopeTarget(requestAgent, requestAgent), 'agent/request',
@@ -138,7 +139,6 @@ it('applies confirmed account switches to native credentials and retains the nat
     expect(await accounts.switchAccount(B, revision)).toMatchObject({ state: 'ready', activeAccountId: B })
     expect(await ctx.githubCopilotUsage.getNative()).toMatchObject({ state: 'ready', accountId: 'canonical' })
     await send('github-copilot')
-    await send(MANAGED)
     expect(ctx.agentDefaultModel.currentSelection()).toEqual(nativeSelection)
     expect(nativeConfig).toEqual({ providers: { 'github-copilot': { models: [{ id: model.id }] } } })
     expect(grants.get(KEY)?.payload.refresh).toBe(`synthetic-${B}`)
@@ -151,8 +151,8 @@ it('applies confirmed account switches to native credentials and retains the nat
     expect(ctx.get('githubCopilotAccounts')).toBeUndefined()
     await send('github-copilot')
     expect(wireAccounts).toEqual([
-      `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
-      `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`,
+      `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
+      `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`,
     ])
     expect(grants.get(KEY)?.payload.refresh).toBe(`synthetic-${B}`)
     expect(ctx.agentDefaultModel.currentSelection()).toEqual(nativeSelection)

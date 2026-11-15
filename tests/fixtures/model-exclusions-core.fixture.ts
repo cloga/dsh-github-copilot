@@ -73,7 +73,7 @@ describe('turn-scoped model exclusions on native Core', () => {
       },
     })
     await ctx.plugin(LlmRuntime)
-    await ctx.plugin(previewPlugin, { accountModelSettings: () => settings })
+    await ctx.plugin(previewPlugin, { registerLegacyProvider: true, accountModelSettings: () => settings })
     await ctx.get('githubCopilotPreview')!.refresh()
     await ctx.plugin(SessionStore)
     await ctx.plugin(Projections)

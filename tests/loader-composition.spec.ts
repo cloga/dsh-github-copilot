@@ -166,7 +166,7 @@ describe('loader composition', () => {
     expect(ctx.get('githubCopilotAccounts') !== undefined).toBe(true)
     expect(ctx.get('githubCopilotAuthorization') !== undefined).toBe(true)
     expect(ctx.get('githubCopilotSearchRouter')).toBeUndefined()
-    expect(registerAdapter).toHaveBeenCalledOnce()
+    expect(registerAdapter).not.toHaveBeenCalled()
 
     const registerSearchProvider = vi.fn(() => () => undefined)
     const nativeWeb = { registerSearchProvider, registerFetchProvider: () => () => undefined }
@@ -180,14 +180,14 @@ describe('loader composition', () => {
     expect(ctx.get('githubCopilotAccounts') !== undefined).toBe(true)
     expect(ctx.get('githubCopilotAuthorization') !== undefined).toBe(true)
     expect(ctx.get('githubCopilotPreview') !== undefined).toBe(true)
-    expect(registerAdapter).toHaveBeenCalledOnce()
+    expect(registerAdapter).not.toHaveBeenCalled()
 
     await web.dispose()
     await vi.waitFor(() => expect(ctx.get('githubCopilotSearchRouter')).toBeUndefined())
     expect(ctx.get('githubCopilotAccounts') !== undefined).toBe(true)
     expect(ctx.get('githubCopilotAuthorization') !== undefined).toBe(true)
     expect(ctx.get('githubCopilotPreview') !== undefined).toBe(true)
-    expect(registerAdapter).toHaveBeenCalledOnce()
+    expect(registerAdapter).not.toHaveBeenCalled()
   })
 
   it('does not rewrite an existing Copilot profile during Host startup', async () => {

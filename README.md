@@ -80,18 +80,20 @@ dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/release
 
 Choose the intended profile explicitly. Then:
 
-1. In **Settings → Models → GitHub Copilot**, sign in with GitHub.
-2. Choose an account-available Copilot model in the native DSH model picker.
-3. For subagents, use the native DSH model selection flow. Compatibility is
+1. In **Settings → Models**, add the native GitHub Copilot provider if it is
+   not already configured; the plugin does not create that profile.
+2. Use the GitHub Copilot account panel to sign in with GitHub.
+3. Choose an account-available Copilot model in the native DSH model picker.
+4. For subagents, use the native DSH model selection flow. Compatibility is
    limited to account-advertised and tested protocol capabilities.
 
 No manually defined Copilot model, pasted token, external gateway, or
 `copilot2api` service is required. Account and model availability are separate:
 successful sign-in does not guarantee every model or capability is available.
-The plugin's account-discovered models and capabilities apply to the
-`github-copilot-preview` route. DSH's native `github-copilot` route uses its
-own bundled or configured catalog; the two routes do not automatically share
-model discovery.
+The plugin does not register a second `github-copilot-preview` model provider.
+Account-discovered model metadata is available for an explicitly reviewed sync
+into the native `github-copilot` model list; discovery alone does not change the
+native catalog or model selection.
 
 To copy enabled models from the verified account used by the native provider into an existing
 native provider, open **Manage → Model preferences**, review the displayed
@@ -101,11 +103,9 @@ account snapshot without forcing discovery; if it is unavailable, use
 **Refresh models**. This one-time snapshot replaces only
 `llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
 The nonempty saved list replaces the native built-in catalog and remains after
-the plugin is unloaded or uninstalled. Copying model settings does not transfer
-the managed route's permission-field filtering to native requests, nor prove
-that supplier calls will succeed. Neither route checks the projected image MIME
-against the account model's format list before dispatch.
-The managed route also uses the native Goal update schema without rewriting it.
+the plugin is unloaded or uninstalled. Copying model settings does not change
+the native adapter's request behavior or prove that supplier calls will
+succeed. Native requests retain DSH's provider-owned transport and semantics.
 Models with unproven or incompatible native catalog protocols, unknown or
 narrower server input caps, unknown context or vision support, or unknown or
 unsupported reasoning controls are skipped rather than guessed.
@@ -130,8 +130,11 @@ OAuth grant as a saved account. In-progress requests are not redirected, and
 the operation does not change model selections, provider settings or history.
 Account switching does not change the native provider's bundled/configured
 model catalog, which is not guaranteed to filter models by account entitlement.
-The existing `github-copilot-preview` route remains a separate plugin-owned
-model route; it is not required for native account switching.
+The plugin does not add a separate Copilot model route. Existing
+`github-copilot-preview` selections are not migrated and may become unavailable;
+stored settings and conversation history remain unchanged. Legacy
+preview-only Session account overrides and continuation controls do not apply
+to native model calls.
 Starting the plugin or completing sign-in does not automatically repair the
 native provider's settings.
 The plugin registers optional `github-copilot-hosted` search in DSH's existing
@@ -173,11 +176,11 @@ applied to the canonical credential slot. Removing the plugin is not signing
 out; explicit sign-out or removal of that authorization is a different action
 and can affect native login.
 
-Plugin-only model selections do not become native automatically. Before removal,
-explicitly select native models for Sessions/defaults using
-`github-copilot-preview`. If Web is set to `github-copilot-hosted`, select another
-available backend in native Web settings first. Removing the plugin does not
-rewrite Web settings: a retained missing backend produces
+Existing `github-copilot-preview` model selections are not migrated and may
+become unavailable; explicitly select a native model where needed. If Web is
+set to `github-copilot-hosted`, select another available backend in native Web
+settings before removing the plugin. Removing the plugin does not rewrite Web
+settings: a retained missing backend produces
 `WEB_PROVIDER_CONFIGURED_MISSING`, not an automatic fallback. Additional-account
 management and plugin-specific search require the plugin; the last selected
 native OAuth grant remains in DSH's canonical credential record.

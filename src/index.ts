@@ -183,7 +183,8 @@ function activate(ctx: Context, config: LiveInlineConfig): void {
     } finally { if (!retained) lease?.release() }
   }, { prepend: true })
   ctx.effect(() => () => { for (const lease of accountTurns.values()) lease.release(); accountTurns.clear(); sessionAccounts.dispose() })
-  ctx.plugin(previewPlugin, { accountModelSettings: () => current(), chatRequestSettings: () => current(), requestBudgetSettings: () => {
+  ctx.plugin(previewPlugin, { registerLegacyProvider: false,
+    accountModelSettings: () => current(), chatRequestSettings: () => current(), requestBudgetSettings: () => {
     const selected = current()
     return { safetyTokens: selected.requestBudgetSafetyTokens, pressureRatio: selected.requestBudgetPressureRatio,
       compactionReasoning: selected.compactionReasoning }
