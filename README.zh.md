@@ -61,15 +61,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.19.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.20.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.19.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.20.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -147,6 +147,8 @@ alpha.13 发布版本修复了该资格判断；实际运行状态仍需单独�
 原生 provider 的已完成轮次也会记录账号证据，但仅在对应请求实际返回原生流数据后记录。
 记录的是绑定到 canonical 凭据的 profile 全局账号，不是 Session 覆盖、计费归属或子 Agent 汇总。
 账号不匹配、原生路线无法确认，或返回数据前凭据发生变化时，账号证据显示未知。
+已明确配置的原生模型 ID 即使不在内置目录中，也可用于账号证据；这不证明模型可用，
+也不会放宽搜索或 reviewer 的协议资格要求。
 证据仅保留在 Host 内存中；更早的历史，以及重启或淘汰后缺失的记录仍显示未知。
 原生上下文异常诊断不依赖可选的托管续接服务，也不会替代 DSH 的上下文计量。
 Local diagnostics 已移除；现有诊断数据和设置均不改动。若旧版插件重新加载，且原有开关仍开启，

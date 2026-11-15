@@ -193,6 +193,59 @@ describe('native Copilot protocol qualification', () => {
     expect(() => snapshot?.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
   })
 
+  it.each([
+    { id: 'configured-native-model' },
+    { id: 'configured-native-model', name: 'Existing configured model',
+      contextWindow: 64_000, maxTokens: 8_192, input: ['text'], reasoningEfforts: false },
+  ])('qualifies the explicitly configured model ID only for account attribution', async configured => {
+    const fixture = await independentCatalogFixture()
+    fixture.state.profile = normalizedProfile({ api: 'openai-responses', models: [configured] })
+    const route = await captureNativeCopilot(fixture.ctx)
+    expect(route?.models.has(configured.id)).toBe(false)
+    expect(route?.accountModelIds?.has(configured.id)).toBe(true)
+    expect(route?.accountModelIds?.has('unconfigured-model')).toBe(false)
+    fixture.state.revision += 1
+    expect(() => route?.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
+  })
+
+  it('uses the proven catalog for account attribution when no model list is configured', async () => {
+    const fixture = await independentCatalogFixture()
+    const route = await captureNativeCopilot(fixture.ctx)
+    expect(route?.accountModelIds?.has(fixture.model.id)).toBe(true)
+    expect(route?.accountModelIds?.has('unconfigured-model')).toBe(false)
+  })
+
+  it.each([
+    { models: [{ id: '' }] },
+    { models: [{ id: ' invalid' }] },
+    { models: [{ id: 'invalid\nmodel' }] },
+    { models: [{ id: 'duplicate' }, { id: 'duplicate' }] },
+  ])('does not qualify malformed configured model IDs for account attribution', async ({ models }) => {
+    const fixture = await independentCatalogFixture()
+    fixture.state.profile = { models }
+    const route = await captureNativeCopilot(fixture.ctx)
+    expect(route?.accountModelIds).toBeUndefined()
+  })
+
+  it('does not qualify malformed native model overrides for account attribution', async () => {
+    const fixture = await independentCatalogFixture()
+    fixture.state.profile = { models: [{ id: 'configured-native-model' }], modelOverrides: [] }
+    const route = await captureNativeCopilot(fixture.ctx)
+    expect(route?.accountModelIds).toBeUndefined()
+  })
+
+  it.each([
+    { apiKeyEnv: 'CUSTOM_KEY' },
+    { baseURL: 'https://example.invalid' },
+    { headers: { authorization: 'custom' } },
+    { models: [{ id: 'configured-native-model', baseURL: 'https://example.invalid' }] },
+    { modelOverrides: { 'configured-native-model': { headers: { authorization: 'custom' } } } },
+  ])('does not qualify account evidence for custom native transport', async transport => {
+    const fixture = await independentCatalogFixture()
+    fixture.state.profile = { api: 'openai-responses', models: [{ id: 'configured-native-model' }], ...transport }
+    expect(await captureNativeCopilot(fixture.ctx)).toBeUndefined()
+  })
+
   it('rejects unknown pi-ai versions and unresolvable public catalog exports', async () => {
     const fixture = await independentCatalogFixture()
     const reasons: string[] = []

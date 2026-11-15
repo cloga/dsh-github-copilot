@@ -73,15 +73,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.19.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.20.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.19.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.19.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.20.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.20.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -189,6 +189,9 @@ only after an actual native stream chunk for that admitted request. It reflects
 the profile-wide account bound to the canonical credential, not a Session
 override, billing attribution or subagent rollup. A mismatched account,
 unproven native route or credential change before delivery leaves it unknown.
+Explicitly configured native model IDs can qualify for account evidence even
+when absent from the bundled catalog; this does not establish model support or
+qualify them for search or reviewer protocol compatibility.
 Evidence is Host-memory-only;
 older turns and turns missing after a restart or eviction remain unknown.
 Native context-incident diagnostics remain available without the optional

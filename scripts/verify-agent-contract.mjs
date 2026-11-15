@@ -206,6 +206,17 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && contract.tasks.accounts?.risk?.includes('No durable account events')
     && agentGuide.includes('Approved multi-account ownership extension (#297, #474)'),
   'account ownership must preserve native authorization, shared storage, Session turn freezing and bounded historical evidence')
+  const nativeAccountEvidence = contract.tasks.accounts?.nativeTurnEvidenceBoundary
+  require(nativeAccountEvidence?.includes('explicitly configured native IDs')
+    && nativeAccountEvidence.includes('never qualifies reviewer/search protocols')
+    && nativeAccountEvidence.includes('canonical OAuth and selected-account equality')
+    && nativeAccountEvidence.includes('same Session/turn/signal/model and marked ordinary stream delivery')
+    && nativeAccountEvidence.includes('Credential/configuration changes, cancellation, turn end and disposal')
+    && nativeAccountEvidence.includes('not billing or reconstruction')
+    && contract.tasks.accounts?.read?.includes('src/native-copilot-access.ts')
+    && contract.tasks.accounts?.tests?.includes('tests/native-copilot-access.spec.ts')
+    && contract.tasks.accounts?.tests?.includes('tests/fixtures/auto-review-copilot-core.fixture.ts'),
+  'native account evidence must keep account-only model membership separate from protocol qualification and preserve delivery fences')
   require(contract.tasks.accounts?.read?.includes('src/copilot-login-environment.ts')
     && contract.tasks.accounts?.tests?.includes('tests/scripts/copilot-login-environment.test.mjs')
     && contract.tasks.accounts?.loginEnvironmentBoundary?.includes('tenant.ghe.com')

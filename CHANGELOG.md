@@ -5,6 +5,11 @@ release tags do not update this file after publication. Check the exact
 [GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
 version separately rather than treating an old `prepared` label as current status.
 
+## 0.1.0-alpha.20.dsh.0.2.2.rc.3 (prepared)
+
+- Record native turn-account evidence for valid explicitly configured Copilot model IDs even when absent from the native built-in catalog (#488).
+- Preserve canonical account ownership, actual ordinary stream delivery and Host-lifetime retention requirements; reviewer and hosted-search eligibility remain unchanged.
+
 ## 0.1.0-alpha.19.dsh.0.2.2.rc.3 (prepared)
 
 - Submit all enabled account model IDs directly instead of copying account capabilities or filtering against the native catalog (#508).

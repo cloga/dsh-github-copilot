@@ -37,7 +37,7 @@ function setup() {
   } } }).providers.get()['github-copilot']!
   const models = nativeCopilotModels(nativeProfile, getBuiltinModels('github-copilot'))
   vi.mocked(captureNativeCopilot).mockResolvedValue(models === undefined ? undefined
-    : { namespace: 'llm-pi-ai', models, assertCurrent })
+    : { namespace: 'llm-pi-ai', models, accountModelIds: undefined, assertCurrent })
   const readRecord = vi.fn(async (record: string) => {
     expect(record).toBe(key)
     return { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-refresh',
@@ -114,7 +114,9 @@ describe('optional native Copilot hosted search', () => {
     const fixture = setup()
     const models = nativeCopilotModels({ ...fixture.nativeProfile, api: 'openai-completions' }, getBuiltinModels('github-copilot'))
     expect(models?.get(model.id)?.api).toBe('openai-completions')
-    vi.mocked(captureNativeCopilot).mockResolvedValue({ namespace: 'llm-pi-ai', models: models!, assertCurrent: fixture.assertCurrent })
+    vi.mocked(captureNativeCopilot).mockResolvedValue({
+      namespace: 'llm-pi-ai', models: models!, accountModelIds: undefined, assertCurrent: fixture.assertCurrent,
+    })
     await expect(fixture.provider.search({ query: 'must not send' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
     expect(fixture.requests).toHaveLength(0)
     expect(fixture.fetch).toHaveBeenCalledTimes(1)

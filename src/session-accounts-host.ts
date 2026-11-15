@@ -108,7 +108,7 @@ export class SessionAccountsHost {
         this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_MISMATCH')
         return
       }
-      if (!route || !route.models.has(evidence.model) || credential?.type !== 'oauth') {
+      if (!route || !route.accountModelIds?.has(evidence.model) || credential?.type !== 'oauth') {
         this.invalidateNative(evidence)
         this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_UNPROVEN')
         return
