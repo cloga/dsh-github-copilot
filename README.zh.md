@@ -55,15 +55,15 @@ node scripts/select-core-release.mjs 0.2.2-rc.3
 精确兼容版本发布且通过验证后，在空目录下载原始制品并校验：
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.12.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 例如安装到 `web` profile：
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.12.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.12.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
 ```
 
 请明确选择目标 profile，然后：
@@ -114,12 +114,19 @@ Anthropic 模型也会被跳过；已有目录模型保留原生兼容性。只�
 Web 服务替换或旧插件路由 UI。
 原生 Auto reviewer 经确认的 Copilot Responses 审核请求会省略 `temperature`；
 普通聊天和原生 allow/deny/error/cancel 行为不变。即使插件解析到另一份 pi-ai，
-资格判断也使用原生适配器的目录；无法确认协议时仍不可用。参见
+资格判断也使用原生适配器的目录；无法确认协议时仍不可用。
+原生 Schema 自动生成的空 `chatTemplateKwargs`／`chatTemplateArgs` 映射及布尔型
+`supportsStrictMode` 不会使路线失去资格，逐模型配置也遵守同一规则；其他兼容覆盖仍不获准。
+无须改写设置来删除 Schema 默认值，也不应通过关闭审核或搜索能力探测来绕过故障。
+CI 验收和 Desktop 实际加载属于不同证据层级。参见
 [审核兼容说明](./docs/auto-review-sampling.md)。
 原生路线的额度和可选身份显示只使用 canonical OAuth 账号；如果 provider 指定了其他凭据、
 端点或非空请求头，或无法确认其配置，则显示额度不可用，不会将其他账号的额度归到原生路线。
 这不证明单次请求实际计费的账号。
 原生上下文异常诊断不依赖可选的托管续接服务，也不会替代 DSH 的上下文计量。
+Local diagnostics 可另行启用不含内容的原生 Copilot 逻辑流和可选 Copilot 搜索观察；
+它不显示 HTTP 细节，也不证明供应商收到请求或执行成功。参见
+[本地诊断说明](./docs/plugin-diagnostics.md)。
 
 ### 移除增强
 

@@ -24,6 +24,8 @@ export interface InlineConfig {
   autoAllocationDiagnosticsEnabled?: boolean
   /** Separate opt-in content-free physical request observations. */
   requestDiagnosticsEnabled?: boolean
+  /** Separate opt-in native Copilot logical observations. */
+  nativeDiagnosticsEnabled?: boolean
   /** Hosted-search switch; managed chat requests remain enabled. */
   enabled: boolean
   /**
@@ -98,7 +100,7 @@ export interface InlineConfig {
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'nativeSearchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'nativeDiagnosticsEnabled' | 'searchModel' | 'nativeSearchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
   autoSemanticAssessmentTimeoutMs?: number | LiveSetting<number>
   autoSemanticAssessmentModel?: string | LiveSetting<string>
   continuationDefaultHistory?: InlineConfig['continuationDefaultHistory'] | LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
@@ -107,6 +109,7 @@ export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAl
   diagnosticsEnabled?: boolean | LiveSetting<boolean>
   autoAllocationDiagnosticsEnabled?: boolean | LiveSetting<boolean>
   requestDiagnosticsEnabled?: boolean | LiveSetting<boolean>
+  nativeDiagnosticsEnabled?: boolean | LiveSetting<boolean>
   activeAccountId?: string | LiveSetting<string | undefined>
   followParentModel?: boolean | LiveSetting<boolean>
   parentModelFollow?: ParentModelBinding[] | LiveSetting<ArrayLike<ParentModelBinding>>
@@ -118,12 +121,13 @@ export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAl
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'nativeSearchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'nativeDiagnosticsEnabled' | 'searchModel' | 'nativeSearchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
   autoSemanticAssessmentTimeoutMs: LiveSetting<number>
   autoSemanticAssessmentModel: LiveSetting<string>
   diagnosticsEnabled: LiveSetting<boolean>
   autoAllocationDiagnosticsEnabled: LiveSetting<boolean>
   requestDiagnosticsEnabled: LiveSetting<boolean>
+  nativeDiagnosticsEnabled: LiveSetting<boolean>
   continuationDefaultHistory: LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
   sessionContinuation: LiveSetting<ArrayLike<SessionContinuationPreference>>
   sessionAccounts: LiveSetting<ArrayLike<SessionAccountPreference>>
@@ -153,6 +157,7 @@ export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
     diagnosticsEnabled: readConfigValue(config.diagnosticsEnabled),
     autoAllocationDiagnosticsEnabled: readConfigValue(config.autoAllocationDiagnosticsEnabled),
     requestDiagnosticsEnabled: readConfigValue(config.requestDiagnosticsEnabled),
+    nativeDiagnosticsEnabled: readConfigValue(config.nativeDiagnosticsEnabled),
     continuationDefaultHistory: defaults === undefined ? undefined : Array.from(defaults,
       row => ({ enabled: row.enabled, changedAt: row.changedAt })),
     sessionContinuation: continuation === undefined ? undefined : Array.from(continuation,
@@ -183,6 +188,7 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   diagnosticsEnabled: z.boolean().default(false).hidden().volatile(),
   autoAllocationDiagnosticsEnabled: z.boolean().default(false).hidden().volatile(),
   requestDiagnosticsEnabled: z.boolean().default(false).hidden().volatile(),
+  nativeDiagnosticsEnabled: z.boolean().default(false).hidden().volatile(),
   enabled: z.boolean().default(true).hidden(),
   providers: z.array(z.string()).default([]).hidden(),
   includeSources: z.boolean().default(true).hidden(),

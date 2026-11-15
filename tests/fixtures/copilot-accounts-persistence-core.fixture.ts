@@ -211,6 +211,9 @@ it('persists independent accounts and SettingsForms CAS across restart with nati
     await ctx.settings.mutate('github-copilot', [{ op: 'set', path: ['requestDiagnosticsEnabled'], value: true }],
       ctx.settings.describe().find(row => row.ns === 'github-copilot')!.revision)
     expect(readInlineConfig(configs.at(-1)!).requestDiagnosticsEnabled).toBe(true)
+    await ctx.settings.mutate('github-copilot', [{ op: 'set', path: ['nativeDiagnosticsEnabled'], value: true }],
+      ctx.settings.describe().find(row => row.ns === 'github-copilot')!.revision)
+    expect(readInlineConfig(configs.at(-1)!).nativeDiagnosticsEnabled).toBe(true)
     await ctx.settings.mutate('github-copilot', [
       { op: 'set', path: ['autoSemanticAssessmentTimeoutMs'], value: 45000 },
       { op: 'set', path: ['autoSemanticAssessmentModel'], value: 'synthetic-peer' },
@@ -237,6 +240,7 @@ it('persists independent accounts and SettingsForms CAS across restart with nati
     await verifySavedAutoPreferences(ctx, configs.at(-1)!)
     await verifySavedAutoPreferences(ctx, configs.at(-1)!, true)
     expect(readInlineConfig(configs.at(-1)!).requestDiagnosticsEnabled).toBe(true)
+    expect(readInlineConfig(configs.at(-1)!).nativeDiagnosticsEnabled).toBe(true)
     expect((await ctx.githubCopilotSessionContinuation.get(viewedSession as Agent)).enabled).toBe(true)
     expect((await ctx.githubCopilotSessionContinuation.defaults()).enabled).toBe(false)
     expect((await ctx.githubCopilotSessionContinuation.get(fresh)).enabled).toBe(true)
