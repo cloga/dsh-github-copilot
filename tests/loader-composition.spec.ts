@@ -4,6 +4,8 @@ import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import * as GitHubCopilotPlugin from '../src/index.ts'
 import type { InlineConfig } from '../src/config.ts'
+import type {} from '@deepseek-ai/dsh-storage-domain'
+import type {} from '@deepseek-ai/dsh-app-boot'
 
 const config: InlineConfig = {
   enabled: true,
@@ -114,8 +116,8 @@ async function mountProfile(
   return { settingsDocument, mutate }
 }
 
-async function mountIntegration(ctx: Context): Promise<void> {
-  const fiber = ctx.plugin(GitHubCopilotPlugin, config)
+async function mountIntegration(ctx: Context, input: InlineConfig = config): Promise<void> {
+  const fiber = ctx.plugin(GitHubCopilotPlugin, input)
   disposers.push(fiber.dispose)
   await fiber
   await vi.waitFor(() => {
@@ -124,6 +126,30 @@ async function mountIntegration(ctx: Context): Promise<void> {
 }
 
 describe('loader composition', () => {
+  it('does not open local diagnostics or change previously enabled settings', async () => {
+    const ctx = new Context()
+    const harness = await mountProfile(ctx, true)
+    const legacy = {
+      diagnosticsEnabled: true,
+      autoAllocationDiagnosticsEnabled: true,
+      requestDiagnosticsEnabled: true,
+      nativeDiagnosticsEnabled: true,
+    }
+    Object.assign(harness.settingsDocument['github-copilot'], legacy, {
+      continuationDefaultHistory: [{ enabled: true, changedAt: 1 }],
+    })
+    const open = vi.fn(async () => { throw new Error('unexpected diagnostics storage access') })
+    ctx.provide('profileContext', { name: 'synthetic' })
+    ctx.provide('storageDomain', { open })
+
+    await mountIntegration(ctx, { ...config, ...legacy })
+    await new Promise<void>(resolve => setImmediate(resolve))
+
+    expect(Reflect.apply(ctx.get, ctx, ['githubCopilotDiagnostics'])).toBeUndefined()
+    expect(open).not.toHaveBeenCalled()
+    expect(harness.mutate).not.toHaveBeenCalled()
+    expect(harness.settingsDocument['github-copilot']).toMatchObject(legacy)
+  })
   it('starts and disposes without an optional native reviewer package or package resolver', async () => {
     const ctx = new Context()
     await mountProfile(ctx)

@@ -13,10 +13,7 @@ import { nativeSettingsStyle, nativeCardStyle, nativeHeadingStyle, nativeCaption
 import type { GitHubCopilotAuthorizationView } from './authorization-controller.ts'
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
-import { DiagnosticsCard } from './diagnostics-card.ts'
 import { NativeSearchModelCard } from './native-search-model-card.ts'
-import type { DiagnosticsRemote } from './diagnostics-card.ts'
-import { installDiagnosticsClient } from './diagnostics-client.ts'
 import { installAccountUsagePresentation, installAccountUsageProjections } from './auto-model-presentation.ts'
 export { HostedSearchSettingsCard, WebSearchRoutingCard } from './web-search-routing-card.ts'
 export { CopilotUsageCard } from './copilot-usage-card.ts'
@@ -1035,13 +1032,9 @@ function registerUi(ctx: ClientContext): () => void {
 }
 
 export function CopilotPluginSettingsPage(props: {
-  diagnostics?: DiagnosticsRemote
-  diagnosticsControl?: ReactElement
   searchModelControl?: ReactElement
 }) {
-  return createElement('div', null,
-    props.searchModelControl,
-    props.diagnosticsControl ?? createElement(DiagnosticsCard, { remote: props.diagnostics }))
+  return createElement('div', null, props.searchModelControl)
 }
 function NativeSearchModelConnectionCard({ ctx }: { ctx: ClientContext }): ReactElement {
   const [services, setServices] = useState<{
@@ -1060,20 +1053,6 @@ function NativeSearchModelConnectionCard({ ctx }: { ctx: ClientContext }): React
   return services ? createElement(NativeSearchModelCard, services)
     : createElement('p', { role: 'status', style: nativeCaptionStyle }, 'Copilot search model settings are unavailable.')
 }
-function DiagnosticsConnectionCard({ ctx }: { ctx: ClientContext }): ReactElement {
-  const [remote, setRemote] = useState<DiagnosticsRemote>()
-  useEffect(() => {
-    let active = true
-    const injection = ctx.inject(['remote.githubCopilotDiagnostics'], scope => {
-      const captured = scope.remote.githubCopilotDiagnostics
-      if (active) setRemote(captured)
-      return () => { if (active) setRemote(undefined) }
-    })
-    return () => { active = false; void injection.dispose() }
-  }, [ctx])
-  return createElement(DiagnosticsCard, { remote })
-}
-
 /** Optional plugin settings must never hold account authorization UI in waiting. */
 function registerPluginSettingsUi(ctx: ClientContext): () => void {
   let active = true
@@ -1082,9 +1061,8 @@ function registerPluginSettingsUi(ctx: ClientContext): () => void {
   let sectionActive = false
   let footerSeat: (() => void) | undefined
   let fallback: (() => void) | undefined
-  const diagnosticsControl = createElement(DiagnosticsConnectionCard, { ctx })
   const searchModelControl = createElement(NativeSearchModelConnectionCard, { ctx })
-  const render = () => createElement(CopilotPluginSettingsPage, { diagnosticsControl, searchModelControl })
+  const render = () => createElement(CopilotPluginSettingsPage, { searchModelControl })
   const syncFallback = () => {
     if (active && footerReady && !bundleActive && footerSeat === undefined) {
       try {
@@ -1175,7 +1153,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     throw error
   }
   const settingsUi = ctx.inject(['slots'], registerPluginSettingsUi)
-  const diagnosticsUi = ctx.inject(['remote.githubCopilotDiagnostics'], scope => installDiagnosticsClient(scope))
   const usageUi = ctx.inject(['remote.githubCopilotUsage', 'slots'], registerCopilotUsageUi)
   const contextUi = ctx.inject(['remote', 'slots'], registerContextEvidenceUi)
   const recoveryUi = ctx.inject(['remote.githubCopilotReplayRecovery', 'remote.githubCopilotSessionContinuation', 'slots'], registerReplayRecoveryUi)
@@ -1192,7 +1169,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   return async () => {
     await accountUsageProjections.dispose()
     await accountUsageUi.dispose()
-    await diagnosticsUi.dispose()
     await recoveryUi.dispose()
     await contextUi.dispose()
     await usageUi.dispose()

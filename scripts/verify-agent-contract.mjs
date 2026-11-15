@@ -210,12 +210,17 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && task.requestBodyEvidenceBoundary?.includes('supplier receipt')
     && task.requestBodyEvidenceBoundary?.includes('dispose subscriptions')),
   'request upload diagnostics must retain scoped lifecycle ownership and local-only evidence limits')
-  require(contract.tasks.diagnostics?.read?.includes('src/request-body-composition.ts')
+  require(contract.tasks.diagnostics?.runtimeStatus === 'retired-no-collection'
+    && contract.tasks.diagnostics?.read?.includes('src/request-body-composition.ts')
+    && contract.tasks.diagnostics?.tests?.includes('tests/loader-composition.spec.ts')
+    && contract.tasks.diagnostics?.tests?.includes('tests/client-search-inject.spec.ts')
+    && contract.tasks.diagnostics?.tests?.includes('tests/remote-codec.spec.ts')
     && contract.tasks.diagnostics?.tests?.includes('tests/request-body-composition.spec.ts')
     && contract.tasks.diagnostics?.compositionBoundary?.includes('Keep replay validation/recovery at 16 MiB')
-    && contract.tasks.diagnostics?.compositionBoundary?.includes('without delaying ordinary native delivery')
-    && contract.tasks.diagnostics?.compositionBoundary?.includes('original consent generation, clear, retention and eviction fences'),
-  'large-request composition must remain bounded diagnostic-only work with consent fences and unchanged replay/transport')
+    && contract.tasks.diagnostics?.risk?.includes('existing data untouched')
+    && contract.tasks.diagnostics?.risk?.includes('true settings never enable collection')
+    && agentGuide.includes('Local diagnostics is retired (#499)'),
+  'retired Local diagnostics must preserve data and settings without collection or changes to immediate 408 guidance')
   require(contract.tasks.compatibility?.responsesCompressionBoundary?.includes('defaults false')
     && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('original JSON admission/replay/evidence')
     && contract.tasks.compatibility?.responsesCompressionBoundary?.includes('no identity resend')
