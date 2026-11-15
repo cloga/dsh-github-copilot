@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -168,7 +168,28 @@ it('applies confirmed account switches to native credentials and retains the nat
       })
       const packageRoot = dirname(manifest)
       markerFixture = mkdtempSync(join(tmpdir(), 'copilot-llm-marker-'))
-      symlinkSync(dirname(dirname(packageRoot)), join(markerFixture, 'node_modules'), 'junction')
+      const packageMetadata = JSON.parse(readFileSync(manifest, 'utf8')) as {
+        dependencies?: Record<string, string>
+        peerDependencies?: Record<string, string>
+      }
+      const packageRequire = createRequire(manifest)
+      const markerNodeModules = join(markerFixture, 'node_modules')
+      mkdirSync(markerNodeModules)
+      for (const dependency of new Set([
+        ...Object.keys(packageMetadata.dependencies ?? {}),
+        ...Object.keys(packageMetadata.peerDependencies ?? {}),
+      ])) {
+        let dependencyRoot = dirname(realpathSync(packageRequire.resolve(dependency)))
+        while (!existsSync(join(dependencyRoot, 'package.json'))
+          || JSON.parse(readFileSync(join(dependencyRoot, 'package.json'), 'utf8')).name !== dependency) {
+          const parent = dirname(dependencyRoot)
+          if (parent === dependencyRoot) throw new Error(`Could not locate published dependency ${dependency}`)
+          dependencyRoot = parent
+        }
+        const destination = join(markerNodeModules, dependency)
+        mkdirSync(dirname(destination), { recursive: true })
+        symlinkSync(dependencyRoot, destination, 'junction')
+      }
       const copy = join(markerFixture, 'llm')
       cpSync(packageRoot, copy, { recursive: true, errorOnExist: true, force: false })
       const other: typeof import('@deepseek-ai/dsh-llm') = require(join(copy, 'lib', 'index.js'))
