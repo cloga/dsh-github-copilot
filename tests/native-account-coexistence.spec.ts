@@ -144,6 +144,8 @@ it('applies confirmed account switches to native credentials and retains the nat
       async () => ({ kind: 'enter', messages: [] })])
     await ctx.waterfall(scopeTarget(requestAgent, requestAgent), 'agent/request',
       { agent: requestAgent, turn: 1, step: 1, signal: requestSignal.signal }, async () => nativeSelection)
+    // Core records the first request header before the stream is dispatched.
+    hasNativeHeader = true
     const auxiliary = await ctx.llm.prepareCall({ provider: 'github-copilot', model: model.id })
     for await (const _chunk of auxiliary.stream({ ...auxiliary.config, signal: requestSignal.signal, messages: [] })) {}
     expect(ctx.get('githubCopilotSessionAccounts')?.turns.evidence(nativeAgent.session, 1)).toBeUndefined()
