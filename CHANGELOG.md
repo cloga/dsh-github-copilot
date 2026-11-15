@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.9.dsh.0.2.2.rc.3 (prepared)
+
+- Qualify native Copilot profiles after actual Config/Settings normalization: schema-default empty template maps and boolean `supportsStrictMode` no longer disable reviewer-only temperature omission or canonical hosted-search readiness (#483).
+- Apply the same narrow compatibility rule at provider, model and model-override levels while retaining unknown-value, credential, endpoint, headers, ownership and lifecycle refusal.
+- Add normalized native configuration and reviewer/search regressions. No profile rewrite, Core patch, automatic restart, general sampling override or live supplier acceptance is implied.
+
 ## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (prepared)
 
 - Preview and explicitly confirm a one-time sync of enabled canonical-account models to an existing native Copilot provider (#466).
