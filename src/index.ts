@@ -1,7 +1,6 @@
 /** Account-scoped Copilot model integration for the native DSH runtime. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { DiagnosticsController } from './diagnostics-host.ts'
 import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import { isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import GitHubCopilotDualModel from './dual-model-host.ts'
@@ -80,7 +79,6 @@ export function apply(ctx: Context, config: LiveInlineConfig): void {
     new NativeCopilotSearchController(scope, provider)
     scope.effect(() => scope.web.registerSearchProvider(provider))
   })
-  ctx.plugin({ apply(scope) { new DiagnosticsController(scope) } })
   installContextEvidence(ctx)
   ensureAuthorization(ctx)
   ctx.inject(integrationInject, (integrationCtx) => {

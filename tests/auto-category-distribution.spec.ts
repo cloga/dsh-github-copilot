@@ -3,7 +3,6 @@ import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
 import { selectAutoModel } from '../src/auto-model-routing.ts'
 import { AutoAllocationSchema } from '../src/auto-allocation.ts'
 import { summarizeAutoAllocations } from '../src/auto-allocation-evidence.ts'
-import { AutoAllocationDiagnosticsCollector } from '../src/auto-allocation-diagnostics.ts'
 import { selectionExplanation } from '../src/auto-selection-explanation.ts'
 
 const models: AccountModelDescriptor[] = ['powerful', 'versatile', 'lightweight'].flatMap(category =>
@@ -73,22 +72,16 @@ describe('soft Auto category distribution', () => {
       .toContain('one-turn recency decay')
   })
 
-  it('attributes each candidate to its own category in bounded summaries and persistent cohorts', () => {
+  it('attributes each candidate to its own category in bounded summaries', () => {
     const decision = selectAutoModel(models, [], 'balance', {
       estimateMessage: () => 100, seed: 42,
       assessment: { demand: 'complex', source: 'semantic', signals: [] },
     })
     const summary = summarizeAutoAllocations([decision.explanation])
-    const collector = new AutoAllocationDiagnosticsCollector('0.0.0-synthetic')
-    collector.setEnabled(true)
-    collector.record(decision.explanation)
     for (const model of models) {
       expect(summary.rows.find(row => row.modelId === model.id)?.category).toBe(model.category)
-      expect(collector.snapshot().rows.find(row => row.modelId === model.id))
-        .toMatchObject({ category: model.category, targetCategory: 'powerful' })
     }
     expect(summary.rows.reduce((sum, row) => sum + row.selections, 0)).toBe(1)
-    expect(collector.snapshot().rows.reduce((sum, row) => sum + row.expectedSelections, 0)).toBeCloseTo(1)
   })
 
   it('removes unsupported or oversized models before allocation and retains all fitting categories', () => {

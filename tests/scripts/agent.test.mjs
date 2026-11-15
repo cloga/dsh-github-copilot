@@ -506,7 +506,7 @@ test('login environment plan rejects weakened native OAuth and tenant boundaries
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test('large composition plan rejects weakened replay, transport and consent boundaries', async () => {
+test('diagnostics retirement plan rejects collection or weakened data preservation and 408 boundaries', async () => {
   const plan = await planTask('diagnostics')
   assert.ok(plan.read.includes('src/request-body-composition.ts'))
   assert.ok(plan.tests.includes('tests/request-body-composition.spec.ts'))
@@ -521,13 +521,14 @@ test('large composition plan rejects weakened replay, transport and consent boun
     await writeFile(join(root, 'AGENTS.md'), await readFile(join(repositoryRoot, 'AGENTS.md')))
     for (const mutate of [
       contract => { delete contract.tasks.diagnostics.compositionBoundary },
-      contract => { contract.tasks.diagnostics.compositionBoundary = 'Increase replay limits and wait for diagnostics before sending' },
-      contract => { contract.tasks.diagnostics.tests = contract.tasks.diagnostics.tests.filter(file => file !== 'tests/request-body-composition.spec.ts') },
+      contract => { contract.tasks.diagnostics.runtimeStatus = 'enabled' },
+      contract => { contract.tasks.diagnostics.risk = 'Clear old data and start collection' },
+      contract => { contract.tasks.diagnostics.tests = contract.tasks.diagnostics.tests.filter(file => file !== 'tests/loader-composition.spec.ts') },
     ]) {
       const contract = structuredClone(original)
       mutate(contract)
       await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
-      await assert.rejects(verifyAgentContract(root), /large-request composition/)
+      await assert.rejects(verifyAgentContract(root), /retired Local diagnostics/)
     }
   } finally { await rm(root, { recursive: true, force: true }) }
 })

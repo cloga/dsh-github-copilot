@@ -18,7 +18,7 @@ describe('session search settings', () => {
       searchRouting: { searchProvider: 'github-copilot-hosted', defaultSearchProvider: 'none' },
     })
   })
-  it('keeps request diagnostics independently default-off, hidden, volatile and boolean-only', () => {
+  it('preserves the retired request diagnostics setting as an inert hidden boolean', () => {
     expect(readInlineConfig(Config({ ...base, diagnosticsEnabled: true,
       autoAllocationDiagnosticsEnabled: true })).requestDiagnosticsEnabled).toBe(false)
     expect(Config.dict?.requestDiagnosticsEnabled?.meta.hidden).toBe(true)
@@ -30,7 +30,7 @@ describe('session search settings', () => {
     expect(readInlineConfig(live).requestDiagnosticsEnabled).toBe(true)
     expect(() => Config({ ...base, requestDiagnosticsEnabled: 'true' } as unknown as InlineConfig)).toThrow()
   })
-  it('keeps native diagnostics separately default-off and reads the hidden live leaf', () => {
+  it('preserves the retired native diagnostics setting as an inert hidden boolean', () => {
     expect(readInlineConfig(Config({ ...base, diagnosticsEnabled: true,
       requestDiagnosticsEnabled: true })).nativeDiagnosticsEnabled).toBe(false)
     expect(Config.dict?.nativeDiagnosticsEnabled?.meta.hidden).toBe(true)

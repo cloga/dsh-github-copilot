@@ -73,15 +73,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.16.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.16.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.16.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.17.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.17.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.17.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.16.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.16.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.17.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.17.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -183,10 +183,9 @@ Evidence is Host-memory-only;
 older turns and turns missing after a restart or eviction remain unknown.
 Native context-incident diagnostics remain available without the optional
 managed continuation service; they do not replace DSH's context meter.
-Local diagnostics also offers separately opt-in, content-free logical
-observations for native Copilot streams and the optional Copilot search backend.
-They do not expose HTTP details or prove supplier receipt or execution.
-See [local diagnostics](./docs/plugin-diagnostics.md).
+The Local diagnostics feature has been removed. Existing diagnostic data and
+settings are left untouched; older plugin versions may resume collection if
+their saved switches remain enabled. See [retirement details](./docs/plugin-diagnostics.md).
 
 ### Other optional capabilities
 
@@ -196,9 +195,8 @@ See [local diagnostics](./docs/plugin-diagnostics.md).
   enrolled, and enabling it never sends or retries a message.
 - [Segmented compaction recovery](./docs/manual-compaction-recovery.md) requires
   explicit engine selection; installing the plugin does not replace Core's engine.
-- [Local diagnostics](./docs/plugin-diagnostics.md) and managed Responses gzip
-  are default-off; enabling diagnostics does not upload data. GitHub Enterprise
-  Cloud tenant login is supported, while GHES and Enterprise quota are not.
+- Managed Responses gzip is default-off. GitHub Enterprise Cloud tenant login
+  is supported, while GHES and Enterprise quota are not.
 
 ### Removing the enhancement
 

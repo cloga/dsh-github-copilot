@@ -5,7 +5,6 @@ import type { ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it, vi } from 'vitest'
 import { apply, CopilotPluginSettingsPage, HostedSearchSettingsCard, inject } from '../src/client.ts'
-import { emptyDiagnostics } from '../src/diagnostics-collector.ts'
 
 // Actual Cordis dependency tracing and the actual Client apply/render callback.
 // The mounted test uses real React DOM and Cordis tracing; Remote transport and
@@ -81,9 +80,7 @@ async function fixture(footer: boolean, routingAvailable = false, bundle = true,
   const addDiagnostics = () => root.plugin({ apply(ctx) {
     class DiagnosticsRemote extends NamedService {
       constructor() { super(ctx, 'remote.githubCopilotDiagnostics') }
-      async get() { return { ok: true, value: { enabled: false, autoAllocationEnabled: false,
-        state: 'ready', diagnostic: 'none',
-        dirty: false, snapshot: emptyDiagnostics() } } }
+      async get() { throw new Error('retired diagnostics Remote must not be used') }
     }
     new DiagnosticsRemote()
   } })
@@ -123,7 +120,7 @@ describe('plugin settings without a search Remote', () => {
       Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
     }
   })
-  it('mounts late diagnostics without blocking other settings', async () => {
+  it('does not mount local diagnostics even when a legacy Remote is present', async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     const f = await fixture(true, false, true)
     const element = document.createElement('div')
@@ -132,12 +129,13 @@ describe('plugin settings without a search Remote', () => {
       await act(async () => { mounted.render(f.registrations.get(settingsId)!.render({ view: 'page' })) })
       expect(element.querySelector('[data-dsh-parent-model-follow]')).toBeNull()
       expect(element.querySelector('[data-dsh-web-search-routing]')).toBeNull()
-      expect(element.textContent).toContain('Diagnostics controls are unavailable')
+      expect(element.textContent).not.toContain('Local diagnostics')
+      expect(element.textContent).not.toContain('Diagnostics controls are unavailable')
       let diagnostics!: ReturnType<typeof f.addDiagnostics>
       await act(async () => { diagnostics = f.addDiagnostics(); await diagnostics })
-      expect(element.textContent).toContain('Local collection paused')
+      expect(element.textContent).not.toContain('Local diagnostics')
       await act(async () => { await diagnostics.dispose() })
-      expect(element.textContent).toContain('Diagnostics controls are unavailable')
+      expect(element.textContent).not.toContain('Local diagnostics')
     } finally {
       await act(async () => { mounted.unmount(); await f.root.fiber.dispose() })
       Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
