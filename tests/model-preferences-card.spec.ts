@@ -102,7 +102,7 @@ it('previews a native model sync and applies it only after the explicit confirma
   expect(document.body.textContent).toContain('The native route uses a different protocol')
   expect(document.body.textContent).toContain('replaces the native provider’s built-in catalog')
   expect(document.body.textContent).toContain('remains after the plugin is unloaded or uninstalled')
-  expect(document.body.textContent).toContain('image admission checks and tool-schema filtering do not transfer')
+  expect(document.body.textContent).toContain('permission-field filtering does not transfer')
   expect(document.body.textContent).toContain('Core also uses each configured maxTokens')
   expect(document.body.textContent).toContain('Per-request output defaults (2)')
   expect(document.body.textContent).toContain(`${new Intl.NumberFormat().format(8192)} max output tokens`)

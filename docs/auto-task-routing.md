@@ -332,7 +332,7 @@ no-fit recovery, one-call semantic success/invalid/failure/timeout/cancellation,
 omitted context, strict Remote and footer English/Chinese explanations.
 
 Retain native gateway, parent following, manual selection, exclusion admission,
-account proof, image admission and compaction fixture coverage. Full protected
+account proof, general image eligibility and compaction fixture coverage. Full protected
 Windows/Linux CI remains mandatory before merge/release. No live inference
 calls are needed for synthetic acceptance.
 

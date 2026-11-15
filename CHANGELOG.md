@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.9.dsh.0.2.2.rc.3 (prepared)
+
+- Retire the managed route's projected-image MIME preflight and Goal schema rewriting (#481). Core owns image projection and Goal schemas; supplier errors are not preempted by a plugin MIME diagnostic.
+- Keep the managed route's permission-field filtering and the native model-sync format eligibility checks unchanged.
+- Prepare candidate metadata for PR validation only; no release or live activation is implied.
+
 ## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (prepared)
 
 - Preview and explicitly confirm a one-time sync of enabled canonical-account models to an existing native Copilot provider (#466).
