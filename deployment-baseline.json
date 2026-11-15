@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.10.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.12.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.10.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.12.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -750,13 +750,14 @@
     {
       "id": "confirmed-native-model-sync",
       "required": true,
-      "activation": "explicit-preview-and-one-shot-confirmation",
+      "activation": "visible-nonforcing-preview-and-one-shot-confirmation",
       "evidenceScope": "tagged-native-settings-and-resolution-with-synthetic-catalog-proof-plus-separate-adapter-ownership-tests-not-live-provider",
       "sourceMarkers": [
         {"file": "src/native-model-sync.ts", "marker": "NATIVE_INHERITED_API_MISMATCH"},
         {"file": "src/native-copilot-access.ts", "marker": "captureNativeCopilotCatalog"},
         {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models']"},
-        {"file": "src/model-preferences-card.ts", "marker": "Preview enabled models"},
+        {"file": "src/model-preferences-card.ts", "marker": "Sync models"},
+        {"file": "src/authorization-controller.ts", "marker": "nativeSyncSupportsRouteCompatibility"},
         {"file": "src/remote.ts", "marker": "GitHubCopilotNativeModelSyncPreviewSchema"}
       ],
       "tests": [
@@ -772,9 +773,15 @@
         {"file": "tests/native-copilot-access.spec.ts", "name": "exposes the proven unfiltered adapter catalog independently of the configured model list"},
         {"file": "tests/native-copilot-access.spec.ts", "name": "revokes a catalog snapshot when its native Loader entry is removed"},
         {"file": "tests/authorization-controller.spec.ts", "name": "previews enabled canonical models and applies only the confirmed native models path with CAS/readback"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "prepares from existing account proof without discovery or credential reads"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "preserves the native disabled strict-mode override while syncing supported protocols"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "blocks disabled strict-mode compatibility if no synced model has a supporting protocol"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "rejects a preference change while checking the native credential before writing"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "rejects a plan that expires while checking the native credential before writing"},
         {"file": "tests/authorization-controller.spec.ts", "name": "reports an uncertain commit if the proven native catalog changes during the write"},
-        {"file": "tests/model-preferences-card.spec.ts", "name": "previews a native model sync and applies it only after the explicit confirmation action"},
-        {"file": "tests/model-preferences-card.spec.ts", "name": "does not dispatch duplicate preview or apply actions before React renders the busy state"},
+        {"file": "tests/model-preferences-card.spec.ts", "name": "shows sync changes beside the model list and applies them with one explicit action"},
+        {"file": "tests/model-preferences-card.spec.ts", "name": "does not dispatch duplicate sync actions before React renders the busy state"},
+        {"file": "tests/model-preferences-card.spec.ts", "name": "allows model edits while preparing and ignores the superseded plan"},
         {"file": "tests/remote-codec.spec.ts", "name": "accepts named native-sync safety diagnostics without accepting extra fields"},
         {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds native model sync through actual Client and %s Host gateways"},
         {"file": "tests/fixtures/native-model-sync-core.fixture.ts", "name": "syncs a confirmed snapshot through real native Settings and model resolution across restart using synthetic catalog proof"}
@@ -1213,12 +1220,11 @@
       "sourceMarkers": [
         {"file": "src/tool-schema-compat.ts", "marker": "options.provider !== GITHUB_COPILOT_PREVIEW_PROVIDER_ID"},
         {"file": "src/tool-schema-compat.ts", "marker": "ESCALATION_FIELDS"},
-        {"file": "src/tool-schema-compat.ts", "marker": "GOAL_UPDATE_TOOL_NAME"},
         {"file": "scripts/verify-upstream-baseline.mjs", "marker": "baseline.strictModeCompat === 'route-switch'"}
       ],
       "tests": [
         {"file": "tests/tool-schema-compat.spec.ts", "name": "removes escalation properties and required entries only for Copilot"},
-        {"file": "tests/tool-schema-compat.spec.ts", "name": "turns update_goal into action-specific schemas only for Copilot"},
+        {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves the native update_goal schema for Copilot"},
         {"file": "tests/tool-schema-compat.spec.ts", "name": "preserves every schema for non-Copilot providers"},
         {"file": "tests/fixtures/tool-schema-core.fixture.ts", "name": "preserves frozen native requests and conditional tool execution while adapting managed wire schemas"},
         {"file": "tests/authorization-controller.spec.ts", "name": "preserves configured Anthropic and OpenAI models during explicit strict mode repair"},

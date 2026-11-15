@@ -128,70 +128,10 @@ describe('Copilot tool-schema compatibility', () => {
     expect(input.tools[0]?.parameters.required).toEqual(['command', 'sandbox_permissions', 'justification'])
   })
 
-  it('turns update_goal into action-specific schemas only for Copilot', () => {
+  it('preserves the native update_goal schema for Copilot', () => {
     const input = assembly('github-copilot-preview')
     const filtered = filterCopilotToolRequest(input)
-    const parameters = filtered.tools?.[1]?.parameters
-
-    expect(parameters).toEqual({
-      type: 'object',
-      oneOf: [
-        {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            goal_id: { type: 'string' },
-            revision: { type: 'number' },
-            action: { type: 'string', const: 'edit' },
-            objective: { type: 'string' },
-            max_goal_rounds: { type: 'number' },
-          },
-          required: ['goal_id', 'revision', 'action'],
-        },
-        {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            goal_id: { type: 'string' },
-            revision: { type: 'number' },
-            action: { type: 'string', const: 'pause' },
-          },
-          required: ['goal_id', 'revision', 'action'],
-        },
-        {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            goal_id: { type: 'string' },
-            revision: { type: 'number' },
-            action: { type: 'string', const: 'resume' },
-          },
-          required: ['goal_id', 'revision', 'action'],
-        },
-        {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            goal_id: { type: 'string' },
-            revision: { type: 'number' },
-            action: { type: 'string', const: 'complete' },
-          },
-          required: ['goal_id', 'revision', 'action'],
-        },
-        {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            goal_id: { type: 'string' },
-            revision: { type: 'number' },
-            action: { type: 'string', const: 'blocked' },
-            blocked_reason: { type: 'string' },
-          },
-          required: ['goal_id', 'revision', 'action', 'blocked_reason'],
-        },
-      ],
-    })
-    expect(input.tools[1]?.parameters).toHaveProperty('properties.objective')
+    expect(filtered.tools?.[1]).toBe(input.tools[1])
   })
 
   it('preserves every schema for non-Copilot providers', () => {
@@ -217,7 +157,8 @@ describe('Copilot tool-schema compatibility', () => {
     expect(result).not.toBe(input)
     expect(result.tools?.[0]?.parameters.properties).toEqual({ command: { type: 'string' } })
     expect(result.toolHistory?.tools[0]?.parameters.properties).toEqual({ command: { type: 'string' } })
-    expect(result.toolHistory?.updates[0]?.additions[1]?.parameters).toHaveProperty('oneOf')
+    expect(result.toolHistory?.tools[1]).toBe(input.tools?.[1])
+    expect(result.toolHistory?.updates[0]?.additions[1]).toBe(input.tools?.[1])
     expect(input.tools?.[0]?.parameters.properties).toHaveProperty('sandbox_permissions')
     expect(input.toolHistory?.updates[0]?.additions[1]?.parameters).toHaveProperty('properties.objective')
   })

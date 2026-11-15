@@ -28,7 +28,7 @@ describe('strict Remote factory compatibility', () => {
         checked++
       }
     }
-    expect(checked).toBe(113)
+    expect(checked).toBe(114)
   })
   it('keeps explicit replay recovery arguments and output strict', () => {
     const descriptors = remote.descriptors.filter(value => value.namespace === 'githubCopilotReplayRecovery')
@@ -49,8 +49,6 @@ describe('strict Remote factory compatibility', () => {
     expect(() => duration.create().parse('always')).toThrow()
   })
   it('accepts named native-sync safety diagnostics without accepting extra fields', () => {
-    const descriptor = remote.descriptors.find(value => value.method === 'previewNativeModelSync')!
-    const result = descriptor.result as ReturnType<typeof strictRemoteCodec>
     const preview = {
       state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN', enabledCount: 1, syncableCount: 0,
       outputTokenDefaults: [], addedIds: [], removedIds: [], updatedIds: [],
@@ -59,8 +57,13 @@ describe('strict Remote factory compatibility', () => {
         { id: 'unknown-reasoning', code: 'NATIVE_REASONING_UNKNOWN' },
         { id: 'unknown-compatibility', code: 'NATIVE_COMPATIBILITY_UNPROVEN' }],
     }
-    expect(result.create().parse(preview)).toEqual(preview)
-    expect(() => result.create().parse({ ...preview, credentials: 'private' })).toThrow()
-    expect(() => result.create().parse({ ...preview, skipped: [{ id: 'model', code: 'invented' }] })).toThrow()
+    for (const method of ['prepareNativeModelSync', 'previewNativeModelSync']) {
+      const descriptor = remote.descriptors.find(value => value.method === method)!
+      const result = descriptor.result as ReturnType<typeof strictRemoteCodec>
+      expect(descriptor.parameters).toEqual([])
+      expect(result.create().parse(preview)).toEqual(preview)
+      expect(() => result.create().parse({ ...preview, credentials: 'private' })).toThrow()
+      expect(() => result.create().parse({ ...preview, skipped: [{ id: 'model', code: 'invented' }] })).toThrow()
+    }
   })
 })

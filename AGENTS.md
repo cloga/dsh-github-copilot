@@ -54,15 +54,18 @@ readback; never migrate or interpret the old `searchModel` as this choice.
 The former plugin routing UI and managed Auto remain retired. Supplier calls,
 live installation and restarts are separate from synthetic CI acceptance.
 
-The user-authorized native model sync (#466) is a narrow exception to the
-no-settings-rewrite rule: after an explicit preview and confirmation, one
+The user-authorized native model sync (#466, #479) is a narrow exception to the
+no-settings-rewrite rule: after a visible preview and one explicit confirmation, one
 revision-checked write may replace only
 `llm-pi-ai.providers.github-copilot.models` in an existing canonical profile.
 Prove current canonical-account metadata and the native adapter-owned catalog;
 skip unrepresentable or uncertain model capabilities. Disclose additions,
 updates, removals, skipped models and configured output request defaults.
-Recheck account/catalog/preferences and Settings evidence before the one-shot
-write, then read back both user and effective values. Never create a profile,
+Prepare the preview without forced discovery from existing verified evidence.
+An existing `compat.supportsStrictMode: false` may be preserved only when at
+least one synced Responses or Completions model supports it; block other unproven
+compatibility overrides. Recheck account/catalog/preferences and Settings evidence
+before the one-shot write, then read back both user and effective values. Never create a profile,
 change other paths or perform this sync automatically.
 
 The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
@@ -276,7 +279,7 @@ Alpha.25 admits native `subagent/descriptor` v3, already v3 in the retained rc.1
 - `src/temporary-models.ts`: exact, account-gated corrections with semantic protocol/capability retirement.
 - `src/model-protocol.ts`: explicit Core capability detection and conservative legacy fallback.
 - `src/responses-reasoning.ts`, `src/responses-reasoning-text.ts`: selected-model effort mapping and public summary assembly.
-- `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments and action-specific Goal update schemas.
+- `src/tool-schema-compat.ts`: Copilot-only prompt-assembly filter for unusable escalation arguments; Goal schemas remain native.
 - `src/plan.ts`: Copilot-only, fail-closed hosted-search candidate lifecycle.
 - `src/auto-assessment-evidence.ts`: bounded request-local semantic classifier milestones copied into strict ephemeral turn evidence; no prompts, replay, credentials or error bodies. Total includes preparation; adapter start and first text are not HTTP dispatch/byte timings. Keep one configured monotonic deadline (30s default, 1000–120000ms) checked at preparation/native request/result boundaries and 128-token compact output; delayed timer settlement is not a real-time guarantee. The user-approved budget trial is not calibrated latency or proof of past timeout causes. Empty classifier setting retains metadata-driven automatic selection; a nonempty exact account ID preserves proof/exclusion/text/headroom guards, never a virtual Auto ID or silent alternate-model fallback. Both native volatile Config leaves affect future assessments and preserve admitted turns. Prefer eligible supplier-advertised reasoning-off classifiers, but request off only when supplier and public prepared-model effort agree; unsupported native controls stay unchanged. No guessed optimal/latency ranking, benchmark requests, adaptive timeout, cooldown or cross-turn cache without reviewed observations.
 - `src/probe.ts`: bounded native-search capability proof.
