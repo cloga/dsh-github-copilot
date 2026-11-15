@@ -20,7 +20,7 @@ function customTransport(value: Record<string, unknown>): boolean {
   })
 }
 
-interface NativeCopilotModel {
+export interface NativeCopilotModel {
   readonly id: string
   readonly api: string
 }
@@ -80,13 +80,20 @@ export interface NativeCopilotSnapshot {
   assertCurrent(): void
 }
 
+export interface NativeCopilotCatalogSnapshot {
+  readonly catalog: ReadonlyMap<string, NativeCopilotModel>
+  readonly configuredModels: ReadonlyMap<string, NativeCopilotModel> | undefined
+  readonly namespace: string
+  assertCurrent(): void
+}
+
 /**
  * Qualify the native Loader root and its exact published pi-ai dependency.
  * No credential, discovery, settings write or private adapter registry access.
  */
-export async function captureNativeCopilot(
+export async function captureNativeCopilotCatalog(
   ctx: Context, diagnose: (code: string) => void = () => {},
-): Promise<NativeCopilotSnapshot | undefined> {
+): Promise<NativeCopilotCatalogSnapshot | undefined> {
   const unproven = (code: string) => { diagnose(code); return undefined }
   const llm = ctx.get('llm')
   const settings = ctx.get('settings')
@@ -127,29 +134,55 @@ export async function captureNativeCopilot(
   } catch {
     return unproven('COPILOT_NATIVE_CATALOG_UNAVAILABLE')
   }
-  const models = nativeCopilotModels(captured.value.providers[NATIVE_COPILOT], catalog)
-  if (!models) return unproven('COPILOT_NATIVE_MODELS_UNPROVEN')
+  const nativeCatalog = nativeCopilotModels({}, catalog)
+  if (!nativeCatalog) return unproven('COPILOT_NATIVE_MODELS_UNPROVEN')
+  const configuredModels = nativeCopilotModels(captured.value.providers[NATIVE_COPILOT], catalog)
   const module = await import('@deepseek-ai/dsh-llm-pi-ai')
   const current = () => {
-    const nativeOwner = packages.packageOf(NATIVE, base)
-    const importedOwner = packages.packageOf(NATIVE, import.meta.url)
-    const nativeCatalog = packages.packageOf(PI, pathToFileURL(ownerPath).href)
-    const pluginCatalog = packages.packageOf(PI, import.meta.url)
+    const currentLlm = ctx.get('llm')
+    const currentSettings = ctx.get('settings')
+    const currentLoader = ctx.get('loader')
+    const currentPackages = ctx.get('pluginPackages')
+    if (!currentLlm || !currentSettings || !currentLoader || !currentPackages) return false
+    const currentEntries = [...currentLoader.entries()].filter(value => value.options.id === directory.settingsNs)
+    if (currentEntries.length !== 1 || currentEntries[0] !== entry) return false
+    const currentDirectory = currentLlm.listConfigurableProviders().find(value => value.provider === NATIVE_COPILOT)
+    if (!currentDirectory || currentDirectory.declared !== false || currentDirectory.error !== undefined
+      || currentDirectory.settingsNs !== directory.settingsNs
+      || currentDirectory.settingsPath.length !== 2 || currentDirectory.settingsPath[0] !== 'providers'
+      || currentDirectory.settingsPath[1] !== NATIVE_COPILOT || currentDirectory.nativeAuth?.oauth !== true) return false
+    const nativeOwner = currentPackages.packageOf(NATIVE, base)
+    const importedOwner = currentPackages.packageOf(NATIVE, import.meta.url)
+    const nativeCatalog = currentPackages.packageOf(PI, pathToFileURL(ownerPath).href)
+    const pluginCatalog = currentPackages.packageOf(PI, import.meta.url)
     return fiber.uid !== null && entry.fiber?.ctx.fiber === fiber
       && fiber.runtime?.callback === module.apply && entry.options.name === NATIVE
-      && view()?.revision === captured.revision
+      && currentSettings.describe({ redactSecrets: true }).find(value => value.ns === directory.settingsNs)?.revision === captured.revision
       && nativeOwner?.manifestPath === ownerPath && nativeOwner.version === '0.2.2-rc.3'
       && importedOwner?.manifestPath === ownerPath && importedOwner.version === '0.2.2-rc.3'
       && nativeCatalog?.manifestPath === nativePiPath && nativeCatalog.version === '1.3.0'
       && pluginCatalog?.manifestPath === localPiPath && pluginCatalog.version === '1.3.0'
-      && llm.listProviders().some(value => value.id === NATIVE_COPILOT)
+      && currentLlm.listProviders().some(value => value.id === NATIVE_COPILOT)
   }
   if (!current()) return unproven('COPILOT_NATIVE_SNAPSHOT_REVOKED')
   return {
-    models,
+    catalog: nativeCatalog,
+    configuredModels,
     namespace: directory.settingsNs,
     assertCurrent() {
       if (!current()) throw new Error('COPILOT_NATIVE_ROUTE_CHANGED')
     },
   }
+}
+
+export async function captureNativeCopilot(
+  ctx: Context, diagnose: (code: string) => void = () => {},
+): Promise<NativeCopilotSnapshot | undefined> {
+  const snapshot = await captureNativeCopilotCatalog(ctx, diagnose)
+  if (snapshot === undefined) return undefined
+  if (snapshot.configuredModels === undefined) {
+    diagnose('COPILOT_NATIVE_MODELS_UNPROVEN')
+    return undefined
+  }
+  return { models: snapshot.configuredModels, namespace: snapshot.namespace, assertCurrent: snapshot.assertCurrent }
 }

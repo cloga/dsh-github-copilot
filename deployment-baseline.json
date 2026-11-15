@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.7.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.8.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.7.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.8.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -337,7 +337,7 @@
           "evidenceScope": "unchanged-tagged-source-target",
           "standaloneNpmArtifacts": "not-tested",
           "managedProviderValidation": "not-verified",
-          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts", "tests/native-web-composition.spec.ts", "tests/dual-model-host.spec.ts"]
+          "runtimeTests": ["tests/preview-route.spec.ts", "tests/published-core.spec.ts", "tests/single-route.spec.ts", "tests/search-routing.spec.ts", "tests/routed-web.spec.ts", "tests/deepseek-search-fallback.spec.ts", "tests/tool-schema-compat.spec.ts", "tests/fixtures/alpha2-contracts-core.fixture.ts", "tests/fixtures/compaction-pressure-core.fixture.ts", "tests/remote-codec.spec.ts", "tests/dual-model-projection.spec.ts", "tests/fixtures/scoped-compaction-core.fixture.ts", "tests/fixtures/model-exclusions-core.fixture.ts", "tests/fixtures/turn-usage-core.fixture.ts", "tests/fixtures/copilot-accounts-persistence-core.fixture.ts", "tests/fixtures/copilot-accounts-host-core.fixture.ts", "tests/fixtures/copilot-accounts-gateway-core.fixture.ts", "tests/fixtures/copilot-accounts-request-core.fixture.ts", "tests/copilot-stream-liveness.spec.ts", "tests/copilot-stream-adapter.spec.ts", "tests/fixtures/auto-review-copilot-core.fixture.ts", "tests/fixtures/diagnostics-storage-core.fixture.ts", "tests/fixtures/diagnostics-gateway-core.fixture.ts", "tests/fixtures/session-context-core.fixture.ts", "tests/fixtures/remote-core.fixture.ts", "tests/fixtures/alpha4-contracts-core.fixture.ts", "tests/fixtures/copilot-usage-selector-core.fixture.ts", "tests/native-web-composition.spec.ts", "tests/dual-model-host.spec.ts", "tests/fixtures/native-model-sync-core.fixture.ts"]
         }
       ],
       "packages": [
@@ -739,6 +739,39 @@
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "defaults automatic oversized recovery on without a manual command, enabled=%s"},
         {"file": "tests/fixtures/compaction-pressure-core.fixture.ts", "name": "escalates only a typed summary capacity failure once: %s"},
         {"file": "tests/preview-route.spec.ts", "name": "binds explicit summary capacity proof to its Agent rather than the current default"}
+      ]
+    },
+    {
+      "id": "confirmed-native-model-sync",
+      "required": true,
+      "activation": "explicit-preview-and-one-shot-confirmation",
+      "evidenceScope": "tagged-native-settings-and-resolution-with-synthetic-catalog-proof-plus-separate-adapter-ownership-tests-not-live-provider",
+      "sourceMarkers": [
+        {"file": "src/native-model-sync.ts", "marker": "NATIVE_INHERITED_API_MISMATCH"},
+        {"file": "src/native-copilot-access.ts", "marker": "captureNativeCopilotCatalog"},
+        {"file": "src/authorization-controller.ts", "marker": "path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models']"},
+        {"file": "src/model-preferences-card.ts", "marker": "Preview enabled models"},
+        {"file": "src/remote.ts", "marker": "GitHubCopilotNativeModelSyncPreviewSchema"}
+      ],
+      "tests": [
+        {"file": "tests/native-model-sync.spec.ts", "name": "copies only enabled account models and reports additions, removals, and changed model definitions"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "does not repoint a known native model when its inherited catalog protocol differs"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "skips new non-Responses models without a native compatibility baseline"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "skips narrower or unknown server input caps that cannot be represented natively"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "skips missing vision or reasoning evidence rather than treating it as disabled"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "does not expose an off control that the managed account model does not expose"},
+        {"file": "tests/preview-route.spec.ts", "name": "binds native sync discovery and proof to the global account, not the initiating Session"},
+        {"file": "tests/native-model-sync.spec.ts", "name": "syncs vision only when account metadata covers every native request image format"},
+        {"file": "tests/account-model-catalog.spec.ts", "name": "distinguishes absent vision and reasoning metadata from explicitly declared empty support"},
+        {"file": "tests/native-copilot-access.spec.ts", "name": "exposes the proven unfiltered adapter catalog independently of the configured model list"},
+        {"file": "tests/native-copilot-access.spec.ts", "name": "revokes a catalog snapshot when its native Loader entry is removed"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "previews enabled canonical models and applies only the confirmed native models path with CAS/readback"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "reports an uncertain commit if the proven native catalog changes during the write"},
+        {"file": "tests/model-preferences-card.spec.ts", "name": "previews a native model sync and applies it only after the explicit confirmation action"},
+        {"file": "tests/model-preferences-card.spec.ts", "name": "does not dispatch duplicate preview or apply actions before React renders the busy state"},
+        {"file": "tests/remote-codec.spec.ts", "name": "accepts named native-sync safety diagnostics without accepting extra fields"},
+        {"file": "tests/fixtures/remote-core.fixture.ts", "name": "binds native model sync through actual Client and %s Host gateways"},
+        {"file": "tests/fixtures/native-model-sync-core.fixture.ts", "name": "syncs a confirmed snapshot through real native Settings and model resolution across restart using synthetic catalog proof"}
       ]
     },
     {

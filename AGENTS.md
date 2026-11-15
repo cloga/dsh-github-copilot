@@ -49,6 +49,17 @@ with four concurrent operations and configuration/credential/disposal fences.
 The former plugin routing UI and managed Auto remain retired. Supplier calls,
 live installation and restarts are separate from synthetic CI acceptance.
 
+The user-authorized native model sync (#466) is a narrow exception to the
+no-settings-rewrite rule: after an explicit preview and confirmation, one
+revision-checked write may replace only
+`llm-pi-ai.providers.github-copilot.models` in an existing canonical profile.
+Prove current canonical-account metadata and the native adapter-owned catalog;
+skip unrepresentable or uncertain model capabilities. Disclose additions,
+updates, removals, skipped models and configured output request defaults.
+Recheck account/catalog/preferences and Settings evidence before the one-shot
+write, then read back both user and effective values. Never create a profile,
+change other paths or perform this sync automatically.
+
 The user-confirmed direction on 2026-11-14 supersedes conflicting legacy feature
 requirements below: this plugin is a lightweight GitHub Copilot model integration
 for DSH Desktop, not a second agent product. The qualification target is the exact
@@ -112,7 +123,7 @@ which runtime registrations, UI, and settings remain active:
 1. A conditional authorization-service bootstrap plus Host controller that joins DSH authorization, credentials, and settings.
 2. A Client Models provider-card contribution with one shared account-state owner, Client-safe Remote descriptors and a nested plugin-owned model-preferences disclosure; embed in an existing configured canonical row, suppress its separate footer controller, and retain footer/old-Core section fallback when no such row is mounted.
 3. Strict JSON normalization of pi-ai's provider-owned Copilot OAuth grant.
-4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. Fresh installations use the single account-discovered route; existing profiles require explicit migration, never silent removal.
+4. Preserve intentional absence of `llm-pi-ai.providers.github-copilot`; reconcile only existing legacy profiles and verified ownership journals. The confirmed #466 models-only sync is the narrow explicit exception above; never create or remove a native profile automatically.
 5. Direct provider-hosted search using the same Host-side credential lifecycle.
 6. Provider-scoped tool-schema compatibility for Copilot payload behaviors; Core remains the tool and execution owner.
 7. A bounded account-discovery route that supplies validated endpoint/capability metadata to the published native adapter, including explicit managed Responses sampling compatibility, plus exact plugin-owned model exclusions enforced across its directory, Auto pools and direct admission, without maintaining model-ID routing rules or changing Core's catalog.

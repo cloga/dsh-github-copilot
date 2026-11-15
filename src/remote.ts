@@ -8,7 +8,11 @@ import type {
 } from '@deepseek-ai/dsh-typert-protocol'
 import { z } from 'zod'
 import { strictRemoteCodec } from './remote-codec.ts'
-import type { GitHubCopilotAuthorizationView, GitHubCopilotModelPreferencesView } from './authorization-controller.ts'
+import type {
+  GitHubCopilotAuthorizationView, GitHubCopilotModelPreferencesView,
+  GitHubCopilotNativeModelSyncCode, GitHubCopilotNativeModelSyncPreview,
+  GitHubCopilotNativeModelSyncResult,
+} from './authorization-controller.ts'
 import type { GitHubCopilotMigrationStatus } from './migration-status.ts'
 import dualModelRemote from './dual-model-remote.ts'
 import searchRoutingRemote from './search-routing-remote.ts'
@@ -32,6 +36,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       restoreModel(modelId: string): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       setModelExcluded(modelId: string, excluded: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
       setModelHighCost(modelId: string, highCost: boolean): Promise<RemoteResult<GitHubCopilotModelPreferencesView>>
+      previewNativeModelSync(): Promise<RemoteResult<GitHubCopilotNativeModelSyncPreview>>
+      applyNativeModelSync(planId: string): Promise<RemoteResult<GitHubCopilotNativeModelSyncResult>>
       start(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       cancel(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
       signOut(): Promise<RemoteResult<GitHubCopilotAuthorizationView>>
@@ -101,6 +107,57 @@ export const GitHubCopilotAuthorizationViewSchema = z.object({
 
 const result = strictRemoteCodec(GITHUB_COPILOT_AUTHORIZATION_VIEW_TYPE_SYMBOL, GitHubCopilotAuthorizationViewSchema)
 export const GitHubCopilotModelPreferencesViewSchema = GitHubCopilotAuthorizationViewSchema.shape.modelPreferences.unwrap()
+
+const nativeModelSyncCode = z.enum([
+  'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH',
+  'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE',
+  'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE',
+  'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE',
+  'NATIVE_MODEL_SYNC_NATIVE_CATALOG_UNAVAILABLE',
+  'NATIVE_MODEL_SYNC_PREFERENCES_UNAVAILABLE',
+  'NATIVE_MODEL_SYNC_SETTINGS_UNAVAILABLE',
+  'NATIVE_MODEL_SYNC_SETTINGS_INVALID',
+  'NATIVE_MODEL_SYNC_PROFILE_MISSING',
+  'NATIVE_MODEL_SYNC_ROUTE_OWNERSHIP_CONFLICT',
+  'NATIVE_MODEL_SYNC_NATIVE_AUTH_UNPROVEN',
+  'NATIVE_MODEL_SYNC_OVERRIDES_CONFLICT',
+  'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN',
+  'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS',
+  'NATIVE_MODEL_SYNC_PLAN_EXPIRED',
+  'NATIVE_MODEL_SYNC_PLAN_STALE',
+  'NATIVE_MODEL_SYNC_SETTINGS_CONFLICT',
+  'NATIVE_MODEL_SYNC_SAVE_FAILED',
+  'NATIVE_MODEL_SYNC_READBACK_FAILED',
+]) satisfies z.ZodType<GitHubCopilotNativeModelSyncCode>
+
+export const GitHubCopilotNativeModelSyncPreviewSchema = z.object({
+  state: z.enum(['ready', 'blocked', 'error']),
+  code: nativeModelSyncCode.optional(),
+  planId: z.string().uuid().optional(),
+  enabledCount: z.number().int().nonnegative().max(512),
+  syncableCount: z.number().int().nonnegative().max(512),
+  outputTokenDefaults: z.array(z.object({
+    id: z.string().min(1).max(200),
+    maxTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  }).strict()).max(512),
+  addedIds: z.array(z.string().min(1).max(200)).max(512),
+  removedIds: z.array(z.string().min(1).max(200)).max(512),
+  updatedIds: z.array(z.string().min(1).max(200)).max(512),
+  skipped: z.array(z.object({
+    id: z.string().min(1).max(200),
+    code: z.enum([
+      'NATIVE_API_UNAVAILABLE', 'NATIVE_API_MISMATCH', 'NATIVE_INHERITED_API_MISMATCH', 'NATIVE_COMPATIBILITY_UNPROVEN', 'NATIVE_CONTEXT_LIMIT_UNKNOWN',
+      'NATIVE_INPUT_LIMIT_UNKNOWN', 'NATIVE_INPUT_LIMIT_UNSUPPORTED', 'NATIVE_REASONING_UNKNOWN', 'NATIVE_REASONING_UNSUPPORTED',
+      'NATIVE_VISION_SUPPORT_UNKNOWN', 'NATIVE_VISION_MEDIA_TYPES_UNKNOWN', 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED',
+    ]),
+  }).strict()).max(512),
+}).strict() satisfies z.ZodType<GitHubCopilotNativeModelSyncPreview>
+
+export const GitHubCopilotNativeModelSyncResultSchema = z.object({
+  state: z.enum(['ready', 'error']),
+  code: nativeModelSyncCode.optional(),
+  modelCount: z.number().int().nonnegative().max(512),
+}).strict() satisfies z.ZodType<GitHubCopilotNativeModelSyncResult>
 
 export const GITHUB_COPILOT_MIGRATION_STATUS_TYPE_SYMBOL
   = 'dsh-github-copilot#GitHubCopilotMigrationStatus'
@@ -182,6 +239,22 @@ const contribution: TypertRemoteContribution = {
           codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelHighCost', z.boolean()) },
       ],
       result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotModelPreferencesView', GitHubCopilotModelPreferencesViewSchema),
+    },
+    {
+      id: 'dsh-github-copilot:githubCopilot.previewNativeModelSync',
+      service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'previewNativeModelSync',
+      invocation: direct, parameters: [],
+      result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotNativeModelSyncPreview', GitHubCopilotNativeModelSyncPreviewSchema),
+    },
+    {
+      id: 'dsh-github-copilot:githubCopilot.applyNativeModelSync',
+      service: 'githubCopilotAuthorization', namespace: 'githubCopilot', method: 'applyNativeModelSync',
+      invocation: direct,
+      parameters: [{
+        name: 'planId', wire: 'planId', source: 'json',
+        codec: strictRemoteCodec('dsh-github-copilot#GitHubCopilotNativeModelSyncPlanId', z.string().uuid()),
+      }],
+      result: strictRemoteCodec('dsh-github-copilot#GitHubCopilotNativeModelSyncResult', GitHubCopilotNativeModelSyncResultSchema),
     },
     {
       id: 'dsh-github-copilot:githubCopilot.migrationStatus',

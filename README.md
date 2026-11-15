@@ -67,15 +67,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.7.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.7.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.7.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.8.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.7.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.7.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.8.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.8.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -90,7 +90,31 @@ No manually defined Copilot model, pasted token, external gateway, or
 successful sign-in does not guarantee every model or capability is available.
 The plugin's account-discovered models and capabilities apply to the
 `github-copilot-preview` route. DSH's native `github-copilot` route uses its
-own bundled or configured catalog; the two routes do not share model discovery.
+own bundled or configured catalog; the two routes do not automatically share
+model discovery.
+
+To copy enabled models from the current canonical account into an existing
+native provider, use **Manage → Model preferences → Preview enabled models**,
+review the additions, updates, removals, skipped models and per-request output
+defaults, then choose **Apply sync**. This one-time snapshot replaces only
+`llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
+The nonempty saved list replaces the native built-in catalog and remains after
+the plugin is unloaded or uninstalled. Copying model settings does not transfer
+the managed route's image admission checks or tool-schema filtering to native
+requests, nor prove that supplier calls will succeed.
+Models with unproven or incompatible native catalog protocols, unknown or
+narrower server input caps, unknown context or vision support, or unknown or
+unsupported reasoning controls are skipped rather than guessed.
+New Completions and Anthropic models without a native catalog compatibility
+baseline are also skipped; catalog-backed models retain native compatibility.
+Image models are included only when the account explicitly supports all four
+native request formats: PNG, JPEG, WebP, and GIF. Custom native authentication,
+endpoints, headers, nonempty model overrides, or route compatibility overrides
+block sync rather than changing those settings. An existing native default
+reasoning effort must also be supported by each synced model. Core uses each
+configured `maxTokens` as that model's per-request output default. The sync does
+not change credentials, select a model, alter history, or automatically follow
+later account changes.
 
 When adding DSH's native GitHub Copilot provider, use the separate plugin account
 panel to sign in. With no named key, the native route uses a stored canonical
