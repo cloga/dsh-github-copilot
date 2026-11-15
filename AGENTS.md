@@ -36,6 +36,54 @@ Use native DSH tools for goals, background jobs and scoped subagents. Use local 
 
 These are agent instructions and contract-drift checks, not a filesystem sandbox or a guarantee that every session uses a worktree.
 
+### Scoped autonomous execution (#491)
+
+**Keep progressing within the user's authorization; ask only at a new boundary.**
+Before asking, check the direct user instructions already available for this task.
+Retain the approved target, purpose, side effects, limits and any revocation in
+session-owned task state. Completing one step, receiving a continuation reminder,
+losing a UI window or finding the user unavailable does not by itself erase that
+authorization. A checkpoint records evidence of consent, not a new permission
+grant; respect any tool that requires fresh direct consent or cannot recover it.
+
+Proceed with safe inspection, isolated checks and bounded recovery without routine
+confirmation. An explicit "restart and check" approval covers stopping the approved
+app, starting that same target and inspecting it. If fresh discovery subsequently
+proves it is not running before that check completes, allow at most one recovery
+start under the same authorization, unless the user or tool limits consent to one
+invocation. Do not stop an app that is already running for this recovery, start a
+different target, reinstall, change settings/accounts or broaden the operation.
+Unknown app state calls for read-only discovery, not a guessed launch. Repeated
+exit is a concrete failure to investigate and report, not an unlimited restart loop.
+
+Tool consent, refusal and interruption controls take precedence. Report
+"the tool reported input interruption", not "you were operating the app";
+the report does not independently establish human activity or intent. Reobserve
+through the same supported tool before any permitted retry. An interrupted
+attempt is not proof of navigation or product failure. Preserve attempt budgets
+across continuation and compaction; do not reset them by renaming the task,
+switching tools to evade refusal, or receiving an automated completion reminder.
+
+At a genuine blocker, state the exact missing permission/capability, consequence
+and next action once, then continue any independent authorized work. Do not repeat
+the same question or unchanged waiting message. If no safe work remains, use the
+host's blocked/awaiting-input mechanism when available; otherwise give one truthful
+partial handoff and wait for changed evidence or user input. A completion reminder
+is not new consent, a retry-budget reset or evidence of success. Never mark an
+unverified requirement passed merely to end the loop.
+
+| Situation | Decision |
+|---|---|
+| Approved restart/check; exact app is confirmed stopped | Continue the approved start/check, including the one bounded recovery start when consent permits; do not ask again solely because a previous step finished. |
+| App is already running, target differs, or consent was revoked | Observe the running app; obtain new consent only for the new disruptive action, never infer it from prior installation approval. |
+| Tool reports interruption; user says they did not interact | Keep both facts separate, reread UI and follow the tool's permitted recovery; do not blame the user or bypass the tool. |
+| Genuine approval is missing and the user is absent | Keep that action blocked, do other authorized work, and do not send repeated waiting messages. |
+| Install/import checks pass but loaded version is unknown | Preserve partial status; neither a policy check nor disk evidence proves runtime acceptance. |
+
+This policy is exposed by `agent.mjs describe/plan` and checked for drift, not
+enforced by a runtime permission engine. It grants no new live-profile access and
+does not bypass tool approvals, plugin-only ownership, required reviews or CI.
+
 ## Product and architecture
 
 ### Confirmed product scope (#455, #456)
@@ -455,8 +503,9 @@ plugin version. Attempt safe authorized checks on an already-running Desktop;
 unreliable local npm is not a reason to skip them. Use existing computer-use
 tools, never shell activation or a repository script as an App controller.
 Begin with current app discovery, not a historical "already open" claim. If not
-running, start only with explicit launch authorization via controlled `start_app`
-using the exact approved target; then verify discovery and fresh UI, not merely
+running, start only with explicit launch authorization (including an applicable
+restart/check approval retained under scoped autonomous execution) via controlled
+`start_app` using the exact approved target; then verify discovery and fresh UI, not merely
 the launch receipt. Do not start an already-running app again. A welcome screen
 is not automatically an auth blocker: inspect an official safe skip first. DSH's
 Add API Key -> Set up later path does not submit/store a key or authenticate;
@@ -464,17 +513,22 @@ use it only when actually exposed, within tool permission rules. Never infer
 Copilot account invalidity from welcome UI or bypass real authentication/warnings.
 Welcome dismissal may replace the window: rediscover app/window and read its fresh
 tree before acting, rather than retrying a stale window on an empty immediate diff.
-Honor user-input interruption: reread UI before retrying the same permitted action.
+Honor tool-reported input interruption without inferring human intent: reread UI
+before retrying the same permitted action.
 Before handoff, freshly discover the current app and inspect the target panel or
 workspace, reporting the observation time only; past success does not establish
 current running state or guarantee the app remains running later.
 An action receipt or empty immediate diff is not a navigation failure: obtain
 a fresh post-action `get_window_state` observation first. Keep one attempt per
-supported navigation method, at most two different methods, then report precise
+supported navigation method, at most two different methods. A tool-required
+interruption recovery may retry that same method once after fresh observation;
+it is not a new method or an unlimited retry exemption. Then report precise
 `automation-blocked` and request the named panel once. User absence or an
 unanswered request never grants permission or proves the panel opened.
 App unavailable, restart/install, account/OAuth/paid actions outside explicit
-permission stay blocked. Do not repeat exhausted methods on ordinary continuation.
+permission stay blocked; first check whether the needed action is already covered
+by scoped authorization. Do not repeat exhausted methods on ordinary continuation
+or repeat an unchanged blocker message.
 Record only fixed action/outcome codes, numeric times and version/source facts;
 never upload identities, credentials or conversation content. Unknown loaded
 version permits qualified observations only, not a version-specific fix claim.

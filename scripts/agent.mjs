@@ -64,7 +64,7 @@ export async function planTask(task, root = repositoryRoot) {
     commands: commands.map(argv => ({ argv, executed: false })),
     acceptance: description.acceptance,
     executionPolicy: description.executionPolicy,
-    delivery: 'Issue -> feature branch -> focused tests -> complete gate -> reviewed merge without a separate approval prompt; important updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Ask before profile installation or interrupting restart; report any publication blocker.',
+    delivery: 'Issue -> feature branch -> focused tests -> complete gate -> reviewed merge without a separate approval prompt; important updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Check existing scoped authorization before asking about profile installation or interrupting restart; obey tool consent and report an unchanged blocker only once.',
     boundaries: description.boundaries,
   }
 }

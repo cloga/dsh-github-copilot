@@ -66,6 +66,18 @@
       "escalation": "once-for-genuine-blocker-or-risk",
       "enforcement": "advisory-not-a-sandbox"
     },
+    "autonomousExecution": {
+      "mode": "scoped-authorization-follow-through",
+      "authorization": "retain-explicit-target-scope-limits-until-complete-or-revoked",
+      "routineWork": "safe-inspection-and-bounded-recovery-without-repeat-prompts",
+      "restartRecovery": "one-same-target-start-if-confirmed-stopped-and-within-consent",
+      "toolPolicy": "never-override-tool-consent-or-refusal",
+      "interruption": "tool-report-not-human-intent",
+      "retryBudget": "preserve-across-continuations",
+      "blockers": "report-once-continue-independent-work",
+      "completion": "verified-or-explicitly-blocked-never-fabricated-success",
+      "enforcement": "advisory-contract-drift-only"
+    },
     "releaseDelivery": {
       "mode": "important-update-follow-through",
       "importantChanges": ["user-visible-feature", "behavior-fix", "compatibility-fix", "security-fix", "stability-fix"],

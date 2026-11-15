@@ -173,6 +173,35 @@ test('workspace policy preserves isolation, existing files and tool-specific del
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test('autonomy contract rejects lost authorization scope and unsafe recovery policies', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-autonomy-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    const guide = await readFile(join(repositoryRoot, 'AGENTS.md'), 'utf8')
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    await writeFile(join(root, 'AGENTS.md'), guide)
+    for (const mutate of [
+      contract => { delete contract.boundaries.autonomousExecution },
+      contract => { contract.boundaries.autonomousExecution.authorization = 'ask-again-after-each-step' },
+      contract => { contract.boundaries.autonomousExecution.restartRecovery = 'restart-even-if-running' },
+      contract => { contract.boundaries.autonomousExecution.toolPolicy = 'bypass-refusal' },
+      contract => { contract.boundaries.autonomousExecution.interruption = 'user-is-operating' },
+      contract => { contract.boundaries.autonomousExecution.retryBudget = 'reset-on-continuation' },
+      contract => { contract.boundaries.autonomousExecution.blockers = 'repeat-until-user-answers' },
+      contract => { contract.boundaries.autonomousExecution.enforcement = 'runtime-permission-grant' },
+      contract => { contract.boundaries.autonomousExecution.userAbsenceGrantsConsent = true },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /autonomous execution/)
+    }
+    await writeFile(join(root, 'agent-contract.json'), JSON.stringify(original))
+    await writeFile(join(root, 'AGENTS.md'), guide.replace('### Scoped autonomous execution (#491)', '### Removed'))
+    await assert.rejects(verifyAgentContract(root), /autonomous execution/)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('manual replay recovery plan retains explicit consent and rejects weakened boundaries', async () => {
   const plan = await planTask('compaction')
   assert.ok(plan.read.includes('src/compaction-replay.ts'))
