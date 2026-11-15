@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (prepared)
+
+- Preview and explicitly confirm a one-time sync of enabled canonical-account models to an existing native Copilot provider (#466).
+- Preserve only models whose native protocol and account capability metadata can be safely represented; disclose skipped models, removals, updates, and per-request output defaults before replacing the native models setting.
+- Recheck account, adapter-owned catalog, preference and Settings evidence before the path-level write and verify both stored and effective readback. Live Desktop activation and provider calls are not established by synthetic tests.
+
 ## 0.1.0-alpha.7.dsh.0.2.2.rc.3 (prepared)
 
 - Qualify native search and Auto reviewer compatibility using the adapter-owned pi-ai catalog even when the plugin resolves a separate copy (#461).

@@ -13,7 +13,7 @@ function accountModel(
     evidence: {
       endpoints: ['/responses'], unsupportedEndpointCount: 0, selectedEndpoint: '/responses',
       apiSource: 'advertised-native', policySource: 'server-enabled',
-      contextWindowSource: 'max_context_window_tokens',
+      contextWindowSource: 'max_context_window_tokens', visionSupportKnown: true, reasoningEffortsKnown: true,
     },
   }
 }
@@ -77,6 +77,20 @@ describe('planNativeModelSync', () => {
     ])
   })
 
+  it('does not repoint a known native model when its inherited catalog protocol differs', () => {
+    const result = planNativeModelSync({
+      accountModels: [accountModel('known', 'openai-responses'), accountModel('new', 'openai-responses')],
+      excludedModelIds: new Set(),
+      currentModels: [],
+      currentModelsUseCatalog: false,
+      routeApi: 'openai-responses',
+      nativeCatalog: [{ id: 'known', api: 'anthropic-messages' }],
+    })
+
+    expect(result.models.map(model => model.id)).toEqual(['new'])
+    expect(result.skipped).toEqual([{ id: 'known', code: 'NATIVE_INHERITED_API_MISMATCH' }])
+  })
+
   it('reports extra native profile fields as updates because sync will replace that entry', () => {
     const result = planNativeModelSync({
       accountModels: [accountModel('customized')],
@@ -91,6 +105,23 @@ describe('planNativeModelSync', () => {
     })
 
     expect(result.updatedIds).toEqual(['customized'])
+  })
+
+  it('does not report schema-injected empty compatibility fields as model updates', () => {
+    const result = planNativeModelSync({
+      accountModels: [accountModel('unchanged')],
+      excludedModelIds: new Set(),
+      currentModels: [{
+        id: 'unchanged', name: 'Account unchanged', contextWindow: 131_072, maxTokens: 8_192,
+        input: ['text'], reasoningEfforts: { low: 'low', high: 'high' },
+        compat: { chatTemplateArgs: {}, chatTemplateKwargs: {} },
+      }],
+      currentModelsUseCatalog: false,
+      routeApi: 'openai-responses',
+      nativeCatalog: [],
+    })
+
+    expect(result.updatedIds).toEqual([])
   })
 
   it('requires installed native protocol evidence for unknown account model IDs', () => {
@@ -120,6 +151,25 @@ describe('planNativeModelSync', () => {
 
     expect(result.models.map(model => model.id)).toEqual(['future'])
     expect(result.skipped).toEqual([])
+  })
+
+  it('skips new non-Responses models without a native compatibility baseline', () => {
+    for (const api of ['openai-completions', 'anthropic-messages'] as const) {
+      const result = planNativeModelSync({
+        accountModels: [
+          accountModel('known', api, { advertisedEfforts: [] }),
+          accountModel('new', api, { advertisedEfforts: [] }),
+        ],
+        excludedModelIds: new Set(),
+        currentModels: [],
+        currentModelsUseCatalog: false,
+        routeApi: api,
+        nativeCatalog: [{ id: 'known', api }],
+      })
+
+      expect(result.models.map(model => model.id)).toEqual(['known'])
+      expect(result.skipped).toEqual([{ id: 'new', code: 'NATIVE_COMPATIBILITY_UNPROVEN' }])
+    }
   })
 
   it('reports a catalog-backed model as updated when sync adds an output request default', () => {
@@ -158,6 +208,19 @@ describe('planNativeModelSync', () => {
       { id: 'adaptive', code: 'NATIVE_API_MISMATCH' },
       { id: 'messages-thinking', code: 'NATIVE_API_MISMATCH' },
       { id: 'off-only', code: 'NATIVE_REASONING_UNSUPPORTED' },
+    ])
+  })
+
+  it('does not expose an off control that the managed account model does not expose', () => {
+    const model = accountModel('with-off', 'openai-responses', { advertisedEfforts: ['off', 'low', 'high'] })
+    const base = {
+      accountModels: [model], excludedModelIds: new Set<string>(), currentModels: [],
+      currentModelsUseCatalog: false, routeApi: 'openai-responses', nativeCatalog: [],
+    }
+
+    expect(planNativeModelSync(base).models[0]?.reasoningEfforts).toEqual({ low: 'low', high: 'high' })
+    expect(planNativeModelSync({ ...base, routeReasoning: 'off' }).skipped).toEqual([
+      { id: 'with-off', code: 'NATIVE_REASONING_UNSUPPORTED' },
     ])
   })
 
@@ -222,6 +285,29 @@ describe('planNativeModelSync', () => {
       { id: 'bounded-input', code: 'NATIVE_INPUT_LIMIT_UNSUPPORTED' },
       { id: 'unknown-input', code: 'NATIVE_INPUT_LIMIT_UNKNOWN' },
       { id: 'unknown-context', code: 'NATIVE_CONTEXT_LIMIT_UNKNOWN' },
+    ])
+  })
+
+  it('skips missing vision or reasoning evidence rather than treating it as disabled', () => {
+    const missingVision = accountModel('unknown-vision-support')
+    const missingReasoning = accountModel('unknown-reasoning', 'openai-responses', { advertisedEfforts: [] })
+    const result = planNativeModelSync({
+      accountModels: [
+        { ...missingVision, evidence: { ...missingVision.evidence, visionSupportKnown: undefined } },
+        { ...missingReasoning, evidence: { ...missingReasoning.evidence, reasoningEffortsKnown: undefined } },
+        accountModel('known'),
+      ],
+      excludedModelIds: new Set(),
+      currentModels: [],
+      currentModelsUseCatalog: false,
+      routeApi: 'openai-responses',
+      nativeCatalog: [],
+    })
+
+    expect(result.models.map(model => model.id)).toEqual(['known'])
+    expect(result.skipped).toEqual([
+      { id: 'unknown-vision-support', code: 'NATIVE_VISION_SUPPORT_UNKNOWN' },
+      { id: 'unknown-reasoning', code: 'NATIVE_REASONING_UNKNOWN' },
     ])
   })
 

@@ -51,6 +51,8 @@ function nativeSyncMessage(code: string): string {
     case 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE':
     case 'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE':
       return 'Could not verify a fresh account model list. No native settings were changed.'
+    case 'NATIVE_MODEL_SYNC_NATIVE_CATALOG_UNAVAILABLE':
+      return 'Could not verify the native provider and its model catalog. No native settings were changed.'
     case 'NATIVE_MODEL_SYNC_PREFERENCES_UNAVAILABLE':
       return 'Could not verify the enabled-model preferences. No native settings were changed.'
     case 'NATIVE_MODEL_SYNC_SETTINGS_UNAVAILABLE':
@@ -86,10 +88,14 @@ function nativeSyncSkipMessage(code: NativeModelSyncSkipCode): string {
   switch (code) {
     case 'NATIVE_API_UNAVAILABLE': return 'The native protocol for this model is unknown.'
     case 'NATIVE_API_MISMATCH': return 'The native route uses a different protocol.'
+    case 'NATIVE_INHERITED_API_MISMATCH': return 'The native catalog would inherit settings from a different protocol.'
+    case 'NATIVE_COMPATIBILITY_UNPROVEN': return 'The native catalog lacks a compatibility baseline for this protocol.'
     case 'NATIVE_CONTEXT_LIMIT_UNKNOWN': return 'The server context capacity is unknown.'
     case 'NATIVE_INPUT_LIMIT_UNKNOWN': return 'The server input limit is unknown.'
     case 'NATIVE_INPUT_LIMIT_UNSUPPORTED': return 'The native route cannot enforce the narrower input limit.'
+    case 'NATIVE_REASONING_UNKNOWN': return 'The server reasoning controls are unknown.'
     case 'NATIVE_REASONING_UNSUPPORTED': return 'The native route cannot represent the advertised or configured reasoning.'
+    case 'NATIVE_VISION_SUPPORT_UNKNOWN': return 'The server image support is unknown.'
     case 'NATIVE_VISION_MEDIA_TYPES_UNKNOWN': return 'The server image formats are unknown.'
     case 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED': return 'The native route cannot enforce these image format restrictions.'
   }
@@ -114,6 +120,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
   const [syncError, setSyncError] = useState<string>()
   const [syncResult, setSyncResult] = useState<string>()
   const request = useRef({ generation: 0, pending: false, failed: false, cancelled: false, queue: [] as PreferenceEdit[], active: '' })
+  const syncPending = useRef(false)
   const metadata = useRef(props.models)
   metadata.current = props.models
   const preferenceKey = JSON.stringify(props.preferences)
@@ -123,6 +130,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     scope.pending = false
     scope.failed = scope.cancelled
     scope.active = ''
+    syncPending.current = false
     setPreferences(props.preferences)
     setError(scope.cancelled ? 'COPILOT_MODEL_PREFERENCE_EDITS_CANCELLED' : undefined)
     setSyncPreview(undefined); setSyncError(undefined); setSyncResult(undefined); setSyncBusy(false)
@@ -143,12 +151,13 @@ export function GitHubCopilotModelPreferencesPanel(props: {
   const diagnostic = error ?? preferences?.error
     ?? (preferences === undefined ? 'COPILOT_MODEL_PREFERENCES_UNAVAILABLE' : undefined)
   const writable = preferences?.writable === true && settingsKnown
-  const nativeSyncDisabled = !writable || busyModel !== undefined || queuedModels.length > 0 || syncBusy
+  const nativeSyncDisabled = !writable || request.current.failed || busyModel !== undefined || queuedModels.length > 0 || syncBusy
   const previewNativeSync = async (): Promise<void> => {
-    if (nativeSyncDisabled) return
     const scope = request.current
+    if (nativeSyncDisabled || syncPending.current || scope.pending) return
     const generation = scope.generation
     const current = () => scope.generation === generation
+    syncPending.current = true
     setSyncBusy(true); setSyncError(undefined); setSyncResult(undefined); setSyncPreview(undefined)
     try {
       const result = await props.remote.previewNativeModelSync()
@@ -159,14 +168,15 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       setSyncPreview(parsed.data)
       if (parsed.data.state !== 'ready') setSyncError(parsed.data.code ?? 'NATIVE_MODEL_SYNC_SAVE_FAILED')
     } catch { if (current()) setSyncError('NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE') }
-    finally { if (current()) setSyncBusy(false) }
+    finally { if (current()) { syncPending.current = false; setSyncBusy(false) } }
   }
   const applyNativeSync = async (): Promise<void> => {
     const planId = syncPreview?.planId
-    if (planId === undefined || syncBusy || busyModel !== undefined) return
     const scope = request.current
+    if (planId === undefined || syncBusy || busyModel !== undefined || syncPending.current || scope.pending) return
     const generation = scope.generation
     const current = () => scope.generation === generation
+    syncPending.current = true
     setSyncBusy(true); setSyncError(undefined); setSyncResult(undefined); setSyncPreview(undefined)
     try {
       const result = await props.remote.applyNativeModelSync(planId)
@@ -178,7 +188,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       setSyncPreview(undefined)
       setSyncResult(`Synced ${parsed.data.modelCount} models to the native provider settings. This does not select a model.`)
     } catch { if (current()) setSyncError('NATIVE_MODEL_SYNC_SAVE_FAILED') }
-    finally { if (current()) setSyncBusy(false) }
+    finally { if (current()) { syncPending.current = false; setSyncBusy(false) } }
   }
   const rows = [
     ...available.map(model => ({ id: model.id, name: model.name, available: true })),
@@ -237,6 +247,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
   }
   const update = async (modelId?: string, restore = false): Promise<void> => {
     const scope = request.current
+    if (syncPending.current) return
     const generation = scope.generation
     const current = () => scope.generation === generation
     if (modelId === undefined) {

@@ -54,7 +54,10 @@ describe('strict Remote factory compatibility', () => {
     const preview = {
       state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN', enabledCount: 1, syncableCount: 0,
       outputTokenDefaults: [], addedIds: [], removedIds: [], updatedIds: [],
-      skipped: [{ id: 'image-model', code: 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED' }],
+      skipped: [{ id: 'image-model', code: 'NATIVE_VISION_MEDIA_TYPES_UNSUPPORTED' },
+        { id: 'unknown-vision', code: 'NATIVE_VISION_SUPPORT_UNKNOWN' },
+        { id: 'unknown-reasoning', code: 'NATIVE_REASONING_UNKNOWN' },
+        { id: 'unknown-compatibility', code: 'NATIVE_COMPATIBILITY_UNPROVEN' }],
     }
     expect(result.create().parse(preview)).toEqual(preview)
     expect(() => result.create().parse({ ...preview, credentials: 'private' })).toThrow()

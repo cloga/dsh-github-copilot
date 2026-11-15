@@ -55,6 +55,16 @@ export async function verifyAgentContract(root = repositoryRoot) {
   }
   require(implementation.unsupportedCapability === 'report-limitation-and-plugin-local-alternative', 'plugin-only missing capabilities must not trigger Core patches')
   require(implementation.scopeException === 'separate-explicit-human-request-only', 'plugin-only scope must not expand from an inferred compatibility task')
+  const nativeSync = contract.tasks?.models
+  require(nativeSync?.nativeModelSyncBoundary?.includes('one explicit confirmation')
+    && nativeSync.nativeModelSyncBoundary.includes('native adapter-owned pi-ai catalog')
+    && nativeSync.nativeModelSyncBoundary.includes('CAS only llm-pi-ai.providers.github-copilot.models')
+    && nativeSync.nativeModelSyncBoundary.includes('read back user and effective values')
+    && nativeSync.nativeModelSyncBoundary.includes('No profile creation, automatic sync')
+    && nativeSync.read?.includes('src/native-model-sync.ts')
+    && nativeSync.tests?.includes('tests/native-model-sync.spec.ts')
+    && nativeSync.tests?.includes('tests/fixtures/native-model-sync-core.fixture.ts'),
+  'native model sync must retain explicit confirmation, adapter proof, one-path CAS, readback and bounded tests')
   require(!contract.boundaries?.approvalRequired?.includes('merge'), 'merge must not require a separate approval')
   require(!contract.boundaries?.approvalRequired?.includes('release'), 'release delivery must not require a second blanket release approval')
   for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {

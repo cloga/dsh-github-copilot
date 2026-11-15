@@ -175,6 +175,19 @@ describe('account model catalog normalization (synthetic API fixtures)', () => {
     expect(first(catalog(model())).reasoning).toEqual({ advertisedEfforts: [], unmappedEfforts: [] })
   })
 
+  it('distinguishes absent vision and reasoning metadata from explicitly declared empty support', () => {
+    const absent = model()
+    delete capabilities(absent).supports.vision
+    expect(first(catalog(absent)).evidence).not.toHaveProperty('visionSupportKnown')
+    expect(first(catalog(absent)).evidence).not.toHaveProperty('reasoningEffortsKnown')
+
+    const declared = model()
+    capabilities(declared).supports.reasoning_effort = []
+    expect(first(catalog(declared)).evidence).toMatchObject({
+      visionSupportKnown: true, reasoningEffortsKnown: true,
+    })
+  })
+
   it('does not manufacture high, max, or off when only an unfamiliar effort is advertised', () => {
     const value = model()
     capabilities(value).supports.reasoning_effort = ['future-depth']

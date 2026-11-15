@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { captureNativeCopilot, nativeCopilotModels } from '../src/native-copilot-access.ts'
+import { captureNativeCopilot, captureNativeCopilotCatalog, nativeCopilotModels } from '../src/native-copilot-access.ts'
 
 const contexts: Context[] = []
 const directories: string[] = []
@@ -41,16 +41,16 @@ async function independentCatalogFixture() {
     options: { id: 'llm-pi-ai', name: adapter.name }, fiber: { ctx: { fiber } },
     parent: { tree: { ctx: { baseUrl: import.meta.url } } },
   }
-  const state = { revision: 1 }
+  const state: { revision: number; profile: unknown; entryActive: boolean } = { revision: 1, profile: {}, entryActive: true }
   ctx.provide('llm', {
     listConfigurableProviders: () => [{ provider: 'github-copilot', declared: false,
       settingsPath: ['providers', 'github-copilot'], settingsNs: 'llm-pi-ai', nativeAuth: { oauth: true } }],
     listProviders: () => [{ id: 'github-copilot' }],
   })
   ctx.provide('settings', {
-    describe: () => [{ ns: 'llm-pi-ai', revision: state.revision, value: { providers: { 'github-copilot': {} } } }],
+    describe: () => [{ ns: 'llm-pi-ai', revision: state.revision, value: { providers: { 'github-copilot': state.profile } } }],
   })
-  ctx.provide('loader', { entries: () => [entry] })
+  ctx.provide('loader', { entries: () => state.entryActive ? [entry] : [] })
   ctx.provide('pluginPackages', {
     packageOf: (name: string, importer: string) => name === adapter.name ? adapter
       : name === nativePi.name ? importer === pathToFileURL(adapter.manifestPath).href ? nativePi : localPi
@@ -90,6 +90,16 @@ describe('native Copilot protocol qualification', () => {
     const route = await captureNativeCopilot(fixture.ctx, code => reasons.push(code))
     expect(reasons).toEqual([])
     expect(route?.models.get(fixture.model.id)?.api).toBe('openai-completions')
+  })
+
+  it('exposes the proven unfiltered adapter catalog independently of the configured model list', async () => {
+    const fixture = await independentCatalogFixture()
+    fixture.state.profile = { models: [{ id: 'existing-custom-model' }] }
+    const snapshot = await captureNativeCopilotCatalog(fixture.ctx)
+    expect(snapshot?.catalog.get(fixture.model.id)?.api).toBe('openai-completions')
+    expect(snapshot?.configuredModels?.size).toBe(0)
+    fixture.state.revision += 1
+    expect(() => snapshot?.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
   })
 
   it('rejects unknown pi-ai versions and unresolvable public catalog exports', async () => {
@@ -142,6 +152,14 @@ describe('native Copilot protocol qualification', () => {
     expect(() => route?.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
     fixture.nativePi.manifestPath = fixture.nativePi.manifestPath.slice(0, -'.replaced'.length)
     fixture.fiber.uid = null
+    expect(() => route?.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
+  })
+
+  it('revokes a catalog snapshot when its native Loader entry is removed', async () => {
+    const fixture = await independentCatalogFixture()
+    const route = await captureNativeCopilotCatalog(fixture.ctx)
+    expect(route).toBeDefined()
+    fixture.state.entryActive = false
     expect(() => route?.assertCurrent()).toThrow('COPILOT_NATIVE_ROUTE_CHANGED')
   })
 })

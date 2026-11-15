@@ -16,6 +16,25 @@ import type { AccountModelDescriptor } from '../../src/account-model-catalog.ts'
 import type { GitHubCopilotPreviewView } from '../../src/preview-route.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../../src/copilot-identity.ts'
 
+// The native Loader/package proof is tested separately; this fixture isolates Settings persistence.
+vi.mock('../../src/native-copilot-access.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/native-copilot-access.ts')>()
+  const { getBuiltinModels: getFixtureCatalog } = await import('@earendil-works/pi-ai/providers/all')
+  return { ...original, captureNativeCopilotCatalog: async (ctx: Context) => {
+    const revision = ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')?.revision
+    if (revision === undefined) return undefined
+    const catalog = new Map(getFixtureCatalog('github-copilot').map(({ id, api }) => [id, { id, api }]))
+    return {
+      namespace: 'llm-pi-ai', catalog, configuredModels: undefined,
+      assertCurrent() {
+        if (ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')?.revision !== revision) {
+          throw new Error('COPILOT_NATIVE_ROUTE_CHANGED')
+        }
+      },
+    }
+  } }
+})
+
 const provider = 'github-copilot'
 const synced = 'synthetic-native-sync'
 const excluded = 'synthetic-excluded'
@@ -28,12 +47,12 @@ function model(id: string): AccountModelDescriptor {
     evidence: {
       endpoints: ['/responses'], unsupportedEndpointCount: 0, selectedEndpoint: '/responses',
       apiSource: 'advertised-priority', policySource: 'server-enabled',
-      contextWindowSource: 'max_context_window_tokens',
+      contextWindowSource: 'max_context_window_tokens', visionSupportKnown: true, reasoningEffortsKnown: true,
     },
   }
 }
 
-it('syncs a confirmed snapshot through real native Settings and the pinned model catalog across restart', async () => {
+it('syncs a confirmed snapshot through real native Settings and model resolution across restart using synthetic catalog proof', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
   const home = await mkdtemp(join(tmpdir(), 'copilot-native-sync-'))
@@ -85,8 +104,9 @@ it('syncs a confirmed snapshot through real native Settings and the pinned model
       ctx.provide('githubCopilotPreview', {
         getView: () => view,
         discover: async () => view,
+        discoverNativeModelSync: async () => view,
         refresh: async () => view,
-        nativeModelSyncSnapshot: () => ({ generation: 1, fetchedAt: 123, models: accountModels }),
+        nativeModelSyncSnapshot: () => ({ generation: 1, fetchedAt: 123, models: accountModels, isCurrent: () => true }),
         captureSearchProof: () => () => true,
         recoveryLimits: () => undefined,
         routeFacts: () => undefined,

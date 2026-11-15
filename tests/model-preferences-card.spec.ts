@@ -111,6 +111,27 @@ it('previews a native model sync and applies it only after the explicit confirma
   expect(document.body.textContent).toContain('Synced 2 models')
 })
 
+it('does not dispatch duplicate preview or apply actions before React renders the busy state', async () => {
+  const face = remote()
+  const preview = deferred<Awaited<ReturnType<Props['remote']['previewNativeModelSync']>>>()
+  const apply = deferred<Awaited<ReturnType<Props['remote']['applyNativeModelSync']>>>()
+  face.previewNativeModelSync.mockReturnValue(preview.promise)
+  face.applyNativeModelSync.mockReturnValue(apply.promise)
+  await mount({ remote: face, models, preferences })
+  const previewButton = document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-preview]')!
+  await act(async () => { previewButton.click(); previewButton.click() })
+  expect(face.previewNativeModelSync).toHaveBeenCalledOnce()
+  await act(async () => { preview.resolve({ ok: true, value: {
+    state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
+    enabledCount: 1, syncableCount: 1, addedIds: ['first'], removedIds: [], updatedIds: [],
+    outputTokenDefaults: [{ id: 'first', maxTokens: 8192 }], skipped: [],
+  } }) })
+  const applyButton = document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!
+  await act(async () => { applyButton.click(); applyButton.click() })
+  expect(face.applyNativeModelSync).toHaveBeenCalledOnce()
+  await act(async () => { apply.resolve({ ok: true, value: { state: 'ready', modelCount: 1 } }) })
+})
+
 it('consumes the preview after an uncertain apply instead of offering the same plan again', async () => {
   const face = remote()
   face.previewNativeModelSync.mockResolvedValue({ ok: true, value: {
