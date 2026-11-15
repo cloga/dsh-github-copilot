@@ -711,6 +711,26 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.mutate).toHaveBeenCalledExactlyOnceWith(
       'github-copilot', [{ op: 'set', path: ['excludedModelIds'], value: ['model'] }], 0)
   })
+  it('rejects a plan that expires while checking the native credential before writing', async () => {
+    const now = 1_800_000_000_000
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'saved-account', nativeSyncCanonicalMatches: true,
+      nativeSyncModels: [syncModel('model')], providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const accountHost = harness.services.get('githubCopilotAccounts') as {
+      host: { nativeCredentialMatches: ReturnType<typeof vi.fn> }
+    }
+    accountHost.host.nativeCredentialMatches
+      .mockResolvedValueOnce(true)
+      .mockImplementationOnce(async () => { clock.mockReturnValue(now + 5 * 60_000); return true })
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_EXPIRED', modelCount: 0,
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
   it('does not assume canonical ownership when the account service is unavailable', async () => {
     const harness = runtime({
       configured: true, nativeSyncModels: [syncModel('model')],

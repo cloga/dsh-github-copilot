@@ -776,6 +776,8 @@
         {"file": "tests/authorization-controller.spec.ts", "name": "prepares from existing account proof without discovery or credential reads"},
         {"file": "tests/authorization-controller.spec.ts", "name": "preserves the native disabled strict-mode override while syncing supported protocols"},
         {"file": "tests/authorization-controller.spec.ts", "name": "blocks disabled strict-mode compatibility if no synced model has a supporting protocol"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "rejects a preference change while checking the native credential before writing"},
+        {"file": "tests/authorization-controller.spec.ts", "name": "rejects a plan that expires while checking the native credential before writing"},
         {"file": "tests/authorization-controller.spec.ts", "name": "reports an uncertain commit if the proven native catalog changes during the write"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "shows sync changes beside the model list and applies them with one explicit action"},
         {"file": "tests/model-preferences-card.spec.ts", "name": "does not dispatch duplicate sync actions before React renders the busy state"},

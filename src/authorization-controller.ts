@@ -879,6 +879,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       }
       try { lease.binding.assertCurrent(); plan.nativeCatalog.assertCurrent() }
       catch { return failed('NATIVE_MODEL_SYNC_PLAN_STALE') }
+      if (plan.expiresAt <= Date.now()) return failed('NATIVE_MODEL_SYNC_PLAN_EXPIRED')
       try {
         await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, [{
           op: 'set', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'], value: plan.models,
