@@ -19,7 +19,7 @@ const requiredJobs = [
 ]
 const scriptsTestArgv = [
   'node', '--test', 'tests/scripts/agent.test.mjs', 'tests/scripts/acceptance.test.mjs',
-  'tests/scripts/environment-guardrails.test.mjs',
+  'tests/scripts/environment-guardrails.test.mjs', 'tests/scripts/autonomy-evaluation.test.mjs',
 ]
 
 class GuardError extends Error {

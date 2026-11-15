@@ -234,6 +234,8 @@ The exact development target is in `deployment-baseline.json`; follow
 and package/release gates run in GitHub Actions. A successful local source
 check, synthetic fixture, release publication, profile installation, and loaded
 Desktop runtime are different evidence layers; report each accurately.
+The optional [offline autonomy evaluator](./docs/agent-autonomy-evaluation.md)
+analyzes explicitly supplied sanitized traces; it does not run or control agents.
 PRs declare documentation impact; agent or human reviewers still verify semantic
 accuracy and coverage. This adds no human-only approval gate. See
 [contributing](./CONTRIBUTING.md#change-workflow).

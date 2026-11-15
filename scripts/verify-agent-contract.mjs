@@ -296,7 +296,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && executionPolicy.operations['scripts-test'].maxFailures === 2
     && JSON.stringify(executionPolicy.operations['scripts-test'].argv) === JSON.stringify([
       'node', '--test', 'tests/scripts/agent.test.mjs', 'tests/scripts/acceptance.test.mjs',
-      'tests/scripts/environment-guardrails.test.mjs',
+      'tests/scripts/environment-guardrails.test.mjs', 'tests/scripts/autonomy-evaluation.test.mjs',
     ])
     && executionPolicy.operations?.['ci-evidence']?.environment === 'github-actions-evidence'
     && executionPolicy.operations['ci-evidence'].maxFailures === 2
@@ -313,9 +313,12 @@ export async function verifyAgentContract(root = repositoryRoot) {
   await file('agent-execution-policy.json')
   await file('docs/environment-evidence-guardrails.md')
   require(contract.tasks.tooling.read.includes('agent-execution-policy.json')
+    && contract.tasks.tooling.read.includes('scripts/autonomy-evaluation.mjs')
+    && contract.tasks.tooling.read.includes('docs/agent-autonomy-evaluation.md')
     && contract.tasks.tooling.read.includes('scripts/environment-guard.mjs')
     && contract.tasks.tooling.read.includes('docs/environment-evidence-guardrails.md')
     && contract.tasks.tooling.tests.includes('tests/scripts/environment-guardrails.test.mjs')
+    && contract.tasks.tooling.tests.includes('tests/scripts/autonomy-evaluation.test.mjs')
     && contract.tasks.tooling.risk.includes('cannot prevent direct shell bypass')
     && agentGuide.includes('cannot prevent direct shell bypass')
     && agentGuide.includes('Do not retry local dependency restoration'),
