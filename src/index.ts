@@ -18,7 +18,7 @@ import { readSettingsNamespace } from './settings-reader.ts'
 import GitHubCopilotAuthorizationController from './authorization-controller.ts'
 import previewPlugin from './preview-route.ts'
 import { installAutoReviewSampling } from './auto-review-sampling.ts'
-import { createNativeCopilotSearch } from './native-copilot-search.ts'
+import { createNativeCopilotSearch, NativeCopilotSearchController } from './native-copilot-search.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
 export {
   COPILOT_HOSTED_SEARCH_PROVIDER_ID,
@@ -75,7 +75,9 @@ export type {
 export function apply(ctx: Context, config: LiveInlineConfig): void {
   ctx.effect(() => installAutoReviewSampling(ctx))
   ctx.inject(['web', 'llm', 'settings', 'credentials', 'loader', 'pluginPackages'], scope => {
-    scope.effect(() => scope.web.registerSearchProvider(createNativeCopilotSearch(scope)))
+    const provider = createNativeCopilotSearch(scope)
+    new NativeCopilotSearchController(scope, provider)
+    scope.effect(() => scope.web.registerSearchProvider(provider))
   })
   ctx.plugin({ apply(scope) { new DiagnosticsController(scope) } })
   installContextEvidence(ctx)

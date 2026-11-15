@@ -63,14 +63,17 @@ describe('session search settings', () => {
     expect(() => Config(untrusted)).toThrow()
   })
 
-  it('projects exclusions, routing, the legacy model override and its ownership journal as live fields', () => {
+  it('projects exclusions, routing, both search model settings and the ownership journal as live fields', () => {
     expect(Object.entries(Config.dict ?? {}).filter(([, schema]) => schema.meta.volatile).map(([key]) => key))
-      .toEqual(['diagnosticsEnabled', 'autoAllocationDiagnosticsEnabled', 'requestDiagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'autoSemanticAssessmentTimeoutMs', 'autoSemanticAssessmentModel', 'parentModelFollow', 'searchModel', 'searchRouting', 'temporaryRouteBackup'])
-    const parsed = Config({ ...base, searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
+      .toEqual(['diagnosticsEnabled', 'autoAllocationDiagnosticsEnabled', 'requestDiagnosticsEnabled', 'excludedModelIds', 'highCostModelIds', 'activeAccountId', 'sessionAccounts', 'sessionContinuation', 'continuationDefaultHistory', 'followParentModel', 'autoSemanticAssessmentTimeoutMs', 'autoSemanticAssessmentModel', 'parentModelFollow', 'searchModel', 'nativeSearchModel', 'searchRouting', 'temporaryRouteBackup'])
+    expect(Config.dict?.nativeSearchModel?.meta.hidden).toBe(true)
+    expect(readInlineConfig(Config(base)).nativeSearchModel).toBe('')
+    const parsed = Config({ ...base, searchModel: 'saved-model', nativeSearchModel: 'native-model', temporaryRouteBackup: 'saved-journal' })
     expect(parsed.searchModel.get()).toBe('saved-model')
+    expect(parsed.nativeSearchModel.get()).toBe('native-model')
     expect(parsed.temporaryRouteBackup.get()).toBe('saved-journal')
     expect(parsed.searchRouting.get()).toMatchObject({ defaultSearchProvider: 'deepseek-official' })
-    expect(readInlineConfig(parsed)).toMatchObject({ searchModel: 'saved-model', temporaryRouteBackup: 'saved-journal' })
+    expect(readInlineConfig(parsed)).toMatchObject({ searchModel: 'saved-model', nativeSearchModel: 'native-model', temporaryRouteBackup: 'saved-journal' })
   })
 
   it('keeps diagnostics default-off and reads the hidden live collection setting', () => {

@@ -11,7 +11,9 @@ vi.mock('../src/native-copilot-access.ts', async importOriginal => ({
   captureNativeCopilot: vi.fn(),
 }))
 
-const model = getBuiltinModels('github-copilot').find(model => model.api === 'openai-responses')!
+const candidates = getBuiltinModels('github-copilot').filter(model => model.api === 'openai-responses').slice(0, 2)
+const model = candidates[0]!
+const secondModel = candidates[1]!
 const key = credentialKey('llm-pi-ai', 'github-copilot')
 const contexts: Context[] = []
 afterEach(async () => {
@@ -25,15 +27,16 @@ function setup() {
   contexts.push(ctx)
   const assertCurrent = vi.fn()
   const webSettings: { searchProvider?: string } = { searchProvider: 'github-copilot-hosted' }
+  const copilotSettings: { nativeSearchModel?: string } = {}
   ctx.provide('settings', {
-    get: (ns: string) => ns === 'web' ? webSettings : undefined,
+    get: (ns: string) => ns === 'web' ? webSettings : ns === 'github-copilot' ? copilotSettings : undefined,
   })
   vi.mocked(captureNativeCopilot).mockResolvedValue({ namespace: 'llm-pi-ai',
-    models: new Map([[model.id, model]]), assertCurrent })
+    models: new Map(candidates.map(candidate => [candidate.id, candidate])), assertCurrent })
   const readRecord = vi.fn(async (record: string) => {
     expect(record).toBe(key)
     return { kind: 'grant', payload: { type: 'oauth', refresh: 'synthetic-refresh',
-      access: 'synthetic-access', expires: Date.now() + 3_600_000, availableModelIds: [model.id] } }
+      access: 'synthetic-access', expires: Date.now() + 3_600_000, availableModelIds: candidates.map(candidate => candidate.id) } }
   })
   ctx.provide('credentials', {
     readRecord, listRecords: async () => [{ key, kind: 'grant' }],
@@ -44,12 +47,12 @@ function setup() {
   const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
     expect(init?.redirect).toBe('error')
     expect(new Headers(init?.headers).get('authorization')).toBe('Bearer synthetic-access')
-    if (String(url).endsWith('/models')) return Response.json({ data: [{
-      id: model.id, model_picker_enabled: true, policy: { state: 'enabled' },
+    if (String(url).endsWith('/models')) return Response.json({ data: candidates.map(candidate => ({
+      id: candidate.id, model_picker_enabled: true, policy: { state: 'enabled' },
       supported_endpoints: ['/responses'],
       capabilities: { supports: { tool_calls: true, streaming: true },
         limits: { max_context_window_tokens: 32000, max_output_tokens: 4096 } },
-    }] })
+    })) })
     const body: Record<string, unknown> = JSON.parse(String(init?.body))
     requests.push(body)
     return Response.json({ output: [
@@ -58,7 +61,7 @@ function setup() {
     ] })
   })
   vi.stubGlobal('fetch', fetch)
-  return { ctx, provider: createNativeCopilotSearch(ctx), readRecord, fetch, requests, assertCurrent, webSettings }
+  return { ctx, provider: createNativeCopilotSearch(ctx), readRecord, fetch, requests, assertCurrent, webSettings, copilotSettings }
 }
 
 describe('optional native Copilot hosted search', () => {
@@ -93,6 +96,47 @@ describe('optional native Copilot hosted search', () => {
     expect(JSON.stringify(fixture.requests[0])).not.toContain('unique user query')
     expect(JSON.stringify(fixture.requests[1])).toContain('unique user query')
     expect(result).toMatchObject({ content: 'A sourced answer.', sources: [{ url: 'https://example.com' }] })
+  })
+
+  it('uses the explicitly selected eligible model for both proof and query', async () => {
+    const fixture = setup()
+    const selected = [model.id, secondModel.id].sort((a, b) => a.localeCompare(b))[1]!
+    fixture.copilotSettings.nativeSearchModel = selected
+    await fixture.provider.search({ query: 'selected model' })
+    expect(fixture.requests.map(request => request.model)).toEqual([selected, selected])
+  })
+
+  it('fails without a proof or query when the selected model is unavailable', async () => {
+    const fixture = setup()
+    fixture.copilotSettings.nativeSearchModel = 'missing-model'
+    await expect(fixture.provider.search({ query: 'must not send' })).rejects.toMatchObject({
+      code: 'WEB_PROVIDER_UNAVAILABLE', message: 'COPILOT_NATIVE_SEARCH_MODEL_UNAVAILABLE',
+    })
+    expect(fixture.requests).toHaveLength(0)
+  })
+
+  it('lists account-proven Responses candidates without running a search', async () => {
+    const fixture = setup()
+    delete fixture.webSettings.searchProvider
+    await expect(fixture.provider.models()).resolves.toEqual({
+      models: candidates.map(candidate => ({ id: candidate.id })).sort((a, b) => a.id.localeCompare(b.id)),
+    })
+    expect(fixture.requests).toHaveLength(0)
+  })
+
+  it('revokes an in-flight search if the chosen search model changes', async () => {
+    const fixture = setup()
+    const original = fixture.fetch.getMockImplementation()!
+    fixture.fetch.mockImplementation(async (url, init) => {
+      const response = await original(url, init)
+      if (String(url).endsWith('/responses')) {
+        fixture.copilotSettings.nativeSearchModel = secondModel.id
+        fixture.ctx.emit('settings/updated', 'github-copilot')
+      }
+      return response
+    })
+    await expect(fixture.provider.search({ query: 'must not send' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(fixture.requests).toHaveLength(1)
   })
 
   it('refuses an unqualified route even when search is called without ready', async () => {

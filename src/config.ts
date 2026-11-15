@@ -90,13 +90,15 @@ export interface InlineConfig {
   searchFallback?: 'none' | 'deepseek'
   /** Optional authoritative legacy override; otherwise hosted search resolves bounded account-owned candidates independently of Chat. */
   searchModel?: string
+  /** Explicit native Copilot hosted-search model; empty retains automatic selection. */
+  nativeSearchModel?: string
   /** Provider routing folded into this plugin entry on current Core releases. */
   searchRouting?: WebSearchRoutingConfig
   /** Internal JSON backup of route leaves temporarily owned by the GPT-6 overlay. */
   temporaryRouteBackup?: string
 }
 
-export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
+export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'nativeSearchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
   autoSemanticAssessmentTimeoutMs?: number | LiveSetting<number>
   autoSemanticAssessmentModel?: string | LiveSetting<string>
   continuationDefaultHistory?: InlineConfig['continuationDefaultHistory'] | LiveSetting<ArrayLike<{ enabled: boolean; changedAt: number }>>
@@ -111,11 +113,12 @@ export type LiveInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAl
   highCostModelIds?: string[] | LiveSetting<ArrayLike<string>>
   excludedModelIds?: string[] | LiveSetting<ArrayLike<string>>
   searchModel?: string | LiveSetting<string | undefined>
+  nativeSearchModel?: string | LiveSetting<string>
   searchRouting?: WebSearchRoutingConfig | LiveSetting<WebSearchRoutingConfig | undefined>
   temporaryRouteBackup?: string | LiveSetting<string | undefined>
 }
 
-export type ResolvedInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
+export type ResolvedInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'autoAllocationDiagnosticsEnabled' | 'requestDiagnosticsEnabled' | 'searchModel' | 'nativeSearchModel' | 'searchRouting' | 'temporaryRouteBackup' | 'excludedModelIds' | 'highCostModelIds' | 'parentModelFollow' | 'followParentModel' | 'activeAccountId' | 'sessionAccounts' | 'sessionContinuation' | 'continuationDefaultHistory' | 'autoSemanticAssessmentTimeoutMs' | 'autoSemanticAssessmentModel'> & {
   autoSemanticAssessmentTimeoutMs: LiveSetting<number>
   autoSemanticAssessmentModel: LiveSetting<string>
   diagnosticsEnabled: LiveSetting<boolean>
@@ -130,6 +133,7 @@ export type ResolvedInlineConfig = Omit<InlineConfig, 'diagnosticsEnabled' | 'au
   highCostModelIds: LiveSetting<ArrayLike<string>>
   excludedModelIds: LiveSetting<ArrayLike<string>>
   searchModel: LiveSetting<string | undefined>
+  nativeSearchModel: LiveSetting<string>
   searchRouting: LiveSetting<WebSearchRoutingConfig>
   temporaryRouteBackup: LiveSetting<string | undefined>
 }
@@ -165,6 +169,7 @@ export function readInlineConfig(config: LiveInlineConfig): InlineConfig {
     })),
     followParentModel: readConfigValue(config.followParentModel),
     searchModel: readConfigValue(config.searchModel),
+    nativeSearchModel: readConfigValue(config.nativeSearchModel),
     searchRouting: readConfigValue(config.searchRouting),
     temporaryRouteBackup: readConfigValue(config.temporaryRouteBackup),
   }
@@ -220,6 +225,7 @@ export const Config: z<Partial<InlineConfig>, ResolvedInlineConfig> = z.object({
   routeWebSearch: z.boolean().default(true).hidden(),
   searchFallback: z.union(['none', 'deepseek']).default('deepseek').hidden(),
   searchModel: z.string().hidden().volatile(),
+  nativeSearchModel: z.string().max(512).default('').hidden().volatile(),
   searchRouting: WebSearchRoutingConfigSchema.default({}).hidden().volatile(),
   temporaryRouteBackup: z.string().hidden().volatile(),
 })

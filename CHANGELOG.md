@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.10.dsh.0.2.2.rc.3 (prepared)
+
+- Allow an explicit native Copilot hosted-search model in plugin settings, with account and native catalog filtering (#478).
+- Preserve automatic selection by default, require the existing search capability proof, and fail without switching if a chosen model is unavailable.
+
 ## 0.1.0-alpha.9.dsh.0.2.2.rc.3 (prepared)
 
 - Apply confirmed account switches to DSH's existing native `github-copilot` credential, preserving the replaced grant and protecting observable in-progress native Agent turns.
