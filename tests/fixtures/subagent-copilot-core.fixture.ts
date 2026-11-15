@@ -311,6 +311,7 @@ it('routes native Copilot children across a confirmed account switch', async () 
     expect(wire).toHaveLength(4)
   } finally {
     release.resolve()
+    releaseThird.resolve()
     try { await ctx.fiber.dispose() }
     finally {
       try { await rm(directory, { recursive: true, force: true }) }
