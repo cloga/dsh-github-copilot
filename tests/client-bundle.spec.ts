@@ -414,7 +414,8 @@ describe('tsdown client artifact', () => {
       && descriptor.namespace !== 'githubCopilotSessionContinuation'
       && descriptor.namespace !== 'githubCopilotDiagnostics').map(descriptor => descriptor.method)).toEqual([
       'status', 'reconcile', 'discoverModels', 'ensureModels', 'start', 'cancel', 'signOut',
-      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost', 'migrationStatus',
+      'excludeModel', 'restoreModel', 'setModelExcluded', 'setModelHighCost',
+      'previewNativeModelSync', 'applyNativeModelSync', 'migrationStatus',
       'view', 'save', 'create', 'providers', 'get', 'refresh', 'getNative', 'refreshNative',
       'ensureNativeIdentity', 'refreshNativeIdentity', 'get', 'requestedModels', 'allocationSummary', 'get', 'authorize', 'setEnabled',
     ])
@@ -454,6 +455,10 @@ describe('tsdown client artifact', () => {
         expect(descriptor.parameters).toHaveLength(2)
         expect(descriptor.parameters.every(parameter => parameter.codec.mode === 'strict')).toBe(true)
       }
+      else if (descriptor.method === 'applyNativeModelSync') {
+        expect(descriptor.parameters).toHaveLength(1)
+        expect(descriptor.parameters[0]?.codec.mode).toBe('strict')
+      }
       else expect(descriptor.parameters).toEqual([])
       expect(descriptor).toMatchObject({
         id: `dsh-github-copilot:githubCopilot.${descriptor.method}`,
@@ -464,6 +469,8 @@ describe('tsdown client artifact', () => {
         typeSymbol: descriptor.method === 'migrationStatus'
           ? 'dsh-github-copilot#GitHubCopilotMigrationStatus'
           : descriptor.method === 'setModelExcluded' || descriptor.method === 'setModelHighCost' ? 'dsh-github-copilot#GitHubCopilotModelPreferencesView'
+          : descriptor.method === 'previewNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncPreview'
+            : descriptor.method === 'applyNativeModelSync' ? 'dsh-github-copilot#GitHubCopilotNativeModelSyncResult'
           : 'dsh-github-copilot#GitHubCopilotAuthorizationView',
       })
     }

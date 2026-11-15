@@ -781,7 +781,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     }) : createElement('p', { role: 'status' }, 'Sign in to manage model preferences.'),
     createElement('details', null,
       createElement('summary', null, 'Discovery details'),
-      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches account models once. Opening this view refreshes missing or stale metadata when needed. These models are for github-copilot-preview, not the native github-copilot catalog. Refreshing does not verify a model call or change your selected model.'),
+      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches account models once. Opening this view refreshes missing or stale metadata when needed. Discovery serves github-copilot-preview and does not change the native github-copilot list; an explicitly confirmed sync can copy eligible models. Refreshing does not verify a model call or change your selected model.'),
       models === undefined ? createElement('p', { style: nativeCaptionStyle }, 'Account model metadata is not available yet.')
         : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models })),
     signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,

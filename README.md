@@ -90,7 +90,31 @@ No manually defined Copilot model, pasted token, external gateway, or
 successful sign-in does not guarantee every model or capability is available.
 The plugin's account-discovered models and capabilities apply to the
 `github-copilot-preview` route. DSH's native `github-copilot` route uses its
-own bundled or configured catalog; the two routes do not share model discovery.
+own bundled or configured catalog; the two routes do not automatically share
+model discovery.
+
+To copy enabled models from the current canonical account into an existing
+native provider, use **Manage → Model preferences → Preview enabled models**,
+review the additions, updates, removals, skipped models and per-request output
+defaults, then choose **Apply sync**. This one-time snapshot replaces only
+`llm-pi-ai.providers.github-copilot.models` with Settings CAS and readback.
+The nonempty saved list replaces the native built-in catalog and remains after
+the plugin is unloaded or uninstalled. Copying model settings does not transfer
+the managed route's image admission checks or tool-schema filtering to native
+requests, nor prove that supplier calls will succeed.
+Models with unproven or incompatible native catalog protocols, unknown or
+narrower server input caps, unknown context or vision support, or unknown or
+unsupported reasoning controls are skipped rather than guessed.
+New Completions and Anthropic models without a native catalog compatibility
+baseline are also skipped; catalog-backed models retain native compatibility.
+Image models are included only when the account explicitly supports all four
+native request formats: PNG, JPEG, WebP, and GIF. Custom native authentication,
+endpoints, headers, nonempty model overrides, or route compatibility overrides
+block sync rather than changing those settings. An existing native default
+reasoning effort must also be supported by each synced model. Core uses each
+configured `maxTokens` as that model's per-request output default. The sync does
+not change credentials, select a model, alter history, or automatically follow
+later account changes.
 
 Use **Manage → Account management → Switch** in the native GitHub Copilot
 account panel to apply a saved account to DSH's canonical

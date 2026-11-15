@@ -44,6 +44,8 @@ function remote() {
     status: vi.fn<Props['remote']['status']>(),
     setModelExcluded: vi.fn<Props['remote']['setModelExcluded']>(),
     setModelHighCost: vi.fn(),
+    previewNativeModelSync: vi.fn<Props['remote']['previewNativeModelSync']>(),
+    applyNativeModelSync: vi.fn<Props['remote']['applyNativeModelSync']>(),
   }
 }
 
@@ -76,6 +78,94 @@ it('keeps a real mounted row saving across equivalent parent snapshots and appli
   expect(row('first').textContent).toBe('Restore')
   expect(face.status).not.toHaveBeenCalled()
   expect(face.setModelExcluded).toHaveBeenCalledExactlyOnceWith('first', true)
+})
+
+it('previews a native model sync and applies it only after the explicit confirmation action', async () => {
+  const face = remote()
+  face.previewNativeModelSync.mockResolvedValue({ ok: true, value: {
+    state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
+    enabledCount: 3, syncableCount: 2, addedIds: ['first'], removedIds: ['old'],
+    outputTokenDefaults: [{ id: 'first', maxTokens: 8192 }, { id: 'second', maxTokens: 4096 }],
+    updatedIds: ['second'], skipped: [{ id: 'third', code: 'NATIVE_API_MISMATCH' }],
+  } })
+  face.applyNativeModelSync.mockResolvedValue({ ok: true, value: { state: 'ready', modelCount: 2 } })
+  const availableModels = { ...models, models: [...models.models, { id: 'third', name: 'Third', api: 'openai-responses' }] }
+  await mount({ remote: face, models: availableModels, preferences })
+
+  await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-preview]')!)
+  expect(face.previewNativeModelSync).toHaveBeenCalledOnce()
+  expect(face.applyNativeModelSync).not.toHaveBeenCalled()
+  expect(document.body.textContent).toContain('2 of 3 enabled models will be written')
+  expect(document.body.textContent).toContain('Models to add')
+  expect(document.body.textContent).toContain('Models to update')
+  expect(document.body.textContent).toContain('NATIVE_API_MISMATCH')
+  expect(document.body.textContent).toContain('The native route uses a different protocol')
+  expect(document.body.textContent).toContain('replaces the native provider’s built-in catalog')
+  expect(document.body.textContent).toContain('remains after the plugin is unloaded or uninstalled')
+  expect(document.body.textContent).toContain('image admission checks and tool-schema filtering do not transfer')
+  expect(document.body.textContent).toContain('Core also uses each configured maxTokens')
+  expect(document.body.textContent).toContain('Per-request output defaults (2)')
+  expect(document.body.textContent).toContain(`${new Intl.NumberFormat().format(8192)} max output tokens`)
+  expect(document.body.textContent).toContain(`${new Intl.NumberFormat().format(4096)} max output tokens`)
+  expect(document.body.textContent).toContain('old')
+
+  await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!)
+  expect(face.applyNativeModelSync).toHaveBeenCalledExactlyOnceWith('12345678-1234-4234-8234-123456789012')
+  expect(document.body.textContent).toContain('Synced 2 models')
+})
+
+it('does not dispatch duplicate preview or apply actions before React renders the busy state', async () => {
+  const face = remote()
+  const preview = deferred<Awaited<ReturnType<Props['remote']['previewNativeModelSync']>>>()
+  const apply = deferred<Awaited<ReturnType<Props['remote']['applyNativeModelSync']>>>()
+  face.previewNativeModelSync.mockReturnValue(preview.promise)
+  face.applyNativeModelSync.mockReturnValue(apply.promise)
+  await mount({ remote: face, models, preferences })
+  const previewButton = document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-preview]')!
+  await act(async () => { previewButton.click(); previewButton.click() })
+  expect(face.previewNativeModelSync).toHaveBeenCalledOnce()
+  await act(async () => { preview.resolve({ ok: true, value: {
+    state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
+    enabledCount: 1, syncableCount: 1, addedIds: ['first'], removedIds: [], updatedIds: [],
+    outputTokenDefaults: [{ id: 'first', maxTokens: 8192 }], skipped: [],
+  } }) })
+  const applyButton = document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!
+  await act(async () => { applyButton.click(); applyButton.click() })
+  expect(face.applyNativeModelSync).toHaveBeenCalledOnce()
+  await act(async () => { apply.resolve({ ok: true, value: { state: 'ready', modelCount: 1 } }) })
+})
+
+it('consumes the preview after an uncertain apply instead of offering the same plan again', async () => {
+  const face = remote()
+  face.previewNativeModelSync.mockResolvedValue({ ok: true, value: {
+    state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
+    enabledCount: 1, syncableCount: 1, addedIds: ['first'], removedIds: [], updatedIds: [],
+    outputTokenDefaults: [{ id: 'first', maxTokens: 8192 }], skipped: [],
+  } })
+  face.applyNativeModelSync.mockResolvedValue({ ok: false, error: new RemoteError('gateway/internal', 'Synthetic failure', {}) })
+  await mount({ remote: face, models, preferences })
+  await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-preview]')!)
+  await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-apply]')!)
+  expect(document.querySelector('[data-dsh-github-copilot-native-model-sync-apply]')).toBeNull()
+  expect(document.body.textContent).toContain('Read the saved settings before trying again')
+  expect(face.applyNativeModelSync).toHaveBeenCalledOnce()
+})
+
+it('ignores a preview response after the preference scope changes', async () => {
+  const face = remote()
+  const preview = deferred<Awaited<ReturnType<Props['remote']['previewNativeModelSync']>>>()
+  face.previewNativeModelSync.mockReturnValue(preview.promise)
+  const panel = await mount({ remote: face, models, preferences })
+  await click(document.querySelector<HTMLButtonElement>('[data-dsh-github-copilot-native-model-sync-preview]')!)
+  await panel.render({ remote: face, models, preferences: { ...preferences, revision: 2 } })
+  await act(async () => { preview.resolve({ ok: true, value: {
+    state: 'ready', planId: '12345678-1234-4234-8234-123456789012',
+    enabledCount: 1, syncableCount: 1, addedIds: ['first'], removedIds: [],
+    outputTokenDefaults: [{ id: 'first', maxTokens: 8192 }],
+    updatedIds: [], skipped: [],
+  } }) })
+  expect(document.querySelector('[data-dsh-github-copilot-native-model-sync-preview-result]')).toBeNull()
+  expect(face.applyNativeModelSync).not.toHaveBeenCalled()
 })
 
 it('sends one CAS intent at a time and never sends a queued intent after an unconfirmed response', async () => {

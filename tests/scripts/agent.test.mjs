@@ -313,6 +313,24 @@ test('contract validation preserves quota and rejects plugin-owned parent-child 
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test('contract validation preserves the explicitly confirmed native model sync boundary', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-native-sync-policy-'))
+  try {
+    const original = JSON.parse(await readFile(join(repositoryRoot, 'agent-contract.json'), 'utf8'))
+    await writeFile(join(root, 'package.json'), await readFile(join(repositoryRoot, 'package.json')))
+    for (const mutate of [
+      contract => { delete contract.tasks.models.nativeModelSyncBoundary },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = 'Automatically replace every provider.' },
+      contract => { contract.tasks.models.tests = contract.tasks.models.tests.filter(value => !value.includes('native-model-sync')) },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /native model sync/)
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('contract validation rejects removal or weakening of the plugin-only boundary', async () => {
   const root = await mkdtemp(join(tmpdir(), 'copilot-plugin-only-policy-'))
   try {

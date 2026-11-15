@@ -1,11 +1,16 @@
 # Changelog
 
-## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.9.dsh.0.2.2.rc.3 (prepared)
 
-- Make confirmed multi-account switching update DSH's native `github-copilot` credential slot instead of relying on a separate provider route (#474).
-- Preserve the replaced native grant, fence observable in-progress native Agent turns, and retain the last applied grant after plugin disposal.
-- Keep account/selector mismatch explicit after external native sign-in and require a user-confirmed recovery; do not rewrite model selections, provider settings or history.
-- Add synthetic regressions for native credential switching, rollback, recovery and bare native use after plugin disposal. No live profile installation or Desktop restart.
+- Apply confirmed account switches to DSH's existing native `github-copilot` credential, preserving the replaced grant and protecting observable in-progress native Agent turns.
+- Allow #466 native model sync for a saved-account selection only when its normalized grant matches the native canonical credential; mismatches and unavailable credentials remain blocked.
+- Keep `github-copilot-preview` registered. This change does not complete #474's native-only route acceptance or retire the separate preview route.
+
+## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (published)
+
+- Preview and explicitly confirm a one-time sync of enabled canonical-account models to an existing native Copilot provider (#466).
+- Preserve only models whose native protocol and account capability metadata can be safely represented; disclose skipped models, removals, updates, and per-request output defaults before replacing the native models setting.
+- Recheck account, adapter-owned catalog, preference and Settings evidence before the path-level write and verify both stored and effective readback. Live Desktop activation and provider calls are not established by synthetic tests.
 
 ## 0.1.0-alpha.7.dsh.0.2.2.rc.3 (prepared)
 
