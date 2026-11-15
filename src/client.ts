@@ -739,7 +739,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
   createElement('style', null, modelsControlCss),
   createElement('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', minHeight: '28px' } },
     createElement('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', minWidth: 0 } },
-      createElement(props.embedded === true ? 'span' : 'h3', { style: props.embedded === true ? nativeCaptionStyle : nativeHeadingStyle }, 'GitHub Copilot (multi-account)'),
+      createElement(props.embedded === true ? 'span' : 'h3', { style: props.embedded === true ? nativeCaptionStyle : nativeHeadingStyle }, 'GitHub Copilot account'),
       createElement('span', { role: 'status', 'aria-live': 'polite', style: nativeCaptionStyle }, status),
       modelStatus === undefined ? null : createElement('span', { role: 'status', 'aria-live': 'polite', style: nativeCaptionStyle }, modelStatus),
       signedIn ? createElement(GitHubCopilotAccountModelsUpdatedAt, { discoveredAt: models?.discoveredAt }) : null),
@@ -750,8 +750,8 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
         { title: view.writable === false ? 'Credentials are read-only' : undefined }) : null,
       actionButton('Manage', () => setManageOpen(open => !open), false, { 'aria-expanded': manageOpen, 'aria-controls': managementId }))),
   props.embedded === true ? createElement('p', { style: { ...nativeCaptionStyle, margin: '6px 0' } },
-    props.locale?.startsWith('zh') ? '切换仅影响插件管理的模型；原生 GitHub Copilot 账号保持不变。'
-      : 'Switching affects plugin-managed models only; the native GitHub Copilot account stays unchanged.') : null,
+    props.locale?.startsWith('zh') ? '切换会影响此 profile 后续的原生 GitHub Copilot 请求；正在进行的请求不会被重定向。'
+      : 'Switching affects future native GitHub Copilot requests in this profile; in-progress requests are not redirected.') : null,
   state.error === undefined ? null : createElement('p', { role: 'alert', 'data-dsh-github-copilot-account-error': state.error,
     style: { ...nativeCaptionStyle, margin: '8px 0 0', overflowWrap: 'anywhere' } },
   compactErrorMessage(state.error, view?.authorizationMilestone)),

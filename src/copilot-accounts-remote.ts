@@ -49,7 +49,8 @@ export const CopilotAccountsViewSchema = z.object({
   const invalid = () => ctx.addIssue({ code: 'custom', message: 'Invalid account evidence' })
   if ((view.state === 'error') !== (view.diagnostic !== undefined)) invalid()
   if (view.switchable && (!view.writable || view.operation !== undefined
-    || view.state !== 'ready' && view.diagnostic !== 'COPILOT_ACCOUNTS_SELECTED_MISSING')) invalid()
+    || view.state !== 'ready' && view.diagnostic !== 'COPILOT_ACCOUNTS_SELECTED_MISSING'
+      && view.diagnostic !== 'COPILOT_ACCOUNTS_NATIVE_CREDENTIAL_MISMATCH')) invalid()
   if (view.writable && view.revision === undefined) invalid()
   if (new Set(view.accounts.map(row => row.id)).size !== view.accounts.length) invalid()
   for (const row of view.accounts) {

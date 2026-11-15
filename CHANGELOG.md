@@ -5,7 +5,13 @@
 - Allow an explicit native Copilot hosted-search model in plugin settings, with account and native catalog filtering (#478).
 - Preserve automatic selection by default, require the existing search capability proof, and fail without switching if a chosen model is unavailable.
 
-## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.9.dsh.0.2.2.rc.3 (prepared)
+
+- Apply confirmed account switches to DSH's existing native `github-copilot` credential, preserving the replaced grant and protecting observable in-progress native Agent turns.
+- Allow #466 native model sync for a saved-account selection only when its normalized grant matches the native canonical credential; mismatches and unavailable credentials remain blocked.
+- Keep `github-copilot-preview` registered. This change does not complete #474's native-only route acceptance or retire the separate preview route.
+
+## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (published)
 
 - Preview and explicitly confirm a one-time sync of enabled canonical-account models to an existing native Copilot provider (#466).
 - Preserve only models whose native protocol and account capability metadata can be safely represented; disclose skipped models, removals, updates, and per-request output defaults before replacing the native models setting.
