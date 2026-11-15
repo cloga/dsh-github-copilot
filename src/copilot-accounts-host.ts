@@ -288,7 +288,7 @@ export class CopilotAccountsHost {
       left === undefined ? right === undefined : right !== undefined && JSON.stringify(left) === JSON.stringify(right)
     let actual: Awaited<ReturnType<typeof store.read>>
     try {
-      actual = await store.modify(GITHUB_COPILOT_PROVIDER_ID, current => {
+      actual = await store.modify(GITHUB_COPILOT_PROVIDER_ID, async current => {
         binding.assertCurrent()
         if (!same(normalize(current), expected)) fail('COPILOT_ACCOUNTS_CHANGED')
         return next
@@ -899,7 +899,7 @@ export class CopilotAccountsHost {
     try {
       const credentials = this.ctx.get('credentials')
       if (!object(credentials) || typeof credentials.deleteRecord !== 'function') fail('COPILOT_ACCOUNTS_CREDENTIALS_UNAVAILABLE')
-      await credentials.deleteRecord(GITHUB_COPILOT_CREDENTIAL_KEY)
+      await credentials.deleteRecord(recordKey('canonical'))
     } finally { this.operation = undefined }
   }
   dispose(): void {
