@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.13.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.14.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.13.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.14.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -419,6 +419,8 @@
         {"file": "src/request-body-composition.ts", "marker": "concurrent: 4"},
         {"file": "src/request-diagnostics.ts", "marker": "REQUEST_DIAGNOSTICS_RETENTION_MS = 24 * 60 * 60 * 1000"},
         {"file": "src/config.ts", "marker": "requestDiagnosticsEnabled: z.boolean().default(false).hidden().volatile()"},
+        {"file": "src/config.ts", "marker": "nativeDiagnosticsEnabled: z.boolean().default(false).hidden().volatile()"},
+        {"file": "src/native-diagnostics.ts", "marker": "observeNativeStream"},
         {"file": "src/diagnostics-host.ts", "marker": "diagnosticsDomainForProfile"},
         {"file": "src/diagnostics-client.ts", "marker": "createClientDiagnosticsScope"},
         {"file": "src/remote.ts", "marker": "...diagnosticsRemote.descriptors"},
@@ -427,6 +429,9 @@
       ],
       "tests": [
         {"file": "tests/diagnostics-collector.spec.ts", "name": "is disabled until enabled, records success denominators and settles once"},
+        {"file": "tests/diagnostics-collector.spec.ts", "name": "requires independent native consent and fences paused or cleared native operations"},
+        {"file": "tests/native-diagnostics.spec.ts", "name": "preserves chunks and records only fixed, content-free terminal evidence"},
+        {"file": "tests/fixtures/diagnostics-native-core.fixture.ts", "name": "observes native and prepared streams through the published waterfall without affecting output"},
         {"file": "tests/auto-allocation-diagnostics.spec.ts", "name": "separates assessment outcomes without changing model opportunities or exposing errors"},
         {"file": "tests/auto-allocation-diagnostics.spec.ts", "name": "keeps legacy reasons unrecorded and captures no-fit and successful assessment outcomes"},
         {"file": "tests/request-diagnostics.spec.ts", "name": "requires independent consent, captures status/timing and never infers upload or retry count"},

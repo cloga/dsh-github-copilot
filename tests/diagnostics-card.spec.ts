@@ -14,14 +14,14 @@ describe('local diagnostics control', () => {
       get: vi.fn(async () => ({ ok: true as const, value: { enabled: true, autoAllocationEnabled: true,
         requestEnabled: true, state: 'ready' as const, diagnostic: 'none' as const,
         dirty: false, snapshot: emptyDiagnostics() } })),
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), setNativeEnabled: vi.fn(),
       clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
     try {
       await act(async () => root.render(createElement(DiagnosticsCard, { remote })))
-      for (const label of ['Physical request observations', 'Credential change observations', 'Account and compaction observations']) {
+      for (const label of ['Native Copilot observations', 'Physical request observations', 'Credential change observations', 'Account and compaction observations']) {
         const summary = Array.from(element.querySelectorAll('summary')).find(node => node.textContent?.startsWith(label))
         expect(summary, label).toBeDefined()
         expect(summary?.parentElement?.hasAttribute('open')).toBe(false)
@@ -50,7 +50,7 @@ describe('local diagnostics control', () => {
     const remote: DiagnosticsRemote = {
       get: async () => ({ ok: true, value: { enabled: false, autoAllocationEnabled: false,
         requestEnabled: true, state: 'ready', diagnostic: 'none', dirty: false, snapshot } }),
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), setNativeEnabled: vi.fn(),
       clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
@@ -68,7 +68,7 @@ describe('local diagnostics control', () => {
   })
   it('requires a confirmed durable enable and a separate destructive clear confirmation', async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-    let view: DiagnosticsView = { enabled: false, autoAllocationEnabled: false, requestEnabled: false, state: 'ready', diagnostic: 'none',
+    let view: DiagnosticsView = { enabled: false, autoAllocationEnabled: false, requestEnabled: false, nativeEnabled: false, state: 'ready', diagnostic: 'none',
       dirty: false, snapshot: emptyDiagnostics() }
     const remote: DiagnosticsRemote = {
       get: vi.fn(async () => ({ ok: true as const, value: view })),
@@ -78,6 +78,9 @@ describe('local diagnostics control', () => {
       })),
       setRequestEnabled: vi.fn(async requestEnabled => ({
         ok: true as const, value: view = { ...view, requestEnabled },
+      })),
+      setNativeEnabled: vi.fn(async nativeEnabled => ({
+        ok: true as const, value: view = { ...view, nativeEnabled },
       })),
       clear: vi.fn(async () => ({ ok: true as const, value: view = { ...view, snapshot: { ...emptyDiagnostics(), epoch: 1 } } })),
       recordClient: vi.fn(async () => ({ ok: true as const, value: view })),
@@ -94,6 +97,12 @@ describe('local diagnostics control', () => {
       await act(async () => { root.render(createElement(DiagnosticsCard, { remote })) })
       expect(element.textContent).toContain('Local collection paused')
       expect(remote.setRequestEnabled).not.toHaveBeenCalled()
+      expect(remote.setNativeEnabled).not.toHaveBeenCalled()
+      await click('Enable native observations')
+      expect(remote.setNativeEnabled).toHaveBeenCalledExactlyOnceWith(true)
+      expect(remote.setRequestEnabled).not.toHaveBeenCalled()
+      await click('Pause native observations')
+      expect(remote.setNativeEnabled).toHaveBeenLastCalledWith(false)
       await click('Enable request observations')
       expect(remote.setRequestEnabled).toHaveBeenCalledExactlyOnceWith(true)
       expect(remote.setEnabled).not.toHaveBeenCalled()
@@ -129,7 +138,7 @@ describe('local diagnostics control', () => {
     const remote: DiagnosticsRemote = {
       get: async () => ({ ok: true, value: { enabled: false, autoAllocationEnabled: false, state: 'unavailable',
         diagnostic: 'storage-unavailable', dirty: false, snapshot: emptyDiagnostics() } }),
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), setNativeEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
@@ -147,7 +156,7 @@ describe('local diagnostics control', () => {
     const remote: DiagnosticsRemote = {
       get: async () => ({ ok: true, value: { enabled: false, autoAllocationEnabled: false, state: 'ready',
         diagnostic: 'none', dirty: false, snapshot } }),
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), setNativeEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
@@ -182,7 +191,7 @@ describe('local diagnostics control', () => {
     const remote: DiagnosticsRemote = {
       get: async () => ({ ok: true, value: { enabled: true, autoAllocationEnabled: false, state: 'ready',
         diagnostic: 'none', dirty: false, snapshot } }),
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), setNativeEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
@@ -211,7 +220,7 @@ describe('local diagnostics control', () => {
     const remote: DiagnosticsRemote = {
       get: async () => ({ ok: true, value: { enabled: false, autoAllocationEnabled: false, state: 'ready',
         diagnostic: 'none', dirty: false, snapshot } }),
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), setNativeEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
@@ -231,7 +240,7 @@ describe('local diagnostics control', () => {
       .mockResolvedValueOnce({ ok: true as const, value: view })
     const remote: DiagnosticsRemote = {
       get,
-      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
+      setEnabled: vi.fn(), setAutoAllocationEnabled: vi.fn(), setRequestEnabled: vi.fn(), setNativeEnabled: vi.fn(), clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')
     const root = createRoot(element)
@@ -256,6 +265,7 @@ describe('local diagnostics control', () => {
       setEnabled: vi.fn(async enabled => ({ ok: true as const, value: view = { ...view, enabled } })),
       setAutoAllocationEnabled: vi.fn(),
       setRequestEnabled: vi.fn(),
+      setNativeEnabled: vi.fn(),
       clear: vi.fn(), recordClient: vi.fn(),
     }
     const element = document.createElement('div')

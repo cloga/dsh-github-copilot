@@ -28,6 +28,16 @@ describe('diagnostics analysis', () => {
     expect(report.populations).toEqual([])
     expect(report.investigationCandidates).toEqual([])
   })
+  it('excludes independently consented native observations from account aggregate analysis', () => {
+    const report = analyzeSnapshot({ ...emptySnapshot(), rows: [
+      row({ operation: 'native-copilot-llm', metric: 'failed', reason: 'unknown' }),
+    ], pending: [{ version: '0.4.0-alpha.128', operation: 'native-copilot-search',
+      stage: 'admitted', bucket: 0, count: 1 }] }, persistedOptions)
+    expect(report.gaps).toContain('native-observations-not-analyzed')
+    expect(report.populations).toEqual([])
+    expect(report.pendingAtSnapshot).toEqual([])
+    expect(report.investigationCandidates).toEqual([])
+  })
   it('keeps no observations uncertain and does not claim current collection state', () => {
     const report = analyzeSnapshot(emptySnapshot(), persistedOptions)
     expect(report.populations).toEqual([])

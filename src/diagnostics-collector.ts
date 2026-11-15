@@ -1,5 +1,5 @@
 import {
-  DIAGNOSTICS_MAX_LIVE, DIAGNOSTICS_MAX_ROWS, DIAGNOSTICS_RETENTION_MS,
+  DIAGNOSTICS_MAX_BYTES, DIAGNOSTICS_MAX_LIVE, DIAGNOSTICS_MAX_ROWS, DIAGNOSTICS_RETENTION_MS,
   DiagnosticsSnapshotSchema, diagnosticsBucket,
 } from './diagnostics-types.ts'
 import type { DiagnosticsOperation, DiagnosticsStage, DiagnosticsOutcome, DiagnosticsReason,
@@ -24,7 +24,10 @@ interface Live { operation: DiagnosticsOperation; stage: DiagnosticsStage; start
 export class DiagnosticsCollector {
   private data = emptyDiagnostics()
   private readonly live = new Set<Live>()
+  private readonly nativeLive = new Set<Live>()
   private enabled = false
+  private nativeEnabled = false
+  private nativeGeneration: object = {}
   private autoAllocationEnabled = false
   private requestEnabled = false
   private readonly requestHandles = new Set<RequestDiagnosticHandle>()
@@ -89,6 +92,8 @@ export class DiagnosticsCollector {
     const epoch = this.data.epoch + 1
     if (!Number.isSafeInteger(epoch)) throw new Error('COPILOT_DIAGNOSTICS_EPOCH_LIMIT')
     this.live.clear()
+    this.nativeLive.clear()
+    this.nativeGeneration = {}
     this.requestHandles.clear()
     this.credentialHandles.clear()
     this.requestGeneration++
@@ -98,7 +103,7 @@ export class DiagnosticsCollector {
   }
   begin(operation: DiagnosticsOperation): DiagnosticsHandle {
     if (!this.enabled) return noop
-    if (this.live.size >= DIAGNOSTICS_MAX_LIVE) {
+    if (this.live.size + this.nativeLive.size >= DIAGNOSTICS_MAX_LIVE) {
       this.increment('dropped')
       this.changed()
       return noop
@@ -114,6 +119,38 @@ export class DiagnosticsCollector {
       },
       finish: (outcome, reason = 'none') => this.settle(live, outcome, reason),
     }
+  }
+  isNativeEnabled(): boolean { return this.nativeEnabled && this.layer === 'host' }
+  nativeToken(): object | undefined { return this.isNativeEnabled() ? this.nativeGeneration : undefined }
+  setNativeEnabled(enabled: boolean): void {
+    if (this.nativeEnabled !== enabled) this.nativeGeneration = {}
+    if (this.nativeEnabled && !enabled) {
+      for (const live of this.nativeLive) this.settleNative(live, 'interrupted', 'unknown')
+    }
+    this.nativeEnabled = enabled
+  }
+  beginNative(operation: 'native-copilot-llm' | 'native-copilot-review' | 'native-copilot-search',
+    token = this.nativeGeneration): DiagnosticsHandle {
+    if (!this.isNativeEnabled() || token !== this.nativeGeneration) return noop
+    if (this.live.size + this.nativeLive.size >= DIAGNOSTICS_MAX_LIVE) {
+      this.increment('dropped')
+      this.changed()
+      return noop
+    }
+    const live: Live = { operation, stage: 'admitted', start: this.mono(), epoch: this.data.epoch }
+    this.nativeLive.add(live)
+    this.add(operation, live.stage, 'started', 'none', 0)
+    return {
+      stage: () => {},
+      finish: (outcome, reason = 'unknown') => this.settleNative(live, outcome, reason),
+    }
+  }
+  private settleNative(live: Live, outcome: DiagnosticsOutcome, reason: DiagnosticsReason): void {
+    if (!this.nativeLive.delete(live)) return
+    const safeReason = ['NATIVE_LLM_AUTH', 'NATIVE_LLM_RATE_LIMIT', 'NATIVE_LLM_TIMEOUT', 'NATIVE_LLM_CONTEXT_LIMIT']
+      .includes(reason) ? reason : 'unknown'
+    this.add(live.operation, live.stage, outcome, outcome === 'success' ? 'none' : safeReason, this.age(live))
+    if (outcome === 'interrupted') this.increment('interrupted')
   }
   private settle(live: Live, outcome: DiagnosticsOutcome, reason: DiagnosticsReason): void {
     if (!this.live.delete(live) || live.epoch !== this.data.epoch) return
@@ -154,6 +191,12 @@ export class DiagnosticsCollector {
   private add(operation: DiagnosticsOperation, stage: DiagnosticsStage, metric: DiagnosticsRow['metric'],
     reason: DiagnosticsReason, bucket: number, count = 1, version = this.version): void {
     this.expire()
+    if (operation.startsWith('native-copilot-')
+      && JSON.stringify(this.data).length > DIAGNOSTICS_MAX_BYTES - 65_536) {
+      this.increment('dropped')
+      this.changed()
+      return
+    }
     const now = this.wall()
     const discontinuity = now < this.lastWall
     this.lastWall = now
@@ -186,7 +229,7 @@ export class DiagnosticsCollector {
   snapshot(): DiagnosticsSnapshot {
     this.expire()
     const pending: DiagnosticsSnapshot['pending'] = []
-    for (const live of this.live) {
+    for (const live of [...this.live, ...this.nativeLive]) {
       const bucket = this.age(live)
       const existing = pending.find(row => row.operation === live.operation && row.stage === live.stage && row.bucket === bucket)
       if (existing) existing.count++
@@ -200,7 +243,7 @@ export class DiagnosticsCollector {
       autoAllocation: this.autoAllocation.snapshot(),
       updatedAt: this.wall(), pending })
   }
-  close(): void { this.setEnabled(false); this.setAutoAllocationEnabled(false); this.setRequestEnabled(false) }
+  close(): void { this.setEnabled(false); this.setNativeEnabled(false); this.setAutoAllocationEnabled(false); this.setRequestEnabled(false) }
   setRequestEnabled(enabled: boolean): void {
     if (this.requestEnabled !== enabled) this.requestGeneration++
     if (this.requestEnabled !== enabled) this.credentialHandles.clear()

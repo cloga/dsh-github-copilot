@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.14.dsh.0.2.2.rc.3 (prepared)
+
+- Add independently enabled, content-free native Copilot logical stream and hosted-search aggregates (#486).
+- Keep native observations separate from managed physical-request diagnostics; they do not prove HTTP dispatch, supplier receipt or execution.
+- Preserve request, retry, Usage and settings ownership; old strict versions may not read retained new operation codes on rollback.
+
 ## 0.1.0-alpha.13.dsh.0.2.2.rc.3 (prepared)
 
 - Qualify native Copilot profiles after actual Config/Settings normalization: schema-default empty template maps and boolean `supportsStrictMode` no longer disable reviewer-only temperature omission or canonical hosted-search readiness (#483).

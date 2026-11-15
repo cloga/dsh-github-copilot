@@ -5,6 +5,7 @@ import { RequestDiagnosticsSchema } from './request-diagnostics.ts'
 export const DIAGNOSTICS_OPERATIONS = [
   'account-global-switch', 'account-session-select', 'account-session-inherit',
   'identity-read', 'identity-flight', 'compaction', 'compaction-summary',
+  'native-copilot-llm', 'native-copilot-review', 'native-copilot-search',
   'collection',
 ] as const
 export const DIAGNOSTICS_STAGES = [
@@ -21,6 +22,7 @@ export const DIAGNOSTICS_METRICS = [
 ] as const
 export const DIAGNOSTICS_REASONS = [
   'none', 'unknown', 'rpc-unavailable', 'decode-invalid',
+  'NATIVE_LLM_AUTH', 'NATIVE_LLM_RATE_LIMIT', 'NATIVE_LLM_TIMEOUT', 'NATIVE_LLM_CONTEXT_LIMIT',
   'COPILOT_ACCOUNTS_BUSY', 'COPILOT_ACCOUNTS_CONFLICT', 'COPILOT_ACCOUNTS_CHANGED',
   'COPILOT_ACCOUNTS_COMMIT_UNCERTAIN', 'COPILOT_ACCOUNTS_IDENTITY_TIMEOUT',
   'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE', 'COPILOT_ACCOUNTS_MODELS_FAILED',
@@ -66,6 +68,7 @@ export const DiagnosticsSnapshotSchema = z.object({
 export const DiagnosticsViewSchema = z.object({
   enabled: z.boolean(), autoAllocationEnabled: z.boolean(),
   requestEnabled: z.boolean().optional(),
+  nativeEnabled: z.boolean().optional(),
   state: z.enum(['loading', 'ready', 'unavailable', 'error']),
   diagnostic: z.enum(['none', 'storage-unavailable', 'storage-invalid', 'storage-write-failed',
     'profile-unavailable', 'settings-unavailable', 'settings-conflict', 'client-report-failed', 'client-report-revoked', 'closed']),
