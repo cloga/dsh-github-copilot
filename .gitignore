@@ -12,3 +12,5 @@ artifacts/
 *.tsbuildinfo
 coverage/
 .capture-*
+/.impeccable/hook.cache.json
+/.ci-evidence-459/
