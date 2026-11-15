@@ -33,7 +33,7 @@ const key = (account: string) => account === 'canonical' ? KEY : `github-copilot
 type SyntheticGrant = { kind: 'grant'; payload: { type: 'oauth'; refresh: string; access: string; expires: number; availableModelIds: string[] } }
 afterEach(() => vi.unstubAllGlobals())
 
-it('preserves native account evidence and account switches across request marker instances', async () => {
+it('applies confirmed account switches to native credentials and retains the native route after disposal', async () => {
   const ctx = new Context()
   let markerFixture: string | undefined
   const model = getBuiltinModels('github-copilot').find(model => model.api === 'openai-completions')
