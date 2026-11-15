@@ -141,6 +141,25 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && Object.entries(workspaceRequirements).every(([key, value]) => workspace[key] === value)
     && agentGuide.includes('## Session isolation and temporary artifacts (#442)'),
   'workspace isolation must preserve user files, authorized worktrees and delivery tool boundaries')
+  const autonomy = contract.boundaries?.autonomousExecution
+  const autonomyRequirements = {
+    mode: 'scoped-authorization-follow-through',
+    authorization: 'retain-explicit-target-scope-limits-until-complete-or-revoked',
+    routineWork: 'safe-inspection-and-bounded-recovery-without-repeat-prompts',
+    restartRecovery: 'one-same-target-start-if-confirmed-stopped-and-within-consent',
+    toolPolicy: 'never-override-tool-consent-or-refusal',
+    interruption: 'tool-report-not-human-intent',
+    retryBudget: 'preserve-across-continuations',
+    blockers: 'report-once-continue-independent-work',
+    completion: 'verified-or-explicitly-blocked-never-fabricated-success',
+    enforcement: 'advisory-contract-drift-only',
+  }
+  require(autonomy && Object.keys(autonomy).length === Object.keys(autonomyRequirements).length
+    && Object.entries(autonomyRequirements).every(([key, value]) => autonomy[key] === value)
+    && agentGuide.includes('### Scoped autonomous execution (#491)')
+    && agentGuide.includes('Tool consent, refusal and interruption controls take precedence.')
+    && /Do not repeat\s+the same question or unchanged waiting message\./.test(agentGuide),
+  'autonomous execution must retain scoped consent, bounded recovery, tool controls and truthful non-repeating handoffs')
   require(agentGuide.includes('### Confirmed product scope (#455, #456)')
     && agentGuide.includes('When any later legacy detail in this guide conflicts with this confirmed scope'),
   'the confirmed product scope must be authoritative over historical guide details')
