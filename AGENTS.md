@@ -125,11 +125,11 @@ subagent invocation must be verified on `github-copilot`, not inferred from
 managed-route tests. Record enhancements that cannot safely attach to native
 APIs rather than patching Core or misrepresenting support.
 
-For official DSH `0.2.2-rc.3`, plugin `0.1.0-alpha.13.dsh.0.2.2.rc.3`
-at `c7d3ab72cc043a32d24379738bf55189fbc0806a` passed the Windows/Linux
-source/artifact CI in [run 43690419471](https://github.com/cloga/dsh-github-copilot/actions/runs/43690419471)
+For official DSH `0.2.2-rc.3`, plugin `0.1.0-alpha.14.dsh.0.2.2.rc.3`
+at `5d82df760683eeae7bb0413c946e4d25daef2049` passed the Windows/Linux
+source/artifact CI in [run 43691055529](https://github.com/cloga/dsh-github-copilot/actions/runs/43691055529)
 and was published to GitHub Releases and npm. This evidence is limited to that
-revision; the alpha.14 source requires its own CI and publication evidence.
+revision; later changes require their own CI and publication evidence.
 Desktop signatures, installation, loaded state, OAuth and supplier calls are not
 established. The `desktopCandidateQualified: false` contract
 tracks the unverified Desktop artifact/live-acceptance layer, not a failed CI.

@@ -40,6 +40,11 @@ GitHub Copilot 模型。插件不会读取或强制检查用户的 DeepSeek 账�
 不能证明资格验证或发布已完成。安装前请确认精确版本已通过必要门禁，且
 Release 与 npm 制品均已发布。已发布、已安装、已加载是不同状态。
 
+插件 `0.1.0-alpha.14.dsh.0.2.2.rc.3` 已通过 Windows/Linux 源码及已发布制品
+[CI](https://github.com/cloga/dsh-github-copilot/actions/runs/43691055529)，
+并已发布到 GitHub Releases 和 npm。这不代表 Desktop 制品、安装、加载或供应商
+实时调用已验证。
+
 可在经过验证的源码 checkout 中，用只读的精确 Core 选择器检查发布映射：
 
 ```sh

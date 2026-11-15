@@ -50,6 +50,11 @@ confirm that the exact version has passed the required gates and its Release
 and npm artifacts are available. Published, installed, and loaded states are
 distinct.
 
+Plugin `0.1.0-alpha.14.dsh.0.2.2.rc.3` passed the Windows/Linux source and
+published-artifact [CI](https://github.com/cloga/dsh-github-copilot/actions/runs/43691055529)
+and was published to GitHub Releases and npm. This does not verify Desktop
+artifacts, installation, loaded state or live supplier calls.
+
 Use the read-only exact-Core selector from a verified source checkout to check
 the release mapping:
 

@@ -5,7 +5,7 @@ release tags do not update this file after publication. Check the exact
 [GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
 version separately rather than treating an old `prepared` label as current status.
 
-## 0.1.0-alpha.14.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.14.dsh.0.2.2.rc.3 (published)
 
 - Add independently enabled, content-free native Copilot logical stream and hosted-search aggregates (#486).
 - Keep native observations separate from managed physical-request diagnostics; they do not prove HTTP dispatch, supplier receipt or execution.
