@@ -7,6 +7,111 @@ import { spawnSync } from 'node:child_process'
 import { attribution, describeRepository, doctor, planTask, repositoryRoot } from '../../scripts/agent.mjs'
 import { verifyAgentContract, verifyCurrentCoreDocument, verifyCurrentTaskStatus, verifyDocumentationReview } from '../../scripts/verify-agent-contract.mjs'
 import { assessDeliveryImpact, assessDocumentationImpact } from '../../scripts/verify-documentation-impact.mjs'
+import { assessLocalDelivery, readLocalDelivery } from '../../scripts/local-delivery.mjs'
+
+const localDeliveryExample = () => ({
+  schemaVersion: 1,
+  target: { profile: 'desktop', desktopVersion: '0.2.2-rc.3', pluginVersion: '0.1.0-alpha.17.dsh.0.2.2.rc.3' },
+  stages: {
+    desktop: { status: 'passed', version: '0.2.2-rc.3', observedAtMs: 100 },
+    release: { status: 'passed', version: '0.1.0-alpha.17.dsh.0.2.2.rc.3', observedAtMs: 200 },
+    preflight: { status: 'passed', observedAtMs: 300 },
+    installed: { status: 'passed', version: '0.1.0-alpha.17.dsh.0.2.2.rc.3', observedAtMs: 400 },
+    loaded: { status: 'passed', version: '0.1.0-alpha.17.dsh.0.2.2.rc.3', observedAtMs: 500 },
+    behavior: { status: 'passed', observedAtMs: 600 },
+  },
+  peers: { bundled: 'matching', resolved: 'matching', loaded: 'matching' },
+})
+
+test('local delivery keeps reported completion distinct from independent verification', () => {
+  const result = assessLocalDelivery(localDeliveryExample(), 1000)
+  assert.equal(result.state, 'reported-complete')
+  assert.equal(result.nextStage, null)
+  assert.equal(result.executionVerified, false)
+  assert.equal(result.authorizationVerified, false)
+  assert.equal(result.acceptanceVerified, false)
+})
+
+test('local delivery resumes at the first incomplete or stale stage', () => {
+  const input = localDeliveryExample()
+  input.stages.loaded = { status: 'blocked', version: null, observedAtMs: 500 }
+  input.stages.behavior = { status: 'not-run', observedAtMs: null }
+  input.peers.loaded = 'unknown'
+  const result = assessLocalDelivery(input, 1000)
+  assert.equal(result.state, 'incomplete')
+  assert.equal(result.nextStage, 'loaded')
+  assert.equal(result.stages.loaded, 'blocked')
+  assert.ok(result.warnings.includes('loaded-peer-unknown'))
+  input.stages.loaded = { status: 'passed', version: input.target.pluginVersion, observedAtMs: 700 }
+  input.stages.behavior = { status: 'passed', observedAtMs: 600 }
+  assert.equal(assessLocalDelivery(input, 1000).stages.behavior, 'stale')
+  input.stages.installed.observedAtMs = 800
+  assert.equal(assessLocalDelivery(input, 1000).stages.loaded, 'stale')
+  input.stages.installed = { status: 'failed', version: null, observedAtMs: 800 }
+  assert.equal(assessLocalDelivery(input, 1000).stages.installed, 'failed')
+})
+
+test('local delivery rejects false readiness from version mismatch and future evidence', () => {
+  const input = localDeliveryExample()
+  input.stages.loaded.version = '0.1.0-alpha.16.dsh.0.2.2.rc.3'
+  const result = assessLocalDelivery(input, 1000)
+  assert.equal(result.nextStage, 'loaded')
+  assert.equal(result.stages.loaded, 'version-mismatch')
+  assert.equal(result.stages.behavior, 'stale')
+  input.stages.loaded.observedAtMs = 1001
+  assert.throws(() => assessLocalDelivery(input, 1000), /LOCAL_DELIVERY_INVALID/)
+  const invalid = localDeliveryExample()
+  invalid.stages.behavior.authorization = 'granted'
+  assert.throws(() => assessLocalDelivery(invalid, 1000), /LOCAL_DELIVERY_INVALID/)
+  const otherProfile = localDeliveryExample()
+  otherProfile.target.profile = 'web'
+  assert.throws(() => assessLocalDelivery(otherProfile, 1000), /LOCAL_DELIVERY_INVALID/)
+})
+
+test('local delivery distinguishes mismatched and unknown shared peers', () => {
+  const input = localDeliveryExample()
+  input.peers = { bundled: 'matching', resolved: 'mismatch', loaded: 'unknown' }
+  const result = assessLocalDelivery(input, 1000)
+  assert.equal(result.state, 'reported-complete-with-uncertainty')
+  assert.deepEqual(result.warnings, ['resolved-peer-mismatch', 'loaded-peer-unknown'])
+})
+
+test('local delivery reads only bounded, unambiguous state outside the checkout', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'copilot-local-delivery-'))
+  const file = join(root, 'state.json')
+  try {
+    await writeFile(file, JSON.stringify(localDeliveryExample()))
+    assert.equal((await readLocalDelivery(file, repositoryRoot, 1000)).state, 'reported-complete')
+    const state = localDeliveryExample()
+    state.stages.loaded = { status: 'blocked', version: null, observedAtMs: 500 }
+    state.stages.behavior = { status: 'not-run', observedAtMs: null }
+    await writeFile(file, JSON.stringify(state))
+    const result = spawnSync(process.execPath, [join(repositoryRoot, 'scripts', 'agent.mjs'),
+      'local-delivery', '--state', file], { cwd: repositoryRoot, encoding: 'utf8' })
+    assert.equal(result.status, 1)
+    assert.equal(JSON.parse(result.stdout).nextStage, 'loaded')
+    state.stages.loaded = localDeliveryExample().stages.loaded
+    state.stages.behavior = localDeliveryExample().stages.behavior
+    state.peers.loaded = 'unknown'
+    await writeFile(file, JSON.stringify(state))
+    const warning = spawnSync(process.execPath, [join(repositoryRoot, 'scripts', 'agent.mjs'),
+      'local-delivery', '--state', file], { cwd: repositoryRoot, encoding: 'utf8' })
+    assert.equal(warning.status, 1)
+    assert.equal(JSON.parse(warning.stdout).state, 'reported-complete-with-uncertainty')
+    await writeFile(file, '{"schemaVersion":1,"schemaVersion":1}')
+    await assert.rejects(readLocalDelivery(file, repositoryRoot, 1000), /LOCAL_DELIVERY_INVALID/)
+    await writeFile(file, '{"secret":"PRIVATE_SENTINEL"}')
+    const invalid = spawnSync(process.execPath, [join(repositoryRoot, 'scripts', 'agent.mjs'),
+      'local-delivery', '--state', file], { cwd: repositoryRoot, encoding: 'utf8' })
+    assert.equal(invalid.status, 2)
+    assert.equal(JSON.parse(invalid.stdout).error, 'LOCAL_DELIVERY_INVALID')
+    assert.ok(!`${invalid.stdout}${invalid.stderr}`.includes('PRIVATE_SENTINEL'))
+    await writeFile(file, 'x'.repeat(65537))
+    await assert.rejects(readLocalDelivery(file, repositoryRoot, 1000), /LOCAL_DELIVERY_INVALID/)
+    await assert.rejects(readLocalDelivery(join(repositoryRoot, 'package.json'), repositoryRoot, 1000), /LOCAL_DELIVERY_UNSAFE_FILE/)
+    await assert.rejects(readLocalDelivery(join(root, 'missing.json'), repositoryRoot, 1000), /LOCAL_DELIVERY_FILE_UNAVAILABLE/)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
 
 const documentationImpactBody = `### Documentation impact
 - Behavior: user-facing
@@ -269,6 +374,9 @@ test('describes actual package metadata without claiming a release exists', asyn
   assert.equal(result.acceptance.executed, false)
   assert.equal(result.acceptance.executionVerified, false)
   assert.equal(result.acceptance.independenceVerified, false)
+  assert.equal(result.localDelivery.mode, 'reported-state-only')
+  assert.equal(result.localDelivery.authorizationVerified, false)
+  assert.equal(result.localDelivery.acceptanceVerified, false)
   assert.deepEqual(result.acceptance.liveUi, {
     schemaVersion: 2, ci: 'guarded-exact-head', source: 'report-consistency-only',
     browserManualRequireLiveContract: true, automaticClosure: false,
@@ -296,6 +404,7 @@ test('plans only known task IDs with unexecuted argument arrays', async () => {
   ])
   assert.ok(!(await planTask('tooling')).commands.some(command => command.argv.includes('pnpm')))
   assert.deepEqual((await planTask('tooling')).acceptance, (await describeRepository()).acceptance)
+  assert.deepEqual((await planTask('tooling')).localDelivery, (await describeRepository()).localDelivery)
 })
 
 test('context diagnostics preserve shared usage and include native whole-turn evidence', async () => {
@@ -607,6 +716,8 @@ test('contract validation preserves the explicitly confirmed native model sync b
       contract => { delete contract.tasks.models.nativeModelSyncBoundary },
       contract => { contract.tasks.models.nativeModelSyncBoundary = 'Automatically replace every provider.' },
       contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('non-forcing preview', 'preview') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('ID-only account model submission, not capability qualification', 'copy account capabilities') },
+      contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('Missing native IDs are advisory, not skipped', 'Guess definitions for absent IDs') },
       contract => { contract.tasks.models.nativeModelSyncBoundary = contract.tasks.models.nativeModelSyncBoundary.replace('preserve supportsStrictMode: false only when at least one synced Responses or Completions model supports it', 'permit all overrides') },
       contract => { contract.tasks.models.tests = contract.tasks.models.tests.filter(value => !value.includes('native-model-sync')) },
     ]) {

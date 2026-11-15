@@ -8,6 +8,74 @@ works. It extends the existing Agent contract and CLI; it is not another
 orchestrator, runtime plugin surface, execution attestation or merge authority.
 The plugin-only and approval boundaries in [AGENTS.md](../AGENTS.md) still apply.
 
+## Resuming a local delivery
+
+When an installation and verification are explicitly requested, use a small,
+sanitized state file in the session-owned artifact area **outside the checkout**.
+The agent records observations; the command does not create or update the file:
+
+```sh
+node scripts/agent.mjs local-delivery --state STATE_FILE --json
+```
+
+This is a read-only progress aid. It reports the first incomplete stage, refuses
+version mismatch or evidence older than its prerequisite, and separates bundled,
+normally resolved and actually loaded peer observations. It runs no preflight,
+installation, Desktop action or network call, reads no profile or credentials,
+and does not verify its input. It never authenticates consent. Continue using the
+exact-Core release selector, composition/peer checks and approved Desktop CLI in
+[installation guidance](./npm-distribution.md), plus schema 2 below when required.
+`reported-complete` is not actual execution, approval or live acceptance; required
+CI and reviews remain separate. Exit 0 means no reported stage/peer uncertainty,
+1 means incomplete or peer warnings, and 2 means invalid/unavailable/unsafe input.
+
+The following is an illustrative schema, not evidence that an action took place.
+Use actual UTC epoch milliseconds, or `null` for `not-run`. A versioned stage
+also uses `version: null` when not run. Allowed stage statuses are `passed`,
+`failed`, `blocked`, `unknown` and `not-run`; peer values are `matching`,
+`mismatch` and `unknown`. A `passed` versioned stage requires a version.
+
+```json
+{
+  "schemaVersion": 1,
+  "target": {
+    "profile": "desktop",
+    "desktopVersion": "0.2.2-rc.3",
+    "pluginVersion": "0.1.0-alpha.1.dsh.0.2.2.rc.3"
+  },
+  "stages": {
+    "desktop": { "status": "passed", "version": "0.2.2-rc.3", "observedAtMs": 100 },
+    "release": { "status": "passed", "version": "0.1.0-alpha.1.dsh.0.2.2.rc.3", "observedAtMs": 200 },
+    "preflight": { "status": "passed", "observedAtMs": 300 },
+    "installed": { "status": "passed", "version": "0.1.0-alpha.1.dsh.0.2.2.rc.3", "observedAtMs": 400 },
+    "loaded": { "status": "unknown", "version": null, "observedAtMs": 500 },
+    "behavior": { "status": "not-run", "observedAtMs": null }
+  },
+  "peers": { "bundled": "matching", "resolved": "mismatch", "loaded": "unknown" }
+}
+```
+
+This entry point is limited to the `desktop` profile. The agent must bind the
+state to the specific intended Desktop installation in its separate scoped task
+context; this file does not identify a machine, installation path or account.
+The `desktop` stage records the observed exact Desktop version, `release` the
+verified exact artifact, `preflight` the required composition/readiness checks,
+`installed` the installed bytes, `loaded` the public runtime version, and
+`behavior` the specifically requested live checks. `installed` depends on both
+release and preflight; loaded and behavior depend on their preceding stage.
+Failed or blocked reports remain distinct from unknown and not-run; mismatch
+and chronological stale status never become passed. Peer warnings never infer
+actual loading from a bundled or ordinary Node resolution.
+
+Keep the state content-free: no paths, credentials, identities, raw errors,
+conversation content or permission grants. The checker accepts no free-form
+fields, does not upload data and cannot establish how observations were obtained.
+Retain the task's real authorization and action/navigation budgets separately.
+After a reinstall, restart, environment change, or uncertain interruption,
+invalidate and re-observe affected evidence even when versions match. The
+checker cannot detect those events or attest an observation's continuing freshness.
+It is not a replacement for schema 2's bounded live observations and exact-head CI.
+
 ## Workflow
 
 1. Before implementation, agree on an issue, objective, non-goals and observable

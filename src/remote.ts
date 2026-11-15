@@ -144,6 +144,7 @@ export const GitHubCopilotNativeModelSyncPreviewSchema = z.object({
   addedIds: z.array(z.string().min(1).max(200)).max(512),
   removedIds: z.array(z.string().min(1).max(200)).max(512),
   updatedIds: z.array(z.string().min(1).max(200)).max(512),
+  nativeCatalogMissingIds: z.array(z.string().min(1).max(200)).max(512).optional(),
   skipped: z.array(z.object({
     id: z.string().min(1).max(200),
     code: z.enum([

@@ -109,9 +109,19 @@ The user-authorized native model sync (#466, #479) is a narrow exception to the
 no-settings-rewrite rule: after a visible preview and one explicit confirmation, one
 revision-checked write may replace only
 `llm-pi-ai.providers.github-copilot.models` in an existing canonical profile.
-Prove current canonical-account metadata and the native adapter-owned catalog;
-skip unrepresentable or uncertain model capabilities. Disclose additions,
-updates, removals, skipped models and configured output request defaults.
+Prove current canonical-account metadata and the native adapter-owned catalog.
+The explicit #508 direction changes this operation to ID-only account model
+submission, not capability qualification: submit all enabled account IDs as
+`{ id }` references without intersecting them with the native catalog. Do not copy,
+correct or certify account capacity, input, image or reasoning facts here.
+Unknown native IDs are advisory only, not skipped; do not invent definitions
+or rewrite route defaults. Native validation may reject the entire update.
+The native adapter owns inherited definitions, validation,
+requests and their limitations. This does not weaken account capability proof
+for search or other plugin-owned request paths. Disclose additions, updates,
+removals and IDs absent from the native catalog, and that replacing customized entries removes their
+per-model overrides and output request defaults. A successful sync is not
+model-call compatibility evidence.
 Prepare the preview without forced discovery from existing verified evidence.
 An existing `compat.supportsStrictMode: false` may be preserved only when at
 least one synced Responses or Completions model supports it; block other unproven
