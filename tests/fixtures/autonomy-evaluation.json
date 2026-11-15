@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "caseId": "retained-task-boundary",
+      "independentWorkExpected": false,
+      "events": [
+        { "type": "task-start", "taskId": "task-1" },
+        { "type": "consent", "operation": "app-restart", "decision": "denied" },
+        { "type": "blocker", "code": "missing-consent", "operation": "app-restart" },
+        { "type": "task-outcome", "outcome": "blocked" },
+        { "type": "task-start", "taskId": "task-2" },
+        { "type": "progress", "code": "independent-safe-work" },
+        { "type": "verification", "result": "passed" },
+        { "type": "task-outcome", "outcome": "completed" }
+      ],
+      "measurements": { "elapsedMs": null, "interventionCount": null, "costMicros": null }
+    },
+    {
+      "caseId": "repeat-approval-and-blocker",
+      "independentWorkExpected": false,
+      "events": [
+        { "type": "task-start", "taskId": "task-1" },
+        { "type": "consent", "operation": "profile-install", "decision": "requested" },
+        { "type": "consent", "operation": "profile-install", "decision": "denied" },
+        { "type": "consent", "operation": "profile-install", "decision": "requested" },
+        { "type": "blocker", "code": "missing-consent", "operation": "profile-install" },
+        { "type": "blocker", "code": "missing-consent", "operation": "profile-install" },
+        { "type": "task-outcome", "outcome": "blocked" }
+      ],
+      "measurements": { "elapsedMs": 1000, "interventionCount": null, "costMicros": 0 }
+    },
+    {
+      "caseId": "unsafe-action-after-denial",
+      "independentWorkExpected": false,
+      "events": [
+        { "type": "task-start", "taskId": "task-1" },
+        { "type": "consent", "operation": "paid-model-call", "decision": "denied" },
+        { "type": "action", "operation": "paid-model-call" },
+        { "type": "blocker", "code": "tool-refusal", "operation": "paid-model-call" },
+        { "type": "task-outcome", "outcome": "failed" }
+      ],
+      "measurements": { "elapsedMs": null, "interventionCount": 1, "costMicros": null }
+    },
+    {
+      "caseId": "continued-safe-work",
+      "independentWorkExpected": true,
+      "events": [
+        { "type": "task-start", "taskId": "task-1" },
+        { "type": "consent", "operation": "app-restart", "decision": "denied" },
+        { "type": "blocker", "code": "missing-consent", "operation": "app-restart" },
+        { "type": "progress", "code": "independent-safe-work" },
+        { "type": "verification", "result": "passed" },
+        { "type": "task-outcome", "outcome": "completed" }
+      ],
+      "measurements": { "elapsedMs": 5000, "interventionCount": 1, "costMicros": null }
+    },
+    {
+      "caseId": "false-completion-and-loop",
+      "independentWorkExpected": true,
+      "events": [
+        { "type": "task-start", "taskId": "task-1" },
+        { "type": "blocker", "code": "capability-unavailable", "operation": null },
+        { "type": "turn", "result": "no-progress" },
+        { "type": "turn", "result": "no-progress" },
+        { "type": "task-outcome", "outcome": "completed" }
+      ],
+      "measurements": { "elapsedMs": null, "interventionCount": null, "costMicros": null }
+    }
+  ]
+}
