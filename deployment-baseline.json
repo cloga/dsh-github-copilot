@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.5.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.7.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.7.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -468,7 +468,7 @@
       "id": "independent-copilot-accounts",
       "required": true,
       "evidenceScope": "synthetic-public-services-native-adapter-and-ui-not-live-oauth-or-provider-access",
-      "activation": "managed-only-explicit-account-selector",
+      "activation": "managed-route-explicit-account-selector-with-independent-native-coexistence",
       "sourceMarkers": [
         {"file": "src/copilot-accounts-host.ts", "marker": "async ensureIdentityFor(accountId: string)"},
         {"file": "src/copilot-login-environment.ts", "marker": "COPILOT_LOGIN_HOST_PATTERN"},
@@ -481,6 +481,7 @@
         {"file": "docs/copilot-accounts.md", "marker": "A mutable active-account lookup inside each store method is forbidden"}
       ],
       "tests": [
+        {"file": "tests/native-account-coexistence.spec.ts", "name": "keeps native requests, credentials and selection independent before, during and after multi-account enhancement"},
         {"file": "tests/scripts/copilot-login-environment.test.mjs", "name": "compares numeric identities within their host without relabeling legacy GitHub.com evidence"},
         {"file": "tests/fixtures/copilot-accounts-host-core.fixture.ts", "name": "authorizes native GHE environments with host-scoped duplicates and immutable reauthorization hosts"},
         {"file": "tests/copilot-accounts-card.spec.ts", "name": "chooses a validated GHE environment without selecting an account or changing GitHub.com login"},
@@ -1416,7 +1417,7 @@
       "required": true,
       "sourceMarkers": [
         {"file": "src/authorization-controller.ts", "marker": "current !== undefined && providerSupportsStrictMode(current) !== false"},
-        {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot'"},
+        {"file": "src/preview-route.ts", "marker": "displayName: 'GitHub Copilot (multi-account)'"},
         {"file": "src/client.ts", "marker": "GitHubCopilotAccountSurface"}
       ],
       "tests": [

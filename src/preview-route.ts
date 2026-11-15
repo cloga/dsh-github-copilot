@@ -380,7 +380,7 @@ function resolvedProfile(provider: ReturnType<typeof createAccountProvider>['pro
   const maxRequestImages = positive(parsed.maxRequestImages)
   return Object.freeze({
     ...config,
-    provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, displayName: 'GitHub Copilot', piProvider: provider,
+    provider: GITHUB_COPILOT_PREVIEW_PROVIDER_ID, displayName: 'GitHub Copilot (multi-account)', piProvider: provider,
     streamIdleTimeoutMs: positive(parsed.streamIdleTimeoutMs), maxRequestImageBytes: positive(parsed.maxRequestImageBytes),
     maxRequestImages,
     // The pinned Core's profile resolver defaults the quantum to ten, capped by the image count.
