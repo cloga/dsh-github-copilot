@@ -64,7 +64,7 @@ export async function planTask(task, root = repositoryRoot) {
     commands: commands.map(argv => ({ argv, executed: false })),
     acceptance: description.acceptance,
     executionPolicy: description.executionPolicy,
-    delivery: 'Issue -> feature branch -> focused tests -> complete gate -> reviewed merge without a separate approval prompt; important updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Other changes need an explicit release request. Check existing scoped authorization before asking about profile installation or interrupting restart; obey tool consent and report an unchanged blocker only once.',
+    delivery: 'Classify consumer impact before package/version edits. Repository-only engineering completes at reviewed merge and green required CI, without a plugin version or local upgrade. Never expand the package whitelist to manufacture a release obligation. Issue -> feature branch -> focused tests -> complete gate -> reviewed merge without a separate approval prompt; important plugin updates continue to verified Release and npm integrity without a second release prompt, unless user scope excludes it. Engineering artifact distribution needs an explicit plugin-artifact request, not a generic publish/status question. Preserve existing shipped-file release gates. Report repository delivery, plugin publication, installation and loaded runtime separately. Check existing scoped authorization before asking about profile installation or interrupting restart; obey tool consent and report an unchanged blocker only once.',
     boundaries: description.boundaries,
   }
 }

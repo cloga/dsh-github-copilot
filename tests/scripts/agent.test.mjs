@@ -6,12 +6,79 @@ import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { attribution, describeRepository, doctor, planTask, repositoryRoot } from '../../scripts/agent.mjs'
 import { verifyAgentContract, verifyCurrentCoreDocument, verifyCurrentTaskStatus, verifyDocumentationReview } from '../../scripts/verify-agent-contract.mjs'
-import { assessDocumentationImpact } from '../../scripts/verify-documentation-impact.mjs'
+import { assessDeliveryImpact, assessDocumentationImpact } from '../../scripts/verify-documentation-impact.mjs'
 
 const documentationImpactBody = `### Documentation impact
 - Behavior: user-facing
 - Docs: README.md, README.zh.md, docs/accounts.md
 - Details: Explain the account switch and its profile-wide behavior.`
+
+const deliveryImpactBody = classification => `## Release delivery
+- Classification: ${classification}
+- Details: Classify the actual consumer impact before changing the package.`
+
+test('repository engineering completes without a plugin release or local upgrade', () => {
+  const manifest = { version: '1.0.0', files: ['lib/'] }
+  const input = {
+    changedFiles: ['AGENTS.md', '.github/workflows/ci.yml', 'scripts/agent.mjs'],
+    baseManifest: manifest, manifest,
+    body: deliveryImpactBody('repository-only'),
+  }
+  assert.deepEqual(assessDeliveryImpact(input), {
+    classification: 'repository-only', localInstallation: 'not-needed',
+  })
+  for (const change of [
+    { changedFiles: ['src/index.ts'] },
+    { changedFiles: ['scripts/autonomy-evaluation.mjs'] },
+    { changedFiles: ['package.json'], manifest: { ...manifest, version: '1.1.0' } },
+    { changedFiles: ['package.json'], manifest: { ...manifest, files: ['lib/', 'scripts/new-evaluator.mjs'] } },
+  ]) assert.throws(() => assessDeliveryImpact({ ...input, ...change }), /DELIVERY_IMPACT_REPOSITORY_PACKAGE_CHANGE/)
+  for (const body of [
+    '', '<!-- ' + input.body + ' -->',
+    input.body + '\n- Classification: plugin-update',
+    input.body + '\n## Release delivery\n- Classification: plugin-update',
+    input.body.replace('repository-only', 'publish-everything'),
+    input.body.replace(/- Details:.*/, '- Details: TODO'),
+  ]) assert.throws(() => assessDeliveryImpact({ ...input, body }), /DELIVERY_IMPACT/)
+})
+
+test('version and whitelist edits alone cannot manufacture a plugin update', () => {
+  const baseManifest = { version: '1.0.0', files: ['lib/'], engines: { dsh: '1.0.0' } }
+  const input = {
+    changedFiles: ['package.json', 'deployment-baseline.json', 'README.md'],
+    baseManifest,
+    manifest: { ...baseManifest, version: '1.1.0', files: ['lib/', 'scripts/new-evaluator.mjs'] },
+    body: deliveryImpactBody('plugin-update'),
+  }
+  assert.throws(() => assessDeliveryImpact(input), /DELIVERY_IMPACT_CONSUMER_CHANGE_REQUIRED/)
+  for (const change of [
+    { changedFiles: [...input.changedFiles, 'src/index.ts'] },
+    { manifest: { ...input.manifest, engines: { dsh: '1.1.0' } } },
+  ]) assert.equal(assessDeliveryImpact({ ...input, ...change }).localInstallation, 'separate-authorization')
+  const explicit = { ...input, body: deliveryImpactBody('explicit-plugin-artifact') }
+  assert.throws(() => assessDeliveryImpact(explicit), /DELIVERY_IMPACT_ARTIFACT_AUTHORIZATION_REQUIRED/)
+  assert.equal(assessDeliveryImpact({
+    ...explicit,
+    body: explicit.body + '\n- Authorization: The user explicitly requested distributing this offline tool in a plugin package.',
+  }).classification, 'explicit-plugin-artifact')
+  assert.equal(assessDeliveryImpact({
+    ...explicit, manifest: { ...baseManifest, version: '1.1.0' },
+    body: explicit.body + '\n- Authorization: Version alignment follows the already reviewed and authorized plugin runtime fix; no new artifact scope.',
+  }).classification, 'explicit-plugin-artifact')
+})
+
+test('release recovery cannot introduce a new version or change consumer payloads', () => {
+  const manifest = { version: '1.0.0', files: ['lib/'] }
+  const input = {
+    changedFiles: ['.github/workflows/ci.yml'], baseManifest: manifest, manifest,
+    body: deliveryImpactBody('release-recovery'),
+  }
+  assert.equal(assessDeliveryImpact(input).localInstallation, 'not-needed')
+  assert.throws(() => assessDeliveryImpact({ ...input, manifest: { ...manifest, version: '1.1.0' } }),
+    /DELIVERY_IMPACT_REPOSITORY_PACKAGE_CHANGE/)
+  assert.throws(() => assessDeliveryImpact({ ...input, changedFiles: ['src/index.ts'] }),
+    /DELIVERY_IMPACT_REPOSITORY_PACKAGE_CHANGE/)
+})
 
 test('documentation impact requires reviewable evidence for code and tooling changes', () => {
   const unchanged = {
@@ -103,8 +170,20 @@ test('documentation impact CLI checks the actual PR base, head and event body', 
       env: { ...process.env, GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: event, GITHUB_BASE_REF: 'test-base' },
     })
 
-    await writeFile(event, JSON.stringify({ pull_request: { body: documentationImpactBody } }))
+    await writeFile(event, JSON.stringify({
+      pull_request: { body: documentationImpactBody + '\n\n' + deliveryImpactBody('plugin-update') },
+    }))
     assert.equal(invoke().status, 0)
+    await writeFile(event, JSON.stringify({ pull_request: { body: documentationImpactBody } }))
+    assert.match(invoke().stderr, /DELIVERY_IMPACT_DECLARATION_REQUIRED/)
+    await writeFile(event, JSON.stringify({
+      pull_request: { body: `### Documentation impact
+- Behavior: unchanged
+- Details: This claim cannot bypass the package delivery check.
+
+${deliveryImpactBody('repository-only')}` },
+    }))
+    assert.match(invoke().stderr, /DELIVERY_IMPACT_REPOSITORY_PACKAGE_CHANGE/)
     await writeFile(event, JSON.stringify({ pull_request: { body: 'SECRET_SENTINEL' } }))
     const rejected = invoke()
     assert.notEqual(rejected.status, 0)
@@ -164,6 +243,7 @@ test('agent contract keeps documentation review and PR-body edit checks wired in
   for (const invalid of [
     { ...policy, detailsRequired: false },
     { ...policy, versionOnlyInsufficient: false },
+    { ...policy, deliveryClasses: ['publish-everything'] },
     { ...policy, rerunOnBodyEdit: false },
     { ...policy, semanticReview: 'automated' },
     { ...policy, semanticReview: 'human-required' },
@@ -171,6 +251,7 @@ test('agent contract keeps documentation review and PR-body edit checks wired in
     assert.throws(() => verifyDocumentationReview(invalid, template, workflow), /documentation impact/)
   }
   assert.throws(() => verifyDocumentationReview(policy, template.replace('### Documentation impact', '### Removed'), workflow), /documentation impact/)
+  assert.throws(() => verifyDocumentationReview(policy, template.replace('## Release delivery', '## Removed'), workflow), /documentation impact/)
   assert.throws(() => verifyDocumentationReview(policy, template, workflow.replace('opened, synchronize, reopened, edited', 'opened, synchronize, reopened')), /documentation impact/)
   assert.throws(() => verifyDocumentationReview(policy, template, workflow.replace('test "$DOCUMENTATION_RESULT" = success', 'echo ignored')), /documentation impact/)
 })
@@ -301,7 +382,10 @@ test('important updates carry release follow-through without a second approval p
   for (const boundary of ['install into a user profile', 'sign-out', 'worktree checkout']) {
     assert.ok(plan.boundaries.approvalRequired.includes(boundary))
   }
-  assert.match(plan.delivery, /reviewed merge without a separate approval prompt; important updates continue to verified Release/)
+  assert.match(plan.delivery, /reviewed merge without a separate approval prompt; important plugin updates continue to verified Release/)
+  assert.match(plan.delivery, /Repository-only engineering completes at reviewed merge and green required CI/)
+  assert.match(plan.delivery, /Never expand the package whitelist/)
+  assert.match(plan.delivery, /explicit plugin-artifact request, not a generic publish\/status question/)
   assert.ok(plan.commands.every(command => command.executed === false))
 })
 
@@ -466,6 +550,9 @@ test('contract validation rejects a redundant release prompt or weakened release
       [contract => { contract.boundaries.releaseDelivery.requiredConditions = ['reviewed-merge'] }, /release delivery/],
       [contract => { contract.boundaries.releaseDelivery.localGateWhenRegistryBlocked = 'skip-ci' }, /blocked local gate/],
       [contract => { contract.boundaries.releaseDelivery.completionEvidence = [] }, /release delivery/],
+      [contract => { delete contract.boundaries.releaseDelivery.deliveryClassification }, /delivery classification/],
+      [contract => { contract.boundaries.releaseDelivery.deliveryClassification.repositoryOnlyCompletion = 'plugin-release' }, /delivery classification/],
+      [contract => { contract.boundaries.releaseDelivery.deliveryClassification.repositoryOnlyArtifacts = 'package-tools-to-release' }, /delivery classification/],
     ]) {
       const contract = structuredClone(original)
       mutate(contract)

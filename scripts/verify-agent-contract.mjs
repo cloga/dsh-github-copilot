@@ -23,9 +23,12 @@ export function verifyDocumentationReview(policy, template, workflow) {
     || JSON.stringify(policy.impact) !== JSON.stringify(['user-facing', 'unchanged'])
     || JSON.stringify(policy.requiredDocuments) !== JSON.stringify(['README.md', 'README.zh.md', 'docs/*.md'])
     || policy.detailsRequired !== true || policy.versionOnlyInsufficient !== true
+    || JSON.stringify(policy.deliveryClasses) !== JSON.stringify(['repository-only', 'plugin-update', 'explicit-plugin-artifact', 'release-recovery'])
     || policy.rerunOnBodyEdit !== true || policy.semanticReview !== 'agent-or-human-required'
     || !template.includes('### Documentation impact') || !template.includes('- Behavior:')
     || !template.includes('- Docs:') || !template.includes('- Details:')
+    || !template.includes('## Release delivery') || !template.includes('- Classification:')
+    || !template.includes('- Authorization:')
     || !workflow.includes('types: [opened, synchronize, reopened, edited]')
     || !workflow.includes('node scripts/verify-documentation-impact.mjs')
     || !workflow.includes('needs: [verify, published-adapter, documentation-impact]')
@@ -125,10 +128,25 @@ export async function verifyAgentContract(root = repositoryRoot) {
   const release = contract.boundaries?.releaseDelivery
   require(release?.mode === 'important-update-follow-through' && release.repeatApprovalRequired === false, 'release delivery follow-through is missing')
   require(release.userRestrictionsTakePrecedence === true && release.otherChangesRequireExplicitReleaseRequest === true, 'release delivery must respect user scope and exclude implicit unrelated releases')
+  const deliveryClassification = {
+    basis: 'consumer-impact-before-package-or-version-changes',
+    repositoryOnlyCompletion: 'reviewed-merge-and-green-required-ci',
+    repositoryOnlyArtifacts: 'no-new-version-no-whitelist-expansion',
+    explicitArtifactRequest: 'plugin-artifact-specific-not-generic-publish',
+    shippedArtifacts: 'preserve-existing-release-policy-and-immutable-bytes',
+    installation: 'no-runtime-benefit-no-local-upgrade',
+    reporting: 'separate-repository-release-installation-runtime',
+  }
+  require(release.deliveryClassification
+    && Object.keys(release.deliveryClassification).length === Object.keys(deliveryClassification).length
+    && Object.entries(deliveryClassification).every(([key, value]) => release.deliveryClassification[key] === value),
+  'delivery classification must separate repository engineering from plugin artifacts and local upgrades')
   require(JSON.stringify(release.importantChanges) === JSON.stringify(['user-visible-feature', 'behavior-fix', 'compatibility-fix', 'security-fix', 'stability-fix']), 'release delivery change classes differ')
   require(JSON.stringify(release.requiredConditions) === JSON.stringify(['reviewed-merge', 'green-required-ci', 'fresh-annotated-tag', 'verified-release-assets']), 'release delivery prerequisites differ')
   require(release.localGateWhenRegistryBlocked === 'record-environment-blocker-and-require-complete-github-ci', 'blocked local gate must require full GitHub CI')
   const agentGuide = await readFile(resolve(root, 'AGENTS.md'), 'utf8')
+  require(agentGuide.includes('### Classify delivery before packaging (#502)'),
+    'delivery classification guidance is missing')
   const workspace = contract.boundaries?.workspaceIsolation
   const workspaceRequirements = {
     default: 'app-managed-worktree-when-authorized',
