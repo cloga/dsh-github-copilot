@@ -1,24 +1,29 @@
 # Changelog
 
+Status labels record what was known when each entry was written; immutable
+release tags do not update this file after publication. Check the exact
+[GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
+version separately rather than treating an old `prepared` label as current status.
+
 ## 0.1.0-alpha.15.dsh.0.2.2.rc.3 (prepared)
 
 - Include an optional, bounded offline multi-turn autonomy trace evaluator and synthetic examples (#494).
-- Detect repeated approval/blocker requests, unsafe actions and unverified outcomes while preserving explicit task-scoped authorization across tool-state changes.
+- Detect repeated approval/blocker requests, unconsented protected actions and unverified outcomes while preserving explicit task-scoped authorization across tool-state changes.
 - Keep this as a repository analysis aid, not runtime agent enforcement or proof of improved autonomy; no profile, account or model calls are changed.
 
-## 0.1.0-alpha.14.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.14.dsh.0.2.2.rc.3
 
 - Add independently enabled, content-free native Copilot logical stream and hosted-search aggregates (#486).
 - Keep native observations separate from managed physical-request diagnostics; they do not prove HTTP dispatch, supplier receipt or execution.
 - Preserve request, retry, Usage and settings ownership; old strict versions may not read retained new operation codes on rollback.
 
-## 0.1.0-alpha.13.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.13.dsh.0.2.2.rc.3 (published)
 
 - Qualify native Copilot profiles after actual Config/Settings normalization: schema-default empty template maps and boolean `supportsStrictMode` no longer disable reviewer-only temperature omission or canonical hosted-search readiness (#483).
 - Apply the same narrow compatibility rule at provider, model and model-override levels while retaining unknown-value, credential, endpoint, headers, ownership and lifecycle refusal.
 - Add normalized native configuration and reviewer/search regressions. No profile rewrite, Core patch, automatic restart, general sampling override or live supplier acceptance is implied.
 
-## 0.1.0-alpha.12.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.12.dsh.0.2.2.rc.3 (published)
 
 - Retire the managed route's projected-image MIME preflight and Goal schema rewriting (#481). Core owns image projection and Goal schemas; supplier errors are not preempted by a plugin MIME diagnostic.
 - Keep the managed route's permission-field filtering and the native model-sync format eligibility checks unchanged.
