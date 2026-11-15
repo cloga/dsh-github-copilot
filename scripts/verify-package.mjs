@@ -81,8 +81,12 @@ if (typeof host.apply !== 'function' || !Array.isArray(host.inject)) {
 const recovery = await import(pathToFileURL(resolve(root, 'lib/manual-compaction-recovery.js')).href)
 if (typeof recovery.default !== 'function') throw new Error('built recovery engine must remain independently importable')
 for (const file of (await readdir(resolve(root, 'lib'))).filter(file => file.endsWith('.js'))) {
-  if (importsRuntimePackage(await readFile(resolve(root, 'lib', file), 'utf8'), '@deepseek-ai/dsh-jobs')) {
+  const contents = await readFile(resolve(root, 'lib', file), 'utf8')
+  if (importsRuntimePackage(contents, '@deepseek-ai/dsh-jobs')) {
     throw new Error('jobs must remain a type-only development dependency, not a bundled runtime import')
+  }
+  if (/githubCopilotDiagnostics|github_copilot_diagnostics/u.test(contents)) {
+    throw new Error('retired local diagnostics must not be present in built runtime bundles')
   }
 }
 const recoveryTypes = await readFile(resolve(root, 'lib/types/manual-compaction-recovery.d.ts'), 'utf8')

@@ -36,6 +36,16 @@ describe('verified request-body timeout diagnostics', () => {
       expect(text).not.toContain(value)
       expect(text).not.toContain('private/model')
     })
+  it.each([
+    ['a'.repeat(128), true],
+    ['a'.repeat(129), false],
+    ['', false],
+    ['synthetic/model', false],
+  ] as const)('keeps strict model correlation bounds for %s', async (model, valid) => {
+    const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408 }),
+      '{"input":[]}', undefined, { protocol: 'openai-responses', model })
+    expect(text).toContain(valid ? `model ${model}` : 'model unavailable')
+  })
   it('does not recommend changing image budgets for a measured zero-image request', async () => {
     const text = await requestBodyTimeoutDiagnostic(new Response(JSON.stringify(error), { status: 408 }),
       '{"input":[{"role":"user","content":[{"type":"input_text","text":"synthetic"}]}]}', undefined,
