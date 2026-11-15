@@ -166,6 +166,7 @@ it('applies confirmed account switches to native credentials and retains the nat
     await send('github-copilot')
     expect(wireAccounts).toEqual([
       `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
+      `Bearer synthetic-access-${A}`, `Bearer synthetic-access-${A}`,
       `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`, `Bearer synthetic-access-${B}`,
     ])
     expect(grants.get(KEY)?.payload.refresh).toBe(`synthetic-${B}`)
