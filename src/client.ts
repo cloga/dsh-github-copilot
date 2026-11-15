@@ -23,8 +23,6 @@ import { registerReplayRecoveryUi } from './replay-recovery-ui.ts'
 import { externalLinkTarget } from './external-link.ts'
 import { GitHubCopilotModelPreferencesPanel } from './model-preferences-card.ts'
 import { CopilotAccountsPanel } from './copilot-accounts-card.ts'
-import { ContinuationDefaultCard } from './session-continuation-ui.ts'
-import type { SessionContinuationRemote } from './session-continuation-ui.ts'
 import type { CopilotAccountsRemote } from './copilot-accounts-card.ts'
 import { accountPresentationChanges } from './copilot-account-presentation.ts'
 import { copyAuthorizationCode } from './authorization-code-clipboard.ts'
@@ -551,7 +549,7 @@ export function GitHubCopilotAccountModelsSummary(props: { readonly snapshot: Ac
 
   return createElement('section', { 'data-dsh-github-copilot-account-models': true },
     createElement('p', { role: 'status', 'aria-live': 'polite', 'data-dsh-github-copilot-account-models-state': snapshot.state }, messages[snapshot.state]),
-    createElement('p', null, 'This list applies to github-copilot-preview. The native github-copilot route uses a separate catalog. Discovery does not prove a successful model call; it does not change your default model or account policy.'),
+    createElement('p', null, 'This is account metadata for an explicit, reviewable sync to the native github-copilot model list. Discovery does not prove a successful model call or change your model list, default model, or account policy.'),
     snapshot.error === undefined ? null : createElement('p', { role: 'alert' }, discoveryCode(snapshot.error, 'COPILOT_MODEL_DISCOVERY_FAILED')),
     createElement('details', null,
       createElement('summary', null, `${snapshot.models.length} accepted model(s)`),
@@ -630,7 +628,6 @@ export function GitHubCopilotAccountModelsPanel(props: { readonly remote: Client
 interface GitHubCopilotPreviewFooterProps {
   readonly remote: ClientContext['remote']['githubCopilot']
   readonly accountsRemote?: CopilotAccountsRemote
-  readonly continuationRemote?: SessionContinuationRemote
   readonly continuationSettings?: ReactElement
   readonly locale?: string
   /** A slot coordinator owns this controller's attachment across surface handoffs. */
@@ -688,8 +685,6 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
   const state = useSyncExternalStore(account.subscribe, account.getSnapshot, account.getSnapshot)
   useEffect(() => props.account === undefined ? account.attach() : undefined, [account, props.account])
   const [manageOpen, setManageOpen] = useState(false)
-  const [accountRevisionKey, setAccountRevisionKey] = useState(0)
-  const refreshAccountRevision = () => setAccountRevisionKey(value => value + 1)
   const managementId = `github-copilot-management-${useId()}`
   const view = state.view
   const signedIn = view?.configured === true
@@ -723,9 +718,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     view?.route?.state === 'needs-repair' && signedIn ? actionButton('Repair model configuration', account.reconcile, pendingAction) : null,
     signedIn ? actionButton(state.operation === 'signOut' ? 'Signing out…' : 'Sign out', account.signOut, pendingAction || view?.writable === false) : null,
     view?.writable === false ? createElement('p', { style: nativeCaptionStyle }, 'Credentials are read-only in this profile.') : null)
-  const continuationSettings = props.continuationSettings ?? createElement(ContinuationDefaultCard, {
-    remote: props.continuationRemote, locale: props.locale, onSaved: refreshAccountRevision,
-  })
+  const continuationSettings = props.continuationSettings
   return createElement('section', {
     'data-dsh-github-copilot-compact-account': true, 'data-copilot-native-ui': true,
     'data-dsh-github-copilot-embedded': props.embedded === true ? true : undefined,
@@ -763,7 +756,6 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
       overflowWrap: 'anywhere' } },
     props.accountsRemote === undefined ? null : createElement(CopilotAccountsPanel, {
       remote: props.accountsRemote, expanded: manageOpen, onChanged: account.retryStatus,
-      refreshKey: accountRevisionKey,
       authorizationBusy, configured: view?.configured, locale: props.locale,
       accountSettings, continuationSettings,
     }),
@@ -779,7 +771,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     }) : createElement('p', { role: 'status' }, 'Sign in to manage model preferences.'),
     createElement('details', null,
       createElement('summary', null, 'Discovery details'),
-      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches account models once. Opening this view refreshes missing or stale metadata when needed. Discovery serves github-copilot-preview and does not change the native github-copilot list; an explicitly confirmed sync can copy eligible models. Refreshing does not verify a model call or change your selected model.'),
+      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches account models once. Opening this view refreshes missing or stale metadata when needed. Discovery supplies the reviewable native model sync; it does not change the native github-copilot list until you explicitly sync. Refreshing does not verify a model call or change your selected model.'),
       models === undefined ? createElement('p', { style: nativeCaptionStyle }, 'Account model metadata is not available yet.')
         : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models })),
     signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
@@ -793,7 +785,7 @@ export function GitHubCopilotPreviewFooter(props: GitHubCopilotPreviewFooterProp
   return createElement('div', { 'data-dsh-github-copilot-preview-footer': true },
     createElement(GitHubCopilotCompactAccount, {
       remote: props.remote, accountsRemote: props.accountsRemote, continuationSettings: props.continuationSettings,
-      continuationRemote: props.continuationRemote, locale: props.locale,
+      locale: props.locale,
     }))
 }
 
@@ -879,7 +871,6 @@ export function GitHubCopilotAccountSurface(props: GitHubCopilotPreviewFooterPro
   readonly seat: AccountSurfaceSeat
   readonly eligible?: boolean
   readonly localeReader?: LocaleReader
-  readonly continuationContext?: ClientContext
 }): ReactElement | null {
   const token = useMemo(() => Symbol('github-copilot-account-surface'), [])
   const owner = useSyncExternalStore(props.surfaces.subscribe, props.surfaces.getSnapshot, props.surfaces.getSnapshot)
@@ -891,27 +882,10 @@ export function GitHubCopilotAccountSurface(props: GitHubCopilotPreviewFooterPro
   if (props.eligible === false || owner?.token !== token) return null
   const embedded = props.seat.kind === 'provider'
   const accountProps = { remote: props.remote, accountsRemote: props.accountsRemote,
-    continuationRemote: props.continuationRemote, continuationSettings: props.continuationSettings,
+    continuationSettings: props.continuationSettings,
     account: owner.account, embedded, locale }
   return createElement('div', { 'data-dsh-github-copilot-account-surface': props.seat.kind },
-    props.continuationContext === undefined
-      ? createElement(GitHubCopilotCompactAccount, accountProps)
-      : createElement(AccountContinuationConnection, { ...accountProps, ctx: props.continuationContext }))
-}
-
-function AccountContinuationConnection(props: GitHubCopilotPreviewFooterProps & { ctx: ClientContext }): ReactElement {
-  const [continuationRemote, setContinuationRemote] = useState<SessionContinuationRemote>()
-  useEffect(() => {
-    let active = true
-    const injection = props.ctx.inject(['remote.githubCopilotSessionContinuation'], scope => {
-      const captured = scope.remote.githubCopilotSessionContinuation
-      if (active) setContinuationRemote(captured)
-      return () => { if (active) setContinuationRemote(previous => previous === captured ? undefined : previous) }
-    })
-    return () => { active = false; void injection.dispose() }
-  }, [props.ctx])
-  const { ctx: _ctx, ...accountProps } = props
-  return createElement(GitHubCopilotCompactAccount, { ...accountProps, continuationRemote })
+    createElement(GitHubCopilotCompactAccount, accountProps))
 }
 
 /** Unified fallback when the Models footer extension is absent or incompatible. */
@@ -945,7 +919,7 @@ function registerUi(ctx: ClientContext): () => void {
           id: 'github-copilot',
           order: 11,
           label: 'GitHub Copilot',
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote, continuationContext: ctx, localeReader }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote, localeReader }))
         disposeFallback = () => { surfaces.revoke(seat); dispose() }
       }
       return
@@ -962,10 +936,10 @@ function registerUi(ctx: ClientContext): () => void {
     }, (props: ProviderCardExtrasOwnerProps) => {
       if (!props.configured && props.provider.provider === GITHUB_COPILOT_PROVIDER_ID && props.provider.settingsNs === 'llm-pi-ai') {
         return createElement('p', { role: 'note', 'data-dsh-github-copilot-native-add-warning': true, style: nativeCaptionStyle },
-          'Use the GitHub Copilot account panel to sign in. With a stored OAuth grant and no named key, the native provider uses the canonical account, not a separately selected plugin account. For account switching, select a model under GitHub Copilot (multi-account). Both routes can coexist.')
+          'Use the GitHub Copilot account panel to sign in or switch the canonical account. The native GitHub Copilot provider uses that account for future requests; this plugin does not add a second model provider.')
       }
       return createElement(GitHubCopilotAccountSurface, {
-        surfaces, seat, remote, accountsRemote, continuationContext: ctx, eligible: isGitHubCopilotAccountRow(props), localeReader,
+        surfaces, seat, remote, accountsRemote, eligible: isGitHubCopilotAccountRow(props), localeReader,
       })
     })
     return () => { surfaces.revoke(seat); dispose() }
@@ -987,7 +961,7 @@ function registerUi(ctx: ClientContext): () => void {
           name: 'settings.models.footer',
           id: GITHUB_COPILOT_PREVIEW_PROVIDER_ID,
           order: 10,
-        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote, continuationContext: ctx, localeReader }))
+        }, () => createElement(GitHubCopilotAccountSurface, { surfaces, seat, remote, accountsRemote, localeReader }))
       } catch {
         // Do not withdraw working fallback authorization until footer registration succeeds.
         reportFooterUnavailable()

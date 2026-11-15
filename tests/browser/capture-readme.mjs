@@ -42,8 +42,6 @@ try {
   await open('models')
   await page.locator('summary').filter({ hasText: 'Model preferences ·' }).click()
   await page.getByRole('checkbox', { name: /High cost/ }).first().waitFor()
-  await page.locator('summary').filter({ hasText: 'New Session continuation default' }).click()
-  await page.getByRole('checkbox', { name: /Enable visible-history continuation for new Sessions/ }).waitFor()
   await capture('copilot-model-preferences.png', page.locator('main'))
   await open('models')
   await page.getByRole('button', { name: 'Switch', exact: true }).click()
@@ -68,7 +66,6 @@ try {
       await open(surface, theme)
       if (surface === 'models') {
         await page.locator('summary').filter({ hasText: 'Model preferences ·' }).click()
-        await page.locator('summary').filter({ hasText: 'New Session continuation default' }).click()
         await page.getByRole('button', { name: 'Switch', exact: true }).click()
       }
       if (surface === 'credits') {

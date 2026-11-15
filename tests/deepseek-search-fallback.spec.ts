@@ -106,7 +106,7 @@ describe('official DeepSeek fallback factory (keyless public-provider integratio
           } as unknown as Context['credentials'])
         } })
         await previewOwner.plugin(LlmRuntime)
-        await previewOwner.plugin(previewPlugin)
+        await previewOwner.plugin(previewPlugin, { registerLegacyProvider: true })
         const preview = previewOwner.get('githubCopilotPreview')!
         await preview.discover()
         expect(preview.getView().error).toBeUndefined()

@@ -363,12 +363,12 @@ export function GitHubCopilotModelPreferencesPanel(props: {
     createElement('summary', null, settingsKnown
       ? `Model preferences · ${visibleCount} enabled · ${excluded.size} excluded` : 'Model preferences · Read-only'),
     createElement('p', { style: { fontSize: '14px', marginBlock: '12px' } },
-      'Exclusions are shared across GitHub Copilot accounts; availability below reflects the current account. Newly discovered models are enabled by default. Unavailable saved exclusions are retained and apply again if that model returns. Excluded models disappear from the managed picker and cannot start a new turn. An admitted turn keeps its model. Fixed selections are not changed; select another model before the next turn. Restoring a model does not select it.'),
+      'Exclusions are shared across GitHub Copilot accounts; availability below reflects the current account. Newly discovered models are enabled by default. Unavailable saved exclusions are retained and apply again if that model returns. Excluded models are omitted from the next explicitly reviewed native model sync; this does not change the current native catalog or select another model. Restoring a model does not select it.'),
     createElement('section', { 'aria-label': 'Sync models to native provider', style: { display: 'grid', gap: '8px',
       paddingBlock: '12px', borderBlock: '1px solid color-mix(in srgb, currentColor 18%, transparent)' } },
       createElement('strong', null, 'Native provider model list'),
       createElement('p', { style: { ...nativeCaptionStyle, margin: 0 } },
-        'Sync enabled models from the verified account used by the native provider. The native provider’s built-in catalog is replaced by this saved list, which remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change; managed permission-field filtering does not transfer to native requests. Core also uses each configured maxTokens as its per-request output default.'),
+        'Sync enabled models from the verified account used by the native provider. The native provider’s built-in catalog is replaced by this saved list, which remains after the plugin is unloaded or uninstalled. Credentials, model selection, and conversation history do not change. Core also uses each configured maxTokens as its per-request output default.'),
       syncPreparing ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },
         'Checking the current model list…') : !availabilityKnown
         ? createElement('p', { role: 'status', style: { ...nativeCaptionStyle, margin: 0 } },
