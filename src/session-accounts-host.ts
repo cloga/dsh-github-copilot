@@ -1,6 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { createGitHubCopilotCredentialStore } from './copilot-auth.ts'
+import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
+import { captureNativeCopilot } from './native-copilot-access.ts'
+import type { NativeCopilotSnapshot } from './native-copilot-access.ts'
 import { SessionAccountTurns, parseSessionAccounts, resolveSessionAccount, SESSION_ACCOUNTS_MAX } from './session-accounts.ts'
-import type { SessionAccountSelection } from './session-accounts.ts'
+import type { SessionAccountSelection, TurnAccountEvidence } from './session-accounts.ts'
 import type { CopilotAccountBinding, CopilotAccountLease } from './copilot-accounts-types.ts'
 import { readSettingsNamespace } from './settings-reader.ts'
 
@@ -8,11 +12,27 @@ declare module '@deepseek-ai/cordis' {
   interface Context { githubCopilotSessionAccounts: SessionAccountsHost }
 }
 interface SessionOwner { readonly session: { readonly id: string } }
+interface NativeTurnEvidence {
+  readonly session: SessionOwner['session']
+  readonly turn: number
+  readonly signal: AbortSignal
+  readonly accountId: string
+  readonly accountKey: string
+  readonly model: string
+  valid: boolean
+  delivered: boolean
+  ownsAdmission: boolean
+  route?: NativeCopilotSnapshot
+}
 
 /** Host-only routing owner; credentials remain in the existing account service. */
 export class SessionAccountsHost {
-  readonly turns = new SessionAccountTurns()
+  private readonly history = new Map<object, Map<number, TurnAccountEvidence>>()
+  readonly turns = new SessionAccountTurns(this.history)
+  private readonly nativeAccountTurns = new SessionAccountTurns(this.history)
   private readonly leases = new Map<object, CopilotAccountLease>()
+  private readonly nativeTurns = new Map<object, NativeTurnEvidence>()
+  private readonly nativeSignals = new WeakMap<AbortSignal, NativeTurnEvidence>()
   constructor(private readonly ctx: Context) {}
   selected(agent: SessionOwner): SessionAccountSelection {
     const settings = readSettingsNamespace(this.ctx, 'github-copilot')
@@ -39,27 +59,130 @@ export class SessionAccountsHost {
       return lease.binding
     } catch (error) { lease.release(); throw error }
   }
-  admitNative(agent: SessionOwner, turn: number, signal: AbortSignal, accountId: string): void {
-    const binding = this.bindingForAccount(accountId)
-    const existing = this.turns.current(agent.session)
-    if (existing && (existing.accountId !== binding.accountId || existing.source !== 'global')) {
-      throw new Error('COPILOT_NATIVE_ACCOUNT_TURN_CONFLICT')
+  admitNative(agent: SessionOwner, turn: number, signal: AbortSignal, accountId: string, model: string): void {
+    let binding: CopilotAccountBinding
+    try { binding = this.bindingForAccount(accountId) } catch {
+      this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_UNAVAILABLE')
+      return
     }
-    this.turns.admit(agent.session, turn, signal, { accountId: binding.accountId, source: 'global' })
-    if (!existing) this.captureIdentity(signal, binding.accountId)
+    const existing = this.nativeTurns.get(agent.session)
+    if (existing) {
+      if (existing.turn === turn && existing.signal === signal && existing.accountId === binding.accountId) return
+      this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_TURN_CONFLICT')
+      return
+    }
+    if (this.nativeSignals.has(signal)) {
+      this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_SIGNAL_CONFLICT')
+      return
+    }
+    if (this.nativeTurns.size >= SESSION_ACCOUNTS_MAX) {
+      this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_LIMIT')
+      return
+    }
+    const evidence: NativeTurnEvidence = { session: agent.session, turn, signal, accountId: binding.accountId,
+      accountKey: binding.key, model, valid: true, delivered: false, ownsAdmission: false }
+    this.nativeTurns.set(agent.session, evidence)
+    this.nativeSignals.set(signal, evidence)
+    void this.qualifyNative(evidence)
+  }
+  private nativeCurrent(evidence: NativeTurnEvidence): boolean {
+    return evidence.valid && !evidence.signal.aborted && this.nativeTurns.get(evidence.session) === evidence
+      && this.nativeSignals.get(evidence.signal) === evidence
+  }
+  private invalidateNative(evidence: NativeTurnEvidence): void {
+    evidence.valid = false
+    if (evidence.ownsAdmission) this.nativeAccountTurns.end(evidence.session, evidence.turn)
+  }
+  private async qualifyNative(evidence: NativeTurnEvidence): Promise<void> {
+    try {
+      const accounts = this.ctx.get('githubCopilotAccounts')
+      if (!accounts) throw new Error('COPILOT_SESSION_ACCOUNTS_UNAVAILABLE')
+      const [route, credential, matches] = await Promise.all([
+        captureNativeCopilot(this.ctx),
+        createGitHubCopilotCredentialStore(this.ctx).read(GITHUB_COPILOT_PROVIDER_ID),
+        accounts.host.nativeCredentialMatches(evidence.accountId),
+      ])
+      if (!this.nativeCurrent(evidence)) return
+      if (!matches) {
+        this.invalidateNative(evidence)
+        this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_MISMATCH')
+        return
+      }
+      if (!route || !route.models.has(evidence.model) || credential?.type !== 'oauth') {
+        this.invalidateNative(evidence)
+        this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_UNPROVEN')
+        return
+      }
+      route.assertCurrent()
+      this.nativeAccountTurns.admit(evidence.session, evidence.turn, evidence.signal,
+        { accountId: evidence.accountId, source: 'global' })
+      evidence.ownsAdmission = true
+      evidence.route = route
+      this.captureIdentity(evidence.signal, evidence.accountId, () => this.nativeCurrent(evidence), this.nativeAccountTurns)
+      this.recordNativeEvidence(evidence)
+    } catch {
+      if (this.nativeCurrent(evidence)) {
+        this.invalidateNative(evidence)
+        this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_UNAVAILABLE')
+      }
+    }
+  }
+  private recordNativeEvidence(evidence: NativeTurnEvidence): void {
+    if (!this.nativeCurrent(evidence) || !evidence.delivered || !evidence.route
+      || this.nativeAccountTurns.forSignal(evidence.signal)?.turn !== evidence.turn) return
+    try {
+      evidence.route.assertCurrent()
+      this.nativeAccountTurns.recordSignal(evidence.signal,
+        this.ctx.get('githubCopilotAccounts')?.host.cachedIdentity(evidence.accountId))
+    } catch {
+      this.invalidateNative(evidence)
+      this.ctx.logger.warn('[github-copilot] %s', 'COPILOT_NATIVE_ACCOUNT_EVIDENCE_UNAVAILABLE')
+    }
+  }
+  recordNativeRequest(signal: AbortSignal, sessionId: string, model: string): void {
+    const evidence = this.nativeSignals.get(signal)
+    if (!evidence || !this.nativeCurrent(evidence) || evidence.session.id !== sessionId || evidence.model !== model) return
+    evidence.delivered = true
+    this.recordNativeEvidence(evidence)
+  }
+  credentialChanged(key: string): void {
+    for (const evidence of this.nativeTurns.values()) {
+      if (evidence.valid && (key === GITHUB_COPILOT_CREDENTIAL_KEY || key === evidence.accountKey)) {
+        this.invalidateNative(evidence)
+      }
+    }
   }
   end(session: object, turn: number): void {
+    const native = this.nativeTurns.get(session)
+    if (native?.turn === turn) {
+      this.invalidateNative(native)
+      this.nativeSignals.delete(native.signal)
+      this.nativeTurns.delete(session)
+    }
     if (this.turns.current(session)?.turn !== turn) return
     this.leases.get(session)?.release()
     this.leases.delete(session)
     this.turns.end(session, turn)
   }
   remove(session: object): void {
+    const native = this.nativeTurns.get(session)
+    if (native) {
+      this.invalidateNative(native)
+      this.nativeSignals.delete(native.signal)
+      this.nativeTurns.delete(session)
+    }
+    this.nativeAccountTurns.remove(session)
     this.leases.get(session)?.release()
     this.leases.delete(session)
     this.turns.remove(session)
   }
   dispose(): void {
+    for (const native of this.nativeTurns.values()) {
+      this.invalidateNative(native)
+      this.nativeSignals.delete(native.signal)
+    }
+    this.nativeTurns.clear()
+    this.nativeAccountTurns.clear()
     for (const lease of this.leases.values()) lease.release()
     this.leases.clear()
     this.turns.clear()
@@ -69,26 +192,28 @@ export class SessionAccountsHost {
     if (!accounts) throw new Error('COPILOT_SESSION_ACCOUNTS_UNAVAILABLE')
     return accounts.host.captureAccount(accountId)
   }
-  private captureIdentity(signal: AbortSignal, accountId: string): void {
+  private captureIdentity(
+    signal: AbortSignal, accountId: string, eligible: () => boolean = () => true, turns = this.turns,
+  ): void {
     const accounts = this.ctx.get('githubCopilotAccounts')
     if (!accounts) throw new Error('COPILOT_SESSION_ACCOUNTS_UNAVAILABLE')
     const cached = accounts.host.cachedIdentity(accountId)
     if (cached) {
-      this.turns.captureIdentity(signal, cached)
+      if (eligible()) turns.captureIdentity(signal, cached)
       return
     }
-    const admission = this.turns.forSignal(signal)
+    const admission = turns.forSignal(signal)
     // Non-forcing, account-bound lookup never delays native model delivery.
     void accounts.host.ensureIdentityFor(accountId).then(view => {
-      if (this.turns.forSignal(signal) !== admission || signal.aborted) return
+      if (turns.forSignal(signal) !== admission || signal.aborted || !eligible()) return
       if (view.state === 'error') {
         this.ctx.logger.warn('[github-copilot] %s', view.diagnostic ?? 'COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
         return
       }
       const identity = accounts.host.cachedIdentity(accountId)
-      if (identity) this.turns.captureIdentity(signal, identity)
+      if (identity) turns.captureIdentity(signal, identity)
     }, () => {
-      if (this.turns.forSignal(signal) === admission && !signal.aborted) {
+      if (turns.forSignal(signal) === admission && !signal.aborted && eligible()) {
         this.ctx.logger.warn('[github-copilot] COPILOT_ACCOUNTS_IDENTITY_UNAVAILABLE')
       }
     })

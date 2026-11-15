@@ -429,11 +429,16 @@ It freezes a verified cached identity at admission. Missing identity starts one
 nonforcing, bounded lookup for the exact admitted account without delaying model
 delivery. A successful lookup may fill missing identity only while that same
 turn/signal remains active and uncancelled, retaining the first verified name.
-Native turns capture the account bound to the profile-wide canonical credential;
-they do not inherit plugin Session-account overrides. Account execution evidence
-is created only on the first real ordinary native chunk, not selection,
-discovery, preparation or auxiliary Auto assessment. Late lookups never backfill
-completed turns. Host memory retains at
+Native turns use the profile-wide canonical credential, not plugin Session-account
+overrides. Native evidence additionally requires the public native adapter and
+configuration proof, a canonical OAuth grant, and a match with the selected
+account. A credential change before qualification and delivery, an unproven
+route, or an account mismatch leaves the evidence unknown. Qualification does
+not delay the model stream. Account execution evidence is created only after an
+ordinary AgentLoop chunk for the same Session and signal, not selection,
+discovery, preparation or auxiliary calls; it is not proof of supplier execution.
+Native evidence does not change managed Session-account admission. Late lookups
+never backfill completed turns. Host memory retains at
 most 64 Sessions and 128 turns per Session. Restart, cold history, eviction or a
 request with no native delivery is unknown. Failed reads are distinct from
 unknown evidence; Retry rereads the same turn without inference. Official rc.2
