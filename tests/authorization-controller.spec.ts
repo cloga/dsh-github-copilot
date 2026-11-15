@@ -11,8 +11,35 @@ import { encodeBackup, leavesOf, ROUTE_OWNERSHIP_EPOCH } from '../src/route-owne
 import { createCompactAccount } from '../src/compact-account.ts'
 import type { GitHubCopilotAuthorizationView } from '../src/authorization-controller.ts'
 import { GITHUB_COPILOT_PREVIEW_PROVIDER_ID } from '../src/copilot-identity.ts'
+import type { AccountModelDescriptor } from '../src/account-model-catalog.ts'
+
+function syncModel(id: string): AccountModelDescriptor {
+  return {
+    id, name: `Account ${id}`, api: 'openai-responses', contextWindow: 128_000,
+    maxInputTokens: 128_000, maxTokens: 8_192, input: ['text'],
+    reasoning: { advertisedEfforts: ['low'], unmappedEfforts: [] },
+    evidence: {
+      endpoints: ['/responses'], unsupportedEndpointCount: 0, selectedEndpoint: '/responses',
+      apiSource: 'advertised-native', policySource: 'server-enabled',
+      contextWindowSource: 'max_context_window_tokens', visionSupportKnown: true, reasoningEffortsKnown: true,
+    },
+  }
+}
+
+function syncMessagesModel(id: string): AccountModelDescriptor {
+  const model = syncModel(id)
+  return {
+    ...model, api: 'anthropic-messages',
+    reasoning: { advertisedEfforts: [], unmappedEfforts: [] },
+    evidence: { ...model.evidence, endpoints: ['/v1/messages'], selectedEndpoint: '/v1/messages' },
+  }
+}
 
 const catalogDrift = vi.hoisted(() => ({ wrongGpt6Api: false }))
+const nativeSyncCatalog = vi.hoisted(() => ({
+  unavailable: false,
+  models: undefined as { id: string; api: string }[] | undefined,
+}))
 vi.mock('@earendil-works/pi-ai/providers/all', async (importOriginal) => {
   const original = await importOriginal<typeof import('@earendil-works/pi-ai/providers/all')>()
   return { ...original, getBuiltinModels(provider: Parameters<typeof original.getBuiltinModels>[0]) {
@@ -20,6 +47,27 @@ vi.mock('@earendil-works/pi-ai/providers/all', async (importOriginal) => {
     return provider !== 'github-copilot' || !catalogDrift.wrongGpt6Api ? native : [...native, {
       ...native[0]!, id: 'gpt-6-astra', name: 'GPT-6 Astra', api: 'openai-completions' as const,
     }]
+  } }
+})
+
+vi.mock('../src/native-copilot-access.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/native-copilot-access.ts')>()
+  const { getBuiltinModels } = await import('@earendil-works/pi-ai/providers/all')
+  return { ...original, captureNativeCopilotCatalog: async (ctx: Context) => {
+    if (nativeSyncCatalog.unavailable) return undefined
+    const settings = ctx.get('settings')
+    const revision = settings?.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')?.revision
+    if (revision === undefined) return undefined
+    const catalog = new Map((nativeSyncCatalog.models ?? getBuiltinModels('github-copilot'))
+      .map(({ id, api }) => [id, { id, api }]))
+    return {
+      namespace: 'llm-pi-ai', catalog, configuredModels: undefined,
+      assertCurrent() {
+        if (settings?.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')?.revision !== revision) {
+          throw new Error('COPILOT_NATIVE_ROUTE_CHANGED')
+        }
+      },
+    }
   } }
 })
 
@@ -34,6 +82,7 @@ interface Runtime {
   readonly readRecord: ReturnType<typeof vi.fn>
   readonly describeSettings: ReturnType<typeof vi.fn>
   authorize(): void
+  setNativeSyncGeneration(generation: number): void
 }
 
 function runtime(options: {
@@ -49,6 +98,10 @@ function runtime(options: {
   readFailure?: boolean
   defaultSelection?: { provider: string; model: string } | null
   accountModels?: readonly { id: string; name: string; api: string }[]
+  nativeSyncModels?: readonly AccountModelDescriptor[]
+  nativeSyncAccount?: string
+  nativeSyncCanonicalMatches?: boolean
+  routeSecrets?: readonly { path: readonly string[]; set: boolean }[]
   githubCopilotUserSettings?: Record<string, unknown>
   githubCopilotEffectiveSettings?: Record<string, unknown>
   liveSelections?: readonly {
@@ -57,6 +110,7 @@ function runtime(options: {
   }[]
 } = {}): Runtime {
   let configured = options.configured ?? false
+  let nativeSyncGeneration = 1
   let resolveAuthorization: (() => void) | undefined
   const settingsDocument: Record<string, unknown> = {
     'github-copilot': options.githubCopilotEffectiveSettings ?? {},
@@ -74,6 +128,7 @@ function runtime(options: {
     ns, revision: revisions.get(ns) ?? 0,
     user: ns === 'github-copilot' ? options.githubCopilotUserSettings ?? value : value,
     value,
+    ...ns === 'llm-pi-ai' && options.routeSecrets !== undefined ? { secrets: options.routeSecrets } : {},
   })))
   const mutate = vi.fn(async (ns: string, operations: Array<
     | { op: 'set'; path: string[]; value: unknown }
@@ -180,12 +235,35 @@ function runtime(options: {
     ['githubCopilotPreview', {
       getView: () => ({
         state: 'ready',
+        available: true,
         models: options.accountModels ?? [],
         rejected: [],
         warnings: [],
       }),
+      discover: vi.fn(async () => undefined),
+      discoverNativeModelSync: vi.fn(async () => undefined),
+      nativeModelSyncSnapshot: () => options.nativeSyncModels === undefined ? undefined
+        : ({ generation: 1, fetchedAt: 123, models: options.nativeSyncModels, isCurrent: () => true }),
+      captureSearchProof: () => () => true,
     }],
   ])
+  if (options.nativeSyncAccount !== undefined || options.nativeSyncModels !== undefined) {
+    const capture = () => {
+      const generation = nativeSyncGeneration
+      return {
+        accountId: options.nativeSyncAccount ?? 'canonical', generation,
+        assertCurrent: () => {
+          if (generation !== nativeSyncGeneration) throw new Error('COPILOT_ACCOUNTS_CHANGED')
+        },
+      }
+    }
+    services.set('githubCopilotAccounts', { host: {
+      capture,
+      acquire: vi.fn(() => ({ binding: capture(), release: vi.fn() })),
+      nativeCredentialMatches: vi.fn(async (accountId: string) =>
+        options.nativeSyncCanonicalMatches ?? accountId === 'canonical'),
+    } })
+  }
   const ctx = new Context()
   ctx.get = ((name: string) => services.get(name)) as typeof ctx.get
   ctx.logger.error = vi.fn()
@@ -201,6 +279,7 @@ function runtime(options: {
     begin,
     readRecord,
     describeSettings,
+    setNativeSyncGeneration: generation => { nativeSyncGeneration = generation },
     authorize: () => {
       resolveAuthorization?.()
     },
@@ -236,6 +315,7 @@ function activeTemporaryGpt6Profile(): Record<string, unknown> {
       },
     }],
   }
+
 }
 
 function activeTemporaryRouteBackup(): string {
@@ -253,7 +333,10 @@ function activeTemporaryRouteBackup(): string {
   })
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); catalogDrift.wrongGpt6Api = false })
+afterEach(() => {
+  vi.unstubAllGlobals(); vi.restoreAllMocks(); catalogDrift.wrongGpt6Api = false
+  nativeSyncCatalog.unavailable = false; nativeSyncCatalog.models = undefined
+})
 
 describe('GitHubCopilotAuthorizationController', () => {
   it('stores exact exclusions with CAS including selected fixed models without reading sessions', async () => {
@@ -335,6 +418,513 @@ describe('GitHubCopilotAuthorizationController', () => {
     expect(harness.readRecord).not.toHaveBeenCalled()
     expect(harness.describeSettings).toHaveBeenCalledTimes(2)
     expect(await harness.controller.setModelHighCost('fast-future-id', false)).toMatchObject({ highCostModelIds: [] })
+  })
+  it('previews enabled canonical models and applies only the confirmed native models path with CAS/readback', async () => {
+    const harness = runtime({
+      configured: true,
+      providerProfile: { api: 'openai-responses', models: [{ id: 'old-model' }] },
+      accountModels: [
+        { id: 'enabled-model', name: 'Enabled', api: 'openai-responses' },
+        { id: 'excluded-model', name: 'Excluded', api: 'openai-responses' },
+      ],
+      nativeSyncModels: [syncModel('enabled-model'), syncModel('excluded-model')],
+      githubCopilotEffectiveSettings: { excludedModelIds: ['excluded-model'] },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    expect(preview).toMatchObject({
+      state: 'ready', enabledCount: 1, syncableCount: 1,
+      addedIds: ['enabled-model'], removedIds: ['old-model'], skipped: [],
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 1,
+    })
+    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', [{
+      op: 'set', path: ['providers', 'github-copilot', 'models'], value: [{
+        id: 'enabled-model', name: 'Account enabled-model', contextWindow: 128_000, maxTokens: 8_192,
+        input: ['text'], reasoningEfforts: { low: 'low' },
+      }],
+    }], 0)
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
+      providers: { 'github-copilot': { api: 'openai-responses', models: [{ id: 'enabled-model' }] } },
+    })
+  })
+  it('prepares from existing account proof without discovery or credential reads', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+    })
+    const source = harness.services.get('githubCopilotPreview') as {
+      discoverNativeModelSync: ReturnType<typeof vi.fn>
+    }
+
+    await expect(harness.controller.prepareNativeModelSync()).resolves.toMatchObject({
+      state: 'ready', enabledCount: 1, syncableCount: 1,
+    })
+    expect(source.discoverNativeModelSync).not.toHaveBeenCalled()
+    expect(harness.readRecord).not.toHaveBeenCalled()
+    expect(harness.mutate).not.toHaveBeenCalled()
+    await harness.controller.previewNativeModelSync()
+    expect(source.discoverNativeModelSync).toHaveBeenCalledOnce()
+  })
+  it('does not discover models when a non-forcing sync preparation has no current proof', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'canonical',
+      providerProfile: { api: 'openai-responses' },
+    })
+    const source = harness.services.get('githubCopilotPreview') as {
+      discoverNativeModelSync: ReturnType<typeof vi.fn>
+    }
+
+    await expect(harness.controller.prepareNativeModelSync()).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE',
+    })
+    expect(source.discoverNativeModelSync).not.toHaveBeenCalled()
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('preserves the native disabled strict-mode override while syncing supported protocols', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: {
+        api: 'openai-responses',
+        compat: { supportsStrictMode: false, chatTemplateArgs: {}, chatTemplateKwargs: {} },
+      },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    expect(preview.state).toBe('ready')
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 1,
+    })
+    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', [
+      expect.objectContaining({ op: 'set', path: ['providers', 'github-copilot', 'models'] }),
+    ], 0)
+    expect(harness.settingsDocument['llm-pi-ai']).toMatchObject({
+      providers: { 'github-copilot': { compat: { supportsStrictMode: false } } },
+    })
+  })
+  it('blocks disabled strict-mode compatibility if no synced model has a supporting protocol', async () => {
+    const model = syncMessagesModel('messages-model')
+    nativeSyncCatalog.models = [{ id: model.id, api: model.api }]
+    const harness = runtime({
+      configured: true, nativeSyncModels: [model],
+      providerProfile: { api: 'anthropic-messages', compat: { supportsStrictMode: false } },
+    })
+
+    await expect(harness.controller.prepareNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('accepts a mixed protocol list only when a synced model supports the disabled strict-mode setting', async () => {
+    const responses = syncModel('responses-model')
+    const messages = syncMessagesModel('messages-model')
+    nativeSyncCatalog.models = [
+      { id: responses.id, api: responses.api }, { id: messages.id, api: messages.api },
+    ]
+    const harness = runtime({
+      configured: true, nativeSyncModels: [responses, messages],
+      providerProfile: { compat: { supportsStrictMode: false } },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    expect(preview).toMatchObject({ state: 'ready', syncableCount: 2 })
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'ready', modelCount: 2,
+    })
+  })
+  it('rechecks route compatibility before applying a prepared plan', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses', compat: { supportsStrictMode: false } },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const settings = harness.settingsDocument['llm-pi-ai'] as {
+      providers: { 'github-copilot': { compat: { supportsStrictMode: boolean } } }
+    }
+    settings.providers['github-copilot'].compat.supportsStrictMode = true
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('reports an uncertain sync if route compatibility changes during the write', async () => {
+    const profile: { api: string; compat?: { supportsStrictMode: boolean } } = {
+      api: 'openai-responses', compat: { supportsStrictMode: false },
+    }
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')], providerProfile: profile,
+      beforeMutate: () => { delete profile.compat },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_READBACK_FAILED',
+    })
+  })
+  it('accepts equivalent route compatibility fields reordered during readback', async () => {
+    const profile = {
+      api: 'openai-responses',
+      compat: { supportsStrictMode: false, chatTemplateArgs: {}, chatTemplateKwargs: {} },
+    }
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')], providerProfile: profile,
+      beforeMutate: () => {
+        profile.compat = { chatTemplateKwargs: {}, chatTemplateArgs: {}, supportsStrictMode: false }
+      },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 1,
+    })
+  })
+  it('accepts empty schema-injected model compatibility fields during effective readback', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const describe = harness.describeSettings.getMockImplementation()!
+    harness.describeSettings.mockImplementation(() => describe().map((entry: {
+      readonly ns: string; readonly value: unknown; readonly [key: string]: unknown
+    }) => {
+      if (entry.ns !== 'llm-pi-ai') return entry
+      const value = entry.value as { providers: Record<string, { models?: Record<string, unknown>[] }> }
+      const profile = value.providers['github-copilot']!
+      if (!Array.isArray(profile.models)) return entry
+      return { ...entry, value: { ...value, providers: { ...value.providers, 'github-copilot': {
+        ...profile, models: profile.models.map(model => ({
+          ...model, compat: { chatTemplateKwargs: {}, chatTemplateArgs: {} },
+        })),
+      } } } }
+    }))
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 1,
+    })
+  })
+  it.each(['user', 'value'] as const)('reports an uncertain commit when %s model readback differs', async layer => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const describe = harness.describeSettings.getMockImplementation()!
+    harness.describeSettings.mockImplementation(() => describe().map((entry: {
+      readonly ns: string; readonly [key: string]: unknown
+    }) => {
+      if (entry.ns !== 'llm-pi-ai' || !harness.mutate.mock.calls.length) return entry
+      const document = entry[layer] as { providers: Record<string, { models: Record<string, unknown>[] }> }
+      const profile = document.providers['github-copilot']!
+      return { ...entry, [layer]: { ...document, providers: { ...document.providers, 'github-copilot': {
+        ...profile, models: profile.models.map(model => ({
+          ...model, compat: { supportsReasoningEffort: true },
+        })),
+      } } } }
+    }))
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_READBACK_FAILED',
+    })
+  })
+  it('refuses noncanonical accounts and stale native settings without writes', async () => {
+    const otherAccount = runtime({
+      configured: true, nativeSyncAccount: 'saved-account', nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+    })
+    await expect(otherAccount.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH',
+    })
+    expect(otherAccount.mutate).not.toHaveBeenCalled()
+
+    const stale = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')], accountModels: [{ id: 'model', name: 'Model', api: 'openai-responses' }],
+      providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await stale.controller.previewNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const originalDescribe = stale.describeSettings.getMockImplementation()!
+    stale.describeSettings.mockImplementation(() => originalDescribe().map((entry: {
+      readonly ns: string; readonly revision: number; readonly [key: string]: unknown
+    }) =>
+      entry.ns === 'llm-pi-ai' ? { ...entry, revision: entry.revision + 1 } : entry))
+    await expect(stale.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_STALE',
+    })
+    expect(stale.mutate).not.toHaveBeenCalled()
+  })
+  it('allows native model sync when the selected saved account is already applied to the canonical credential', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'saved-account', nativeSyncCanonicalMatches: true,
+      nativeSyncModels: [syncModel('model')], providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    expect(preview).toMatchObject({ state: 'ready', syncableCount: 1 })
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 1,
+    })
+    const accountHost = harness.services.get('githubCopilotAccounts') as {
+      host: { nativeCredentialMatches: ReturnType<typeof vi.fn> }
+    }
+    expect(accountHost.host.nativeCredentialMatches).toHaveBeenCalledWith('saved-account')
+  })
+  it('prepares a saved-account sync only when it matches the native credential, without forcing discovery', async () => {
+    for (const matches of [true, false]) {
+      const harness = runtime({
+        configured: true, nativeSyncAccount: 'saved-account', nativeSyncCanonicalMatches: matches,
+        nativeSyncModels: [syncModel('model')], providerProfile: { api: 'openai-responses' },
+      })
+      const source = harness.services.get('githubCopilotPreview') as {
+        discoverNativeModelSync: ReturnType<typeof vi.fn>
+      }
+      await expect(harness.controller.prepareNativeModelSync()).resolves.toMatchObject(matches
+        ? { state: 'ready', syncableCount: 1 }
+        : { state: 'blocked', code: 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH' })
+      expect(source.discoverNativeModelSync).not.toHaveBeenCalled()
+      expect(harness.mutate).not.toHaveBeenCalled()
+    }
+  })
+  it('rejects a preference change while checking the native credential before writing', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'saved-account', nativeSyncCanonicalMatches: true,
+      nativeSyncModels: [syncModel('model')], providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const accountHost = harness.services.get('githubCopilotAccounts') as {
+      host: { nativeCredentialMatches: ReturnType<typeof vi.fn> }
+    }
+    accountHost.host.nativeCredentialMatches
+      .mockResolvedValueOnce(true)
+      .mockImplementationOnce(async () => {
+        await harness.mutate('github-copilot', [{ op: 'set', path: ['excludedModelIds'], value: ['model'] }], 0)
+        return true
+      })
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_STALE', modelCount: 0,
+    })
+    expect(harness.mutate).toHaveBeenCalledExactlyOnceWith(
+      'github-copilot', [{ op: 'set', path: ['excludedModelIds'], value: ['model'] }], 0)
+  })
+  it('rejects a plan that expires while checking the native credential before writing', async () => {
+    const now = 1_800_000_000_000
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'saved-account', nativeSyncCanonicalMatches: true,
+      nativeSyncModels: [syncModel('model')], providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const accountHost = harness.services.get('githubCopilotAccounts') as {
+      host: { nativeCredentialMatches: ReturnType<typeof vi.fn> }
+    }
+    accountHost.host.nativeCredentialMatches
+      .mockResolvedValueOnce(true)
+      .mockImplementationOnce(async () => { clock.mockReturnValue(now + 5 * 60_000); return true })
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_EXPIRED', modelCount: 0,
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('does not assume canonical ownership when the account service is unavailable', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+    })
+    harness.services.delete('githubCopilotAccounts')
+    await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('reports a missing native profile before attempting to qualify its catalog', async () => {
+    const harness = runtime({ configured: true, nativeSyncModels: [syncModel('model')] })
+    nativeSyncCatalog.unavailable = true
+    await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_PROFILE_MISSING',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('requires the proven adapter-owned catalog and does not borrow the plugin catalog', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { models: [{ id: 'existing' }] },
+    })
+    nativeSyncCatalog.unavailable = true
+    await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_NATIVE_CATALOG_UNAVAILABLE',
+    })
+    nativeSyncCatalog.unavailable = false
+    nativeSyncCatalog.models = [
+      { id: 'model', api: 'anthropic-messages' }, { id: 'other', api: 'openai-responses' },
+    ]
+    await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS',
+      skipped: [{ id: 'model', code: 'NATIVE_API_MISMATCH' }],
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['credential reference', { apiKeyEnv: 'SYNTHETIC_REFERENCE' }],
+    ['empty credential reference', { apiKeyEnv: '' }],
+    ['custom endpoint', { baseURL: 'https://example.invalid' }],
+    ['empty endpoint', { baseURL: '' }],
+    ['custom headers', { headers: { Authorization: 'synthetic' } }],
+    ['invalid headers', { headers: null }],
+  ])('refuses native model sync when the native %s prevents proving canonical OAuth', async (_label, custom) => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses', ...custom },
+    })
+    await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_NATIVE_AUTH_UNPROVEN',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['reasoning override', { supportsReasoningEffort: true }],
+    ['enabled strict mode', { supportsStrictMode: true }],
+    ['unknown override', { custom: true }],
+  ])('refuses an unproven %s rather than changing the native route', async (_label, compat) => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses', compat },
+    })
+    await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('checks configured default reasoning against account-supported efforts', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses', reasoning: 'high' },
+    })
+    await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS',
+      skipped: [{ id: 'model', code: 'NATIVE_REASONING_UNSUPPORTED' }],
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('refuses sync when native settings report a redacted provider secret', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+      routeSecrets: [{ path: ['providers', 'github-copilot', 'headers', 'Authorization'], set: true }],
+    })
+    await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_NATIVE_AUTH_UNPROVEN',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['nonempty', { existing: { contextWindow: 64_000 } }],
+    ['invalid', null],
+  ])('refuses %s native model overrides rather than replacing or invalidating them', async (_label, modelOverrides) => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses', modelOverrides },
+    })
+    await expect(harness.controller.previewNativeModelSync()).resolves.toMatchObject({
+      state: 'blocked', code: 'NATIVE_MODEL_SYNC_OVERRIDES_CONFLICT',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('rechecks native auth and override safety at confirmation', async () => {
+    for (const [field, value, code] of [
+      ['headers', { Authorization: 'synthetic' }, 'NATIVE_MODEL_SYNC_NATIVE_AUTH_UNPROVEN'],
+      ['modelOverrides', { old: { maxTokens: 1 } }, 'NATIVE_MODEL_SYNC_OVERRIDES_CONFLICT'],
+    ] as const) {
+      const profile: Record<string, unknown> = { api: 'openai-responses', headers: {}, modelOverrides: {} }
+      const harness = runtime({ configured: true, nativeSyncModels: [syncModel('model')], providerProfile: profile })
+      const preview = await harness.controller.previewNativeModelSync()
+      if (preview.planId === undefined) throw new Error('expected a native sync plan')
+      profile[field] = value
+      await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+        state: 'error', code,
+      })
+      expect(harness.mutate).not.toHaveBeenCalled()
+    }
+  })
+  it('rejects a confirmed plan after the account-selection generation changes', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'canonical', nativeSyncModels: [syncModel('model')],
+      accountModels: [{ id: 'model', name: 'Model', api: 'openai-responses' }],
+      providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    harness.setNativeSyncGeneration(2)
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_STALE',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('rejects a confirmed plan when the account discovery service is replaced', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    const source = harness.services.get('githubCopilotPreview') as Record<string, unknown>
+    harness.services.set('githubCopilotPreview', { ...source })
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_STALE',
+    })
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+  it('reports an uncertain commit if account ownership changes while the write is in flight', async () => {
+    let harness!: Runtime
+    harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+      beforeMutate: () => { harness.setNativeSyncGeneration(2) },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_READBACK_FAILED',
+    })
+    expect(harness.mutate).toHaveBeenCalledOnce()
+  })
+  it('reports an uncertain commit if model preferences change while the write is in flight', async () => {
+    let harness!: Runtime
+    harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+      beforeMutate: () => {
+        const describe = harness.describeSettings.getMockImplementation()!
+        harness.describeSettings.mockImplementation(() => describe().map((entry: {
+          readonly ns: string; readonly revision: number; readonly [key: string]: unknown
+        }) => entry.ns === 'github-copilot' ? { ...entry, revision: entry.revision + 1 } : entry))
+      },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_READBACK_FAILED',
+    })
+    expect(harness.mutate).toHaveBeenCalledOnce()
+  })
+  it('reports an uncertain commit if the proven native catalog changes during the write', async () => {
+    nativeSyncCatalog.models = [{ id: 'model', api: 'openai-responses' }]
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')],
+      providerProfile: { api: 'openai-responses' },
+      beforeMutate: () => { nativeSyncCatalog.models = [{ id: 'model', api: 'anthropic-messages' }] },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toMatchObject({
+      state: 'error', code: 'NATIVE_MODEL_SYNC_READBACK_FAILED',
+    })
+    expect(harness.mutate).toHaveBeenCalledOnce()
   })
   it('reads exclusions from the effective settings value rather than a partial user layer', async () => {
     const harness = runtime({
@@ -459,6 +1049,7 @@ describe('GitHubCopilotAuthorizationController', () => {
 
   it('keeps discovery unavailable or failed separate from sign-in and sanitizes failures', async () => {
     const harness = runtime({ configured: true })
+    harness.services.delete('githubCopilotPreview')
     await expect(harness.controller.discoverModels()).resolves.toMatchObject({ phase: 'signed-in', accountModels: {
       state: 'error', error: 'COPILOT_MODEL_DISCOVERY_UNAVAILABLE',
     } })

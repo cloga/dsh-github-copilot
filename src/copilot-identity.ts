@@ -7,6 +7,18 @@ export const GITHUB_COPILOT_AUTO_MODEL_ID = 'auto'
 export const GITHUB_COPILOT_AUTO_EFFICIENCY_MODEL_ID = 'auto-efficiency'
 export const GITHUB_COPILOT_AUTO_INTELLIGENCE_MODEL_ID = 'auto-intelligence'
 
+/** A customized native credential, endpoint or header cannot prove canonical OAuth. */
+export function nativeCopilotUsesCanonicalOAuth(profile: unknown): boolean {
+  if (typeof profile !== 'object' || profile === null || Array.isArray(profile)
+    || Reflect.get(profile, 'apiKeyEnv') !== undefined
+    || Reflect.get(profile, 'baseURL') !== undefined) return false
+  const headers: unknown = Reflect.get(profile, 'headers')
+  if (headers === undefined) return true
+  if (typeof headers !== 'object' || headers === null || Array.isArray(headers)) return false
+  const prototype: unknown = Object.getPrototypeOf(headers)
+  return (prototype === Object.prototype || prototype === null) && Reflect.ownKeys(headers).length === 0
+}
+
 export type AutoModelPreference = 'efficiency' | 'balance' | 'intelligence'
 
 export function autoModelPreference(model: string): AutoModelPreference | undefined {

@@ -5,20 +5,26 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { randomUUID } from 'node:crypto'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import {
   ROUTE_OWNERSHIP_EPOCH, TemporaryRouteConflictError, assertOwned, encodeBackup, equalJson, leafOperations,
-  object, ownedHeaderRemoval, settingsSnapshot, wholeProfileOwned,
+  object, ownedHeaderRemoval, profileAt, settingsSnapshot, wholeProfileOwned,
   type RouteBackup, type RouteMutation, type RouteSettings,
 } from './route-ownership.ts'
 import { temporaryGitHubCopilotModelFromProfile } from './temporary-models.ts'
 import { migrationStatus, type GitHubCopilotMigrationStatus } from './migration-status.ts'
 import { normalizeExcludedModelIds } from './model-exclusions.ts'
 import { normalizeHighCostModelIds } from './auto-allocation.ts'
+import { emptyNativeCompatibility, matchesNativeModelProfile, planNativeModelSync } from './native-model-sync.ts'
+import type { NativeModelProfile, NativeModelSyncSkipCode } from './native-model-sync.ts'
+import { captureNativeCopilotCatalog } from './native-copilot-access.ts'
+import type { NativeCopilotCatalogSnapshot, NativeCopilotModel } from './native-copilot-access.ts'
 import type {} from './copilot-accounts-host.ts'
+import type { GitHubCopilotPreview } from './preview-route.ts'
 
 export { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
-import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
+import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID, nativeCopilotUsesCanonicalOAuth } from './copilot-identity.ts'
 export const LLM_PI_AI_SETTINGS_NAMESPACE = 'llm-pi-ai'
 const GITHUB_COPILOT_SETTINGS_NAMESPACE = 'github-copilot'
 /** Historical v2 migration risk marker only; never an account-model routing rule. */
@@ -83,6 +89,90 @@ export interface GitHubCopilotModelPreferencesView {
     | 'COPILOT_MODEL_EXCLUSION_CONFLICT' | 'COPILOT_MODEL_EXCLUSION_SAVE_FAILED'
     | 'COPILOT_MODEL_SETTINGS_UNAVAILABLE' | 'COPILOT_MODEL_SETTINGS_INVALID'
     | 'COPILOT_MODEL_SELECTION_UNAVAILABLE'
+}
+
+export type GitHubCopilotNativeModelSyncCode =
+  | 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH'
+  | 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE'
+  | 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE'
+  | 'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE'
+  | 'NATIVE_MODEL_SYNC_NATIVE_CATALOG_UNAVAILABLE'
+  | 'NATIVE_MODEL_SYNC_PREFERENCES_UNAVAILABLE'
+  | 'NATIVE_MODEL_SYNC_SETTINGS_UNAVAILABLE'
+  | 'NATIVE_MODEL_SYNC_SETTINGS_INVALID'
+  | 'NATIVE_MODEL_SYNC_PROFILE_MISSING'
+  | 'NATIVE_MODEL_SYNC_ROUTE_OWNERSHIP_CONFLICT'
+  | 'NATIVE_MODEL_SYNC_NATIVE_AUTH_UNPROVEN'
+  | 'NATIVE_MODEL_SYNC_OVERRIDES_CONFLICT'
+  | 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN'
+  | 'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS'
+  | 'NATIVE_MODEL_SYNC_PLAN_EXPIRED'
+  | 'NATIVE_MODEL_SYNC_PLAN_STALE'
+  | 'NATIVE_MODEL_SYNC_SETTINGS_CONFLICT'
+  | 'NATIVE_MODEL_SYNC_SAVE_FAILED'
+  | 'NATIVE_MODEL_SYNC_READBACK_FAILED'
+
+export interface GitHubCopilotNativeModelSyncPreview {
+  readonly state: 'ready' | 'blocked' | 'error'
+  readonly code?: GitHubCopilotNativeModelSyncCode
+  readonly planId?: string
+  readonly enabledCount: number
+  readonly syncableCount: number
+  readonly outputTokenDefaults: readonly { readonly id: string; readonly maxTokens: number }[]
+  readonly addedIds: readonly string[]
+  readonly removedIds: readonly string[]
+  readonly updatedIds: readonly string[]
+  readonly skipped: readonly { readonly id: string; readonly code: NativeModelSyncSkipCode }[]
+}
+
+export interface GitHubCopilotNativeModelSyncResult {
+  readonly state: 'ready' | 'error'
+  readonly code?: GitHubCopilotNativeModelSyncCode
+  readonly modelCount: number
+}
+
+function effectiveNativeModelsMatch(value: unknown, expected: readonly NativeModelProfile[]): boolean {
+  return Array.isArray(value) && value.length === expected.length && value.every((entry, index) => {
+    const model = object(entry)
+    const target = expected[index]
+    return model !== undefined && target !== undefined && matchesNativeModelProfile(model, target)
+  })
+}
+
+function sameNativeCatalog(
+  left: ReadonlyMap<string, NativeCopilotModel>, right: ReadonlyMap<string, NativeCopilotModel>,
+): boolean {
+  return left.size === right.size && [...left].every(([id, model]) => right.get(id)?.api === model.api)
+}
+
+function nativeSyncProfileProblem(
+  profile: Record<string, unknown>, hasSecrets: boolean,
+): GitHubCopilotNativeModelSyncCode | undefined {
+  try {
+    if (hasSecrets || !nativeCopilotUsesCanonicalOAuth(profile)) return 'NATIVE_MODEL_SYNC_NATIVE_AUTH_UNPROVEN'
+    const overrides = object(profile.modelOverrides)
+    if (profile.modelOverrides !== undefined && (overrides === undefined || Reflect.ownKeys(overrides).length > 0)) {
+      return 'NATIVE_MODEL_SYNC_OVERRIDES_CONFLICT'
+    }
+    const compat = object(profile.compat)
+    if (!emptyNativeCompatibility(profile.compat) && (compat === undefined || compat.supportsStrictMode !== false
+      || Reflect.ownKeys(compat).length > 64
+      || !Reflect.ownKeys(compat).every(key => key === 'supportsStrictMode'
+        || emptyNativeCompatibility(Reflect.get(compat, key))))) {
+      return 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN'
+    }
+    return undefined
+  } catch { return 'NATIVE_MODEL_SYNC_SETTINGS_INVALID' }
+}
+
+function nativeSyncSupportsRouteCompatibility(
+  profile: Record<string, unknown>, models: readonly NativeModelProfile[],
+  accountModels: readonly { readonly id: string; readonly api: string }[],
+): boolean {
+  if (object(profile.compat)?.supportsStrictMode !== false) return true
+  const ids = new Set(models.map(model => model.id))
+  return accountModels.some(model => ids.has(model.id)
+    && (model.api === 'openai-responses' || model.api === 'openai-completions'))
 }
 
 /** Only these owned presentation leaves can cross the Remote boundary. */
@@ -445,6 +535,19 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   private attempt: Promise<void> | undefined
   private authorizationMilestone: GitHubCopilotAuthorizationMilestone | undefined
   private modelPreferenceFailure: GitHubCopilotModelPreferencesView['error']
+  private readonly nativeModelSyncPlans = new Map<string, {
+    readonly expiresAt: number
+    readonly accountGeneration: number
+    readonly generation: number
+    readonly fetchedAt: number
+    readonly preferencesRevision: number
+    readonly routeRevision: number
+    readonly markerRevision: number
+    readonly models: readonly NativeModelProfile[]
+    readonly proofCurrent: () => boolean
+    readonly nativeCatalog: NativeCopilotCatalogSnapshot
+    readonly source: GitHubCopilotPreview
+  }>()
 
   constructor(ctx: Context) {
     super(ctx, 'githubCopilotAuthorization', { namespace: 'githubCopilot' })
@@ -551,6 +654,284 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
   @Remote
   async setModelHighCost(modelId: string, highCost: boolean): Promise<GitHubCopilotModelPreferencesView> {
     return this.updateModelExclusion(modelId, highCost, 'highCostModelIds')
+  }
+
+  /** Refresh and preview a one-time snapshot for the native canonical profile. */
+  @Remote
+  async previewNativeModelSync(): Promise<GitHubCopilotNativeModelSyncPreview> {
+    return this.buildNativeModelSyncPlan(true)
+  }
+
+  /** Prepare from current account evidence without forcing discovery or changing settings. */
+  @Remote
+  async prepareNativeModelSync(): Promise<GitHubCopilotNativeModelSyncPreview> {
+    return this.buildNativeModelSyncPlan(false)
+  }
+
+  private async buildNativeModelSyncPlan(forceDiscovery: boolean): Promise<GitHubCopilotNativeModelSyncPreview> {
+    const empty = (state: GitHubCopilotNativeModelSyncPreview['state'],
+      code?: GitHubCopilotNativeModelSyncCode): GitHubCopilotNativeModelSyncPreview => ({
+      state, ...(code === undefined ? {} : { code }), enabledCount: 0, syncableCount: 0,
+      outputTokenDefaults: [], addedIds: [], removedIds: [], updatedIds: [], skipped: [],
+    })
+    const lease = this.acquireNativeModelSyncLease()
+    if (lease === null) return empty('error', 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+    try {
+      const nativeAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
+      if (nativeAccountMatches === undefined) return empty('error', 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!nativeAccountMatches) return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
+      try {
+        const settings = service<RouteSettings>(this.ctx, 'settings', ['describe', 'mutate'])
+        if (settingsSnapshot(settings).current === undefined) {
+          return empty('blocked', 'NATIVE_MODEL_SYNC_PROFILE_MISSING')
+        }
+      } catch { return empty('error', 'NATIVE_MODEL_SYNC_SETTINGS_UNAVAILABLE') }
+      const source = this.ctx.get('githubCopilotPreview')
+      if (source === undefined) return empty('error', 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE')
+      if (forceDiscovery) {
+        try { await source.discoverNativeModelSync() }
+        catch { return empty('error', 'NATIVE_MODEL_SYNC_DISCOVERY_UNAVAILABLE') }
+      }
+      try { lease.binding.assertCurrent() }
+      catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
+      const discoveredAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
+      if (discoveredAccountMatches === undefined) return empty('error', 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!discoveredAccountMatches) return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
+      const snapshot = source.nativeModelSyncSnapshot()
+      if (snapshot === undefined) return empty('error', 'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE')
+      const proofCurrent = snapshot.isCurrent
+      if (!proofCurrent()) return empty('error', 'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE')
+
+      let nativeCatalog: NativeCopilotCatalogSnapshot | undefined
+      try { nativeCatalog = await captureNativeCopilotCatalog(this.ctx) }
+      catch { return empty('error', 'NATIVE_MODEL_SYNC_NATIVE_CATALOG_UNAVAILABLE') }
+      if (nativeCatalog === undefined || nativeCatalog.namespace !== LLM_PI_AI_SETTINGS_NAMESPACE) {
+        return empty('error', 'NATIVE_MODEL_SYNC_NATIVE_CATALOG_UNAVAILABLE')
+      }
+      try { nativeCatalog.assertCurrent() }
+      catch { return empty('error', 'NATIVE_MODEL_SYNC_NATIVE_CATALOG_UNAVAILABLE') }
+      try { lease.binding.assertCurrent() }
+      catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
+      const currentAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH') }
+      if (currentAccountMatches === undefined) return empty('error', 'NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!currentAccountMatches) return empty('blocked', 'NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
+      const currentSnapshot = source.nativeModelSyncSnapshot()
+      if (this.ctx.get('githubCopilotPreview') !== source || !proofCurrent()
+        || currentSnapshot === undefined || currentSnapshot.generation !== snapshot.generation
+        || currentSnapshot.fetchedAt !== snapshot.fetchedAt) {
+        return empty('error', 'NATIVE_MODEL_SYNC_MODELS_UNAVAILABLE')
+      }
+      const preferences = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
+      if (preferences.state !== 'ready' || !preferences.writable || preferences.revision === undefined) {
+        return empty('error', 'NATIVE_MODEL_SYNC_PREFERENCES_UNAVAILABLE')
+      }
+
+      let route: ReturnType<typeof settingsSnapshot>
+      try {
+        const settings = service<RouteSettings>(this.ctx, 'settings', ['describe', 'mutate'])
+        route = settingsSnapshot(settings)
+        nativeCatalog.assertCurrent()
+      } catch { return empty('error', 'NATIVE_MODEL_SYNC_SETTINGS_UNAVAILABLE') }
+      if (route.backup !== undefined || route.hasOwnedSecrets) {
+        return empty('blocked', 'NATIVE_MODEL_SYNC_ROUTE_OWNERSHIP_CONFLICT')
+      }
+      const profile = route.current
+      if (profile === undefined) return empty('blocked', 'NATIVE_MODEL_SYNC_PROFILE_MISSING')
+      const profileProblem = nativeSyncProfileProblem(profile, route.hasSecrets)
+      if (profileProblem !== undefined) return empty('blocked', profileProblem)
+
+      let currentModels: readonly Readonly<Record<string, unknown>>[]
+      const configuredModels = profile.models
+      if (configuredModels === undefined || Array.isArray(configuredModels) && configuredModels.length === 0) {
+        currentModels = []
+      } else if (Array.isArray(configuredModels) && configuredModels.length <= 512
+        && configuredModels.every(item => object(item) !== undefined)) {
+        currentModels = configuredModels as readonly Readonly<Record<string, unknown>>[]
+      } else return empty('error', 'NATIVE_MODEL_SYNC_SETTINGS_INVALID')
+      if (profile.api !== undefined && (typeof profile.api !== 'string' || profile.api.length === 0)
+        || profile.reasoning !== undefined && typeof profile.reasoning !== 'string') {
+        return empty('error', 'NATIVE_MODEL_SYNC_SETTINGS_INVALID')
+      }
+      let plan: ReturnType<typeof planNativeModelSync>
+      try {
+        plan = planNativeModelSync({
+          accountModels: snapshot.models,
+          excludedModelIds: new Set(preferences.excludedModelIds),
+          currentModels,
+          currentModelsUseCatalog: currentModels.length === 0,
+          ...(typeof profile.api === 'string' ? { routeApi: profile.api } : {}),
+          ...(typeof profile.reasoning === 'string' ? { routeReasoning: profile.reasoning } : {}),
+          nativeCatalog: [...nativeCatalog.catalog.values()],
+        })
+      } catch { return empty('error', 'NATIVE_MODEL_SYNC_SETTINGS_INVALID') }
+      if (plan.models.length === 0) {
+        return { ...empty('blocked', 'NATIVE_MODEL_SYNC_NO_SYNCABLE_MODELS'),
+          enabledCount: plan.enabledCount, skipped: plan.skipped }
+      }
+      if (!nativeSyncSupportsRouteCompatibility(profile, plan.models, snapshot.models)) {
+        return empty('blocked', 'NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN')
+      }
+
+      const now = Date.now()
+      for (const [id, pending] of this.nativeModelSyncPlans) {
+        if (pending.expiresAt <= now) this.nativeModelSyncPlans.delete(id)
+      }
+      while (this.nativeModelSyncPlans.size >= 8) {
+        this.nativeModelSyncPlans.delete(this.nativeModelSyncPlans.keys().next().value!)
+      }
+      const planId = randomUUID()
+      this.nativeModelSyncPlans.set(planId, {
+        expiresAt: now + 5 * 60_000,
+        accountGeneration: lease.binding.generation,
+        generation: snapshot.generation,
+        fetchedAt: snapshot.fetchedAt,
+        preferencesRevision: preferences.revision,
+        routeRevision: route.routeRevision,
+        markerRevision: route.markerRevision,
+        models: plan.models,
+        proofCurrent,
+        nativeCatalog,
+        source,
+      })
+      return {
+        state: 'ready', planId, enabledCount: plan.enabledCount, syncableCount: plan.syncableCount,
+        outputTokenDefaults: plan.outputTokenDefaults,
+        addedIds: plan.addedIds, removedIds: plan.removedIds, updatedIds: plan.updatedIds, skipped: plan.skipped,
+      }
+    } finally { lease.release() }
+  }
+
+  /** Apply only the exact previewed model array using namespace CAS and readback. */
+  @Remote
+  async applyNativeModelSync(planId: string): Promise<GitHubCopilotNativeModelSyncResult> {
+    const failed = (code: GitHubCopilotNativeModelSyncCode): GitHubCopilotNativeModelSyncResult =>
+      ({ state: 'error', code, modelCount: 0 })
+    const plan = this.nativeModelSyncPlans.get(planId)
+    this.nativeModelSyncPlans.delete(planId)
+    if (plan === undefined || plan.expiresAt <= Date.now()) return failed('NATIVE_MODEL_SYNC_PLAN_EXPIRED')
+    const lease = this.acquireNativeModelSyncLease()
+    if (lease === null) return failed('NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+    try {
+      const nativeAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return failed('NATIVE_MODEL_SYNC_PLAN_STALE') }
+      if (nativeAccountMatches === undefined) return failed('NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!nativeAccountMatches) return failed('NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
+      if (lease.binding.generation !== plan.accountGeneration) return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
+      const source = this.ctx.get('githubCopilotPreview')
+      const snapshot = source?.nativeModelSyncSnapshot()
+      if (source !== plan.source || snapshot === undefined
+        || snapshot.generation !== plan.generation || snapshot.fetchedAt !== plan.fetchedAt
+        || !plan.proofCurrent()) {
+        return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
+      }
+      try { plan.nativeCatalog.assertCurrent() }
+      catch { return failed('NATIVE_MODEL_SYNC_PLAN_STALE') }
+      const preferences = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
+      if (preferences.state !== 'ready' || !preferences.writable || preferences.revision !== plan.preferencesRevision) {
+        return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
+      }
+
+      let settings: RouteSettings
+      let route: ReturnType<typeof settingsSnapshot>
+      try {
+        settings = service<RouteSettings>(this.ctx, 'settings', ['describe', 'mutate'])
+        route = settingsSnapshot(settings)
+      } catch { return failed('NATIVE_MODEL_SYNC_SETTINGS_UNAVAILABLE') }
+      if (route.backup !== undefined || route.hasOwnedSecrets) return failed('NATIVE_MODEL_SYNC_ROUTE_OWNERSHIP_CONFLICT')
+      if (route.current === undefined) return failed('NATIVE_MODEL_SYNC_PROFILE_MISSING')
+      const profileProblem = nativeSyncProfileProblem(route.current, route.hasSecrets)
+      if (profileProblem !== undefined) return failed(profileProblem)
+      if (!nativeSyncSupportsRouteCompatibility(route.current, plan.models, snapshot.models)) {
+        return failed('NATIVE_MODEL_SYNC_ROUTE_COMPAT_UNPROVEN')
+      }
+      if (route.routeRevision !== plan.routeRevision || route.markerRevision !== plan.markerRevision) {
+        return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
+      }
+      const routeApi = route.current.api
+      const routeReasoning = route.current.reasoning
+      const routeCompatibility = structuredClone(route.current.compat)
+      const latestPreferences = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
+      if (latestPreferences.state !== 'ready' || !latestPreferences.writable
+        || latestPreferences.revision !== plan.preferencesRevision || !plan.proofCurrent()) {
+        return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
+      }
+      try { lease.binding.assertCurrent(); plan.nativeCatalog.assertCurrent() }
+      catch { return failed('NATIVE_MODEL_SYNC_PLAN_STALE') }
+      const currentAccountMatches = await this.nativeCredentialMatchesSelected(lease.binding.accountId)
+      try { lease.binding.assertCurrent() }
+      catch { return failed('NATIVE_MODEL_SYNC_PLAN_STALE') }
+      if (currentAccountMatches === undefined) return failed('NATIVE_MODEL_SYNC_ACCOUNT_UNAVAILABLE')
+      if (!currentAccountMatches) return failed('NATIVE_MODEL_SYNC_ACCOUNT_MISMATCH')
+      const admissionPreferences = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
+      const admissionSnapshot = source?.nativeModelSyncSnapshot()
+      if (admissionPreferences.state !== 'ready' || !admissionPreferences.writable
+        || admissionPreferences.revision !== plan.preferencesRevision || !plan.proofCurrent()
+        || this.ctx.get('githubCopilotPreview') !== source || admissionSnapshot === undefined
+        || admissionSnapshot.generation !== plan.generation || admissionSnapshot.fetchedAt !== plan.fetchedAt) {
+        return failed('NATIVE_MODEL_SYNC_PLAN_STALE')
+      }
+      try { lease.binding.assertCurrent(); plan.nativeCatalog.assertCurrent() }
+      catch { return failed('NATIVE_MODEL_SYNC_PLAN_STALE') }
+      if (plan.expiresAt <= Date.now()) return failed('NATIVE_MODEL_SYNC_PLAN_EXPIRED')
+      try {
+        await settings.mutate(LLM_PI_AI_SETTINGS_NAMESPACE, [{
+          op: 'set', path: ['providers', GITHUB_COPILOT_PROVIDER_ID, 'models'], value: plan.models,
+        }], plan.routeRevision)
+      } catch (cause) {
+        const error = object(cause)
+        try { lease.binding.assertCurrent() }
+        catch { return failed('NATIVE_MODEL_SYNC_READBACK_FAILED') }
+        return failed(error?.code === 'SETTINGS_CONFLICT' || cause instanceof Error && /conflict/i.test(cause.message)
+          ? 'NATIVE_MODEL_SYNC_SETTINGS_CONFLICT' : 'NATIVE_MODEL_SYNC_SAVE_FAILED')
+      }
+      try {
+        const nativeCatalog = await captureNativeCopilotCatalog(this.ctx)
+        if (nativeCatalog === undefined || nativeCatalog.namespace !== plan.nativeCatalog.namespace
+          || !sameNativeCatalog(nativeCatalog.catalog, plan.nativeCatalog.catalog)) {
+          return failed('NATIVE_MODEL_SYNC_READBACK_FAILED')
+        }
+        lease.binding.assertCurrent()
+        const saved = settingsSnapshot(settings)
+        const currentPreferences = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
+        const currentSnapshot = source?.nativeModelSyncSnapshot()
+        nativeCatalog.assertCurrent()
+        if (saved.current === undefined || saved.backup !== undefined
+          || saved.markerRevision !== plan.markerRevision
+          || saved.routeRevision < plan.routeRevision || saved.routeRevision > plan.routeRevision + 1
+          || nativeSyncProfileProblem(saved.current, saved.hasSecrets) !== undefined
+          || saved.current.api !== routeApi || saved.current.reasoning !== routeReasoning
+          || !equalJson(saved.current.compat, routeCompatibility)
+          || !nativeSyncSupportsRouteCompatibility(saved.current, plan.models, snapshot.models)
+          || !equalJson(saved.raw?.models, plan.models) || !effectiveNativeModelsMatch(saved.current.models, plan.models)
+          || currentPreferences.state !== 'ready' || !currentPreferences.writable
+          || currentPreferences.revision !== plan.preferencesRevision || !plan.proofCurrent()
+          || this.ctx.get('githubCopilotPreview') !== source
+          || currentSnapshot === undefined || currentSnapshot.generation !== plan.generation
+          || currentSnapshot.fetchedAt !== plan.fetchedAt) {
+          return failed('NATIVE_MODEL_SYNC_READBACK_FAILED')
+        }
+      } catch { return failed('NATIVE_MODEL_SYNC_READBACK_FAILED') }
+      return { state: 'ready', modelCount: plan.models.length }
+    } finally { lease.release() }
+  }
+
+  private acquireNativeModelSyncLease() {
+    try { return this.ctx.get('githubCopilotAccounts')?.host.acquire(undefined, true) ?? null }
+    catch { return null }
+  }
+
+  private async nativeCredentialMatchesSelected(accountId: string): Promise<boolean | undefined> {
+    const accounts = this.ctx.get('githubCopilotAccounts')
+    if (accounts === undefined) return undefined
+    try { return await accounts.host.nativeCredentialMatches(accountId) }
+    catch { return undefined }
   }
 
   /** Explicit model discovery: may refresh OAuth and GET the account catalog, never changes selection. */

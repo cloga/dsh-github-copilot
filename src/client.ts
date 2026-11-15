@@ -14,6 +14,7 @@ import type { GitHubCopilotAuthorizationView } from './authorization-controller.
 import type { ProviderCardExtrasOwnerProps, SettingsSectionOwnerProps } from './dsh-supported-types.ts'
 import githubCopilotRemote, { GitHubCopilotAuthorizationViewSchema } from './remote.ts'
 import { DiagnosticsCard } from './diagnostics-card.ts'
+import { NativeSearchModelCard } from './native-search-model-card.ts'
 import type { DiagnosticsRemote } from './diagnostics-card.ts'
 import { installDiagnosticsClient } from './diagnostics-client.ts'
 import { installAccountUsagePresentation, installAccountUsageProjections } from './auto-model-presentation.ts'
@@ -738,7 +739,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
   createElement('style', null, modelsControlCss),
   createElement('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', minHeight: '28px' } },
     createElement('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', minWidth: 0 } },
-      createElement(props.embedded === true ? 'span' : 'h3', { style: props.embedded === true ? nativeCaptionStyle : nativeHeadingStyle }, 'GitHub Copilot (multi-account)'),
+      createElement(props.embedded === true ? 'span' : 'h3', { style: props.embedded === true ? nativeCaptionStyle : nativeHeadingStyle }, 'GitHub Copilot account'),
       createElement('span', { role: 'status', 'aria-live': 'polite', style: nativeCaptionStyle }, status),
       modelStatus === undefined ? null : createElement('span', { role: 'status', 'aria-live': 'polite', style: nativeCaptionStyle }, modelStatus),
       signedIn ? createElement(GitHubCopilotAccountModelsUpdatedAt, { discoveredAt: models?.discoveredAt }) : null),
@@ -749,8 +750,8 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
         { title: view.writable === false ? 'Credentials are read-only' : undefined }) : null,
       actionButton('Manage', () => setManageOpen(open => !open), false, { 'aria-expanded': manageOpen, 'aria-controls': managementId }))),
   props.embedded === true ? createElement('p', { style: { ...nativeCaptionStyle, margin: '6px 0' } },
-    props.locale?.startsWith('zh') ? '切换仅影响插件管理的模型；原生 GitHub Copilot 账号保持不变。'
-      : 'Switching affects plugin-managed models only; the native GitHub Copilot account stays unchanged.') : null,
+    props.locale?.startsWith('zh') ? '切换会影响此 profile 后续的原生 GitHub Copilot 请求；正在进行的请求不会被重定向。'
+      : 'Switching affects future native GitHub Copilot requests in this profile; in-progress requests are not redirected.') : null,
   state.error === undefined ? null : createElement('p', { role: 'alert', 'data-dsh-github-copilot-account-error': state.error,
     style: { ...nativeCaptionStyle, margin: '8px 0 0', overflowWrap: 'anywhere' } },
   compactErrorMessage(state.error, view?.authorizationMilestone)),
@@ -781,7 +782,7 @@ export function GitHubCopilotCompactAccount(props: GitHubCopilotPreviewFooterPro
     }) : createElement('p', { role: 'status' }, 'Sign in to manage model preferences.'),
     createElement('details', null,
       createElement('summary', null, 'Discovery details'),
-      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches account models once. Opening this view refreshes missing or stale metadata when needed. These models are for github-copilot-preview, not the native github-copilot catalog. Refreshing does not verify a model call or change your selected model.'),
+      createElement('p', { style: nativeCaptionStyle }, 'Signing in here fetches account models once. Opening this view refreshes missing or stale metadata when needed. Discovery serves github-copilot-preview and does not change the native github-copilot list; an explicitly confirmed sync can copy eligible models. Refreshing does not verify a model call or change your selected model.'),
       models === undefined ? createElement('p', { style: nativeCaptionStyle }, 'Account model metadata is not available yet.')
         : createElement(GitHubCopilotAccountModelsSummary, { snapshot: models })),
     signedIn ? actionButton(refreshing ? 'Refreshing models…' : 'Refresh models', account.refreshModels, pendingAction,
@@ -1036,9 +1037,28 @@ function registerUi(ctx: ClientContext): () => void {
 export function CopilotPluginSettingsPage(props: {
   diagnostics?: DiagnosticsRemote
   diagnosticsControl?: ReactElement
+  searchModelControl?: ReactElement
 }) {
   return createElement('div', null,
+    props.searchModelControl,
     props.diagnosticsControl ?? createElement(DiagnosticsCard, { remote: props.diagnostics }))
+}
+function NativeSearchModelConnectionCard({ ctx }: { ctx: ClientContext }): ReactElement {
+  const [services, setServices] = useState<{
+    settings: ClientContext['remote']['settings']
+    search: ClientContext['remote']['githubCopilotNativeSearch']
+  }>()
+  useEffect(() => {
+    let active = true
+    const injection = ctx.inject(['remote.settings', 'remote.githubCopilotNativeSearch'], scope => {
+      const captured = { settings: scope.remote.settings, search: scope.remote.githubCopilotNativeSearch }
+      if (active) setServices(captured)
+      return () => { if (active) setServices(undefined) }
+    })
+    return () => { active = false; void injection.dispose() }
+  }, [ctx])
+  return services ? createElement(NativeSearchModelCard, services)
+    : createElement('p', { role: 'status', style: nativeCaptionStyle }, 'Copilot search model settings are unavailable.')
 }
 function DiagnosticsConnectionCard({ ctx }: { ctx: ClientContext }): ReactElement {
   const [remote, setRemote] = useState<DiagnosticsRemote>()
@@ -1063,7 +1083,8 @@ function registerPluginSettingsUi(ctx: ClientContext): () => void {
   let footerSeat: (() => void) | undefined
   let fallback: (() => void) | undefined
   const diagnosticsControl = createElement(DiagnosticsConnectionCard, { ctx })
-  const render = () => createElement(CopilotPluginSettingsPage, { diagnosticsControl })
+  const searchModelControl = createElement(NativeSearchModelConnectionCard, { ctx })
+  const render = () => createElement(CopilotPluginSettingsPage, { diagnosticsControl, searchModelControl })
   const syncFallback = () => {
     if (active && footerReady && !bundleActive && footerSeat === undefined) {
       try {

@@ -73,6 +73,15 @@ export interface GitHubCopilotPreviewView {
 }
 export interface GitHubCopilotPreview {
   getView(): GitHubCopilotPreviewView
+  /** Current proof-backed account catalog for an explicit native settings sync. */
+  nativeModelSyncSnapshot(): {
+    readonly generation: number
+    readonly fetchedAt: number
+    readonly models: readonly AccountModelDescriptor[]
+    readonly isCurrent: () => boolean
+  } | undefined
+  /** Refresh the global account only, regardless of an ambient Session initiator. */
+  discoverNativeModelSync(): Promise<GitHubCopilotPreviewView>
   /** Synchronous, account-proven summary capacities for the initiating Agent; never triggers discovery. */
   recoveryLimits(modelId: string, agent?: Agent): {
     readonly api: AccountModelDescriptor['api']
@@ -912,6 +921,20 @@ function createAccountRuntime(ctx: Context, config: PreviewRouteConfig, binding:
         && (expires === undefined || expires > Date.now())
         && (snapshotProof === captured || snapshotProof === undefined || snapshotProof.expires > Date.now())
     },
+    nativeModelSyncSnapshot() {
+      const snapshot = source.readSnapshot()
+      const view = getView()
+      if (snapshot === undefined || view.state !== 'ready' || !view.available) return undefined
+      const proof = lifetime.proofFor(snapshot)
+      if (proof === undefined) return undefined
+      const revision = lifetime.revision
+      return Object.freeze({
+        generation: snapshot.generation, fetchedAt: snapshot.fetchedAt, models: snapshot.models,
+        isCurrent: () => lifetime.isCurrent(revision) && lifetime.proofFor(snapshot) === proof
+          && configured && readError === undefined,
+      })
+    },
+    discoverNativeModelSync: () => preview.discover({ force: true }),
     routeFacts(modelId) {
       if (excludedModels().has(modelId)) return undefined
       const snapshot = source.readSnapshot()
@@ -1074,6 +1097,8 @@ export function apply(ctx: Context, config: PreviewRouteConfig = {}): void {
   installCopilotCompactionPressure(ctx, pressureCallbacks)
   ctx.provide('githubCopilotPreview', {
     getView: () => disposed ? initial.preview.getView() : currentRuntime().preview.getView(),
+    nativeModelSyncSnapshot: () => disposed ? undefined : directoryRuntime().preview.nativeModelSyncSnapshot(),
+    discoverNativeModelSync: () => directoryRuntime().preview.discoverNativeModelSync(),
     refresh: async () => currentRuntime().preview.refresh(),
     discover: options => currentRuntime(options?.signal).preview.discover(options),
     recoveryLimits: (model, agent) => {

@@ -307,6 +307,12 @@ const alphaCore = dshBaselines.find(entry => entry.release === '0.1.3-alpha.1')
 assert(alphaCore.evidenceScope === 'unchanged-tagged-source-target'
   && alphaCore.standaloneNpmArtifacts === 'not-published'
   && alphaCore.managedProviderValidation === 'not-verified', 'alpha.1 source evidence must not pretend unavailable npm artifacts were tested')
+const nativeSync = manifest.capabilities?.find(capability => capability.id === 'confirmed-native-model-sync')
+assert(nativeSync?.required === true
+  && nativeSync.evidenceScope === 'tagged-native-settings-and-resolution-with-synthetic-catalog-proof-plus-separate-adapter-ownership-tests-not-live-provider'
+  && nativeSync.tests?.some(entry => entry.file === 'tests/fixtures/native-model-sync-core.fixture.ts')
+  && (await read('.github/workflows/ci.yml')).includes("['native-model-sync-core.fixture.ts',1]"),
+  'native model sync evidence must retain bounded synthetic scope and an executed tagged-source fixture')
 const nativeWeb = manifest.capabilities?.find(capability => capability.id === 'native-web-ownership')
 assert(nativeWeb?.required === true && nativeWeb.evidenceScope === 'native-web-composition-and-synthetic-tool-execution-not-live-search',
   'native web ownership must retain bounded composition evidence, not claim live search')
@@ -331,7 +337,9 @@ const clientEntry = await read('src/client.ts')
 const overlay = await read('cordis.patch.yml')
 assert(!/githubCopilotSearchRouter|resolveCandidates|routeSearchTools/u.test(hostEntry),
   'plugin Host must not own native web routing')
-assert(hostEntry.includes('scope.effect(() => scope.web.registerSearchProvider(createNativeCopilotSearch(scope)))')
+assert(hostEntry.includes('const provider = createNativeCopilotSearch(scope)')
+  && hostEntry.includes('scope.effect(() => scope.web.registerSearchProvider(provider))')
+  && hostEntry.includes('new NativeCopilotSearchController(scope, provider)')
   && (hostEntry.match(/registerSearchProvider/gu) ?? []).length === 1,
   'plugin Host may register only the optional native Copilot search backend')
 const nativeSearch = await read('src/native-copilot-search.ts')
@@ -433,7 +441,7 @@ assert(Array.isArray(manifest.capabilities) && manifest.capabilities.length > 0,
 const capabilityIds = new Set(manifest.capabilities.map(capability => capability.id))
 assert(capabilityIds.size === manifest.capabilities.length, 'capability IDs must be unique')
 const missingEvidence = []
-for (const required of ['independent-copilot-accounts', 'account-quota-composer-usage', 'account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
+for (const required of ['confirmed-native-model-sync', 'independent-copilot-accounts', 'account-quota-composer-usage', 'account-driven-provider-metadata', 'account-scoped-discovery-snapshot',
   'public-adapter-account-model-route', 'managed-request-budget-and-compaction-policy', 'managed-model-generation-and-lifetime', 'managed-http-auth-rejection-recovery', 'managed-responses-replay-scope-isolation', 'account-discovery-native-oauth',
   'canonical-owner-preservation', 'single-managed-route-native-oauth', 'legacy-route-conflict-protection', 'legacy-global-override-restoration',
   'read-only-status-and-explicit-discovery', 'shared-copilot-credential-refresh', 'compact-account-row-and-auth-disclosure']) {
@@ -582,7 +590,7 @@ assert(candidateCore?.tag === currentDsh.tag && candidateCore.commit === current
   && candidateCore.managedProviderValidation === 'not-verified',
   '0.2.2-rc.3 must not claim unrun runtime or artifact qualification')
 for (const path of candidateCore.runtimeTests) await access(resolve(root, path))
-for (const path of ['tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts', 'tests/fixtures/auto-review-copilot-core.fixture.ts',
+for (const path of ['tests/native-web-composition.spec.ts', 'tests/dual-model-host.spec.ts', 'tests/fixtures/native-model-sync-core.fixture.ts', 'tests/fixtures/auto-review-copilot-core.fixture.ts',
   'tests/fixtures/alpha4-contracts-core.fixture.ts']) {
   assert(candidateCore.runtimeTests.includes(path), `current candidate qualification is missing ${path}`)
 }

@@ -7,7 +7,7 @@ import { copilotAccountKey } from './account-model-auth.ts'
 import { createGitHubCopilotCredentialStore } from './copilot-auth.ts'
 import { normalizeGitHubCopilotOAuthCredential } from './copilot-grant.ts'
 import type { GitHubCopilotOAuthCredential } from './copilot-grant.ts'
-import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID } from './copilot-identity.ts'
+import { GITHUB_COPILOT_CREDENTIAL_KEY, GITHUB_COPILOT_PROVIDER_ID, nativeCopilotUsesCanonicalOAuth } from './copilot-identity.ts'
 import { normalizeCopilotUsage, unavailableCopilotUsage } from './copilot-usage-normalize.ts'
 import type { CopilotUsageView, CopilotUsageDiagnostic } from './copilot-usage-types.ts'
 import { onSettingsNamespaceUpdated, readSettingsNamespace } from './settings-reader.ts'
@@ -349,15 +349,7 @@ export default class GitHubCopilotUsageController extends TypertRemoteService {
     if (typeof section !== 'object' || section === null || Array.isArray(section)) return false
     const providers: unknown = Reflect.get(section, 'providers')
     if (typeof providers !== 'object' || providers === null || Array.isArray(providers)) return false
-    const profile: unknown = Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID)
-    if (typeof profile !== 'object' || profile === null || Array.isArray(profile)
-      || Reflect.get(profile, 'apiKeyEnv') !== undefined
-      || Reflect.get(profile, 'baseURL') !== undefined) return false
-    const headers: unknown = Reflect.get(profile, 'headers')
-    if (headers === undefined) return true
-    if (typeof headers !== 'object' || headers === null || Array.isArray(headers)) return false
-    const prototype: unknown = Object.getPrototypeOf(headers)
-    return (prototype === Object.prototype || prototype === null) && Reflect.ownKeys(headers).length === 0
+    return nativeCopilotUsesCanonicalOAuth(Reflect.get(providers, GITHUB_COPILOT_PROVIDER_ID))
   }
   private async nativeUsage(force: boolean): Promise<CopilotUsageView> {
     try {

@@ -266,9 +266,6 @@ export function createGitHubCopilotTokenResolver(
   } } })
   return async (modelId) => {
     const binding = captureActiveGitHubCopilotBinding(ctx)
-    if (binding !== undefined && binding.accountId !== 'canonical') {
-      throw new Error('COPILOT_ACCOUNTS_ROUTE_BLOCKED')
-    }
     const snapshot = readCopilotCatalog(ctx)
     const installedModels = new Map(snapshot.models.map(model => [model.id, model]))
     const native = installedModels.get(modelId)

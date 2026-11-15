@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.1.0-alpha.11.dsh.0.2.2.rc.3 (prepared)
+
+- Show native model-list changes and output defaults automatically from current verified account metadata; one **Sync models** action explicitly confirms the write (#479).
+- Preserve an existing disabled native strict-mode override when the synced list contains a supporting Responses or Completions model; unproven overrides remain blocked.
+- Recheck account, catalog, preference and plan-expiry evidence immediately before writing; keep revision and readback fences.
+- Preparation does not force discovery, and sync, profile installation and Desktop restart remain explicit.
+
+## 0.1.0-alpha.10.dsh.0.2.2.rc.3 (published)
+
+- Allow an explicit native Copilot hosted-search model in plugin settings, with account and native catalog filtering (#478).
+- Preserve automatic selection by default, require the existing search capability proof, and fail without switching if a chosen model is unavailable.
+
+## 0.1.0-alpha.9.dsh.0.2.2.rc.3 (published)
+
+- Apply confirmed account switches to DSH's existing native `github-copilot` credential, preserving the replaced grant and protecting observable in-progress native Agent turns.
+- Allow #466 native model sync for a saved-account selection only when its normalized grant matches the native canonical credential; mismatches and unavailable credentials remain blocked.
+- Keep `github-copilot-preview` registered. This change does not complete #474's native-only route acceptance or retire the separate preview route.
+
+## 0.1.0-alpha.8.dsh.0.2.2.rc.3 (published)
+
+- Preview and explicitly confirm a one-time sync of enabled canonical-account models to an existing native Copilot provider (#466).
+- Preserve only models whose native protocol and account capability metadata can be safely represented; disclose skipped models, removals, updates, and per-request output defaults before replacing the native models setting.
+- Recheck account, adapter-owned catalog, preference and Settings evidence before the path-level write and verify both stored and effective readback. Live Desktop activation and provider calls are not established by synthetic tests.
+
 ## 0.1.0-alpha.7.dsh.0.2.2.rc.3 (prepared)
 
 - Qualify native search and Auto reviewer compatibility using the adapter-owned pi-ai catalog even when the plugin resolves a separate copy (#461).
