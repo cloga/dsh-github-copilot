@@ -136,8 +136,13 @@ The plugin registers optional `github-copilot-hosted` search in DSH's existing
 Web service. Select it explicitly in native Web settings and enable the native
 search tool as needed; installation does not change the selected backend.
 Search uses only the canonical OAuth account and models shared by the native
-configured catalog and current account metadata. Each search makes one fixed
-capability probe and, only after proof, one user query; both may incur charges.
+configured catalog and current account metadata. In **Plugins → dsh-github-copilot
+→ details → Copilot search model**, choose **Automatic** (the default) or one
+eligible model. Opening or reloading this control fetches account metadata and
+may refresh native OAuth; metadata alone does not prove search support. If an
+explicitly selected model is no longer eligible, search fails without choosing
+another model. Each search makes one fixed capability probe and, only after
+proof, one user query; both may incur charges.
 Custom endpoint, credential or transport overrides and unproven models remain
 unavailable. There is no model retry, backend replacement or plugin routing UI.
 The native Auto reviewer's qualified Copilot Responses requests omit

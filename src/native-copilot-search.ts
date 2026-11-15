@@ -3,7 +3,9 @@ import { attributionHeaders } from '@deepseek-ai/dsh-llm'
 import { WebError, type WebSearchProvider } from '@deepseek-ai/dsh-web'
 import { createModels } from '@earendil-works/pi-ai'
 import { githubCopilotProvider } from '@earendil-works/pi-ai/providers/github-copilot'
+import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { createAccountModelSource } from './account-model-source.ts'
+import type { AccountModelDescriptor } from './account-model-catalog.ts'
 import { createGitHubCopilotCredentialStore, normalizeGitHubCopilotOAuthCredential,
   trustedGitHubCopilotBaseUrl } from './copilot-auth.ts'
 import { GITHUB_COPILOT_CREDENTIAL_KEY } from './copilot-identity.ts'
@@ -12,9 +14,30 @@ import { captureNativeCopilot, NATIVE_COPILOT } from './native-copilot-access.ts
 import { copilotPublicHeaders } from './preview-provider.ts'
 import { onSettingsNamespaceUpdated, readSettingsNamespace } from './settings-reader.ts'
 import { normalizeSearchResponse } from './traditional-search.ts'
+import type { NativeCopilotSearchModels } from './native-copilot-search-remote.ts'
 
 const unavailable = () => new WebError('COPILOT_NATIVE_SEARCH_UNAVAILABLE', 'WEB_PROVIDER_UNAVAILABLE')
 const failed = () => new WebError('COPILOT_NATIVE_SEARCH_FAILED', 'WEB_PROVIDER_ERROR')
+const modelUnavailable = () => new WebError('COPILOT_NATIVE_SEARCH_MODEL_UNAVAILABLE', 'WEB_PROVIDER_UNAVAILABLE')
+
+interface NativeCopilotSearch extends WebSearchProvider {
+  models(): Promise<NativeCopilotSearchModels>
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    githubCopilotNativeSearch: NativeCopilotSearchController
+  }
+}
+
+export class NativeCopilotSearchController extends TypertRemoteService {
+  constructor(ctx: Context, private readonly provider: Pick<NativeCopilotSearch, 'models'>) {
+    super(ctx, 'githubCopilotNativeSearch')
+  }
+
+  @Remote
+  models(): Promise<NativeCopilotSearchModels> { return this.provider.models() }
+}
 
 /** One bounded read; cancellation also releases an uncooperative response reader. */
 async function json(response: Response, signal: AbortSignal): Promise<unknown> {
@@ -46,7 +69,7 @@ function hasSearchEvidence(value: unknown): boolean {
 }
 
 /** Add only a backend to the existing Web service; never select it or replace native tools. */
-export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
+export function createNativeCopilotSearch(ctx: Context): NativeCopilotSearch {
   let active = true
   const selected = () => {
     const value = readSettingsNamespace(ctx, 'web')
@@ -63,14 +86,76 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
   ctx.on('llm/adapters-updated', revoke)
   ctx.on('llm/models-updated', provider => { if (provider === NATIVE_COPILOT) revoke() })
   ctx.effect(() => onSettingsNamespaceUpdated(ctx, namespace => {
-    for (const [controller, owner] of pending) if (owner === namespace || namespace === 'web') controller.abort()
+    for (const [controller, owner] of pending) {
+      if (owner === namespace || namespace === 'web' || namespace === 'github-copilot') controller.abort()
+    }
   }))
+
+  const searchModel = (): string => {
+    const config = readSettingsNamespace(ctx, 'github-copilot')
+    if (config === null || typeof config !== 'object' || Array.isArray(config)) throw unavailable()
+    const value = 'nativeSearchModel' in config ? config.nativeSearchModel : undefined
+    if (value === undefined) return ''
+    if (typeof value !== 'string' || value.length > 512 || value !== value.trim()
+      || /[\p{Cc}\p{Cf}]/u.test(value)) throw modelUnavailable()
+    return value
+  }
+
+  async function prepare(controller: AbortController, signal: AbortSignal, requireSelection: boolean,
+    modelSetting?: string): Promise<{ eligible: AccountModelDescriptor[]; headers: Headers; baseURL: string; check: () => void }> {
+    const route = await abortable(captureNativeCopilot(ctx), signal)
+    if (!route) throw unavailable()
+    pending.set(controller, route.namespace)
+    const check = () => {
+      signal.throwIfAborted()
+      if (!active || requireSelection && (!selected() || searchModel() !== modelSetting)) throw unavailable()
+      route.assertCurrent()
+    }
+    check()
+    const store = createGitHubCopilotCredentialStore(ctx)
+    const models = createModels({ credentials: store })
+    models.setProvider(githubCopilotProvider())
+    const credential = await abortable(store.read(NATIVE_COPILOT), signal)
+    if (credential?.type !== 'oauth') throw unavailable()
+    const auth = await abortable(models.getAuth(NATIVE_COPILOT), signal)
+    check()
+    if (!auth?.auth.apiKey) throw unavailable()
+    const current = await abortable(store.read(NATIVE_COPILOT), signal)
+    check()
+    const grant = normalizeGitHubCopilotOAuthCredential(current)
+    if (grant.access !== auth.auth.apiKey || grant.expires <= Date.now()) throw unavailable()
+    const baseURL = trustedGitHubCopilotBaseUrl(auth.auth.baseUrl, grant)
+    const apiKey = auth.auth.apiKey
+    const headers = new Headers({ ...copilotPublicHeaders(), ...attributionHeaders() })
+    for (const [name, value] of Object.entries(auth.auth.headers ?? {})) {
+      if (value !== null) headers.set(name, value)
+    }
+    headers.set('authorization', `Bearer ${apiKey}`)
+    headers.set('content-type', 'application/json')
+    headers.set('accept', 'application/json')
+    headers.set('X-Initiator', 'user')
+    headers.set('Openai-Intent', 'conversation-edits')
+    const source = createAccountModelSource({
+      resolveAuth: async () => ({ apiKey, baseURL,
+        accountKey: 'native-canonical-operation', availableModelIds: grant.availableModelIds }),
+      assertAuthCurrent: check,
+      nativeApis: new Map([...route.models].map(([id, model]) => [id, model.api])),
+      headers: copilotPublicHeaders(), timeoutMs: 10000,
+    })
+    try {
+      const catalog = await abortable(source.load({ signal }), signal)
+      check()
+      const eligible = catalog.models.filter(model => model.api === 'openai-responses'
+        && route.models.get(model.id)?.api === 'openai-responses').sort((a, b) => a.id.localeCompare(b.id))
+      return { eligible, headers, baseURL, check }
+    } finally { source.dispose() }
+  }
 
   return {
     id: 'github-copilot-hosted',
     title: 'GitHub Copilot',
-    description: { en: 'Optional Copilot hosted search using the native account. Each search runs one capability probe before the query; both may incur supplier charges.',
-      zh: '使用原生账号的可选 Copilot 搜索。每次先执行一次能力探测，再发送查询；两者均可能产生供应商费用。' },
+    description: { en: 'Optional Copilot hosted search using the native account. Choose a search model in the Copilot plugin settings. Each search runs a capability probe; both calls may incur supplier charges.',
+      zh: '使用原生账号的可选 Copilot 搜索。可在 Copilot 插件设置中选择搜索模型。每次先执行能力探测，两次调用均可能产生供应商费用。' },
     // Never turn a previously unique implicit native backend into an ambiguous set.
     available: () => active && selected(),
     async ready() {
@@ -88,6 +173,22 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
         return false
       }
     },
+    async models() {
+      if (!active || pending.size >= 4) throw unavailable()
+      const controller = new AbortController()
+      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(10000)])
+      pending.set(controller, undefined)
+      try {
+        const { eligible, check } = await prepare(controller, signal, false)
+        check()
+        return { models: eligible.map(model => ({ id: model.id })) }
+      } catch {
+        throw unavailable()
+      } finally {
+        controller.abort()
+        pending.delete(controller)
+      }
+    },
     async search(request, callerSignal) {
       if (callerSignal?.aborted) throw new WebError('web search aborted', 'ABORTED')
       if (!active || !selected() || pending.size >= 4) throw unavailable()
@@ -97,54 +198,11 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
       const deadline = AbortSignal.timeout(25000)
       const signal = AbortSignal.any([controller.signal, deadline, ...(callerSignal ? [callerSignal] : [])])
       pending.set(controller, undefined)
-      let disposeSource: (() => void) | undefined
       try {
-        const route = await abortable(captureNativeCopilot(ctx), signal)
-        if (!route) throw unavailable()
-        pending.set(controller, route.namespace)
-        const check = () => {
-          signal.throwIfAborted()
-          if (!selected()) throw unavailable()
-          route.assertCurrent()
-        }
-        check()
-        const store = createGitHubCopilotCredentialStore(ctx)
-        const models = createModels({ credentials: store })
-        models.setProvider(githubCopilotProvider())
-        const credential = await abortable(store.read(NATIVE_COPILOT), signal)
-        if (credential?.type !== 'oauth') throw unavailable()
-        const auth = await abortable(models.getAuth(NATIVE_COPILOT), signal)
-        check()
-        if (!auth?.auth.apiKey) throw unavailable()
-        const current = await abortable(store.read(NATIVE_COPILOT), signal)
-        check()
-        const grant = normalizeGitHubCopilotOAuthCredential(current)
-        if (grant.access !== auth.auth.apiKey || grant.expires <= Date.now()) throw unavailable()
-        const baseURL = trustedGitHubCopilotBaseUrl(auth.auth.baseUrl, grant)
-        const apiKey = auth.auth.apiKey
-        const headers = new Headers({ ...copilotPublicHeaders(), ...attributionHeaders() })
-        for (const [name, value] of Object.entries(auth.auth.headers ?? {})) {
-          if (value !== null) headers.set(name, value)
-        }
-        headers.set('authorization', `Bearer ${apiKey}`)
-        headers.set('content-type', 'application/json')
-        headers.set('accept', 'application/json')
-        headers.set('X-Initiator', 'user')
-        headers.set('Openai-Intent', 'conversation-edits')
-        const source = createAccountModelSource({
-          resolveAuth: async () => ({ apiKey, baseURL,
-            accountKey: 'native-canonical-operation', availableModelIds: grant.availableModelIds }),
-          assertAuthCurrent: check,
-          nativeApis: new Map([...route.models].map(([id, model]) => [id, model.api])),
-          headers: copilotPublicHeaders(), timeoutMs: 10000,
-        })
-        disposeSource = () => source.dispose()
-        const catalog = await abortable(source.load({ signal }), signal)
-        check()
-        const eligible = catalog.models.filter(model => model.api === 'openai-responses'
-          && route.models.get(model.id)?.api === 'openai-responses').sort((a, b) => a.id.localeCompare(b.id))
-        const model = eligible[0]
-        if (!model) throw unavailable()
+        const configured = searchModel()
+        const { eligible, headers, baseURL, check } = await prepare(controller, signal, true, configured)
+        const model = configured === '' ? eligible[0] : eligible.find(candidate => candidate.id === configured)
+        if (!model) throw configured === '' ? unavailable() : modelUnavailable()
         const dispatch = async (query: string, probe: boolean) => {
           check()
           const callSignal = probe ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : signal
@@ -183,7 +241,6 @@ export function createNativeCopilotSearch(ctx: Context): WebSearchProvider {
         throw failed()
       } finally {
         controller.abort()
-        disposeSource?.()
         pending.delete(controller)
       }
     },

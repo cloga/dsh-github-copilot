@@ -87,15 +87,42 @@ async function fixture(footer: boolean, routingAvailable = false, bundle = true,
     }
     new DiagnosticsRemote()
   } })
+  const addNativeSearch = () => root.plugin({ apply(ctx) {
+    class NativeSearchRemote extends NamedService {
+      constructor() { super(ctx, 'remote.githubCopilotNativeSearch') }
+      async models() { return { ok: true, value: { models: [{ id: 'synthetic-responses-model' }] } } }
+    }
+    new NativeSearchRemote()
+  } })
   if (routingAvailable) await addRouting()
   const client = root.plugin({ inject, apply })
   await client
-  return { root, client, registrations, addRouting, addContinuation, addDiagnostics, describeSettings, mutateSettings, status, settings: settingsRemote, remoteDisposals: () => remoteDisposals }
+  return { root, client, registrations, addRouting, addContinuation, addDiagnostics, addNativeSearch, describeSettings, mutateSettings, status, settings: settingsRemote, remoteDisposals: () => remoteDisposals }
 }
 
 const settingsId = 'github-copilot-options'
 
 describe('plugin settings without a search Remote', () => {
+  it('mounts the search model selector when its native Remote becomes available', async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+    const f = await fixture(true, false, true)
+    const element = document.createElement('div')
+    const mounted = createRoot(element)
+    try {
+      await act(async () => { mounted.render(f.registrations.get(settingsId)!.render({ view: 'page' })) })
+      expect(element.textContent).toContain('Copilot search model settings are unavailable')
+      let nativeSearch!: ReturnType<typeof f.addNativeSearch>
+      await act(async () => { nativeSearch = f.addNativeSearch(); await nativeSearch })
+      expect(element.querySelector('[data-dsh-native-search-model]')).not.toBeNull()
+      expect(element.textContent).toContain('synthetic-responses-model')
+      expect(f.mutateSettings).not.toHaveBeenCalled()
+      await act(async () => { await nativeSearch.dispose() })
+      expect(element.textContent).toContain('Copilot search model settings are unavailable')
+    } finally {
+      await act(async () => { mounted.unmount(); await f.root.fiber.dispose() })
+      Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
+    }
+  })
   it('mounts late diagnostics without blocking other settings', async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     const f = await fixture(true, false, true)
