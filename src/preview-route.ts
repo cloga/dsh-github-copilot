@@ -36,7 +36,6 @@ import { TurnSelectionController } from './turn-selection-host.ts'
 import { ResponsesRetryReplay } from './responses-replay-compat.ts'
 import { excludedModelSet, ModelExclusionTurns } from './model-exclusions.ts'
 import { onSettingsNamespaceUpdated } from './settings-reader.ts'
-import { imageInputFailure } from './image-input-admission.ts'
 import { activeCopilotBinding } from './copilot-accounts-host.ts'
 import { filterCopilotToolRequest } from './tool-schema-compat.ts'
 import type { CopilotAccountBinding, CopilotAccountLease } from './copilot-accounts-types.ts'
@@ -520,11 +519,6 @@ class PreviewAdapter extends PiAiAdapter {
       let liveness: Parameters<NonNullable<AccountProviderGuard['onStreamLiveness']>>[0] | undefined
       const inspectRequest: NonNullable<AccountProviderGuard['inspectRequest']> = (_model, context, nativeOptions) => {
         if (signal.aborted) throw abortFailure(signal)
-        const imageFailure = imageInputFailure(lease.descriptor, context.messages)
-        if (imageFailure !== undefined) {
-          requestFailure = new LlmError(imageFailure.message, 'INVALID_REQUEST')
-          throw requestFailure
-        }
         const calculated = calculateRequestBudget(lease.descriptor, nativeOptions?.maxTokens, policy)
         if (!calculated.ok) {
           requestFailure = budgetFailure(calculated)
