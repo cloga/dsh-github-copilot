@@ -90,6 +90,11 @@ repair publication.
 The non-cancelling repository release concurrency group serializes publication.
 External publishers must coordinate; dist-tags are not atomic CAS.
 
+On an uncancelled main push, the caller requires a successful `release-ready`
+gate even though the PR-only documentation check is skipped. Cancelled runs and
+failed or skipped gates cannot invoke publication; PRs still require the
+documentation check. Eligibility is not proof of publication.
+
 After the complete compatibility gate, pack once with
 `pnpm --config.ignore-scripts=true pack --pack-destination artifacts`.
 Verification already built/prepacked. Recovery downloads the original uploaded
