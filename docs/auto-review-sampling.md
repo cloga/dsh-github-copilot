@@ -9,8 +9,24 @@ native Responses route. The adapter and plugin may resolve separate pi-ai copies
 protocol facts come from the adapter's copy, not an assumed equivalent plugin
 catalog. Missing exports or incomplete metadata leave the enhancement
 unavailable with a diagnostic. It requires `purpose: 'auto-review'` and excludes
-loop-owned requests. Custom credential, endpoint and compatibility overrides
-remain native; unknown models are diagnosed, never assigned a guessed protocol.
+loop-owned requests. Custom credential, endpoint and unqualified compatibility
+overrides remain native; unknown models are diagnosed, never assigned a guessed protocol.
+
+Qualification reads the native Settings schema output, not raw YAML (#483).
+The schema materializes empty `compat.chatTemplateKwargs` and
+`compat.chatTemplateArgs` maps at provider and model levels. These empty maps
+are not custom transport. The only additionally qualified compatibility leaf
+is boolean `supportsStrictMode`, which controls native tool-schema strictness,
+not credentials, endpoint, protocol or sampling. Apply the same narrow rule to
+provider, configured model and model-override entries without mutating any of
+them. Nonempty template maps, unknown compatibility keys and malformed values
+remain unqualified; credential, endpoint, headers, ownership and lifecycle
+checks are unchanged.
+
+Deleting `compat` from stored configuration is not a workaround: schema
+normalization recreates its empty defaults. The regression must pass real native
+Config/Settings output through reviewer and hosted-search qualification; raw
+handwritten profile fixtures alone cannot establish this compatibility.
 
 The auxiliary request is cloned without temperature and prepared through public
 `llm.prepareCall`. Identity and configuration are checked again after awaits,

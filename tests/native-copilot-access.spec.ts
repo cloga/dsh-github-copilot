@@ -11,6 +11,18 @@ import { captureNativeCopilot, captureNativeCopilotCatalog, nativeCopilotModels 
 const contexts: Context[] = []
 const directories: string[] = []
 
+function normalizedProfile(profile: Record<string, unknown>) {
+  return NativeAdapter.Config({ providers: { 'github-copilot': profile } }).providers.get()['github-copilot']!
+}
+
+function freeze<T>(value: T): T {
+  if (value !== null && typeof value === 'object') {
+    for (const child of Object.values(value)) freeze(child)
+    Object.freeze(value)
+  }
+  return value
+}
+
 afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
   await Promise.all(directories.splice(0).map(directory => rm(directory, { recursive: true, force: true })))
@@ -41,7 +53,9 @@ async function independentCatalogFixture() {
     options: { id: 'llm-pi-ai', name: adapter.name }, fiber: { ctx: { fiber } },
     parent: { tree: { ctx: { baseUrl: import.meta.url } } },
   }
-  const state: { revision: number; profile: unknown; entryActive: boolean } = { revision: 1, profile: {}, entryActive: true }
+  const state: { revision: number; profile: unknown; entryActive: boolean } = {
+    revision: 1, profile: normalizedProfile({}), entryActive: true,
+  }
   ctx.provide('llm', {
     listConfigurableProviders: () => [{ provider: 'github-copilot', declared: false,
       settingsPath: ['providers', 'github-copilot'], settingsNs: 'llm-pi-ai', nativeAuth: { oauth: true } }],
@@ -82,6 +96,83 @@ describe('native Copilot protocol qualification', () => {
     { models: [{ id: model.id, headers: { authorization: 'custom' } }] },
   ])('leaves custom authentication or transport outside the enhancement', profile => {
     expect(nativeCopilotModels(profile, catalog)).toBeUndefined()
+  })
+
+  const layers = ['provider', 'model', 'override'] as const
+  function atLayer(layer: typeof layers[number], compat: unknown): Record<string, unknown> {
+    if (layer === 'model') return { models: [{ id: model.id, compat }] }
+    if (layer === 'override') return { modelOverrides: { [model.id]: { compat } } }
+    return { compat }
+  }
+
+  it.each(layers)('accepts only verified native default compat and strict-tool booleans at %s scope without mutation', layer => {
+    for (const compat of [
+      {}, { chatTemplateKwargs: {} }, { chatTemplateArgs: {} },
+      { chatTemplateKwargs: {}, chatTemplateArgs: {} },
+      { supportsStrictMode: false }, { supportsStrictMode: true },
+      { chatTemplateKwargs: {}, chatTemplateArgs: {}, supportsStrictMode: false },
+      { chatTemplateKwargs: {}, chatTemplateArgs: {}, supportsStrictMode: true },
+      { chatTemplateKwargs: Object.create(null) as Record<string, never> },
+    ]) {
+      const profile = freeze(atLayer(layer, compat))
+      const before = structuredClone(profile)
+      expect(nativeCopilotModels(profile, catalog)?.get(model.id)?.api).toBe('openai-responses')
+      expect(profile).toEqual(before)
+    }
+  })
+
+  it.each(layers)('rejects unknown, malformed or nonempty native compat at %s scope', layer => {
+    for (const compat of [
+      null, false, 0, '', [], new Date(0),
+      { chatTemplateKwargs: null }, { chatTemplateKwargs: [] }, { chatTemplateKwargs: undefined },
+      { chatTemplateKwargs: { enable_thinking: false } }, { chatTemplateKwargs: { empty: undefined } },
+      { chatTemplateKwargs: Object.create({ inherited: true }) as object },
+      { chatTemplateKwargs: new Date(0) },
+      { chatTemplateArgs: null }, { chatTemplateArgs: [] }, { chatTemplateArgs: '' },
+      { chatTemplateArgs: { enable_thinking: false } },
+      { supportsStrictMode: 'false' }, { supportsStrictMode: 0 },
+      { supportsStrictMode: null }, { supportsStrictMode: undefined },
+      { supportsStrictMode: {} },
+      { unknown: {} }, { unknown: undefined }, { unknown: null },
+      { supportsTemperature: false },
+      { chatTemplateKwargs: {}, chatTemplateArgs: {}, supportsStrictMode: false, unknown: {} },
+    ]) expect(nativeCopilotModels(atLayer(layer, compat), catalog)).toBeUndefined()
+  })
+
+  it.each(layers)('keeps credential, endpoint and header exclusions with allowed compat at %s scope', layer => {
+    for (const transport of [
+      { apiKeyEnv: 'CUSTOM_KEY' }, { baseURL: 'https://example.invalid' },
+      { headers: { authorization: 'custom' } },
+    ]) {
+      const value = { compat: { chatTemplateKwargs: {}, chatTemplateArgs: {}, supportsStrictMode: false }, ...transport }
+      const profile = layer === 'model' ? { models: [{ id: model.id, ...value }] }
+        : layer === 'override' ? { modelOverrides: { [model.id]: value } } : value
+      expect(nativeCopilotModels(profile, catalog)).toBeUndefined()
+    }
+  })
+
+  it.each([undefined, false, true])('qualifies real native Config defaults in separate models/overrides profiles (strict=%s)', strict => {
+    const compat = strict === undefined ? undefined : { supportsStrictMode: strict }
+    for (const layer of ['model', 'override'] as const) {
+      const fields = compat === undefined ? {} : { compat }
+      // Core forbids modelOverrides beside a nonempty replacement models list.
+      const input = { ...fields, ...layer === 'model'
+        ? { models: [{ id: model.id, ...fields }] }
+        : { modelOverrides: { [model.id]: fields } } }
+      const profile = freeze(normalizedProfile(input))
+      const before = structuredClone(profile)
+      const expected = { chatTemplateKwargs: {}, chatTemplateArgs: {}, ...compat }
+      expect(profile.compat).toEqual(expected)
+      if (layer === 'model') {
+        expect(profile.models?.[0]?.compat).toEqual(expected)
+        expect(profile.modelOverrides).toEqual({})
+      } else {
+        expect(profile.models).toEqual([])
+        expect(profile.modelOverrides?.[model.id]?.compat).toEqual(expected)
+      }
+      expect(nativeCopilotModels(profile, catalog)?.get(model.id)?.api).toBe('openai-responses')
+      expect(profile).toEqual(before)
+    }
   })
 
   it('uses the adapter-owned catalog when native and plugin pi-ai copies have different paths', async () => {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.13.dsh.0.2.2.rc.3 (prepared)
+
+- Qualify native Copilot profiles after actual Config/Settings normalization: schema-default empty template maps and boolean `supportsStrictMode` no longer disable reviewer-only temperature omission or canonical hosted-search readiness (#483).
+- Apply the same narrow compatibility rule at provider, model and model-override levels while retaining unknown-value, credential, endpoint, headers, ownership and lifecycle refusal.
+- Add normalized native configuration and reviewer/search regressions. No profile rewrite, Core patch, automatic restart, general sampling override or live supplier acceptance is implied.
+
 ## 0.1.0-alpha.12.dsh.0.2.2.rc.3 (prepared)
 
 - Retire the managed route's projected-image MIME preflight and Goal schema rewriting (#481). Core owns image projection and Goal schemas; supplier errors are not preempted by a plugin MIME diagnostic.
