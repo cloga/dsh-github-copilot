@@ -114,9 +114,6 @@ importers:
       '@deepseek-ai/dsh-storage-domain':
         specifier: 0.2.2-rc.3
         version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-storage@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0))
-      '@deepseek-ai/dsh-storage-json':
-        specifier: 0.2.2-rc.3
-        version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-storage@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0))
       '@deepseek-ai/dsh-system-prompt':
         specifier: 0.2.2-rc.3
         version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-llm@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)))(@deepseek-ai/dsh-scope@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0))
@@ -755,12 +752,6 @@ packages:
 
   '@deepseek-ai/dsh-storage-domain@0.2.2-rc.3':
     resolution: {integrity: sha512-6kIAi2q8+8DrToCd2l04suZYHqT0qdanh0yuvR7z8X675YUPVjWmcg3HeY/HmJ55AsIPaqIQA3iX1qyoPJEPcQ==}
-    peerDependencies:
-      '@deepseek-ai/cordis': ~4.1.0
-      '@deepseek-ai/dsh-storage': 0.2.2-rc.3
-
-  '@deepseek-ai/dsh-storage-json@0.2.2-rc.3':
-    resolution: {integrity: sha512-Nv9x8OX2gLLoOj6qGby/uEkNw9PyP/l+quT30OdxbbuKOeCKHuVQPMqH26ESJZYQDa6WZOji6+f0BnwHrZuAYg==}
     peerDependencies:
       '@deepseek-ai/cordis': ~4.1.0
       '@deepseek-ai/dsh-storage': 0.2.2-rc.3
@@ -3142,12 +3133,6 @@ snapshots:
       '@deepseek-ai/dsh-storage': 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)
       '@deepseek-ai/schemastery': 3.19.0
       zod: 4.6.6
-
-  '@deepseek-ai/dsh-storage-json@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-storage@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0))':
-    dependencies:
-      '@deepseek-ai/cordis': 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
-      '@deepseek-ai/dsh-storage': 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)
-      '@deepseek-ai/schemastery': 3.19.0
 
   '@deepseek-ai/dsh-storage@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)':
     dependencies:
