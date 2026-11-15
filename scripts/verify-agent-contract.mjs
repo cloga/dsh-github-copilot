@@ -23,7 +23,7 @@ export function verifyDocumentationReview(policy, template, workflow) {
     || JSON.stringify(policy.impact) !== JSON.stringify(['user-facing', 'unchanged'])
     || JSON.stringify(policy.requiredDocuments) !== JSON.stringify(['README.md', 'README.zh.md', 'docs/*.md'])
     || policy.detailsRequired !== true || policy.versionOnlyInsufficient !== true
-    || policy.rerunOnBodyEdit !== true || policy.semanticReview !== 'human-required'
+    || policy.rerunOnBodyEdit !== true || policy.semanticReview !== 'agent-or-human-required'
     || !template.includes('### Documentation impact') || !template.includes('- Behavior:')
     || !template.includes('- Docs:') || !template.includes('- Details:')
     || !workflow.includes('types: [opened, synchronize, reopened, edited]')
@@ -338,7 +338,7 @@ export async function verifyAgentContract(root = repositoryRoot) {
   verifyDocumentationReview(contract.tasks.tooling.documentationReview, template, ciWorkflow)
   require(contract.tasks.tooling.read.includes('scripts/verify-documentation-impact.mjs')
     && contract.tasks.tooling.tests.includes('tests/scripts/agent.test.mjs')
-    && contract.tasks.tooling.risk.includes('human review remains required'),
+    && contract.tasks.tooling.risk.includes('agent or human semantic review remains required'),
   'documentation impact must retain its implementation, regression and semantic-review boundary')
   require(ciWorkflow.includes('verify:') && ciWorkflow.includes('runs-on: ${{ matrix.os }}')
     && ciWorkflow.includes('os: [ubuntu-latest, windows-latest]')

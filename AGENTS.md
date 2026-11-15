@@ -784,7 +784,10 @@ Auto intent continuity (#293) uses the strict `githubCopilotAutoModelIntent` pub
    changes, beyond version-only edits. For unchanged behavior, explain why.
    The PR `Documentation impact` declaration is checked against changed files
    and rechecked when edited; it cannot judge semantic accuracy or relevance.
-   Reviewers must check those claims and retain dated historical evidence.
+   An agent or human reviewer must check those claims against source and retain
+   dated historical evidence. Record findings in the PR. This is not a new
+   human-only approval gate; agents may complete the review and proceed when
+   actual GitHub review/CI requirements and authorization boundaries are met.
 4. Update `deployment-baseline.json`, `agent-contract.json` and their verifiers when the corresponding contract changes.
 5. Build before package smoke; never hand-edit `lib/`.
 

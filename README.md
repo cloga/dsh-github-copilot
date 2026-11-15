@@ -227,8 +227,9 @@ The exact development target is in `deployment-baseline.json`; follow
 and package/release gates run in GitHub Actions. A successful local source
 check, synthetic fixture, release publication, profile installation, and loaded
 Desktop runtime are different evidence layers; report each accurately.
-PRs declare documentation impact; reviewers still verify semantic accuracy and
-coverage. See [contributing](./CONTRIBUTING.md#change-workflow).
+PRs declare documentation impact; agent or human reviewers still verify semantic
+accuracy and coverage. This adds no human-only approval gate. See
+[contributing](./CONTRIBUTING.md#change-workflow).
 Commit attribution must use an `Assisted-by` trailer for the actual assisting
 tool; do not invent a co-author identity.
 

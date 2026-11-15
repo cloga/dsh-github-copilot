@@ -177,7 +177,8 @@ rc.2 的证据不能证明 rc.3 的行为。安装不会自动运行预检：
 [AGENTS.md](./AGENTS.md)。完整验证及打包／发布门禁由 GitHub Actions 执行。
 本地源码检查、合成 fixture、发布、profile 安装和 Desktop 实际加载属于不同的证据层级，
 应分别如实报告。
-PR 需要说明文档影响，审阅者仍需核实语义准确性和覆盖范围；见[贡献指南](./CONTRIBUTING.md#change-workflow)。
+PR 需要说明文档影响，由 agent 或人工审阅者核实语义准确性和覆盖范围，不额外要求人工审批；
+见[贡献指南](./CONTRIBUTING.md#change-workflow)。
 提交归因必须用 `Assisted-by` 标记实际使用的工具；不得虚构共同作者身份。
 
 更多行为和验收限制见[账号接入](./docs/copilot-accounts.md)、

@@ -156,12 +156,14 @@ test('agent contract keeps documentation review and PR-body edit checks wired in
   const policy = contract.tasks.tooling.documentationReview
   const template = await readFile(join(repositoryRoot, '.github', 'PULL_REQUEST_TEMPLATE.md'), 'utf8')
   const workflow = await readFile(join(repositoryRoot, '.github', 'workflows', 'ci.yml'), 'utf8')
+  assert.equal(policy.semanticReview, 'agent-or-human-required')
   verifyDocumentationReview(policy, template, workflow)
   for (const invalid of [
     { ...policy, detailsRequired: false },
     { ...policy, versionOnlyInsufficient: false },
     { ...policy, rerunOnBodyEdit: false },
     { ...policy, semanticReview: 'automated' },
+    { ...policy, semanticReview: 'human-required' },
   ]) {
     assert.throws(() => verifyDocumentationReview(invalid, template, workflow), /documentation impact/)
   }

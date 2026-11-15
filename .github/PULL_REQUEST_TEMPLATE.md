@@ -35,8 +35,10 @@ Other changes: N/A with the actual Expected vs Actual results above. See docs/ag
 Choose Behavior: user-facing or unchanged. Explain the behavior or why it is unchanged.
 For user-facing changes, list both READMEs and at least one relevant changed docs/*.md
 file in Docs, separated by commas; version-only edits do not count.
-The check verifies structure and changed files, not relevance or correctness: reviewers
-must compare every affected feature, setting, limitation and evidence claim with source.
+The check verifies structure and changed files, not relevance or correctness: an agent
+or human reviewer must compare every affected feature, setting, limitation and evidence
+claim with source and record findings here. This adds no human-only approval gate;
+actual GitHub review requirements and explicit authorization boundaries still apply.
 Documentation-only PRs may explain their impact without filling these fields. -->
 
 - Behavior:
