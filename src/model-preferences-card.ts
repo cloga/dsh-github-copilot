@@ -246,6 +246,7 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       if (mounted.current) {
         setSyncApplying(false)
         if (!current()) uncertain()
+        setSyncCheckEpoch(value => value + 1)
       }
     }
   }
@@ -314,7 +315,10 @@ export function GitHubCopilotModelPreferencesPanel(props: {
       syncGeneration.current++; setSyncPreview(undefined); setSyncResult(undefined)
       scope.pending = true
       const succeeded = await save()
-      if (current()) { scope.pending = false; scope.failed = !succeeded }
+      if (current()) {
+        scope.pending = false; scope.failed = !succeeded
+        setSyncCheckEpoch(value => value + 1)
+      }
       return
     }
     if (!writable || scope.failed || scope.pending && scope.active === '' && scope.queue.length === 0
@@ -344,7 +348,10 @@ export function GitHubCopilotModelPreferencesPanel(props: {
             break
           }
         }
-        if (current()) scope.pending = false
+        if (current()) {
+          scope.pending = false
+          setSyncCheckEpoch(value => value + 1)
+        }
       })()
     }
     await completed

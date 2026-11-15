@@ -841,7 +841,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
       }
       const routeApi = route.current.api
       const routeReasoning = route.current.reasoning
-      const routeCompatibility = JSON.stringify(route.current.compat)
+      const routeCompatibility = structuredClone(route.current.compat)
       const latestPreferences = modelPreferencesView(this.ctx, accountModelsView(this.ctx))
       if (latestPreferences.state !== 'ready' || !latestPreferences.writable
         || latestPreferences.revision !== plan.preferencesRevision || !plan.proofCurrent()) {
@@ -876,7 +876,7 @@ export class GitHubCopilotAuthorizationController extends TypertRemoteService {
           || saved.routeRevision < plan.routeRevision || saved.routeRevision > plan.routeRevision + 1
           || nativeSyncProfileProblem(saved.current, saved.hasSecrets) !== undefined
           || saved.current.api !== routeApi || saved.current.reasoning !== routeReasoning
-          || JSON.stringify(saved.current.compat) !== routeCompatibility
+          || !equalJson(saved.current.compat, routeCompatibility)
           || !nativeSyncSupportsRouteCompatibility(saved.current, plan.models, snapshot.models)
           || !equalJson(saved.raw?.models, plan.models) || !effectiveNativeModelsMatch(saved.current.models, plan.models)
           || currentPreferences.state !== 'ready' || !currentPreferences.writable

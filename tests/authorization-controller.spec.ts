@@ -562,6 +562,23 @@ describe('GitHubCopilotAuthorizationController', () => {
       state: 'error', code: 'NATIVE_MODEL_SYNC_READBACK_FAILED',
     })
   })
+  it('accepts equivalent route compatibility fields reordered during readback', async () => {
+    const profile = {
+      api: 'openai-responses',
+      compat: { supportsStrictMode: false, chatTemplateArgs: {}, chatTemplateKwargs: {} },
+    }
+    const harness = runtime({
+      configured: true, nativeSyncModels: [syncModel('model')], providerProfile: profile,
+      beforeMutate: () => {
+        profile.compat = { chatTemplateKwargs: {}, chatTemplateArgs: {}, supportsStrictMode: false }
+      },
+    })
+    const preview = await harness.controller.prepareNativeModelSync()
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 1,
+    })
+  })
   it('accepts empty schema-injected model compatibility fields during effective readback', async () => {
     const harness = runtime({
       configured: true, nativeSyncModels: [syncModel('model')],
