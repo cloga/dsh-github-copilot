@@ -5,6 +5,12 @@ release tags do not update this file after publication. Check the exact
 [GitHub Release](https://github.com/cloga/dsh-github-copilot/releases) and npm
 version separately rather than treating an old `prepared` label as current status.
 
+## 0.1.0-alpha.15.dsh.0.2.2.rc.3 (prepared)
+
+- Include an optional, bounded offline multi-turn autonomy trace evaluator and synthetic examples (#494).
+- Detect repeated approval/blocker requests, unconsented protected actions and unverified outcomes while preserving explicit task-scoped authorization across tool-state changes.
+- Keep this as a repository analysis aid, not runtime agent enforcement or proof of improved autonomy; no profile, account or model calls are changed.
+
 ## 0.1.0-alpha.14.dsh.0.2.2.rc.3
 
 - Add independently enabled, content-free native Copilot logical stream and hosted-search aggregates (#486).

@@ -73,15 +73,15 @@ After the exact compatible release is available and verified, download its
 original asset and checksum in an empty directory:
 
 ```sh
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
-curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/SHA256SUMS
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.15.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.15.dsh.0.2.2.rc.3.tgz
+curl -fLO https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.15.dsh.0.2.2.rc.3/SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
 For the `web` profile, install the same Release asset:
 
 ```sh
-dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.14.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.14.dsh.0.2.2.rc.3.tgz
+dsh plugin --profile web add https://github.com/cloga/dsh-github-copilot/releases/download/v0.1.0-alpha.15.dsh.0.2.2.rc.3/dsh-github-copilot-0.1.0-alpha.15.dsh.0.2.2.rc.3.tgz
 ```
 
 Choose the intended profile explicitly. Then:
@@ -227,6 +227,8 @@ The exact development target is in `deployment-baseline.json`; follow
 and package/release gates run in GitHub Actions. A successful local source
 check, synthetic fixture, release publication, profile installation, and loaded
 Desktop runtime are different evidence layers; report each accurately.
+The optional [offline autonomy evaluator](./docs/agent-autonomy-evaluation.md)
+analyzes explicitly supplied sanitized traces; it does not run or control agents.
 PRs declare documentation impact; agent or human reviewers still verify semantic
 accuracy and coverage. This adds no human-only approval gate. See
 [contributing](./CONTRIBUTING.md#change-workflow).
