@@ -1,8 +1,10 @@
 import '@earendil-works/pi-ai/api/openai-responses'
 import { Context } from '@deepseek-ai/cordis'
+import Authorization from '@deepseek-ai/dsh-authorization'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionController } from '@deepseek-ai/dsh-api-session-controller'
+import * as CorePiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -107,25 +109,43 @@ it('routes concurrently authorized native children to their selected Copilot mod
       readRecord: async (key: string) => records.get(key),
       listRecords: async () => [...records.keys()].map(key => ({ key, kind: 'grant' })),
       deleteRecord: async () => { throw new Error('unexpected fixture credential deletion') },
-      modifyRecord: async () => { throw new Error('valid synthetic credential must not refresh') },
+      modifyRecord: async (key: string, mutate: (record: unknown) => Promise<unknown>) => {
+        const next = await mutate(records.get(key))
+        if (next === undefined) records.delete(key)
+        else records.set(key, next as typeof grant)
+        ctx.emit('credentials/record-updated', key as never)
+        return records.get(key)
+      },
     })
     const settings = {
       'github-copilot': {
         activeAccountId: 'canonical',
         continuationDefaultHistory: [{ enabled: true, changedAt: 1 }],
       },
-      'llm-pi-ai': { providers: {} },
+      'llm-pi-ai': { providers: { 'github-copilot': { models: [] } } },
     }
     let accountSettingsRevision = 0
     ctx.provide('settings', {
       describe: () => Object.entries(settings).map(([ns, value]) => ({
         ns, revision: ns === 'github-copilot' ? accountSettingsRevision : 0, value, user: value,
       })),
-      mutate: async () => { throw new Error('unexpected fixture settings mutation') },
+      mutate: async (namespace: string, operations: readonly { op: string; path: string[]; value?: unknown }[],
+        expected: number) => {
+        if (namespace !== 'github-copilot' || expected !== accountSettingsRevision) throw new Error('fixture Settings conflict')
+        for (const operation of operations) {
+          if (operation.op === 'set' && operation.path.length === 1 && operation.path[0] === 'activeAccountId'
+            && typeof operation.value === 'string') {
+            settings['github-copilot'].activeAccountId = operation.value
+          }
+        }
+        ctx.emit('settings/document-updated', namespace as SettingsNamespace, ++accountSettingsRevision)
+      },
     })
     ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: PARENT, model: PARENT }) })
     await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     ctx.provide('tokenMeter', { estimateMessage: () => 1, measure: () => ({ totalTokens: 1 }) })
+    await ctx.plugin(Authorization)
+    await ctx.plugin(CorePiAi, settings['llm-pi-ai'])
     await ctx.plugin(GitHubCopilotPlugin, {
       enabled: true, providers: [], includeSources: true, stripServerTools: true,
       idleTimeoutMs: 300_000, probe: false, probeTimeoutMs: 30_000,
@@ -209,9 +229,14 @@ it('routes concurrently authorized native children to their selected Copilot mod
     for (const child of children) {
       expect(accounts.turns.current(child.session)).toMatchObject({ accountId: 'canonical', source: 'global' })
     }
-    settings['github-copilot'].activeAccountId = SECOND
-    ctx.emit('settings/document-updated', 'github-copilot' as SettingsNamespace, ++accountSettingsRevision)
     expect(signals.every(signal => signal && !signal.aborted)).toBe(true)
+    const accountHost = ctx.get('githubCopilotAccounts')!.host
+    release.resolve()
+    do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
+    expect(completed).toHaveLength(2)
+    expect(await accountHost.switchAccount(SECOND, accountSettingsRevision)).toMatchObject({
+      state: 'ready', activeAccountId: SECOND,
+    })
     const third = await call('third', MODELS[0]!, 'high')
     expect(third.isError).toBe(false)
     await vi.waitFor(() => expect(wire).toHaveLength(3), { timeout: 15_000 })

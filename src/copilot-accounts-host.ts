@@ -314,6 +314,14 @@ export class CopilotAccountsHost {
     if (selected === undefined) fail('COPILOT_ACCOUNTS_SELECTED_MISSING')
     return native === undefined || copilotAccountKey(selected) !== copilotAccountKey(native)
   }
+  async nativeCredentialMatches(accountId: string): Promise<boolean> {
+    const binding = this.capture()
+    if (binding.accountId !== id(accountId)) fail('COPILOT_ACCOUNTS_CHANGED')
+    if (binding.accountId === 'canonical') return true
+    const mismatch = await this.nativeCredentialMismatch(binding.accountId)
+    binding.assertCurrent()
+    return !mismatch
+  }
   async get(): Promise<CopilotAccountsView> {
     return this.accountView()
   }

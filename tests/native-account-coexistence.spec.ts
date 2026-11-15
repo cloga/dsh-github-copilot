@@ -26,8 +26,9 @@ it('applies confirmed account switches to native credentials and retains the nat
     kind: 'grant' as const, payload: { type: 'oauth', refresh: `synthetic-${account}`,
       access: `synthetic-access-${account}`, expires, availableModelIds: [model.id] },
   })
+  const savedA = syntheticGrant(A)
   const grants = new Map<string, SyntheticGrant>([
-    [KEY, syntheticGrant(A)], [key(A), syntheticGrant(A)], [key(B), syntheticGrant(B)],
+    [KEY, structuredClone(savedA)], [key(A), savedA], [key(B), syntheticGrant(B)],
   ])
   const nativeSelection = { provider: 'github-copilot', model: model.id }
   const nativeConfig = { providers: { 'github-copilot': { models: [{ id: model.id }] } } }
@@ -56,7 +57,8 @@ it('applies confirmed account switches to native credentials and retains the nat
     ctx.emit('credentials/record-updated', recordKey as never)
   })
   const nativeAgent = { id: 'native-session', status: 'running',
-    session: { id: 'native-session', requestHeader: () => ({ config: nativeSelection, adapterDefaults: {} }) } }
+    session: { id: 'native-session', header: { id: 'native-session' },
+      requestHeader: () => ({ config: nativeSelection, adapterDefaults: {} }) } }
   const wireAccounts: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input)

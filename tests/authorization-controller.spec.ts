@@ -91,6 +91,7 @@ function runtime(options: {
   accountModels?: readonly { id: string; name: string; api: string }[]
   nativeSyncModels?: readonly AccountModelDescriptor[]
   nativeSyncAccount?: string
+  nativeSyncCanonicalMatches?: boolean
   routeSecrets?: readonly { path: readonly string[]; set: boolean }[]
   githubCopilotUserSettings?: Record<string, unknown>
   githubCopilotEffectiveSettings?: Record<string, unknown>
@@ -250,6 +251,8 @@ function runtime(options: {
     services.set('githubCopilotAccounts', { host: {
       capture,
       acquire: vi.fn(() => ({ binding: capture(), release: vi.fn() })),
+      nativeCredentialMatches: vi.fn(async (accountId: string) =>
+        options.nativeSyncCanonicalMatches ?? accountId === 'canonical'),
     } })
   }
   const ctx = new Context()
@@ -513,6 +516,22 @@ describe('GitHubCopilotAuthorizationController', () => {
       state: 'error', code: 'NATIVE_MODEL_SYNC_PLAN_STALE',
     })
     expect(stale.mutate).not.toHaveBeenCalled()
+  })
+  it('allows native model sync when the selected saved account is already applied to the canonical credential', async () => {
+    const harness = runtime({
+      configured: true, nativeSyncAccount: 'saved-account', nativeSyncCanonicalMatches: true,
+      nativeSyncModels: [syncModel('model')], providerProfile: { api: 'openai-responses' },
+    })
+    const preview = await harness.controller.previewNativeModelSync()
+    expect(preview).toMatchObject({ state: 'ready', syncableCount: 1 })
+    if (preview.planId === undefined) throw new Error('expected a native sync plan')
+    await expect(harness.controller.applyNativeModelSync(preview.planId)).resolves.toEqual({
+      state: 'ready', modelCount: 1,
+    })
+    const accountHost = harness.services.get('githubCopilotAccounts') as {
+      host: { nativeCredentialMatches: ReturnType<typeof vi.fn> }
+    }
+    expect(accountHost.host.nativeCredentialMatches).toHaveBeenCalledWith('saved-account')
   })
   it('does not assume canonical ownership when the account service is unavailable', async () => {
     const harness = runtime({

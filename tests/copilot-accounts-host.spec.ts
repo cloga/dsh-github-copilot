@@ -12,8 +12,17 @@ const B = '22222222-2222-4222-8222-222222222222'
 function fixture(selected: unknown = A) {
   const ctx = new Context()
   let revision = 1
-  const rows = [A, B].map(id => ({ key: `github-copilot/account-${id}`, kind: 'grant' }))
-  const readRecord = vi.fn(async () => { throw new Error('No payload reads expected') })
+  const rows = [
+    { key: 'llm-pi-ai/github-copilot', kind: 'grant' },
+    ...[A, B].map(id => ({ key: `github-copilot/account-${id}`, kind: 'grant' })),
+  ]
+  const sharedGrant = { kind: 'grant', payload: {
+    type: 'oauth', refresh: 'synthetic-account-a', access: 'synthetic-access-a', expires: Date.now() + 3_600_000,
+  } }
+  const grants = new Map(rows.map(row => [row.key, { kind: 'grant', payload: {
+    ...sharedGrant.payload,
+  } }]))
+  const readRecord = vi.fn(async (key: string) => grants.get(key))
   ctx.provide('credentials', { listRecords: async () => rows, readRecord,
     modifyRecord: vi.fn(), deleteRecord: vi.fn() })
   ctx.provide('settings', {
@@ -23,12 +32,14 @@ function fixture(selected: unknown = A) {
   const host = new CopilotAccountsHost(ctx, { routeDiagnostic: () => undefined })
   return { ctx, host, readRecord, rows, change(value: unknown) { selected = value; revision++; host.selectionChanged() } }
 }
-it('lists safe membership without credentials, discovery or implicit fallback', async () => {
+it('verifies the selected native credential without identity discovery or implicit fallback', async () => {
   const f = fixture()
   const view = await f.host.get()
   expect(view).toMatchObject({ state: 'ready', activeAccountId: A, revision: 1 })
   expect(CopilotAccountsViewSchema.safeParse(view).success).toBe(true)
-  expect(f.readRecord).not.toHaveBeenCalled()
+  expect(new Set(f.readRecord.mock.calls.map(([key]) => key))).toEqual(new Set([
+    'llm-pi-ai/github-copilot', `github-copilot/account-${A}`,
+  ]))
   f.change('invalid')
   expect(await f.host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_SELECTOR_INVALID' })
   f.host.dispose()
@@ -56,6 +67,7 @@ it('classifies record notifications from retained selector metadata without read
   const f = fixture()
   f.ctx.provide('githubCopilotAccounts', { host: f.host })
   await f.host.get()
+  f.readRecord.mockClear()
   const describe = vi.spyOn(f.ctx.settings, 'describe')
   for (let index = 0; index < 20; index++) {
     expect(isActiveCopilotRecord(f.ctx, `github-copilot/account-${A}`)).toBe(true)

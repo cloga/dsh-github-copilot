@@ -76,6 +76,7 @@ async function verifySavedAutoPreferences(profile: Context, config: ResolvedInli
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
 const key = (id: string) => credentialKey('github-copilot', `account-${id}`)
+const nativeKey = credentialKey('llm-pi-ai', 'github-copilot')
 const grant = (id: string) => ({ kind: 'grant' as const, payload: {
   type: 'oauth', refresh: `synthetic-${id}`, access: `synthetic-access-${id}`, expires: 0,
 } })
@@ -279,7 +280,8 @@ it('persists independent accounts and SettingsForms CAS across restart with nati
     await host.add()
     await vi.waitFor(async () => expect((await host.get()).operation).toBeUndefined(), { timeout: 15_000 })
     expect(await host.get()).toMatchObject({ state: 'ready', activeAccountId: A })
-    const added = (await ctx.credentials.listRecords()).find(row => row.key !== key(A) && row.key !== key(B))!
+    const added = (await ctx.credentials.listRecords())
+      .find(row => row.key !== key(A) && row.key !== key(B) && row.key !== nativeKey)!
     expect(await ctx.credentials.readRecord(added.key)).toMatchObject({ payload: { refresh: 'synthetic-new-user' } })
     expect(await ctx.credentials.readRecord(key(B))).toEqual(beforeB)
     host.dispose()

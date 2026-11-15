@@ -394,7 +394,7 @@ describe('Models account management', () => {
     expect(text()).toContain('@demo-b')
     await click('@demo-b')
     expect(api.switchAccount).not.toHaveBeenCalled()
-    expect(text()).toContain('encrypted reasoning')
+    expect(text()).toContain('Requests already in progress are not redirected')
     await click('Confirm switch')
     expect(api.switchAccount).toHaveBeenCalledExactlyOnceWith(view().accounts[1]!.id, 2)
   })

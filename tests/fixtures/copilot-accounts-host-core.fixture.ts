@@ -21,7 +21,10 @@ const grant = (id: string, enterpriseUrl?: string) => ({ kind: 'grant' as const,
 afterEach(() => vi.unstubAllGlobals())
 function fixture(activeAccountId: unknown = undefined) {
   const ctx = new Context()
-  const records = new Map([[GITHUB_COPILOT_CREDENTIAL_KEY, grant('canonical')], [key(A), grant(A)], [key(B), grant(B)]])
+  const nativeAccount = activeAccountId === A || activeAccountId === B ? activeAccountId : 'canonical'
+  const records = new Map([[key(A), grant(A)], [key(B), grant(B)]])
+  records.set(GITHUB_COPILOT_CREDENTIAL_KEY,
+    nativeAccount === A || nativeAccount === B ? structuredClone(records.get(key(nativeAccount))!) : grant(nativeAccount))
   let revision = 1
   const settings = {
     describe: (): { ns: string; revision: number; value: unknown }[] =>
@@ -273,6 +276,7 @@ describe('independent Copilot account ownership', () => {
     })
 
     expect(await f.host.switchAccount(B, 1)).toMatchObject({ state: 'ready', activeAccountId: B })
+    expect(await f.host.nativeCredentialMatches(B)).toBe(true)
     expect(f.records.get(GITHUB_COPILOT_CREDENTIAL_KEY)?.payload.refresh).toBe(`synthetic-${B}`)
     const backupKey = [...f.records.keys()].find(recordKey =>
       recordKey.startsWith('github-copilot/account-') && recordKey !== key(A) && recordKey !== key(B))
@@ -287,6 +291,8 @@ describe('independent Copilot account ownership', () => {
   })
   it('lets the user explicitly reconcile a selected account with externally changed native credentials', async () => {
     const f = fixture(B)
+    f.records.set(GITHUB_COPILOT_CREDENTIAL_KEY, grant('canonical'))
+    expect(await f.host.nativeCredentialMatches(B)).toBe(false)
     f.fetch.mockImplementation(async (_url, init) => {
       const canonical = new Headers(init?.headers).get('Authorization')?.includes('synthetic-access-canonical')
       return Response.json({ login: canonical ? 'alice' : 'bob', id: canonical ? 1 : 2 })
@@ -351,7 +357,9 @@ describe('independent Copilot account ownership', () => {
     expect(view).toMatchObject({ state: 'ready', switchable: true, activeAccountId: A })
     expect(view.diagnostic).toBeUndefined()
     expect(f.fetch).not.toHaveBeenCalled()
-    expect(f.credentials.readRecord).not.toHaveBeenCalled()
+    expect(new Set(f.credentials.readRecord.mock.calls.map(([recordKey]) => recordKey))).toEqual(new Set([
+      GITHUB_COPILOT_CREDENTIAL_KEY, key(A),
+    ]))
     expect(f.settings.mutate).not.toHaveBeenCalled()
     f.host.dispose()
   })
@@ -391,6 +399,7 @@ describe('independent Copilot account ownership', () => {
     expect(await host.get()).toMatchObject({ state: 'ready', switchable: true })
     managed = false
     expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_ROUTE_BLOCKED', switchable: false })
+    f.credentials.readRecord.mockClear()
     managed = true; complete = false
     expect(await host.get()).toMatchObject({ diagnostic: 'COPILOT_ACCOUNTS_EVIDENCE_INCOMPLETE', switchable: false })
     expect(f.fetch).not.toHaveBeenCalled()

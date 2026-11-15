@@ -4,11 +4,18 @@ import { CopilotAccountsHost } from '../src/copilot-accounts-host.ts'
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
+const nativeKey = 'llm-pi-ai/github-copilot'
 function fixture() {
   const ctx = new Context()
-  const records = new Map([A, B].map(id => [`github-copilot/account-${id}`, { kind: 'grant', payload: {
+  const grant = (id: string) => ({ kind: 'grant', payload: {
     type: 'oauth', refresh: `synthetic-${id}`, access: 'synthetic-access', expires: Date.now() + 3_600_000,
-  } }]))
+  } })
+  const accountA = grant(A)
+  const records = new Map<string, ReturnType<typeof grant>>([
+    [nativeKey, structuredClone(accountA)],
+    [`github-copilot/account-${A}`, accountA],
+    [`github-copilot/account-${B}`, grant(B)],
+  ])
   ctx.provide('settings', {
     describe: () => [{ ns: 'github-copilot', revision: 1, value: { activeAccountId: A } }],
     mutate: vi.fn(async () => { throw new Error('Identity reads must not mutate settings') }),
@@ -29,7 +36,7 @@ function fixture() {
 }
 afterEach(() => vi.restoreAllMocks())
 describe('account identity display cache', () => {
-  it('retains inactive verified names after freshness expiry without reads or network in status', async () => {
+  it('retains inactive verified names after freshness expiry without identity discovery in status', async () => {
     const f = fixture()
     expect((await f.host.ensureIdentityFor(A)).state).toBe('ready')
     expect((await f.host.ensureIdentityFor(B)).state).toBe('ready')
@@ -39,7 +46,9 @@ describe('account identity display cache', () => {
     expect(view.accounts.find(row => row.id === B)?.identity?.login).toBe('bob')
     expect(f.host.cachedIdentity(B)?.login).toBe('bob')
     expect(f.fetch).not.toHaveBeenCalled()
-    expect(f.read).not.toHaveBeenCalled()
+    expect(new Set(f.read.mock.calls.map(([key]) => key))).toEqual(new Set([
+      nativeKey, `github-copilot/account-${A}`,
+    ]))
     await f.host.ensureIdentityFor(B)
     expect(f.fetch).toHaveBeenCalledOnce()
     f.host.dispose()
