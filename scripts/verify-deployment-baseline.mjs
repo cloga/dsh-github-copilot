@@ -313,6 +313,14 @@ assert(nativeSync?.required === true
   && nativeSync.tests?.some(entry => entry.file === 'tests/fixtures/native-model-sync-core.fixture.ts')
   && (await read('.github/workflows/ci.yml')).includes("['native-model-sync-core.fixture.ts',1]"),
   'native model sync evidence must retain bounded synthetic scope and an executed tagged-source fixture')
+const nativeAccountEvidence = manifest.capabilities?.find(capability => capability.id === 'copilot-session-accounts')
+const reviewerAccountAssertion = 'expected all 37 native reviewer/account tests, none skipped'
+assert(nativeAccountEvidence?.tests?.some(entry => entry.file === 'tests/native-copilot-access.spec.ts'
+    && entry.name === 'qualifies the explicitly configured model ID only for account attribution')
+  && nativeAccountEvidence.tests.some(entry => entry.file === 'tests/fixtures/auto-review-copilot-core.fixture.ts'
+    && entry.name === 'records %s through real Loader qualification and synthetic stream delivery')
+  && (await read('.github/workflows/ci.yml')).split(reviewerAccountAssertion).length === 3,
+  'native account evidence must retain separate account qualification and executed synthetic delivery coverage')
 const nativeWeb = manifest.capabilities?.find(capability => capability.id === 'native-web-ownership')
 assert(nativeWeb?.required === true && nativeWeb.evidenceScope === 'native-web-composition-and-synthetic-tool-execution-not-live-search',
   'native web ownership must retain bounded composition evidence, not claim live search')

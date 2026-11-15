@@ -437,6 +437,9 @@ test('multi-account plan retains explicit direct-grant ownership and UI boundari
   assert.match(contract.tasks.accounts.risk, /Credits selects this Session's subsequent turns or restores inheritance/)
   assert.match(contract.tasks.accounts.risk, /hold account pins through native turn\/end\/disposal/)
   assert.match(contract.tasks.accounts.risk, /No durable account events, history\/default\/model\/Usage writes/)
+  assert.ok(plan.read.includes('src/native-copilot-access.ts'))
+  assert.ok(plan.tests.includes('tests/fixtures/auto-review-copilot-core.fixture.ts'))
+  assert.match(contract.tasks.accounts.nativeTurnEvidenceBoundary, /never qualifies reviewer\/search protocols/)
   const doc = await readFile(join(repositoryRoot, 'docs/copilot-accounts.md'), 'utf8')
   assert.match(doc, /immutable account identifier/)
   assert.match(doc, /not a cross-namespace/)
@@ -592,7 +595,7 @@ test('manual replay recovery plan retains explicit consent and rejects weakened 
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test('login environment plan rejects weakened native OAuth and tenant boundaries', async () => {
+test('account plan rejects weakened login and native turn evidence boundaries', async () => {
   const plan = await planTask('accounts')
   assert.ok(plan.read.includes('src/copilot-login-environment.ts'))
   assert.ok(plan.tests.includes('tests/scripts/copilot-login-environment.test.mjs'))
@@ -614,6 +617,16 @@ test('login environment plan rejects weakened native OAuth and tenant boundaries
       mutate(contract)
       await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
       await assert.rejects(verifyAgentContract(root), /login environments/)
+    }
+    for (const mutate of [
+      contract => { delete contract.tasks.accounts.nativeTurnEvidenceBoundary },
+      contract => { contract.tasks.accounts.nativeTurnEvidenceBoundary = contract.tasks.accounts.nativeTurnEvidenceBoundary.replace('never qualifies reviewer/search protocols', 'qualifies reviewer/search protocols') },
+      contract => { contract.tasks.accounts.tests = contract.tasks.accounts.tests.filter(file => file !== 'tests/fixtures/auto-review-copilot-core.fixture.ts') },
+    ]) {
+      const contract = structuredClone(original)
+      mutate(contract)
+      await writeFile(join(root, 'agent-contract.json'), JSON.stringify(contract))
+      await assert.rejects(verifyAgentContract(root), /native account evidence/)
     }
   } finally { await rm(root, { recursive: true, force: true }) }
 })

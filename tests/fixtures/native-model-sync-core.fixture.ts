@@ -26,7 +26,7 @@ vi.mock('../../src/native-copilot-access.ts', async (importOriginal) => {
     if (revision === undefined) return undefined
     const catalog = new Map(getFixtureCatalog('github-copilot').map(({ id, api }) => [id, { id, api }]))
     return {
-      namespace: 'llm-pi-ai', catalog, configuredModels: undefined,
+      namespace: 'llm-pi-ai', catalog, configuredModels: undefined, accountModelIds: undefined,
       assertCurrent() {
         if (ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')?.revision !== revision) {
           throw new Error('COPILOT_NATIVE_ROUTE_CHANGED')

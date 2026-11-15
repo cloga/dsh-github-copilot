@@ -72,6 +72,28 @@ export function nativeCopilotModels(profile: unknown, catalog: unknown): Readonl
   return models
 }
 
+/** Account membership does not establish a model's protocol or capabilities. */
+function nativeAccountModelIds(
+  profile: unknown, configuredModels: ReadonlyMap<string, NativeCopilotModel> | undefined,
+): ReadonlySet<string> | undefined {
+  if (!record(profile) || configuredModels === undefined
+    || profile.modelOverrides !== undefined && !plainRecord(profile.modelOverrides)) return undefined
+  const configured = profile.models
+  if (configured === undefined || Array.isArray(configured) && configured.length === 0) {
+    return new Set(configuredModels.keys())
+  }
+  if (!Array.isArray(configured) || configured.length > 512) return undefined
+  const ids = new Set<string>()
+  for (const model of configured) {
+    if (!record(model) || typeof model.id !== 'string' || model.id.length === 0 || model.id.length > 512
+      || model.id !== model.id.trim() || /[\p{Cc}\p{Cf}\u2028\u2029]/u.test(model.id) || ids.has(model.id)) {
+      return undefined
+    }
+    ids.add(model.id)
+  }
+  return ids
+}
+
 function nativeCatalogUrl(manifestPath: string, exports: unknown): string | undefined {
   if (!record(exports)) return undefined
   const exact = exports['./providers/all']
@@ -99,6 +121,7 @@ function nativeCatalogUrl(manifestPath: string, exports: unknown): string | unde
 
 export interface NativeCopilotSnapshot {
   readonly models: ReadonlyMap<string, NativeCopilotModel>
+  readonly accountModelIds: ReadonlySet<string> | undefined
   readonly namespace: string
   assertCurrent(): void
 }
@@ -106,6 +129,7 @@ export interface NativeCopilotSnapshot {
 export interface NativeCopilotCatalogSnapshot {
   readonly catalog: ReadonlyMap<string, NativeCopilotModel>
   readonly configuredModels: ReadonlyMap<string, NativeCopilotModel> | undefined
+  readonly accountModelIds: ReadonlySet<string> | undefined
   readonly namespace: string
   assertCurrent(): void
 }
@@ -159,7 +183,9 @@ export async function captureNativeCopilotCatalog(
   }
   const nativeCatalog = nativeCopilotModels({}, catalog)
   if (!nativeCatalog) return unproven('COPILOT_NATIVE_MODELS_UNPROVEN')
-  const configuredModels = nativeCopilotModels(captured.value.providers[NATIVE_COPILOT], catalog)
+  const profile = captured.value.providers[NATIVE_COPILOT]
+  const configuredModels = nativeCopilotModels(profile, catalog)
+  const accountModelIds = nativeAccountModelIds(profile, configuredModels)
   const module = await import('@deepseek-ai/dsh-llm-pi-ai')
   const current = () => {
     const currentLlm = ctx.get('llm')
@@ -191,6 +217,7 @@ export async function captureNativeCopilotCatalog(
   return {
     catalog: nativeCatalog,
     configuredModels,
+    accountModelIds,
     namespace: directory.settingsNs,
     assertCurrent() {
       if (!current()) throw new Error('COPILOT_NATIVE_ROUTE_CHANGED')
@@ -207,5 +234,6 @@ export async function captureNativeCopilot(
     diagnose('COPILOT_NATIVE_MODELS_UNPROVEN')
     return undefined
   }
-  return { models: snapshot.configuredModels, namespace: snapshot.namespace, assertCurrent: snapshot.assertCurrent }
+  return { models: snapshot.configuredModels, accountModelIds: snapshot.accountModelIds,
+    namespace: snapshot.namespace, assertCurrent: snapshot.assertCurrent }
 }

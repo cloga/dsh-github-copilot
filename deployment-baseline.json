@@ -8,14 +8,14 @@
   },
   "package": {
     "name": "dsh-github-copilot",
-    "version": "0.1.0-alpha.19.dsh.0.2.2.rc.3"
+    "version": "0.1.0-alpha.20.dsh.0.2.2.rc.3"
   },
   "releaseLines": [
     { "core": "0.2.0-rc.2", "version": "0.4.2-alpha.15", "status": "published" },
     { "core": "0.2.1-alpha.4", "version": "0.4.2-alpha.16", "status": "published" },
     { "core": "0.2.1-alpha.5", "version": "0.1.0-alpha.2.dsh.0.2.1.alpha.5", "status": "published" },
     { "core": "0.2.1-rc.3", "version": "0.1.0-alpha.5.dsh.0.2.1.rc.3", "status": "published" },
-    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.19.dsh.0.2.2.rc.3", "status": "pending" }
+    { "core": "0.2.2-rc.3", "version": "0.1.0-alpha.20.dsh.0.2.2.rc.3", "status": "pending" }
   ],
   "evidence": {
     "kind": "source-and-synthetic-test-inventory",
@@ -433,6 +433,8 @@
       "activation": "managed-session-choice-or-global-default-with-qualified-native-turn-evidence",
       "sourceMarkers": [
         {"file": "src/session-accounts-host.ts", "marker": "class SessionAccountsHost"},
+        {"file": "src/session-accounts-host.ts", "marker": "route.accountModelIds?.has(evidence.model)"},
+        {"file": "src/native-copilot-access.ts", "marker": "accountModelIds"},
         {"file": "src/session-accounts-controller.ts", "marker": "extends TypertRemoteService"},
         {"file": "src/session-accounts-remote.ts", "marker": "githubCopilotSessionAccount"},
         {"file": "src/config.ts", "marker": "sessionAccounts:"},
@@ -444,6 +446,9 @@
         {"file": "tests/session-accounts-host.spec.ts", "name": "holds account mutation fencing through abort until the actual turn boundary"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "ignores identity completion after the turn ends"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "records native evidence only after matching account proof and delivery"},
+        {"file": "tests/session-accounts-host.spec.ts", "name": "records an explicitly configured native model without treating it as protocol-qualified"},
+        {"file": "tests/native-copilot-access.spec.ts", "name": "qualifies the explicitly configured model ID only for account attribution"},
+        {"file": "tests/fixtures/auto-review-copilot-core.fixture.ts", "name": "records %s through real Loader qualification and synthetic stream delivery"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "keeps native evidence separate from managed account admission and identity"},
         {"file": "tests/session-accounts-host.spec.ts", "name": "leaves native evidence unknown when the selected and canonical accounts differ"},
         {"file": "tests/native-account-coexistence.spec.ts", "name": "applies confirmed account switches to native credentials and retains the native route after disposal"},
