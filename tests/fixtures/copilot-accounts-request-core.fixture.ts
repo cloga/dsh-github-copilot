@@ -97,7 +97,7 @@ it.each(['/responses', '/chat/completions', '/v1/messages'])(
     expect((await accounts.ensureIdentityFor(A)).state).toBe('ready')
     owner.admit({ session }, 1, firstSignal)
     await ctx.plugin(LlmRuntime)
-    await ctx.plugin(previewPlugin, {})
+    await ctx.plugin(previewPlugin, { registerLegacyProvider: true })
     const request = { provider: 'github-copilot-preview', model: MODEL }
     const messages = [createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })]
     const pending = await ctx.llm.prepareCall(request)

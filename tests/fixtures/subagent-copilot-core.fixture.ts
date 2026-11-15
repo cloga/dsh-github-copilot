@@ -22,6 +22,7 @@ import { expect, it, vi } from 'vitest'
 import * as GitHubCopilotPlugin from '../../src/index.ts'
 import {
   GITHUB_COPILOT_CREDENTIAL_KEY as KEY,
+  GITHUB_COPILOT_PROVIDER_ID as NATIVE,
   GITHUB_COPILOT_PREVIEW_PROVIDER_ID as PREVIEW,
 } from '../../src/copilot-identity.ts'
 
@@ -31,6 +32,13 @@ const PARENT = 'fixture-parent'
 const MISSING = 'fixture-missing'
 const SECOND = '22222222-2222-4222-8222-222222222222'
 const SECOND_KEY = `github-copilot/account-${SECOND}`
+
+function nativeConfig(ids: readonly string[]) {
+  return { providers: { [NATIVE]: { api: 'openai-responses', models: ids.map(id => ({
+    id, name: id, contextWindow: 128_000, maxTokens: 4_096, input: ['text'],
+    reasoningEfforts: { low: 'low', high: 'high' },
+  })) } } }
+}
 
 function response(model: string) {
   const item = { type: 'message', id: `message-${model}`, role: 'assistant',
@@ -46,7 +54,7 @@ function response(model: string) {
   ].join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
 
-it('routes concurrently authorized native children to their selected Copilot models and efforts', async () => {
+it('routes native Copilot children across a confirmed account switch', async () => {
   expect(process.env.DSH_CORE_EVIDENCE).toBe('tagged-source-runtime')
   expect(process.env.DSH_PUBLISHED_CORE_RELEASE).toBe('0.2.2-rc.3')
   const directory = await mkdtemp(join(tmpdir(), 'copilot-subagent-fixture-'))
@@ -82,7 +90,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
       supported_endpoints: ['/responses'],
       capabilities: {
         supports: { streaming: true, tool_calls: true, vision: false, reasoning_effort: ['low', 'high'] },
-        limits: { max_context_window_tokens: 128_000, max_prompt_tokens: 96_000, max_output_tokens: 4_096 },
+        limits: { max_context_window_tokens: 128_000, max_prompt_tokens: 128_000, max_output_tokens: 4_096 },
       },
     })) })
     if (!String(input).endsWith('/responses')) throw new Error('unexpected fixture request')
@@ -126,7 +134,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
         activeAccountId: 'canonical',
         continuationDefaultHistory: [{ enabled: true, changedAt: 1 }],
       },
-      'llm-pi-ai': { providers: { 'github-copilot': { models: [] } } },
+      'llm-pi-ai': nativeConfig(MODELS),
     }
     let accountSettingsRevision = 0
     ctx.provide('settings', {
@@ -149,7 +157,8 @@ it('routes concurrently authorized native children to their selected Copilot mod
     await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     ctx.provide('tokenMeter', { estimateMessage: () => 1, measure: () => ({ totalTokens: 1 }) })
     await ctx.plugin(Authorization)
-    await ctx.plugin(CorePiAi, settings['llm-pi-ai'])
+    const nativeProvider = ctx.plugin(CorePiAi, settings['llm-pi-ai'])
+    await nativeProvider
     await ctx.plugin(GitHubCopilotPlugin, {
       enabled: true, providers: [], includeSources: true, stripServerTools: true,
       idleTimeoutMs: 300_000, probe: false, probeTimeoutMs: 30_000,
@@ -172,12 +181,13 @@ it('routes concurrently authorized native children to their selected Copilot mod
     await ctx.plugin(SubagentRuntime)
     await ctx.plugin(Spawn, { providerName: 'spawn' })
     await ctx.plugin(ToolSubagent, { provider: 'spawn', modelSelection: true, modelDiscovery: true })
-    const allowedModels = [...MODELS, NEW_MODEL, MISSING].map(model => ({ provider: PREVIEW, model }))
+    const allowedModels = [...MODELS, NEW_MODEL, MISSING].map(model => ({ provider: NATIVE, model }))
     await ctx.plugin(SubagentModelSelectionConfig, { enabled: true, allowedModels })
 
     const controller = new SessionController(ctx, { nativeOpen: false }, { canOpenPath: () => false })
     const catalog = await controller.modelCatalog()
-    const models = catalog.groups.find(group => group.id === PREVIEW)?.models
+    expect(catalog.groups.some(group => group.id === PREVIEW)).toBe(false)
+    const models = catalog.groups.find(group => group.id === NATIVE)?.models
     expect(models?.map(model => model.id)).toEqual(MODELS)
     expect(models?.map(model => model.reasoning?.efforts.map(effort => effort.id))).toEqual([
       ['low', 'high'], ['low', 'high'],
@@ -194,13 +204,13 @@ it('routes concurrently authorized native children to their selected Copilot mod
       agent: parent,
       signal: new AbortController().signal,
       calls: [{ type: 'tool-call', id: ToolCallId('discover'), name: 'list_subagent_models',
-        arguments: JSON.stringify({ provider: PREVIEW }) }],
+        arguments: JSON.stringify({ provider: NATIVE }) }],
     }))
     const discoveryResult = discovery.results[0]?.result
     expect(discoveryResult?.isError).toBe(false)
     const discoveryText = discoveryResult?.content.filter(block => block.type === 'text')
       .map(block => block.text).join('')
-    for (const model of MODELS) expect(discoveryText).toContain(`${PREVIEW}/${model}`)
+    for (const model of MODELS) expect(discoveryText).toContain(`${NATIVE}/${model}`)
     expect(discoveryText).not.toContain(NEW_MODEL)
     expect(discoveryText).not.toContain(MISSING)
 
@@ -210,7 +220,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
         signal: new AbortController().signal,
         calls: [{ type: 'tool-call', id: ToolCallId(id), name: 'subagent',
           arguments: JSON.stringify({ description: 'fixture child', prompt: `Handle ${id}.`,
-            provider: PREVIEW, model, reasoning_effort: effort }) }],
+            provider: NATIVE, model, reasoning_effort: effort }) }],
       }))
       if (batch.results.length !== 1) throw new Error('expected one native subagent result')
       return batch.results[0]!.result
@@ -229,12 +239,11 @@ it('routes concurrently authorized native children to their selected Copilot mod
     expect(authorizations).toEqual(['Bearer synthetic-access', 'Bearer synthetic-access'])
     const children = ctx.agents.list().filter(agent => agent.session.header.parentSession === parent.session.id)
     expect(children).toHaveLength(2)
-    const accounts = ctx.get('githubCopilotSessionAccounts')!
-    for (const child of children) {
-      expect(accounts.turns.current(child.session)).toMatchObject({ accountId: 'canonical', source: 'global' })
-    }
     expect(signals.every(signal => signal && !signal.aborted)).toBe(true)
     const accountHost = ctx.get('githubCopilotAccounts')!.host
+    expect(await accountHost.switchAccount(SECOND, accountSettingsRevision)).toMatchObject({
+      state: 'error', activeAccountId: 'canonical', diagnostic: 'COPILOT_ACCOUNTS_BUSY',
+    })
     release.resolve()
     do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
     expect(completed).toHaveLength(2)
@@ -249,7 +258,6 @@ it('routes concurrently authorized native children to their selected Copilot mod
     expect(signalsActiveAtDispatch).toEqual([true, true, true])
     const laterChildren = ctx.agents.list().filter(agent => agent.session.header.parentSession === parent.session.id)
     expect(laterChildren).toHaveLength(1)
-    expect(accounts.turns.current(laterChildren[0]!.session)).toMatchObject({ accountId: SECOND, source: 'global' })
     releaseThird.resolve()
     const third = await thirdRun
     expect(third.isError).toBe(false)
@@ -263,17 +271,23 @@ it('routes concurrently authorized native children to their selected Copilot mod
     advertisedModels = [...MODELS, NEW_MODEL]
     const refreshed = await ctx.get('githubCopilotPreview')!.discover({ force: true })
     expect(refreshed.state).toBe('ready')
+    expect(refreshed.models.map(model => model.id)).toContain(NEW_MODEL)
+    const beforeConfigUpdate = await controller.modelCatalog()
+    expect(beforeConfigUpdate.groups.find(group => group.id === NATIVE)?.models.map(model => model.id))
+      .not.toContain(NEW_MODEL)
+    settings['llm-pi-ai'] = nativeConfig([...MODELS, NEW_MODEL])
+    await nativeProvider.update(settings['llm-pi-ai'])
     const refreshedCatalog = await controller.modelCatalog()
-    const newEntry = refreshedCatalog.groups.find(group => group.id === PREVIEW)?.models.find(model => model.id === NEW_MODEL)
+    const newEntry = refreshedCatalog.groups.find(group => group.id === NATIVE)?.models.find(model => model.id === NEW_MODEL)
     expect(newEntry?.reasoning?.efforts.map(effort => effort.id)).toEqual(['low', 'high'])
     const refreshedDiscovery = await ctx.agents.withInitiator(parent, () => ctx.tools.execute({
       agent: parent, signal: new AbortController().signal,
       calls: [{ type: 'tool-call', id: ToolCallId('discover-refreshed'), name: 'list_subagent_models',
-        arguments: JSON.stringify({ provider: PREVIEW }) }],
+        arguments: JSON.stringify({ provider: NATIVE }) }],
     }))
     expect(refreshedDiscovery.results[0]!.result.isError).toBe(false)
     expect(refreshedDiscovery.results[0]!.result.content.filter(block => block.type === 'text').map(block => block.text).join(''))
-      .toContain(`${PREVIEW}/${NEW_MODEL}`)
+      .toContain(`${NATIVE}/${NEW_MODEL}`)
     const newChild = await call('newly-discovered', NEW_MODEL, 'high')
     expect(newChild.isError).toBe(false)
     do { await parent.whenIdle() } while (await ctx.subagents.waitForTreeWork(parent))
@@ -297,6 +311,7 @@ it('routes concurrently authorized native children to their selected Copilot mod
     expect(wire).toHaveLength(4)
   } finally {
     release.resolve()
+    releaseThird.resolve()
     try { await ctx.fiber.dispose() }
     finally {
       try { await rm(directory, { recursive: true, force: true }) }

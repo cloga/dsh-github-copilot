@@ -263,7 +263,8 @@ async function run(outcome: Outcome, automatic = false, thinking?: boolean, scop
       })()
     })
   }
-  await ctx.plugin(previewPlugin, { chatRequestSettings: () => ({ responsesOmitTemperature: !automatic }) })
+  await ctx.plugin(previewPlugin, { registerLegacyProvider: true,
+    chatRequestSettings: () => ({ responsesOmitTemperature: !automatic }) })
   await ctx.get('githubCopilotPreview')!.refresh()
   await ctx.plugin(SessionStore)
   await ctx.plugin(Projections)

@@ -228,6 +228,9 @@ test('task map distinguishes retired routing from current native controls', asyn
   const missingContext = structuredClone(contract)
   missingContext.tasks.search.riskContext = ''
   assert.throws(() => verifyCurrentTaskStatus(missingContext), /current task status/)
+  const missingContinuationBoundary = structuredClone(contract)
+  missingContinuationBoundary.tasks.continuation.accountUiBoundary = 'There is no add-only OAuth entry in Chat.'
+  assert.throws(() => verifyCurrentTaskStatus(missingContinuationBoundary), /current task status/)
 })
 
 test('agent contract keeps documentation review and PR-body edit checks wired into CI', async () => {

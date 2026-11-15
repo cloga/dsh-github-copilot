@@ -83,7 +83,7 @@ async function runtime(initial: RecordValue | undefined = grant(), config: Previ
   } })
   await ctx.plugin(LlmRuntime)
   const registration = vi.spyOn(ctx.llm, 'registerAdapter')
-  const fiber = ctx.plugin(previewPlugin, config)
+  const fiber = ctx.plugin(previewPlugin, { ...config, registerLegacyProvider: true })
   await fiber
   await ctx.get('githubCopilotPreview')!.refresh()
   const adapter = registration.mock.calls[0]![1]
@@ -458,7 +458,7 @@ describe('account-local managed runtimes', () => {
     } })
     await ctx.plugin(LlmRuntime)
     const registrations = vi.spyOn(ctx.llm, 'registerAdapter')
-    await ctx.plugin(previewPlugin, { accountModelFailureCooldownMs: 0, ...config })
+    await ctx.plugin(previewPlugin, { registerLegacyProvider: true, accountModelFailureCooldownMs: 0, ...config })
     expect(registrations).toHaveBeenCalledTimes(1)
     const adapter = registrations.mock.calls[0]![1]
     registrations.mockRestore()
@@ -2960,7 +2960,7 @@ describe('plugin-owned account Copilot route', () => {
     stubFetch(fetch)
     expect((await call(harness.ctx)).assembler.finish).toEqual({ kind: 'stop' })
     await harness.fiber.dispose()
-    await harness.ctx.plugin(previewPlugin, { reasoning: 'max' })
+    await harness.ctx.plugin(previewPlugin, { registerLegacyProvider: true, reasoning: 'max' })
     const dropped = new BlockAssembler()
     for await (const chunk of old.stream({ ...old.config, messages: [] })) dropped.push(chunk)
     expect(dropped.finish.kind).not.toBe('stop')
@@ -2992,7 +2992,7 @@ describe('plugin-owned account Copilot route', () => {
     const harness = await runtime()
     const service = harness.ctx.get('githubCopilotPreview')
     await expect(harness.ctx.plugin({ name: 'duplicate-preview-test', inject: ['llm', 'credentials'],
-      apply(owner: Context) { previewPlugin.apply(owner) },
+      apply(owner: Context) { previewPlugin.apply(owner, { registerLegacyProvider: true }) },
     })).rejects.toThrow(/already registered|has been registered|DUPLICATE_ADAPTER/)
     expect(harness.ctx.get('githubCopilotPreview')).toBe(service)
     expect(harness.ctx.llm.listProviders().filter(provider => provider.id === PREVIEW)).toHaveLength(1)
@@ -3003,7 +3003,7 @@ describe('plugin-owned account Copilot route', () => {
     const harness = await runtime()
     await harness.fiber.dispose()
     await expect(harness.ctx.plugin({ name: 'unsafe-preview-config-test', inject: ['llm', 'credentials'],
-      apply(owner: Context) { previewPlugin.apply(owner, { apiKeyEnv: 'DO_NOT_USE', baseURL: 'https://private.invalid' } as never) },
+      apply(owner: Context) { previewPlugin.apply(owner, { registerLegacyProvider: true, apiKeyEnv: 'DO_NOT_USE', baseURL: 'https://private.invalid' } as never) },
     })).rejects.toThrow('COPILOT_PREVIEW_CONFIG_UNSUPPORTED')
     expect(harness.ctx.llm.listProviders().some(provider => provider.id === PREVIEW)).toBe(false)
     expect(harness.ctx.get('githubCopilotPreview')).toBeUndefined()

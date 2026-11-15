@@ -52,6 +52,7 @@ export function verifyCurrentTaskStatus(contract) {
   })
     || typeof contract.tasks?.continuation?.accountUiBoundary !== 'string'
     || !contract.tasks.continuation.accountUiBoundary.includes('no add-only OAuth entry in Chat')
+    || !contract.tasks.continuation.accountUiBoundary.includes('no new-Session default in Models')
     || !contract.tasks.search.read?.includes('src/native-copilot-search.ts')
     || !contract.tasks.search.tests?.includes('tests/native-copilot-search.spec.ts')
     || !contract.tasks.client.read?.includes('src/native-search-model-card.ts')) {
@@ -80,8 +81,9 @@ export async function verifyAgentContract(root = repositoryRoot) {
     && productScope.desktopCandidateQualified === false
     && productScope.desktopCandidateQualificationScope === 'desktop-artifact-and-live-acceptance'
     && JSON.stringify(productScope.retirePluginOwned) === JSON.stringify([
-      'auto', 'parent-model-follow', 'hosted-search-routing',
+      'auto', 'parent-model-follow', 'hosted-search-routing', 'managed-model-route',
     ])
+    && JSON.stringify(productScope.productionCopilotModelProviders) === JSON.stringify(['github-copilot'])
     && productScope.preserve.includes('native-copilot-oauth')
     && productScope.preserve.includes('account-isolation')
     && productScope.preserve.includes('account-advertised-model-capabilities')

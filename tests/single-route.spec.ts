@@ -69,7 +69,7 @@ async function runtime(legacy = false) {
     } as unknown as Context['settings'])
     owner.provide('systemPrompt', { section: () => () => undefined } as unknown as Context['systemPrompt'])
     owner.provide('web', { registerSearchProvider: () => () => undefined } as unknown as Context['web'])
-    owner.provide('agentDefaultModel', { currentSelection: () => ({ provider: legacy ? 'github-copilot' : MANAGED, model: 'future-account-model' }) } as Context['agentDefaultModel'])
+    owner.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'github-copilot', model: 'future-account-model' }) } as Context['agentDefaultModel'])
   } })
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(AuthorizationService)
@@ -80,13 +80,13 @@ async function runtime(legacy = false) {
   return { ctx, documents, grant, mutate, deleteRecord, modifyRecord }
 }
 
-describe('single managed Copilot route with native OAuth', () => {
-  it('keeps the native login flow while exposing only the account-driven provider', async () => {
+describe('native Copilot provider with account metadata enhancements', () => {
+  it('keeps the native login flow without registering a second model provider', async () => {
     const fetch = vi.fn(async () => { throw new Error('No eager discovery or model request') })
     vi.stubGlobal('fetch', fetch)
     const h = await runtime()
     expect(h.ctx.authorization.describe(parseCredentialKey(KEY))?.methods.some(method => method.id === 'oauth')).toBe(true)
-    expect(h.ctx.llm.listProviders().map(provider => provider.id)).toEqual([MANAGED])
+    expect(h.ctx.llm.listProviders().map(provider => provider.id)).not.toContain(MANAGED)
     const status = await h.ctx.get('githubCopilotAuthorization')!.status()
     expect(status).toMatchObject({ configured: true, phase: 'signed-in', route: { state: 'not-configured' } })
     expect(await Companion.ensureGitHubCopilotProviderProfile(h.ctx)).toBe(false)
@@ -96,7 +96,7 @@ describe('single managed Copilot route with native OAuth', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('discovers new IDs and reasoning metadata without a canonical model profile', async () => {
+  it('discovers account model metadata without registering a model provider', async () => {
     const fetch = vi.fn(async (url: unknown) => {
       expect(String(url)).toMatch(/\/models$/)
       return new Response(JSON.stringify({ data: [{ id: 'future-account-model', name: 'Future model', model_picker_enabled: true,
@@ -108,23 +108,29 @@ describe('single managed Copilot route with native OAuth', () => {
     vi.stubGlobal('fetch', fetch)
     const h = await runtime()
     expect(fetch).not.toHaveBeenCalled()
-    expect((await h.ctx.llm.listModels(MANAGED)).map(model => [model.provider, model.id])).toEqual([
-      [MANAGED, 'future-account-model'],
-    ])
     const view = await h.ctx.get('githubCopilotAuthorization')!.ensureModels()
     expect(view.accountModels).toMatchObject({ state: 'ready', models: [{ id: 'future-account-model', api: 'openai-responses' }] })
-    expect(h.ctx.llm.listProviders().map(provider => ({ id: provider.id, name: provider.name }))).toEqual([{ id: MANAGED, name: 'GitHub Copilot (multi-account)' }])
-    expect((await h.ctx.llm.listModels(MANAGED)).map(model => model.id))
+    expect(h.ctx.llm.listProviders().map(provider => provider.id)).not.toContain(MANAGED)
+    expect(h.ctx.get('githubCopilotPreview')!.getView().models.map(model => model.id))
       .toEqual(['future-account-model'])
-    const model = await h.ctx.llm.resolveModelInfo(MANAGED, 'future-account-model')
-    expect(model.reasoning?.efforts.map(effort => effort.id)).toEqual(['low', 'high'])
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(h.mutate).toHaveBeenCalledOnce()
     expect(h.mutate.mock.calls[0]?.[0]).toBe('github-copilot')
     expect(h.deleteRecord).not.toHaveBeenCalled()
   })
 
-  it('joins Settings ensure and recursive Core catalog refresh to one cold discovery flight', async () => {
+  it('handles model preference updates without registering a legacy provider', async () => {
+    const h = await runtime(true)
+    h.documents['github-copilot'] = {
+      ...h.documents['github-copilot'] as object,
+      excludedModelIds: ['future-account-model'],
+    }
+    expect(() => h.ctx.emit('settings/document-updated', 'github-copilot' as never, 1)).not.toThrow()
+    expect(h.ctx.llm.listProviders().map(provider => provider.id)).toEqual(['github-copilot'])
+    expect(h.deleteRecord).not.toHaveBeenCalled()
+  })
+
+  it('coalesces account discovery without a recursive provider catalog refresh', async () => {
     let release!: (response: Response) => void
     let entered!: () => void
     const started = new Promise<void>(resolve => { entered = resolve })
@@ -132,35 +138,26 @@ describe('single managed Copilot route with native OAuth', () => {
     const fetch = vi.fn(async () => { entered(); return pending })
     vi.stubGlobal('fetch', fetch)
     const h = await runtime()
-    const refreshed: Array<ReturnType<Context['llm']['listModels']>> = []
-    const updated = vi.fn(() => {
-      // Match the public host-catalog consumer: re-read after registration.replace.
-      // Cap the fixture only to report a runaway loop rather than hang the runner.
-      if (refreshed.length < 5) refreshed.push(h.ctx.llm.listModels(MANAGED))
-    })
+    const updated = vi.fn()
     const remove = h.ctx.on('llm/adapters-updated', updated)
     try {
-      const listing = h.ctx.llm.listModels(MANAGED)
+      const authorization = h.ctx.get('githubCopilotAuthorization')!
+      const preview = h.ctx.get('githubCopilotPreview')!
+      const ensuring = authorization.ensureModels()
       await started
-      const discover = vi.spyOn(h.ctx.get('githubCopilotPreview')!, 'discover')
-      const ensuring = h.ctx.get('githubCopilotAuthorization')!.ensureModels()
-      const concurrent = h.ctx.llm.listModels(MANAGED)
-      await vi.waitFor(() => expect(discover).toHaveBeenCalledWith({ force: false }))
+      const concurrent = preview.discover({ force: false })
+      const secondEnsure = authorization.ensureModels()
       expect(fetch).toHaveBeenCalledTimes(1)
       release(new Response(JSON.stringify({ data: [{ id: 'future-account-model', name: 'Future model', model_picker_enabled: true,
         policy: { state: 'enabled' }, supported_endpoints: ['/responses'],
         capabilities: { supports: { streaming: true, tool_calls: true }, limits: { max_context_window_tokens: 128000, max_output_tokens: 16000 } },
       }] }), { headers: { 'content-type': 'application/json' } }))
-      const [models, settings, other] = await Promise.all([listing, ensuring, concurrent])
-      expect(models.map(model => [model.provider, model.id])).toEqual([
-        [MANAGED, 'future-account-model'],
-      ])
-      expect(other).toEqual(models)
+      const [settings, discovered, otherSettings] = await Promise.all([ensuring, concurrent, secondEnsure])
       expect(settings.accountModels).toMatchObject({ state: 'ready', models: [{ id: 'future-account-model' }] })
-      expect(await Promise.all(refreshed)).toEqual([models])
-      for (let attempt = 0; attempt < 3; attempt++) expect(await h.ctx.llm.listModels(MANAGED)).toEqual(models)
-      await h.ctx.get('githubCopilotAuthorization')!.ensureModels()
-      expect(updated).toHaveBeenCalledTimes(1)
+      expect(otherSettings.accountModels).toMatchObject({ state: 'ready', models: [{ id: 'future-account-model' }] })
+      expect(discovered.models.map(model => model.id)).toEqual(['future-account-model'])
+      expect(h.ctx.llm.listProviders().map(provider => provider.id)).not.toContain(MANAGED)
+      expect(updated).not.toHaveBeenCalled()
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(h.modifyRecord).not.toHaveBeenCalled()
       expect(h.mutate).toHaveBeenCalledOnce()
@@ -168,7 +165,7 @@ describe('single managed Copilot route with native OAuth', () => {
     } finally { remove() }
   })
 
-  it('invalidates native model catalogs when capabilities change without changing model identity', async () => {
+  it('refreshes native-sync metadata when account capabilities change without registering a provider', async () => {
     let updated = false
     const fetch = vi.fn(async () => Response.json({ data: [{
       id: 'future-account-model', name: 'Future model', model_picker_enabled: true,
@@ -178,23 +175,24 @@ describe('single managed Copilot route with native OAuth', () => {
     }] }))
     vi.stubGlobal('fetch', fetch)
     const h = await runtime()
-    await h.ctx.llm.listModels(MANAGED)
+    const preview = h.ctx.get('githubCopilotPreview')!
+    await preview.discover()
+    const before = preview.nativeModelSyncSnapshot()
+    expect(before?.models[0]?.contextWindow).toBe(128000)
     const changed = vi.fn()
     const remove = h.ctx.on('llm/adapters-updated', changed)
     try {
       updated = true
-      await h.ctx.get('githubCopilotPreview')!.discover({ force: true })
-      expect(changed).toHaveBeenCalledTimes(1)
-      const info = await h.ctx.llm.resolveModelInfo(MANAGED, 'future-account-model')
-      expect(info.context?.contextWindow).toBe(192000)
-      expect(info.reasoning?.efforts.map(effort => effort.id)).toEqual(['high'])
-      await h.ctx.llm.listModels(MANAGED)
-      expect(changed).toHaveBeenCalledTimes(1)
+      await preview.discover({ force: true })
+      const after = preview.nativeModelSyncSnapshot()
+      expect(after?.models[0]?.contextWindow).toBe(192000)
+      expect(changed).not.toHaveBeenCalled()
+      expect(h.ctx.llm.listProviders().map(provider => provider.id)).not.toContain(MANAGED)
       expect(fetch).toHaveBeenCalledTimes(2)
     } finally { remove() }
   })
 
-  it('honors explicit legacy-profile removal from settings without deleting OAuth', async () => {
+  it('does not replace a removed native profile with the retired provider', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('No implicit network during migration') }))
     const h = await runtime(true)
     expect(h.ctx.llm.listProviders().map(provider => provider.id)).toContain('github-copilot')
@@ -204,7 +202,7 @@ describe('single managed Copilot route with native OAuth', () => {
     await Companion.ensureGitHubCopilotProviderProfile(h.ctx)
     await h.ctx.get('githubCopilotAuthorization')!.reconcile()
     expect(h.documents['llm-pi-ai']).toEqual({ providers: {} })
-    expect(h.ctx.llm.listProviders().map(provider => provider.id)).toContain(MANAGED)
+    expect(h.ctx.llm.listProviders().map(provider => provider.id)).not.toContain(MANAGED)
     expect(h.ctx.authorization.describe(parseCredentialKey(KEY))?.methods.some(method => method.id === 'oauth')).toBe(true)
     expect(h.mutate).toHaveBeenCalledTimes(2)
     expect(h.mutate.mock.calls.map(([namespace]) => namespace)).toEqual(['github-copilot', 'llm-pi-ai'])
