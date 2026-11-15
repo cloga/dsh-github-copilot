@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-alpha.15.dsh.0.2.2.rc.3 (prepared)
+## 0.1.0-alpha.16.dsh.0.2.2.rc.3 (prepared)
 
 - Record native Copilot turn-account evidence only after an ordinary native stream chunk is yielded for the admitted account (#488).
 - Exclude auxiliary calls and require native route and canonical-account proof; mismatches and credential changes leave evidence unknown.
